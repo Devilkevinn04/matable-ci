@@ -18,6 +18,7 @@ import {
   sanitizeTextField,
   validateCustomerOrderInput,
   validateRuntimeConfig,
+  shouldSeedDemoData,
 } from '../server.ts';
 
 test('blocks backend bundles and sourcemaps from public static serving', () => {
@@ -194,6 +195,51 @@ test('rejects malformed or oversized order customer data', () => {
   assert.equal(invalidPhone.ok, false);
   assert.equal(valid.ok, true);
   assert.equal(valid.customer_phone, '+2250708091011');
+});
+
+test('skips demo data seeding in production unless explicitly enabled', () => {
+  const previous = {
+    NODE_ENV: process.env.NODE_ENV,
+    DEMO_MODE: process.env.DEMO_MODE,
+  };
+
+  try {
+    process.env.NODE_ENV = 'production';
+    delete process.env.DEMO_MODE;
+    assert.equal(shouldSeedDemoData(), false);
+
+    process.env.DEMO_MODE = 'true';
+    assert.equal(shouldSeedDemoData(), true);
+  } finally {
+    if (previous.NODE_ENV === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous.NODE_ENV;
+    if (previous.DEMO_MODE === undefined) delete process.env.DEMO_MODE; else process.env.DEMO_MODE = previous.DEMO_MODE;
+  }
+});
+
+test('rejects placeholder production app URLs', () => {
+  const previous = {
+    NODE_ENV: process.env.NODE_ENV,
+    ADMIN_ACCESS_KEY: process.env.ADMIN_ACCESS_KEY,
+    APP_URL: process.env.APP_URL,
+    PORT: process.env.PORT,
+    MATABLE_DB_PATH: process.env.MATABLE_DB_PATH,
+  };
+
+  try {
+    process.env.NODE_ENV = 'production';
+    process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
+    process.env.APP_URL = 'https://example.com';
+    process.env.PORT = '3000';
+    process.env.MATABLE_DB_PATH = './data/matable.db';
+
+    assert.throws(() => validateRuntimeConfig(), /APP_URL.*example/i);
+  } finally {
+    if (previous.NODE_ENV === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous.NODE_ENV;
+    if (previous.ADMIN_ACCESS_KEY === undefined) delete process.env.ADMIN_ACCESS_KEY; else process.env.ADMIN_ACCESS_KEY = previous.ADMIN_ACCESS_KEY;
+    if (previous.APP_URL === undefined) delete process.env.APP_URL; else process.env.APP_URL = previous.APP_URL;
+    if (previous.PORT === undefined) delete process.env.PORT; else process.env.PORT = previous.PORT;
+    if (previous.MATABLE_DB_PATH === undefined) delete process.env.MATABLE_DB_PATH; else process.env.MATABLE_DB_PATH = previous.MATABLE_DB_PATH;
+  }
 });
 
 test('rejects unsafe production configuration and mock Paystack mode', () => {

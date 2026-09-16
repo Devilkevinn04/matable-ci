@@ -11,6 +11,14 @@ import { sendWhatsAppCloudTemplate, sendWhatsAppCloudText } from './whatsapp.ts'
 const EXTERNAL_INTEGRATIONS_LOCKED = true;
 const DEMO_MODE = String(process.env.DEMO_MODE || '').trim().toLowerCase() === 'true';
 
+export function shouldSeedDemoData(): boolean {
+  if (process.env.NODE_ENV !== 'production') {
+    return true;
+  }
+
+  return String(process.env.DEMO_MODE || '').trim().toLowerCase() === 'true';
+}
+
 interface ShopOpeningHours {
   enabled: boolean;
   open_time: string; // "08:00"
@@ -1053,6 +1061,10 @@ export function validateRuntimeConfig(): void {
     throw new Error('APP_URL doit être une URL publique HTTPS complète en production.');
   }
 
+  if (/example\.com|localhost|127\.0\.0\.1/i.test(appUrl) || /change_me|demo/i.test(appUrl)) {
+    throw new Error('APP_URL doit pointer vers un domaine public réel en production, pas vers example.com, localhost ou un domaine d’exemple.');
+  }
+
   if (appUrl.includes('localhost') || appUrl.includes('127.0.0.1')) {
     throw new Error('APP_URL doit pointer vers un domaine public réel en production, pas vers localhost.');
   }
@@ -1249,6 +1261,10 @@ const findShopByPhone = (phone: string) => {
 };
 
 function seedDatabaseIfEmpty() {
+  if (process.env.NODE_ENV === 'production' && !shouldSeedDemoData()) {
+    return;
+  }
+
   const shopRow = db.prepare('SELECT COUNT(*) as count FROM shops').get() as { count: number };
   if (shopRow.count > 0) {
     return;
