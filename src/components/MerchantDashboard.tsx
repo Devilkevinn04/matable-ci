@@ -1224,13 +1224,13 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
         {/* REGISTER NEW SHOP MODAL */}
         {isRegisterModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#211712]/60 backdrop-blur-xs p-4">
-            <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-[28px] border-[3px] border-[#211712] bg-[#fffaf2] p-4 shadow-[10px_10px_0_rgba(33,23,18,0.96)] sm:p-6">
-              <div className="flex items-center justify-between border-b-[2px] border-[#211712] pb-3">
-                <div className="flex items-center gap-2">
-                  <Store className="w-5 h-5 text-[#211712]" />
-                  <div>
-                    <h3 className="font-extrabold text-[#211712] text-base">Créer ma boutique</h3>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#211712]/60 backdrop-blur-xs p-2 sm:p-4">
+            <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-[28px] border-[3px] border-[#211712] bg-[#fffaf2] p-3 shadow-[10px_10px_0_rgba(33,23,18,0.96)] sm:p-5">
+              <div className="flex items-center justify-between gap-3 border-b-[2px] border-[#211712] pb-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Store className="w-5 h-5 shrink-0 text-[#211712]" />
+                  <div className="min-w-0">
+                    <h3 className="truncate font-extrabold text-[#211712] text-base">Créer ma boutique</h3>
                     <p className="text-[10px] text-[#6b5548] mt-0.5">Quelques informations pour préparer votre espace.</p>
                   </div>
                 </div>
@@ -1238,19 +1238,19 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                   type="button"
                   onClick={() => setIsRegisterModalOpen(false)}
                   aria-label="Fermer le formulaire"
-                  className="w-8 h-8 rounded-full border-[2px] border-[#211712] bg-[#f7e7c7] hover:bg-[#f0d6a5] flex items-center justify-center text-[#211712]"
+                  className="h-8 w-8 shrink-0 rounded-full border-[2px] border-[#211712] bg-[#f7e7c7] hover:bg-[#f0d6a5] flex items-center justify-center text-[#211712]"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[10px] font-black uppercase tracking-[0.08em] text-[#6b5548]">
+              <div className="mt-4 grid grid-cols-3 gap-1.5 text-center text-[9px] font-black uppercase tracking-[0.08em] text-[#6b5548] sm:gap-2 sm:text-[10px]">
                 <div className="rounded-xl border-[2px] border-[#211712] bg-white px-2 py-2 text-[#1b3a63]"><span className="block text-sm">1</span>Infos</div>
-                <div className="rounded-xl border-[2px] border-[#211712] bg-[#f7e7c7] px-2 py-2 text-[#8a5a12]"><span className="block text-sm">2</span>Accès gratuit</div>
-                <div className="rounded-xl border-[2px] border-[#211712] bg-[#edf7f2] px-2 py-2 text-[#155c3d]"><span className="block text-sm">3</span>Accès</div>
+                <div className="rounded-xl border-[2px] border-[#211712] bg-[#f7e7c7] px-2 py-2 text-[#8a5a12]"><span className="block text-sm">2</span>Accès</div>
+                <div className="rounded-xl border-[2px] border-[#211712] bg-[#edf7f2] px-2 py-2 text-[#155c3d]"><span className="block text-sm">3</span>Validation</div>
               </div>
 
-              <form onSubmit={handleRegisterShop} className="mt-5 space-y-5">
+              <form onSubmit={handleRegisterShop} className="mt-4 space-y-4 sm:space-y-5">
                 <section className="space-y-3">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63]">Identité de la boutique</p>
@@ -1266,45 +1266,45 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                     className="w-full text-sm p-3 rounded-xl border-[2px] border-[#211712] bg-white font-bold text-[#211712] placeholder:text-slate-400"
                   />
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-xs font-bold text-[#4a3a30] mb-1">
-                      Secteur d'activité *
-                    </label>
-                    <select
-                      value={regCategory}
-                      onChange={(e) => setRegCategory(e.target.value as ShopCategory)}
-                      className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#211712] bg-white font-bold text-[#211712]"
-                    >
-                      {shopCategoryOptions.map((option) => (
-                        <option key={option.value} value={option.value}>{option.icon} {option.label}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-bold text-[#4a3a30]">
+                        Secteur d'activité *
+                      </label>
+                      <select
+                        value={regCategory}
+                        onChange={(e) => setRegCategory(e.target.value as ShopCategory)}
+                        className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#211712] bg-white font-bold text-[#211712]"
+                      >
+                        {shopCategoryOptions.map((option) => (
+                          <option key={option.value} value={option.value}>{option.icon} {option.label}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-[#4a3a30] mb-1">Ville / Commune *</label>
-                    <select
-                      required
-                      value={regCity}
-                      onChange={(e) => setRegCity(e.target.value)}
-                      className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#211712] bg-white text-[#211712]"
-                    >
-                      <option value="Abidjan">Abidjan</option>
-                      {abidjanCommunes.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
-                    </select>
-                    {regCity === 'Autre ville / commune' && (
-                      <input
-                        type="text"
+                    <div>
+                      <label className="mb-1 block text-xs font-bold text-[#4a3a30]">Ville / Commune *</label>
+                      <select
                         required
-                        value={regCityOther}
-                        onChange={(e) => setRegCityOther(e.target.value)}
-                        placeholder="Saisissez votre ville ou commune"
-                        className="mt-2 w-full text-xs p-2.5 rounded-xl border-[2px] border-[#211712] bg-white text-[#211712]"
-                      />
-                    )}
+                        value={regCity}
+                        onChange={(e) => setRegCity(e.target.value)}
+                        className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#211712] bg-white text-[#211712]"
+                      >
+                        <option value="Abidjan">Abidjan</option>
+                        {abidjanCommunes.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
+                      </select>
+                      {regCity === 'Autre ville / commune' && (
+                        <input
+                          type="text"
+                          required
+                          value={regCityOther}
+                          onChange={(e) => setRegCityOther(e.target.value)}
+                          placeholder="Saisissez votre ville ou commune"
+                          className="mt-2 w-full text-xs p-2.5 rounded-xl border-[2px] border-[#211712] bg-white text-[#211712]"
+                        />
+                      )}
+                    </div>
                   </div>
-                </div>
                 </section>
 
                 <section className="space-y-3">
@@ -1312,45 +1312,46 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63]">Accès et contact</p>
                     <p className="text-[11px] text-[#6b5548] mt-1">Votre numéro sert de contact public pour les commandes. Conservez votre lien privé de gestion.</p>
                   </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-xs font-bold text-[#4a3a30] mb-1">
-                      Numéro WhatsApp *
-                    </label>
-                    <input
-                      type="tel"
-                      inputMode="tel"
-                      required
-                      placeholder="+225 07 00 11 22 33"
-                      value={regPhone}
-                      onChange={(e) => setRegPhone(e.target.value)}
-                      className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#211712] bg-white font-mono text-[#211712]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-[#4a3a30] mb-1">
-                      Code PIN (6 chiffres) *
-                    </label>
-                    <div className="relative">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-bold text-[#4a3a30]">
+                        Numéro WhatsApp *
+                      </label>
                       <input
-                        type={showRegPin ? 'text' : 'password'}
-                        inputMode="numeric"
-                        pattern="[0-9]{6}"
-                        maxLength={6}
+                        type="tel"
+                        inputMode="tel"
                         required
-                        placeholder="6 chiffres"
-                        value={regPin}
-                        onChange={(e) => setRegPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        className="w-full text-xs p-2.5 pr-12 rounded-xl border-[2px] border-[#211712] bg-white font-mono text-center tracking-widest text-[#211712]"
+                        placeholder="+225 07 00 11 22 33"
+                        value={regPhone}
+                        onChange={(e) => setRegPhone(e.target.value)}
+                        className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#211712] bg-white font-mono text-[#211712]"
                       />
-                      <button type="button" onClick={() => setShowRegPin((visible) => !visible)} aria-label={showRegPin ? 'Masquer le PIN' : 'Afficher le PIN'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 hover:bg-slate-100">
-                        {showRegPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-bold text-[#4a3a30]">
+                        Code PIN (6 chiffres) *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showRegPin ? 'text' : 'password'}
+                          inputMode="numeric"
+                          pattern="[0-9]{6}"
+                          maxLength={6}
+                          required
+                          placeholder="6 chiffres"
+                          value={regPin}
+                          onChange={(e) => setRegPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          className="w-full text-xs p-2.5 pr-12 rounded-xl border-[2px] border-[#211712] bg-white font-mono text-center tracking-widest text-[#211712]"
+                        />
+                        <button type="button" onClick={() => setShowRegPin((visible) => !visible)} aria-label={showRegPin ? 'Masquer le PIN' : 'Afficher le PIN'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 hover:bg-slate-100">
+                          {showRegPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
+
                   <div>
-                    <label className="block text-xs font-bold text-[#4a3a30] mb-1">Email de réception <span className="font-normal text-slate-500">(optionnel)</span></label>
+                    <label className="mb-1 block text-xs font-bold text-[#4a3a30]">Email de réception <span className="font-normal text-slate-500">(optionnel)</span></label>
                     <input
                       type="email"
                       placeholder="vous@exemple.ci"
@@ -1371,18 +1372,18 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                   </div>
                 </section>
 
-                <div className="pt-1 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
                   <button
                     type="button"
                     onClick={() => setIsRegisterModalOpen(false)}
-                    className="py-3 px-4 rounded-xl border-[2px] border-[#211712] bg-[#fff] text-[#211712] font-bold text-xs shadow-[3px_3px_0_rgba(33,23,18,0.94)] sm:w-auto"
+                    className="w-full rounded-xl border-[2px] border-[#211712] bg-[#fff] px-4 py-3 text-xs font-bold text-[#211712] shadow-[3px_3px_0_rgba(33,23,18,0.94)] sm:w-auto"
                   >
                     Annuler
                   </button>
                   <button
                     type="submit"
                     disabled={regLoading}
-                    className="py-3 px-5 rounded-xl bg-[#1b3a63] text-white font-bold text-xs border-[2px] border-[#211712] shadow-[4px_4px_0_rgba(33,23,18,0.95)] sm:w-auto"
+                    className="w-full rounded-xl bg-[#1b3a63] px-5 py-3 text-xs font-bold text-white border-[2px] border-[#211712] shadow-[4px_4px_0_rgba(33,23,18,0.95)] sm:w-auto"
                   >
                     {regLoading ? 'Création...' : 'Créer ma boutique'}
                   </button>

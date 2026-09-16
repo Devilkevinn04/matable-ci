@@ -27,9 +27,7 @@ export default function App() {
   const [currentRole, setCurrentRole] = useState<'storefront' | 'merchant' | 'admin'>(initialRole);
   const [selectedShopSlug, setSelectedShopSlug] = useState<string>(initialShopSlug);
   const [showDirectory, setShowDirectory] = useState(initialPath === '/');
-  const [availableShops, setAvailableShops] = useState<{ slug: string; name: string; category?: string }[]>([
-    { slug: 'demo-boutique', name: 'Boutique de démonstration', category: 'Mode de test' },
-  ]);
+  const [availableShops, setAvailableShops] = useState<{ slug: string; name: string; category?: string }[]>([]);
 
   const loadingSteps = ['Quartier', 'Boutiques', 'Commandes', 'Émotion'];
 

@@ -124,34 +124,44 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenS
           <span className="text-xs text-slate-500 hidden sm:flex items-center gap-1"><ShoppingBag className="w-3.5 h-3.5" /> {productCount} articles référencés</span>
         </div>
 
-        <div className="mt-5 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredShops.map(shop => (
-            <button key={shop.slug} onClick={() => onOpenShop(shop.slug)} style={{ '--shop-color': getShopColor(shop) } as React.CSSProperties} className="shop-card relative text-left bg-white border border-slate-200 rounded-[1.6rem] overflow-hidden hover:-translate-y-1 hover:shadow-[0_18px_32px_rgba(33,23,18,0.12)] hover:border-[var(--shop-color)] transition-all group animate-in fade-in slide-in-from-bottom-2 duration-500 bg-[linear-gradient(180deg,#fffdfb,#fff6ee)]">
-              <div className="relative h-36 overflow-hidden bg-slate-100">
-                {getShopImage(shop) ? <img src={getShopImage(shop)} alt={shop.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: `${getShopColor(shop)}20`, color: getShopColor(shop) }}>{shop.category?.toLowerCase().includes('rest') || shop.category?.toLowerCase().includes('food') ? <UtensilsCrossed className="w-10 h-10" /> : <Shirt className="w-10 h-10" />}</div>}
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 to-transparent" />
-                {shop.theme_config?.logo_url ? (
-                  <img src={shop.theme_config.logo_url} alt={shop.name} className="absolute left-4 bottom-3 w-9 h-9 rounded-xl object-cover border-2 border-white bg-white shadow-sm" />
-                ) : null}
-                <span className="absolute left-16 bottom-3 text-[10px] text-white font-black uppercase tracking-wider">{categoryLabel(shop.category)}</span>
-                <span className={`absolute right-4 top-4 text-[10px] font-black uppercase px-2 py-1 rounded-full ${shop.is_open ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{shop.is_open ? 'Ouverte' : 'Fermée'}</span>
-              </div>
-              <div className="p-5">
-                <h3 className="font-black text-lg">{shop.name}</h3>
-                <p className="mt-1 text-xs text-slate-500 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {shop.city || 'Côte d’Ivoire'}</p>
-                <p className="mt-3 text-sm text-slate-600 line-clamp-2 min-h-10">{shop.welcome_message || 'Découvrez le catalogue et commandez directement.'}</p>
-                <div className="mt-4 flex gap-1.5 h-10">
-                  {(shop.products_preview || []).slice(0, 3).map(product => <img key={product.id} src={product.image_url} alt={`Aperçu : ${product.title}`} className="w-10 h-10 rounded-lg object-cover border border-slate-100" />)}
-                  {!shop.products_preview?.length && <span className="text-[11px] font-bold text-amber-700 self-center">Collection en préparation</span>}
+        {filteredShops.length === 0 ? (
+          <div className="mt-6 rounded-[2rem] border-[3px] border-dashed border-[#211712] bg-[#fffaf2] p-8 text-center shadow-[6px_6px_0_rgba(33,23,18,0.08)]">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#fbe7d3] text-[#1b3a63]">
+              <Store className="h-8 w-8" />
+            </div>
+            <h3 className="mt-4 text-xl font-black text-[#211712]">Aucune boutique disponible pour le moment</h3>
+            <p className="mt-2 text-sm text-[#4a3a30]">La vitrine s’actualisera dès qu’une boutique sera publiée.</p>
+          </div>
+        ) : (
+          <div className="mt-5 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredShops.map(shop => (
+              <button key={shop.slug} onClick={() => onOpenShop(shop.slug)} style={{ '--shop-color': getShopColor(shop) } as React.CSSProperties} className="shop-card relative text-left bg-white border border-slate-200 rounded-[1.6rem] overflow-hidden hover:-translate-y-1 hover:shadow-[0_18px_32px_rgba(33,23,18,0.12)] hover:border-[var(--shop-color)] transition-all group animate-in fade-in slide-in-from-bottom-2 duration-500 bg-[linear-gradient(180deg,#fffdfb,#fff6ee)]">
+                <div className="relative h-36 overflow-hidden bg-slate-100">
+                  {getShopImage(shop) ? <img src={getShopImage(shop)} alt={shop.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: `${getShopColor(shop)}20`, color: getShopColor(shop) }}>{shop.category?.toLowerCase().includes('rest') || shop.category?.toLowerCase().includes('food') ? <UtensilsCrossed className="w-10 h-10" /> : <Shirt className="w-10 h-10" />}</div>}
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 to-transparent" />
+                  {shop.theme_config?.logo_url ? (
+                    <img src={shop.theme_config.logo_url} alt={shop.name} className="absolute left-4 bottom-3 w-9 h-9 rounded-xl object-cover border-2 border-white bg-white shadow-sm" />
+                  ) : null}
+                  <span className="absolute left-16 bottom-3 text-[10px] text-white font-black uppercase tracking-wider">{categoryLabel(shop.category)}</span>
+                  <span className={`absolute right-4 top-4 text-[10px] font-black uppercase px-2 py-1 rounded-full ${shop.is_open ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{shop.is_open ? 'Ouverte' : 'Fermée'}</span>
                 </div>
-                <div className="mt-4 flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-bold text-slate-400">{shop.products_count || 0} articles · {shop.orders_today || 0} commande(s) aujourd’hui</span>
-                  <span className="inline-flex items-center gap-1.5 text-sm font-black" style={{ color: getShopColor(shop) }}>Découvrir <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></span>
+                <div className="p-5">
+                  <h3 className="font-black text-lg">{shop.name}</h3>
+                  <p className="mt-1 text-xs text-slate-500 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {shop.city || 'Côte d’Ivoire'}</p>
+                  <p className="mt-3 text-sm text-slate-600 line-clamp-2 min-h-10">{shop.welcome_message || 'Découvrez le catalogue et commandez directement.'}</p>
+                  <div className="mt-4 flex gap-1.5 h-10">
+                    {(shop.products_preview || []).slice(0, 3).map(product => <img key={product.id} src={product.image_url} alt={`Aperçu : ${product.title}`} className="w-10 h-10 rounded-lg object-cover border border-slate-100" />)}
+                    {!shop.products_preview?.length && <span className="text-[11px] font-bold text-amber-700 self-center">Collection en préparation</span>}
+                  </div>
+                  <div className="mt-4 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-slate-400">{shop.products_count || 0} articles · {shop.orders_today || 0} commande(s) aujourd’hui</span>
+                    <span className="inline-flex items-center gap-1.5 text-sm font-black" style={{ color: getShopColor(shop) }}>Découvrir <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></span>
+                  </div>
                 </div>
-              </div>
-            </button>
-          ))}
-        </div>
+              </button>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );

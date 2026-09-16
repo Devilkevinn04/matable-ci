@@ -120,7 +120,7 @@ test('concurrent single-item orders cannot oversell the last unit', async () => 
   const createProduct = await apiFetch('/api/auth/merchant-login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone: '+2250708091011', pin: '123456' }),
+    body: JSON.stringify({ phone: '+2250708091011', pin: '402138' }),
   });
   assert.equal(createProduct.response.status, 200, `Unexpected login response: ${JSON.stringify(createProduct.payload)}`);
 
@@ -250,7 +250,7 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   const login = await apiFetch('/api/auth/merchant-login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone: '+2250708091011', pin: '123456' }),
+    body: JSON.stringify({ phone: '+2250708091011', pin: '402138' }),
   });
   assert.equal(login.response.status, 200, `Unexpected login response: ${JSON.stringify(login.payload)}`);
   assert.equal(login.payload.success, true);
@@ -448,7 +448,7 @@ test('recovery and security hardening: duplicate shop prevention and limited mer
     body: JSON.stringify({
       name: 'Deuxième boutique même numéro',
       whatsapp_number: phone,
-      pin_code: '123456',
+      pin_code: '402138',
       category: 'fashion',
       city: 'Abidjan',
       subscription_tier: 'premium',

@@ -206,6 +206,25 @@ function normalizeWhatsAppPhone(phone: unknown): string | null {
   return null;
 }
 
+function isWeakShopPin(pin: unknown): boolean {
+  const normalized = String(pin ?? '').trim();
+  if (!/^\d{6}$/.test(normalized)) {
+    return true;
+  }
+
+  const blockedPins = new Set([
+    '000000',
+    '000001',
+    '111222',
+    '123123',
+    '123456',
+    '222222',
+    '999999',
+  ]);
+
+  return blockedPins.has(normalized);
+}
+
 export function getSubscriptionPlanConfig(tier: SubscriptionTier | string): SubscriptionPlanConfig {
   const normalizedTier = (tier === 'premium' || tier === 'pro' || tier === 'standard') ? tier : 'standard';
   const options: Record<SubscriptionTier, SubscriptionPlanConfig> = {
@@ -545,13 +564,13 @@ export function buildPaystackCheckoutPayload({
   };
 }
 
-const shops: ShopRecord[] = [
+const demoShops: ShopRecord[] = [
   {
     id: 1,
     name: 'Aya Chic Lingerie & Nuisettes',
     slug: 'aya-chic',
     whatsapp_number: '+2250708091011',
-    pin_code_hash: '123456',
+    pin_code_hash: '402138',
     theme_color: '#E11D48',
     welcome_message: 'Lingerie fine & Nuisettes soyeuses à Abidjan. Livraison discrète et soignée dans toute la Côte d\'Ivoire ✨',
     is_open: true,
@@ -594,7 +613,7 @@ const shops: ShopRecord[] = [
     name: 'Saveurs d\'Attiéké & Grillades Babi',
     slug: 'saveurs-babi',
     whatsapp_number: '+2250504030201',
-    pin_code_hash: '123456',
+    pin_code_hash: '402138',
     theme_color: '#C2410C',
     welcome_message: 'Le vrai goût d\'Abidjan ! Poulet fermier & poissons braisés minute au feu de bois. Attiéké frais de Dabou 🍗🔥',
     is_open: true,
@@ -636,7 +655,7 @@ const shops: ShopRecord[] = [
     name: 'Kouassi Prêt-à-Porter & Wax',
     slug: 'kouassi-tech',
     whatsapp_number: '+2250102030405',
-    pin_code_hash: '123456',
+    pin_code_hash: '402138',
     theme_color: '#0F172A',
     welcome_message: 'Chemises en pagne tissé et costumes sur mesure à Treichville. Confection rapide et livraison express ✂️👔',
     is_open: true,
@@ -677,7 +696,7 @@ const shops: ShopRecord[] = [
     name: 'Bijoux & Perles Traditionnelles',
     slug: 'perles-abidjan',
     whatsapp_number: '+2250700001122',
-    pin_code_hash: '123456',
+    pin_code_hash: '402138',
     theme_color: '#D97706',
     welcome_message: 'Créations artisanales, colliers baoulé et perles de hanches faites main à Grand-Bassam 📿✨',
     is_open: true,
@@ -715,263 +734,264 @@ const shops: ShopRecord[] = [
   },
 ];
 
-const products: ProductRecord[] = [
-  // Shop 1: Aya Chic Lingerie (Fashion)
-  {
-    id: 1,
-    shop_id: 1,
-    title: 'Nuisette en Soie Sauvage & Dentelle de Calais',
-    description: 'Satin de soie ultra-doux au toucher. Bretelles réglables croisées au dos. Tailles disponibles : M, L, XL. Parfait pour vos nuits douces et élégantes.',
-    price: 14500,
-    stock: 8,
-    image_url: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600&auto=format&fit=crop&q=80',
-    is_available: true,
-    sizes: ['S', 'M', 'L', 'XL'],
-    colors: [
-      { name: 'Rose Poudré', hex: '#E11D48' },
-      { name: 'Noir Nuit', hex: '#0F172A' },
-      { name: 'Blanc Ivoire', hex: '#F8FAFC' }
-    ],
-    lookbook_image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=1200&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 2,
-    shop_id: 1,
-    title: 'Body Galbant Minceur Invisible Sans Couture',
-    description: 'Matière microfibre respirante gainante ventre plat. Totalement invisible sous robe en pagne wax ou tailleur. Confort quotidien 100% garanti.',
-    price: 12000,
-    stock: 15,
-    image_url: 'https://images.unsplash.com/photo-1518049362265-d5b2a6467637?w=600&auto=format&fit=crop&q=80',
-    is_available: true,
-    sizes: ['M', 'L', 'XL'],
-    colors: [
-      { name: 'Beige Peau', hex: '#D97706' },
-      { name: 'Noir Profond', hex: '#0F172A' }
-    ],
-  },
-  {
-    id: 3,
-    shop_id: 1,
-    title: 'Ensemble Soutien-Gorge Push-Up & Culotte Soie',
-    description: 'Maintien ferme sans armature métallique blessante. Bonnet B et C. Dentelle florale brodée main. Teinte Rouge Passion intemporelle.',
-    price: 9500,
-    stock: 4,
-    image_url: 'https://images.unsplash.com/photo-1579613832125-5d34a13ffe0a?w=600&auto=format&fit=crop&q=80',
-    is_available: true,
-    sizes: ['S', 'M', 'L'],
-    colors: [
-      { name: 'Rouge Passion', hex: '#BE123C' },
-      { name: 'Noir Satin', hex: '#1E293B' }
-    ],
-  },
-  {
-    id: 4,
-    shop_id: 1,
-    title: 'Peignoir Kimono Satin Doré avec Ceinture',
-    description: 'Finition brillante luxueuse, manches 3/4 évasées, passants et ceinture amovible. Longueur genoux. Taille standard ajustable du 36 au 44.',
-    price: 18000,
-    stock: 2,
-    image_url: 'https://images.unsplash.com/photo-1582533561751-ef6f6ab93a2e?w=600&auto=format&fit=crop&q=80',
-    is_available: true,
-    sizes: ['Taille Unique (36-44)'],
-    colors: [
-      { name: 'Or Champêtre', hex: '#F59E0B' },
-      { name: 'Bordeaux Velours', hex: '#881337' }
-    ],
-    lookbook_image: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200&auto=format&fit=crop&q=80',
-  },
+const shops: ShopRecord[] = shouldSeedDemoData() ? demoShops : [];
 
-  // Shop 2: Saveurs d'Attiéké (Food)
-  {
-    id: 5,
-    shop_id: 2,
-    title: 'Poulet Braisé Entier Fermier & Alloco Doré',
-    description: 'Poulet fermier mariné 24h au gingembre, ail sauvage et épices de Man. Braisé minute au feu de bois. Servi avec alloco croustillant et piment maison.',
-    price: 7000,
-    stock: 20,
-    image_url: 'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=600&auto=format&fit=crop&q=80',
-    is_available: true,
-    prep_time: 20,
-    modifier_groups: [
+const products: ProductRecord[] = shouldSeedDemoData()
+  ? [
       {
-        name: 'Sauce au choix',
-        required: true,
-        options: [
-          { label: 'Piment Rouge Pilé (Babi Hot 🔥)', price_delta: 0 },
-          { label: 'Piment Vert Doux Ail & Oignon', price_delta: 0 },
-          { label: 'Moutarde & Jus de Citron', price_delta: 0 },
+        id: 1,
+        shop_id: 1,
+        title: 'Nuisette en Soie Sauvage & Dentelle de Calais',
+        description: 'Satin de soie ultra-doux au toucher. Bretelles réglables croisées au dos. Tailles disponibles : M, L, XL. Parfait pour vos nuits douces et élégantes.',
+        price: 14500,
+        stock: 8,
+        image_url: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600&auto=format&fit=crop&q=80',
+        is_available: true,
+        sizes: ['S', 'M', 'L', 'XL'],
+        colors: [
+          { name: 'Rose Poudré', hex: '#E11D48' },
+          { name: 'Noir Nuit', hex: '#0F172A' },
+          { name: 'Blanc Ivoire', hex: '#F8FAFC' },
+        ],
+        lookbook_image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=1200&auto=format&fit=crop&q=80',
+      },
+      {
+        id: 2,
+        shop_id: 1,
+        title: 'Body Galbant Minceur Invisible Sans Couture',
+        description: 'Matière microfibre respirante gainante ventre plat. Totalement invisible sous robe en pagne wax ou tailleur. Confort quotidien 100% garanti.',
+        price: 12000,
+        stock: 15,
+        image_url: 'https://images.unsplash.com/photo-1518049362265-d5b2a6467637?w=600&auto=format&fit=crop&q=80',
+        is_available: true,
+        sizes: ['M', 'L', 'XL'],
+        colors: [
+          { name: 'Beige Peau', hex: '#D97706' },
+          { name: 'Noir Profond', hex: '#0F172A' },
         ],
       },
       {
-        name: 'Accompagnement Extra',
-        required: false,
-        options: [
-          { label: 'Attiéké Agbodjama Frais (+500 F)', price_delta: 500 },
-          { label: 'Double Alloco Banane Mûre (+500 F)', price_delta: 500 },
-          { label: 'Frites d\'Igname Braisées (+1 000 F)', price_delta: 1000 },
-        ],
-      },
-    ],
-  },
-  {
-    id: 6,
-    shop_id: 2,
-    title: 'Garba Spécial Thon Braisé & Huile Rouge',
-    description: 'Gros morceau de thon croustillant à l\'extérieur et tendre à cœur. Servi avec attiéké agbodjama frais de Dabou, oignons émincés et piment rouge pilé.',
-    price: 2500,
-    stock: 25,
-    image_url: 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=600&auto=format&fit=crop&q=80',
-    is_available: true,
-    prep_time: 10,
-    modifier_groups: [
-      {
-        name: 'Piment & Assaisonnement',
-        required: true,
-        options: [
-          { label: 'Piment bien écrasé + Cubes', price_delta: 0 },
-          { label: 'Piment moyen + Tomate fraîche', price_delta: 0 },
-          { label: 'Sans piment (Doux)', price_delta: 0 },
+        id: 3,
+        shop_id: 1,
+        title: 'Ensemble Soutien-Gorge Push-Up & Culotte Soie',
+        description: 'Maintien ferme sans armature métallique blessante. Bonnet B et C. Dentelle florale brodée main. Teinte Rouge Passion intemporelle.',
+        price: 9500,
+        stock: 4,
+        image_url: 'https://images.unsplash.com/photo-1579613832125-5d34a13ffe0a?w=600&auto=format&fit=crop&q=80',
+        is_available: true,
+        sizes: ['S', 'M', 'L'],
+        colors: [
+          { name: 'Rouge Passion', hex: '#BE123C' },
+          { name: 'Noir Satin', hex: '#1E293B' },
         ],
       },
       {
-        name: 'Supplément Poisson',
-        required: false,
-        options: [
-          { label: '2ème Tranche de Thon Frais (+1 500 F)', price_delta: 1500 },
-          { label: 'Attiéké Double Dose (+500 F)', price_delta: 500 },
+        id: 4,
+        shop_id: 1,
+        title: 'Peignoir Kimono Satin Doré avec Ceinture',
+        description: 'Finition brillante luxueuse, manches 3/4 évasées, passants et ceinture amovible. Longueur genoux. Taille standard ajustable du 36 au 44.',
+        price: 18000,
+        stock: 2,
+        image_url: 'https://images.unsplash.com/photo-1582533561751-ef6f6ab93a2e?w=600&auto=format&fit=crop&q=80',
+        is_available: true,
+        sizes: ['Taille Unique (36-44)'],
+        colors: [
+          { name: 'Or Champêtre', hex: '#F59E0B' },
+          { name: 'Bordeaux Velours', hex: '#881337' },
         ],
-      },
-    ],
-  },
-  {
-    id: 7,
-    shop_id: 2,
-    title: 'Poisson Bar Frais Braisé (Format XL 1kg)',
-    description: 'Pêché du jour à Grand-Bassam. Braisage lent au charbon de bois avec sauce tomate mijotée, frites d\'igname ou attiéké au choix.',
-    price: 8500,
-    stock: 5,
-    image_url: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=600&auto=format&fit=crop&q=80',
-    is_available: true,
-    prep_time: 25,
-    modifier_groups: [
-      {
-        name: 'Cuisson du Poisson',
-        required: true,
-        options: [
-          { label: 'Bien grillé & croustillant', price_delta: 0 },
-          { label: 'Tendre & juteux', price_delta: 0 },
-        ],
+        lookbook_image: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200&auto=format&fit=crop&q=80',
       },
       {
-        name: 'Accompagnement Principal',
-        required: true,
-        options: [
-          { label: 'Attiéké de Dabou (Inclus)', price_delta: 0 },
-          { label: 'Alloco Banane Mûre (Inclus)', price_delta: 0 },
-          { label: 'Frites d\'Igname Salées (Inclus)', price_delta: 0 },
+        id: 5,
+        shop_id: 2,
+        title: 'Poulet Braisé Entier Fermier & Alloco Doré',
+        description: 'Poulet fermier mariné 24h au gingembre, ail sauvage et épices de Man. Braisé minute au feu de bois. Servi avec alloco croustillant et piment maison.',
+        price: 7000,
+        stock: 20,
+        image_url: 'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=600&auto=format&fit=crop&q=80',
+        is_available: true,
+        prep_time: 20,
+        modifier_groups: [
+          {
+            name: 'Sauce au choix',
+            required: true,
+            options: [
+              { label: 'Piment Rouge Pilé (Babi Hot 🔥)', price_delta: 0 },
+              { label: 'Piment Vert Doux Ail & Oignon', price_delta: 0 },
+              { label: 'Moutarde & Jus de Citron', price_delta: 0 },
+            ],
+          },
+          {
+            name: 'Accompagnement Extra',
+            required: false,
+            options: [
+              { label: 'Attiéké Agbodjama Frais (+500 F)', price_delta: 500 },
+              { label: 'Double Alloco Banane Mûre (+500 F)', price_delta: 500 },
+              { label: 'Frites d\'Igname Braisées (+1 000 F)', price_delta: 1000 },
+            ],
+          },
         ],
       },
-    ],
-  },
+      {
+        id: 6,
+        shop_id: 2,
+        title: 'Garba Spécial Thon Braisé & Huile Rouge',
+        description: 'Gros morceau de thon croustillant à l\'extérieur et tendre à cœur. Servi avec attiéké agbodjama frais de Dabou, oignons émincés et piment rouge pilé.',
+        price: 2500,
+        stock: 25,
+        image_url: 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=600&auto=format&fit=crop&q=80',
+        is_available: true,
+        prep_time: 10,
+        modifier_groups: [
+          {
+            name: 'Piment & Assaisonnement',
+            required: true,
+            options: [
+              { label: 'Piment bien écrasé + Cubes', price_delta: 0 },
+              { label: 'Piment moyen + Tomate fraîche', price_delta: 0 },
+              { label: 'Sans piment (Doux)', price_delta: 0 },
+            ],
+          },
+          {
+            name: 'Supplément Poisson',
+            required: false,
+            options: [
+              { label: '2ème Tranche de Thon Frais (+1 500 F)', price_delta: 1500 },
+              { label: 'Attiéké Double Dose (+500 F)', price_delta: 500 },
+            ],
+          },
+        ],
+      },
+      {
+        id: 7,
+        shop_id: 2,
+        title: 'Poisson Bar Frais Braisé (Format XL 1kg)',
+        description: 'Pêché du jour à Grand-Bassam. Braisage lent au charbon de bois avec sauce tomate mijotée, frites d\'igname ou attiéké au choix.',
+        price: 8500,
+        stock: 5,
+        image_url: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=600&auto=format&fit=crop&q=80',
+        is_available: true,
+        prep_time: 25,
+        modifier_groups: [
+          {
+            name: 'Cuisson du Poisson',
+            required: true,
+            options: [
+              { label: 'Bien grillé & croustillant', price_delta: 0 },
+              { label: 'Tendre & juteux', price_delta: 0 },
+            ],
+          },
+          {
+            name: 'Accompagnement Principal',
+            required: true,
+            options: [
+              { label: 'Attiéké de Dabou (Inclus)', price_delta: 0 },
+              { label: 'Alloco Banane Mûre (Inclus)', price_delta: 0 },
+              { label: 'Frites d\'Igname Salées (Inclus)', price_delta: 0 },
+            ],
+          },
+        ],
+      },
+      {
+        id: 8,
+        shop_id: 3,
+        title: 'Chemise Homme Pagne Wax & Lin Beige',
+        description: 'Coupe slim moderne, col mandarin boutonné, finitions en lin pur et empiècement wax véritable. Idéal pour cérémonies ou vendredis chic.',
+        price: 18500,
+        stock: 7,
+        image_url: 'https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=600&auto=format&fit=crop&q=80',
+        is_available: true,
+        sizes: ['M', 'L', 'XL', 'XXL'],
+        colors: [
+          { name: 'Beige & Bleu Wax', hex: '#2563EB' },
+          { name: 'Blanc & Or', hex: '#D97706' },
+        ],
+      },
+      {
+        id: 9,
+        shop_id: 3,
+        title: 'Ensemble Veste Tailleur Femme Wax Imprimé',
+        description: 'Veste cintrée avec épaulettes structurées et pantalon carotte assorti. Tissu coton wax certifié ne déteint pas au lavage.',
+        price: 32000,
+        stock: 5,
+        image_url: 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=600&auto=format&fit=crop&q=80',
+        is_available: true,
+        sizes: ['S', 'M', 'L'],
+        colors: [
+          { name: 'Motif Étoile Babi', hex: '#C2410C' },
+          { name: 'Motif Soleil Royal', hex: '#E11D48' },
+        ],
+        lookbook_image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=1200&auto=format&fit=crop&q=80',
+      },
+      {
+        id: 10,
+        shop_id: 3,
+        title: 'Boubou Moderne Brodé Main Deux Pièces',
+        description: 'Bazin riche teinté artisanalement à Bouaké. Broderies fines au fil de soie sur le col et les manches. Vient avec pantalon coupe droite.',
+        price: 45000,
+        stock: 3,
+        image_url: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=600&auto=format&fit=crop&q=80',
+        is_available: true,
+        sizes: ['L', 'XL', 'XXL'],
+        colors: [
+          { name: 'Bleu Nuit Brodé Or', hex: '#1E3A8A' },
+          { name: 'Blanc Majestueux', hex: '#F8FAFC' },
+        ],
+      },
+    ]
+  : [];
 
-  // Shop 3: Kouassi Prêt-à-Porter (Fashion)
-  {
-    id: 8,
-    shop_id: 3,
-    title: 'Chemise Homme Pagne Wax & Lin Beige',
-    description: 'Coupe slim moderne, col mandarin boutonné, finitions en lin pur et empiècement wax véritable. Idéal pour cérémonies ou vendredis chic.',
-    price: 18500,
-    stock: 7,
-    image_url: 'https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=600&auto=format&fit=crop&q=80',
-    is_available: true,
-    sizes: ['M', 'L', 'XL', 'XXL'],
-    colors: [
-      { name: 'Beige & Bleu Wax', hex: '#2563EB' },
-      { name: 'Blanc & Or', hex: '#D97706' },
-    ],
-  },
-  {
-    id: 9,
-    shop_id: 3,
-    title: 'Ensemble Veste Tailleur Femme Wax Imprimé',
-    description: 'Veste cintrée avec épaulettes structurées et pantalon carotte assorti. Tissu coton wax certifié ne déteint pas au lavage.',
-    price: 32000,
-    stock: 5,
-    image_url: 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=600&auto=format&fit=crop&q=80',
-    is_available: true,
-    sizes: ['S', 'M', 'L'],
-    colors: [
-      { name: 'Motif Étoile Babi', hex: '#C2410C' },
-      { name: 'Motif Soleil Royal', hex: '#E11D48' },
-    ],
-    lookbook_image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=1200&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 10,
-    shop_id: 3,
-    title: 'Boubou Moderne Brodé Main Deux Pièces',
-    description: 'Bazin riche teinté artisanalement à Bouaké. Broderies fines au fil de soie sur le col et les manches. Vient avec pantalon coupe droite.',
-    price: 45000,
-    stock: 3,
-    image_url: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=600&auto=format&fit=crop&q=80',
-    is_available: true,
-    sizes: ['L', 'XL', 'XXL'],
-    colors: [
-      { name: 'Bleu Nuit Brodé Or', hex: '#1E3A8A' },
-      { name: 'Blanc Majestueux', hex: '#F8FAFC' },
-    ],
-  },
-];
-
-const orders: OrderRecord[] = [
-  {
-    id: 1,
-    shop_id: 1,
-    customer_name: 'Affoué Konan',
-    customer_phone: '+2250748123456',
-    delivery_location: 'Cocody Riviera 3, près du carrefour Cap Nord',
-    delivery_note: 'Portail blanc en face de la pharmacie',
-    payment_method_preference: 'wave',
-    total_amount: 26500,
-    created_at: new Date(Date.now() - 4 * 3600000).toISOString(),
-    status: 'confirmed',
-    items: [
-      { id: 1, order_id: 1, product_id: 1, product_title: 'Nuisette en Soie Sauvage', quantity: 1, unit_price: 14500 },
-      { id: 2, order_id: 1, product_id: 2, product_title: 'Body Galbant Minceur', quantity: 1, unit_price: 12000 },
-    ],
-  },
-  {
-    id: 2,
-    shop_id: 1,
-    customer_name: 'Mariam Diabaté',
-    customer_phone: '+2250567891011',
-    delivery_location: 'Marcory Biétry, Rue du Canal',
-    delivery_note: 'Appelez dès que le livreur est au carrefour',
-    payment_method_preference: 'mobile_money',
-    total_amount: 18000,
-    created_at: new Date(Date.now() - 22 * 3600000).toISOString(),
-    status: 'delivered',
-    items: [
-      { id: 3, order_id: 2, product_id: 4, product_title: 'Peignoir Kimono Satin Doré', quantity: 1, unit_price: 18000 },
-    ],
-  },
-  {
-    id: 3,
-    shop_id: 2,
-    customer_name: 'Bamba Souleymane',
-    customer_phone: '+2250102039988',
-    delivery_location: 'Koumassi Remblais, Terminus 05',
-    delivery_note: 'Paiement à la livraison',
-    payment_method_preference: 'mobile_money',
-    total_amount: 9500,
-    created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
-    status: 'pending',
-    items: [
-      { id: 4, order_id: 3, product_id: 5, product_title: 'Poulet Braisé Entier Fermier', quantity: 1, unit_price: 7000 },
-      { id: 5, order_id: 3, product_id: 6, product_title: 'Garba Spécial Thon Braisé', quantity: 1, unit_price: 2500 },
-    ],
-  },
-];
+const orders: OrderRecord[] = shouldSeedDemoData()
+  ? [
+      {
+        id: 1,
+        shop_id: 1,
+        customer_name: 'Affoué Konan',
+        customer_phone: '+2250748123456',
+        delivery_location: 'Cocody Riviera 3, près du carrefour Cap Nord',
+        delivery_note: 'Portail blanc en face de la pharmacie',
+        payment_method_preference: 'wave',
+        total_amount: 26500,
+        created_at: new Date(Date.now() - 4 * 3600000).toISOString(),
+        status: 'confirmed',
+        items: [
+          { id: 1, order_id: 1, product_id: 1, product_title: 'Nuisette en Soie Sauvage', quantity: 1, unit_price: 14500 },
+          { id: 2, order_id: 1, product_id: 2, product_title: 'Body Galbant Minceur', quantity: 1, unit_price: 12000 },
+        ],
+      },
+      {
+        id: 2,
+        shop_id: 1,
+        customer_name: 'Mariam Diabaté',
+        customer_phone: '+2250567891011',
+        delivery_location: 'Marcory Biétry, Rue du Canal',
+        delivery_note: 'Appelez dès que le livreur est au carrefour',
+        payment_method_preference: 'mobile_money',
+        total_amount: 18000,
+        created_at: new Date(Date.now() - 22 * 3600000).toISOString(),
+        status: 'delivered',
+        items: [
+          { id: 3, order_id: 2, product_id: 4, product_title: 'Peignoir Kimono Satin Doré', quantity: 1, unit_price: 18000 },
+        ],
+      },
+      {
+        id: 3,
+        shop_id: 2,
+        customer_name: 'Bamba Souleymane',
+        customer_phone: '+2250102039988',
+        delivery_location: 'Koumassi Remblais, Terminus 05',
+        delivery_note: 'Paiement à la livraison',
+        payment_method_preference: 'mobile_money',
+        total_amount: 9500,
+        created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
+        status: 'pending',
+        items: [
+          { id: 4, order_id: 3, product_id: 5, product_title: 'Poulet Braisé Entier Fermier', quantity: 1, unit_price: 7000 },
+          { id: 5, order_id: 3, product_id: 6, product_title: 'Garba Spécial Thon Braisé', quantity: 1, unit_price: 2500 },
+        ],
+      },
+    ]
+  : [];
 
 const hashPin = (pin: string) => bcrypt.hashSync(String(pin).trim(), 10);
 const hashAccessToken = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -1821,7 +1841,11 @@ async function startServer() {
     if (name !== undefined) shop.name = name;
     if (city !== undefined) shop.city = city;
     if (pin_code !== undefined && String(pin_code).trim()) {
-      shop.pin_code_hash = hashPin(String(pin_code).trim());
+      const rawPin = String(pin_code).trim();
+      if (isWeakShopPin(rawPin)) {
+        return res.status(400).json({ error: 'Le code PIN est trop simple ou invalide. Utilisez un PIN à 6 chiffres fort.' });
+      }
+      shop.pin_code_hash = hashPin(rawPin);
     }
     if (category && ['fashion', 'food', 'beauty', 'electronics', 'home', 'services', 'health', 'crafts', 'education', 'automotive', 'other'].includes(category)) {
       shop.category = category;
@@ -1850,8 +1874,11 @@ async function startServer() {
     const safeCity = sanitizeTextField(city || 'Abidjan', 100);
     const safeWelcomeMessage = sanitizeTextField(welcome_message, 300);
 
-    if (safeName.length < 2 || !whatsapp_number || !/^\d{6}$/.test(String(effectivePin || '').trim())) {
+    if (safeName.length < 2 || !whatsapp_number || !/^[0-9]{6}$/.test(String(effectivePin || '').trim())) {
       return res.status(400).json({ error: 'Nom, numéro WhatsApp et code PIN requis.' });
+    }
+    if (isWeakShopPin(effectivePin)) {
+      return res.status(400).json({ error: 'Le code PIN est trop simple ou invalide. Utilisez un PIN à 6 chiffres fort.' });
     }
 
     const reservedShopId = nextShopId;
