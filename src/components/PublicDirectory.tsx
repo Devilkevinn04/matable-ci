@@ -13,9 +13,7 @@ interface DirectoryShop {
   welcome_message?: string | null;
   theme_color?: string;
   theme_config?: { custom_banner_url?: string; primary_color?: string; logo_url?: string };
-  products_preview?: { id: number; title: string; image_url: string; price: number; stock: number }[];
-  orders_today?: number;
-  low_stock_count?: number;
+  products_preview?: { id: number; title: string; image_url: string; price: number }[];
 }
 
 interface PublicDirectoryProps {
@@ -91,7 +89,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenS
             <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(17,10,7,0.84),rgba(17,10,7,0.64),rgba(17,10,7,0.28))]" />
             <div className="relative max-w-2xl p-6 sm:p-8">
               <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-white/15 rounded-full px-3 py-1.5 backdrop-blur-sm">Boutique à découvrir</span>
-              <p className="mt-4 text-xs font-black uppercase tracking-widest text-orange-100">{categoryLabel(featuredShop.category)} · {featuredShop.orders_today || 0} commande(s) aujourd’hui</p>
+              <p className="mt-4 text-xs font-black uppercase tracking-widest text-orange-100">{categoryLabel(featuredShop.category)} · Boutique locale</p>
               <h2 className="mt-1 text-2xl sm:text-3xl font-black text-white">{featuredShop.name}</h2>
               <p className="mt-2 text-sm text-amber-50 max-w-xl">{featuredShop.welcome_message || 'Une adresse locale à découvrir maintenant.'}</p>
               <span className="mt-5 inline-flex items-center gap-2 text-sm font-black group-hover:gap-3 transition-all">Découvrir la boutique <ArrowRight className="w-4 h-4" /></span>
@@ -154,7 +152,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenS
                     {!shop.products_preview?.length && <span className="text-[11px] font-bold text-amber-700 self-center">Collection en préparation</span>}
                   </div>
                   <div className="mt-4 flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold text-slate-400">{shop.products_count || 0} articles · {shop.orders_today || 0} commande(s) aujourd’hui</span>
+                    <span className="text-[11px] font-bold text-slate-400">{shop.products_count || 0} articles disponibles</span>
                     <span className="inline-flex items-center gap-1.5 text-sm font-black" style={{ color: getShopColor(shop) }}>Découvrir <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></span>
                   </div>
                 </div>

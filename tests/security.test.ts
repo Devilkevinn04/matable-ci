@@ -263,6 +263,10 @@ test('rejects unsafe production configuration and mock Paystack mode', () => {
     assert.throws(() => validateRuntimeConfig(), /PAYSTACK_MOCK_MODE.*production/i);
 
     delete process.env.PAYSTACK_MOCK_MODE;
+    process.env.ADMIN_ACCESS_KEY = '03062004';
+    assert.throws(() => validateRuntimeConfig(), /ADMIN_ACCESS_KEY.*32 caractères/i);
+
+    process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
     process.env.APP_URL = 'not-a-valid-url';
     assert.throws(() => validateRuntimeConfig(), /APP_URL.*URL publique/i);
 

@@ -1061,9 +1061,8 @@ export function validateRuntimeConfig(): void {
   }
 
   const adminAccessKey = String(process.env.ADMIN_ACCESS_KEY || '').trim();
-  const isAllowedExplicitAdminKey = adminAccessKey === '03062004';
-  if (!isAllowedExplicitAdminKey && (adminAccessKey.length < 16 || /change_me|demo|example/i.test(adminAccessKey))) {
-    throw new Error('ADMIN_ACCESS_KEY doit être une clé forte et non par défaut en production.');
+  if (adminAccessKey.length < 32 || /change_me|demo|example|03062004/i.test(adminAccessKey)) {
+    throw new Error('ADMIN_ACCESS_KEY doit être une clé forte, unique et longue d’au moins 32 caractères en production.');
   }
 
   if (DEMO_MODE) {
@@ -1620,18 +1619,14 @@ async function startServer() {
       ...(() => {
         const shopProducts = products.filter((product) => product.shop_id === s.id);
         const availableProducts = shopProducts.filter((product) => product.is_available && product.stock > 0);
-        const today = new Date().toISOString().slice(0, 10);
         return {
           products_preview: availableProducts.slice(0, 3).map((product) => ({
             id: product.id,
             title: product.title,
             image_url: product.image_url,
             price: product.price,
-            stock: product.stock,
           })),
-          orders_today: orders.filter((order) => order.shop_id === s.id && order.created_at.startsWith(today)).length,
           products_count: availableProducts.length,
-          low_stock_count: availableProducts.filter((product) => product.stock <= 3).length,
         };
       })(),
       id: s.id,
