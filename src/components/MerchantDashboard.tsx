@@ -270,6 +270,15 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     try {
       // 1. Load shop details & products
       const shopRes = await fetch(`/api/shops/${shopId}`);
+      if (shopRes.status === 401) {
+        localStorage.removeItem('matable_merchant_session');
+        setCurrentShop(null);
+        setProducts([]);
+        setOrders([]);
+        setFlashBilan(null);
+        setAuthError('Votre session a expiré. Veuillez vous reconnecter.');
+        return;
+      }
       if (shopRes.ok) {
         const sData = await shopRes.json();
         setCurrentShop(sData.shop);

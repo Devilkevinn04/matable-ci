@@ -1125,8 +1125,7 @@ export function validateRuntimeConfig(): void {
 export function buildSessionFingerprint(req: Request): string {
   const userAgent = String(req.headers['user-agent'] || '').trim();
   const acceptLanguage = String(req.headers['accept-language'] || '').trim();
-  const clientIp = String(req.ip || req.socket?.remoteAddress || '').replace(/^::ffff:/, '').trim();
-  const normalized = `${userAgent}|${acceptLanguage}|${clientIp}`;
+  const normalized = `${userAgent}|${acceptLanguage}`;
   return createHash('sha256').update(normalized).digest('hex');
 }
 

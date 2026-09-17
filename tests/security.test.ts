@@ -72,6 +72,24 @@ test('ignores spoofed x-forwarded-for values when binding a session fingerprint'
   assert.equal(isRequestFingerprintMatch({ fingerprint: buildSessionFingerprint(firstReq) }, secondReq), true);
 });
 
+test('keeps a merchant session valid when the client IP changes', () => {
+  const firstReq = {
+    headers: {
+      'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+      'accept-language': 'fr-FR,fr;q=0.9',
+    },
+    socket: { remoteAddress: '10.0.0.10' },
+    ip: '10.0.0.10',
+  } as any;
+  const secondReq = {
+    ...firstReq,
+    socket: { remoteAddress: '10.0.0.11' },
+    ip: '10.0.0.11',
+  } as any;
+
+  assert.equal(isRequestFingerprintMatch({ fingerprint: buildSessionFingerprint(firstReq) }, secondReq), true);
+});
+
 test('persists merchant sessions in SQLite so they survive a server restart', () => {
   const token = 'restart-session-test-token';
   const session = {
