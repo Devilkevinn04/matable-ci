@@ -224,7 +224,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
               <span>Galerie de Thèmes Prédéfinis ({shop.category === 'food' ? 'Food & Grillades' : 'Fashion & Lingerie'})</span>
             </h4>
             <span className="text-[11px] text-slate-400">
-              Cliquez pour appliquer instantanément
+              Cliquez pour sélectionner, puis enregistrez vos changements
             </span>
           </div>
 

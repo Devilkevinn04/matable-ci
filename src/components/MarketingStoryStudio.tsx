@@ -26,6 +26,15 @@ export const MarketingStoryStudio: React.FC<MarketingStoryStudioProps> = ({ shop
     renderStoryCanvas(selectedProduct);
   }, [selectedProduct, shop, storyTemplate]);
 
+  useEffect(() => {
+    setSelectedProduct((current) => {
+      if (current && products.some((product) => product.id === current.id)) {
+        return products.find((product) => product.id === current.id) || current;
+      }
+      return products[0] || null;
+    });
+  }, [products]);
+
   const renderStoryCanvas = (prod: Product) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -358,7 +367,8 @@ export const MarketingStoryStudio: React.FC<MarketingStoryStudioProps> = ({ shop
 
             <button
               onClick={handleDownload}
-              className="w-full py-3.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-colors"
+              disabled={!previewUrl || !selectedProduct}
+              className="w-full py-3.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
               <span>Télécharger l'image 9:16 (HD 1080x1920)</span>
@@ -366,7 +376,8 @@ export const MarketingStoryStudio: React.FC<MarketingStoryStudioProps> = ({ shop
 
             <button
               onClick={handleCopyLink}
-              className="w-full py-3 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+              disabled={!selectedProduct}
+              className="w-full py-3 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4" />}
               <span>{copied ? 'Texte de vente copié !' : 'Copier le texte prêt à l’emploi'}</span>

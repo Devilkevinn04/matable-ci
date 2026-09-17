@@ -686,6 +686,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   // Quick Stock Step (+1 or -1)
   const handleQuickStockChange = async (productId: number, delta: number) => {
     if (!currentShop) return;
+    const previousProduct = products.find((product) => product.id === productId);
+    if (!previousProduct) return;
+
     try {
       // Optimistic update
       setProducts(prev => prev.map(p => {
@@ -704,9 +707,13 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       if (res.ok) {
         const data = await res.json();
         setProducts(prev => prev.map(p => (p.id === productId ? { ...p, stock: data.stock } : p)));
+      } else {
+        setProducts(prev => prev.map(p => (p.id === productId ? previousProduct : p)));
+        toast.error('Impossible de mettre à jour le stock.');
       }
-    } catch (e) {
-      console.error('Erreur stock step', e);
+    } catch {
+      setProducts(prev => prev.map(p => (p.id === productId ? previousProduct : p)));
+      toast.error('Impossible de mettre à jour le stock.');
     }
   };
 
@@ -1579,11 +1586,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 <p className="text-xs text-emerald-800 mt-1">Conservez votre lien vitrine et votre espace privé. Votre boutique est disponible dès maintenant.</p>
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
               <a href={registrationLinks.publicUrl} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-900 text-xs font-bold">Voir ma vitrine</a>
               <a href={registrationLinks.whatsappUrl} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold">Partager sur WhatsApp</a>
-              {regEmail.trim() && <a href={registrationLinks.emailUrl} className="px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold">Préparer un email</a>}
-              <button type="button" onClick={copyRegistrationLinks} className="px-3 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-900 text-xs font-bold">Copier les liens privés</button>
+              {registrationLinks.emailUrl && <a href={registrationLinks.emailUrl} className="px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold">Préparer un email</a>}
+              <button type="button" onClick={copyRegistrationLinks} className="px-3 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-900 text-xs font-bold">Copier les liens d’accès</button>
             </div>
           </div>
         </div>
