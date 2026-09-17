@@ -71,6 +71,13 @@ interface AdminHealth {
   integrations: { paystack: string; whatsapp_cloud: string; whatsapp_click_to_chat: string };
 }
 
+const ownerNotificationTemplates = [
+  { id: 'welcome', label: 'Bienvenue et démarrage' },
+  { id: 'catalog', label: 'Rappel catalogue à jour' },
+  { id: 'orders', label: 'Rappel nouvelles commandes' },
+  { id: 'support', label: 'Proposition d’assistance' },
+] as const;
+
 export const AdminDashboard: React.FC = () => {
   const [shops, setShops] = useState<AdminShopItem[]>([]);
   const [adminKey, setAdminKey] = useState('');
@@ -89,6 +96,9 @@ export const AdminDashboard: React.FC = () => {
   const [adminOrders, setAdminOrders] = useState<AdminOrder[]>([]);
   const [adminHealth, setAdminHealth] = useState<AdminHealth | null>(null);
   const [operationsLoading, setOperationsLoading] = useState(false);
+  const [notificationShopId, setNotificationShopId] = useState('');
+  const [notificationTemplate, setNotificationTemplate] = useState<typeof ownerNotificationTemplates[number]['id']>('welcome');
+  const [notificationLoading, setNotificationLoading] = useState(false);
 
   const fetchAdminShops = async () => {
     try {
@@ -380,6 +390,30 @@ export const AdminDashboard: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const prepareOwnerNotification = async () => {
+    if (!notificationShopId) {
+      showNotice('Sélectionnez une boutique avant de préparer le message.');
+      return;
+    }
+    try {
+      setNotificationLoading(true);
+      const res = await fetch(`/api/admin/shops/${notificationShopId}/notification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template: notificationTemplate }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Impossible de préparer la notification.');
+      const popup = window.open(data.whatsapp_url, '_blank', 'noopener,noreferrer');
+      if (!popup) showNotice('WhatsApp est prêt : autorisez les fenêtres pop-up pour ouvrir le message.');
+      else showNotice('Message WhatsApp prêt pour le propriétaire.');
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Impossible de préparer la notification.');
+    } finally {
+      setNotificationLoading(false);
+    }
+  };
+
   return (
     <div className="admin-dashboard min-h-screen pb-20">
       <header className="relative overflow-hidden border-b-[3px] border-[#211712] bg-[#fffaf2] text-[#211712]">
@@ -559,6 +593,28 @@ export const AdminDashboard: React.FC = () => {
               <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3"><span className="text-[10px] font-bold text-sky-700">Commandes</span><strong className="mt-1 block text-sm text-sky-900">{adminHealth.counts.orders}</strong></div>
             </div>
           )}
+
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <div className="flex items-center gap-2">
+              <Send className="w-4 h-4 text-emerald-700" />
+              <div>
+                <h3 className="text-xs font-black text-emerald-950">Notifier un propriétaire</h3>
+                <p className="text-[11px] text-emerald-800">Choisissez un message prédéfini. WhatsApp s’ouvre avec le texte personnalisé prêt à envoyer.</p>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+              <select value={notificationShopId} onChange={(event) => setNotificationShopId(event.target.value)} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                <option value="">Choisir une boutique</option>
+                {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
+              </select>
+              <select value={notificationTemplate} onChange={(event) => setNotificationTemplate(event.target.value as typeof notificationTemplate)} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                {ownerNotificationTemplates.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}
+              </select>
+              <button type="button" onClick={prepareOwnerNotification} disabled={notificationLoading || !notificationShopId} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50">
+                <Send className="w-3.5 h-3.5" /> {notificationLoading ? 'Préparation...' : 'Ouvrir WhatsApp'}
+              </button>
+            </div>
+          </div>
 
           <div className="mt-5 grid lg:grid-cols-2 gap-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-4">

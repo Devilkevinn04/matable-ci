@@ -428,7 +428,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       syncShopSettings(data.shop);
       setIsRegisterModalOpen(false);
       const publicUrl = `${window.location.origin}/${data.shop.slug}`;
-      const privateUrl = `${window.location.origin}/app`;
+      const privateUrl = `${window.location.origin}/app?access=${encodeURIComponent(data.owner_access_token)}`;
       const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable.ci. Vitrine : ${publicUrl} | Connexion : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
       setRegistrationLinks({
         publicUrl,
@@ -473,6 +473,23 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       toast.success('Liens copiés dans le presse-papiers.');
     } catch {
       toast.error('La copie a échoué. Sélectionnez les liens manuellement.');
+    }
+  };
+
+  const copyOwnerLink = async (kind: 'public' | 'private') => {
+    if (!currentShop) return;
+    try {
+      let link = `${window.location.origin}/${currentShop.slug}`;
+      if (kind === 'private') {
+        const res = await fetch(`/api/shops/${currentShop.id}/access-link`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Impossible de générer le lien privé.');
+        link = data.access_url;
+      }
+      await navigator.clipboard.writeText(link);
+      toast.success(kind === 'public' ? 'Lien vitrine copié.' : 'Lien privé copié.');
+    } catch {
+      toast.error('La copie a échoué. Vérifiez les permissions du navigateur.');
     }
   };
 
@@ -1569,6 +1586,22 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <ExternalLink className="w-3.5 h-3.5" />
             </button>
 
+            <button
+              type="button"
+              onClick={() => copyOwnerLink('public')}
+              className="flex flex-1 justify-center py-2 px-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-bold text-xs items-center gap-1.5 transition-colors sm:flex-none"
+            >
+              <Copy className="w-3.5 h-3.5" /> Copier vitrine
+            </button>
+
+            <button
+              type="button"
+              onClick={() => copyOwnerLink('private')}
+              className="flex flex-1 justify-center py-2 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs items-center gap-1.5 transition-colors sm:flex-none"
+            >
+              <Key className="w-3.5 h-3.5" /> Copier accès
+            </button>
+
             {/* Logout button */}
             <button
               onClick={handleLogout}
@@ -1614,6 +1647,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             </div>
               <div className="mt-3 flex flex-wrap gap-2">
               <a href={registrationLinks.publicUrl} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-900 text-xs font-bold">Voir ma vitrine</a>
+              <button type="button" onClick={() => navigator.clipboard.writeText(registrationLinks.publicUrl).then(() => toast.success('Lien vitrine copié.')).catch(() => toast.error('La copie a échoué.'))} className="px-3 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-900 text-xs font-bold">Copier la vitrine</button>
+              <button type="button" onClick={() => navigator.clipboard.writeText(registrationLinks.privateUrl).then(() => toast.success('Lien privé copié.')).catch(() => toast.error('La copie a échoué.'))} className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold">Copier l’accès</button>
               <a href={registrationLinks.whatsappUrl} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold">Partager sur WhatsApp</a>
               {registrationLinks.emailUrl && <a href={registrationLinks.emailUrl} className="px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold">Préparer un email</a>}
               <button type="button" onClick={copyRegistrationLinks} className="px-3 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-900 text-xs font-bold">Copier les liens d’accès</button>

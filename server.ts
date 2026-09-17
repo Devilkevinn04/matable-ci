@@ -1710,6 +1710,20 @@ async function startServer() {
     });
   });
 
+  app.post('/api/shops/:id/access-link', requireMerchantAccess, (req: Request, res: Response) => {
+    const shopId = Number(req.params.id);
+    const shop = shops.find((candidate) => candidate.id === shopId);
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+
+    const ownerAccessToken = rotateMerchantAccessTokenForShop(shop.id);
+    const origin = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+    res.json({
+      success: true,
+      public_url: `${origin}/${encodeURIComponent(shop.slug)}`,
+      access_url: `${origin}/app?access=${encodeURIComponent(ownerAccessToken)}`,
+    });
+  });
+
   // Toggle shop ordering status (Ouvert / Fermé) - POST /api/shops/:id/toggle-status
   app.post('/api/shops/:id/toggle-status', (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
@@ -3099,6 +3113,31 @@ async function startServer() {
     const publicUrl = `${String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')}/${shop.slug}`;
     const accessUrl = `${String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')}/app?access=${encodeURIComponent(ownerAccessToken)}`;
     res.json({ success: true, shop: toSafeShop(shop), public_url: publicUrl, access_url: accessUrl });
+  });
+
+  app.post('/api/admin/shops/:id/notification', (req: Request, res: Response) => {
+    const shopId = Number(req.params.id);
+    const shop = shops.find((candidate) => candidate.id === shopId);
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+
+    const templates: Record<string, string> = {
+      welcome: `Bonjour ${shop.name}, votre espace MaTable.ci est prêt. Pensez à compléter votre catalogue et à partager votre vitrine avec vos clients.`,
+      catalog: `Bonjour ${shop.name}, pensez à vérifier vos articles, vos prix et vos disponibilités afin que votre vitrine MaTable.ci reste à jour.`,
+      orders: `Bonjour ${shop.name}, pensez à consulter vos nouvelles commandes et à confirmer rapidement les demandes reçues via MaTable.ci.`,
+      support: `Bonjour ${shop.name}, nous vous contactons au sujet de votre boutique MaTable.ci. Répondez à ce message si vous avez besoin d’aide.`,
+    };
+    const template = String(req.body?.template || '').trim();
+    if (!templates[template]) return res.status(400).json({ error: 'Modèle de notification invalide.' });
+
+    const message = templates[template];
+    const phone = shop.whatsapp_number.replace(/\D/g, '');
+    res.json({
+      success: true,
+      delivery_mode: 'whatsapp_click_to_chat',
+      template,
+      message,
+      whatsapp_url: `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
+    });
   });
 
   // Manual Subscription Extension: +1 Mois, +3 Mois, +6 Mois, +1 An

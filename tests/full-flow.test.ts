@@ -353,6 +353,7 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.equal(registration.response.status, 200, `Shop creation failed: ${JSON.stringify(registration.payload)}`);
   assert.equal(registration.payload.payment_required, false);
   assert.equal(registration.payload.payment_status, 'approved');
+  assert.ok(registration.payload.owner_access_token);
 
   const newShopId = registration.payload.shop.id;
 
@@ -363,6 +364,17 @@ test('new merchant registration flow is local and immediately usable', async () 
   });
   assert.equal(merchantLogin.response.status, 200, JSON.stringify(merchantLogin.payload));
   assert.equal(merchantLogin.payload.shop.is_active, true);
+
+  const privateAccessLogin = await apiFetch('/api/auth/merchant-access-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: registration.payload.owner_access_token }),
+  });
+  assert.equal(privateAccessLogin.response.status, 200, JSON.stringify(privateAccessLogin.payload));
+
+  const ownerLinks = await apiFetch(`/api/shops/${newShopId}/access-link`, { method: 'POST' });
+  assert.equal(ownerLinks.response.status, 200, JSON.stringify(ownerLinks.payload));
+  assert.ok(String(ownerLinks.payload.access_url).includes('/app?access='));
 });
 
 test('super-admin full watchdog workflow: wrong key rejection, access link generation, subscription extension, and cron execution', async () => {
@@ -406,6 +418,15 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   const accessLink = await apiFetch(`/api/admin/shops/${shopId}/access-link`, { method: 'POST' });
   assert.equal(accessLink.response.status, 200);
   assert.ok(String(accessLink.payload.access_url).includes('/app?access='));
+
+  const ownerNotification = await apiFetch(`/api/admin/shops/${shopId}/notification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ template: 'welcome' }),
+  });
+  assert.equal(ownerNotification.response.status, 200, JSON.stringify(ownerNotification.payload));
+  assert.equal(ownerNotification.payload.delivery_mode, 'whatsapp_click_to_chat');
+  assert.ok(String(ownerNotification.payload.whatsapp_url).startsWith('https://wa.me/'));
 
   const extend = await apiFetch(`/api/admin/shops/${shopId}/extend-subscription`, {
     method: 'POST',
