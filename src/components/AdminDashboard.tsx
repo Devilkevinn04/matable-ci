@@ -39,8 +39,6 @@ interface AdminShopItem extends Shop {
   total_sales: number;
   average_order_value: number;
   last_order_at: string | null;
-  low_stock_count: number;
-  out_of_stock_count: number;
 }
 
 interface AdminAnalytics {
@@ -48,6 +46,29 @@ interface AdminAnalytics {
   daily: { date: string; page_views: number; unique_visitors: number }[];
   by_shop: { shop_id: number; shop_name: string; page_views: number; unique_visitors: number; orders: number; sales: number; conversion_rate: number }[];
   totals: { page_views: number; unique_visitors: number; orders: number; sales: number; conversion_rate: number };
+}
+
+interface AdminOrder {
+  id: number;
+  shop_id: number;
+  shop_name: string;
+  customer_name: string;
+  customer_phone: string;
+  delivery_location: string;
+  total_amount: number;
+  status: string;
+  created_at: string;
+  items_count: number;
+}
+
+interface AdminHealth {
+  status: string;
+  checked_at: string;
+  database: string;
+  database_path: string;
+  counts: { shops: number; products: number; orders: number };
+  latest_analytics_event_at: string | null;
+  integrations: { paystack: string; whatsapp_cloud: string; whatsapp_click_to_chat: string };
 }
 
 export const AdminDashboard: React.FC = () => {
@@ -65,6 +86,9 @@ export const AdminDashboard: React.FC = () => {
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
   const [analyticsDays, setAnalyticsDays] = useState(30);
+  const [adminOrders, setAdminOrders] = useState<AdminOrder[]>([]);
+  const [adminHealth, setAdminHealth] = useState<AdminHealth | null>(null);
+  const [operationsLoading, setOperationsLoading] = useState(false);
 
   const fetchAdminShops = async () => {
     try {
@@ -75,6 +99,7 @@ export const AdminDashboard: React.FC = () => {
         setShops(data);
         setIsAuthenticated(true);
         await fetchAnalytics(analyticsDays);
+        await fetchOperations();
       } else if (res.status === 401) {
         setIsAuthenticated(false);
       }
@@ -82,6 +107,24 @@ export const AdminDashboard: React.FC = () => {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchOperations = async () => {
+    try {
+      setOperationsLoading(true);
+      const [healthRes, ordersRes] = await Promise.all([
+        fetch('/api/admin/health'),
+        fetch('/api/admin/orders?limit=50'),
+      ]);
+      if (!healthRes.ok || !ordersRes.ok) throw new Error('Impossible de charger les outils opérationnels.');
+      const [health, orderData] = await Promise.all([healthRes.json(), ordersRes.json()]);
+      setAdminHealth(health);
+      setAdminOrders(orderData.orders || []);
+    } catch {
+      showNotice('Les outils opérationnels sont momentanément indisponibles.');
+    } finally {
+      setOperationsLoading(false);
     }
   };
 
@@ -309,14 +352,12 @@ export const AdminDashboard: React.FC = () => {
   const totalSales = shops.reduce((sum, shop) => sum + shop.total_sales, 0);
   const totalOrders = shops.reduce((sum, shop) => sum + shop.orders_count, 0);
   const averageOrderValue = totalOrders ? Math.round(totalSales / totalOrders) : 0;
-  const lowStockProducts = shops.reduce((sum, shop) => sum + shop.low_stock_count, 0);
-  const outOfStockProducts = shops.reduce((sum, shop) => sum + shop.out_of_stock_count, 0);
 
   const exportShopsCsv = () => {
-    const headers = ['Boutique', 'Slug', 'Statut', 'CA FCFA', 'Commandes', 'Panier moyen', 'Produits', 'Stock bas', 'Ruptures', 'Echeance'];
+    const headers = ['Boutique', 'Slug', 'Statut', 'CA FCFA', 'Commandes', 'Panier moyen', 'Produits', 'Echeance'];
     const rows = filteredShops.map(shop => [
       shop.name, shop.slug, shop.is_active ? 'active' : 'inactive', shop.total_sales,
-      shop.orders_count, shop.average_order_value, shop.products_count, shop.low_stock_count, shop.out_of_stock_count,
+      shop.orders_count, shop.average_order_value, shop.products_count,
       shop.subscription_expires_at,
     ]);
     const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(';')).join('\n');
@@ -325,6 +366,16 @@ export const AdminDashboard: React.FC = () => {
     const link = document.createElement('a');
     link.href = url;
     link.download = `matable-super-admin-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportOperationsCsv = (filename: string, headers: string[], rows: (string | number)[][]) => {
+    const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(';')).join('\n');
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -487,6 +538,47 @@ export const AdminDashboard: React.FC = () => {
           )}
         </motion.section>
 
+        <section className="chart-panel p-4 md:p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-emerald-600" />
+              <div>
+                <h2 className="font-black text-slate-900 text-sm">Centre opérationnel</h2>
+                <p className="text-[11px] text-slate-500">État du service, commandes récentes et alertes de stock.</p>
+              </div>
+            </div>
+            <button type="button" onClick={fetchOperations} disabled={operationsLoading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">
+              <RefreshCw className={`w-3.5 h-3.5 ${operationsLoading ? 'animate-spin' : ''}`} /> Actualiser
+            </button>
+          </div>
+
+          {adminHealth && (
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3"><span className="text-[10px] font-bold text-emerald-700">Service</span><strong className="mt-1 block text-sm text-emerald-900">Opérationnel</strong></div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><span className="text-[10px] font-bold text-slate-500">Stockage</span><strong className="mt-1 block text-sm text-slate-900">SQLite persistant</strong></div>
+              <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3"><span className="text-[10px] font-bold text-sky-700">Commandes</span><strong className="mt-1 block text-sm text-sky-900">{adminHealth.counts.orders}</strong></div>
+            </div>
+          )}
+
+          <div className="mt-5 grid lg:grid-cols-2 gap-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-black text-slate-800">Commandes récentes</h3>
+                <button type="button" onClick={() => exportOperationsCsv(`matable-commandes-${new Date().toISOString().slice(0, 10)}.csv`, ['ID', 'Boutique', 'Client', 'Téléphone', 'Montant', 'Statut', 'Date'], adminOrders.map(order => [order.id, order.shop_name, order.customer_name, order.customer_phone, order.total_amount, order.status, order.created_at]))} className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-900"><Download className="w-3 h-3" /> CSV</button>
+              </div>
+              <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
+                {adminOrders.length === 0 ? <p className="text-[11px] text-slate-500">Aucune commande enregistrée.</p> : adminOrders.slice(0, 8).map(order => (
+                  <div key={order.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-[11px]">
+                    <div className="min-w-0"><p className="truncate font-bold text-slate-800">#{order.id} · {order.shop_name}</p><p className="truncate text-slate-500">{order.customer_name} · {order.items_count} article(s)</p></div>
+                    <div className="shrink-0 text-right"><p className="font-black text-slate-800">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} F</p><span className="text-[9px] font-bold uppercase text-slate-500">{order.status}</span></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        </section>
+
         {cronResult && (
           <motion.section
             initial={{ opacity: 0, y: 16 }}
@@ -551,8 +643,6 @@ export const AdminDashboard: React.FC = () => {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3"><span className="text-[11px] text-emerald-700 font-bold block">CA cumulé</span><strong className="text-lg text-emerald-900">{new Intl.NumberFormat('fr-FR').format(totalSales)} F</strong></div>
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3"><span className="text-[11px] text-sky-700 font-bold block">Commandes</span><strong className="text-lg text-sky-900">{totalOrders}</strong></div>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3"><span className="text-[11px] text-amber-700 font-bold block">Stock bas</span><strong className="text-lg text-amber-900">{lowStockProducts}</strong></div>
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3"><span className="text-[11px] text-rose-700 font-bold block">Ruptures</span><strong className="text-lg text-rose-900">{outOfStockProducts}</strong></div>
           </div>
         </section>
 

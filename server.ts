@@ -3025,12 +3025,54 @@ async function startServer() {
         last_order_at: orders
           .filter((o) => o.shop_id === s.id)
           .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.created_at ?? null,
-        low_stock_count: products.filter((p) => p.shop_id === s.id && p.stock > 0 && p.stock <= 3).length,
-        out_of_stock_count: products.filter((p) => p.shop_id === s.id && p.stock <= 0).length,
       };
     });
 
     res.json(adminShops);
+  });
+
+  app.get('/api/admin/health', (req: Request, res: Response) => {
+    const latestAnalytics = db.prepare('SELECT created_at FROM analytics_events ORDER BY created_at DESC LIMIT 1').get() as { created_at?: string } | undefined;
+    const counts = {
+      shops: Number((db.prepare('SELECT COUNT(*) AS count FROM shops').get() as { count: number }).count),
+      products: Number((db.prepare('SELECT COUNT(*) AS count FROM products').get() as { count: number }).count),
+      orders: Number((db.prepare('SELECT COUNT(*) AS count FROM orders').get() as { count: number }).count),
+    };
+
+    res.json({
+      status: 'ok',
+      checked_at: new Date().toISOString(),
+      database: 'sqlite',
+      database_path: process.env.MATABLE_DB_PATH || 'data/matable.db',
+      counts,
+      latest_analytics_event_at: latestAnalytics?.created_at || null,
+      integrations: { paystack: 'locked', whatsapp_cloud: 'locked', whatsapp_click_to_chat: 'available' },
+    });
+  });
+
+  app.get('/api/admin/orders', (req: Request, res: Response) => {
+    const requestedLimit = Number(req.query.limit);
+    const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
+    const requestedStatus = String(req.query.status || 'all');
+    const allowedStatuses = new Set(['pending', 'confirmed', 'delivered', 'cancelled']);
+    const filteredOrders = orders
+      .filter((order) => requestedStatus === 'all' || (allowedStatuses.has(requestedStatus) && order.status === requestedStatus))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, limit)
+      .map((order) => ({
+        id: order.id,
+        shop_id: order.shop_id,
+        shop_name: shops.find((shop) => shop.id === order.shop_id)?.name || 'Boutique inconnue',
+        customer_name: order.customer_name,
+        customer_phone: order.customer_phone,
+        delivery_location: order.delivery_location,
+        total_amount: order.total_amount,
+        status: order.status,
+        created_at: order.created_at,
+        items_count: (order.items || []).reduce((sum, item) => sum + item.quantity, 0),
+      }));
+
+    res.json({ orders: filteredOrders, total: filteredOrders.length, status: requestedStatus });
   });
 
   // Manual ON/OFF toggle
