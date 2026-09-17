@@ -31,7 +31,6 @@ L’application est disponible sur : `http://localhost:3000`
 NODE_ENV="development"
 PORT="3000"
 MATABLE_DB_PATH="./data/matable.db"
-DATABASE_URL=""
 APP_URL="http://localhost:3000"
 TRUST_PROXY_HOPS="0"
 ADMIN_ACCESS_KEY="CHANGE_ME_ADMIN_KEY"
@@ -40,21 +39,16 @@ WHATSAPP_ADMIN_PHONE="+2250700000000"
 # Les variables Cloud WhatsApp et Paystack ne sont pas utilisées tant que les intégrations restent verrouillées.
 ```
 
-### Production / PostgreSQL / Neon
+### Production / SQLite persistant
 
-Pour un déploiement réel en production, un stockage durable externe est requis.
+La version actuelle utilise SQLite exclusivement. En production, le fichier doit être placé sur un volume persistant ; sur Render, le Blueprint monte `/data` et configure `MATABLE_DB_PATH=/data/matable.db`.
 
-- `DATABASE_URL` doit être configuré avec une URL Postgres/Neon.
-- L’application ne démarre pas en production si `DATABASE_URL` est absent.
-- Le code SQLite local reste compatible pour le développement local et les tests.
-- La migration vers PostgreSQL doit inclure les tables `shops`, `products`, `orders`, `analytics_events` et `payment_transactions`.
-
-Exemple de configuration Neon :
+Exemple de configuration :
 
 ```env
 NODE_ENV="production"
 PORT="3000"
-DATABASE_URL="postgres://user:password@host.neon.tech/neondb?sslmode=require"
+MATABLE_DB_PATH="/data/matable.db"
 APP_URL="https://matable.ci"
 TRUST_PROXY_HOPS="1"
 ADMIN_ACCESS_KEY="<cle-tres-longue-et-securisee>"
@@ -83,7 +77,7 @@ Avant un déploiement réel, vérifiez bien les points suivants :
 
 1. Définir un `ADMIN_ACCESS_KEY` fort et unique.
 2. Définir `APP_URL` avec l’URL publique exacte du site.
-3. Définir `PORT` et `MATABLE_DB_PATH` explicitement dans l’environnement de production.
+3. Définir `PORT` et `MATABLE_DB_PATH` explicitement dans l’environnement de production, sur un volume persistant.
 4. Vérifier qu’aucun ancien process Node n’écoute déjà sur le port cible.
 5. Vérifier les droits d’écriture du dossier `data/`.
 6. Ne jamais exposer la clé admin ni les secrets Paystack dans le navigateur.

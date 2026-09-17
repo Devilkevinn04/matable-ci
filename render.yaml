@@ -16,8 +16,6 @@ services:
         sync: false
       - key: ADMIN_ACCESS_KEY
         generateValue: true
-      - key: DATABASE_URL
-        sync: false
       - key: MATABLE_DB_PATH
         value: /data/matable.db
       - key: PAYSTACK_MOCK_MODE

@@ -2,11 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import Database from 'better-sqlite3';
 
-export const databaseMode = process.env.DATABASE_URL ? 'postgres' : 'sqlite';
-
-if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
-  throw new Error('Production requires DATABASE_URL. Use Neon/Postgres and migrate the SQLite schema before deploying.');
-}
+export const databaseMode = 'sqlite';
 
 const dataDir = path.join(process.cwd(), 'data');
 const configuredDbPath = process.env.MATABLE_DB_PATH ? path.resolve(process.env.MATABLE_DB_PATH) : path.join(dataDir, 'matable.db');
