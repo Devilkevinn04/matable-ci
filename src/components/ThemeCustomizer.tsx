@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
-import { 
+import {
   Palette, 
   Sparkles, 
-  Crown, 
   Check, 
-  Lock, 
   Layers, 
   Type, 
   Image as ImageIcon, 
@@ -13,7 +11,7 @@ import {
   RefreshCw, 
   ExternalLink 
 } from 'lucide-react';
-import { Shop, ThemeConfig, SubscriptionTier } from '../types';
+import { Shop, ThemeConfig } from '../types';
 import { SAFE_THEME_COLORS, estimateDominantColorFromPixels, getContrastTextColor, mixHexColors, normalizeHex } from '../utils/color';
 import { 
   getAllPresetsForCategory, 
@@ -27,7 +25,7 @@ interface ThemeCustomizerProps {
 }
 
 export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdateShop }) => {
-  const [currentTier] = useState<SubscriptionTier>('pro');
+  const currentTier = 'free';
   const [brandDirection, setBrandDirection] = useState<'luxe' | 'moderne' | 'authentique'>(
     shop.category === 'food' ? 'authentique' : 'luxe'
   );
@@ -179,31 +177,24 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
 
   return (
     <div className="space-y-6">
-      {/* 1. Subscription Tier Header & Switcher */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <Crown className="w-5 h-5 text-amber-500" />
+              <Sparkles className="w-5 h-5 text-emerald-500" />
               <h3 className="font-extrabold text-slate-900 text-base">
                 Fonctionnalités de la Boutique
               </h3>
-              <span className={`text-xs font-black uppercase px-2.5 py-0.5 rounded-full ${
-                currentTier === 'pro'
-                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                  : currentTier === 'premium'
-                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                  : 'bg-slate-100 text-slate-700'
-              }`}>
-                ACCÈS COMPLET
+              <span className="text-xs font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                GRATUIT
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Secteur d'activité : <strong className="text-slate-800">{shop.category === 'food' ? '🍲 Restauration (Food)' : shop.category === 'fashion' ? '👗 Mode & Lingerie' : '🏪 Commerce local'}</strong>. Toutes les options visuelles, promotions et outils marketing sont inclus gratuitement.
+              Secteur d'activité : <strong className="text-slate-800">{shop.category === 'food' ? '🍲 Restauration (Food)' : shop.category === 'fashion' ? '👗 Mode & Lingerie' : '🏪 Commerce local'}</strong>. Toutes les options visuelles, promotions et outils marketing sont disponibles sans abonnement.
             </p>
             <div className="mt-3 rounded-xl bg-slate-50 border border-slate-200 p-3">
               <p className="text-xs font-black text-slate-800">Accès complet inclus</p>
-              <p className="text-[11px] text-slate-500 mt-1">Aucune fonctionnalité n’est réservée à un pack.</p>
+              <p className="text-[11px] text-slate-500 mt-1">Aucune fonctionnalité n’est réservée à un paiement.</p>
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {['Vitrine publique', 'Catalogue et stock', 'Commandes WhatsApp', 'Thèmes et bannières', 'Studio marketing', 'CSS avancé'].map(feature => (
                   <span key={feature} className="text-[10px] font-bold px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-600">
@@ -215,20 +206,12 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-100 p-1">
-            <span className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500">Accès actif</span>
-            <span className={`rounded-lg px-3 py-1.5 text-xs font-black shadow-xs ${
-              currentTier === 'pro' ? 'bg-purple-600 text-white' : currentTier === 'premium' ? 'bg-amber-500 text-white' : 'bg-white text-slate-900'
-            }`}>
-              Accès complet
+            <span className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500">Mode</span>
+            <span className="rounded-lg px-3 py-1.5 text-xs font-black shadow-xs bg-emerald-600 text-white">
+              Gratuit
             </span>
           </div>
         </div>
-
-        {upgradeNotice && (
-          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold">
-            <span>{upgradeNotice}</span>
-          </div>
-        )}
       </div>
 
       {/* 2. Theme Customization Form */}
@@ -248,7 +231,6 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {presets.map(p => {
               const isSelected = themeConfig.theme_preset_id === p.id;
-              const isLocked = false;
 
               return (
                 <div
@@ -268,11 +250,6 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                       {isSelected && (
                         <span className="w-5 h-5 rounded-full bg-white text-slate-900 flex items-center justify-center shadow-xs">
                           <Check className="w-3.5 h-3.5" />
-                        </span>
-                      )}
-                      {isLocked && (
-                        <span className="w-5 h-5 rounded-full bg-black/40 text-white flex items-center justify-center">
-                          <Lock className="w-3 h-3" />
                         </span>
                       )}
                     </div>
@@ -533,11 +510,6 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
               <Megaphone className="w-4 h-4 text-rose-600" />
               <span>Bannière d'En-tête & Mode Événementiel (Soldes, Tabaski, Fêtes)</span>
             </h4>
-            {!isFeatureAllowed(currentTier, 'event_banner') && (
-              <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                <Lock className="w-3 h-3" /> Premium
-              </span>
-            )}
           </div>
 
           {/* Custom Banner URL */}
@@ -550,8 +522,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
               placeholder="https://images.unsplash.com/..."
               value={themeConfig.custom_banner_url || ''}
               onChange={(e) => setThemeConfig(prev => ({ ...prev, custom_banner_url: e.target.value }))}
-              disabled={!isFeatureAllowed(currentTier, 'custom_banner')}
-              className="w-full text-xs p-2.5 rounded-xl border border-slate-300 font-mono focus:ring-2 focus:ring-rose-500 disabled:opacity-50"
+              className="w-full text-xs p-2.5 rounded-xl border border-slate-300 font-mono focus:ring-2 focus:ring-rose-500"
             />
           </div>
 
@@ -563,8 +534,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                   type="checkbox"
                   checked={themeConfig.event_mode_enabled || false}
                   onChange={(e) => setThemeConfig(prev => ({ ...prev, event_mode_enabled: e.target.checked }))}
-                  disabled={!isFeatureAllowed(currentTier, 'event_banner')}
-                  className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4 disabled:opacity-50"
+                  className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4"
                 />
                 <span>Activer le bandeau d'annonce promotionnel en haut de la vitrine</span>
               </label>
@@ -582,8 +552,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                   placeholder="Ex: ✨ NOUVELLE COLLECTION DISPONIBLE — LIVRAISON EXPRESS ABIDJAN"
                   value={themeConfig.event_banner_text || ''}
                   onChange={(e) => setThemeConfig(prev => ({ ...prev, event_banner_text: e.target.value }))}
-                  disabled={!isFeatureAllowed(currentTier, 'event_banner')}
-                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300 font-bold bg-white focus:ring-2 focus:ring-rose-500 disabled:opacity-50"
+                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300 font-bold bg-white focus:ring-2 focus:ring-rose-500"
                 />
               </div>
             )}
@@ -591,9 +560,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
         </div>
 
         {/* Advanced CSS Controls (PRO Tier Only) */}
-        <div className={`p-5 rounded-2xl border shadow-2xs space-y-4 ${
-          currentTier === 'pro' ? 'bg-white border-slate-200' : 'bg-slate-50/70 border-dashed border-slate-300'
-        }`}>
+        <div className="p-5 rounded-2xl border shadow-2xs space-y-4 bg-white border-slate-200">
           <div className="flex items-center justify-between">
             <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-purple-600" />

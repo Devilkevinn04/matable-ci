@@ -387,10 +387,25 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center">
-        <div className="w-12 h-12 border-4 border-slate-900 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-slate-700 font-bold">Chargement optimisé de la vitrine...</p>
-        <span className="text-xs text-slate-400 mt-1">Conçu pour connexions 3G/4G Côte d'Ivoire</span>
+      <div className="page-loading-wrap">
+        <div className="page-loading-shell">
+          <div className="page-loading-orb page-loading-orb-1" />
+          <div className="page-loading-orb page-loading-orb-2" />
+          <div className="brand-mark brand-mark-hero">M</div>
+          <div className="page-loading-copy">
+            <span className="eyebrow">MaTable.ci</span>
+            <h2>Chargement de la vitrine…</h2>
+            <div className="loading-progress">
+              <div className="loading-progress-bar" />
+            </div>
+            <div className="loading-dots">
+              <span />
+              <span />
+              <span />
+            </div>
+            <p>Conçu pour des connexions rapides et stables sur mobile.</p>
+          </div>
+        </div>
       </div>
     );
   }

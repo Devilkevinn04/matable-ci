@@ -59,7 +59,6 @@ export const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'expiring'>('all');
-  const [tierFilter, setTierFilter] = useState<'all' | 'standard' | 'premium' | 'pro'>('all');
   const [sortBy, setSortBy] = useState<'sales' | 'orders' | 'expiry' | 'name'>('sales');
   const [cronRunning, setCronRunning] = useState(false);
   const [cronResult, setCronResult] = useState<any | null>(null);
@@ -276,7 +275,6 @@ export const AdminDashboard: React.FC = () => {
     (s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.whatsapp_number.includes(searchQuery) ||
       s.slug.toLowerCase().includes(searchQuery.toLowerCase())) &&
-    (tierFilter === 'all' || s.subscription_tier === tierFilter) &&
     (statusFilter === 'all' ||
       (statusFilter === 'active' && s.is_active) ||
       (statusFilter === 'inactive' && !s.is_active) ||
@@ -297,9 +295,9 @@ export const AdminDashboard: React.FC = () => {
   const outOfStockProducts = shops.reduce((sum, shop) => sum + shop.out_of_stock_count, 0);
 
   const exportShopsCsv = () => {
-    const headers = ['Boutique', 'Slug', 'Tier', 'Statut', 'CA FCFA', 'Commandes', 'Panier moyen', 'Produits', 'Stock bas', 'Ruptures', 'Echeance'];
+    const headers = ['Boutique', 'Slug', 'Statut', 'CA FCFA', 'Commandes', 'Panier moyen', 'Produits', 'Stock bas', 'Ruptures', 'Echeance'];
     const rows = filteredShops.map(shop => [
-      shop.name, shop.slug, shop.subscription_tier, shop.is_active ? 'active' : 'inactive', shop.total_sales,
+      shop.name, shop.slug, shop.is_active ? 'active' : 'inactive', shop.total_sales,
       shop.orders_count, shop.average_order_value, shop.products_count, shop.low_stock_count, shop.out_of_stock_count,
       shop.subscription_expires_at,
     ]);
@@ -329,7 +327,7 @@ export const AdminDashboard: React.FC = () => {
                   <span className="dashboard-chip dashboard-chip-soft">Tour de contrôle</span>
                 </div>
                 <p className="text-[11px] text-[#4a3a30] mt-0.5 leading-4 max-w-xl">
-                  Gestion des abonnements et alertes automatiques
+                  Gestion des boutiques et alertes automatiques
                 </p>
               </div>
             </div>

@@ -31,9 +31,10 @@ import {
   Copy,
   RotateCcw,
   Calendar,
-  Upload
+  Upload,
+  Boxes
 } from 'lucide-react';
-import { Shop, Product, Order, FlashBilan, ShopCategory, SubscriptionTier, OrderStatus } from '../types';
+import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus } from '../types';
 import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../utils/format';
 import { MarketingStoryStudio } from './MarketingStoryStudio';
 import { ThemeCustomizer } from './ThemeCustomizer';
@@ -107,15 +108,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const [regCityOther, setRegCityOther] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regCategory, setRegCategory] = useState<ShopCategory>('fashion');
-  const [regTier, setRegTier] = useState<SubscriptionTier>('standard');
   const [regLoading, setRegLoading] = useState(false);
   const [registrationLinks, setRegistrationLinks] = useState<{
     publicUrl: string;
     privateUrl: string;
     whatsappUrl: string;
     emailUrl: string;
-    paymentLink?: string;
-    paymentProvider?: 'whatsapp' | 'paystack';
   } | null>(null);
 
   // Active view tab
@@ -393,7 +391,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           city: regCity === 'Autre ville / commune' ? regCityOther.trim() : regCity.trim(),
           category: regCategory,
           email: regEmail.trim() || undefined,
-          subscription_tier: regTier,
           welcome_message: regCategory === 'food' 
             ? 'Commandez nos plats chauds du jour livrés directement à Abidjan !'
             : 'Découvrez notre collection raffinée livrée en toute discrétion à Abidjan.',
@@ -417,16 +414,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         privateUrl,
         whatsappUrl: `https://wa.me/${data.shop.whatsapp_number.replace(/\D/g, '')}?text=${encodeURIComponent(accessMessage)}`,
         emailUrl: `mailto:${regEmail.trim()}?subject=${encodeURIComponent(`Accès MaTable.ci - ${data.shop.name}`)}&body=${encodeURIComponent(accessMessage)}`,
-        paymentLink: data.payment_link || undefined,
-        paymentProvider: data.payment_provider || 'whatsapp',
       });
       localStorage.setItem('matable_registration_links', JSON.stringify({
         publicUrl,
         privateUrl,
         whatsappUrl: `https://wa.me/${data.shop.whatsapp_number.replace(/\D/g, '')}?text=${encodeURIComponent(accessMessage)}`,
         emailUrl: `mailto:${regEmail.trim()}?subject=${encodeURIComponent(`Accès MaTable.ci - ${data.shop.name}`)}&body=${encodeURIComponent(accessMessage)}`,
-        paymentLink: data.payment_link || undefined,
-        paymentProvider: data.payment_provider || 'whatsapp',
       }));
       loadShopData(data.shop.id);
     } catch (err: unknown) {
@@ -1224,38 +1217,50 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
         {/* REGISTER NEW SHOP MODAL */}
         {isRegisterModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#211712]/60 backdrop-blur-xs p-2 sm:p-4">
-            <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-[28px] border-[3px] border-[#211712] bg-[#fffaf2] p-3 shadow-[10px_10px_0_rgba(33,23,18,0.96)] sm:p-5">
-              <div className="flex items-center justify-between gap-3 border-b-[2px] border-[#211712] pb-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Store className="w-5 h-5 shrink-0 text-[#211712]" />
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#211712]/60 p-3 backdrop-blur-sm sm:p-4 lg:p-6">
+            <div className="w-full max-w-[1100px] max-h-[94vh] overflow-y-auto rounded-[28px] border-[3px] border-[#211712] bg-[#fffaf2] p-4 shadow-[12px_12px_0_rgba(33,23,18,0.96)] sm:p-5 lg:p-6">
+              <div className="flex flex-col gap-3 border-b-[2px] border-[#211712] pb-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl border-[2px] border-[#211712] bg-[#f7e7c7] text-[#211712]">
+                    <Store className="h-5 w-5" />
+                  </div>
                   <div className="min-w-0">
-                    <h3 className="truncate font-extrabold text-[#211712] text-base">Créer ma boutique</h3>
-                    <p className="text-[10px] text-[#6b5548] mt-0.5">Quelques informations pour préparer votre espace.</p>
+                    <h3 className="truncate text-base font-extrabold text-[#211712] sm:text-lg lg:text-xl">Créer ma boutique</h3>
+                    <p className="mt-0.5 text-[10px] text-[#6b5548] sm:text-[11px] lg:text-xs">Quelques informations pour préparer votre espace.</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsRegisterModalOpen(false)}
                   aria-label="Fermer le formulaire"
-                  className="h-8 w-8 shrink-0 rounded-full border-[2px] border-[#211712] bg-[#f7e7c7] hover:bg-[#f0d6a5] flex items-center justify-center text-[#211712]"
+                  className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-[2px] border-[#211712] bg-[#f7e7c7] text-[#211712] transition hover:bg-[#f0d6a5] sm:ml-0"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="h-4 w-4" />
                 </button>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-1.5 text-center text-[9px] font-black uppercase tracking-[0.08em] text-[#6b5548] sm:gap-2 sm:text-[10px]">
-                <div className="rounded-xl border-[2px] border-[#211712] bg-white px-2 py-2 text-[#1b3a63]"><span className="block text-sm">1</span>Infos</div>
-                <div className="rounded-xl border-[2px] border-[#211712] bg-[#f7e7c7] px-2 py-2 text-[#8a5a12]"><span className="block text-sm">2</span>Accès</div>
-                <div className="rounded-xl border-[2px] border-[#211712] bg-[#edf7f2] px-2 py-2 text-[#155c3d]"><span className="block text-sm">3</span>Validation</div>
+              <div className="mt-4 grid grid-cols-1 gap-2 text-center text-[10px] font-black uppercase tracking-[0.08em] text-[#6b5548] sm:grid-cols-3 sm:gap-3 sm:text-[10px]">
+                <div className="rounded-xl border-[2px] border-[#211712] bg-white px-2 py-2 text-[#1b3a63]">
+                  <span className="block text-base">1</span>
+                  Infos
+                </div>
+                <div className="rounded-xl border-[2px] border-[#211712] bg-[#f7e7c7] px-2 py-2 text-[#8a5a12]">
+                  <span className="block text-base">2</span>
+                  Accès
+                </div>
+                <div className="rounded-xl border-[2px] border-[#211712] bg-[#edf7f2] px-2 py-2 text-[#155c3d]">
+                  <span className="block text-base">3</span>
+                  Validation
+                </div>
               </div>
 
-              <form onSubmit={handleRegisterShop} className="mt-4 space-y-4 sm:space-y-5">
-                <section className="space-y-3">
+              <form onSubmit={handleRegisterShop} className="mt-5 space-y-4 lg:space-y-5">
+                <section className="space-y-3 rounded-2xl border-[2px] border-[#211712] bg-[#fff] p-3 sm:p-4 lg:p-5">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63]">Identité de la boutique</p>
-                    <p className="text-[11px] text-[#6b5548] mt-1">Ces informations seront visibles par vos clients.</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">Identité de la boutique</p>
+                    <p className="mt-1 text-[11px] text-[#6b5548] lg:text-xs">Ces informations seront visibles par vos clients.</p>
                   </div>
+
                   <input
                     type="text"
                     aria-label="Nom de votre boutique"
@@ -1263,18 +1268,16 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                     placeholder="Ex: Glamour Abidjan, Babi Braisé..."
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
-                    className="w-full text-sm p-3 rounded-xl border-[2px] border-[#211712] bg-white font-bold text-[#211712] placeholder:text-slate-400"
+                    className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-3 text-sm font-bold text-[#211712] placeholder:text-slate-400 lg:text-[15px]"
                   />
 
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-xs font-bold text-[#4a3a30]">
-                        Secteur d'activité *
-                      </label>
+                      <label className="mb-1 block text-xs font-bold text-[#4a3a30] lg:text-sm">Secteur d'activité *</label>
                       <select
                         value={regCategory}
                         onChange={(e) => setRegCategory(e.target.value as ShopCategory)}
-                        className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#211712] bg-white font-bold text-[#211712]"
+                        className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 text-xs font-bold text-[#211712] lg:text-sm"
                       >
                         {shopCategoryOptions.map((option) => (
                           <option key={option.value} value={option.value}>{option.icon} {option.label}</option>
@@ -1283,12 +1286,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                     </div>
 
                     <div>
-                      <label className="mb-1 block text-xs font-bold text-[#4a3a30]">Ville / Commune *</label>
+                      <label className="mb-1 block text-xs font-bold text-[#4a3a30] lg:text-sm">Ville / Commune *</label>
                       <select
                         required
                         value={regCity}
                         onChange={(e) => setRegCity(e.target.value)}
-                        className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#211712] bg-white text-[#211712]"
+                        className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 text-xs text-[#211712] lg:text-sm"
                       >
                         <option value="Abidjan">Abidjan</option>
                         {abidjanCommunes.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
@@ -1300,23 +1303,22 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                           value={regCityOther}
                           onChange={(e) => setRegCityOther(e.target.value)}
                           placeholder="Saisissez votre ville ou commune"
-                          className="mt-2 w-full text-xs p-2.5 rounded-xl border-[2px] border-[#211712] bg-white text-[#211712]"
+                          className="mt-2 w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 text-xs text-[#211712] lg:text-sm"
                         />
                       )}
                     </div>
                   </div>
                 </section>
 
-                <section className="space-y-3">
+                <section className="space-y-3 rounded-2xl border-[2px] border-[#211712] bg-[#fff] p-3 sm:p-4 lg:p-5">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63]">Accès et contact</p>
-                    <p className="text-[11px] text-[#6b5548] mt-1">Votre numéro sert de contact public pour les commandes. Conservez votre lien privé de gestion.</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">Accès et contact</p>
+                    <p className="mt-1 text-[11px] text-[#6b5548] lg:text-xs">Votre numéro sert de contact public pour les commandes. Conservez votre lien privé de gestion.</p>
                   </div>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-xs font-bold text-[#4a3a30]">
-                        Numéro WhatsApp *
-                      </label>
+                      <label className="mb-1 block text-xs font-bold text-[#4a3a30] lg:text-sm">Numéro WhatsApp *</label>
                       <input
                         type="tel"
                         inputMode="tel"
@@ -1324,13 +1326,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                         placeholder="+225 07 00 11 22 33"
                         value={regPhone}
                         onChange={(e) => setRegPhone(e.target.value)}
-                        className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#211712] bg-white font-mono text-[#211712]"
+                        className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 text-xs font-mono text-[#211712] lg:text-sm"
                       />
                     </div>
+
                     <div>
-                      <label className="mb-1 block text-xs font-bold text-[#4a3a30]">
-                        Code PIN (6 chiffres) *
-                      </label>
+                      <label className="mb-1 block text-xs font-bold text-[#4a3a30] lg:text-sm">Code PIN (6 chiffres) *</label>
                       <div className="relative">
                         <input
                           type={showRegPin ? 'text' : 'password'}
@@ -1341,9 +1342,14 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                           placeholder="6 chiffres"
                           value={regPin}
                           onChange={(e) => setRegPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                          className="w-full text-xs p-2.5 pr-12 rounded-xl border-[2px] border-[#211712] bg-white font-mono text-center tracking-widest text-[#211712]"
+                          className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 pr-11 text-center text-xs font-mono tracking-widest text-[#211712] lg:text-sm"
                         />
-                        <button type="button" onClick={() => setShowRegPin((visible) => !visible)} aria-label={showRegPin ? 'Masquer le PIN' : 'Afficher le PIN'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 hover:bg-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => setShowRegPin((visible) => !visible)}
+                          aria-label={showRegPin ? 'Masquer le PIN' : 'Afficher le PIN'}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 transition hover:bg-slate-100"
+                        >
                           {showRegPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
@@ -1351,39 +1357,39 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-bold text-[#4a3a30]">Email de réception <span className="font-normal text-slate-500">(optionnel)</span></label>
+                    <label className="mb-1 block text-xs font-bold text-[#4a3a30] lg:text-sm">Email de réception <span className="font-normal text-slate-500">(optionnel)</span></label>
                     <input
                       type="email"
                       placeholder="vous@exemple.ci"
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
-                      className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#211712] bg-white text-[#211712]"
+                      className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 text-xs text-[#211712] lg:text-sm"
                     />
                   </div>
                 </section>
 
-                <section className="space-y-3">
+                <section className="space-y-3 rounded-2xl border-[2px] border-[#211712] bg-[#edf7f2] p-3 sm:p-4 lg:p-5">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63]">Accès complet inclus</p>
-                    <p className="text-[11px] text-[#6b5548] mt-1">Toutes les fonctionnalités sont incluses gratuitement pour chaque boutique.</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">Accès complet inclus</p>
+                    <p className="mt-1 text-[11px] text-[#6b5548] lg:text-xs">Toutes les fonctionnalités sont incluses gratuitement pour chaque boutique.</p>
                   </div>
-                  <div className="rounded-2xl border-[2px] border-[#211712] bg-[#edf7f2] p-3 text-[11px] text-[#155c3d] leading-relaxed">
+                  <div className="rounded-xl border-[2px] border-[#211712] bg-white p-3 text-[11px] leading-relaxed text-[#155c3d] lg:text-sm">
                     Après la création, vous recevez votre lien privé et votre lien vitrine. Catalogue, personnalisation, promotions et studio marketing sont immédiatement disponibles.
                   </div>
                 </section>
 
-                <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+                <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end lg:gap-3">
                   <button
                     type="button"
                     onClick={() => setIsRegisterModalOpen(false)}
-                    className="w-full rounded-xl border-[2px] border-[#211712] bg-[#fff] px-4 py-3 text-xs font-bold text-[#211712] shadow-[3px_3px_0_rgba(33,23,18,0.94)] sm:w-auto"
+                    className="w-full rounded-xl border-[2px] border-[#211712] bg-white px-4 py-3 text-xs font-bold text-[#211712] shadow-[3px_3px_0_rgba(33,23,18,0.94)] transition hover:-translate-y-0.5 sm:w-auto lg:px-5 lg:py-3.5 lg:text-sm"
                   >
                     Annuler
                   </button>
                   <button
                     type="submit"
                     disabled={regLoading}
-                    className="w-full rounded-xl bg-[#1b3a63] px-5 py-3 text-xs font-bold text-white border-[2px] border-[#211712] shadow-[4px_4px_0_rgba(33,23,18,0.95)] sm:w-auto"
+                    className="w-full rounded-xl border-[2px] border-[#211712] bg-[#1b3a63] px-5 py-3 text-xs font-bold text-white shadow-[4px_4px_0_rgba(33,23,18,0.95)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto lg:px-6 lg:py-3.5 lg:text-sm"
                   >
                     {regLoading ? 'Création...' : 'Créer ma boutique'}
                   </button>
@@ -1454,21 +1460,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     <div className="merchant-dashboard min-h-screen pb-20">
       {/* Top Shop Control Bar */}
       <div className="bg-[#fffaf2] border-b-[3px] border-[#211712] sticky top-0 z-30 shadow-[0_8px_0_rgba(33,23,18,0.08)]">
-        {currentShop && currentShop.payment_status === 'pending' && (
-          <div className="border-b-[2px] border-[#211712] bg-gradient-to-r from-[#ecf0f8] via-[#f7e7c7] to-[#f8dcd0] px-4 py-3">
-            <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs text-[#211712]">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-600 px-2.5 py-1 font-black text-white">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Activation administrateur
-                </span>
-                <span className="font-semibold text-slate-700">
-                  Contactez l’administrateur pour réactiver cette boutique.
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
         <div className="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             {currentShop.theme_config?.logo_url ? (
@@ -1491,8 +1482,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
                   {currentShop.category === 'food' ? '🍲' : '🏪'} {shopCategoryLabels[currentShop.category]}
                 </span>
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                  {currentShop.subscription_tier.toUpperCase()}
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  GRATUIT
                 </span>
               </div>
               <p className="truncate text-xs text-slate-500">
@@ -1725,7 +1716,18 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             {dataLoading ? (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3" aria-label="Chargement du catalogue">
                 {[1, 2, 3].map((skeleton) => (
-                  <div key={skeleton} className="h-72 animate-pulse rounded-[1.5rem] border-[2px] border-slate-200 bg-white" />
+                  <div key={skeleton} className="merchant-skeleton-card">
+                    <div className="merchant-skeleton-media" />
+                    <div className="merchant-skeleton-body">
+                      <div className="merchant-skeleton-line short" />
+                      <div className="merchant-skeleton-line" />
+                      <div className="merchant-skeleton-line medium" />
+                      <div className="merchant-skeleton-row">
+                        <div className="merchant-skeleton-pill" />
+                        <div className="merchant-skeleton-pill short" />
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : filteredProducts.length === 0 ? (
@@ -2662,174 +2664,168 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
       {/* PRODUCT ADD/EDIT MODAL */}
       {isProductModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4">
-          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-extrabold text-slate-900 text-base">
-                {editingProduct ? "Modifier l'article" : 'Ajouter un article au catalogue'}
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#211712]/60 p-3 backdrop-blur-sm sm:p-4 lg:p-6">
+          <div className="w-full max-w-[980px] max-h-[94vh] overflow-y-auto rounded-[28px] border-[3px] border-[#211712] bg-[#fffaf2] p-4 shadow-[12px_12px_0_rgba(33,23,18,0.96)] sm:p-5 lg:p-6">
+            <div className="flex items-center justify-between gap-3 border-b-[2px] border-[#211712] pb-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl border-[2px] border-[#211712] bg-[#f7e7c7] text-[#211712]">
+                  <Boxes className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="truncate text-base font-extrabold text-[#211712] sm:text-lg lg:text-xl">
+                    {editingProduct ? 'Modifier l\'article' : 'Ajouter un article au catalogue'}
+                  </h3>
+                  <p className="mt-0.5 text-[10px] text-[#6b5548] sm:text-[11px] lg:text-xs">Complétez les détails utiles pour la vitrine et les commandes.</p>
+                </div>
+              </div>
               <button
                 onClick={() => setIsProductModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-[2px] border-[#211712] bg-[#f7e7c7] text-[#211712] transition hover:bg-[#f0d6a5]"
+                aria-label="Fermer le formulaire"
               >
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveProduct} className="space-y-4">
-              {/* Product Title */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nom de l'article *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder={currentShop.category === 'food' ? "Ex: Poulet braisé kédjénou" : "Ex: Nuisette en soie dentelle noire"}
-                  value={prodTitle}
-                  onChange={(e) => setProdTitle(e.target.value)}
-                  className="w-full text-xs p-3 rounded-xl border border-slate-300 font-bold focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
-              </div>
-
-              {/* Product Category */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Catégorie d'article (optionnelle)
+            <form onSubmit={handleSaveProduct} className="mt-5 space-y-4 lg:space-y-5">
+              <section className="space-y-3 rounded-2xl border-[2px] border-[#211712] bg-white p-3 sm:p-4 lg:p-5">
+                <div>
+                  <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">
+                    Nom de l'article *
                   </label>
-                  <span className="text-[10px] text-slate-400">Pour le filtrage côté client</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder={currentShop.category === 'food' ? 'Ex: Poulet braisé kédjénou' : 'Ex: Nuisette en soie dentelle noire'}
+                    value={prodTitle}
+                    onChange={(e) => setProdTitle(e.target.value)}
+                    className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-3 text-sm font-bold text-[#211712] placeholder:text-slate-400 lg:text-[15px]"
+                  />
                 </div>
-                <input
-                  type="text"
-                  placeholder={currentShop.category === 'food' ? "Ex: Grillades, Sauces, Boissons, Desserts" : "Ex: Robes, Lingerie, Chaussures, Sacs"}
-                  value={prodCategory}
-                  onChange={(e) => setProdCategory(e.target.value)}
-                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300 font-medium focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
-                <div className="flex flex-wrap gap-1.5 mt-1.5">
-                  {(currentShop.category === 'food'
-                    ? ['Plats', 'Grillades', 'Boissons', 'Accompagnements', 'Desserts']
-                    : ['Robes', 'Lingerie', 'Chaussures', 'Accessoires', 'Ensembles']
-                  ).map((catSuggestion) => (
-                    <button
-                      key={catSuggestion}
-                      type="button"
-                      onClick={() => setProdCategory(catSuggestion)}
-                      className={`text-[10px] px-2 py-0.5 rounded-full border transition-all ${
-                        prodCategory === catSuggestion
-                          ? 'bg-slate-900 text-white border-slate-900 font-bold shadow-2xs'
-                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {catSuggestion}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
-              {/* Product Description */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Descriptif court (taille, matière, ingrédients, conseils)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[11px] font-mono ${prodDescription.length > 200 ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>
-                      {prodDescription.length}/200 car.
+                <div>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">
+                      Catégorie d'article (optionnelle)
+                    </label>
+                    <span className="text-[10px] text-slate-400">Filtrage client</span>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder={currentShop.category === 'food' ? 'Ex: Grillades, Sauces, Boissons, Desserts' : 'Ex: Robes, Lingerie, Chaussures, Sacs'}
+                    value={prodCategory}
+                    onChange={(e) => setProdCategory(e.target.value)}
+                    className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 text-xs text-[#211712] lg:text-sm"
+                  />
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {(currentShop.category === 'food'
+                      ? ['Plats', 'Grillades', 'Boissons', 'Accompagnements', 'Desserts']
+                      : ['Robes', 'Lingerie', 'Chaussures', 'Accessoires', 'Ensembles']
+                    ).map((catSuggestion) => (
+                      <button
+                        key={catSuggestion}
+                        type="button"
+                        onClick={() => setProdCategory(catSuggestion)}
+                        className={`rounded-full border px-2.5 py-1 text-[10px] transition ${
+                          prodCategory === catSuggestion
+                            ? 'border-[#211712] bg-[#211712] font-bold text-white'
+                            : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        {catSuggestion}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">
+                      Descriptif court
+                    </label>
+                    <span className={`text-[11px] font-mono ${prodDescription.length > 200 ? 'font-bold text-amber-700' : 'text-slate-400'}`}>
+                      {prodDescription.length}/200
                     </span>
                   </div>
+                  <textarea
+                    rows={3}
+                    placeholder={currentShop.category === 'food'
+                      ? "Ex: Accompagné d'attiéké à l'huile rouge et piment vert frais. Portion généreuse pour 2 personnes."
+                      : "Ex: Matière satin soyeux, bonnets doublés. Conseils : lavage délicat à la main."}
+                    value={prodDescription}
+                    onChange={(e) => setProdDescription(e.target.value)}
+                    className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-3 text-xs text-[#211712] lg:text-sm"
+                  />
                 </div>
-                <textarea
-                  rows={3}
-                  placeholder={currentShop.category === 'food' 
-                    ? "Ex: Accompagné d'attiéké à l'huile rouge et piment vert frais. Portion généreuse pour 2 personnes."
-                    : "Ex: Matière satin soyeux, bonnets doublés. Conseils : lavage délicat à la main."}
-                  value={prodDescription}
-                  onChange={(e) => setProdDescription(e.target.value)}
-                  className="w-full text-xs p-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
-              </div>
+              </section>
 
-              {/* Category-Specific Fields */}
-              {currentShop.category === 'fashion' ? (
-                <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Tailles (séparées par virgule)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="S, M, L, XL"
-                      value={prodSizes}
-                      onChange={(e) => setProdSizes(e.target.value)}
-                      className="w-full text-xs p-2 rounded-lg border border-slate-300 bg-white"
-                    />
+              <section className="space-y-3 rounded-2xl border-[2px] border-[#211712] bg-[#fff] p-3 sm:p-4 lg:p-5">
+                {currentShop.category === 'fashion' ? (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">Tailles</label>
+                      <input
+                        type="text"
+                        placeholder="S, M, L, XL"
+                        value={prodSizes}
+                        onChange={(e) => setProdSizes(e.target.value)}
+                        className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 text-xs text-[#211712] lg:text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">Couleurs</label>
+                      <input
+                        type="text"
+                        placeholder="Noir, Rouge, Doré"
+                        value={prodColors}
+                        onChange={(e) => setProdColors(e.target.value)}
+                        className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 text-xs text-[#211712] lg:text-sm"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Couleurs (séparées par virgule)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Noir, Rouge, Doré"
-                      value={prodColors}
-                      onChange={(e) => setProdColors(e.target.value)}
-                      className="w-full text-xs p-2 rounded-lg border border-slate-300 bg-white"
-                    />
+                ) : (
+                  <div className="space-y-3 rounded-xl border-[2px] border-[#e7d4ae] bg-[#fff8ed] p-3">
+                    <div>
+                      <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.14em] text-[#8a5a12] lg:text-[11px]">Temps de préparation (minutes)</label>
+                      <input
+                        type="number"
+                        min={5}
+                        step={5}
+                        placeholder="20"
+                        value={prodPrepTime}
+                        onChange={(e) => setProdPrepTime(e.target.value === '' ? '' : Number(e.target.value))}
+                        className="w-full rounded-xl border-[2px] border-[#e7d4ae] bg-white p-2.5 text-xs text-[#211712] lg:text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.14em] text-[#8a5a12] lg:text-[11px]">Options / Sauces</label>
+                      <input
+                        type="text"
+                        placeholder="Sauce pimentée, Alloco en plus, Boisson fraîche"
+                        value={prodModifiers}
+                        onChange={(e) => setProdModifiers(e.target.value)}
+                        className="w-full rounded-xl border-[2px] border-[#e7d4ae] bg-white p-2.5 text-xs text-[#211712] lg:text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.14em] text-[#8a5a12] lg:text-[11px]">Choix max par groupe</label>
+                      <select
+                        value={prodModifierMaxSelections}
+                        onChange={(e) => setProdModifierMaxSelections(Number(e.target.value))}
+                        className="w-full rounded-xl border-[2px] border-[#e7d4ae] bg-white p-2.5 text-xs font-bold text-[#211712] lg:text-sm"
+                      >
+                        <option value={1}>1 choix</option>
+                        <option value={2}>Jusqu’à 2 choix</option>
+                      </select>
+                      <p className="mt-1 text-[10px] text-[#8a5a12]">Exemple : Sauce : Piment, Doux | Accompagnement : Alloco, Attiéké.</p>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="space-y-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
-                  <div>
-                    <label className="block text-[11px] font-bold text-amber-900 mb-1">
-                      ⏱️ Temps de préparation estimé (minutes)
-                    </label>
-                    <input
-                      type="number"
-                      min={5}
-                      step={5}
-                      placeholder="20"
-                      value={prodPrepTime}
-                      onChange={(e) => setProdPrepTime(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full text-xs p-2 rounded-lg border border-amber-300 bg-white font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-amber-900 mb-1">
-                      Sauces / Options au choix (séparées par virgule)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Sauce pimentée, Alloco en plus, Boisson fraîche"
-                      value={prodModifiers}
-                      onChange={(e) => setProdModifiers(e.target.value)}
-                      className="w-full text-xs p-2 rounded-lg border border-amber-300 bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-amber-900 mb-1">
-                      Nombre maximum de choix par groupe
-                    </label>
-                    <select
-                      value={prodModifierMaxSelections}
-                      onChange={(e) => setProdModifierMaxSelections(Number(e.target.value))}
-                      className="w-full text-xs p-2 rounded-lg border border-amber-300 bg-white font-bold"
-                    >
-                      <option value={1}>1 choix</option>
-                      <option value={2}>Jusqu’à 2 choix</option>
-                    </select>
-                    <p className="text-[10px] text-amber-800 mt-1">Séparez plusieurs groupes avec `|`, par exemple : Sauce : Piment, Doux | Accompagnement : Alloco, Attiéké.</p>
-                  </div>
-                </div>
-              )}
+                )}
+              </section>
 
-              {/* Price & Stock */}
-              <div className="grid grid-cols-2 gap-3">
+              <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Prix (en FCFA) *
-                  </label>
+                  <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">Prix (en FCFA) *</label>
                   <input
                     type="number"
                     required
@@ -2838,98 +2834,91 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                     placeholder="15000"
                     value={prodPrice}
                     onChange={(e) => setProdPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full text-xs p-3 rounded-xl border border-slate-300 font-mono font-bold"
+                    className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-3 text-xs font-mono font-bold text-[#211712] lg:text-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Quantité en stock
-                  </label>
+                  <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">Quantité en stock</label>
                   <input
                     type="number"
                     min={0}
                     placeholder="10"
                     value={prodStock}
                     onChange={(e) => setProdStock(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full text-xs p-3 rounded-xl border border-slate-300 font-mono"
+                    className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-3 text-xs font-mono text-[#211712] lg:text-sm"
                   />
                 </div>
-              </div>
+              </section>
 
-              {/* Product Photo Upload with client compression */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Photo produit
-                </label>
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-3 flex items-center gap-3">
-                  <img
-                    src={prodImage}
-                    alt="Aperçu du produit"
-                    className="w-20 h-20 rounded-xl object-cover border border-slate-200 bg-white shrink-0"
-                  />
-                  <div className="flex-1">
-                    <input
-                      id="product-photo-upload"
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/avif"
-                      onChange={handleImageUpload}
-                      className="sr-only"
+              <section className="space-y-3 rounded-2xl border-[2px] border-[#211712] bg-[#fff] p-3 sm:p-4 lg:p-5">
+                <div>
+                  <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">Photo produit</label>
+                  <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-3 sm:flex-row sm:items-center">
+                    <img
+                      src={prodImage}
+                      alt="Aperçu du produit"
+                      className="h-20 w-20 shrink-0 rounded-xl border border-slate-200 bg-white object-cover"
                     />
-                    <label htmlFor="product-photo-upload" className="inline-flex items-center gap-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-3 py-2 text-xs font-black cursor-pointer transition-colors">
-                      <Upload className="w-3.5 h-3.5" /> Choisir une photo HD
-                    </label>
-                    <p className="text-[11px] text-slate-500 mt-2">JPG, PNG, WebP ou AVIF. L’image est redimensionnée et compressée automatiquement pour un chargement rapide.</p>
-                    {imageCompressing && (
-                      <span className="text-[11px] text-amber-700 font-bold block mt-2">Optimisation de la photo en cours...</span>
-                    )}
-                    {compressedSizeKB && (
-                      <span className="text-[11px] text-emerald-600 font-bold block mt-2">
-                        ✓ Photo prête : {originalImageSizeKB || '?'} KB → {compressedSizeKB} KB
-                      </span>
-                    )}
+                    <div className="flex-1">
+                      <input
+                        id="product-photo-upload"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/avif"
+                        onChange={handleImageUpload}
+                        className="sr-only"
+                      />
+                      <label htmlFor="product-photo-upload" className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-[#211712] px-3 py-2 text-xs font-black text-white transition hover:bg-[#3a2d28]">
+                        <Upload className="h-3.5 w-3.5" /> Choisir une photo HD
+                      </label>
+                      <p className="mt-2 text-[11px] text-slate-500">JPG, PNG, WebP ou AVIF. La photo est optimisée automatiquement.</p>
+                      {imageCompressing && <span className="mt-2 block text-[11px] font-bold text-amber-700">Optimisation de la photo en cours...</span>}
+                      {compressedSizeKB && (
+                        <span className="mt-2 block text-[11px] font-bold text-emerald-600">
+                          ✓ Photo prête : {originalImageSizeKB || '?'} KB → {compressedSizeKB} KB
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">Image secondaire / lookbook <span className="font-normal text-slate-400">(optionnelle)</span></label>
-                <input
-                  type="url"
-                  value={prodLookbookImage}
-                  onChange={(e) => setProdLookbookImage(e.target.value)}
-                  placeholder="https://.../photo-lookbook.jpg"
-                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300 font-mono"
-                />
-                <p className="mt-1 text-[10px] text-slate-500">Cette image sera affichée sous la photo principale sur votre vitrine.</p>
-              </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">Image secondaire / lookbook <span className="font-normal text-slate-400">(optionnelle)</span></label>
+                  <input
+                    type="url"
+                    value={prodLookbookImage}
+                    onChange={(e) => setProdLookbookImage(e.target.value)}
+                    placeholder="https://.../photo-lookbook.jpg"
+                    className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 text-xs text-[#211712] lg:text-sm"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-500">Cette image apparaît sous la photo principale sur la vitrine.</p>
+                </div>
 
-              {/* Visibility Checkbox */}
-              <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <input
-                  type="checkbox"
-                  id="prod-available"
-                  checked={prodIsAvailable}
-                  onChange={(e) => setProdIsAvailable(e.target.checked)}
-                  className="rounded text-slate-900 focus:ring-slate-900"
-                />
-                <label htmlFor="prod-available" className="text-xs font-bold text-slate-700 cursor-pointer">
-                  Afficher immédiatement cet article dans la vitrine client
-                </label>
-              </div>
+                <div className="flex items-start gap-3 rounded-xl border-[2px] border-[#211712] bg-[#edf7f2] p-3">
+                  <input
+                    type="checkbox"
+                    id="prod-available"
+                    checked={prodIsAvailable}
+                    onChange={(e) => setProdIsAvailable(e.target.checked)}
+                    className="mt-0.5 rounded border-[#211712] text-[#211712] focus:ring-[#211712]"
+                  />
+                  <label htmlFor="prod-available" className="cursor-pointer text-xs font-bold text-[#155c3d] lg:text-sm">
+                    Afficher immédiatement cet article dans la vitrine client
+                  </label>
+                </div>
+              </section>
 
-              {/* Modal Buttons */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end lg:gap-3">
                 <button
                   type="button"
                   onClick={() => setIsProductModalOpen(false)}
-                  className="py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs"
+                  className="w-full rounded-xl border-[2px] border-[#211712] bg-white px-4 py-3 text-xs font-bold text-[#211712] shadow-[3px_3px_0_rgba(33,23,18,0.94)] transition hover:-translate-y-0.5 sm:w-auto lg:px-5 lg:py-3.5 lg:text-sm"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
-                  className="py-2.5 px-5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs"
+                  className="w-full rounded-xl border-[2px] border-[#211712] bg-[#1b3a63] px-5 py-3 text-xs font-bold text-white shadow-[4px_4px_0_rgba(33,23,18,0.95)] transition hover:-translate-y-0.5 sm:w-auto lg:px-6 lg:py-3.5 lg:text-sm"
                 >
                   {editingProduct ? 'Enregistrer les modifications' : 'Ajouter au catalogue'}
                 </button>
