@@ -1,5 +1,5 @@
 import React from 'react';
-import { Store, ShieldCheck, ShoppingBag, ChevronDown, ArrowLeft } from 'lucide-react';
+import { Store, ShieldCheck, ShoppingBag, ArrowLeft } from 'lucide-react';
 
 interface NavigationProps {
   currentRole: 'storefront' | 'merchant' | 'admin';
@@ -7,17 +7,11 @@ interface NavigationProps {
   onOpenDirectory: () => void;
   isDirectory?: boolean;
   isLegalPage?: boolean;
-  selectedShopSlug: string;
-  onSelectShopSlug: (slug: string) => void;
-  availableShops: { slug: string; name: string; category?: string }[];
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
   currentRole,
   onChangeRole,
-  selectedShopSlug,
-  onSelectShopSlug,
-  availableShops,
   onOpenDirectory,
   isDirectory = false,
   isLegalPage = false,
@@ -63,32 +57,6 @@ export const Navigation: React.FC<NavigationProps> = ({
           )}
         </nav>
 
-        {currentRole === 'storefront' && !isDirectory && !isLegalPage && (
-          <div className="app-nav-selector flex items-center gap-2">
-            <span className="hidden sm:inline text-[10px] uppercase tracking-[0.15em] text-slate-400 font-bold">Boutique</span>
-            <div className="relative">
-              <select
-                id="shop-selector-dropdown"
-                value={selectedShopSlug}
-                onChange={(e) => onSelectShopSlug(e.target.value)}
-                className="appearance-none rounded-xl border-[2px] border-[#211712] bg-[#fffaf2] px-3 py-2 pr-8 text-xs font-bold text-[#211712] shadow-[3px_3px_0_rgba(33,23,18,0.95)] outline-none focus:border-[#1b3a63]"
-              >
-                {!availableShops.some(shop => shop.slug === selectedShopSlug) && (
-                  <option value={selectedShopSlug}>Boutique en cours de chargement</option>
-                )}
-                {availableShops.map(s => {
-                  const prefix = s.category === 'food' ? '🍲 ' : s.category === 'fashion' ? '👗 ' : '';
-                  return (
-                    <option key={s.slug} value={s.slug} className="text-slate-900">
-                      {prefix}{s.name}
-                    </option>
-                  );
-                })}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-            </div>
-          </div>
-        )}
       </div>
     </header>
   );

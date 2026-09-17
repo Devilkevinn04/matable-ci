@@ -199,9 +199,6 @@ export default function App() {
                   }}
                   isDirectory={currentRole === 'storefront' && showDirectory}
                   isLegalPage={Boolean(initialLegalPage)}
-                  selectedShopSlug={selectedShopSlug}
-                  onSelectShopSlug={setSelectedShopSlug}
-                  availableShops={availableShops}
                 />
 
                 <div className="flex-1 app-shell">
