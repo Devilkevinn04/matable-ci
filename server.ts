@@ -6,6 +6,7 @@ import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { createServer as createViteServer } from 'vite';
 import { db, initializeDatabase } from './db.ts';
+import { hydrateLocalFromNeon, installNeonSyncMiddleware, neonEnabled, syncNeonFromLocal } from './neon-sync.ts';
 import { sendWhatsAppCloudTemplate, sendWhatsAppCloudText } from './whatsapp.ts';
 
 const EXTERNAL_INTEGRATIONS_LOCKED = true;
@@ -1555,6 +1556,7 @@ async function startServer() {
   app.use('/api/shops/:id/flash-bilan', requireMerchantAccess);
   app.use('/api/admin', requireAdminAccess);
   app.use('/api/cron', requireAdminAccess);
+  installNeonSyncMiddleware(app);
 
   // Helper to calculate days remaining
   function getDaysRemaining(expirationDateStr: string) {
@@ -1571,6 +1573,7 @@ async function startServer() {
   }
 
   initializeDatabase();
+  const hydratedFromNeon = await hydrateLocalFromNeon();
   seedDatabaseIfEmpty();
 
   shops.forEach((shop) => {
@@ -1589,6 +1592,9 @@ async function startServer() {
   nextItemId = Math.max(0, ...orders.flatMap((order) => (order.items || []).map((item) => item.id))) + 1;
   nextShopId = Math.max(0, ...shops.map((shop) => shop.id)) + 1;
   nextProductId = Math.max(0, ...products.map((product) => product.id)) + 1;
+  if (neonEnabled && !hydratedFromNeon) {
+    await syncNeonFromLocal();
+  }
 
   // Free background automation: subscription checks run hourly without requiring a dashboard click.
   setInterval(() => runSubscriptionAutomation(), 60 * 60 * 1000).unref();

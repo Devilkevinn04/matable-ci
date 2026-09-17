@@ -17,7 +17,9 @@ services:
       - key: ADMIN_ACCESS_KEY
         generateValue: true
       - key: MATABLE_DB_PATH
-        value: /data/matable.db
+        value: /tmp/matable.db
+      - key: DATABASE_URL
+        sync: false
       - key: PAYSTACK_MOCK_MODE
         value: false
       - key: WHATSAPP_CLOUD_ENABLED
@@ -26,7 +28,3 @@ services:
         value: +2250700000000
       - key: WHATSAPP_ADMIN_PHONE
         value: +2250700000000
-    disk:
-      name: matable-data
-      mountPath: /data
-      sizeGB: 1

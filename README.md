@@ -7,7 +7,7 @@ Application React + Vite + Express pour la gestion de vitrines locales, de comma
 - Les paiements Paystack et les notifications WhatsApp Cloud sont désactivés et verrouillés pour une amélioration future.
 - Une commande client est enregistrée localement, puis le client ouvre manuellement un reçu prérempli vers le WhatsApp du vendeur.
 - Le prix d’une commande est recalculé côté serveur à partir du catalogue et des options sélectionnées.
-- SQLite est initialisé dans `data/matable.db` ; boutiques, produits, stocks, commandes et abonnements restent persistants après redémarrage.
+- SQLite sert de cache local et Neon PostgreSQL conserve les boutiques, produits, stocks, commandes et abonnements après redémarrage.
 - Les sessions marchand et super-admin sont sécurisées via cookies `HttpOnly` et contrôles de sécurité sur les tentatives.
 - La gestion de stock est protégée contre les oversells concurrentiels.
 
@@ -31,6 +31,7 @@ L’application est disponible sur : `http://localhost:3000`
 NODE_ENV="development"
 PORT="3000"
 MATABLE_DB_PATH="./data/matable.db"
+DATABASE_URL="postgresql://..."
 APP_URL="http://localhost:3000"
 TRUST_PROXY_HOPS="0"
 ADMIN_ACCESS_KEY="CHANGE_ME_ADMIN_KEY"
@@ -41,7 +42,7 @@ WHATSAPP_ADMIN_PHONE="+2250700000000"
 
 ### Production / SQLite persistant
 
-La version actuelle utilise SQLite exclusivement. En production, le fichier doit être placé sur un volume persistant ; sur Render, le Blueprint monte `/data` et configure `MATABLE_DB_PATH=/data/matable.db`.
+En production, l’application utilise Neon PostgreSQL si `DATABASE_URL` est configurée. SQLite reste un cache local temporaire et est synchronisé avec Neon après les écritures API.
 
 Exemple de configuration :
 
@@ -49,12 +50,17 @@ Exemple de configuration :
 NODE_ENV="production"
 PORT="3000"
 MATABLE_DB_PATH="/data/matable.db"
+DATABASE_URL="postgresql://..."
 APP_URL="https://matable.ci"
 TRUST_PROXY_HOPS="1"
 ADMIN_ACCESS_KEY="<cle-tres-longue-et-securisee>"
 ```
 
 Les anciennes routes Paystack et de notification Cloud répondent `410 Gone`. Elles sont conservées comme points d’extension, mais aucun secret d’environnement ne peut les réactiver.
+
+### Base Neon gratuite sur Render
+
+Créez un projet gratuit sur [Neon](https://neon.tech), copiez sa chaîne `postgresql://...`, puis ajoutez-la dans Render sous `Environment` avec la clé `DATABASE_URL`. Le Blueprint Render gratuit utilise `/tmp/matable.db` comme cache temporaire et Neon comme stockage persistant.
 
 ## Règles métier
 
@@ -77,7 +83,7 @@ Avant un déploiement réel, vérifiez bien les points suivants :
 
 1. Définir un `ADMIN_ACCESS_KEY` fort et unique.
 2. Définir `APP_URL` avec l’URL publique exacte du site.
-3. Définir `PORT` et `MATABLE_DB_PATH` explicitement dans l’environnement de production, sur un volume persistant.
+3. Définir `PORT`, `MATABLE_DB_PATH` et `DATABASE_URL` explicitement dans l’environnement de production.
 4. Vérifier qu’aucun ancien process Node n’écoute déjà sur le port cible.
 5. Vérifier les droits d’écriture du dossier `data/`.
 6. Ne jamais exposer la clé admin ni les secrets Paystack dans le navigateur.
@@ -105,11 +111,11 @@ npm start
 
 ## Déploiement recommandé
 
-Cette version finale est un serveur Node/Express avec SQLite persistant. Déployez-la sur Railway, Render, Fly.io ou un VPS avec un volume persistant monté pour `data/`. Configurez `MATABLE_DB_PATH` dans ce volume et utilisez `npm run build` puis `npm start`.
+Cette version finale est un serveur Node/Express avec Neon PostgreSQL. Déployez-la sur Render, Railway, Fly.io ou un VPS et configurez `DATABASE_URL` avec une base PostgreSQL persistante.
 
-Vercel convient au frontend statique, mais ne doit pas héberger directement ce serveur avec SQLite local : le système de fichiers des fonctions est éphémère et les processus ne sont pas persistants. Pour utiliser Vercel complètement, il faudra d’abord remplacer SQLite par PostgreSQL ou un autre stockage externe, puis adapter les routes serveur aux fonctions Vercel.
+Vercel convient au frontend statique, mais ne doit pas héberger directement ce serveur Express avec une base locale. Une base PostgreSQL externe est nécessaire.
 
-Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `MATABLE_DB_PATH` sur le volume persistant, `ADMIN_ACCESS_KEY` longue et unique (générée automatiquement par Render si elle n’est pas configurée manuellement), et `TRUST_PROXY_HOPS` adapté au reverse proxy.
+Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `MATABLE_DB_PATH`, `DATABASE_URL`, `ADMIN_ACCESS_KEY` longue et unique (générée automatiquement par Render si elle n’est pas configurée manuellement), et `TRUST_PROXY_HOPS` adapté au reverse proxy.
 
 ## Build production
 
