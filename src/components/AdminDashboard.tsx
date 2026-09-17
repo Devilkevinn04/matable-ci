@@ -86,8 +86,14 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const fetchAnalytics = async (days: number) => {
-    const res = await fetch(`/api/admin/analytics?days=${days}`);
-    if (res.ok) setAnalytics(await res.json());
+    try {
+      const res = await fetch(`/api/admin/analytics?days=${days}`);
+      if (!res.ok) throw new Error('Impossible de charger les données d’audience.');
+      setAnalytics(await res.json());
+    } catch (error) {
+      console.error(error);
+      showNotice('Les données d’audience sont momentanément indisponibles.');
+    }
   };
 
   useEffect(() => {
@@ -176,9 +182,12 @@ export const AdminDashboard: React.FC = () => {
           prev.map(s => (s.id === shopId ? { ...s, is_active: !s.is_active } : s))
         );
         showNotice('Statut boutique mis à jour.');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showNotice(data.error || 'Impossible de mettre à jour le statut.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      showNotice('Impossible de contacter le serveur.');
     }
   };
 
@@ -194,9 +203,12 @@ export const AdminDashboard: React.FC = () => {
         const data = await res.json();
         showNotice(data.message);
         fetchAdminShops();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showNotice(data.error || 'Impossible de prolonger la boutique.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      showNotice('Impossible de contacter le serveur.');
     }
   };
 
@@ -241,9 +253,12 @@ export const AdminDashboard: React.FC = () => {
           prev.map(s => (s.id === shopId ? { ...s, subscription_tier: tier } : s))
         );
         showNotice(`Classe d'abonnement mise à jour : ${tier.toUpperCase()}`);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showNotice(data.error || 'Impossible de modifier la classe.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      showNotice('Impossible de contacter le serveur.');
     }
   };
 
@@ -258,9 +273,12 @@ export const AdminDashboard: React.FC = () => {
         const data = await res.json();
         setCronResult(data);
         fetchAdminShops();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showNotice(data.error || 'Impossible d’actualiser le bilan.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      showNotice('Impossible de contacter le serveur.');
     } finally {
       setCronRunning(false);
     }
@@ -432,8 +450,8 @@ export const AdminDashboard: React.FC = () => {
                       />
                     </svg>
                     <div className="absolute inset-x-3 bottom-3 flex justify-between text-[9px] text-slate-400">
-                      {analytics.daily.map((day) => (
-                        <span key={day.date}>{day.date.slice(5)}</span>
+                      {analytics.daily.map((day, index) => (
+                        <span key={day.date} className={index % Math.max(1, Math.ceil(analytics.daily.length / 6)) === 0 || index === analytics.daily.length - 1 ? '' : 'invisible'}>{day.date.slice(5)}</span>
                       ))}
                     </div>
                   </div>

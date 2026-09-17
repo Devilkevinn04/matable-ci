@@ -596,9 +596,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         setCurrentShop(prev => (prev ? { ...prev, is_open: data.is_open } : null));
         setSettingsOpen(data.is_open);
         setManualOverride(true);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Impossible de modifier le statut de la boutique.');
       }
-    } catch (e) {
-      console.error('Erreur toggle status', e);
+    } catch {
+      toast.error('Impossible de contacter le serveur.');
     }
   };
 
@@ -630,9 +633,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         localStorage.setItem('matable_merchant_session', JSON.stringify(data.shop));
         setHoursSaved(true);
         setTimeout(() => setHoursSaved(false), 3000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Impossible de sauvegarder les horaires.');
       }
-    } catch (err) {
-      console.error('Erreur sauvegarde horaires', err);
+    } catch {
       toast.error('Erreur lors de la mise à jour des horaires.');
     }
   };
@@ -657,9 +662,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       if (res.ok) {
         setManualOverride(false);
         await loadShopData(currentShop.id);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Impossible de reprendre le planning.');
       }
-    } catch (err) {
-      console.error('Erreur réinitialisation forçage', err);
+    } catch {
+      toast.error('Impossible de contacter le serveur.');
     }
   };
 
@@ -675,9 +683,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         if (currentShop) {
           await loadShopData(currentShop.id);
         }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Impossible d’actualiser le bilan.');
       }
-    } catch (err) {
-      console.error('Erreur actualisation du bilan', err);
+    } catch {
+      toast.error('Impossible de contacter le serveur.');
     } finally {
       setCronRunning(false);
     }
@@ -727,9 +738,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       if (res.ok) {
         const data = await res.json();
         setProducts(prev => prev.map(p => (p.id === productId ? { ...p, is_available: data.is_available } : p)));
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Impossible de modifier la visibilité.');
       }
-    } catch (e) {
-      console.error('Erreur toggle visibility', e);
+    } catch {
+      toast.error('Impossible de contacter le serveur.');
     }
   };
 
@@ -916,6 +930,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           setProducts(prev => prev.map(p => (p.id === editingProduct.id ? data.product : p)));
           setIsProductModalOpen(false);
           toast.success('Article modifié avec succès !');
+        } else {
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.error || "Impossible de modifier l'article.");
         }
       } else {
         // Add new
@@ -929,6 +946,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           setProducts(prev => [data.product, ...prev]);
           setIsProductModalOpen(false);
           toast.success('Article ajouté au catalogue !');
+        } else {
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.error || "Impossible d'ajouter l'article.");
         }
       }
     } catch {
@@ -948,6 +968,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       if (res.ok) {
         setProducts(prev => prev.filter(p => p.id !== productId));
         toast.success('Article supprimé du catalogue.');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Impossible de supprimer l'article.");
       }
     } catch {
       toast.error("Erreur lors de la suppression de l'article");
@@ -980,6 +1003,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         setSettingsNewPin('');
         toast.success('Paramètres enregistrés avec succès !');
         setTimeout(() => setSettingsSaved(false), 3000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Impossible de sauvegarder les paramètres.');
       }
     } catch {
       toast.error('Erreur lors de la mise à jour des paramètres');
@@ -2583,10 +2609,14 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                     {flashBilan && (
                       <button
                         type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(flashBilan.whatsapp_message);
-                          setCopiedBilan(true);
-                          setTimeout(() => setCopiedBilan(false), 2500);
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(flashBilan.whatsapp_message);
+                            setCopiedBilan(true);
+                            setTimeout(() => setCopiedBilan(false), 2500);
+                          } catch {
+                            toast.error('Impossible de copier le bilan.');
+                          }
                         }}
                         className="py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors"
                       >

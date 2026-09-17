@@ -233,6 +233,8 @@ export default function App() {
                       onOpenStorefront={(slug) => {
                         setSelectedShopSlug(slug);
                         setCurrentRole('storefront');
+                        setShowDirectory(false);
+                        window.history.pushState({}, '', `/${slug}`);
                       }}
                     />
                   )}

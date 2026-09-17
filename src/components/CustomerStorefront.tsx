@@ -1069,8 +1069,12 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                   <button
                     type="button"
                     onClick={async () => {
-                      await navigator.clipboard.writeText(orderSuccess.whatsappText);
-                      setMessageCopied(true);
+                      try {
+                        await navigator.clipboard.writeText(orderSuccess.whatsappText);
+                        setMessageCopied(true);
+                      } catch {
+                        toast.error('Impossible de copier le message.');
+                      }
                     }}
                     className="mt-3 text-xs text-slate-600 hover:text-slate-900 font-semibold"
                   >
@@ -1123,7 +1127,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                             )}
                           </div>
                           <span className="text-xs font-semibold text-slate-600 block mt-0.5">
-                            {formatFCFA(item.product.price)} x {item.quantity} = {formatFCFA(item.product.price * item.quantity)}
+                            {formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers))} x {item.quantity} = {formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers) * item.quantity)}
                           </span>
                         </div>
 

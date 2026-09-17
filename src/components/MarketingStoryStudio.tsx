@@ -266,11 +266,15 @@ export const MarketingStoryStudio: React.FC<MarketingStoryStudioProps> = ({ shop
     a.click();
   };
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     const shareText = `Découvrez *${selectedProduct?.title}* à seulement *${formatFCFA(selectedProduct?.price || 0)}* sur ma boutique : https://matable.ci/${shop.slug}`;
-    navigator.clipboard.writeText(shareText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setCopied(false);
+    }
   };
 
   return (
