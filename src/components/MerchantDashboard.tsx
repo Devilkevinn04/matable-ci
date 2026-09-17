@@ -1231,7 +1231,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
         {/* REGISTER NEW SHOP MODAL */}
         {isRegisterModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#211712]/60 p-3 backdrop-blur-sm sm:p-4 lg:p-6">
+          <div className="fixed inset-0 z-50 flex h-dvh min-h-0 max-h-dvh items-start justify-center overflow-y-auto bg-[#211712]/60 p-3 backdrop-blur-sm sm:p-4 lg:p-6">
             <div className="my-0 w-full max-w-3xl rounded-[30px] border-[3px] border-[#211712] bg-[#fffaf2] p-4 shadow-[10px_10px_0_rgba(33,23,18,0.96)] sm:my-3 sm:p-5 lg:my-4 lg:p-6">
               <div className="flex flex-col gap-2 border-b-[2px] border-[#211712] pb-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
