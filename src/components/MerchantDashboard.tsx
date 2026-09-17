@@ -1232,44 +1232,44 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         {/* REGISTER NEW SHOP MODAL */}
         {isRegisterModalOpen && (
           <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#211712]/60 p-3 backdrop-blur-sm sm:p-4 lg:p-6">
-            <div className="my-0 w-full max-w-[1100px] rounded-[28px] border-[3px] border-[#211712] bg-[#fffaf2] p-4 shadow-[12px_12px_0_rgba(33,23,18,0.96)] sm:my-4 sm:p-5 lg:my-6 lg:p-6">
-              <div className="flex flex-col gap-3 border-b-[2px] border-[#211712] pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="my-0 w-full max-w-[1100px] rounded-[22px] border-[2px] border-[#211712] bg-[#fffaf2] p-3 shadow-[8px_8px_0_rgba(33,23,18,0.96)] sm:my-3 sm:p-4 lg:my-4 lg:p-5">
+              <div className="flex flex-col gap-2 border-b-[2px] border-[#211712] pb-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl border-[2px] border-[#211712] bg-[#f7e7c7] text-[#211712]">
-                    <Store className="h-5 w-5" />
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg border-[2px] border-[#211712] bg-[#f7e7c7] text-[#211712]">
+                    <Store className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="truncate text-base font-extrabold text-[#fffaf2] sm:text-lg lg:text-xl">Créer ma boutique</h3>
-                    <p className="mt-0.5 text-[10px] text-[#d9eee5] sm:text-[11px] lg:text-xs">Quelques informations pour préparer votre espace.</p>
+                    <h3 className="truncate text-sm font-extrabold text-[#fffaf2] sm:text-base lg:text-lg">Créer ma boutique</h3>
+                    <p className="mt-0.5 text-[10px] text-[#d9eee5] sm:text-[10px] lg:text-[11px]">Quelques informations pour préparer votre espace.</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsRegisterModalOpen(false)}
                   aria-label="Fermer le formulaire"
-                  className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-[2px] border-[#211712] bg-[#f7e7c7] text-[#211712] transition hover:bg-[#f0d6a5] sm:ml-0"
+                  className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[2px] border-[#211712] bg-[#f7e7c7] text-[#211712] transition hover:bg-[#f0d6a5] sm:ml-0"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-2 text-center text-[10px] font-black uppercase tracking-[0.08em] text-[#6b5548] sm:grid-cols-3 sm:gap-3 sm:text-[10px]">
-                <div className="rounded-xl border-[2px] border-[#211712] bg-white px-2 py-2 text-[#1b3a63]">
-                  <span className="block text-base">1</span>
+              <div className="mt-3 grid grid-cols-1 gap-2 text-center text-[9px] font-black uppercase tracking-[0.08em] text-[#6b5548] sm:grid-cols-3 sm:gap-2">
+                <div className="rounded-lg border-[2px] border-[#211712] bg-white px-2 py-1.5 text-[#1b3a63]">
+                  <span className="block text-sm">1</span>
                   Infos
                 </div>
-                <div className="rounded-xl border-[2px] border-[#211712] bg-[#f7e7c7] px-2 py-2 text-[#8a5a12]">
-                  <span className="block text-base">2</span>
+                <div className="rounded-lg border-[2px] border-[#211712] bg-[#f7e7c7] px-2 py-1.5 text-[#8a5a12]">
+                  <span className="block text-sm">2</span>
                   Accès
                 </div>
-                <div className="rounded-xl border-[2px] border-[#211712] bg-[#edf7f2] px-2 py-2 text-[#155c3d]">
-                  <span className="block text-base">3</span>
+                <div className="rounded-lg border-[2px] border-[#211712] bg-[#edf7f2] px-2 py-1.5 text-[#155c3d]">
+                  <span className="block text-sm">3</span>
                   Validation
                 </div>
               </div>
 
-              <form onSubmit={handleRegisterShop} className="mt-5 space-y-4 lg:space-y-5">
-                <section className="space-y-3 rounded-2xl border-[2px] border-[#211712] bg-[#fff] p-3 sm:p-4 lg:p-5">
+              <form onSubmit={handleRegisterShop} className="mt-3 space-y-3 lg:space-y-4">
+                <section className="space-y-2 rounded-xl border-[2px] border-[#211712] bg-[#fff] p-2.5 sm:p-3 lg:p-4">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">Identité de la boutique</p>
                     <p className="mt-1 text-[11px] text-[#6b5548] lg:text-xs">Ces informations seront visibles par vos clients.</p>
@@ -1282,7 +1282,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                     placeholder="Ex: Glamour Abidjan, Babi Braisé..."
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
-                    className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-3 text-sm font-bold text-[#211712] placeholder:text-slate-400 lg:text-[15px]"
+                    className="w-full rounded-lg border-[2px] border-[#211712] bg-white p-2.5 text-sm font-bold text-[#211712] placeholder:text-slate-400 lg:text-sm"
                   />
 
                   <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -1291,7 +1291,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                       <select
                         value={regCategory}
                         onChange={(e) => setRegCategory(e.target.value as ShopCategory)}
-                        className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 text-xs font-bold text-[#211712] lg:text-sm"
+                        className="w-full rounded-lg border-[2px] border-[#211712] bg-white p-2 text-xs font-bold text-[#211712] lg:text-sm"
                       >
                         {shopCategoryOptions.map((option) => (
                           <option key={option.value} value={option.value}>{option.icon} {option.label}</option>
@@ -1305,7 +1305,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                         required
                         value={regCity}
                         onChange={(e) => setRegCity(e.target.value)}
-                        className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 text-xs text-[#211712] lg:text-sm"
+                        className="w-full rounded-lg border-[2px] border-[#211712] bg-white p-2 text-xs text-[#211712] lg:text-sm"
                       >
                         <option value="Abidjan">Abidjan</option>
                         {abidjanCommunes.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
@@ -1324,7 +1324,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                   </div>
                 </section>
 
-                <section className="space-y-3 rounded-2xl border-[2px] border-[#211712] bg-[#fff] p-3 sm:p-4 lg:p-5">
+                <section className="space-y-2 rounded-xl border-[2px] border-[#211712] bg-[#fff] p-2.5 sm:p-3 lg:p-4">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">Accès et contact</p>
                     <p className="mt-1 text-[11px] text-[#6b5548] lg:text-xs">Votre numéro sert de contact public pour les commandes. Conservez votre lien privé de gestion.</p>
@@ -1340,7 +1340,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                         placeholder="+225 07 00 11 22 33"
                         value={regPhone}
                         onChange={(e) => setRegPhone(e.target.value)}
-                        className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 text-xs font-mono text-[#211712] lg:text-sm"
+                        className="w-full rounded-lg border-[2px] border-[#211712] bg-white p-2 text-xs font-mono text-[#211712] lg:text-sm"
                       />
                     </div>
 
@@ -1356,7 +1356,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                           placeholder="6 chiffres"
                           value={regPin}
                           onChange={(e) => setRegPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                          className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 pr-11 text-center text-xs font-mono tracking-widest text-[#211712] lg:text-sm"
+                          className="w-full rounded-lg border-[2px] border-[#211712] bg-white p-2 pr-10 text-center text-xs font-mono tracking-widest text-[#211712] lg:text-sm"
                         />
                         <button
                           type="button"
@@ -1377,17 +1377,17 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                       placeholder="vous@exemple.ci"
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
-                      className="w-full rounded-xl border-[2px] border-[#211712] bg-white p-2.5 text-xs text-[#211712] lg:text-sm"
+                      className="w-full rounded-lg border-[2px] border-[#211712] bg-white p-2 text-xs text-[#211712] lg:text-sm"
                     />
                   </div>
                 </section>
 
-                <section className="space-y-3 rounded-2xl border-[2px] border-[#211712] bg-[#edf7f2] p-3 sm:p-4 lg:p-5">
+                <section className="space-y-2 rounded-xl border-[2px] border-[#211712] bg-[#edf7f2] p-2.5 sm:p-3 lg:p-4">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">Accès complet inclus</p>
                     <p className="mt-1 text-[11px] text-[#6b5548] lg:text-xs">Toutes les fonctionnalités sont incluses gratuitement pour chaque boutique.</p>
                   </div>
-                  <div className="rounded-xl border-[2px] border-[#211712] bg-white p-3 text-[11px] leading-relaxed text-[#155c3d] lg:text-sm">
+                  <div className="rounded-lg border-[2px] border-[#211712] bg-white p-2.5 text-[11px] leading-relaxed text-[#155c3d] lg:text-sm">
                     Après la création, vous recevez votre lien privé et votre lien vitrine. Catalogue, personnalisation, promotions et studio marketing sont immédiatement disponibles.
                   </div>
                 </section>
