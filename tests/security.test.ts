@@ -19,6 +19,9 @@ import {
   validateCustomerOrderInput,
   validateRuntimeConfig,
   shouldSeedDemoData,
+  saveMerchantSessionRecord,
+  getMerchantSessionRecord,
+  deleteMerchantSessionRecord,
 } from '../server.ts';
 
 test('blocks backend bundles and sourcemaps from public static serving', () => {
@@ -67,6 +70,21 @@ test('ignores spoofed x-forwarded-for values when binding a session fingerprint'
 
   assert.equal(buildSessionFingerprint(firstReq), buildSessionFingerprint(secondReq));
   assert.equal(isRequestFingerprintMatch({ fingerprint: buildSessionFingerprint(firstReq) }, secondReq), true);
+});
+
+test('persists merchant sessions in SQLite so they survive a server restart', () => {
+  const token = 'restart-session-test-token';
+  const session = {
+    shopId: 42,
+    expiresAt: Date.now() + 60 * 60 * 1000,
+    fingerprint: 'session-fingerprint-v1',
+  };
+
+  saveMerchantSessionRecord(token, session);
+  assert.deepEqual(getMerchantSessionRecord(token), session);
+
+  deleteMerchantSessionRecord(token);
+  assert.equal(getMerchantSessionRecord(token), null);
 });
 
 test('limits merchant recovery attempts to two per 24h window', () => {

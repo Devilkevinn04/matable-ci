@@ -998,6 +998,28 @@ const hashPin = (pin: string) => bcrypt.hashSync(String(pin).trim(), 10);
 const hashAccessToken = (token: string) => createHash('sha256').update(token).digest('hex');
 const merchantSessions = new Map<string, { shopId: number; expiresAt: number; fingerprint: string }>();
 const adminSessions = new Map<string, number>();
+
+export function saveMerchantSessionRecord(token: string, session: { shopId: number; expiresAt: number; fingerprint: string }) {
+  db.prepare(`
+    INSERT INTO merchant_sessions (token, shop_id, expires_at, fingerprint, created_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(token) DO UPDATE SET
+      shop_id = excluded.shop_id,
+      expires_at = excluded.expires_at,
+      fingerprint = excluded.fingerprint,
+      created_at = excluded.created_at
+  `).run(token, session.shopId, session.expiresAt, session.fingerprint, new Date().toISOString());
+}
+
+export function getMerchantSessionRecord(token: string): { shopId: number; expiresAt: number; fingerprint: string } | null {
+  const row = db.prepare('SELECT shop_id, expires_at, fingerprint FROM merchant_sessions WHERE token = ?').get(token) as { shop_id: number; expires_at: number; fingerprint: string } | undefined;
+  if (!row) return null;
+  return { shopId: row.shop_id, expiresAt: row.expires_at, fingerprint: row.fingerprint };
+}
+
+export function deleteMerchantSessionRecord(token: string) {
+  db.prepare('DELETE FROM merchant_sessions WHERE token = ?').run(token);
+}
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const merchantRecoveryAttempts = new Map<number, { count: number; resetAt: number }>();
 const merchantRecoveryTokens = new Map<string, { shopId: number; expiresAt: number }>();
@@ -1116,9 +1138,10 @@ export function isRequestFingerprintMatch(session: { fingerprint?: string } | nu
 
 function createMerchantSession(res: Response, shopId: number, req: Request) {
   const sessionToken = randomUUID();
-  const fingerprint = buildSessionFingerprint(req);
-  merchantSessions.set(sessionToken, { shopId, expiresAt: Date.now() + SESSION_DURATION_MS, fingerprint });
-  setSessionCookie(res, sessionToken, fingerprint);
+  const session = { shopId, expiresAt: Date.now() + SESSION_DURATION_MS, fingerprint: buildSessionFingerprint(req) };
+  merchantSessions.set(sessionToken, session);
+  saveMerchantSessionRecord(sessionToken, session);
+  setSessionCookie(res, sessionToken, session.fingerprint);
 }
 
 function clearSessionCookie(res: Response) {
@@ -1168,15 +1191,28 @@ function rateLimitPublicRequest(limit: number = MAX_PUBLIC_REQUESTS_PER_WINDOW) 
 
 function requireMerchantAccess(req: Request, res: Response, next: express.NextFunction) {
   const token = getCookie(req, 'matable_session');
-  const session = token ? merchantSessions.get(token) : undefined;
+  let session = token ? merchantSessions.get(token) : undefined;
+
+  if (!session && token) {
+    session = getMerchantSessionRecord(token) ?? undefined;
+    if (session) {
+      merchantSessions.set(token, session);
+    }
+  }
 
   if (!session || session.expiresAt <= Date.now() || session.shopId !== Number(req.params.id)) {
-    if (token) merchantSessions.delete(token);
+    if (token) {
+      merchantSessions.delete(token);
+      deleteMerchantSessionRecord(token);
+    }
     return res.status(401).json({ error: 'Session marchand invalide ou expirée.' });
   }
 
   if (!isRequestFingerprintMatch(session, req)) {
-    if (token) merchantSessions.delete(token);
+    if (token) {
+      merchantSessions.delete(token);
+      deleteMerchantSessionRecord(token);
+    }
     clearSessionCookie(res);
     return res.status(401).json({ error: 'Session rejetée pour sécurité : appareil ou IP non reconnue.' });
   }
@@ -1247,8 +1283,12 @@ export function rotateMerchantAccessTokenForShop(shopId: number, previousToken?:
 setInterval(() => {
   const now = Date.now();
   for (const [token, session] of merchantSessions) {
-    if (session.expiresAt <= now) merchantSessions.delete(token);
+    if (session.expiresAt <= now) {
+      merchantSessions.delete(token);
+      deleteMerchantSessionRecord(token);
+    }
   }
+  db.prepare('DELETE FROM merchant_sessions WHERE expires_at <= ?').run(now);
   for (const [token, expiresAt] of adminSessions) {
     if (expiresAt <= now) adminSessions.delete(token);
   }
@@ -1588,6 +1628,10 @@ async function startServer() {
   products.splice(0, products.length, ...persistedProducts);
   const persistedOrders = loadOrdersFromDatabase();
   orders.splice(0, orders.length, ...persistedOrders);
+  const persistedMerchantSessions = db.prepare('SELECT token, shop_id, expires_at, fingerprint FROM merchant_sessions WHERE expires_at > ?').all(Date.now()) as { token: string; shop_id: number; expires_at: number; fingerprint: string }[];
+  for (const record of persistedMerchantSessions) {
+    merchantSessions.set(record.token, { shopId: record.shop_id, expiresAt: record.expires_at, fingerprint: record.fingerprint });
+  }
   nextOrderId = Math.max(0, ...orders.map((order) => order.id)) + 1;
   nextItemId = Math.max(0, ...orders.flatMap((order) => (order.items || []).map((item) => item.id))) + 1;
   nextShopId = Math.max(0, ...shops.map((shop) => shop.id)) + 1;
@@ -2211,7 +2255,10 @@ async function startServer() {
 
   app.post('/api/auth/logout', (req: Request, res: Response) => {
     const token = getCookie(req, 'matable_session');
-    if (token) merchantSessions.delete(token);
+    if (token) {
+      merchantSessions.delete(token);
+      deleteMerchantSessionRecord(token);
+    }
     clearSessionCookie(res);
     res.json({ success: true });
   });

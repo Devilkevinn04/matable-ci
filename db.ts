@@ -89,6 +89,14 @@ db.exec(`
     processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(provider, reference)
   );
+
+  CREATE TABLE IF NOT EXISTS merchant_sessions (
+    token TEXT PRIMARY KEY,
+    shop_id INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    fingerprint TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 const shopColumns = db.prepare('PRAGMA table_info(shops)').all() as { name: string }[];
