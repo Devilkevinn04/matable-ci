@@ -357,6 +357,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     e.preventDefault();
     setAuthError(null);
     setForgotPinInfo(null);
+
+    if (phoneInput.includes('@')) {
+      setAuthError('Utilisez le numéro WhatsApp saisi lors de la création de la boutique, pas l’adresse email.');
+      return;
+    }
+
     setAuthLoading(true);
 
     try {
@@ -993,7 +999,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               Connexion à mon espace boutique
             </h2>
             <p className="text-xs text-[#4a3a30] mt-2 max-w-xs mx-auto leading-relaxed">
-              Connectez-vous avec l’identifiant et le mot de passe de votre boutique.
+              Connectez-vous avec le numéro WhatsApp et le code PIN choisis lors de la création de votre boutique.
             </p>
           </div>
 
@@ -1106,14 +1112,14 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             <form onSubmit={handleLogin} className="relative space-y-4">
               <div>
                 <label className="block text-xs font-bold text-[#4a3a30] mb-1">
-                  Identifiant de la boutique
+                  Numéro WhatsApp de la boutique
                 </label>
                 <div className="relative">
                   <Phone className="w-4 h-4 text-[#4a3a30] absolute left-3 top-3.5" />
                   <input
                     type="tel"
                     required
-                    placeholder="+2250708091011"
+                    placeholder="+225 07 00 11 22 33"
                     value={phoneInput}
                     onChange={(e) => setPhoneInput(e.target.value)}
                     className="w-full text-xs py-3 pl-10 pr-3 rounded-xl border-[2px] border-[#211712] bg-[#fff] text-[#211712] focus:outline-none focus:border-[#1b3a63]"
@@ -1213,7 +1219,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
           <div className="relative mt-5 pt-4 border-t-[2px] border-[#211712] text-center">
             <p className="text-xs text-[#4a3a30] max-w-sm mx-auto mb-3">
-              Vous n’avez pas encore de boutique ? Créez-la ici. Vous vous connecterez ensuite avec votre identifiant et votre mot de passe.
+              Vous n’avez pas encore de boutique ? Créez-la ici. Pour vous reconnecter ensuite, utilisez le numéro WhatsApp et le code PIN choisis à la création.
             </p>
             <button
               type="button"
