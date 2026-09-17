@@ -115,7 +115,7 @@ Cette version finale est un serveur Node/Express avec SQLite persistant. Déploy
 
 Vercel convient au frontend statique, mais ne doit pas héberger directement ce serveur avec SQLite local : le système de fichiers des fonctions est éphémère et les processus ne sont pas persistants. Pour utiliser Vercel complètement, il faudra d’abord remplacer SQLite par PostgreSQL ou un autre stockage externe, puis adapter les routes serveur aux fonctions Vercel.
 
-Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `MATABLE_DB_PATH` sur le volume persistant, `ADMIN_ACCESS_KEY` longue et unique, et `TRUST_PROXY_HOPS` adapté au reverse proxy.
+Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `MATABLE_DB_PATH` sur le volume persistant, `ADMIN_ACCESS_KEY` longue et unique (générée automatiquement par Render si elle n’est pas configurée manuellement), et `TRUST_PROXY_HOPS` adapté au reverse proxy.
 
 ## Build production
 
