@@ -153,6 +153,14 @@ export const AdminDashboard: React.FC = () => {
     fetchAdminShops();
   }, []);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const refreshTimer = window.setInterval(() => {
+      fetchAdminShops();
+    }, 30000);
+    return () => window.clearInterval(refreshTimer);
+  }, [isAuthenticated]);
+
   const handleAdminLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     setAuthError(null);
@@ -435,15 +443,27 @@ export const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
-            <button
-              id="trigger-cron-btn"
-              onClick={handleTriggerCron}
-              disabled={cronRunning}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1b3a63] px-4 py-2.5 text-xs font-black text-white shadow-[4px_4px_0_rgba(33,23,18,0.96)] border-[2px] border-[#211712] transition hover:translate-y-[-1px]"
-            >
-              <Zap className="w-4 h-4 text-[#e8a93a]" />
-              <span>{cronRunning ? 'Exécution en cours...' : 'Exécuter le Cron Job'}</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={fetchAdminShops}
+                disabled={loading}
+                aria-label="Actualiser les boutiques"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-xs font-black text-[#211712] shadow-[4px_4px_0_rgba(33,23,18,0.96)] border-[2px] border-[#211712] transition hover:translate-y-[-1px] disabled:opacity-60"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>Actualiser</span>
+              </button>
+              <button
+                id="trigger-cron-btn"
+                onClick={handleTriggerCron}
+                disabled={cronRunning}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1b3a63] px-4 py-2.5 text-xs font-black text-white shadow-[4px_4px_0_rgba(33,23,18,0.96)] border-[2px] border-[#211712] transition hover:translate-y-[-1px]"
+              >
+                <Zap className="w-4 h-4 text-[#e8a93a]" />
+                <span>{cronRunning ? 'Exécution en cours...' : 'Exécuter le Cron Job'}</span>
+              </button>
+            </div>
           </div>
 
           <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">

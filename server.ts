@@ -1464,6 +1464,17 @@ function loadOrdersFromDatabase() {
   })) as OrderRecord[];
 }
 
+function refreshRuntimeDataFromDatabase() {
+  const persistedShops = loadShopsFromDatabase();
+  shops.splice(0, shops.length, ...persistedShops);
+  products.splice(0, products.length, ...loadProductsFromDatabase());
+  orders.splice(0, orders.length, ...loadOrdersFromDatabase());
+  nextShopId = Math.max(0, ...shops.map((shop) => shop.id)) + 1;
+  nextProductId = Math.max(0, ...products.map((product) => product.id)) + 1;
+  nextOrderId = Math.max(0, ...orders.map((order) => order.id)) + 1;
+  nextItemId = Math.max(0, ...orders.flatMap((order) => (order.items || []).map((item) => item.id))) + 1;
+}
+
 function persistOrder(order: OrderRecord) {
   db.prepare(`
     INSERT INTO orders (
@@ -2948,6 +2959,7 @@ async function startServer() {
   });
 
   app.get('/api/admin/analytics', (req: Request, res: Response) => {
+    refreshRuntimeDataFromDatabase();
     const requestedDays = Number(req.query.days);
     const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 90) : 30;
     const since = new Date(Date.now() - days * 86400000).toISOString();
@@ -2991,6 +3003,7 @@ async function startServer() {
   // 6. SUPER-ADMIN DASHBOARD (/admin)
   // "Dashboard Super-Admin (Votre Tour de Contrôle — /admin)"
   app.get('/api/admin/shops', (req: Request, res: Response) => {
+    refreshRuntimeDataFromDatabase();
     const adminShops = shops.map((s) => {
       const daysRemaining = getDaysRemaining(s.subscription_expires_at);
       let alertLevel = 'normal';
@@ -3046,6 +3059,7 @@ async function startServer() {
   });
 
   app.get('/api/admin/health', (req: Request, res: Response) => {
+    refreshRuntimeDataFromDatabase();
     const latestAnalytics = db.prepare('SELECT created_at FROM analytics_events ORDER BY created_at DESC LIMIT 1').get() as { created_at?: string } | undefined;
     const counts = {
       shops: Number((db.prepare('SELECT COUNT(*) AS count FROM shops').get() as { count: number }).count),
@@ -3065,6 +3079,7 @@ async function startServer() {
   });
 
   app.get('/api/admin/orders', (req: Request, res: Response) => {
+    refreshRuntimeDataFromDatabase();
     const requestedLimit = Number(req.query.limit);
     const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
     const requestedStatus = String(req.query.status || 'all');
