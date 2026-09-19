@@ -147,7 +147,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   // Orders search & filter
   const [orderSearch, setOrderSearch] = useState('');
-  const [orderPaymentFilter, setOrderPaymentFilter] = useState<'all' | 'wave' | 'mobile_money'>('all');
+  const [orderPaymentFilter, setOrderPaymentFilter] = useState<'all' | 'wave' | 'mobile_money' | 'cash' | 'to_confirm'>('all');
   const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | OrderStatus>('all');
 
   // Product Add/Edit Modal
@@ -169,6 +169,17 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const [imageCompressing, setImageCompressing] = useState(false);
   const [compressedSizeKB, setCompressedSizeKB] = useState<number | null>(null);
   const [originalImageSizeKB, setOriginalImageSizeKB] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!isRegisterModalOpen && !isProductModalOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (isProductModalOpen) setIsProductModalOpen(false);
+      else setIsRegisterModalOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isProductModalOpen, isRegisterModalOpen]);
 
   // Shop Settings state
   const [settingsName, setSettingsName] = useState('');
@@ -192,7 +203,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const [cronResult, setCronResult] = useState<any>(null);
   const [copiedBilan, setCopiedBilan] = useState(false);
 
-  // Check persistent session on mount
+  // Restore the merchant view only from the server-side session.
   useEffect(() => {
     const savedRegistrationLinks = localStorage.getItem('matable_registration_links');
     if (savedRegistrationLinks) {
@@ -203,17 +214,14 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       }
     }
 
-    const savedShop = localStorage.getItem('matable_merchant_session');
-    if (savedShop) {
-      try {
-        const parsed = JSON.parse(savedShop);
-        setCurrentShop(parsed);
-        syncShopSettings(parsed);
-        loadShopData(parsed.id);
-      } catch {
-        localStorage.removeItem('matable_merchant_session');
-      }
-    }
+    fetch('/api/auth/session')
+      .then(async (res) => {
+        const data = await res.json();
+        if (res.ok && data.authenticated && data.userType === 'merchant' && data.shopId) {
+          await loadShopData(Number(data.shopId));
+        }
+      })
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -223,7 +231,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     const openSession = (data: any) => {
       window.history.replaceState({}, '', '/app');
       setCurrentShop(data.shop);
-      localStorage.setItem('matable_merchant_session', JSON.stringify(data.shop));
       syncShopSettings(data.shop);
       loadShopData(data.shop.id);
     };
@@ -271,7 +278,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       // 1. Load shop details & products
       const shopRes = await fetch(`/api/shops/${shopId}`);
       if (shopRes.status === 401) {
-        localStorage.removeItem('matable_merchant_session');
         setCurrentShop(null);
         setProducts([]);
         setOrders([]);
@@ -289,7 +295,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       // 2. Load orders
       const ordersRes = await fetch(`/api/shops/${shopId}/orders`);
       if (ordersRes.status === 401) {
-        localStorage.removeItem('matable_merchant_session');
         setCurrentShop(null);
         setProducts([]);
         setOrders([]);
@@ -305,7 +310,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       // 3. Load Flash Bilan
       const bilanRes = await fetch(`/api/shops/${shopId}/flash-bilan`);
       if (bilanRes.status === 401) {
-        localStorage.removeItem('matable_merchant_session');
         setCurrentShop(null);
         setProducts([]);
         setOrders([]);
@@ -350,7 +354,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
       window.history.replaceState({}, '', '/app');
       setCurrentShop(data.shop);
-      localStorage.setItem('matable_merchant_session', JSON.stringify(data.shop));
       syncShopSettings(data.shop);
       loadShopData(data.shop.id);
     } catch (err: unknown) {
@@ -390,7 +393,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       }
 
       setCurrentShop(data.shop);
-      localStorage.setItem('matable_merchant_session', JSON.stringify(data.shop));
       syncShopSettings(data.shop);
       loadShopData(data.shop.id);
     } catch (err: unknown) {
@@ -433,7 +435,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       }
 
       setCurrentShop(data.shop);
-      localStorage.setItem('matable_merchant_session', JSON.stringify(data.shop));
       syncShopSettings(data.shop);
       setIsRegisterModalOpen(false);
       const publicUrl = `${window.location.origin}/${data.shop.slug}`;
@@ -596,7 +597,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   // Logout handler
   const handleLogout = () => {
     fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
-    localStorage.removeItem('matable_merchant_session');
     setCurrentShop(null);
     setProducts([]);
     setOrders([]);
@@ -656,7 +656,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       if (res.ok) {
         const data = await res.json();
         setCurrentShop(data.shop);
-        localStorage.setItem('matable_merchant_session', JSON.stringify(data.shop));
         setHoursSaved(true);
         setTimeout(() => setHoursSaved(false), 3000);
       } else {
@@ -1024,7 +1023,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       if (res.ok) {
         const data = await res.json();
         setCurrentShop(data.shop);
-        localStorage.setItem('matable_merchant_session', JSON.stringify(data.shop));
         setSettingsSaved(true);
         setSettingsNewPin('');
         toast.success('Paramètres enregistrés avec succès !');
@@ -1297,15 +1295,15 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
         {/* REGISTER NEW SHOP MODAL */}
         {isRegisterModalOpen && createPortal((
-          <div className="fixed inset-0 z-50 flex h-dvh min-h-0 max-h-dvh items-start justify-center overflow-y-auto bg-[#211712]/60 p-3 backdrop-blur-sm sm:p-4 lg:p-6">
-            <div className="my-0 w-full max-w-3xl rounded-[30px] border-[3px] border-[#211712] bg-[#fffaf2] p-4 shadow-[10px_10px_0_rgba(33,23,18,0.96)] sm:my-3 sm:p-5 lg:my-4 lg:p-6">
+          <div className="fixed inset-0 z-50 flex h-dvh min-h-0 max-h-dvh items-start justify-center overflow-y-auto bg-[#211712]/60 p-3 backdrop-blur-sm sm:p-4 lg:p-6" role="presentation">
+            <div role="dialog" aria-modal="true" aria-labelledby="register-dialog-title" className="my-0 w-full max-w-3xl rounded-[30px] border-[3px] border-[#211712] bg-[#fffaf2] p-4 shadow-[10px_10px_0_rgba(33,23,18,0.96)] sm:my-3 sm:p-5 lg:my-4 lg:p-6">
               <div className="flex flex-col gap-2 border-b-[2px] border-[#211712] pb-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-9 w-9 items-center justify-center rounded-lg border-[2px] border-[#211712] bg-[#f7e7c7] text-[#211712]">
                     <Store className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="truncate text-sm font-extrabold text-[#fffaf2] sm:text-base lg:text-lg">Créer ma boutique</h3>
+                    <h3 id="register-dialog-title" className="truncate text-sm font-extrabold text-[#fffaf2] sm:text-base lg:text-lg">Créer ma boutique</h3>
                     <p className="mt-0.5 text-[10px] text-[#d9eee5] sm:text-[10px] lg:text-[11px]">Quelques informations pour préparer votre espace.</p>
                   </div>
                 </div>
@@ -1529,6 +1527,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         if (!['mobile_money', 'orange_money', 'mtn_money', 'moov_money'].includes(o.payment_method_preference)) {
           return false;
         }
+      } else if (orderPaymentFilter === 'cash' || orderPaymentFilter === 'to_confirm') {
+        if (o.payment_method_preference !== orderPaymentFilter) return false;
       } else if (o.payment_method_preference !== orderPaymentFilter) {
         return false;
       }
@@ -1986,7 +1986,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 </div>
                 <div>
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Chiffre d'Affaires
+                    Valeur des commandes
                   </span>
                   <span className="font-black text-slate-900 text-lg">
                     {formatFCFA(totalRevenue)}
@@ -2000,7 +2000,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 </div>
                 <div>
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Total Commandes
+                    Commandes reçues
                   </span>
                   <span className="font-black text-slate-900 text-lg">
                     {orders.length}
@@ -2055,7 +2055,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                       : 'bg-sky-50 text-sky-700 hover:bg-sky-100'
                   }`}
                 >
-                  Wave ({orders.filter(o => o.payment_method_preference === 'wave').length})
+                  Wave souhaité ({orders.filter(o => o.payment_method_preference === 'wave').length})
                 </button>
                 <button
                   onClick={() => setOrderPaymentFilter('mobile_money')}
@@ -2065,7 +2065,19 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                       : 'bg-orange-50 text-orange-700 hover:bg-orange-100'
                   }`}
                 >
-                  Mobile Money ({orders.filter(o => ['mobile_money', 'orange_money', 'mtn_money', 'moov_money'].includes(o.payment_method_preference)).length})
+                  Mobile Money souhaité ({orders.filter(o => ['mobile_money', 'orange_money', 'mtn_money', 'moov_money'].includes(o.payment_method_preference)).length})
+                </button>
+                <button
+                  onClick={() => setOrderPaymentFilter('cash')}
+                  className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 ${orderPaymentFilter === 'cash' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                >
+                  Espèces ({orders.filter(o => o.payment_method_preference === 'cash').length})
+                </button>
+                <button
+                  onClick={() => setOrderPaymentFilter('to_confirm')}
+                  className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 ${orderPaymentFilter === 'to_confirm' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'}`}
+                >
+                  À convenir ({orders.filter(o => o.payment_method_preference === 'to_confirm').length})
                 </button>
               </div>
 
@@ -2076,6 +2088,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                   { id: 'all', label: 'Toutes', count: orders.length },
                   { id: 'pending', label: '⏳ En attente', count: orders.filter(o => (o.status || 'pending') === 'pending').length },
                   { id: 'confirmed', label: '✓ Confirmées', count: orders.filter(o => o.status === 'confirmed').length },
+                  { id: 'preparing', label: '🍳 En préparation', count: orders.filter(o => o.status === 'preparing').length },
+                  { id: 'ready', label: '📦 Prêtes', count: orders.filter(o => o.status === 'ready').length },
                   { id: 'delivered', label: '✨ Livrées', count: orders.filter(o => o.status === 'delivered').length },
                   { id: 'cancelled', label: '✕ Annulées', count: orders.filter(o => o.status === 'cancelled').length },
                 ].map(st => (
@@ -2127,7 +2141,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                             {order.customer_phone}
                           </span>
                           <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            {order.payment_method_preference.toUpperCase()}
+                            {{ wave: 'WAVE', mobile_money: 'MOBILE MONEY', cash: 'ESPÈCES', to_confirm: 'À CONVENIR' }[order.payment_method_preference] || 'À CONVENIR'}
                           </span>
 
                           {/* Status Badge */}
@@ -2141,9 +2155,19 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                               ✨ Livrée
                             </span>
                           )}
+                          {order.status === 'preparing' && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                              🍳 En préparation
+                            </span>
+                          )}
+                          {order.status === 'ready' && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
+                              📦 Prête
+                            </span>
+                          )}
                           {order.status === 'cancelled' && (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-                              ✕ Annulée (Stock remis)
+                              ✕ Demande annulée
                             </span>
                           )}
                           {(!order.status || order.status === 'pending') && (
@@ -2204,6 +2228,51 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                           )}
 
                           {order.status === 'confirmed' && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'preparing')}
+                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors"
+                              >
+                                Préparer
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'delivered')}
+                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                              >
+                                Marquer livrée
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors"
+                              >
+                                Annuler
+                              </button>
+                            </>
+                          )}
+
+                          {order.status === 'preparing' && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'ready')}
+                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors"
+                              >
+                                Prête
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors"
+                              >
+                                Annuler
+                              </button>
+                            </>
+                          )}
+
+                          {order.status === 'ready' && (
                             <>
                               <button
                                 type="button"
@@ -2316,7 +2385,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 shop={currentShop}
                 onUpdateShop={(updated) => {
                   setCurrentShop(updated);
-                  localStorage.setItem('matable_merchant_session', JSON.stringify(updated));
                 }}
               />
             )}
@@ -2766,15 +2834,15 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
       {/* PRODUCT ADD/EDIT MODAL */}
       {isProductModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#211712]/60 p-3 backdrop-blur-sm sm:p-4 lg:p-6">
-          <div className="w-full max-w-[980px] max-h-[94vh] overflow-y-auto rounded-[28px] border-[3px] border-[#211712] bg-[#fffaf2] p-4 shadow-[12px_12px_0_rgba(33,23,18,0.96)] sm:p-5 lg:p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#211712]/60 p-3 backdrop-blur-sm sm:p-4 lg:p-6" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="product-dialog-title" className="w-full max-w-[980px] max-h-[94vh] overflow-y-auto rounded-[28px] border-[3px] border-[#211712] bg-[#fffaf2] p-4 shadow-[12px_12px_0_rgba(33,23,18,0.96)] sm:p-5 lg:p-6">
             <div className="flex items-center justify-between gap-3 border-b-[2px] border-[#211712] pb-4">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl border-[2px] border-[#211712] bg-[#f7e7c7] text-[#211712]">
                   <Boxes className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="truncate text-base font-extrabold text-[#211712] sm:text-lg lg:text-xl">
+                  <h3 id="product-dialog-title" className="truncate text-base font-extrabold text-[#211712] sm:text-lg lg:text-xl">
                     {editingProduct ? 'Modifier l\'article' : 'Ajouter un article au catalogue'}
                   </h3>
                   <p className="mt-0.5 text-[10px] text-[#6b5548] sm:text-[11px] lg:text-xs">Complétez les détails utiles pour la vitrine et les commandes.</p>

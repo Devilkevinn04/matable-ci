@@ -44,18 +44,20 @@ export function generateWhatsAppOrderReceipt(
   customerPhone: string,
   deliveryLocation: string,
   deliveryNote: string,
-  paymentMethod: 'wave' | 'mobile_money',
+  paymentMethod: 'wave' | 'mobile_money' | 'cash' | 'to_confirm',
   cart: CartItem[],
   totalAmount: number,
   deliverySlot?: string
 ): { text: string; url: string } {
   const paymentLabels: Record<string, string> = {
-    wave: 'Wave (0 FCFA de frais)',
-    mobile_money: 'Mobile Money (Orange/MTN/Moov)',
+    wave: 'Wave souhaité',
+    mobile_money: 'Mobile Money souhaité',
+    cash: 'Espèces souhaitées',
+    to_confirm: 'À convenir avec le vendeur',
   };
 
   const lines: string[] = [
-    `🛒 *NOUVELLE COMMANDE SUR MATABLE.CI*`,
+    `🛒 *COMMANDE MATABLE.CI*`,
     `🏪 *Boutique :* ${shop.name} (${shop.category === 'food' ? 'Restauration' : 'Mode & Lingerie'})`,
     `----------------------------------------`,
     `👤 *Client :* ${customerName.trim()}`,
@@ -71,7 +73,10 @@ export function generateWhatsAppOrderReceipt(
     lines.push(`ℹ️ *Précision repère :* ${deliveryNote.trim()}`);
   }
 
-  lines.push(`💳 *Mode de paiement :* ${paymentLabels[paymentMethod] || paymentMethod}`);
+  lines.push(`💳 *Paiement :* à convenir directement avec le vendeur`);
+  if (paymentMethod) {
+    lines.push(`📲 *Mode souhaité :* ${paymentLabels[paymentMethod] || paymentMethod}`);
+  }
   lines.push(`----------------------------------------`);
   lines.push(`📦 *ARTICLES COMMANDÉS :*`);
 
@@ -99,10 +104,10 @@ export function generateWhatsAppOrderReceipt(
   });
 
   lines.push(`----------------------------------------`);
-  lines.push(`💰 *TOTAL PANIER : ${formatFCFA(totalAmount)}*`);
-  lines.push(`🛵 _(Hors frais de livraison, à régler au livreur selon la commune)_`);
+  lines.push(`💰 *TOTAL INDICATIF : ${formatFCFA(totalAmount)}*`);
+  lines.push(`📌 *Prix final à confirmer avec le vendeur selon disponibilité, livraison et mode de paiement.*`);
   lines.push(`----------------------------------------`);
-  lines.push(`Merci de me confirmer la disponibilité et l'heure de livraison ! ✨`);
+  lines.push(`Merci de me confirmer la disponibilité, le montant final et le mode de paiement. ✨`);
 
   const fullText = lines.join('\n');
   const cleanPhone = cleanPhoneForWhatsApp(shop.whatsapp_number);

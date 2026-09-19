@@ -3,14 +3,12 @@ import { motion } from 'motion/react';
 import {
   ShieldCheck,
   Store,
-  Calendar,
   Clock,
   AlertTriangle,
   CheckCircle2,
   RefreshCw,
   Phone,
   Send,
-  Zap,
   DollarSign,
   Search,
   Check,
@@ -24,16 +22,10 @@ import {
   Users,
   Activity,
   ShoppingBag,
-  Sparkles,
 } from 'lucide-react';
 import { Shop } from '../types';
 
 interface AdminShopItem extends Shop {
-  payment_status: 'pending' | 'awaiting_review' | 'approved' | 'rejected' | 'suspended';
-  daysRemaining: number;
-  alertLevel: string;
-  alertMessage: string;
-  shouldDeactivate: boolean;
   products_count: number;
   orders_count: number;
   total_sales: number;
@@ -68,7 +60,7 @@ interface AdminHealth {
   database_path: string;
   counts: { shops: number; products: number; orders: number };
   latest_analytics_event_at: string | null;
-  integrations: { paystack: string; whatsapp_cloud: string; whatsapp_click_to_chat: string };
+  integrations: { whatsapp_cloud: string; whatsapp_click_to_chat: string };
 }
 
 const ownerNotificationTemplates = [
@@ -86,10 +78,8 @@ export const AdminDashboard: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'expiring'>('all');
-  const [sortBy, setSortBy] = useState<'sales' | 'orders' | 'expiry' | 'name'>('sales');
-  const [cronRunning, setCronRunning] = useState(false);
-  const [cronResult, setCronResult] = useState<any | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [sortBy, setSortBy] = useState<'sales' | 'orders' | 'name'>('sales');
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
   const [analyticsDays, setAnalyticsDays] = useState(30);
@@ -103,6 +93,20 @@ export const AdminDashboard: React.FC = () => {
   const fetchAdminShops = async () => {
     try {
       setLoading(true);
+      const sessionRes = await fetch('/api/auth/session', { method: 'GET' });
+      if (!sessionRes.ok) {
+        setIsAuthenticated(false);
+        setShops([]);
+        return;
+      }
+
+      const sessionData = await sessionRes.json();
+      if (!sessionData.authenticated || sessionData.userType !== 'admin') {
+        setIsAuthenticated(false);
+        setShops([]);
+        return;
+      }
+
       const res = await fetch('/api/admin/shops');
       if (res.ok) {
         const data = await res.json();
@@ -252,27 +256,6 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Extend subscription (+1, +3, +6, +12 months)
-  const handleExtendSubscription = async (shopId: number, months: number) => {
-    try {
-      const res = await fetch(`/api/admin/shops/${shopId}/extend-subscription`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ months }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        showNotice(data.message);
-        fetchAdminShops();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        showNotice(data.error || 'Impossible de prolonger la boutique.');
-      }
-    } catch {
-      showNotice('Impossible de contacter le serveur.');
-    }
-  };
-
   const handleOpenMerchantSpace = async (shopId: number) => {
     // ⚠️ Must open the window SYNCHRONOUSLY before any await,
     // otherwise browsers treat it as a popup and block it.
@@ -301,50 +284,6 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Change Subscription Tier (Standard, Premium, Pro)
-  const handleUpdateTier = async (shopId: number, tier: 'standard' | 'premium' | 'pro') => {
-    try {
-      const res = await fetch(`/api/shops/${shopId}/tier`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscription_tier: tier }),
-      });
-      if (res.ok) {
-        setShops(prev =>
-          prev.map(s => (s.id === shopId ? { ...s, subscription_tier: tier } : s))
-        );
-        showNotice(`Classe d'abonnement mise à jour : ${tier.toUpperCase()}`);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        showNotice(data.error || 'Impossible de modifier la classe.');
-      }
-    } catch {
-      showNotice('Impossible de contacter le serveur.');
-    }
-  };
-
-  // Run Cron Engine
-  const handleTriggerCron = async () => {
-    try {
-      setCronRunning(true);
-      const res = await fetch('/api/admin/trigger-cron', {
-        method: 'POST',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCronResult(data);
-        fetchAdminShops();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        showNotice(data.error || 'Impossible d’actualiser le bilan.');
-      }
-    } catch {
-      showNotice('Impossible de contacter le serveur.');
-    } finally {
-      setCronRunning(false);
-    }
-  };
-
   const showNotice = (msg: string) => {
     setActionNotice(msg);
     setTimeout(() => setActionNotice(null), 3500);
@@ -356,27 +295,23 @@ export const AdminDashboard: React.FC = () => {
       s.slug.toLowerCase().includes(searchQuery.toLowerCase())) &&
     (statusFilter === 'all' ||
       (statusFilter === 'active' && s.is_active) ||
-      (statusFilter === 'inactive' && !s.is_active) ||
-      (statusFilter === 'expiring' && s.daysRemaining <= 4))
+      (statusFilter === 'inactive' && !s.is_active))
   ).sort((a, b) => {
     if (sortBy === 'sales') return b.total_sales - a.total_sales;
     if (sortBy === 'orders') return b.orders_count - a.orders_count;
-    if (sortBy === 'expiry') return a.daysRemaining - b.daysRemaining;
     return a.name.localeCompare(b.name);
   });
 
   const activeShopsCount = shops.filter(s => s.is_active).length;
-  const expiringShopsCount = shops.filter(s => s.daysRemaining <= 4 && s.daysRemaining >= 0).length;
   const totalSales = shops.reduce((sum, shop) => sum + shop.total_sales, 0);
   const totalOrders = shops.reduce((sum, shop) => sum + shop.orders_count, 0);
   const averageOrderValue = totalOrders ? Math.round(totalSales / totalOrders) : 0;
 
   const exportShopsCsv = () => {
-    const headers = ['Boutique', 'Slug', 'Statut', 'CA FCFA', 'Commandes', 'Panier moyen', 'Produits', 'Echeance'];
+    const headers = ['Boutique', 'Slug', 'Statut', 'Valeur commandes FCFA', 'Commandes', 'Panier moyen', 'Produits'];
     const rows = filteredShops.map(shop => [
       shop.name, shop.slug, shop.is_active ? 'active' : 'inactive', shop.total_sales,
       shop.orders_count, shop.average_order_value, shop.products_count,
-      shop.subscription_expires_at,
     ]);
     const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
@@ -454,20 +389,11 @@ export const AdminDashboard: React.FC = () => {
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                 <span>Actualiser</span>
               </button>
-              <button
-                id="trigger-cron-btn"
-                onClick={handleTriggerCron}
-                disabled={cronRunning}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1b3a63] px-4 py-2.5 text-xs font-black text-white shadow-[4px_4px_0_rgba(33,23,18,0.96)] border-[2px] border-[#211712] transition hover:translate-y-[-1px]"
-              >
-                <Zap className="w-4 h-4 text-[#e8a93a]" />
-                <span>{cronRunning ? 'Exécution en cours...' : 'Exécuter le Cron Job'}</span>
-              </button>
             </div>
           </div>
 
           <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-            {[{ label: 'Total Boutiques', value: shops.length, tone: 'bg-white border-[#211712]' }, { label: 'Actives', value: `${activeShopsCount}/${shops.length}`, tone: 'bg-[#edf7f2] border-[#211712] text-[#155c3d]' }, { label: 'Alertes', value: expiringShopsCount, tone: 'bg-[#f8eed7] border-[#211712] text-[#8a5a12]' }, { label: 'Tarif / Mois', value: '5 000 F', tone: 'bg-[#edf2fb] border-[#211712] text-[#1b3a63]' }, { label: 'CA cumulé', value: `${new Intl.NumberFormat('fr-FR').format(totalSales)} F`, tone: 'bg-[#edf7f2] border-[#211712] text-[#155c3d]' }, { label: 'Commandes', value: totalOrders, tone: 'bg-[#eef5ff] border-[#211712] text-[#1b3a63]' }, { label: 'Panier moyen', value: `${new Intl.NumberFormat('fr-FR').format(averageOrderValue)} F`, tone: 'bg-[#f9e7d6] border-[#211712] text-[#b93712]' }].map((item, index) => (
+            {[{ label: 'Total Boutiques', value: shops.length, tone: 'bg-white border-[#211712]' }, { label: 'Actives', value: `${activeShopsCount}/${shops.length}`, tone: 'bg-[#edf7f2] border-[#211712] text-[#155c3d]' }, { label: 'Valeur des commandes', value: `${new Intl.NumberFormat('fr-FR').format(totalSales)} F`, tone: 'bg-[#edf7f2] border-[#211712] text-[#155c3d]' }, { label: 'Commandes', value: totalOrders, tone: 'bg-[#eef5ff] border-[#211712] text-[#1b3a63]' }, { label: 'Panier moyen', value: `${new Intl.NumberFormat('fr-FR').format(averageOrderValue)} F`, tone: 'bg-[#f9e7d6] border-[#211712] text-[#b93712]' }].map((item, index) => (
               <motion.div
                 key={item.label}
                 initial={{ opacity: 0, y: 16 }}
@@ -655,54 +581,6 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </section>
 
-        {cronResult && (
-          <motion.section
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="chart-panel p-4 md:p-5"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Zap className="w-5 h-5 text-rose-600" />
-                <h3 className="font-black text-slate-900 text-sm">Rapport du cron</h3>
-              </div>
-              <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">
-                {new Date(cronResult.timestamp).toLocaleTimeString()}
-              </span>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-3 text-xs text-slate-600">
-              <span className="rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 text-amber-800 font-bold">Alertes générées : {cronResult.alertsCount}</span>
-              <span className="rounded-full bg-rose-50 border border-rose-200 px-2.5 py-1 text-rose-800 font-bold">Boutiques OFF : {cronResult.deactivatedCount}</span>
-            </div>
-
-            {cronResult.alerts.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {cronResult.alerts.map((alert: any, idx: number) => (
-                  <div key={idx} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 flex flex-col md:flex-row md:items-center justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
-                        <span>{alert.shop_name}</span>
-                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[9px] text-slate-600">{alert.type}</span>
-                      </div>
-                      <p className="mt-1 text-[11px] text-slate-600">{alert.message.slice(0, 120)}...</p>
-                    </div>
-                    <a
-                      href={`https://wa.me/${alert.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(alert.message)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white"
-                    >
-                      <Phone className="w-3.5 h-3.5" />
-                      WhatsApp
-                    </a>
-                  </div>
-                ))}
-              </div>
-            )}
-          </motion.section>
-        )}
-
         <section className="chart-panel p-4 md:p-5">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2">
@@ -717,7 +595,7 @@ export const AdminDashboard: React.FC = () => {
             </button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3"><span className="text-[11px] text-emerald-700 font-bold block">CA cumulé</span><strong className="text-lg text-emerald-900">{new Intl.NumberFormat('fr-FR').format(totalSales)} F</strong></div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3"><span className="text-[11px] text-emerald-700 font-bold block">Valeur des commandes</span><strong className="text-lg text-emerald-900">{new Intl.NumberFormat('fr-FR').format(totalSales)} F</strong></div>
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3"><span className="text-[11px] text-sky-700 font-bold block">Commandes</span><strong className="text-lg text-sky-900">{totalOrders}</strong></div>
           </div>
         </section>
@@ -738,15 +616,14 @@ export const AdminDashboard: React.FC = () => {
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
-            {(['all', 'active', 'inactive', 'expiring'] as const).map(filter => (
+            {(['all', 'active', 'inactive'] as const).map(filter => (
               <button key={filter} onClick={() => setStatusFilter(filter)} className={`rounded-xl px-2.5 py-1.5 text-[11px] font-bold ${statusFilter === filter ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                {filter === 'all' ? 'Toutes' : filter === 'active' ? 'Actives' : filter === 'inactive' ? 'Inactives' : 'Échéance ≤ 4j'}
+                {filter === 'all' ? 'Toutes' : filter === 'active' ? 'Actives' : 'Inactives'}
               </button>
             ))}
             <select value={sortBy} onChange={event => setSortBy(event.target.value as typeof sortBy)} className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 outline-none">
-              <option value="sales">Trier par CA</option>
+              <option value="sales">Trier par valeur des commandes</option>
               <option value="orders">Trier par commandes</option>
-              <option value="expiry">Trier par échéance</option>
               <option value="name">Trier par nom</option>
             </select>
           </div>
@@ -759,9 +636,6 @@ export const AdminDashboard: React.FC = () => {
 
           <div className="divide-y divide-slate-200">
             {filteredShops.map((shop) => {
-              const isExpired = shop.daysRemaining < 0;
-              const isUrgent = shop.daysRemaining <= 4 && shop.daysRemaining >= 0;
-
               return (
                 <motion.div
                   key={shop.id}
@@ -776,13 +650,6 @@ export const AdminDashboard: React.FC = () => {
                       <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${shop.category === 'food' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'}`}>
                         {shop.category === 'food' ? '🍲 Restauration' : '👗 Mode'}
                       </span>
-                      {isExpired ? (
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-rose-100 text-rose-700">Expiré</span>
-                      ) : isUrgent ? (
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 animate-pulse">Expire dans {shop.daysRemaining}j</span>
-                      ) : (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700">{shop.daysRemaining} jours restants</span>
-                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
@@ -793,15 +660,7 @@ export const AdminDashboard: React.FC = () => {
                       <span>💰 {new Intl.NumberFormat('fr-FR').format(shop.total_sales)} FCFA</span>
                     </div>
 
-                    {shop.payment_status === 'approved' && (
-                      <div className="inline-flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 text-[10px] font-black text-emerald-800">
-                        <Check className="w-3.5 h-3.5" />
-                        Paiement validé automatiquement
-                      </div>
-                    )}
-
                     <div className="text-xs text-slate-600 flex flex-wrap items-center gap-4 pt-1">
-                      <div className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-slate-400" /><span>Échéance : <strong>{shop.subscription_expires_at}</strong></span></div>
                       <div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-slate-400" /><span>Dernière commande : <strong>{shop.last_order_at ? new Date(shop.last_order_at).toLocaleDateString('fr-FR') : 'Aucune'}</strong></span></div>
                     </div>
                   </div>
@@ -811,11 +670,6 @@ export const AdminDashboard: React.FC = () => {
                     <button onClick={() => handleToggleActive(shop.id)} className={`rounded-xl border px-3 py-2 text-xs font-extrabold ${shop.is_active ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
                       {shop.is_active ? '● ON' : '○ OFF'}
                     </button>
-                    <div className="flex items-center gap-1.5">
-                      {[1, 3, 6, 12].map((months) => (
-                        <button key={months} onClick={() => handleExtendSubscription(shop.id, months)} className="rounded-lg bg-slate-100 px-2 py-1.5 text-[10px] font-bold text-slate-700">+{months}M</button>
-                      ))}
-                    </div>
                   </div>
                 </motion.div>
               );
@@ -823,14 +677,6 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="rounded-[1.7rem] bg-slate-900 p-6 text-slate-200">
-          <h3 className="font-black text-white text-sm flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-400" /> Moteur d’alerte automatique</h3>
-          <ul className="mt-3 text-xs space-y-1.5 text-slate-300 list-disc list-inside">
-            <li><strong>À J-10, J-8, J-6, J-4, J-2</strong> : envoi automatique d’un rappel WhatsApp.</li>
-            <li><strong>À J-0</strong> : alerte ultime de coupure.</li>
-            <li><strong>À J+1</strong> : basculement automatique de la boutique à l’état <code className="text-rose-400">OFF (is_active = false)</code>.</li>
-          </ul>
-        </div>
       </main>
     </div>
   );

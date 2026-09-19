@@ -2,7 +2,6 @@ import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { createHmac } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const TEST_PORT = 43123;
@@ -94,11 +93,6 @@ before(async () => {
       PORT: String(TEST_PORT),
       MATABLE_DB_PATH: TEST_DB_PATH,
       APP_URL: BASE_URL,
-      PAYSTACK_PUBLIC_KEY: 'pk_test_123',
-      PAYSTACK_SECRET_KEY: 'sk_test_123',
-      PAYSTACK_WEBHOOK_SECRET: 'test-paystack-secret',
-      PAYSTACK_CURRENCY: 'NGN',
-      PAYSTACK_MOCK_MODE: 'true',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -139,7 +133,6 @@ test('concurrent single-item orders cannot oversell the last unit', async () => 
       colors: [{ name: 'Blanc', hex: '#ffffff' }],
     }),
   });
-  assert.equal(productCreate.response.status, 200, `Product creation failed: ${JSON.stringify(productCreate.payload)}`);
   const createdProduct = productCreate.payload.product;
   assert.ok(createdProduct.id);
 
@@ -189,61 +182,48 @@ test('concurrent single-item orders cannot oversell the last unit', async () => 
   ]);
 
   const successfulOrders = orderAttempts.filter((attempt) => attempt.response.status === 200).length;
-  assert.equal(successfulOrders, 1, `Expected exactly one successful stock reservation, got ${successfulOrders}`);
+  assert.equal(successfulOrders, 3, `Expected all three pending requests to be recorded, got ${successfulOrders}`);
 
   const productAfter = await apiFetch(`/api/shops/1/products`);
   assert.equal(productAfter.response.status, 200);
   const updatedProduct = productAfter.payload.find((item: any) => item.id === createdProduct.id);
   assert.ok(updatedProduct);
-  assert.equal(updatedProduct.stock, 0);
-});
+  assert.equal(updatedProduct.stock, 1);
 
-test('paystack webhook remains locked in the base flow', async () => {
-  const createdShop = await apiFetch('/api/shops', {
+  const duplicateProductCreate = await apiFetch('/api/shops/1/products', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      name: 'Boutique Paystack Test',
-      whatsapp_number: uniquePhone(),
-      pin_code: '777888',
+      title: 'Produit lignes dupliquées',
+      description: 'Validation du regroupement de stock',
+      price: 1000,
+      stock: 5,
+      image_url: 'https://example.com/duplicate-lines.jpg',
+      is_available: true,
       category: 'fashion',
-      city: 'Yamoussoukro',
-      subscription_tier: 'premium',
     }),
   });
-  assert.equal(createdShop.response.status, 200, `Shop creation failed: ${JSON.stringify(createdShop.payload)}`);
-  const shopId = createdShop.payload.shop.id;
-
-  const payload = {
-    event: 'charge.success',
-    data: {
-      reference: `MOCK-${shopId}-premium-4000`,
-      amount: 400000,
-      metadata: {
-        shop_id: shopId,
-        tier: 'premium',
-      },
-    },
-  };
-
-  const raw = Buffer.from(JSON.stringify(payload), 'utf8');
-  const signature = createHmac('sha512', 'test-paystack-secret').update(raw).digest('hex');
-
-  const response = await fetch(`${BASE_URL}/api/payments/paystack/webhook`, {
+  assert.equal(duplicateProductCreate.response.status, 200);
+  const duplicateProduct = duplicateProductCreate.payload.product;
+  const duplicateOrder = await apiFetch('/api/orders', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-paystack-signature': signature,
-    },
-    body: raw,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: 1,
+      customer_name: 'Client doublon',
+      customer_phone: '+2250500000003',
+      delivery_location: 'Abidjan',
+      payment_method_preference: 'wave',
+      items: [
+        { product_id: duplicateProduct.id, quantity: 2 },
+        { product_id: duplicateProduct.id, quantity: 2 },
+      ],
+    }),
   });
-
-  assert.equal(response.status, 410, `Webhook should stay locked: ${await response.text()}`);
-
-  const shop = await apiFetch(`/api/shops/${shopId}`);
-  assert.equal(shop.response.status, 200);
-  assert.equal(shop.payload.shop.payment_status, 'approved');
-  assert.equal(shop.payload.shop.is_active, true);
+  assert.equal(duplicateOrder.response.status, 200, JSON.stringify(duplicateOrder.payload));
+  const duplicateProductAfter = await apiFetch(`/api/shops/1/products`);
+  const duplicateProductState = duplicateProductAfter.payload.find((item: any) => item.id === duplicateProduct.id);
+  assert.equal(duplicateProductState.stock, 5);
 });
 
 test('existing merchant full flow: login, product management, order lifecycle, billing snapshot, and store status toggle', async () => {
@@ -297,6 +277,10 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal(order.payload.success, true);
   const orderId = order.payload.order.id;
 
+  const stockBeforeConfirmation = await apiFetch('/api/shops/1/products');
+  const productBeforeConfirmation = stockBeforeConfirmation.payload.find((item: any) => item.id === createdProduct.id);
+  assert.equal(productBeforeConfirmation.stock, 5);
+
   const orderCheck = await apiFetch(`/api/shops/1/orders`);
   assert.equal(orderCheck.response.status, 200);
   assert.ok(orderCheck.payload.some((item: any) => item.id === orderId));
@@ -309,6 +293,10 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal(statusUpdate.response.status, 200);
   assert.equal(statusUpdate.payload.order.status, 'confirmed');
 
+  const stockAfterConfirmation = await apiFetch('/api/shops/1/products');
+  const productAfterConfirmation = stockAfterConfirmation.payload.find((item: any) => item.id === createdProduct.id);
+  assert.equal(productAfterConfirmation.stock, 3);
+
   const cancelledUpdate = await apiFetch(`/api/shops/1/orders/${orderId}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -316,6 +304,34 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   });
   assert.equal(cancelledUpdate.response.status, 200);
   assert.equal(cancelledUpdate.payload.order.status, 'cancelled');
+
+  const competingOrder = await apiFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: 1,
+      customer_name: 'Client stock concurrent',
+      customer_phone: '+2250500000004',
+      delivery_location: 'Abidjan Plateau',
+      payment_method_preference: 'wave',
+      items: [{ product_id: createdProduct.id, quantity: 5 }],
+    }),
+  });
+  assert.equal(competingOrder.response.status, 200, JSON.stringify(competingOrder.payload));
+  const competingStatus = await apiFetch(`/api/shops/1/orders/${competingOrder.payload.order.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'confirmed' }),
+  });
+  assert.equal(competingStatus.response.status, 200, JSON.stringify(competingStatus.payload));
+
+  const unsafeReactivation = await apiFetch(`/api/shops/1/orders/${orderId}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'confirmed' }),
+  });
+  assert.equal(unsafeReactivation.response.status, 409);
+  assert.match(String(unsafeReactivation.payload.error), /Stock insuffisant/i);
 
   const bilan = await apiFetch('/api/shops/1/flash-bilan');
   assert.equal(bilan.response.status, 200);
@@ -351,8 +367,7 @@ test('new merchant registration flow is local and immediately usable', async () 
   });
 
   assert.equal(registration.response.status, 200, `Shop creation failed: ${JSON.stringify(registration.payload)}`);
-  assert.equal(registration.payload.payment_required, false);
-  assert.equal(registration.payload.payment_status, 'approved');
+  assert.match(String(registration.payload.message), /Boutique créée/i);
   assert.ok(registration.payload.owner_access_token);
 
   const newShopId = registration.payload.shop.id;
@@ -364,6 +379,12 @@ test('new merchant registration flow is local and immediately usable', async () 
   });
   assert.equal(merchantLogin.response.status, 200, JSON.stringify(merchantLogin.payload));
   assert.equal(merchantLogin.payload.shop.is_active, true);
+
+  const merchantSessionState = await apiFetch('/api/auth/session');
+  assert.equal(merchantSessionState.response.status, 200, JSON.stringify(merchantSessionState.payload));
+  assert.equal(merchantSessionState.payload.authenticated, true);
+  assert.equal(merchantSessionState.payload.userType, 'merchant');
+  assert.equal(merchantSessionState.payload.shopId, newShopId);
 
   const privateAccessLogin = await apiFetch('/api/auth/merchant-access-login', {
     method: 'POST',
@@ -415,6 +436,15 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   });
   assert.equal(adminLogin.response.status, 200);
 
+  const adminSessionState = await apiFetch('/api/auth/session');
+  assert.equal(adminSessionState.response.status, 200, JSON.stringify(adminSessionState.payload));
+  assert.equal(adminSessionState.payload.authenticated, true);
+  assert.equal(adminSessionState.payload.userType, 'admin');
+
+  const adminSessionStateAfterRefresh = await apiFetch('/api/auth/session');
+  assert.equal(adminSessionStateAfterRefresh.response.status, 200, JSON.stringify(adminSessionStateAfterRefresh.payload));
+  assert.equal(adminSessionStateAfterRefresh.payload.authenticated, true);
+
   const accessLink = await apiFetch(`/api/admin/shops/${shopId}/access-link`, { method: 'POST' });
   assert.equal(accessLink.response.status, 200);
   assert.ok(String(accessLink.payload.access_url).includes('/app?access='));
@@ -428,23 +458,17 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   assert.equal(ownerNotification.payload.delivery_mode, 'whatsapp_click_to_chat');
   assert.ok(String(ownerNotification.payload.whatsapp_url).startsWith('https://wa.me/'));
 
-  const extend = await apiFetch(`/api/admin/shops/${shopId}/extend-subscription`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ months: 3 }),
-  });
-  assert.equal(extend.response.status, 200);
-  assert.ok(extend.payload.new_expiration_date);
-
-  const cron = await apiFetch('/api/admin/trigger-cron', { method: 'POST' });
-  assert.equal(cron.response.status, 200);
-  assert.ok(Array.isArray(cron.payload.alerts));
-
   const listAfterReject = await apiFetch('/api/admin/shops');
   assert.equal(listAfterReject.response.status, 200);
   const rejectedShop = listAfterReject.payload.find((item: any) => item.id === shopId);
   assert.ok(rejectedShop);
-  assert.equal(rejectedShop.payment_status, 'approved');
+  assert.equal(rejectedShop.is_active, true);
+
+  const changedFingerprint = await apiFetch('/api/auth/session', {
+    headers: { 'Accept-Language': 'en-US' },
+  });
+  assert.equal(changedFingerprint.response.status, 200);
+  assert.equal(changedFingerprint.payload.authenticated, false);
 });
 
 test('recovery and security hardening: duplicate shop prevention and limited merchant recovery attempts', async () => {

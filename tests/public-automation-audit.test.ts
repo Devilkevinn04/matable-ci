@@ -31,11 +31,6 @@ before(async () => {
       NODE_ENV: 'test',
       PORT: String(TEST_PORT),
       MATABLE_DB_PATH: TEST_DB_PATH,
-      PAYSTACK_PUBLIC_KEY: 'pk_test_demo',
-      PAYSTACK_SECRET_KEY: 'sk_test_demo',
-      PAYSTACK_WEBHOOK_SECRET: 'whsec_demo',
-      PAYSTACK_CURRENCY: 'NGN',
-      PAYSTACK_MOCK_MODE: 'true',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -80,7 +75,7 @@ test('public directory shows active shops from the local onboarding flow', async
   });
   assert.equal(created.status, 200);
   const createdShop = await created.json();
-  assert.equal(createdShop.payment_required, false);
+  assert.match(String(createdShop.message), /Boutique créée/i);
 
   const directoryAfterCreate = await fetch(`${BASE_URL}/api/shops`);
   const directoryPayload = await directoryAfterCreate.json();
@@ -125,9 +120,7 @@ test('registration flow is coherent without external payment or WhatsApp API', a
   });
   assert.equal(created.status, 200);
   const createdPayload = await created.json();
-  assert.equal(createdPayload.payment_required, false);
-  assert.equal(createdPayload.payment_status, 'approved');
-  assert.match(String(createdPayload.payment_message), /reçu WhatsApp/i);
+  assert.match(String(createdPayload.message), /reçu WhatsApp/i);
 
   const merchantLogin = await fetch(`${BASE_URL}/api/auth/merchant-login`, {
     method: 'POST',
@@ -137,7 +130,7 @@ test('registration flow is coherent without external payment or WhatsApp API', a
   assert.equal(merchantLogin.status, 200);
 });
 
-test('free mode does not suspend shops or generate renewal reminders', async () => {
+test('free onboarding keeps the shop active without subscription controls', async () => {
   const shopCreate = await fetch(`${BASE_URL}/api/shops`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -153,47 +146,21 @@ test('free mode does not suspend shops or generate renewal reminders', async () 
   const shopCreateText = await shopCreate.text();
   assert.equal(shopCreate.status, 200, `Shop creation failed: ${shopCreateText}`);
   const reminderShop = JSON.parse(shopCreateText);
-  const reminderShopId = reminderShop.shop.id;
+  assert.equal(reminderShop.shop.is_active, true);
 
   const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key: 'super-admin-demo-key' }),
   });
-  const adminLoginText = await adminLogin.text();
-  assert.equal(adminLogin.status, 200, `Admin login failed: ${adminLoginText}`);
-
+  assert.equal(adminLogin.status, 200);
   const cookies = adminLogin.headers.get('set-cookie');
   const cookieHeader = cookies ? cookies.split(';')[0] : undefined;
 
-  const expirationUpdate = await fetch(`${BASE_URL}/api/admin/shops/${reminderShopId}/subscription-expiration`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-    },
-    body: JSON.stringify({ days_from_now: 4 }),
-  });
-  const expirationText = await expirationUpdate.text();
-  assert.equal(expirationUpdate.status, 200, `Expiration update failed: ${expirationText}`);
-
-  const firstCron = await fetch(`${BASE_URL}/api/admin/trigger-cron`, {
-    method: 'POST',
+  const adminShops = await fetch(`${BASE_URL}/api/admin/shops`, {
     headers: cookieHeader ? { Cookie: cookieHeader } : {},
   });
-  assert.equal(firstCron.status, 200);
-  const firstCronText = await firstCron.text();
-  const firstCronPayload = JSON.parse(firstCronText);
-  assert.ok(Array.isArray(firstCronPayload.alerts));
-  assert.equal(firstCronPayload.alerts.length, 0);
-
-  const secondCron = await fetch(`${BASE_URL}/api/admin/trigger-cron`, {
-    method: 'POST',
-    headers: cookieHeader ? { Cookie: cookieHeader } : {},
-  });
-  assert.equal(secondCron.status, 200);
-  const secondCronText = await secondCron.text();
-  const secondCronPayload = JSON.parse(secondCronText);
-  assert.ok(Array.isArray(secondCronPayload.alerts));
-  assert.equal(secondCronPayload.alerts.length, 0);
+  assert.equal(adminShops.status, 200);
+  const adminShop = (await adminShops.json()).find((shop: any) => shop.id === reminderShop.shop.id);
+  assert.equal(adminShop.is_active, true);
 });

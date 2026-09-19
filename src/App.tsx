@@ -98,6 +98,7 @@ export default function App() {
 
   return (
     <ToastProvider>
+      <a href="#main-content" className="skip-link">Aller au contenu</a>
       <AnimatePresence mode="wait">
         {isBooting ? (
           <motion.div
@@ -201,7 +202,7 @@ export default function App() {
                   isLegalPage={Boolean(initialLegalPage)}
                 />
 
-                <div className="flex-1 app-shell">
+                <div id="main-content" className="flex-1 app-shell" tabIndex={-1}>
                   {initialLegalPage ? (
                     <LegalPages page={initialLegalPage} />
                   ) : currentRole === 'storefront' && (

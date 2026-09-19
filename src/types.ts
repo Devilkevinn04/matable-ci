@@ -84,7 +84,7 @@ export interface ProductModifierGroup {
   options: ProductModifierOption[];
 }
 
-export type OrderStatus = 'pending' | 'confirmed' | 'delivered' | 'cancelled';
+export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'expired';
 
 export interface Product {
   id: number;
@@ -125,7 +125,7 @@ export interface Order {
   delivery_location: string;
   delivery_note?: string;
   delivery_slot?: string; // For food: "Midi 12h-13h", etc.
-  payment_method_preference: 'wave' | 'mobile_money';
+  payment_method_preference: 'wave' | 'mobile_money' | 'cash' | 'to_confirm';
   total_amount: number;
   created_at: string;
   status: OrderStatus;

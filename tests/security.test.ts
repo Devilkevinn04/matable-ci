@@ -22,7 +22,29 @@ import {
   saveMerchantSessionRecord,
   getMerchantSessionRecord,
   deleteMerchantSessionRecord,
+  summarizeOrderMetrics,
 } from '../server.ts';
+
+test('counts only actionable orders in revenue and status totals', () => {
+  const orders = [
+    { id: 1, shop_id: 8, total_amount: 15000, created_at: '2026-09-19T08:00:00.000Z', status: 'pending' },
+    { id: 2, shop_id: 8, total_amount: 24000, created_at: '2026-09-19T09:30:00.000Z', status: 'confirmed' },
+    { id: 3, shop_id: 8, total_amount: 33000, created_at: '2026-09-19T10:00:00.000Z', status: 'delivered' },
+    { id: 4, shop_id: 8, total_amount: 22000, created_at: '2026-09-19T11:00:00.000Z', status: 'cancelled' },
+    { id: 5, shop_id: 8, total_amount: 41000, created_at: '2026-09-18T18:00:00.000Z', status: 'delivered' },
+  ] as any[];
+
+  const metrics = summarizeOrderMetrics(orders, 8, new Date('2026-09-19T18:00:00.000Z'));
+
+  assert.equal(metrics.received, 4);
+  assert.equal(metrics.confirmed, 1);
+  assert.equal(metrics.delivered, 1);
+  assert.equal(metrics.cancelled, 1);
+  assert.equal(metrics.ca_ordered, 72000);
+  assert.equal(metrics.ca_confirmed, 24000);
+  assert.equal(metrics.ca_delivered, 33000);
+  assert.equal(metrics.panier_moyen_livre, 33000);
+});
 
 test('blocks backend bundles and sourcemaps from public static serving', () => {
   assert.equal(isBlockedStaticAsset('/server.cjs'), true);
@@ -278,14 +300,13 @@ test('rejects placeholder production app URLs', () => {
   }
 });
 
-test('rejects unsafe production configuration and mock Paystack mode', () => {
+test('rejects unsafe production configuration', () => {
   const previous = {
     NODE_ENV: process.env.NODE_ENV,
     ADMIN_ACCESS_KEY: process.env.ADMIN_ACCESS_KEY,
     APP_URL: process.env.APP_URL,
     PORT: process.env.PORT,
     MATABLE_DB_PATH: process.env.MATABLE_DB_PATH,
-    PAYSTACK_MOCK_MODE: process.env.PAYSTACK_MOCK_MODE,
   };
 
   try {
@@ -294,11 +315,6 @@ test('rejects unsafe production configuration and mock Paystack mode', () => {
     process.env.APP_URL = 'https://matable.ci';
     process.env.PORT = '3000';
     process.env.MATABLE_DB_PATH = './data/matable.db';
-    process.env.PAYSTACK_MOCK_MODE = 'true';
-
-    assert.throws(() => validateRuntimeConfig(), /PAYSTACK_MOCK_MODE.*production/i);
-
-    delete process.env.PAYSTACK_MOCK_MODE;
     process.env.ADMIN_ACCESS_KEY = '03062004';
     assert.throws(() => validateRuntimeConfig(), /ADMIN_ACCESS_KEY.*32 caractères/i);
 

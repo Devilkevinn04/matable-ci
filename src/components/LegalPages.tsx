@@ -42,33 +42,32 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
           <p className="legal-kicker">MaTable.ci · Côte d’Ivoire</p>
           <h1>{content.title}</h1>
           <p>{content.intro}</p>
-          <small>Dernière mise à jour : 15 septembre 2026</small>
+          <small>Dernière mise à jour : 19 septembre 2026</small>
         </header>
 
         {page === 'mentions-legales' && (
           <div className="legal-content">
             <section>
               <h2>Éditeur du site</h2>
-              <p>Le site MaTable.ci est édité par la plateforme MaTable.ci, opérateur de la vitrine commerciale et du service de commande directe. L’exploitation du service est assurée par l’équipe responsable du projet, dans le cadre de la mise à disposition de vitrines locales et de catalogues de commerce de proximité.</p>
-              <p>MaTable.ci peut être contacté via le formulaire de contact ou par les coordonnées de contact publiées sur le site et mises à jour par l’exploitant du service.</p>
+              <p>MaTable.ci est exploité par l’équipe responsable du projet MaTable.ci, opérateur de la plateforme de mise en relation entre commerçants et clients. Le service est proposé depuis la Côte d’Ivoire et vise à aider les boutiques locales à présenter leurs offres et à recevoir des demandes de commande.</p>
+              <p>La plateforme agit comme prestataire technique de mise en relation et ne collecte pas les paiements entre le client et le vendeur.</p>
             </section>
             <section>
-              <h2>Siège social et immatriculation</h2>
-              <p>Les informations juridiques complètes du responsable légal, de la forme juridique, du siège social et de l’immatriculation sont communiquées selon les exigences locales et peuvent être mises à jour en fonction de l’entité juridique qui exploite la plateforme.</p>
-              <p>La plateforme agit en qualité de prestataire technologique et d’intermédiaire de mise en relation entre les commerçants et leurs clients.</p>
+              <h2>Siège social, forme juridique et contact</h2>
+              <p>Les informations juridiques complètes de la structure exploiteuse, y compris la raison sociale, la forme juridique, l’adresse du siège, l’immatriculation et les coordonnées officielles, doivent être publiées de manière exacte et mise à jour par l’exploitant du service selon le statut retenu.</p>
+              <p>Les coordonnées de contact effectives du service sont publiées sur le site et peuvent être modifiées par l’exploitant en fonction de l’organisation juridique de la plateforme.</p>
             </section>
             <section>
               <h2>Hébergement</h2>
-              <p>Le site est hébergé par un prestataire de services cloud choisi par l’exploitant de la plateforme et configuré pour garantir la disponibilité, la sécurité et la redondance du service.</p>
-              <p>Les coordonnées de l’hébergeur peuvent être mises à jour selon l’infrastructure retenue pour la production.</p>
+              <p>Le site est hébergé par un prestataire de services cloud choisi par l’exploitant du service afin de garantir la disponibilité, la sécurité et la redondance de la plateforme. Les informations précises concernant l’hébergeur peuvent être mises à jour selon l’infrastructure de production retenue.</p>
             </section>
             <section>
               <h2>Responsabilités</h2>
-              <p>Chaque commerçant est responsable du contenu qu’il publie sur sa vitrine, notamment les descriptions, tarifs, stock, disponibilité, photos, conditions de vente, délais de livraison et informations commerciales. MaTable.ci sert de support technique et ne se substitue pas au vendeur pour l’exécution commerciale.</p>
+              <p>Chaque commerçant reste responsable du contenu de sa vitrine, notamment la description des produits, les prix affichés, les stocks, les disponibilités, les délais, la qualité des produits et les conditions commerciales qu’il propose. MaTable.ci facilite la mise en relation, la transmission des demandes de commande et la gestion technique du service, sans se substituer au vendeur pour la vente finale ou pour le paiement.</p>
             </section>
             <section>
               <h2>Contact</h2>
-              <p>Pour toute question relative aux mentions légales, à l’utilisation du site ou au fonctionnement du service, les utilisateurs peuvent contacter l’exploitant de la plateforme via les moyens de contact publiés sur le site.</p>
+              <p>Pour toute question relative aux mentions légales, au fonctionnement du service, aux demandes de droit ou au traitement des données, les utilisateurs peuvent contacter l’exploitant du service via les coordonnées publiées sur le site.</p>
             </section>
           </div>
         )}
@@ -77,23 +76,23 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
           <div className="legal-content">
             <section>
               <h2>Données collectées</h2>
-              <p>MaTable.ci traite les informations nécessaires au bon fonctionnement du service : identité commerciale, coordonnées de contact, informations de livraison, données de compte, contenu de catalogue, historique de commandes, paramètres de session et éléments techniques liés à la sécurité.</p>
+              <p>MaTable.ci peut traiter les informations nécessaires au fonctionnement du service : nom commercial, coordonnées de contact, informations de livraison, données de boutique, produits et stocks, historique de commandes, données de navigation et éléments techniques nécessaires à la sécurité du site.</p>
             </section>
             <section>
               <h2>Finalités du traitement</h2>
-              <p>Les données sont utilisées pour afficher les vitrines, gérer les catalogues, recevoir et suivre les commandes, sécuriser les accès, prévenir les abus, améliorer la qualité du service et assurer la conformité technique et juridique du site.</p>
+              <p>Les données sont utilisées pour afficher les vitrines, gérer les catalogues, recevoir et suivre les demandes de commande, sécuriser l’accès aux comptes, prévenir les abus, améliorer la qualité du service et gérer la conformité technique et juridique du site.</p>
+            </section>
+            <section>
+              <h2>Mode de paiement</h2>
+              <p>MaTable.ci ne collecte ni ne conserve aucun paiement effectué entre le client et le vendeur. Les modalités de paiement, de livraison, de disponibilité et de finalisation de la vente sont convenues directement entre les parties, notamment via WhatsApp ou tout autre canal de communication accepté par le vendeur.</p>
             </section>
             <section>
               <h2>Conservation et sécurité</h2>
-              <p>Les données sont conservées pendant la durée nécessaire à la fourniture du service, à l’exécution des commandes et à la gestion des obligations légales ou comptables applicables. Les accès aux espaces propriétaires et administrateurs sont protégés par des sessions sécurisées, des contrôles d’authentification et des mécanismes de protection contre les abus.</p>
-            </section>
-            <section>
-              <h2>Partage et transferts</h2>
-              <p>Les données ne sont pas vendues ni commercialisées à des fins publicitaires. Elles peuvent être partagées avec des prestataires techniques strictement nécessaires au fonctionnement du service, notamment l’hébergement, le stockage de données, le support technique ou le traitement des paiements, conformément aux obligations légales applicables.</p>
+              <p>Les données sont conservées pendant la durée nécessaire à la fourniture du service, à la gestion des demandes de commande et au respect des obligations légales applicables. Les accès aux espaces professionnels et administrateurs sont protégés par des sessions sécurisées et des contrôles d’authentification.</p>
             </section>
             <section>
               <h2>Droits et contact</h2>
-              <p>Les personnes concernées peuvent demander l’accès, la rectification ou la suppression de leurs données, ainsi que toute information utile sur les traitements, via le canal de contact officiel indiqué par l’exploitant du service.</p>
+              <p>Les personnes concernées peuvent demander l’accès, la rectification, la limitation ou la suppression des données les concernant, ainsi que toute information utile sur les traitements, via le canal de contact officiel indiqué par l’exploitant du service.</p>
             </section>
           </div>
         )}
@@ -102,23 +101,24 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
           <div className="legal-content">
             <section>
               <h2>Objet du service</h2>
-              <p>MaTable.ci met à disposition une plateforme de vitrines locales, de catalogue produit, de gestion de stock et de commande directe. Le service permet aux commerçants de présenter leurs offres et aux clients de contacter directement les vendeurs via WhatsApp ou les outils de commande mis à disposition.</p>
+              <p>MaTable.ci met à disposition une plateforme gratuite de vitrines locales, de catalogue produit et de commande directe. Le service permet à des commerçants de présenter leurs offres et à des clients de passer des demandes de commande via la plateforme puis d’échanger directement avec le vendeur, notamment sur WhatsApp.</p>
+            </section>
+            <section>
+              <h2>Commande et paiement</h2>
+              <p>La commande enregistrée sur MaTable.ci correspond à une demande de commande, pas à un paiement collecté par la plateforme. Le montant final, la disponibilité, les frais de livraison éventuels, le mode de paiement et le bon de commande sont discutés et convenus directement entre le client et le vendeur.</p>
+              <p>MaTable.ci ne reçoit pas, ne garde pas et ne traite pas d’argent au titre des ventes. La plateforme ne facture ni commission, ni frais de service, ni frais de commande au client ni au vendeur dans le modèle actuel.</p>
             </section>
             <section>
               <h2>Compte commerçant</h2>
-              <p>Le commerçant s’engage à fournir des informations exactes, à protéger l’accès à son compte et à ses liens privés, à respecter les règles applicables à la vente en ligne et à signaler toute utilisation non autorisée. L’exploitant du service peut suspendre un accès en cas d’abus, de fraude, de contenu illicite ou de non-respect des conditions d’utilisation.</p>
+              <p>Le commerçant s’engage à fournir des informations exactes, à protéger l’accès à son compte et à ses liens privés, à respecter les règles applicables à la vente et à signaler toute utilisation non autorisée. L’exploitant du service peut suspendre un accès en cas d’abus, de fraude, de contenu illicite ou de non-respect des conditions d’utilisation.</p>
             </section>
             <section>
-              <h2>Commandes, tarifs et livraison</h2>
-              <p>Les prix, stocks, délais, modes de livraison, modes de paiement et conditions de vente sont fixés par le commerçant. MaTable.ci agit comme outil de mise en relation et de diffusion technique. La plateforme n’exerce pas le contrôle direct sur l’exécution des ventes ni sur la qualité des produits livrés.</p>
+              <h2>Prix, livraison et qualité</h2>
+              <p>Les prix affichés, la disponibilité des produits, les délais, les conditions de livraison, les frais de livraison éventuels et le mode de paiement sont fixés par le commerçant. MaTable.ci agit comme outil de mise en relation et de diffusion technique. La plateforme n’exerce pas le contrôle direct sur l’exécution de la vente, la qualité du produit livré ou le paiement final.</p>
             </section>
             <section>
-              <h2>Contenus interdits</h2>
-              <p>Sont interdits les contenus illégaux, trompeurs, discriminatoires, contrefaisants ou portant atteinte aux droits de tiers. Les contenus jugés non conformes peuvent être retirés, signalés ou suspendus après vérification.</p>
-            </section>
-            <section>
-              <h2>Disponibilité du service</h2>
-              <p>MaTable.ci s’efforce de maintenir le service accessible et sécurisé. Toutefois, la plateforme ne garantit pas une disponibilité continue ininterrompue et peut procéder à des interventions techniques, des mises à jour ou des maintenances nécessaires au bon fonctionnement du service.</p>
+              <h2>Disponibilité et sécurité</h2>
+              <p>MaTable.ci s’efforce de maintenir le service accessible et sécurisé, mais la plateforme ne garantit pas une continuité absolue de disponibilité et peut procéder à des interventions techniques, des mises à jour ou des maintenances nécessaires au bon fonctionnement du service.</p>
             </section>
           </div>
         )}
@@ -127,19 +127,19 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
           <div className="legal-content">
             <section>
               <h2>Cookies essentiels</h2>
-              <p>Le site peut utiliser des cookies ou technologies similaires pour maintenir une session utilisateur, mémoriser des préférences de navigation, sécuriser les accès et assurer le bon fonctionnement des vitrines et des espaces propriétaires.</p>
+              <p>Le site utilise des cookies essentiels afin de maintenir la session de navigation, mémoriser les préférences de l’utilisateur, sécuriser les accès et garantir le bon fonctionnement des vitrines et des espaces de gestion des boutiques.</p>
             </section>
             <section>
-              <h2>Cookies de mesure d’audience</h2>
-              <p>Des données d’usage limitées peuvent être collectées afin d’analyser la fréquentation du site et d’améliorer l’expérience utilisateur. Ces informations sont généralement anonymisées ou pseudonymisées et utilisées uniquement pour des fins de mesure et de sécurité.</p>
+              <h2>Cookies d’analyse anonymisée</h2>
+              <p>Des cookies de mesure d’audience peuvent être utilisés uniquement si l’utilisateur les accepte. Ils servent à mesurer l’usage du service, mieux comprendre la fréquentation et améliorer l’expérience utilisateur. Ces données sont anonymisées ou pseudonymisées et ne servent pas à la collecte ou au suivi des paiements.</p>
             </section>
             <section>
               <h2>Gestion des préférences</h2>
-              <p>Les utilisateurs peuvent supprimer les cookies enregistrés dans leur navigateur, bloquer certains types de traceurs ou ajuster les préférences de confidentialité à tout moment. La désactivation de cookies essentiels peut toutefois empêcher certaines fonctionnalités de fonctionnement du site ou de l’espace propriétaire.</p>
+              <p>Les visiteurs peuvent refuser tout ou partie des cookies, personnaliser leurs choix ou modifier leur consentement à tout moment en revenant sur cette page ou en utilisant le bouton de gestion des cookies présent sur le site. Les cookies essentiels restent activés pour des raisons techniques et de sécurité.</p>
             </section>
             <section>
               <h2>Durée de conservation</h2>
-              <p>La durée de conservation des cookies dépend de leur finalité. Les cookies de session sont supprimés à la fermeture du navigateur ou après expiration, tandis que certaines données techniques peuvent être conservées temporairement pour des motifs de sécurité et de maintenance.</p>
+              <p>La durée de conservation des cookies dépend de leur finalité. Les cookies de session sont supprimés à la fermeture du navigateur ou après expiration, tandis que les cookies techniques et d’analyse sont conservés pendant des durées limitées et non supérieures au besoin de fonctionnement ou de mesure du service.</p>
             </section>
           </div>
         )}

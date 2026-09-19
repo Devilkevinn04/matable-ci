@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { createHash, createHmac, randomUUID, timingSafeEqual as cryptoTimingSafeEqual } from 'crypto';
+import { createHash, randomUUID, timingSafeEqual as cryptoTimingSafeEqual } from 'crypto';
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { createServer as createViteServer } from 'vite';
@@ -9,7 +9,6 @@ import { db, initializeDatabase } from './db.ts';
 import { hydrateLocalFromNeon, installNeonSyncMiddleware, neonEnabled, syncNeonFromLocal } from './neon-sync.ts';
 import { sendWhatsAppCloudTemplate, sendWhatsAppCloudText } from './whatsapp.ts';
 
-const EXTERNAL_INTEGRATIONS_LOCKED = true;
 const DEMO_MODE = String(process.env.DEMO_MODE || '').trim().toLowerCase() === 'true';
 
 export function shouldSeedDemoData(): boolean {
@@ -108,10 +107,10 @@ interface OrderRecord {
   delivery_location: string;
   delivery_note?: string;
   delivery_slot?: string;
-  payment_method_preference: 'wave' | 'mobile_money';
+  payment_method_preference: 'wave' | 'mobile_money' | 'cash' | 'to_confirm';
   total_amount: number;
   created_at: string;
-  status: 'pending' | 'confirmed' | 'delivered' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'expired';
   items?: {
     id: number;
     order_id: number;
@@ -234,6 +233,62 @@ export function getSubscriptionPlanConfig(tier: SubscriptionTier | string): Subs
     pro: { tier: 'pro', amount: 5000, label: 'Pro', description: 'Tout Premium + studio avancé' },
   };
   return options[normalizedTier];
+}
+
+function toBusinessDateKey(value: string | Date, timeZone = 'Africa/Abidjan'): string {
+  const date = value instanceof Date ? value : new Date(value);
+  return new Intl.DateTimeFormat('fr-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date).replace(/\//g, '-');
+}
+
+function isSameBusinessDay(value: string | Date, referenceDate: Date = new Date(), timeZone = 'Africa/Abidjan'): boolean {
+  return toBusinessDateKey(value, timeZone) === toBusinessDateKey(referenceDate, timeZone);
+}
+
+export function summarizeOrderMetrics<T extends { shop_id: number; total_amount: number; created_at: string; status?: string }>(
+  orders: T[],
+  shopId?: number,
+  referenceDate: Date = new Date(),
+) {
+  const filteredOrders = (typeof shopId === 'number'
+    ? orders.filter((order) => order.shop_id === shopId)
+    : orders
+  ).filter((order) => isSameBusinessDay(order.created_at, referenceDate));
+
+  const received = filteredOrders.length;
+  const pending = filteredOrders.filter((order) => order.status === 'pending').length;
+  const confirmed = filteredOrders.filter((order) => order.status === 'confirmed').length;
+  const delivered = filteredOrders.filter((order) => order.status === 'delivered').length;
+  const cancelled = filteredOrders.filter((order) => order.status === 'cancelled').length;
+
+  const caOrdered = filteredOrders
+    .filter((order) => order.status !== 'cancelled')
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+  const caConfirmed = filteredOrders
+    .filter((order) => order.status === 'confirmed')
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+  const caDelivered = filteredOrders
+    .filter((order) => order.status === 'delivered')
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+
+  const panierMoyenLivre = delivered > 0 ? Math.round(caDelivered / delivered) : 0;
+
+  return {
+    received,
+    pending,
+    confirmed,
+    delivered,
+    cancelled,
+    total_orders: received,
+    ca_ordered: caOrdered,
+    ca_confirmed: caConfirmed,
+    ca_delivered: caDelivered,
+    panier_moyen_livre: panierMoyenLivre,
+  };
 }
 
 export type PaymentProvider = 'whatsapp' | 'paystack';
@@ -997,7 +1052,7 @@ const orders: OrderRecord[] = shouldSeedDemoData()
 const hashPin = (pin: string) => bcrypt.hashSync(String(pin).trim(), 10);
 const hashAccessToken = (token: string) => createHash('sha256').update(token).digest('hex');
 const merchantSessions = new Map<string, { shopId: number; expiresAt: number; fingerprint: string }>();
-const adminSessions = new Map<string, number>();
+const adminSessions = new Map<string, { expiresAt: number; fingerprint: string }>();
 
 export function saveMerchantSessionRecord(token: string, session: { shopId: number; expiresAt: number; fingerprint: string }) {
   db.prepare(`
@@ -1019,6 +1074,27 @@ export function getMerchantSessionRecord(token: string): { shopId: number; expir
 
 export function deleteMerchantSessionRecord(token: string) {
   db.prepare('DELETE FROM merchant_sessions WHERE token = ?').run(token);
+}
+
+export function saveAdminSessionRecord(token: string, session: { expiresAt: number; fingerprint: string }) {
+  db.prepare(`
+    INSERT INTO admin_sessions (token, expires_at, fingerprint, created_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(token) DO UPDATE SET
+      expires_at = excluded.expires_at,
+      fingerprint = excluded.fingerprint,
+      created_at = excluded.created_at
+  `).run(token, session.expiresAt, session.fingerprint, new Date().toISOString());
+}
+
+export function getAdminSessionRecord(token: string): { expiresAt: number; fingerprint: string } | null {
+  const row = db.prepare('SELECT expires_at, fingerprint FROM admin_sessions WHERE token = ?').get(token) as { expires_at: number; fingerprint: string } | undefined;
+  if (!row) return null;
+  return { expiresAt: row.expires_at, fingerprint: row.fingerprint };
+}
+
+export function deleteAdminSessionRecord(token: string) {
+  db.prepare('DELETE FROM admin_sessions WHERE token = ?').run(token);
 }
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const merchantRecoveryAttempts = new Map<number, { count: number; resetAt: number }>();
@@ -1062,8 +1138,9 @@ function getCookie(req: Request, name: string): string | null {
 
 function setSessionCookie(res: Response, token: string, fingerprint: string) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  const sessionCookie = `matable_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800${secure}`;
-  const fingerprintCookie = `matable_session_fp=${encodeURIComponent(fingerprint)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800${secure}`;
+  const maxAgeSeconds = Math.max(1, Math.floor(SESSION_DURATION_MS / 1000));
+  const sessionCookie = `matable_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
+  const fingerprintCookie = `matable_session_fp=${encodeURIComponent(fingerprint)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
   res.setHeader('Set-Cookie', [sessionCookie, fingerprintCookie]);
 }
 
@@ -1072,11 +1149,7 @@ export function validateRuntimeConfig(): void {
     return;
   }
 
-  if (String(process.env.PAYSTACK_MOCK_MODE || '').trim().toLowerCase() === 'true') {
-    throw new Error('PAYSTACK_MOCK_MODE ne doit pas être activé en production.');
-  }
-
-  const requiredKeys = ['ADMIN_ACCESS_KEY', 'APP_URL', 'PORT', 'MATABLE_DB_PATH'];
+  const requiredKeys = ['ADMIN_ACCESS_KEY', 'APP_URL', 'PORT', 'DATABASE_URL'];
   const missing = requiredKeys.filter((key) => !String(process.env[key] || '').trim());
 
   if (missing.length > 0) {
@@ -1117,9 +1190,6 @@ export function validateRuntimeConfig(): void {
     throw new Error('PORT doit être un entier valide entre 1 et 65535 en production.');
   }
 
-  if (String(process.env.PAYSTACK_MOCK_MODE || '').trim().toLowerCase() === 'true') {
-    throw new Error('PAYSTACK_MOCK_MODE ne doit pas être activé en production.');
-  }
 }
 
 export function buildSessionFingerprint(req: Request): string {
@@ -1150,17 +1220,74 @@ function clearSessionCookie(res: Response) {
 
 function setAdminSessionCookie(res: Response, token: string) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.setHeader('Set-Cookie', `matable_admin_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800${secure}`);
+  const maxAgeSeconds = Math.max(1, Math.floor(ADMIN_SESSION_DURATION_MS / 1000));
+  res.setHeader('Set-Cookie', `matable_admin_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`);
 }
 
 function getAdminSession(req: Request): string | null {
   const token = getCookie(req, 'matable_admin_session');
-  const expiresAt = token ? adminSessions.get(token) : undefined;
-  if (!token || !expiresAt || expiresAt <= Date.now()) {
-    if (token) adminSessions.delete(token);
+  let session = token ? adminSessions.get(token) : undefined;
+
+  if (!session && token) {
+    session = getAdminSessionRecord(token) ?? undefined;
+    if (session) adminSessions.set(token, session);
+  }
+
+  if (!token || !session || session.expiresAt <= Date.now()) {
+    if (token) {
+      adminSessions.delete(token);
+      deleteAdminSessionRecord(token);
+    }
     return null;
   }
+
+  if (!isRequestFingerprintMatch(session, req)) {
+    adminSessions.delete(token);
+    deleteAdminSessionRecord(token);
+    return null;
+  }
+
+  const renewedSession = { ...session, expiresAt: Date.now() + ADMIN_SESSION_DURATION_MS };
+  adminSessions.set(token, renewedSession);
+  saveAdminSessionRecord(token, renewedSession);
   return token;
+}
+
+function getSessionStateForResponse(req: Request, res?: Response) {
+  const adminToken = getCookie(req, 'matable_admin_session');
+  if (adminToken) {
+    const adminSessionToken = getAdminSession(req);
+    if (adminSessionToken) {
+      if (res) setAdminSessionCookie(res, adminSessionToken);
+      return { authenticated: true, userType: 'admin', shopId: null };
+    }
+  }
+
+  const merchantToken = getCookie(req, 'matable_session');
+  if (merchantToken) {
+    let merchantSession = merchantSessions.get(merchantToken) ?? getMerchantSessionRecord(merchantToken) ?? undefined;
+    if (!merchantSession) {
+      return { authenticated: false, userType: null, shopId: null };
+    }
+    if (merchantSession.expiresAt <= Date.now()) {
+      merchantSessions.delete(merchantToken);
+      deleteMerchantSessionRecord(merchantToken);
+      return { authenticated: false, userType: null, shopId: null };
+    }
+    if (!isRequestFingerprintMatch(merchantSession, req)) {
+      merchantSessions.delete(merchantToken);
+      deleteMerchantSessionRecord(merchantToken);
+      return { authenticated: false, userType: null, shopId: null };
+    }
+
+    const renewedSession = { ...merchantSession, expiresAt: Date.now() + SESSION_DURATION_MS };
+    merchantSessions.set(merchantToken, renewedSession);
+    saveMerchantSessionRecord(merchantToken, renewedSession);
+    if (res) setSessionCookie(res, merchantToken, renewedSession.fingerprint);
+    return { authenticated: true, userType: 'merchant', shopId: renewedSession.shopId };
+  }
+
+  return { authenticated: false, userType: null, shopId: null };
 }
 
 function requireAdminAccess(req: Request, res: Response, next: express.NextFunction) {
@@ -1213,12 +1340,12 @@ function requireMerchantAccess(req: Request, res: Response, next: express.NextFu
       deleteMerchantSessionRecord(token);
     }
     clearSessionCookie(res);
-    return res.status(401).json({ error: 'Session rejetée pour sécurité : appareil ou IP non reconnue.' });
+    return res.status(401).json({ error: 'Session rejetée pour sécurité : appareil ou navigateur non reconnu.' });
   }
 
   const shop = shops.find((candidate) => candidate.id === session.shopId);
   if (!shop || !shop.is_active) {
-    return res.status(403).json({ error: 'Boutique inactive : contactez l’administrateur pour la réactivation.', payment_status: shop?.payment_status || 'approved' });
+    return res.status(403).json({ error: 'Boutique inactive : contactez l’administration pour la réactivation.' });
   }
 
   next();
@@ -1288,13 +1415,26 @@ setInterval(() => {
     }
   }
   db.prepare('DELETE FROM merchant_sessions WHERE expires_at <= ?').run(now);
-  for (const [token, expiresAt] of adminSessions) {
-    if (expiresAt <= now) adminSessions.delete(token);
+  for (const [token, session] of adminSessions) {
+    if (session.expiresAt <= now) {
+      adminSessions.delete(token);
+      deleteAdminSessionRecord(token);
+    }
   }
+  db.prepare('DELETE FROM admin_sessions WHERE expires_at <= ?').run(now);
 }, 15 * 60 * 1000).unref();
 
 const toSafeShop = (shop: ShopRecord) => {
-  const { pin_code_hash: _pinCodeHash, owner_access_token_hash: _ownerAccessTokenHash, ...safeShop } = shop;
+  const {
+    pin_code_hash: _pinCodeHash,
+    owner_access_token_hash: _ownerAccessTokenHash,
+    payment_status: _paymentStatus,
+    payment_deadline_at: _paymentDeadlineAt,
+    selected_subscription_tier: _selectedSubscriptionTier,
+    subscription_expires_at: _subscriptionExpiresAt,
+    subscription_tier: _subscriptionTier,
+    ...safeShop
+  } = shop;
   return safeShop;
 };
 const verifyPin = (inputPin: string, storedHash: string) => {
@@ -1496,7 +1636,7 @@ function loadOrdersFromDatabase() {
     delivery_location: String(row.delivery_location),
     delivery_note: row.delivery_note ? String(row.delivery_note) : undefined,
     delivery_slot: row.delivery_slot ? String(row.delivery_slot) : undefined,
-    payment_method_preference: String(row.payment_method_preference || 'wave') as OrderRecord['payment_method_preference'],
+    payment_method_preference: String(row.payment_method_preference || 'to_confirm') as OrderRecord['payment_method_preference'],
     total_amount: Number(row.total_amount),
     created_at: String(row.created_at),
     status: (String(row.status || 'pending')) as OrderRecord['status'],
@@ -1586,7 +1726,6 @@ async function startServer() {
     next();
   });
 
-  app.use('/api/payments/paystack/webhook', express.raw({ type: 'application/json' }));
   app.use(express.json({ limit: '2mb' }));
   app.use('/api/shops/:id/toggle-status', requireMerchantAccess);
   app.use('/api/shops/:id/theme', requireMerchantAccess);
@@ -1594,22 +1733,7 @@ async function startServer() {
   app.use('/api/shops/:id/orders', requireMerchantAccess);
   app.use('/api/shops/:id/flash-bilan', requireMerchantAccess);
   app.use('/api/admin', requireAdminAccess);
-  app.use('/api/cron', requireAdminAccess);
   installNeonSyncMiddleware(app);
-
-  // Helper to calculate days remaining
-  function getDaysRemaining(expirationDateStr: string) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const exp = new Date(expirationDateStr);
-    exp.setHours(0, 0, 0, 0);
-    const diffTime = exp.getTime() - today.getTime();
-    return Math.round(diffTime / (1000 * 60 * 60 * 24));
-  }
-
-  function runSubscriptionAutomation() {
-    return { timestamp: new Date().toISOString(), deactivatedCount: 0, alertsGenerated: [] };
-  }
 
   initializeDatabase();
   const hydratedFromNeon = await hydrateLocalFromNeon();
@@ -1631,6 +1755,10 @@ async function startServer() {
   for (const record of persistedMerchantSessions) {
     merchantSessions.set(record.token, { shopId: record.shop_id, expiresAt: record.expires_at, fingerprint: record.fingerprint });
   }
+  const persistedAdminSessions = db.prepare('SELECT token, expires_at, fingerprint FROM admin_sessions WHERE expires_at > ?').all(Date.now()) as { token: string; expires_at: number; fingerprint: string }[];
+  for (const record of persistedAdminSessions) {
+    adminSessions.set(record.token, { expiresAt: record.expires_at, fingerprint: record.fingerprint });
+  }
   nextOrderId = Math.max(0, ...orders.map((order) => order.id)) + 1;
   nextItemId = Math.max(0, ...orders.flatMap((order) => (order.items || []).map((item) => item.id))) + 1;
   nextShopId = Math.max(0, ...shops.map((shop) => shop.id)) + 1;
@@ -1639,15 +1767,11 @@ async function startServer() {
     await syncNeonFromLocal();
   }
 
-  // Free background automation: subscription checks run hourly without requiring a dashboard click.
-  setInterval(() => runSubscriptionAutomation(), 60 * 60 * 1000).unref();
-  runSubscriptionAutomation();
-
   // --- API ROUTES ---
 
   // Health check
   app.get('/api/health', (req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString(), whatsapp_cloud: 'locked', paystack: 'locked' });
+    res.json({ status: 'ok', timestamp: new Date().toISOString(), whatsapp_cloud: 'locked' });
   });
 
   app.post('/api/analytics/page-view', rateLimitPublicRequest(120), (req: Request, res: Response) => {
@@ -1698,7 +1822,6 @@ async function startServer() {
       is_active: s.is_active,
       category: s.category,
       city: s.city,
-      subscription_tier: s.subscription_tier,
       theme_config: s.theme_config,
       opening_hours: s.opening_hours,
     }));
@@ -1719,7 +1842,7 @@ async function startServer() {
     const isMerchantForShop = !!(session && session.shopId === shop.id && session.expiresAt > Date.now());
 
     if (isMerchantForShop && !isRequestFingerprintMatch(session, req)) {
-      return res.status(401).json({ error: 'Session rejetée pour sécurité : appareil ou IP non reconnue.' });
+      return res.status(401).json({ error: 'Session rejetée : le navigateur ne correspond plus à celui utilisé lors de la connexion.' });
     }
 
     if (isIdQuery && !isMerchantForShop) {
@@ -1735,7 +1858,6 @@ async function startServer() {
           slug: shop.slug,
           is_active: false,
           category: shop.category,
-          subscription_tier: shop.subscription_tier,
           theme_config: shop.theme_config,
           welcome_message: 'Boutique temporairement indisponible.',
         },
@@ -1757,12 +1879,8 @@ async function startServer() {
         welcome_message: shop.welcome_message,
         is_open: computeIsShopOpen(shop),
         is_active: shop.is_active,
-        payment_status: shop.payment_status,
-        payment_deadline_at: shop.payment_deadline_at,
-        selected_subscription_tier: shop.selected_subscription_tier || shop.subscription_tier,
         category: shop.category,
         city: shop.city,
-        subscription_tier: shop.subscription_tier,
         theme_config: shop.theme_config,
         opening_hours: shop.opening_hours,
       },
@@ -1865,24 +1983,6 @@ async function startServer() {
     res.json({ success: true, shop: toSafeShop(shop), theme_config: shop.theme_config });
   });
 
-  // Update subscription tier (Merchant upgrade simulation or Admin control)
-  app.put('/api/shops/:id/tier', requireAdminAccess, (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shop = shops.find((s) => s.id === shopId);
-    if (!shop) {
-      return res.status(404).json({ error: 'Boutique introuvable' });
-    }
-
-    const { subscription_tier } = req.body;
-    if (['standard', 'premium', 'pro'].includes(subscription_tier)) {
-      shop.subscription_tier = subscription_tier;
-    }
-
-    persistShop(shop);
-
-    res.json({ success: true, shop: toSafeShop(shop) });
-  });
-
   // Update shop settings (Merchant)
   app.put('/api/shops/:id', requireMerchantAccess, (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
@@ -1962,7 +2062,6 @@ async function startServer() {
 
     const shopCategory: ShopRecord['category'] = ['fashion', 'food', 'beauty', 'electronics', 'home', 'services', 'health', 'crafts', 'education', 'automotive', 'other'].includes(category) ? category as ShopRecord['category'] : 'fashion';
     const chosenTier: SubscriptionTier = 'standard';
-    const plan = getSubscriptionPlanConfig(chosenTier);
     const hashedPin = hashPin(effectivePin);
     const ownerAccessToken = randomUUID();
 
@@ -2028,13 +2127,7 @@ async function startServer() {
       success: true,
       shop: toSafeShop(newShop),
       owner_access_token: ownerAccessToken,
-      payment_required: false,
-      payment_status: 'approved',
-      payment_deadline_at: null,
-      payment_amount: 0,
-      payment_tier: chosenTier,
-      payment_provider: 'whatsapp',
-      payment_message: 'Boutique créée. Les commandes clients sont envoyées au vendeur via un reçu WhatsApp à ouvrir manuellement.',
+      message: 'Boutique créée. Les commandes clients sont envoyées au vendeur via un reçu WhatsApp à ouvrir manuellement.',
     });
   });
 
@@ -2071,10 +2164,7 @@ async function startServer() {
 
     if (!shop.is_active) {
       return res.status(403).json({
-        error: 'Votre boutique est en attente de validation du paiement. Envoyez votre reçu dans les 20 minutes pour éviter la suspension.',
-        payment_status: shop.payment_status,
-        payment_deadline_at: shop.payment_deadline_at,
-        payment_amount: getSubscriptionPlanConfig(shop.selected_subscription_tier || shop.subscription_tier).amount,
+        error: 'Votre boutique est inactive. Contactez l’administration MaTable.ci pour la réactivation.',
       });
     }
 
@@ -2092,163 +2182,9 @@ async function startServer() {
         welcome_message: shop.welcome_message,
         is_open: shop.is_open,
         is_active: shop.is_active,
-        payment_status: shop.payment_status,
-        payment_deadline_at: shop.payment_deadline_at,
-        subscription_expires_at: shop.subscription_expires_at,
         category: shop.category,
-        subscription_tier: shop.subscription_tier,
         theme_config: shop.theme_config,
       },
-    });
-  });
-
-  app.get('/api/payments/paystack/config', (req: Request, res: Response) => {
-    if (EXTERNAL_INTEGRATIONS_LOCKED) {
-      return res.status(410).json({ error: 'Paystack est désactivé et verrouillé pour une amélioration future.' });
-    }
-    const config = getPaystackConfig();
-    return res.json({
-      enabled: config.enabled,
-      publicKey: config.publicKey,
-      currency: config.currency,
-      paymentProvider: 'paystack',
-    });
-  });
-
-  app.get('/paystack/callback', async (req: Request, res: Response) => {
-    if (EXTERNAL_INTEGRATIONS_LOCKED) {
-      return res.status(410).send('Paystack est désactivé.');
-    }
-    const reference = String(req.query.reference || '').trim();
-    if (!reference) {
-      return res.redirect('/app?payment=missing_reference');
-    }
-
-    const verification = await verifyPaystackTransaction(reference);
-    if (!verification || !verification.verified || !verification.shopId) {
-      return res.redirect(`/app?payment=failed&reference=${encodeURIComponent(reference)}`);
-    }
-
-    const shop = shops.find((candidate) => candidate.id === verification.shopId);
-    const expectedTier = shop?.selected_subscription_tier || shop?.subscription_tier;
-    const expectedAmount = expectedTier ? getSubscriptionPlanConfig(expectedTier).amount : 0;
-    if (!shop || verification.tier !== expectedTier || verification.amount !== expectedAmount || verification.currency !== getPaystackConfig().currency) {
-      return res.redirect(`/app?payment=invalid&reference=${encodeURIComponent(reference)}`);
-    }
-
-    const result = await activateShopSubscription(shop, verification.tier, 'paystack', reference, verification.amount);
-    return res.redirect(`/app?payment=${result.activated || result.already_processed ? 'success' : 'failed'}&reference=${encodeURIComponent(reference)}`);
-  });
-
-  app.post('/api/payments/paystack/webhook', rateLimitPublicRequest(120), async (req: Request, res: Response) => {
-    if (EXTERNAL_INTEGRATIONS_LOCKED) {
-      return res.status(410).json({ error: 'Webhook Paystack désactivé et verrouillé.' });
-    }
-    const config = getPaystackConfig();
-    if (!config.enabled) {
-      return res.status(503).json({ error: 'Paystack non configuré.' });
-    }
-
-    const signature = String(req.headers['x-paystack-signature'] || '');
-    const rawBody = Buffer.isBuffer(req.body)
-      ? req.body
-      : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {}));
-    const expected = createHmac('sha512', config.webhookSecret).update(rawBody).digest('hex');
-
-    if (!timingSafeEqual(signature, expected)) {
-      return res.status(401).json({ error: 'Signature Paystack invalide.' });
-    }
-
-    try {
-      const event = JSON.parse(rawBody.toString('utf8'));
-      if (event?.event === 'charge.success') {
-        const reference = String(event?.data?.reference || '');
-        if (!reference) {
-          return res.sendStatus(200);
-        }
-
-        const verification = await verifyPaystackTransaction(reference);
-        if (!verification || !verification.verified) {
-          return res.sendStatus(200);
-        }
-
-        const eventShopId = Number(event?.data?.metadata?.shop_id || 0);
-        const eventTier = String(event?.data?.metadata?.tier || '');
-        const eventAmount = Number(event?.data?.amount || 0) / 100;
-        if (!eventShopId || eventShopId !== verification.shopId || eventTier !== verification.tier || eventAmount !== verification.amount || verification.currency !== config.currency) {
-          return res.sendStatus(200);
-        }
-
-        const shopId = verification.shopId;
-        const shop = shopId ? shops.find((candidate) => candidate.id === shopId) : undefined;
-        if (shop) {
-          const expectedAmount = getSubscriptionPlanConfig(verification.tier).amount;
-          if (verification.amount !== expectedAmount || shop.selected_subscription_tier !== verification.tier) return res.sendStatus(200);
-          const result = await activateShopSubscription(shop, verification.tier, 'paystack', reference, verification.amount);
-          if (result.activated) {
-            await sendWhatsAppCloudText(shop.whatsapp_number, result.message);
-          }
-        }
-      }
-      return res.sendStatus(200);
-    } catch (error) {
-      console.error('Paystack webhook parsing error:', error);
-      return res.status(400).json({ error: 'Webhook Paystack invalide.' });
-    }
-  });
-
-  app.get('/api/shops/:id/subscription/verify/:reference', requireMerchantAccess, async (req: Request, res: Response) => {
-    if (EXTERNAL_INTEGRATIONS_LOCKED) {
-      return res.status(410).json({ error: 'La vérification Paystack est désactivée et verrouillée.' });
-    }
-    const shopId = Number(req.params.id);
-    const reference = String(req.params.reference || '').trim();
-    if (!reference) {
-      return res.status(400).json({ error: 'Référence Paystack manquante.' });
-    }
-
-    const shop = shops.find((candidate) => candidate.id === shopId);
-    if (!shop) {
-      return res.status(404).json({ error: 'Boutique introuvable.' });
-    }
-
-    const verification = await verifyPaystackTransaction(reference);
-    if (!verification || !verification.verified) {
-      return res.status(400).json({ verified: false, reference, message: 'La vérification Paystack a échoué ou la transaction n’est pas validée.' });
-    }
-
-    const expectedTier = shop.selected_subscription_tier || shop.subscription_tier;
-    const expectedAmount = getSubscriptionPlanConfig(expectedTier).amount;
-    if (verification.shopId !== shop.id || verification.tier !== expectedTier || verification.amount !== expectedAmount || verification.currency !== getPaystackConfig().currency) {
-      return res.status(403).json({ verified: false, reference, message: 'Transaction Paystack non associée à cette boutique ou montant invalide.' });
-    }
-
-    if (isPaymentReferenceProcessed('paystack', reference, shop.id)) {
-      return res.json({
-        success: true,
-        verified: true,
-        already_processed: true,
-        payment_status: shop.payment_status,
-        shop_id: shop.id,
-        reference,
-        tier: verification.tier,
-        amount: verification.amount,
-        message: 'Cette référence a déjà été consommée ; aucune réactivation supplémentaire n’est nécessaire.',
-      });
-    }
-
-    const result = await activateShopSubscription(shop, verification.tier, 'paystack', reference, verification.amount);
-    return res.json({
-      success: true,
-      verified: true,
-      already_processed: result.already_processed,
-      activated: result.activated,
-      payment_status: shop.payment_status,
-      shop_id: shop.id,
-      reference,
-      tier: result.tier,
-      amount: result.amount,
-      message: result.message,
     });
   });
 
@@ -2262,6 +2198,11 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  app.get('/api/auth/session', (req: Request, res: Response) => {
+    const state = getSessionStateForResponse(req, res);
+    res.json(state);
+  });
+
   app.post('/api/auth/merchant-access-login', (req: Request, res: Response) => {
     const token = String(req.body?.access_token || '').trim();
     if (!token || token.length > 200) return res.status(400).json({ error: 'Lien d’accès invalide.' });
@@ -2271,8 +2212,6 @@ async function startServer() {
     if (!shop.is_active) {
       return res.status(403).json({
         error: 'Boutique inactive : contactez l’administrateur pour la réactivation.',
-        payment_status: shop.payment_status,
-        payment_deadline_at: shop.payment_deadline_at,
       });
     }
     createMerchantSession(res, shop.id, req);
@@ -2457,14 +2396,19 @@ async function startServer() {
     }
     loginAttempts.delete(adminAttemptKey);
     const token = randomUUID();
-    adminSessions.set(token, Date.now() + ADMIN_SESSION_DURATION_MS);
+    const adminSession = { expiresAt: Date.now() + ADMIN_SESSION_DURATION_MS, fingerprint: buildSessionFingerprint(req) };
+    adminSessions.set(token, adminSession);
+    saveAdminSessionRecord(token, adminSession);
     setAdminSessionCookie(res, token);
     res.json({ success: true });
   });
 
   app.post('/api/auth/admin-logout', (req: Request, res: Response) => {
     const token = getAdminSession(req);
-    if (token) adminSessions.delete(token);
+    if (token) {
+      adminSessions.delete(token);
+      deleteAdminSessionRecord(token);
+    }
     res.setHeader('Set-Cookie', 'matable_admin_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
     res.json({ success: true });
   });
@@ -2678,11 +2622,12 @@ async function startServer() {
       return res.status(404).json({ error: 'Boutique introuvable.' });
     }
     if (!shop.is_active) {
-      return res.status(403).json({ error: 'Cette boutique est suspendue ou son abonnement est expiré.' });
+      return res.status(403).json({ error: 'Cette boutique est inactive.' });
     }
 
-    if (payment_method_preference !== 'wave' && payment_method_preference !== 'mobile_money') {
-      return res.status(400).json({ error: 'Le paiement doit être effectué par Wave ou Mobile Money.' });
+    const allowedPaymentPreferences = new Set(['wave', 'mobile_money', 'cash', 'to_confirm', undefined, null, '']);
+    if (!allowedPaymentPreferences.has(payment_method_preference)) {
+      return res.status(400).json({ error: 'Mode de paiement souhaité invalide.' });
     }
 
     const requestedQuantities = new Map<number, number>();
@@ -2705,6 +2650,7 @@ async function startServer() {
     const atomicOrderCreation = db.transaction(() => {
       const orderItemRecords: any[] = [];
       let calculatedTotal = 0;
+      const reservedProductIds = new Set<number>();
 
       for (const item of items) {
         const productId = Number(item.product_id);
@@ -2713,15 +2659,16 @@ async function startServer() {
           throw Object.assign(new Error(`Article #${productId} introuvable dans le catalogue.`), { statusCode: 400 });
         }
 
-        const qty = requestedQuantities.get(prod.id) || 0;
+        const qty = Number(item.quantity);
+        const stockQuantity = reservedProductIds.has(prod.id) ? 0 : (requestedQuantities.get(prod.id) || 0);
         const stockRow = db.prepare('SELECT stock, is_available FROM products WHERE id = ? AND shop_id = ?').get(prod.id, shop.id) as { stock: number; is_available: number } | undefined;
         if (!stockRow) {
           throw Object.assign(new Error(`Article #${productId} introuvable dans le catalogue.`), { statusCode: 400 });
         }
-        if (!stockRow.is_available || stockRow.stock <= 0) {
+        if (stockQuantity > 0 && (!stockRow.is_available || stockRow.stock <= 0)) {
           throw Object.assign(new Error(`L'article "${prod.title}" est en rupture de stock.`), { statusCode: 409, product_id: prod.id, stock: 0 });
         }
-        if (stockRow.stock < qty) {
+        if (stockQuantity > 0 && stockRow.stock < stockQuantity) {
           throw Object.assign(new Error(`Stock insuffisant pour "${prod.title}". Seulement ${stockRow.stock} unité(s) disponible(s).`), { statusCode: 409, product_id: prod.id, stock: stockRow.stock });
         }
 
@@ -2731,19 +2678,14 @@ async function startServer() {
             ? [item.selected_modifiers]
             : [];
         const validSelectedModifiers = getValidSelectedModifiers(prod, selectedModifiers);
-        const unitPrice = getProductUnitPriceWithModifiers(prod, validSelectedModifiers);
-        const nextStock = stockRow.stock - qty;
-
-        const updateResult = db.prepare('UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ? AND stock >= ?')
-          .run(nextStock, nextStock > 0 ? 1 : 0, prod.id, shop.id, qty);
-
-        if (updateResult.changes !== 1) {
-          throw Object.assign(new Error(`Stock insuffisant pour "${prod.title}".`), { statusCode: 409, product_id: prod.id, stock: stockRow.stock });
+        for (const group of prod.modifier_groups || []) {
+          const selectedInGroup = validSelectedModifiers.filter((label) => group.options.some((option) => (typeof option === 'string' ? option : option.label) === label));
+          if (group.required && selectedInGroup.length === 0) {
+            throw Object.assign(new Error(`Veuillez choisir une option pour « ${group.name} » dans "${prod.title}".`), { statusCode: 400, product_id: prod.id });
+          }
         }
-
-        prod.stock = nextStock;
-        prod.is_available = nextStock > 0;
-        persistProduct(prod);
+        const unitPrice = getProductUnitPriceWithModifiers(prod, validSelectedModifiers);
+        // A pending request does not reserve stock. Stock is reserved only when the seller confirms it.
 
         calculatedTotal += unitPrice * Number(item.quantity);
 
@@ -2768,7 +2710,7 @@ async function startServer() {
         delivery_location: validatedCustomer.delivery_location || delivery_location,
         delivery_note: validatedCustomer.delivery_note || delivery_note,
         delivery_slot,
-        payment_method_preference: payment_method_preference || 'wave',
+        payment_method_preference: payment_method_preference || 'to_confirm',
         total_amount: calculatedTotal,
         created_at: new Date().toISOString(),
         status: 'pending',
@@ -2786,7 +2728,7 @@ async function startServer() {
       res.json({
         success: true,
         order: createdOrder,
-        message: 'Commande validée et stock décrémenté automatiquement en base.',
+        message: 'Demande de commande enregistrée. Le stock sera réservé après confirmation du vendeur.',
       });
     } catch (error: unknown) {
       const err = error as any;
@@ -2813,9 +2755,9 @@ async function startServer() {
     const orderId = Number(req.params.orderId);
     const { status } = req.body;
 
-    const validStatuses = ['pending', 'confirmed', 'delivered', 'cancelled'];
+    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'expired'];
     if (!status || !validStatuses.includes(status)) {
-      return res.status(400).json({ error: 'Statut invalide. Valeurs possibles : pending, confirmed, delivered, cancelled.' });
+      return res.status(400).json({ error: 'Statut invalide. Valeurs possibles : pending, confirmed, preparing, ready, delivered, cancelled, expired.' });
     }
 
     const order = orders.find((o) => o.id === orderId && o.shop_id === shopId);
@@ -2828,49 +2770,77 @@ async function startServer() {
       return res.json({ success: true, order });
     }
 
-    // If changing TO cancelled, restore stocks
-    if (status === 'cancelled' && previousStatus !== 'cancelled') {
-      if (order.items && order.items.length > 0) {
-        for (const item of order.items) {
-          const prod = products.find((p) => p.id === item.product_id && p.shop_id === shopId);
-          if (prod) {
-            prod.stock += Number(item.quantity || 1);
-            if (prod.stock > 0) {
-              prod.is_available = true;
-            }
-            db.prepare('UPDATE products SET stock = ?, is_available = ? WHERE id = ?')
-              .run(prod.stock, prod.is_available ? 1 : 0, prod.id);
-          }
-        }
-      }
+    const allowedTransitions: Record<string, string[]> = {
+      pending: ['confirmed', 'cancelled'],
+      confirmed: ['preparing', 'delivered', 'cancelled'],
+      preparing: ['ready', 'cancelled'],
+      ready: ['delivered', 'cancelled'],
+      delivered: [],
+      cancelled: ['confirmed'],
+      expired: [],
+    };
+    if (!allowedTransitions[previousStatus]?.includes(status)) {
+      return res.status(409).json({ error: `Transition impossible : ${previousStatus} → ${status}.` });
     }
 
-    // If changing FROM cancelled to active, re-decrement stock if possible
-    if (previousStatus === 'cancelled' && status !== 'cancelled') {
-      if (order.items && order.items.length > 0) {
-        for (const item of order.items) {
-          const prod = products.find((p) => p.id === item.product_id && p.shop_id === shopId);
-          if (prod) {
-            prod.stock = Math.max(0, prod.stock - Number(item.quantity || 1));
-            if (prod.stock === 0) {
-              prod.is_available = false;
-            }
-            db.prepare('UPDATE products SET stock = ?, is_available = ? WHERE id = ?')
-              .run(prod.stock, prod.is_available ? 1 : 0, prod.id);
+    try {
+      db.transaction(() => {
+        const quantities = new Map<number, number>();
+        for (const item of order.items || []) {
+          quantities.set(item.product_id, (quantities.get(item.product_id) || 0) + Number(item.quantity || 1));
+        }
+
+        const stockReservedStatuses = new Set(['confirmed', 'preparing', 'ready', 'delivered']);
+        const wasStockReserved = stockReservedStatuses.has(previousStatus);
+        const willReserveStock = stockReservedStatuses.has(status);
+
+        if (status === 'cancelled' && wasStockReserved) {
+          for (const [productId, quantity] of quantities) {
+            const prod = products.find((candidate) => candidate.id === productId && candidate.shop_id === shopId);
+            if (!prod) continue;
+            prod.stock += quantity;
+            prod.is_available = prod.stock > 0;
+            db.prepare('UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ?')
+              .run(prod.stock, prod.is_available ? 1 : 0, prod.id, shopId);
           }
         }
-      }
-    }
 
-    order.status = status as OrderRecord['status'];
-    db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, order.id);
+        if (willReserveStock && !wasStockReserved) {
+          for (const [productId, quantity] of quantities) {
+            const prod = products.find((candidate) => candidate.id === productId && candidate.shop_id === shopId);
+            if (!prod) {
+              throw Object.assign(new Error('Un article de cette commande n’existe plus dans le catalogue.'), { statusCode: 409 });
+            }
+            const stockRow = db.prepare('SELECT stock FROM products WHERE id = ? AND shop_id = ?').get(productId, shopId) as { stock: number } | undefined;
+            if (!stockRow || stockRow.stock < quantity) {
+              throw Object.assign(new Error(`Stock insuffisant pour réactiver « ${prod.title} ».`), { statusCode: 409, product_id: productId, stock: stockRow?.stock ?? 0 });
+            }
+            prod.stock = stockRow.stock - quantity;
+            prod.is_available = prod.stock > 0;
+            db.prepare('UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ? AND stock >= ?')
+              .run(prod.stock, prod.is_available ? 1 : 0, productId, shopId, quantity);
+          }
+        }
+
+        order.status = status as OrderRecord['status'];
+        db.prepare('UPDATE orders SET status = ? WHERE id = ? AND shop_id = ?').run(status, order.id, shopId);
+      })();
+    } catch (error: unknown) {
+      const err = error as { message?: string; statusCode?: number; product_id?: number; stock?: number };
+      const payload: Record<string, unknown> = { error: err.message || 'Transition de commande impossible.' };
+      if (err.product_id !== undefined) payload.product_id = err.product_id;
+      if (err.stock !== undefined) payload.stock = err.stock;
+      return res.status(Number(err.statusCode) || 409).json(payload);
+    }
 
     res.json({
       success: true,
       order,
-      message: status === 'cancelled'
-        ? 'Commande annulée et articles remis en stock automatiquement.'
-        : `Statut mis à jour (${status}).`,
+      message: status === 'confirmed' && previousStatus === 'pending'
+        ? 'Commande confirmée et stock réservé.'
+        : status === 'cancelled'
+          ? 'Demande annulée.'
+          : `Statut mis à jour (${status}).`,
     });
   });
 
@@ -2883,8 +2853,9 @@ async function startServer() {
       return res.status(404).json({ error: 'Boutique introuvable.' });
     }
 
-    const shopOrders = orders.filter((o) => o.shop_id === shopId);
-    const totalSales = shopOrders.reduce((sum, o) => sum + o.total_amount, 0);
+    const shopOrders = orders.filter((o) => o.shop_id === shopId && isSameBusinessDay(o.created_at));
+    const metrics = summarizeOrderMetrics(orders, shopId);
+    const totalSales = metrics.ca_ordered;
 
     // Calculate top selling products of the day
     const productSalesMap: Record<number, { title: string; quantity: number; revenue: number }> = {};
@@ -2923,13 +2894,20 @@ async function startServer() {
     });
 
     const lines: string[] = [
-      `🌙 *FLASH BILAN DE 20H — MATABLE.CI*`,
+      `🌙 *FLASH BILAN — ${todayStr.toUpperCase()}*`,
       `🏪 *Boutique :* ${shop.name}`,
-      `📅 *Date :* ${todayStr}`,
+      `📅 *Période :* ${todayStr}`,
       `----------------------------------------`,
-      `💰 *Chiffre d'Affaires du Jour :* ${new Intl.NumberFormat('fr-FR').format(totalSales)} FCFA`,
-      `📦 *Commandes Traitées :* ${shopOrders.length}`,
+      `🧾 *Commandes reçues :* ${metrics.received}`,
+      `✅ *Confirmées :* ${metrics.confirmed}`,
+      `🚚 *Terminées :* ${metrics.delivered}`,
+      `❌ *Annulées :* ${metrics.cancelled}`,
+      `💰 *Valeur des commandes enregistrées :* ${new Intl.NumberFormat('fr-FR').format(metrics.ca_ordered)} FCFA`,
+      `✅ *Valeur des commandes confirmées :* ${new Intl.NumberFormat('fr-FR').format(metrics.ca_confirmed)} FCFA`,
+      `🚚 *Valeur des commandes terminées :* ${new Intl.NumberFormat('fr-FR').format(metrics.ca_delivered)} FCFA`,
+      `🧺 *Panier moyen livré :* ${new Intl.NumberFormat('fr-FR').format(metrics.panier_moyen_livre)} FCFA`,
       `----------------------------------------`,
+      `ℹ️ *MaTable.ci ne collecte aucun paiement.* Les paiements sont convenus directement entre le client et le vendeur.`,
     ];
 
     if (topSellingProducts.length > 0) {
@@ -2966,50 +2944,6 @@ async function startServer() {
     });
   });
 
-  // Automated 20h Cron Job Trigger endpoint
-  app.post('/api/cron/flash-bilan', (req: Request, res: Response) => {
-    const results = shops.map((shop) => {
-      const shopOrders = orders.filter((o) => o.shop_id === shop.id);
-      const totalSales = shopOrders.reduce((sum, o) => sum + o.total_amount, 0);
-
-      const productSalesMap: Record<number, { title: string; quantity: number; revenue: number }> = {};
-      shopOrders.forEach((order) => {
-        (order.items || []).forEach((item) => {
-          if (!productSalesMap[item.product_id]) {
-            productSalesMap[item.product_id] = {
-              title: item.product_title || `Article #${item.product_id}`,
-              quantity: 0,
-              revenue: 0,
-            };
-          }
-          productSalesMap[item.product_id].quantity += item.quantity;
-          productSalesMap[item.product_id].revenue += (item.unit_price || 0) * item.quantity;
-        });
-      });
-
-      const topSelling = Object.values(productSalesMap)
-        .sort((a, b) => b.quantity - a.quantity)
-        .slice(0, 3)
-        .map((p) => ({ title: p.title, quantity_sold: p.quantity, revenue: p.revenue }));
-
-      return {
-        shop_id: shop.id,
-        shop_name: shop.name,
-        total_sales: totalSales,
-        orders_count: shopOrders.length,
-        top_selling_products: topSelling,
-      };
-    });
-
-    res.json({
-      success: true,
-      executed_at: new Date().toISOString(),
-      cron_label: 'Flash Bilan 20h Cron Job',
-      shops_count: results.length,
-      bilans: results,
-    });
-  });
-
   app.get('/api/admin/analytics', (req: Request, res: Response) => {
     refreshRuntimeDataFromDatabase();
     const requestedDays = Number(req.query.days);
@@ -3025,13 +2959,17 @@ async function startServer() {
       SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
       FROM orders WHERE created_at >= ? GROUP BY date ORDER BY date ASC
     `).all(since) as { date: string; orders: number; sales: number }[];
+
+    const validOrderStatuses = new Set(['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'expired']);
     const byShop = shops.map((shop) => {
       const traffic = db.prepare(`
         SELECT COUNT(*) AS page_views, COUNT(DISTINCT session_id) AS unique_visitors
         FROM analytics_events WHERE event_type = 'page_view' AND shop_id = ? AND created_at >= ?
       `).get(shop.id, since) as { page_views: number; unique_visitors: number };
       const shopOrders = orders.filter((order) => order.shop_id === shop.id && order.created_at >= since);
-      const sales = shopOrders.reduce((sum, order) => sum + order.total_amount, 0);
+      const sales = shopOrders
+        .filter((order) => validOrderStatuses.has(order.status ?? 'pending') && order.status !== 'cancelled')
+        .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
       return {
         shop_id: shop.id, shop_name: shop.name, slug: shop.slug,
         page_views: traffic.page_views, unique_visitors: traffic.unique_visitors,
@@ -3057,52 +2995,19 @@ async function startServer() {
   app.get('/api/admin/shops', (req: Request, res: Response) => {
     refreshRuntimeDataFromDatabase();
     const adminShops = shops.map((s) => {
-      const daysRemaining = getDaysRemaining(s.subscription_expires_at);
-      let alertLevel = 'normal';
-      let alertMessage = 'Abonnement actif';
-      let shouldDeactivate = false;
-
-      if (daysRemaining <= -1) {
-        alertLevel = 'j_plus_1';
-        alertMessage = 'Expiré (J+1) - Doit être désactivé';
-        shouldDeactivate = true;
-      } else if (daysRemaining === 0) {
-        alertLevel = 'j0';
-        alertMessage = 'Expire aujourd\'hui (J-0) - Alerte ultime';
-      } else if (daysRemaining <= 2) {
-        alertLevel = 'j2';
-        alertMessage = `Expire dans ${daysRemaining} jours (J-2)`;
-      } else if (daysRemaining <= 4) {
-        alertLevel = 'j4';
-        alertMessage = `Expire dans ${daysRemaining} jours (J-4)`;
-      } else if (daysRemaining <= 6) {
-        alertLevel = 'j6';
-        alertMessage = `Expire dans ${daysRemaining} jours (J-6)`;
-      } else if (daysRemaining <= 8) {
-        alertLevel = 'j8';
-        alertMessage = `Expire dans ${daysRemaining} jours (J-8)`;
-      } else if (daysRemaining <= 10) {
-        alertLevel = 'j10';
-        alertMessage = `Expire dans ${daysRemaining} jours (J-10)`;
-      }
-
+      const shopOrders = orders.filter((order) => order.shop_id === s.id);
+      const actionableOrders = shopOrders.filter((order) => order.status !== 'cancelled' && order.status !== 'expired');
       return {
         ...toSafeShop(s),
-        daysRemaining,
-        alertLevel,
-        alertMessage,
-        shouldDeactivate,
         products_count: products.filter((p) => p.shop_id === s.id).length,
-        orders_count: orders.filter((o) => o.shop_id === s.id).length,
-        total_sales: orders.filter((o) => o.shop_id === s.id).reduce((sum, order) => sum + order.total_amount, 0),
+        orders_count: actionableOrders.length,
+        total_sales: actionableOrders.reduce((sum, order) => sum + order.total_amount, 0),
         average_order_value: (() => {
-          const shopOrders = orders.filter((o) => o.shop_id === s.id);
-          return shopOrders.length
-            ? Math.round(shopOrders.reduce((sum, order) => sum + order.total_amount, 0) / shopOrders.length)
+          return actionableOrders.length
+            ? Math.round(actionableOrders.reduce((sum, order) => sum + order.total_amount, 0) / actionableOrders.length)
             : 0;
         })(),
-        last_order_at: orders
-          .filter((o) => o.shop_id === s.id)
+        last_order_at: actionableOrders
           .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.created_at ?? null,
       };
     });
@@ -3126,7 +3031,7 @@ async function startServer() {
       database_path: process.env.MATABLE_DB_PATH || 'data/matable.db',
       counts,
       latest_analytics_event_at: latestAnalytics?.created_at || null,
-      integrations: { paystack: 'locked', whatsapp_cloud: 'locked', whatsapp_click_to_chat: 'available' },
+      integrations: { whatsapp_cloud: 'locked', whatsapp_click_to_chat: 'available' },
     });
   });
 
@@ -3204,88 +3109,6 @@ async function startServer() {
       template,
       message,
       whatsapp_url: `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
-    });
-  });
-
-  // Manual Subscription Extension: +1 Mois, +3 Mois, +6 Mois, +1 An
-  app.post('/api/admin/shops/:id/extend-subscription', (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const { months } = req.body;
-    const addMonths = Number(months) || 1;
-
-    const shop = shops.find((s) => s.id === shopId);
-    if (!shop) {
-      return res.status(404).json({ error: 'Boutique introuvable.' });
-    }
-
-    // If already expired, extend from today, otherwise from expiration date
-    const currentExp = new Date(shop.subscription_expires_at);
-    const baseDate = currentExp > new Date() ? currentExp : new Date();
-
-    baseDate.setMonth(baseDate.getMonth() + addMonths);
-    shop.subscription_expires_at = baseDate.toISOString().split('T')[0];
-    shop.is_active = true; // reactivate automatically on renewal
-    persistShop(shop);
-
-    res.json({
-      success: true,
-      new_expiration_date: shop.subscription_expires_at,
-      shop: toSafeShop(shop),
-      message: `Abonnement prolongé de +${addMonths} mois avec succès !`,
-    });
-  });
-
-  app.patch('/api/admin/shops/:id/subscription-expiration', (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shop = shops.find((s) => s.id === shopId);
-    if (!shop) {
-      return res.status(404).json({ error: 'Boutique introuvable.' });
-    }
-
-    const { expires_at, days_from_now } = req.body ?? {};
-    let nextExpiration: string | null = null;
-
-    if (expires_at) {
-      const parsedDate = new Date(expires_at);
-      if (Number.isNaN(parsedDate.getTime())) {
-        return res.status(400).json({ error: 'Date d’échéance invalide.' });
-      }
-      nextExpiration = parsedDate.toISOString().split('T')[0];
-    } else if (Number.isInteger(Number(days_from_now))) {
-      const days = Number(days_from_now);
-      const baseDate = new Date();
-      baseDate.setHours(0, 0, 0, 0);
-      baseDate.setDate(baseDate.getDate() + days);
-      nextExpiration = baseDate.toISOString().split('T')[0];
-    }
-
-    if (!nextExpiration) {
-      return res.status(400).json({ error: 'Précisez expires_at ou days_from_now.' });
-    }
-
-    shop.subscription_expires_at = nextExpiration;
-    shop.last_notification_sent_at = null;
-    shop.is_active = true;
-    persistShop(shop);
-
-    res.json({
-      success: true,
-      new_expiration_date: shop.subscription_expires_at,
-      shop: toSafeShop(shop),
-      message: 'Date d’échéance mise à jour par le super-admin.',
-    });
-  });
-
-  // Automatic Alert Engine / Daily Cron Job Simulator
-  app.post('/api/admin/trigger-cron', (req: Request, res: Response) => {
-    const automation = runSubscriptionAutomation();
-
-    res.json({
-      success: true,
-      timestamp: automation.timestamp,
-      deactivatedCount: automation.deactivatedCount,
-      alertsCount: automation.alertsGenerated.length,
-      alerts: automation.alertsGenerated,
     });
   });
 

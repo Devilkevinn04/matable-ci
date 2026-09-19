@@ -5,10 +5,14 @@ import Database from 'better-sqlite3';
 export const databaseMode = 'sqlite';
 
 const dataDir = path.join(process.cwd(), 'data');
-const configuredDbPath = process.env.MATABLE_DB_PATH ? path.resolve(process.env.MATABLE_DB_PATH) : path.join(dataDir, 'matable.db');
+const configuredDbPath = process.env.NODE_ENV === 'production'
+  ? ':memory:'
+  : (process.env.MATABLE_DB_PATH ? path.resolve(process.env.MATABLE_DB_PATH) : path.join(dataDir, 'matable.db'));
 const dbPath = configuredDbPath;
 
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+if (dbPath !== ':memory:') {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+}
 
 export const db = new Database(dbPath);
 
@@ -93,6 +97,13 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS merchant_sessions (
     token TEXT PRIMARY KEY,
     shop_id INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    fingerprint TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS admin_sessions (
+    token TEXT PRIMARY KEY,
     expires_at INTEGER NOT NULL,
     fingerprint TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

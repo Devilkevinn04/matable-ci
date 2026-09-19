@@ -60,13 +60,22 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [customLocation, setCustomLocation] = useState('');
   const [deliveryNote, setDeliveryNote] = useState('');
   const [deliverySlot, setDeliverySlot] = useState('Dès que prêt (30-45 min)');
-  const [paymentMethod, setPaymentMethod] = useState<'wave' | 'mobile_money'>('wave');
+  const [paymentMethod, setPaymentMethod] = useState<'wave' | 'mobile_money' | 'cash' | 'to_confirm'>('to_confirm');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ orderId: number; whatsappUrl: string; whatsappText: string } | null>(null);
   const [messageCopied, setMessageCopied] = useState(false);
   const [whatsappBlocked, setWhatsappBlocked] = useState(false);
   const [formStartedAt] = useState(() => Date.now());
   const [website, setWebsite] = useState('');
+
+  useEffect(() => {
+    if (!isCartOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsCartOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCartOpen]);
 
   // Ces deux useMemo doivent être déclarés avant les "return" conditionnels
   // ci-dessous (loading / error / boutique inactive), sinon React appelle un
@@ -342,7 +351,24 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         throw new Error(data.error || 'Erreur de validation de commande');
       }
 
-      // 2. Préparation du lien WhatsApp avec le reçu détaillé
+      const confirmedCart = (data.order.items || []).map((item: any) => {
+        const localProduct = products.find((product) => product.id === item.product_id);
+        if (!localProduct) return null;
+        return {
+          product: {
+            ...localProduct,
+            title: item.product_title || localProduct.title,
+            price: Number(item.unit_price),
+            modifier_groups: [],
+          },
+          quantity: Number(item.quantity),
+          selected_size: item.selected_size,
+          selected_color: item.selected_color,
+          selected_modifiers: Array.isArray(item.selected_modifiers) ? item.selected_modifiers : [],
+        };
+      }).filter(Boolean);
+
+      // 2. Prepare WhatsApp from the server-confirmed order.
       const { text, url } = generateWhatsAppOrderReceipt(
         shop,
         customerName,
@@ -350,8 +376,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         finalLocation,
         deliveryNote,
         paymentMethod,
-        cart,
-        totalCartAmount,
+        confirmedCart,
+        Number(data.order.total_amount),
         shop.category === 'food' ? deliverySlot : undefined
       );
 
@@ -362,13 +388,17 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       });
       setWhatsappBlocked(false);
       setMessageCopied(false);
-      toast.success('Commande validée ! Ouvrez WhatsApp pour envoyer votre reçu.');
+      toast.success('Demande de commande enregistrée. Ouvrez WhatsApp pour confirmer avec le vendeur.');
 
       // Update only local stock so the confirmation screen stays mounted.
+      const confirmedQuantities = new Map<number, number>();
+      for (const item of data.order.items || []) {
+        confirmedQuantities.set(item.product_id, (confirmedQuantities.get(item.product_id) || 0) + Number(item.quantity));
+      }
       setProducts(prevProducts => prevProducts.map(product => {
-        const orderedItem = cart.find(item => item.product.id === product.id);
-        if (!orderedItem) return product;
-        const remainingStock = Math.max(0, product.stock - orderedItem.quantity);
+        const orderedQuantity = confirmedQuantities.get(product.id);
+        if (!orderedQuantity) return product;
+        const remainingStock = Math.max(0, product.stock - orderedQuantity);
         return {
           ...product,
           stock: remainingStock,
@@ -1002,8 +1032,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
       {/* 5. CHECKOUT DRAWER / MODAL */}
       {isCartOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/60 backdrop-blur-xs p-0 sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/60 backdrop-blur-xs p-0 sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsCartOpen(false); }}>
           <div 
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="checkout-dialog-title"
             className="bg-[#FFFDF9] w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-[0_18px_40px_rgba(34,32,27,0.18)] overflow-hidden animate-in slide-in-from-bottom-6 duration-200 border-[3px] border-[#211712] sm:border"
           >
             {/* Modal Header */}
@@ -1016,7 +1049,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                   <ShoppingBag className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-900 text-base">Finaliser ma commande</h3>
+                  <h3 id="checkout-dialog-title" className="font-black text-slate-900 text-base">Finaliser ma commande</h3>
                   <p className="text-xs text-slate-500">{totalCartCount} article(s) sélectionné(s)</p>
                 </div>
               </div>
@@ -1037,13 +1070,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     <CheckCircle2 className="w-10 h-10" />
                   </div>
                   <h4 className="text-xl font-extrabold text-slate-900 mb-1">
-                    Commande validée ! (N° {orderSuccess.orderId})
+                    Demande de commande envoyée ! (N° {orderSuccess.orderId})
                   </h4>
                   <p className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full inline-block font-semibold mb-4">
-                    ✓ Stock décrémenté automatiquement en base
+                    ✓ Commande enregistrée sur MaTable.ci
                   </p>
                   <p className="text-sm text-slate-600 max-w-sm mx-auto mb-6 leading-relaxed">
-                    Votre commande est enregistrée. Ouvrez WhatsApp pour écrire au vendeur avec le récapitulatif prérempli.
+                    Le vendeur confirme la disponibilité, le montant final et le paiement direct avec vous sur WhatsApp.
                   </p>
 
                   <button
@@ -1057,7 +1090,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base shadow-lg hover:shadow-emerald-600/30 flex items-center justify-center gap-3 transition-all"
                   >
                     <Phone className="w-5 h-5 fill-white" />
-                    <span>Écrire au vendeur sur WhatsApp</span>
+                    <span>Continuer sur WhatsApp</span>
                   </button>
 
                   {whatsappBlocked && (
@@ -1283,12 +1316,14 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     {/* Payment method */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Mode de paiement *
+                        Mode de paiement souhaité
                       </label>
                       <div className="grid grid-cols-2 gap-2">
                         {[
                           { id: 'wave', label: 'Wave', icon: '🌊' },
                           { id: 'mobile_money', label: 'Mobile Money', icon: '📱' },
+                          { id: 'cash', label: 'Espèces', icon: '💵' },
+                          { id: 'to_confirm', label: 'À convenir', icon: '💬' },
                         ].map(p => (
                           <button
                             key={p.id}
@@ -1307,7 +1342,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       </div>
                       <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
                         <Info className="w-3 h-3" />
-                        Paiement par Wave ou Mobile Money à convenir directement avec le vendeur sur WhatsApp.
+                        Le paiement est discuté directement entre le client et le vendeur. MaTable.ci ne collecte pas d’argent.
                       </p>
                     </div>
 

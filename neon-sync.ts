@@ -2,7 +2,7 @@ import { neon } from '@neondatabase/serverless';
 import { db } from './db.ts';
 
 const databaseUrl = String(process.env.DATABASE_URL || '').trim();
-const sql = databaseUrl ? neon(databaseUrl) : null;
+const sql = process.env.NODE_ENV === 'production' && databaseUrl ? neon(databaseUrl) : null;
 let syncInFlight: Promise<void> | null = null;
 
 const tableDefinitions = [
@@ -11,9 +11,11 @@ const tableDefinitions = [
   `CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, customer_name TEXT NOT NULL, customer_phone TEXT NOT NULL, delivery_location TEXT NOT NULL, delivery_note TEXT, delivery_slot TEXT, payment_method_preference TEXT, total_amount INTEGER NOT NULL, created_at TEXT NOT NULL, status TEXT DEFAULT 'pending', items TEXT)`,
   `CREATE TABLE IF NOT EXISTS analytics_events (id BIGSERIAL PRIMARY KEY, shop_id INTEGER, event_type TEXT NOT NULL, session_id TEXT NOT NULL, path TEXT, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS payment_transactions (id BIGSERIAL PRIMARY KEY, provider TEXT NOT NULL, reference TEXT NOT NULL, shop_id INTEGER NOT NULL, tier TEXT NOT NULL, amount INTEGER NOT NULL DEFAULT 0, transaction_date TEXT NOT NULL, processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(provider, reference))`,
+  `CREATE TABLE IF NOT EXISTS merchant_sessions (token TEXT PRIMARY KEY, shop_id INTEGER NOT NULL, expires_at BIGINT NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE TABLE IF NOT EXISTS admin_sessions (token TEXT PRIMARY KEY, expires_at BIGINT NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
 ];
 
-const tableNames = ['shops', 'products', 'orders', 'analytics_events', 'payment_transactions'] as const;
+const tableNames = ['shops', 'products', 'orders', 'analytics_events', 'payment_transactions', 'merchant_sessions', 'admin_sessions'] as const;
 
 async function ensureNeonSchema() {
   if (!sql) return;
