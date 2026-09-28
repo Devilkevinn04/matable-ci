@@ -1,4 +1,4 @@
-const CACHE_NAME = 'matable-ci-v2';
+const CACHE_NAME = 'matable-ci-v3';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -35,6 +35,21 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (url.pathname.startsWith('/api/')) {
+    return;
+  }
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone));
+        }
+        return response;
+      }).catch(() => caches.match(event.request).then((cached) => (
+        cached || caches.match('/offline.html')
+      )))
+    );
     return;
   }
 
