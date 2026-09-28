@@ -75,6 +75,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [prodStock, setProdStock] = useState<number | ''>(10);
   const [prodImage, setProdImage] = useState('');
   const [prodLookbookImage, setProdLookbookImage] = useState('');
+  const [prodGalleryImages, setProdGalleryImages] = useState<string[]>([]);
   const [prodSizes, setProdSizes] = useState('');
   const [prodColors, setProdColors] = useState('');
   const [prodPrepTime, setProdPrepTime] = useState<number | ''>('');
@@ -639,6 +640,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setProdStock(draft.stock);
     setProdLookbookImage(draft.lookbook_image);
     setProdImage(draft.image_url);
+    setProdGalleryImages(draft.gallery_images);
     setProdSizes(draft.sizes);
     setProdColors(draft.colors);
     setProdPrepTime(draft.prep_time);
@@ -662,6 +664,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setProdStock(draft.stock);
     setProdImage(draft.image_url);
     setProdLookbookImage(draft.lookbook_image);
+    setProdGalleryImages(draft.gallery_images);
     setProdSizes(draft.sizes);
     setProdColors(draft.colors);
     setProdPrepTime(draft.prep_time);
@@ -758,6 +761,39 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     e.target.value = '';
   };
 
+  const MAX_GALLERY_IMAGES = 6;
+
+  const handleGalleryImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    if (prodGalleryImages.length >= MAX_GALLERY_IMAGES) {
+      toast.error(`Vous pouvez ajouter jusqu'à ${MAX_GALLERY_IMAGES} photos supplémentaires.`);
+      e.target.value = '';
+      return;
+    }
+
+    const remainingSlots = MAX_GALLERY_IMAGES - prodGalleryImages.length;
+    const filesToProcess = files.slice(0, remainingSlots);
+    const oversized = filesToProcess.some((file) => !file.type.startsWith('image/') || file.size > 8 * 1024 * 1024);
+    if (oversized) {
+      toast.error('Choisissez des images de 8 Mo maximum.');
+      e.target.value = '';
+      return;
+    }
+
+    try {
+      const compressed = await Promise.all(filesToProcess.map((file) => compressImageClientSide(file, 900, 100)));
+      setProdGalleryImages((prev) => [...prev, ...compressed.map((result) => result.dataUrl)]);
+    } catch {
+      toast.error("Erreur lors de la compression d'une photo.");
+    }
+    e.target.value = '';
+  };
+
+  const handleRemoveGalleryImage = (index: number) => {
+    setProdGalleryImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
   // Save Product (Add or Edit)
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -771,6 +807,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       stock: prodStock,
       image_url: prodImage,
       lookbook_image: prodLookbookImage,
+      gallery_images: prodGalleryImages,
       sizes: prodSizes,
       colors: prodColors,
       prep_time: prodPrepTime,
@@ -962,6 +999,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     prodStock,
     prodImage,
     prodLookbookImage,
+    prodGalleryImages,
     prodSizes,
     prodColors,
     prodPrepTime,
@@ -1033,6 +1071,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setProdStock,
     setProdImage,
     setProdLookbookImage,
+    setProdGalleryImages,
     setProdSizes,
     setProdColors,
     setProdPrepTime,
@@ -1077,6 +1116,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     handleUpdateOrderStatus,
     handleImageUpload,
     handleLookbookImageUpload,
+    handleGalleryImageUpload,
+    handleRemoveGalleryImage,
     handleSaveProduct,
     handleDeleteProduct,
     handleSaveGeneralSettings,

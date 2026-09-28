@@ -112,6 +112,7 @@ export interface Product {
   sizes?: string[]; // e.g. ['S', 'M', 'L', 'XL']
   colors?: (ProductColor | string)[];
   lookbook_image?: string;
+  gallery_images?: string[]; // additional optional product photos
   // Food specific
   prep_time?: number; // minutes
   modifier_groups?: { name: string; required?: boolean; max_selections?: number; options: (ProductModifierOption | string)[] }[];

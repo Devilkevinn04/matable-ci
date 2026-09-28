@@ -41,7 +41,7 @@ const sqliteSchema = `
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
     price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT,
     is_available INTEGER NOT NULL DEFAULT 1, sizes TEXT, colors TEXT, lookbook_image TEXT,
-    prep_time INTEGER, modifier_groups TEXT, attributes TEXT
+    gallery_images TEXT, prep_time INTEGER, modifier_groups TEXT, attributes TEXT
   );
   CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, customer_name TEXT NOT NULL,
@@ -108,6 +108,7 @@ function migrateSqlite(connection: Database.Database) {
   connection.exec('CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)');
   addColumn('products', 'category', 'TEXT');
   addColumn('products', 'attributes', 'TEXT');
+  addColumn('products', 'gallery_images', 'TEXT');
   addColumn('users', 'phone', 'TEXT');
   addColumn('users', 'password_hash', 'TEXT');
   addColumn('users', 'is_active', 'INTEGER DEFAULT 1');
@@ -131,7 +132,7 @@ const postgresMigrations = [
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
     price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT,
     is_available INTEGER NOT NULL DEFAULT 1, category TEXT, sizes JSONB, colors JSONB,
-    lookbook_image TEXT, prep_time INTEGER, modifier_groups JSONB, attributes JSONB
+    lookbook_image TEXT, gallery_images JSONB, prep_time INTEGER, modifier_groups JSONB, attributes JSONB
   )`,
   `CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, customer_name TEXT NOT NULL,
@@ -162,6 +163,7 @@ const postgresMigrations = [
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS sizes JSONB',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS colors JSONB',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS lookbook_image TEXT',
+  'ALTER TABLE products ADD COLUMN IF NOT EXISTS gallery_images JSONB',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS prep_time INTEGER',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS modifier_groups JSONB',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT \'approved\'',

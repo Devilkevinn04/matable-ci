@@ -373,6 +373,18 @@ export function getProductImageForDisplay(imageUrl: unknown, category: unknown):
     : getCategoryDefaults(category).productPlaceholderImageUrl;
 }
 
+const MAX_GALLERY_IMAGES = 6;
+
+export function sanitizeGalleryImages(images: unknown): string[] | undefined {
+  if (!Array.isArray(images)) return undefined;
+  const cleaned = images
+    .filter((image): image is string => typeof image === 'string' && image.trim().length > 0)
+    .map((image) => image.trim())
+    .filter((image) => !isLegacyGenericProductImage(image))
+    .slice(0, MAX_GALLERY_IMAGES);
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
 export function normalizeCustomBannerImage(imageUrl: unknown, category: unknown): string {
   if (typeof imageUrl !== 'string') return '';
   const normalized = imageUrl.trim();

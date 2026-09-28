@@ -27,7 +27,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
     prodModifiers, setProdModifiers, prodModifierMaxSelections, setProdModifierMaxSelections, prodAttributes, setProdAttributes, prodIsAvailable, setProdIsAvailable,
     imageCompressing, compressedSizeKB, originalImageSizeKB, flashBilan,
     handleSaveOpeningHours, handleResetManualOverride, handleTriggerCronBilan, handleQuickStockChange, handleQuickToggleVisibility,
-    handleOpenAddModal, handleOpenEditModal, handleUpdateOrderStatus, handleImageUpload, handleLookbookImageUpload, handleSaveProduct, handleDeleteProduct,
+    handleOpenAddModal, handleOpenEditModal, handleUpdateOrderStatus, handleImageUpload, handleLookbookImageUpload,
+    prodGalleryImages, handleGalleryImageUpload, handleRemoveGalleryImage, handleSaveProduct, handleDeleteProduct,
     handleSaveGeneralSettings, addDeliveryZone, updateDeliveryZone, removeDeliveryZone, toast, copyOwnerLink, copyRegistrationLinks
   } = state;
 
@@ -295,6 +296,42 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                       <p className="w-full text-[10px] text-slate-500">JPG, PNG, WebP ou AVIF, 8 Mo maximum. Photo optimisée automatiquement.</p>
                     </div>
                   </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] lg:text-[11px]">Photos supplémentaires <span className="font-normal text-slate-400">(optionnelles, {prodGalleryImages.length}/6)</span></label>
+                  <div className="flex flex-wrap gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-3">
+                    {prodGalleryImages.map((image, index) => (
+                      <div key={index} className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        <img src={image} alt={`Photo supplémentaire ${index + 1}`} className="h-full w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveGalleryImage(index)}
+                          className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#211712]/80 text-white"
+                          aria-label={`Retirer la photo ${index + 1}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {prodGalleryImages.length < 6 && (
+                      <div className="flex h-20 w-20 shrink-0 items-center justify-center">
+                        <input
+                          id="product-gallery-upload"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/avif"
+                          multiple
+                          onChange={handleGalleryImageUpload}
+                          className="sr-only"
+                        />
+                        <label htmlFor="product-gallery-upload" className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100">
+                          <Upload className="h-4 w-4" />
+                          <span className="text-[10px] font-bold">Ajouter</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                  <p className="mt-2 text-[10px] text-slate-500">Ajoutez jusqu'à 6 photos additionnelles pour montrer l'article sous différents angles.</p>
                 </div>
 
                 <div className="flex items-start gap-3 rounded-xl border-[2px] border-[#211712] bg-[#edf7f2] p-3">

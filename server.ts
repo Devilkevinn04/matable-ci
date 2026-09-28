@@ -6,7 +6,7 @@ import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { createServer as createViteServer } from 'vite';
 import { dbAll, dbGet, dbRun, dbTransaction, databaseMode, initializeDatabase } from './db.ts';
-import { getCategoryDefaults, isShopCategory, normalizeCustomBannerImage, normalizeProductImage, normalizeWelcomeMessage } from './src/utils/categoryDefaults.ts';
+import { getCategoryDefaults, isShopCategory, normalizeCustomBannerImage, normalizeProductImage, normalizeWelcomeMessage, sanitizeGalleryImages } from './src/utils/categoryDefaults.ts';
 import type { ShopCategory } from './src/utils/categoryDefaults.ts';
 
 declare global {
@@ -121,6 +121,7 @@ interface ProductRecord {
   sizes?: string[];
   colors?: { name: string; hex: string }[];
   lookbook_image?: string;
+  gallery_images?: string[];
   // Food attributes
   prep_time?: number; // minutes
   modifier_groups?: {
@@ -1448,6 +1449,7 @@ async function loadProductsFromDatabase() {
     sizes: row.sizes ? (typeof row.sizes === 'string' ? JSON.parse(row.sizes) : row.sizes) : undefined,
     colors: row.colors ? (typeof row.colors === 'string' ? JSON.parse(row.colors) : row.colors) : undefined,
     lookbook_image: row.lookbook_image ? String(row.lookbook_image) : undefined,
+    gallery_images: row.gallery_images ? (typeof row.gallery_images === 'string' ? JSON.parse(row.gallery_images) : row.gallery_images) : undefined,
     prep_time: row.prep_time == null ? undefined : Number(row.prep_time),
     modifier_groups: row.modifier_groups ? (typeof row.modifier_groups === 'string' ? JSON.parse(row.modifier_groups) : row.modifier_groups) : undefined,
     attributes: row.attributes ? (typeof row.attributes === 'string' ? JSON.parse(row.attributes) : row.attributes) : undefined,
@@ -1497,16 +1499,16 @@ async function persistShop(shop: ShopRecord) {
 
 async function persistProduct(product: ProductRecord) {
   await dbRun(`
-    INSERT INTO products (id, shop_id, title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, prep_time, modifier_groups, attributes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO products (id, shop_id, title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET shop_id=excluded.shop_id, title=excluded.title, description=excluded.description,
       price=excluded.price, stock=excluded.stock, image_url=excluded.image_url, is_available=excluded.is_available,
-      category=excluded.category, sizes=excluded.sizes, colors=excluded.colors, lookbook_image=excluded.lookbook_image, prep_time=excluded.prep_time,
+      category=excluded.category, sizes=excluded.sizes, colors=excluded.colors, lookbook_image=excluded.lookbook_image, gallery_images=excluded.gallery_images, prep_time=excluded.prep_time,
       modifier_groups=excluded.modifier_groups, attributes=excluded.attributes
   `, [
     product.id, product.shop_id, product.title, product.description ?? null, product.price, product.stock, product.image_url,
     product.is_available ? 1 : 0, product.category ?? null, product.sizes ? JSON.stringify(product.sizes) : null, product.colors ? JSON.stringify(product.colors) : null,
-    product.lookbook_image ?? null, product.prep_time ?? null, product.modifier_groups ? JSON.stringify(product.modifier_groups) : null,
+    product.lookbook_image ?? null, product.gallery_images && product.gallery_images.length > 0 ? JSON.stringify(product.gallery_images) : null, product.prep_time ?? null, product.modifier_groups ? JSON.stringify(product.modifier_groups) : null,
     product.attributes && Object.keys(product.attributes).length > 0 ? JSON.stringify(product.attributes) : null
   ]);
 }
@@ -2327,7 +2329,7 @@ async function startServer() {
     if (!shop) {
       return res.status(404).json({ error: 'Boutique introuvable.' });
     }
-    const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, prep_time, modifier_groups, attributes } = req.body;
+    const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
 
     const safeTitle = sanitizeTextField(title, 120);
     const numericPrice = Number(price);
@@ -2349,6 +2351,7 @@ async function startServer() {
       sizes: Array.isArray(sizes) ? sizes : undefined,
       colors: Array.isArray(colors) ? colors : undefined,
       lookbook_image: lookbook_image || undefined,
+      gallery_images: sanitizeGalleryImages(gallery_images),
       prep_time: prep_time !== undefined ? Number(prep_time) : undefined,
       modifier_groups: Array.isArray(modifier_groups) ? modifier_groups : undefined,
       attributes: sanitizeProductAttributes(attributes, shop.category),
@@ -2367,7 +2370,7 @@ async function startServer() {
       return res.status(404).json({ error: 'Produit introuvable.' });
     }
 
-    const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, prep_time, modifier_groups, attributes } = req.body;
+    const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
     const shop = shops.find((candidate) => candidate.id === shopId);
     if (title !== undefined) {
       const safeTitle = sanitizeTextField(title, 120);
@@ -2391,6 +2394,7 @@ async function startServer() {
     if (sizes !== undefined) product.sizes = Array.isArray(sizes) ? sizes : undefined;
     if (colors !== undefined) product.colors = Array.isArray(colors) ? colors : undefined;
     if (lookbook_image !== undefined) product.lookbook_image = lookbook_image;
+    if (gallery_images !== undefined) product.gallery_images = sanitizeGalleryImages(gallery_images);
     if (prep_time !== undefined) product.prep_time = Number(prep_time);
     if (modifier_groups !== undefined) product.modifier_groups = Array.isArray(modifier_groups) ? modifier_groups : undefined;
     if (attributes !== undefined && shop) product.attributes = sanitizeProductAttributes(attributes, shop.category);

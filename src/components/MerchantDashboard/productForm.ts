@@ -9,6 +9,7 @@ export interface ProductDraft {
   stock: number | '';
   image_url: string;
   lookbook_image: string;
+  gallery_images: string[];
   sizes: string;
   colors: string;
   prep_time: number | '';
@@ -41,6 +42,7 @@ export interface ProductSavePayload {
   stock: number;
   image_url: string;
   lookbook_image?: string;
+  gallery_images?: string[];
   sizes?: string[];
   colors?: string[];
   prep_time?: number;
@@ -59,6 +61,7 @@ export function createProductDraft(category: unknown): ProductDraft {
     stock: 10,
     image_url: '',
     lookbook_image: '',
+    gallery_images: [],
     sizes: defaults.defaultProductSizes,
     colors: defaults.defaultProductColors,
     prep_time: defaults.defaultProductPrepTime ?? '',
@@ -90,6 +93,7 @@ export function productToDraft(product: Product): ProductDraft {
     stock: product.stock,
     image_url: isLegacyGenericProductImage(product.image_url) ? '' : product.image_url,
     lookbook_image: product.lookbook_image || '',
+    gallery_images: product.gallery_images || [],
     sizes: product.sizes ? product.sizes.join(', ') : '',
     colors: Array.isArray(product.colors)
       ? product.colors.map((color) => typeof color === 'string' ? color : color.name).join(', ')
@@ -150,6 +154,7 @@ export function buildProductSavePayload(draft: ProductDraft, category: ShopCateg
     stock: draft.stock === '' ? 0 : Number(draft.stock),
     image_url: draft.image_url,
     lookbook_image: draft.lookbook_image.trim() || undefined,
+    gallery_images: draft.gallery_images.filter(Boolean).slice(0, 6),
     sizes: parseList(draft.sizes),
     colors: parseList(draft.colors),
     prep_time: draft.prep_time !== '' ? Number(draft.prep_time) : undefined,

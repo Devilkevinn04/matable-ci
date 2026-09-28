@@ -997,6 +997,22 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     />
                   )}
 
+                  {Array.isArray(product.gallery_images) && product.gallery_images.length > 0 && (
+                    <div className="flex gap-1.5 overflow-x-auto border-b border-slate-100 p-1.5">
+                      {product.gallery_images.map((image, index) => (
+                        <img
+                          key={index}
+                          src={image}
+                          alt={`Photo ${index + 1} de ${product.title}`}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          className="h-16 w-16 shrink-0 rounded-lg object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      ))}
+                    </div>
+                  )}
+
                   {/* Card Content */}
                   <div className="p-4 flex flex-col flex-1">
                     {/* Title */}
