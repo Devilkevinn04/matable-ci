@@ -13,13 +13,12 @@ export default defineConfig(() => {
     },
     build: {
       target: 'es2022',
-      sourcemap: true,
+      sourcemap: false,
       rollupOptions: {
         output: {
           manualChunks: {
             'react-vendor': ['react', 'react-dom'],
             'ui-motion': ['motion/react', 'lucide-react'],
-            'vendor-utils': ['dotenv'],
           },
         },
       },
