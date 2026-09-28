@@ -29,10 +29,9 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
   const {
     isSessionLoading, currentShop, phoneInput, setPhoneInput, pinInput, setPinInput,
     accessCodeInput, setAccessCodeInput, showAccessCode, setShowAccessCode, showPinInput,
-    setShowPinInput, authMode, setAuthMode, authError, authLoading, recoveryLoading,
-    recoveryInfo, recoveryCodeInput, setRecoveryCodeInput, forgotPinInfo,
-    handlePrivateAccessLogin, handleLogin, handleForgotPin, handleRecoveryRequest,
-    handleRecoveryCodeVerification, setIsRegisterModalOpen, setAuthError, isRegisterModalOpen, handleRegisterShop, regName, setRegName, regCategory, setRegCategory, regCity, setRegCity, regCityOther, setRegCityOther, regPhone, setRegPhone, showRegPin, regPin, setRegPin, setShowRegPin, regEmail, setRegEmail, regLoading
+    setShowPinInput, authMode, setAuthMode, authError, authLoading,
+    handlePrivateAccessLogin, handleLogin,
+    setIsRegisterModalOpen, setAuthError, isRegisterModalOpen, handleRegisterShop, regName, setRegName, regCategory, setRegCategory, regCity, setRegCity, regCityOther, setRegCityOther, regPhone, setRegPhone, showRegPin, regPin, setRegPin, setShowRegPin, regEmail, setRegEmail, regLoading
   } = state;
 
   // 0. SESSION LOADING — prevent flash of login form while checking cookie / access token
@@ -77,107 +76,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
             </div>
           )}
 
-          {recoveryInfo && (
-            <div className="relative mb-4 p-3 rounded-xl bg-[#f8eed7] border-[2px] border-[#211712] text-[#211712] text-xs space-y-2">
-              <div className="font-bold flex items-center gap-1.5">
-                <Check className="w-4 h-4 text-[#155c3d]" />
-                <span>{recoveryInfo.message}</span>
-              </div>
-              {recoveryInfo.url && (
-                <a
-                  href={recoveryInfo.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-[#1b3a63] underline"
-                >
-                  <span>Ouvrir WhatsApp (lien de secours)</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
-              {recoveryInfo.challengeId && (
-                <div className="space-y-2 pt-1">
-                  <label className="block text-[10px] font-bold text-[#4a3a30]" htmlFor="recovery-code">
-                    Code reçu sur WhatsApp
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      id="recovery-code"
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={6}
-                      value={recoveryCodeInput}
-                      onChange={(event) => setRecoveryCodeInput(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="000000"
-                      className="min-w-0 flex-1 rounded-lg border-[2px] border-[#211712] bg-white px-3 py-2 text-center text-sm font-black tracking-[0.25em] text-[#211712]"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleRecoveryCodeVerification}
-                      disabled={recoveryLoading || recoveryCodeInput.length !== 6}
-                      className="rounded-lg border-[2px] border-[#211712] bg-[#155c3d] px-3 py-2 text-[10px] font-black text-white shadow-[2px_2px_0_rgba(33,23,18,0.94)] disabled:opacity-50"
-                    >
-                      Vérifier
-                    </button>
-                  </div>
-                </div>
-              )}
-              <p className="text-[10px] text-[#4a3a30]">Statut : {recoveryInfo.status}</p>
-            </div>
-          )}
-
-          {forgotPinInfo && (
-            <div className="relative mb-4 p-3 rounded-xl bg-[#edf7f2] border-[2px] border-[#211712] text-[#155c3d] text-xs space-y-2">
-              <div className="font-bold flex items-center gap-1.5">
-                <Check className="w-4 h-4 text-[#155c3d]" />
-                <span>{forgotPinInfo.message}</span>
-              </div>
-              <a
-                href={forgotPinInfo.whatsappUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-[#155c3d] underline"
-              >
-                <span>Envoyer le rappel sur WhatsApp</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-          )}
-
-
-          {false ? (
-            <form onSubmit={handlePrivateAccessLogin} className="relative space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-[#4a3a30] mb-1">
-                  Lien privé ou code d’accès
-                </label>
-                <div className="relative">
-                  <Key className="w-4 h-4 text-[#4a3a30] absolute left-3 top-3.5" />
-                  <input
-                    type={showAccessCode ? 'text' : 'password'}
-                    required
-                    placeholder="Collez votre lien privé ou le code unique reçu"
-                    value={accessCodeInput}
-                    onChange={(e) => setAccessCodeInput(e.target.value)}
-                    className="w-full text-xs py-3 pl-10 pr-12 rounded-xl border-[2px] border-[#211712] bg-[#fff] font-mono text-[#211712] focus:outline-none focus:border-[#1b3a63]"
-                  />
-                  <button type="button" onClick={() => setShowAccessCode((visible) => !visible)} aria-label={showAccessCode ? 'Masquer le lien privé' : 'Afficher le lien privé'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-[#4a3a30] hover:bg-[#f7f1e6]">
-                    {showAccessCode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={authLoading}
-                className="w-full py-3.5 px-4 rounded-xl bg-[#1b3a63] hover:bg-[#122744] text-white font-extrabold text-sm shadow-[4px_4px_0_rgba(33,23,18,0.96)] border-[2px] border-[#211712] transition-colors flex items-center justify-center gap-2"
-              >
-                <span>{authLoading ? 'Vérification...' : 'Accéder via mon lien privé'}</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleLogin} className="relative space-y-4">
+          <form onSubmit={handleLogin} className="relative space-y-4">
               <div>
                 <label className="block text-xs font-bold text-[#4a3a30] mb-1">
                   Numéro WhatsApp de la boutique
@@ -197,7 +96,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
 
               <div>
                 <label className="block text-xs font-bold text-[#4a3a30] mb-1">
-                  Mot de passe
+                  Code PIN (6 chiffres)
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-[#4a3a30] absolute left-3 top-3.5" />
@@ -206,8 +105,9 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                     required
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    minLength={4}
-                    placeholder="••••"
+                    minLength={6}
+                    maxLength={6}
+                    placeholder="••••••"
                     value={pinInput}
                     onChange={(e) => setPinInput(e.target.value)}
                     className="w-full text-xs py-3 pl-10 pr-12 rounded-xl border-[2px] border-[#211712] bg-[#fff] text-[#211712] focus:outline-none focus:border-[#1b3a63]"
@@ -227,64 +127,6 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                 <ChevronRight className="w-4 h-4" />
               </button>
             </form>
-          )}
-
-          {false && <div className="relative mt-4 pt-3 border-t-[2px] border-[#211712]">
-            <div className="space-y-2.5">
-              <span className="block font-bold text-[#211712] text-[11px]">J’ai perdu mon accès ?</span>
-              <p className="text-[10px] text-[#4a3a30] leading-relaxed">
-                En cas de perte, contactez l’administrateur avec le numéro de votre boutique pour obtenir un nouveau lien sécurisé.
-              </p>
-
-              <div>
-                <label className="block text-[10px] font-bold text-[#4a3a30] mb-1">
-                  Numéro WhatsApp de votre boutique
-                </label>
-                <input
-                  type="tel"
-                  value={phoneInput}
-                  onChange={(e) => setPhoneInput(e.target.value)}
-                  placeholder="Ex. +2250708091011"
-                  className="w-full text-[11px] py-2.5 px-3 rounded-xl border-[2px] border-[#211712] bg-[#fff] text-[#211712] focus:outline-none focus:border-[#1b3a63]"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setAuthError('La récupération automatique est désactivée. Contactez l’administrateur avec le numéro de votre boutique.')}
-                disabled={false}
-                className="w-full inline-flex items-center justify-center rounded-lg border-[2px] border-[#211712] bg-[#f7e7c7] px-3 py-2 text-[11px] font-extrabold text-[#211712] hover:bg-[#f0d6a5] disabled:opacity-60 transition-colors shadow-[3px_3px_0_rgba(33,23,18,0.94)]"
-              >
-                Contacter l’administrateur
-              </button>
-            </div>
-          </div>}
-
-          {false && (<>
-          <div className="relative mt-5 rounded-2xl border-[2px] border-[#211712] bg-[#fffaf2] p-3 shadow-[3px_3px_0_rgba(33,23,18,0.94)]">
-            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1b3a63] mb-2">
-              Comment l’utiliser ?
-            </p>
-            <ol className="space-y-1.5 text-[11px] text-[#4a3a30] list-decimal list-inside">
-              <li>Utilisez le lien privé reçu lors de la création de votre boutique.</li>
-              <li>Collez-le dans le champ ci-dessus pour accéder directement à votre espace.</li>
-              <li>Ne partagez jamais ce lien dans un groupe public ou un canal ouvert.</li>
-              <li>En cas de perte, contactez l’administrateur pour générer un nouveau lien sécurisé.</li>
-            </ol>
-          </div>
-
-          <div className="relative mt-5 rounded-2xl border-[2px] border-[#211712] bg-[#edf7f2] p-3 shadow-[3px_3px_0_rgba(33,23,18,0.94)]">
-            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#155c3d] mb-2">
-              Bonnes pratiques
-            </p>
-            <ul className="space-y-1.5 text-[11px] text-[#4a3a30]">
-              <li>• Le lien privé est unique par boutique.</li>
-              <li>• Le numéro WhatsApp ne doit pas servir de clé d’accès principale.</li>
-              <li>• Le lien est la vraie clé d’accès sécurisé de votre espace.</li>
-            </ul>
-          </div>
-          </>)}
-
           <div className="relative mt-5 pt-4 border-t-[2px] border-[#211712] text-center">
             <p className="text-xs text-[#4a3a30] max-w-sm mx-auto mb-3">
               Vous n’avez pas encore de boutique ? Créez-la ici. Pour vous reconnecter ensuite, utilisez le numéro WhatsApp et le code PIN choisis à la création.

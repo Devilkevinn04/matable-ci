@@ -21,8 +21,6 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
     regName, setRegName, regCategory, setRegCategory, regCity, setRegCity,
     regCityOther, setRegCityOther, regPhone, setRegPhone, regPin, setRegPin,
     showRegPin, setShowRegPin, regEmail, setRegEmail, regLoading,
-    regKycConsent, setRegKycConsent,
-    merchantKycRequired, merchantKycAvailable, merchantKycConfigLoaded,
     handleRegisterShop, setIsRegisterModalOpen,
   } = state;
 
@@ -88,22 +86,9 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
           </label>
         </div>
 
-        {!merchantKycConfigLoaded ? (
-          <p role="status" className="rounded-[14px] bg-[#edf3ec] px-4 py-3 text-xs leading-5 text-[#426458]">Chargement des options de création…</p>
-        ) : merchantKycRequired && merchantKycAvailable ? (
-          <label className="flex items-start gap-3 rounded-[14px] border border-[#deded5] bg-[#f7f8f2] p-3 text-xs leading-5 text-[#426458]">
-            <input type="checkbox" checked={regKycConsent} onChange={(event) => setRegKycConsent(event.target.checked)} required className="mt-1 h-4 w-4 shrink-0 accent-[#176b55]" />
-            <span>
-              J’accepte la vérification de mon identité par Didit. MaTable.ci ne stocke pas la photo de ma pièce; Didit la traite pour rendre une décision. J’ai lu la <a href="https://didit.me/terms/verification-privacy-notice" target="_blank" rel="noreferrer" className="font-bold text-[#0f4d3d] underline">notice de confidentialité Didit</a> et ses <a href="https://didit.me/terms/identity-verification" target="_blank" rel="noreferrer" className="font-bold text-[#0f4d3d] underline">conditions de vérification</a>.
-            </span>
-          </label>
-        ) : merchantKycRequired ? (
-          <p role="alert" className="rounded-[14px] bg-[#fdf1ee] px-4 py-3 text-xs leading-5 text-[#b93712]">La vérification d’identité est momentanément indisponible. Réessayez plus tard.</p>
-        ) : (
-          <p className="rounded-[14px] bg-[#edf3ec] px-4 py-3 text-xs leading-5 text-[#426458]">Votre boutique et votre vitrine seront prêtes après la création.</p>
-        )}
-        <button type="submit" disabled={regLoading || !merchantKycConfigLoaded || (merchantKycRequired && !merchantKycAvailable)} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
-          {regLoading ? 'Création en cours...' : !merchantKycConfigLoaded ? 'Chargement…' : merchantKycRequired ? (merchantKycAvailable ? 'Créer et vérifier mon identité' : 'Vérification indisponible') : 'Créer ma boutique'} <ArrowRight className="h-4 w-4" />
+        <p className="rounded-[14px] bg-[#edf3ec] px-4 py-3 text-xs leading-5 text-[#426458]">Votre boutique et votre vitrine seront prêtes après la création.</p>
+        <button type="submit" disabled={regLoading} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
+          {regLoading ? 'Création en cours...' : 'Créer ma boutique'} <ArrowRight className="h-4 w-4" />
         </button>
       </form>
     </AuthExperienceLayout>

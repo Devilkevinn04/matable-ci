@@ -24,10 +24,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [authMode, setAuthMode] = useState<'private' | 'quick'>('private');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
-  const [recoveryLoading, setRecoveryLoading] = useState(false);
-  const [recoveryInfo, setRecoveryInfo] = useState<{ message: string; status: string; url?: string; challengeId?: string } | null>(null);
-  const [recoveryCodeInput, setRecoveryCodeInput] = useState('');
-  const [forgotPinInfo, setForgotPinInfo] = useState<{ message: string; whatsappUrl: string } | null>(null);
 
   // Quick Register Modal state
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
@@ -37,10 +33,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [regCity, setRegCity] = useState('Abidjan');
   const [regCityOther, setRegCityOther] = useState('');
   const [regEmail, setRegEmail] = useState('');
-  const [regKycConsent, setRegKycConsent] = useState(false);
-  const [merchantKycRequired, setMerchantKycRequired] = useState(false);
-  const [merchantKycAvailable, setMerchantKycAvailable] = useState(false);
-  const [merchantKycConfigLoaded, setMerchantKycConfigLoaded] = useState(false);
   const [regCategory, setRegCategory] = useState<ShopCategory>('fashion');
   const [regLoading, setRegLoading] = useState(false);
   const [registrationLinks, setRegistrationLinks] = useState<{
@@ -53,29 +45,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   useEffect(() => {
     if (openRegistration && !currentShop) setIsRegisterModalOpen(true);
   }, [openRegistration, currentShop]);
-
-  useEffect(() => {
-    let mounted = true;
-    fetch('/api/merchant-verification/config')
-      .then(async (response) => {
-        if (!response.ok) throw new Error('KYC configuration unavailable');
-        return response.json();
-      })
-      .then((config) => {
-        if (!mounted) return;
-        setMerchantKycRequired(Boolean(config.required));
-        setMerchantKycAvailable(Boolean(config.available));
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setMerchantKycRequired(true);
-        setMerchantKycAvailable(false);
-      })
-      .finally(() => {
-        if (mounted) setMerchantKycConfigLoaded(true);
-      });
-    return () => { mounted = false; };
-  }, []);
 
   // Active view tab
   const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'settings'>('catalog');
@@ -315,7 +284,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const handlePrivateAccessLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
-    setForgotPinInfo(null);
     if (!accessCodeInput.trim()) {
       setAuthError('Veuillez renseigner votre code d’accès privé.');
       return;
@@ -351,7 +319,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
-    setForgotPinInfo(null);
 
     if (phoneInput.includes('@')) {
       setAuthError('Utilisez le numéro WhatsApp saisi lors de la création de la boutique, pas l’adresse email.');
@@ -389,20 +356,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   // Register New Shop
   const handleRegisterShop = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!merchantKycConfigLoaded) {
-      toast.error('Chargement de la configuration d’inscription. Réessayez dans un instant.');
-      return;
-    }
     if (!regName.trim() || !regPhone.trim() || !/^\d{6}$/.test(regPin.trim())) {
       toast.error('Renseignez le nom, le WhatsApp et un PIN de 6 chiffres.');
-      return;
-    }
-    if (merchantKycRequired && !merchantKycAvailable) {
-      toast.error('La vérification d’identité est momentanément indisponible. Réessayez plus tard.');
-      return;
-    }
-    if (merchantKycRequired && !regKycConsent) {
-      toast.error('Votre accord est requis pour lancer la vérification d’identité.');
       return;
     }
     setRegLoading(true);
@@ -418,28 +373,13 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
           city: regCity === 'Autre ville / commune' ? regCityOther.trim() : regCity.trim(),
           category: regCategory,
           email: regEmail.trim() || undefined,
-          identity_verification_consent: regKycConsent,
           welcome_message: CATEGORY_DEFAULTS[regCategory].welcomeMessage,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        if (data.account_created) {
-          setIsRegisterModalOpen(false);
-          setAuthMode('private');
-          setPhoneInput(regPhone.trim());
-          setAuthError(data.error || 'Votre boutique est créée. Connectez-vous pour reprendre la vérification.');
-          return;
-        }
         throw new Error(data.error || 'Erreur lors de la création de la boutique');
-      }
-
-      if (data.verification_required && data.verification_url) {
-        localStorage.removeItem('matable_registration_links');
-        setRegistrationLinks(null);
-        window.location.assign(data.verification_url);
-        return;
       }
 
       setCurrentShop(data.shop);
@@ -508,97 +448,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       toast.success(kind === 'public' ? 'Lien vitrine copié.' : 'Lien privé copié.');
     } catch {
       toast.error('La copie a échoué. Vérifiez les permissions du navigateur.');
-    }
-  };
-
-  // Forgot PIN handler
-  const handleForgotPin = async () => {
-    if (!phoneInput.trim()) {
-      setAuthError('Veuillez d’abord renseigner votre numéro de téléphone.');
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/auth/merchant-forgot-pin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phoneInput.trim() }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Numéro introuvable');
-      }
-
-      setForgotPinInfo(data);
-    } catch (err: unknown) {
-      const error = err as Error;
-      setAuthError(error.message || 'Erreur lors de la récupération du code PIN');
-    }
-  };
-
-  const handleRecoveryRequest = async () => {
-    if (!phoneInput.trim()) {
-      setAuthError('Veuillez renseigner votre numéro de téléphone pour récupérer l’accès.');
-      return;
-    }
-
-    setRecoveryLoading(true);
-    setAuthError(null);
-    setRecoveryInfo(null);
-
-    try {
-      const res = await fetch('/api/auth/merchant-recovery-request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phoneInput.trim() }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Impossible de lancer la récupération.');
-      }
-
-      setRecoveryInfo({
-        message: data.message || (data.whatsapp_sent ? 'Un lien de récupération a été envoyé sur WhatsApp.' : 'La demande de récupération a été enregistrée.'),
-        status: data.whatsapp_status || 'ok',
-        url: data.fallback_url,
-        challengeId: data.challenge_id,
-      });
-      setRecoveryCodeInput('');
-      setAccessCodeInput('');
-    } catch (err: unknown) {
-      const error = err as Error;
-      setAuthError(error.message || 'Erreur lors de la récupération de l’accès.');
-    } finally {
-      setRecoveryLoading(false);
-    }
-  };
-
-  const handleRecoveryCodeVerification = async () => {
-    if (!recoveryInfo?.challengeId || !/^\d{6}$/.test(recoveryCodeInput.trim())) {
-      setAuthError('Saisissez le code de récupération à 6 chiffres reçu sur WhatsApp.');
-      return;
-    }
-
-    setRecoveryLoading(true);
-    setAuthError(null);
-    try {
-      const res = await fetch('/api/auth/merchant-recovery-verify-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ challenge_id: recoveryInfo.challengeId, code: recoveryCodeInput.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.owner_access_token) {
-        throw new Error(data.error || 'Code de récupération invalide.');
-      }
-      window.location.assign(`/app?access=${encodeURIComponent(data.owner_access_token)}`);
-    } catch (err: unknown) {
-      const error = err as Error;
-      setAuthError(error.message || 'Impossible de vérifier le code de récupération.');
-    } finally {
-      setRecoveryLoading(false);
     }
   };
 
@@ -1083,10 +932,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     authMode,
     authError,
     authLoading,
-    recoveryLoading,
-    recoveryInfo,
-    recoveryCodeInput,
-    forgotPinInfo,
     isRegisterModalOpen,
     regName,
     regPhone,
@@ -1094,10 +939,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     regCity,
     regCityOther,
     regEmail,
-    regKycConsent,
-    merchantKycRequired,
-    merchantKycAvailable,
-    merchantKycConfigLoaded,
     regCategory,
     regLoading,
     registrationLinks,
@@ -1162,10 +1003,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setAuthMode,
     setAuthError,
     setAuthLoading,
-    setRecoveryLoading,
-    setRecoveryInfo,
-    setRecoveryCodeInput,
-    setForgotPinInfo,
     setIsRegisterModalOpen,
     setRegName,
     setRegPhone,
@@ -1173,7 +1010,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setRegCity,
     setRegCityOther,
     setRegEmail,
-    setRegKycConsent,
     setRegCategory,
     setRegLoading,
     setRegistrationLinks,
@@ -1229,9 +1065,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     handlePrivateAccessLogin,
     handleLogin,
     handleRegisterShop,
-    handleForgotPin,
-    handleRecoveryRequest,
-    handleRecoveryCodeVerification,
     handleLogout,
     handleToggleShopStatus,
     handleSaveOpeningHours,

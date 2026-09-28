@@ -2,7 +2,8 @@ import type { ShopCategory } from './utils/categoryDefaults';
 export type { ShopCategory } from './utils/categoryDefaults';
 // Legacy tier identifiers remain accepted for compatibility with older records,
 // while the V2 product experience stays free and not gated by tiers.
-export type SubscriptionTier = 'standard' | 'premium' | 'pro';
+export type SubscriptionTier = 'standard';
+export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'cancelled' | 'expired' | 'suspended';
 
 export interface ThemeAdvancedCSS {
   borderRadius?: 'rounded-none' | 'rounded-xl' | 'rounded-2xl' | 'rounded-3xl';
@@ -61,21 +62,18 @@ export interface Shop {
   welcome_message: string | null;
   is_open: boolean;
   is_active: boolean;
-  merchant_verification_status?: 'not_required' | 'pending' | 'approved' | 'rejected' | 'retry_required';
-  payment_status?: 'pending' | 'awaiting_review' | 'approved' | 'rejected' | 'suspended';
-  payment_deadline_at?: string | null;
-  payment_provider?: 'whatsapp' | 'paystack';
-  payment_reference?: string | null;
-  payment_link?: string | null;
-  payment_message?: string | null;
-  payment_amount?: number;
-  payment_tier?: SubscriptionTier;
-  subscription_expires_at: string; // YYYY-MM-DD
   last_notification_sent_at: string | null;
   created_at: string;
   category: ShopCategory;
   city?: string;
-  subscription_tier: SubscriptionTier;
+  subscription?: {
+    plan: SubscriptionTier;
+    status: SubscriptionStatus;
+    trialStart: string | null;
+    trialEnd: string | null;
+    trialDaysRemaining: number;
+    isActive: boolean;
+  };
   theme_config: ThemeConfig;
   opening_hours?: ShopOpeningHours;
 }
@@ -128,7 +126,7 @@ export interface OrderItem {
   unit_price: number; // in FCFA
   selected_size?: string;
   selected_color?: string;
-  selected_modifiers?: string;
+  selected_modifiers?: string[];
 }
 
 export interface Order {

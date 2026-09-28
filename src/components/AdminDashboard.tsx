@@ -61,7 +61,7 @@ interface AdminHealth {
   database_path: string | null;
   counts: { shops: number; products: number; orders: number };
   latest_analytics_event_at: string | null;
-  integrations: { whatsapp_cloud: string; whatsapp_click_to_chat: string };
+  integrations: { whatsapp_click_to_chat: string };
 }
 
 const ownerNotificationTemplates = [
@@ -654,17 +654,6 @@ export const AdminDashboard: React.FC = () => {
                       >
                         {getCategoryDefaults(shop.category).icon} {getCategoryDefaults(shop.category).label}
                       </span>
-                      {shop.merchant_verification_status && shop.merchant_verification_status !== 'not_required' && (
-                        <span className={`rounded-md px-2 py-0.5 text-[10px] font-extrabold ${
-                          shop.merchant_verification_status === 'approved'
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : shop.merchant_verification_status === 'pending'
-                              ? 'bg-amber-50 text-amber-700'
-                              : 'bg-rose-50 text-rose-700'
-                        }`}>
-                          {shop.merchant_verification_status === 'approved' ? 'Identité vérifiée' : shop.merchant_verification_status === 'pending' ? 'Vérification en cours' : shop.merchant_verification_status === 'rejected' ? 'Vérification refusée' : 'Vérification à reprendre'}
-                        </span>
-                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">

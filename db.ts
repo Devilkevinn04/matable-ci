@@ -32,6 +32,7 @@ const sqliteSchema = `
     payment_status TEXT NOT NULL DEFAULT 'approved', payment_deadline_at TEXT,
     merchant_verification_status TEXT NOT NULL DEFAULT 'not_required',
     selected_subscription_tier TEXT, subscription_expires_at TEXT,
+    subscription_status TEXT NOT NULL DEFAULT 'active', trial_start TEXT, trial_end TEXT,
     last_notification_sent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
     city TEXT, subscription_tier TEXT NOT NULL, theme_config TEXT, opening_hours TEXT,
     owner_access_token_hash TEXT
@@ -56,12 +57,6 @@ const sqliteSchema = `
     id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, event_type TEXT NOT NULL,
     session_id TEXT NOT NULL, path TEXT, created_at TEXT NOT NULL
   );
-  CREATE TABLE IF NOT EXISTS payment_transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, provider TEXT NOT NULL, reference TEXT NOT NULL,
-    shop_id INTEGER NOT NULL, tier TEXT NOT NULL, amount INTEGER NOT NULL DEFAULT 0,
-    transaction_date TEXT NOT NULL, processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(provider, reference)
-  );
   CREATE TABLE IF NOT EXISTS merchant_sessions (
     token TEXT PRIMARY KEY, shop_id INTEGER NOT NULL, expires_at INTEGER NOT NULL,
     fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -80,19 +75,10 @@ const sqliteSchema = `
     fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
   CREATE TABLE IF NOT EXISTS id_allocators (name TEXT PRIMARY KEY, last_id INTEGER NOT NULL);
-  CREATE TABLE IF NOT EXISTS merchant_verifications (
-    shop_id INTEGER PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
-    provider TEXT NOT NULL, provider_session_id TEXT NOT NULL UNIQUE, callback_token_hash TEXT, status TEXT NOT NULL,
-    submitted_at TEXT NOT NULL, decided_at TEXT, updated_at TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS merchant_verification_webhook_events (
-    event_id TEXT PRIMARY KEY, received_at TEXT NOT NULL
-  );
   CREATE INDEX IF NOT EXISTS idx_products_shop_id ON products(shop_id);
   CREATE INDEX IF NOT EXISTS idx_products_shop_available ON products(shop_id, is_available);
   CREATE INDEX IF NOT EXISTS idx_orders_shop_created_at ON orders(shop_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_analytics_events_shop_created_at ON analytics_events(shop_id, created_at DESC);
-  CREATE INDEX IF NOT EXISTS idx_payment_transactions_shop_id ON payment_transactions(shop_id);
   CREATE INDEX IF NOT EXISTS idx_merchant_sessions_shop_id ON merchant_sessions(shop_id);
   CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
 `;
@@ -114,6 +100,9 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'payment_deadline_at', 'TEXT');
   addColumn('shops', 'merchant_verification_status', "TEXT NOT NULL DEFAULT 'not_required'");
   addColumn('shops', 'selected_subscription_tier', 'TEXT');
+  addColumn('shops', 'subscription_status', "TEXT NOT NULL DEFAULT 'active'");
+  addColumn('shops', 'trial_start', 'TEXT');
+  addColumn('shops', 'trial_end', 'TEXT');
   addColumn('orders', 'status', "TEXT DEFAULT 'pending'");
   addColumn('orders', 'customer_user_id', 'INTEGER');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)');
@@ -133,6 +122,7 @@ const postgresMigrations = [
     payment_status TEXT NOT NULL DEFAULT 'approved', payment_deadline_at TEXT,
     merchant_verification_status TEXT NOT NULL DEFAULT 'not_required',
     selected_subscription_tier TEXT, subscription_expires_at TEXT,
+    subscription_status TEXT NOT NULL DEFAULT 'active', trial_start TEXT, trial_end TEXT,
     last_notification_sent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
     city TEXT, subscription_tier TEXT NOT NULL, theme_config JSONB, opening_hours JSONB,
     owner_access_token_hash TEXT
@@ -158,12 +148,6 @@ const postgresMigrations = [
     id BIGSERIAL PRIMARY KEY, shop_id INTEGER, event_type TEXT NOT NULL,
     session_id TEXT NOT NULL, path TEXT, created_at TEXT NOT NULL
   )`,
-  `CREATE TABLE IF NOT EXISTS payment_transactions (
-    id BIGSERIAL PRIMARY KEY, provider TEXT NOT NULL, reference TEXT NOT NULL,
-    shop_id INTEGER NOT NULL, tier TEXT NOT NULL, amount INTEGER NOT NULL DEFAULT 0,
-    transaction_date TEXT NOT NULL, processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(provider, reference)
-  )`,
   `CREATE TABLE IF NOT EXISTS merchant_sessions (
     token TEXT PRIMARY KEY, shop_id INTEGER NOT NULL, expires_at BIGINT NOT NULL,
     fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -183,13 +167,15 @@ const postgresMigrations = [
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT \'approved\'',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS payment_deadline_at TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS selected_subscription_tier TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT \'active\'',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS trial_start TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS trial_end TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS opening_hours JSONB',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_access_token_hash TEXT',
   'CREATE INDEX IF NOT EXISTS idx_products_shop_id ON products(shop_id)',
   'CREATE INDEX IF NOT EXISTS idx_products_shop_available ON products(shop_id, is_available)',
   'CREATE INDEX IF NOT EXISTS idx_orders_shop_created_at ON orders(shop_id, created_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_analytics_events_shop_created_at ON analytics_events(shop_id, created_at DESC)',
-  'CREATE INDEX IF NOT EXISTS idx_payment_transactions_shop_id ON payment_transactions(shop_id)',
   'CREATE INDEX IF NOT EXISTS idx_merchant_sessions_shop_id ON merchant_sessions(shop_id)',
   `CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL,
@@ -204,14 +190,6 @@ const postgresMigrations = [
   "ALTER TABLE shops ADD COLUMN IF NOT EXISTS merchant_verification_status TEXT NOT NULL DEFAULT 'not_required'",
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS attributes JSONB',
   'CREATE TABLE IF NOT EXISTS id_allocators (name TEXT PRIMARY KEY, last_id BIGINT NOT NULL)',
-  `CREATE TABLE IF NOT EXISTS merchant_verifications (
-    shop_id INTEGER PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
-    provider TEXT NOT NULL, provider_session_id TEXT NOT NULL UNIQUE, callback_token_hash TEXT, status TEXT NOT NULL,
-    submitted_at TEXT NOT NULL, decided_at TEXT, updated_at TEXT NOT NULL
-  )`,
-  'ALTER TABLE merchant_verifications ALTER COLUMN callback_token_hash DROP NOT NULL',
-  'CREATE TABLE IF NOT EXISTS merchant_verification_webhook_events (event_id TEXT PRIMARY KEY, received_at TEXT NOT NULL)',
-  'CREATE INDEX IF NOT EXISTS idx_merchant_verifications_status ON merchant_verifications(status, updated_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)',
   'CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)',
 ];

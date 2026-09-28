@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Store,
@@ -69,8 +69,8 @@ import { ProductModal } from './ProductModal';
 export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStorefront, onBackToDirectory, openRegistration = false }) => {
 
   const merchantState = useMerchantDashboard(onOpenStorefront, openRegistration);
-  const [verificationStarting, setVerificationStarting] = useState(false);
-  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [quickStartStep, setQuickStartStep] = useState(0);
+  const [showQuickStart, setShowQuickStart] = useState(false);
   const {
     addDeliveryZone,
     updateDeliveryZone,
@@ -88,10 +88,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     authMode,
     authError,
     authLoading,
-    recoveryLoading,
-    recoveryInfo,
-    recoveryCodeInput,
-    forgotPinInfo,
     isRegisterModalOpen,
     regName,
     regPhone,
@@ -162,10 +158,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     setAuthMode,
     setAuthError,
     setAuthLoading,
-    setRecoveryLoading,
-    setRecoveryInfo,
-    setRecoveryCodeInput,
-    setForgotPinInfo,
     setIsRegisterModalOpen,
     setRegName,
     setRegPhone,
@@ -226,9 +218,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     handlePrivateAccessLogin,
     handleLogin,
     handleRegisterShop,
-    handleForgotPin,
-    handleRecoveryRequest,
-    handleRecoveryCodeVerification,
     handleLogout,
     handleToggleShopStatus,
     handleSaveOpeningHours,
@@ -250,56 +239,30 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     copyOwnerLink
   } = merchantState;
 
-  if (!merchantState.currentShop) return <AuthScreens state={merchantState} onBackToDirectory={onBackToDirectory} />;
+  useEffect(() => {
+    if (!currentShop) {
+      setShowQuickStart(false);
+      return;
+    }
+    try {
+      setShowQuickStart(localStorage.getItem(`matable_quick_start_seen_${currentShop.id}`) !== 'true');
+    } catch {
+      setShowQuickStart(false);
+    }
+  }, [currentShop?.id]);
 
-  const verificationStatus = merchantState.currentShop.merchant_verification_status || 'not_required';
-  if (!['approved', 'not_required'].includes(verificationStatus)) {
-    const canRetry = verificationStatus === 'rejected' || verificationStatus === 'retry_required';
-    const startVerification = async () => {
-      if (!merchantState.currentShop || verificationStarting) return;
-      setVerificationStarting(true);
-      setVerificationError(null);
+  const closeQuickStart = () => {
+    if (currentShop) {
       try {
-        const response = await fetch(`/api/shops/${merchantState.currentShop.id}/merchant-verification/start`, { method: 'POST' });
-        const result = await response.json();
-        if (!response.ok || !result.verification_url) throw new Error(result.error || 'Impossible de lancer la vérification.');
-        window.location.assign(result.verification_url);
-      } catch (error) {
-        setVerificationError((error as Error).message);
-        setVerificationStarting(false);
+        localStorage.setItem(`matable_quick_start_seen_${currentShop.id}`, 'true');
+      } catch {
+        // The guide remains dismissible when local storage is unavailable.
       }
-    };
+    }
+    setShowQuickStart(false);
+  };
 
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f6f3ed] px-4 py-10">
-        <section className="w-full max-w-lg rounded-2xl border border-[#deded5] bg-white p-6 shadow-sm sm:p-8">
-          <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-[#edf3ec] text-[#0f4d3d]">
-            <Lock className="h-6 w-6" aria-hidden="true" />
-          </div>
-          <p className="text-xs font-bold uppercase tracking-wide text-[#e6572b]">Espace marchand</p>
-          <h1 className="mt-2 text-2xl font-extrabold text-[#25231f]">{merchantState.currentShop.name}</h1>
-          <h2 className="mt-5 text-lg font-bold text-[#0f4d3d]">
-            {verificationStatus === 'pending' ? 'Vérification en cours' : verificationStatus === 'rejected' ? 'Vérification à reprendre' : 'Session de vérification expirée'}
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-[#68756c]">
-            {verificationStatus === 'pending'
-              ? 'Votre identité est en cours de vérification. Les outils de gestion seront ouverts après approbation.'
-              : 'La vérification n’a pas abouti ou la session a expiré. Vous pouvez lancer une nouvelle vérification sécurisée.'}
-          </p>
-          {verificationError && <p role="alert" className="mt-4 rounded-lg bg-[#fdf1ee] px-3 py-2 text-sm text-[#b93712]">{verificationError}</p>}
-          {canRetry && (
-            <button type="button" onClick={startVerification} disabled={verificationStarting} className="mt-6 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55] disabled:opacity-60">
-              {verificationStarting ? 'Ouverture sécurisée…' : 'Recommencer la vérification'}
-              <ExternalLink className="h-4 w-4" aria-hidden="true" />
-            </button>
-          )}
-          <button type="button" onClick={merchantState.handleLogout} className="mt-3 min-h-10 w-full rounded-full px-4 py-2 text-sm font-semibold text-[#68756c] hover:bg-[#f6f3ed]">
-            Se déconnecter
-          </button>
-        </section>
-      </main>
-    );
-  }
+  if (!merchantState.currentShop) return <AuthScreens state={merchantState} onBackToDirectory={onBackToDirectory} />;
 
   // 2. AUTHENTICATED -> MERCHANT DASHBOARD
   const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
@@ -345,7 +308,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     // Payment preference filter
     if (orderPaymentFilter !== 'all') {
       if (orderPaymentFilter === 'mobile_money') {
-        if (!['mobile_money', 'orange_money', 'mtn_money', 'moov_money'].includes(o.payment_method_preference)) {
+        if (o.payment_method_preference !== 'mobile_money') {
           return false;
         }
       } else if (orderPaymentFilter === 'cash' || orderPaymentFilter === 'to_confirm') {
@@ -359,6 +322,43 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   return (
     <div className="merchant-dashboard min-h-screen pb-20">
+      {showQuickStart && (
+        <div className="fixed inset-0 z-50 flex h-screen max-h-screen items-start justify-center overflow-y-auto bg-[#211712]/55 px-4 py-6 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-labelledby="quick-start-title">
+          <section className="w-full max-w-lg overflow-hidden rounded-2xl border-[3px] border-[#211712] bg-[#fffaf2] shadow-[8px_8px_0_rgba(33,23,18,0.9)]">
+            <div className="flex items-center justify-between gap-3 bg-[#1d6b57] px-5 py-4 text-white">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#f7e7c7]">Premiers pas</p>
+                <h2 id="quick-start-title" className="mt-1 text-xl font-black">Bienvenue sur MaTable 👋</h2>
+              </div>
+              <button type="button" onClick={closeQuickStart} className="rounded-full px-2 py-1 text-sm font-bold text-white/80 hover:bg-white/10">Passer</button>
+            </div>
+            <div className="p-5 sm:p-6">
+              {[
+                { title: 'Votre boutique', text: 'Vérifiez son nom, sa description, son logo et ses horaires.', icon: <Store className="h-6 w-6" /> },
+                { title: 'Vos produits', text: 'Ajoutez vos articles avec un prix, une photo et un stock.', icon: <Package className="h-6 w-6" /> },
+                { title: 'Recevez des commandes', text: 'Vos clients commandent depuis votre vitrine et vous les contactez sur WhatsApp.', icon: <ShoppingBag className="h-6 w-6" /> },
+                { title: 'Partagez votre lien', text: 'Diffusez votre vitrine sur WhatsApp, Instagram ou Facebook.', icon: <Send className="h-6 w-6" /> },
+              ].map((step, index) => index === quickStartStep && (
+                <div key={step.title} className="animate-in fade-in duration-200">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#edf7f2] text-[#155c3d]">{step.icon}</div>
+                  <p className="mt-5 text-xs font-black uppercase tracking-[0.14em] text-[#e6572b]">Étape {index + 1} sur 4</p>
+                  <h3 className="mt-2 text-2xl font-black text-[#211712]">{step.title}</h3>
+                  <p className="mt-2 max-w-md text-sm leading-6 text-[#68756c]">{step.text}</p>
+                </div>
+              ))}
+              <div className="mt-6 flex gap-1.5" aria-label="Progression du guide">
+                {[0, 1, 2, 3].map((step) => <span key={step} className={`h-1.5 flex-1 rounded-full ${step <= quickStartStep ? 'bg-[#155c3d]' : 'bg-[#ded8ce]'}`} />)}
+              </div>
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <button type="button" onClick={() => setQuickStartStep((step) => Math.max(0, step - 1))} disabled={quickStartStep === 0} className="rounded-full px-4 py-2 text-sm font-bold text-[#68756c] disabled:invisible">Retour</button>
+                <button type="button" onClick={() => quickStartStep === 3 ? closeQuickStart() : setQuickStartStep((step) => step + 1)} className="rounded-full bg-[#0f4d3d] px-5 py-3 text-sm font-black text-white hover:bg-[#176b55]">
+                  {quickStartStep === 3 ? 'Commencer' : 'Suivant'} <ChevronRight className="ml-1 inline h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
       {/* Top Shop Control Bar */}
       <div className="bg-[#fffaf2] border-b-[3px] border-[#211712] sticky top-0 z-30 shadow-[0_8px_0_rgba(33,23,18,0.08)]">
         <div className="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
@@ -486,6 +486,37 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           </div>
         </div>
       )}
+
+      <div className="max-w-5xl mx-auto px-4 pt-5">
+        <section className="rounded-2xl border-2 border-[#211712] bg-[#fffaf2] p-4 shadow-[4px_4px_0_rgba(33,23,18,0.18)]" aria-labelledby="setup-checklist-title">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#e6572b]">Mise en route</p>
+              <h2 id="setup-checklist-title" className="mt-1 text-base font-black text-[#211712]">Votre boutique est presque prête</h2>
+            </div>
+            <span className="self-start rounded-full bg-[#edf7f2] px-3 py-1 text-xs font-black text-[#155c3d] sm:self-auto">
+              {[Boolean(currentShop.name), Boolean(currentShop.theme_config?.logo_url), products.length > 0, products.length >= 3, currentShop.is_open, Boolean(registrationLinks)].filter(Boolean).length}/6 étapes
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              { label: 'Ajouter le nom de ma boutique', done: Boolean(currentShop.name), action: () => setActiveTab('settings') },
+              { label: 'Ajouter une photo ou un logo', done: Boolean(currentShop.theme_config?.logo_url), action: () => setActiveTab('settings') },
+              { label: 'Ajouter mon premier produit', done: products.length > 0, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
+              { label: 'Ajouter au moins 3 produits', done: products.length >= 3, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
+              { label: 'Publier ma boutique', done: currentShop.is_open, action: handleToggleShopStatus },
+              { label: 'Partager ma boutique', done: Boolean(registrationLinks), action: () => copyOwnerLink('public') },
+            ].map((step) => (
+              <button key={step.label} type="button" onClick={step.action} className="flex items-center gap-2 rounded-xl border border-[#ded8ce] bg-white px-3 py-2.5 text-left text-xs font-bold text-[#34463d] transition hover:border-[#176b55] hover:bg-[#edf7f2]">
+                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${step.done ? 'bg-[#155c3d] text-white' : 'border-2 border-[#b7c1b9] text-transparent'}`}>
+                  <Check className="h-3 w-3" aria-hidden="true" />
+                </span>
+                <span>{step.label}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
 
       {/* Main Container */}
       <div className="max-w-5xl mx-auto px-4 py-6">

@@ -4,16 +4,9 @@ import {
   isBlockedStaticAsset,
   buildSessionFingerprint,
   isRequestFingerprintMatch,
-  checkAndRegisterRecoveryAttempt,
-  resetRecoveryAttemptsForTests,
   rotateMerchantAccessTokenForShop,
   getSubscriptionPlanConfig,
-  buildPaymentInstructionMessage,
-  getPaystackConfig,
-  buildPaystackCheckoutPayload,
-  isPaymentReferenceProcessed,
-  markPaymentReferenceProcessed,
-  activateShopSubscription,
+  getSubscriptionState,
   normalizeSubscriptionTier,
   escapeHtml,
   sanitizeTextField,
@@ -27,6 +20,23 @@ import {
   summarizeOrderMetrics,
 } from '../server.ts';
 
+test('calculates the merchant trial state on the server', () => {
+  const now = new Date('2026-09-28T12:00:00.000Z');
+  const trialEnd = '2026-10-28T12:00:00.000Z';
+  const state = getSubscriptionState({
+    subscription_status: 'trialing',
+    trial_start: '2026-09-28T12:00:00.000Z',
+    trial_end: trialEnd,
+  }, now);
+
+  assert.equal(state.status, 'trialing');
+  assert.equal(state.trialDaysRemaining, 30);
+  assert.equal(state.isActive, true);
+  const expiredState = getSubscriptionState({ ...state, subscription_status: 'trialing', trial_end: trialEnd }, new Date('2026-10-29T12:00:00.000Z'));
+  assert.equal(expiredState.trialDaysRemaining, 0);
+  assert.equal(expiredState.status, 'expired');
+  assert.equal(expiredState.isActive, false);
+});
 test('counts only actionable orders in revenue and status totals', () => {
   const orders = [
     { id: 1, shop_id: 8, total_amount: 15000, created_at: '2026-09-19T08:00:00.000Z', status: 'pending' },
@@ -140,16 +150,7 @@ test('persists merchant session records through the configured database adapter'
   assert.equal(await getMerchantSessionRecord(token), null);
 });
 
-test('limits merchant recovery attempts to two per 24h window', () => {
-  resetRecoveryAttemptsForTests();
-
-  assert.equal(checkAndRegisterRecoveryAttempt(999).allowed, true);
-  assert.equal(checkAndRegisterRecoveryAttempt(999).allowed, true);
-  assert.equal(checkAndRegisterRecoveryAttempt(999).allowed, false);
-  assert.equal(checkAndRegisterRecoveryAttempt(999).remaining, 0);
-});
-
-test('rotates the merchant access token during a valid recovery flow', async () => {
+test('rotates the merchant access token when an admin renews access', async () => {
   const oldToken = 'old-token-123';
   const newToken = await rotateMerchantAccessTokenForShop(1, oldToken);
 
@@ -158,20 +159,7 @@ test('rotates the merchant access token during a valid recovery flow', async () 
   assert.equal(newToken.length > 10, true);
 });
 
-test('keeps the free V1 model and WhatsApp ordering flow active', () => {
-  process.env.PAYSTACK_PUBLIC_KEY = 'pk_test_demo';
-  process.env.PAYSTACK_SECRET_KEY = 'sk_test_demo';
-  process.env.PAYSTACK_WEBHOOK_SECRET = 'whsec_demo';
-
-  const message = buildPaymentInstructionMessage('Boutique Demo', 'premium', 0, 'https://wa.me/2250700000000?text=Je%20commande', 'whatsapp');
-
-  assert.equal(message.includes('gratuit'), true);
-  assert.equal(message.includes('Paystack'), false);
-  assert.equal(message.includes('WhatsApp'), true);
-  assert.equal(message.includes('Aucun paiement requis'), true);
-});
-
-test('keeps the V1 experience free and compatible with legacy plan identifiers', () => {
+test('keeps the V1 experience on the free standard plan', () => {
   assert.deepEqual(getSubscriptionPlanConfig('standard'), {
     tier: 'standard',
     amount: 0,
@@ -179,74 +167,11 @@ test('keeps the V1 experience free and compatible with legacy plan identifiers',
     description: 'Vitrine + catalogue + commandes',
   });
 
-  assert.deepEqual(getSubscriptionPlanConfig('premium'), {
-    tier: 'premium',
-    amount: 0,
-    label: 'Gratuit',
-    description: 'Vitrine + catalogue + commandes',
-  });
-
-  assert.deepEqual(getSubscriptionPlanConfig('pro'), {
-    tier: 'pro',
-    amount: 0,
-    label: 'Gratuit',
-    description: 'Vitrine + catalogue + commandes',
-  });
 });
 
-test('normalizes legacy tier identifiers to the free V2 standard tier', () => {
-  assert.equal(normalizeSubscriptionTier('premium'), 'standard');
-  assert.equal(normalizeSubscriptionTier('pro'), 'standard');
+test('normalizes the V1 tier to standard', () => {
   assert.equal(normalizeSubscriptionTier('standard'), 'standard');
   assert.equal(normalizeSubscriptionTier(undefined), 'standard');
-  assert.equal(normalizeSubscriptionTier('unknown'), 'standard');
-});
-
-test('builds a clear WhatsApp ordering instruction without any payment wall', () => {
-  const message = buildPaymentInstructionMessage('Boutique Demo', 'premium', 0, 'https://wa.me/2250700000000?text=Je%20commande');
-
-  assert.match(message, /Boutique Demo/);
-  assert.match(message, /gratuit/i);
-  assert.match(message, /WhatsApp/i);
-  assert.match(message, /https:\/\/wa\.me\/2250700000000\?text=Je%20commande/i);
-});
-
-test('treats a processed Paystack reference as the source of truth for activation', async () => {
-  const reference = `MAT-RENEWAL-REF-${Date.now()}`;
-  const shop = {
-    id: 99,
-    name: 'Boutique Test',
-    slug: 'boutique-test',
-    whatsapp_number: '+2250708091011',
-    pin_code_hash: 'hashed-pin',
-    theme_color: '#0f172a',
-    welcome_message: 'Bienvenue',
-    is_open: true,
-    is_active: true,
-    payment_status: 'approved',
-    payment_deadline_at: null,
-    selected_subscription_tier: 'premium',
-    subscription_expires_at: '2026-09-12T00:00:00.000Z',
-    last_notification_sent_at: null,
-    created_at: new Date().toISOString(),
-    category: 'fashion',
-    city: 'Abidjan',
-    subscription_tier: 'premium',
-    theme_config: { primary_color: '#0f172a', secondary_color: '#f8fafc', font_family: 'Plus Jakarta Sans', layout_style: 'grid_portrait' },
-  } as any;
-
-  assert.equal(await isPaymentReferenceProcessed('paystack', reference, shop.id), false);
-  assert.equal(await markPaymentReferenceProcessed('paystack', reference, shop.id, 'premium', 4000), true);
-  assert.equal(await isPaymentReferenceProcessed('paystack', reference, shop.id), true);
-
-  const activated = await activateShopSubscription(shop, 'premium', 'paystack', reference, 4000);
-
-  assert.equal(activated.activated, false);
-  assert.equal(activated.already_processed, true);
-  assert.equal(shop.payment_status, 'approved');
-  assert.equal(shop.is_active, true);
-  assert.equal(shop.subscription_expires_at.length > 0, true);
-  assert.equal(await isPaymentReferenceProcessed('paystack', reference, shop.id), true);
 });
 
 test('escapes HTML in merchant-controlled shop metadata before rendering', () => {
@@ -295,7 +220,6 @@ test('skips demo data seeding in production unless explicitly enabled', () => {
     if (previous.DEMO_MODE === undefined) delete process.env.DEMO_MODE; else process.env.DEMO_MODE = previous.DEMO_MODE;
   }
 });
-
 test('rejects placeholder production app URLs', () => {
   const previous = {
     NODE_ENV: process.env.NODE_ENV,
@@ -324,7 +248,6 @@ test('rejects placeholder production app URLs', () => {
     if (previous.MATABLE_DB_PATH === undefined) delete process.env.MATABLE_DB_PATH; else process.env.MATABLE_DB_PATH = previous.MATABLE_DB_PATH;
   }
 });
-
 test('rejects unsafe production configuration', () => {
   const previous = {
     NODE_ENV: process.env.NODE_ENV,
@@ -361,33 +284,4 @@ test('rejects unsafe production configuration', () => {
       }
     }
   }
-});
-
-test('keeps Paystack config locked while preserving future payload generation', () => {
-  process.env.PAYSTACK_PUBLIC_KEY = 'pk_test_demo';
-  process.env.PAYSTACK_SECRET_KEY = 'sk_test_demo';
-  process.env.PAYSTACK_WEBHOOK_SECRET = 'whsec_demo';
-  process.env.PAYSTACK_CURRENCY = 'NGN';
-
-  const config = getPaystackConfig();
-  const payload = buildPaystackCheckoutPayload({
-    email: 'merchant@example.com',
-    amount: 4000,
-    reference: 'MAT-ORDER-1',
-    shopName: 'Boutique Demo',
-    tier: 'premium',
-    callbackUrl: 'http://localhost:3000/paystack/callback',
-  });
-
-  assert.equal(config.enabled, false);
-  assert.equal(config.publicKey, 'pk_test_demo');
-  assert.equal(payload.amount, 400000);
-  assert.equal(payload.currency, 'NGN');
-  assert.equal(payload.reference, 'MAT-ORDER-1');
-  assert.equal(payload.metadata.shop_name, 'Boutique Demo');
-
-  delete process.env.PAYSTACK_PUBLIC_KEY;
-  delete process.env.PAYSTACK_SECRET_KEY;
-  delete process.env.PAYSTACK_WEBHOOK_SECRET;
-  delete process.env.PAYSTACK_CURRENCY;
 });

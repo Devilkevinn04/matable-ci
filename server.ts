@@ -6,8 +6,6 @@ import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { createServer as createViteServer } from 'vite';
 import { dbAll, dbGet, dbRun, dbTransaction, databaseMode, initializeDatabase } from './db.ts';
-import { createDiditVerificationSession, fetchDiditDecision, getDiditConfiguration, isMerchantKycEnabled, verifyDiditWebhookSignature } from './didit.ts';
-import { sendWhatsAppCloudTemplate, sendWhatsAppCloudText } from './whatsapp.ts';
 import { getCategoryDefaults, isShopCategory, normalizeCustomBannerImage, normalizeProductImage, normalizeWelcomeMessage } from './src/utils/categoryDefaults.ts';
 import type { ShopCategory } from './src/utils/categoryDefaults.ts';
 
@@ -37,15 +35,25 @@ interface ShopOpeningHours {
   manual_override?: boolean;
 }
 
-// Legacy plan identifiers remain accepted for compatibility with older records,
-// while the V2 product experience stays free and not gated by tiers.
-export type SubscriptionTier = 'standard' | 'premium' | 'pro';
+export type SubscriptionTier = 'standard';
+export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'cancelled' | 'expired' | 'suspended';
+
+const TRIAL_DURATION_DAYS = 30;
 
 export interface SubscriptionPlanConfig {
   tier: SubscriptionTier;
   amount: number;
   label: string;
   description: string;
+}
+
+export interface SubscriptionState {
+  plan: SubscriptionTier;
+  status: SubscriptionStatus;
+  trialStart: string | null;
+  trialEnd: string | null;
+  trialDaysRemaining: number;
+  isActive: boolean;
 }
 
 interface ShopRecord {
@@ -58,16 +66,13 @@ interface ShopRecord {
   welcome_message: string | null;
   is_open: boolean;
   is_active: boolean;
-  merchant_verification_status?: 'not_required' | 'pending' | 'approved' | 'rejected' | 'retry_required';
-  payment_status: 'pending' | 'awaiting_review' | 'approved' | 'rejected' | 'suspended';
-  payment_deadline_at?: string | null;
-  selected_subscription_tier?: SubscriptionTier;
-  subscription_expires_at: string;
+  subscription_status?: SubscriptionStatus;
+  trial_start?: string | null;
+  trial_end?: string | null;
   last_notification_sent_at: string | null;
   created_at: string;
   category: ShopCategory;
   city?: string;
-  subscription_tier: SubscriptionTier;
   opening_hours?: ShopOpeningHours;
   owner_access_token_hash?: string | null;
   theme_config: {
@@ -151,7 +156,7 @@ interface OrderRecord {
     unit_price: number;
     selected_size?: string;
     selected_color?: string;
-    selected_modifiers?: string;
+    selected_modifiers?: string[];
   }[];
 }
 
@@ -250,17 +255,45 @@ function isWeakShopPin(pin: unknown): boolean {
 }
 
 export function getSubscriptionPlanConfig(tier: SubscriptionTier | string): SubscriptionPlanConfig {
-  const normalizedTier = (tier === 'premium' || tier === 'pro' || tier === 'standard') ? String(tier) : 'standard';
-  const options: Record<SubscriptionTier, SubscriptionPlanConfig> = {
-    standard: { tier: 'standard', amount: 0, label: 'Gratuit', description: 'Vitrine + catalogue + commandes' },
-    premium: { tier: 'premium', amount: 0, label: 'Gratuit', description: 'Vitrine + catalogue + commandes' },
-    pro: { tier: 'pro', amount: 0, label: 'Gratuit', description: 'Vitrine + catalogue + commandes' },
-  };
-  return options[normalizedTier as SubscriptionTier];
+  return { tier: 'standard', amount: 0, label: 'Gratuit', description: 'Vitrine + catalogue + commandes' };
 }
 
 export function normalizeSubscriptionTier(tier?: SubscriptionTier | string): SubscriptionTier {
   return 'standard';
+}
+
+export function getSubscriptionState(
+  shop: Pick<ShopRecord, 'subscription_status' | 'trial_start' | 'trial_end'>,
+  now = new Date(),
+): SubscriptionState {
+  const plan = 'standard';
+  const trialStart = shop.trial_start || null;
+  const trialEnd = shop.trial_end || null;
+  const trialEndTime = trialEnd ? Date.parse(trialEnd) : NaN;
+  const trialDaysRemaining = Number.isFinite(trialEndTime)
+    ? Math.max(0, Math.ceil((trialEndTime - now.getTime()) / 86400000))
+    : 0;
+  const configuredStatus = shop.subscription_status || (trialDaysRemaining > 0 ? 'trialing' : 'active');
+  const status: SubscriptionStatus = configuredStatus === 'trialing' && trialEnd && trialDaysRemaining === 0
+    ? 'expired'
+    : configuredStatus;
+  return {
+    plan,
+    status,
+    trialStart,
+    trialEnd,
+    trialDaysRemaining,
+    isActive: status === 'trialing' || status === 'active',
+  };
+}
+
+async function refreshSubscriptionState(shop: ShopRecord): Promise<SubscriptionState> {
+  const state = getSubscriptionState(shop);
+  if (shop.subscription_status === 'trialing' && state.status === 'expired') {
+    shop.subscription_status = 'expired';
+    await persistShop(shop);
+  }
+  return state;
 }
 
 function toBusinessDateKey(value: string | Date, timeZone = 'Africa/Abidjan'): string {
@@ -319,8 +352,6 @@ export function summarizeOrderMetrics<T extends { shop_id: number; total_amount:
   };
 }
 
-export type PaymentProvider = 'whatsapp' | 'paystack';
-
 export function escapeHtml(value: string | null | undefined): string {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -373,280 +404,6 @@ export function validateCustomerOrderInput(input: {
   };
 }
 
-export function getConfiguredPaymentProvider(): PaymentProvider {
-  return 'whatsapp';
-}
-
-export function buildPaymentInstructionMessage(
-  shopName: string,
-  tier: SubscriptionTier | string,
-  amount: number,
-  paymentLink: string,
-  paymentProvider: PaymentProvider = 'whatsapp',
-): string {
-  const plan = getSubscriptionPlanConfig(tier);
-  const chosenAmount = Number.isFinite(amount) && amount > 0 ? amount : plan.amount;
-  const safePaymentLink = paymentLink || 'https://wa.me/2250700000000?text=Je%20commande';
-
-  if (paymentProvider === 'paystack') {
-    return [
-      `Bienvenue sur MaTable.ci, ${shopName}.`,
-      `Votre accès est ${plan.label.toLowerCase()} : aucun paiement requis pour lancer votre boutique.`,
-      `Le montant affiché est ${chosenAmount} FCFA, mais la V1 MaTable.ci reste gratuite et le parcours commande passe par WhatsApp.`,
-      `Commande : ouvrez ce lien pour finaliser votre demande : ${safePaymentLink}`,
-      'Aucun paiement requis. La commande est envoyée au commerçant via WhatsApp pour confirmation.',
-    ].join('\n');
-  }
-
-  return [
-    `Bienvenue sur MaTable.ci, ${shopName}.`,
-    `Votre accès est ${plan.label.toLowerCase()} : aucun paiement requis pour lancer votre boutique.`,
-    `Le montant affiché est ${chosenAmount} FCFA, mais la V1 MaTable.ci reste gratuite et le parcours commande passe par WhatsApp.`,
-    `Commande : ouvrez ce lien pour finaliser votre demande : ${safePaymentLink}`,
-    'Aucun paiement requis. La commande est envoyée au commerçant via WhatsApp pour confirmation.',
-  ].join('\n');
-}
-
-function getPaymentContactPhone(): string {
-  const configured = normalizeWhatsAppPhone(process.env.PAYMENT_CONTACT_PHONE || process.env.WHATSAPP_ADMIN_PHONE || '+2250700000000');
-  return configured || '+2250700000000';
-}
-
-function getPaymentLinkForShop(shopName: string, selectedTier: SubscriptionTier): string {
-  const plan = getSubscriptionPlanConfig(selectedTier);
-  const contactNumber = getPaymentContactPhone().replace(/\D/g, '');
-  const paymentText = encodeURIComponent(`Bonjour, je souhaite payer le forfait ${plan.label} (${plan.amount} FCFA) pour la boutique ${shopName}. Veuillez me confirmer la réception du paiement et m’envoyer le reçu.`);
-  return `https://wa.me/${contactNumber}?text=${paymentText}`;
-}
-
-export async function isPaymentReferenceProcessed(
-  provider: PaymentProvider | string,
-  reference: string,
-  shopId?: number,
-): Promise<boolean> {
-  const normalizedProvider = String(provider || 'paystack').trim() || 'paystack';
-  const normalizedReference = String(reference || '').trim();
-  if (!normalizedReference) return false;
-
-  const row = shopId
-    ? await dbGet('SELECT 1 FROM payment_transactions WHERE provider = ? AND reference = ? AND shop_id = ? LIMIT 1', [normalizedProvider, normalizedReference, shopId])
-    : await dbGet('SELECT 1 FROM payment_transactions WHERE provider = ? AND reference = ? LIMIT 1', [normalizedProvider, normalizedReference]);
-
-  return Boolean(row);
-}
-
-export async function markPaymentReferenceProcessed(
-  provider: PaymentProvider | string,
-  reference: string,
-  shopId: number,
-  tier: SubscriptionTier | string,
-  amount: number,
-): Promise<boolean> {
-  const normalizedProvider = String(provider || 'paystack').trim() || 'paystack';
-  const normalizedReference = String(reference || '').trim();
-  if (!normalizedReference || !Number.isFinite(shopId)) {
-    return false;
-  }
-
-  const normalizedTier = normalizeSubscriptionTier(tier || 'standard');
-  const normalizedAmount = Number.isFinite(amount) && amount > 0 ? Math.round(amount) : 0;
-
-  const result = databaseMode === 'postgresql'
-    ? await dbRun(`INSERT INTO payment_transactions (provider, reference, shop_id, tier, amount, transaction_date, processed_at)
-        VALUES (?, ?, ?, ?, ?, ?, NOW()) ON CONFLICT (provider, reference) DO NOTHING`,
-      [normalizedProvider, normalizedReference, shopId, normalizedTier, normalizedAmount, new Date().toISOString()])
-    : await dbRun(`INSERT OR IGNORE INTO payment_transactions (provider, reference, shop_id, tier, amount, transaction_date, processed_at)
-        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
-      [normalizedProvider, normalizedReference, shopId, normalizedTier, normalizedAmount, new Date().toISOString()]);
-
-  return result.changes > 0;
-}
-
-export async function activateShopSubscription(
-  shop: ShopRecord,
-  tier: SubscriptionTier | string,
-  provider: PaymentProvider = 'paystack',
-  reference?: string,
-  amount?: number,
-): Promise<{ activated: boolean; already_processed: boolean; payment_status: ShopRecord['payment_status']; tier: SubscriptionTier; amount: number; message: string; }> {
-  const normalizedTier = normalizeSubscriptionTier(tier || shop.subscription_tier || shop.selected_subscription_tier || 'standard');
-
-  const normalizedReference = reference ? String(reference).trim() : '';
-  const planAmount = getSubscriptionPlanConfig(normalizedTier).amount;
-  const normalizedAmount = Number.isFinite(Number(amount)) && Number(amount) > 0 ? Number(amount) : planAmount;
-
-  if (normalizedReference && await isPaymentReferenceProcessed(provider, normalizedReference, shop.id)) {
-    const currentTier = shop.subscription_tier || normalizedTier;
-    return {
-      activated: false,
-      already_processed: true,
-      payment_status: shop.payment_status === 'approved' ? 'approved' : shop.payment_status,
-      tier: currentTier,
-      amount: normalizedAmount,
-      message: `Cette référence de paiement a déjà été consommée pour ${shop.name}.`,
-    };
-  }
-
-  if (normalizedReference) {
-    await markPaymentReferenceProcessed(provider, normalizedReference, shop.id, normalizedTier, normalizedAmount);
-  }
-
-  shop.subscription_tier = normalizedTier;
-  shop.selected_subscription_tier = normalizedTier;
-  shop.payment_status = 'approved';
-  shop.is_active = shop.merchant_verification_status === 'approved' || !shop.merchant_verification_status || shop.merchant_verification_status === 'not_required';
-  shop.payment_deadline_at = null;
-  shop.subscription_expires_at = new Date(Date.now() + 30 * 86400000).toISOString();
-  await persistShop(shop);
-
-  const confirmationMessage = `Paiement validé pour ${shop.name}. Votre boutique MaTable.ci est désormais activée pour 30 jours.`;
-
-  return {
-    activated: true,
-    already_processed: false,
-    payment_status: 'approved',
-    tier: normalizedTier,
-    amount: normalizedAmount,
-    message: confirmationMessage,
-  };
-}
-
-export async function verifyPaystackTransaction(reference: string): Promise<{ verified: boolean; reference: string; shopId?: number; tier: SubscriptionTier; amount: number; currency: string; status: string; } | null> {
-  const normalizedReference = String(reference || '').trim();
-  if (!normalizedReference) return null;
-
-  const config = getPaystackConfig();
-  if (!config.enabled) return null;
-
-  if (isPaystackMockMode()) {
-    const mockMatch = normalizedReference.match(/^MOCK-(\d+)-(standard|premium|pro)-(\d+)$/i);
-    return {
-      verified: true,
-      reference: normalizedReference,
-      shopId: mockMatch ? Number(mockMatch[1]) : undefined,
-      tier: mockMatch ? mockMatch[2].toLowerCase() as SubscriptionTier : 'standard',
-      amount: mockMatch ? Number(mockMatch[3]) : 0,
-      currency: config.currency,
-      status: 'success',
-    };
-  }
-
-  try {
-    const response = await fetch(`${config.baseUrl}/transaction/verify/${encodeURIComponent(normalizedReference)}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${config.secretKey}`,
-        Accept: 'application/json',
-      },
-    });
-
-    const result: any = await response.json();
-    if (!response.ok || !result?.status) {
-      return { verified: false, reference: normalizedReference, tier: 'standard', amount: 0, currency: config.currency, status: String(result?.message || 'failed') };
-    }
-
-    const tierValue = String(result?.data?.metadata?.tier || 'standard');
-    const tier = ['standard', 'premium', 'pro'].includes(tierValue) ? tierValue as SubscriptionTier : 'standard';
-    const amount = Number(result?.data?.amount || 0) / 100;
-    const currency = String(result?.data?.currency || '').trim().toUpperCase();
-    const shopId = Number(result?.data?.metadata?.shop_id || 0) || undefined;
-
-    return {
-      verified: String(result?.data?.status || '').toLowerCase() === 'success',
-      reference: normalizedReference,
-      shopId,
-      tier,
-      amount,
-      currency,
-      status: String(result?.data?.status || 'unknown'),
-    };
-  } catch (error) {
-    console.error('Paystack verification failed:', error);
-    return null;
-  }
-}
-
-export interface PaystackConfig {
-  enabled: boolean;
-  publicKey: string;
-  secretKey: string;
-  webhookSecret: string;
-  currency: string;
-  baseUrl: string;
-}
-
-export function getPaystackConfig(): PaystackConfig {
-  const publicKey = String(process.env.PAYSTACK_PUBLIC_KEY || '').trim();
-  const secretKey = String(process.env.PAYSTACK_SECRET_KEY || '').trim();
-  const webhookSecret = String(process.env.PAYSTACK_WEBHOOK_SECRET || '').trim();
-  const currency = String(process.env.PAYSTACK_CURRENCY || 'XOF').trim().toUpperCase() || 'XOF';
-
-  return {
-    enabled: false,
-    publicKey,
-    secretKey,
-    webhookSecret,
-    currency,
-    baseUrl: 'https://api.paystack.co',
-  };
-}
-
-export function isPaystackMockMode(): boolean {
-  return false;
-}
-
-export function buildPaystackCheckoutPayload({
-  email,
-  amount,
-  reference,
-  shopName,
-  tier,
-  callbackUrl,
-  shopId,
-}: {
-  email: string;
-  amount: number;
-  reference: string;
-  shopName?: string;
-  tier?: SubscriptionTier | string;
-  callbackUrl?: string;
-  shopId?: number;
-}): {
-  email: string;
-  amount: number;
-  currency: string;
-  reference: string;
-  callback_url: string;
-  channels: string[];
-  metadata: {
-    custom_fields: { display_name: string; variable_name: string; value: string }[];
-    shop_name: string;
-    tier: string;
-    shop_id?: number;
-    app: string;
-  };
-} {
-  const config = getPaystackConfig();
-  const parsedAmount = Number(amount || 0);
-  const normalizedAmount = Number.isFinite(parsedAmount) && parsedAmount > 0 ? Math.round(parsedAmount * 100) : 0;
-
-  return {
-    email: String(email || '').trim(),
-    amount: normalizedAmount,
-    currency: config.currency || 'NGN',
-    reference: String(reference || `MAT-${Date.now()}`),
-    callback_url: String(callbackUrl || `${process.env.APP_URL || 'http://localhost:3000'}/paystack/callback`),
-    channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
-    metadata: {
-      custom_fields: [{ display_name: 'Boutique', variable_name: 'shop_name', value: shopName || 'MaTable.ci' }],
-      shop_name: shopName || 'MaTable.ci',
-      tier: String(tier || 'standard'),
-      ...(shopId ? { shop_id: Number(shopId) } : {}),
-      app: 'matable-ci',
-    },
-  };
-}
-
 const demoShops: ShopRecord[] = [
   {
     id: 1,
@@ -658,15 +415,13 @@ const demoShops: ShopRecord[] = [
     welcome_message: 'Lingerie fine & Nuisettes soyeuses à Abidjan. Livraison discrète et soignée dans toute la Côte d\'Ivoire ✨',
     is_open: true,
     is_active: true,
-    payment_status: 'approved',
-    payment_deadline_at: null,
-    selected_subscription_tier: 'premium',
-    subscription_expires_at: addDays(now, 26), // 26 days left
+    subscription_status: 'trialing',
+    trial_start: addDays(now, -4),
+    trial_end: addDays(now, 26),
     last_notification_sent_at: null,
     created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
     category: 'fashion',
     city: 'Abidjan (Cocody Angré)',
-    subscription_tier: 'premium',
     opening_hours: {
       enabled: true,
       open_time: '08:00',
@@ -701,15 +456,13 @@ const demoShops: ShopRecord[] = [
     welcome_message: 'Le vrai goût d\'Abidjan ! Poulet fermier & poissons braisés minute au feu de bois. Attiéké frais de Dabou 🍗🔥',
     is_open: true,
     is_active: true,
-    payment_status: 'approved',
-    payment_deadline_at: null,
-    selected_subscription_tier: 'pro',
-    subscription_expires_at: addDays(now, 14),
+    subscription_status: 'trialing',
+    trial_start: addDays(now, -16),
+    trial_end: addDays(now, 14),
     last_notification_sent_at: null,
     created_at: new Date(Date.now() - 45 * 86400000).toISOString(),
     category: 'food',
     city: 'Abidjan (Marcory Zone 4)',
-    subscription_tier: 'pro',
     opening_hours: {
       enabled: true,
       open_time: '11:00',
@@ -743,15 +496,13 @@ const demoShops: ShopRecord[] = [
     welcome_message: 'Chemises en pagne tissé et costumes sur mesure à Treichville. Confection rapide et livraison express ✂️👔',
     is_open: true,
     is_active: true,
-    payment_status: 'approved',
-    payment_deadline_at: null,
-    selected_subscription_tier: 'standard',
-    subscription_expires_at: addDays(now, 45),
+    subscription_status: 'trialing',
+    trial_start: addDays(now, -15),
+    trial_end: addDays(now, 15),
     last_notification_sent_at: null,
     created_at: new Date(Date.now() - 15 * 86400000).toISOString(),
     category: 'fashion',
     city: 'Abidjan (Treichville)',
-    subscription_tier: 'standard',
     opening_hours: {
       enabled: true,
       open_time: '08:30',
@@ -784,15 +535,13 @@ const demoShops: ShopRecord[] = [
     welcome_message: 'Créations artisanales, colliers baoulé et perles de hanches faites main à Grand-Bassam 📿✨',
     is_open: true,
     is_active: true,
-    payment_status: 'approved',
-    payment_deadline_at: null,
-    selected_subscription_tier: 'standard',
-    subscription_expires_at: addDays(now, 4), // J-4 alert demo!
+    subscription_status: 'trialing',
+    trial_start: addDays(now, -26),
+    trial_end: addDays(now, 4),
     last_notification_sent_at: null,
     created_at: new Date(Date.now() - 86 * 86400000).toISOString(),
     category: 'fashion',
     city: 'Grand-Bassam / Abidjan',
-    subscription_tier: 'standard',
     opening_hours: {
       enabled: true,
       open_time: '09:00',
@@ -1148,20 +897,12 @@ export async function deleteCustomerSessionRecord(token: string) {
 }
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-const merchantRecoveryAttempts = new Map<number, { count: number; resetAt: number }>();
-const merchantRecoveryTokens = new Map<string, { shopId: number; expiresAt: number }>();
-const merchantRecoveryCodes = new Map<string, { shopId: number; codeHash: string; expiresAt: number; attempts: number }>();
 const publicRequestLimits = new Map<string, { count: number; resetAt: number }>();
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const PUBLIC_REQUEST_WINDOW_MS = 60 * 1000;
 const MAX_PUBLIC_REQUESTS_PER_WINDOW = 60;
-const RECOVERY_TOKEN_VALIDITY_MS = 15 * 60 * 1000;
-const RECOVERY_CODE_VALIDITY_MS = 10 * 60 * 1000;
-const MAX_RECOVERY_CODE_ATTEMPTS = 5;
-const MAX_RECOVERY_ATTEMPTS_PER_DAY = 2;
-const RECOVERY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const ADMIN_SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const timingSafeEqual = (left: string, right: string) => {
   const leftBuffer = Buffer.from(left);
@@ -1367,6 +1108,8 @@ async function getSessionStateForResponse(req: Request, res?: Response) {
     merchantSessions.set(merchantToken, renewedSession);
     await saveMerchantSessionRecord(merchantToken, renewedSession);
     if (res) setSessionCookie(res, merchantToken, renewedSession.fingerprint);
+    const shop = shops.find((candidate) => candidate.id === renewedSession.shopId);
+    if (shop) await refreshSubscriptionState(shop);
     return { authenticated: true, userType: 'merchant', shopId: renewedSession.shopId };
   }
 
@@ -1513,11 +1256,6 @@ async function requireMerchantAccess(req: Request, res: Response, next: express.
   const shop = await requireMerchantIdentity(req, res);
   if (!shop) return;
 
-  const verificationStatus = shop.merchant_verification_status || 'not_required';
-  if (verificationStatus !== 'approved' && verificationStatus !== 'not_required') {
-    if (req.method === 'GET') return next();
-    return res.status(403).json({ error: 'Terminez la vérification d’identité avant de gérer votre catalogue ou vos commandes.', verification_status: verificationStatus });
-  }
   if (!shop.is_active) {
     return res.status(403).json({ error: 'Boutique inactive : contactez l’administration pour la réactivation.' });
   }
@@ -1533,34 +1271,6 @@ function isLoginRateLimited(key: string): boolean {
   }
   current.count += 1;
   return current.count > MAX_LOGIN_ATTEMPTS;
-}
-
-export function checkAndRegisterRecoveryAttempt(shopId: number): { allowed: boolean; remaining: number; resetAt: number } {
-  const now = Date.now();
-  const current = merchantRecoveryAttempts.get(shopId);
-
-  if (!current || current.resetAt <= now) {
-    const nextState = { count: 1, resetAt: now + RECOVERY_WINDOW_MS };
-    merchantRecoveryAttempts.set(shopId, nextState);
-    return { allowed: true, remaining: MAX_RECOVERY_ATTEMPTS_PER_DAY - 1, resetAt: nextState.resetAt };
-  }
-
-  if (current.count >= MAX_RECOVERY_ATTEMPTS_PER_DAY) {
-    return { allowed: false, remaining: 0, resetAt: current.resetAt };
-  }
-
-  current.count += 1;
-  return {
-    allowed: true,
-    remaining: Math.max(0, MAX_RECOVERY_ATTEMPTS_PER_DAY - current.count),
-    resetAt: current.resetAt,
-  };
-}
-
-export function resetRecoveryAttemptsForTests() {
-  merchantRecoveryAttempts.clear();
-  merchantRecoveryTokens.clear();
-  merchantRecoveryCodes.clear();
 }
 
 export async function rotateMerchantAccessTokenForShop(shopId: number, previousToken?: string): Promise<string> {
@@ -1598,22 +1308,14 @@ setInterval(async () => {
   await dbRun('DELETE FROM admin_sessions WHERE expires_at <= ?', [now]);
 }, 15 * 60 * 1000).unref();
 
-setInterval(() => {
-  void purgeExpiredMerchantVerificationMetadata().catch(() => undefined);
-}, 24 * 60 * 60 * 1000).unref();
-
 const toSafeShop = (shop: ShopRecord) => {
+  const subscription = getSubscriptionState(shop);
   const {
     pin_code_hash: _pinCodeHash,
     owner_access_token_hash: _ownerAccessTokenHash,
-    payment_status: _paymentStatus,
-    payment_deadline_at: _paymentDeadlineAt,
-    selected_subscription_tier: _selectedSubscriptionTier,
-    subscription_expires_at: _subscriptionExpiresAt,
-    subscription_tier: _subscriptionTier,
     ...safeShop
   } = shop;
-  return safeShop;
+  return { ...safeShop, subscription };
 };
 const verifyPin = (inputPin: string, storedHash: string) => {
   const pin = String(inputPin).trim();
@@ -1673,12 +1375,12 @@ async function seedDatabaseIfEmpty() {
       shop.welcome_message,
       shop.is_open ? 1 : 0,
       shop.is_active ? 1 : 0,
-      shop.subscription_expires_at,
+      shop.trial_end ?? null,
       shop.last_notification_sent_at,
       shop.created_at,
       shop.category,
       shop.city ?? null,
-      shop.subscription_tier,
+      'standard',
       JSON.stringify(shop.theme_config)
     ]);
 
@@ -1753,24 +1455,18 @@ async function loadProductsFromDatabase() {
 }
 
 async function loadShopsFromDatabase() {
-  const rows = await dbAll<Record<string, unknown>>(`
-    SELECT shops.*, COALESCE(merchant_verifications.status, shops.merchant_verification_status, 'not_required') AS merchant_verification_status
-    FROM shops LEFT JOIN merchant_verifications ON merchant_verifications.shop_id = shops.id
-    ORDER BY shops.id
-  `);
+  const rows = await dbAll<Record<string, unknown>>('SELECT shops.* FROM shops ORDER BY shops.id');
   return rows.map((row) => ({
     id: Number(row.id), name: String(row.name), slug: String(row.slug),
     whatsapp_number: String(row.whatsapp_number), pin_code_hash: String(row.pin_code_hash),
     theme_color: String(row.theme_color || ''), welcome_message: row.welcome_message == null ? null : String(row.welcome_message),
     is_open: Boolean(row.is_open), is_active: Boolean(row.is_active),
-    merchant_verification_status: String(row.merchant_verification_status || 'not_required') as ShopRecord['merchant_verification_status'],
-    payment_status: (String(row.payment_status || 'approved')) as ShopRecord['payment_status'],
-    payment_deadline_at: row.payment_deadline_at == null ? null : String(row.payment_deadline_at),
-    selected_subscription_tier: row.selected_subscription_tier ? String(row.selected_subscription_tier) as SubscriptionTier : undefined,
-    subscription_expires_at: String(row.subscription_expires_at || ''),
+    subscription_status: row.subscription_status ? String(row.subscription_status) as SubscriptionStatus : undefined,
+    trial_start: row.trial_start == null ? null : String(row.trial_start),
+    trial_end: row.trial_end == null ? null : String(row.trial_end),
     last_notification_sent_at: row.last_notification_sent_at == null ? null : String(row.last_notification_sent_at),
     created_at: String(row.created_at), category: String(row.category) as ShopRecord['category'],
-    city: row.city == null ? undefined : String(row.city), subscription_tier: String(row.subscription_tier) as ShopRecord['subscription_tier'],
+    city: row.city == null ? undefined : String(row.city),
     theme_config: row.theme_config ? (typeof row.theme_config === 'string' ? JSON.parse(row.theme_config) : row.theme_config) : {},
     opening_hours: row.opening_hours ? (typeof row.opening_hours === 'string' ? JSON.parse(row.opening_hours) : row.opening_hours) : undefined,
     owner_access_token_hash: row.owner_access_token_hash ? String(row.owner_access_token_hash) : null,
@@ -1779,21 +1475,22 @@ async function loadShopsFromDatabase() {
 
 async function persistShop(shop: ShopRecord) {
   await dbRun(`
-    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, subscription_status, trial_start, trial_end, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET name=excluded.name, slug=excluded.slug, whatsapp_number=excluded.whatsapp_number,
       pin_code_hash=excluded.pin_code_hash, theme_color=excluded.theme_color, welcome_message=excluded.welcome_message,
       is_open=excluded.is_open, is_active=excluded.is_active, payment_status=excluded.payment_status,
       merchant_verification_status=excluded.merchant_verification_status,
       payment_deadline_at=excluded.payment_deadline_at, selected_subscription_tier=excluded.selected_subscription_tier,
       subscription_expires_at=excluded.subscription_expires_at, last_notification_sent_at=excluded.last_notification_sent_at,
+      subscription_status=excluded.subscription_status, trial_start=excluded.trial_start, trial_end=excluded.trial_end,
       category=excluded.category, city=excluded.city, subscription_tier=excluded.subscription_tier,
       theme_config=excluded.theme_config, opening_hours=excluded.opening_hours, owner_access_token_hash=excluded.owner_access_token_hash
   `, [
     shop.id, shop.name, shop.slug, shop.whatsapp_number, shop.pin_code_hash, shop.theme_color, shop.welcome_message,
-    shop.is_open ? 1 : 0, shop.is_active ? 1 : 0, shop.merchant_verification_status || 'not_required', shop.payment_status || 'approved', shop.payment_deadline_at ?? null,
-    shop.selected_subscription_tier ?? shop.subscription_tier, shop.subscription_expires_at, shop.last_notification_sent_at,
-    shop.created_at, shop.category, shop.city ?? null, shop.subscription_tier, JSON.stringify(shop.theme_config),
+    shop.is_open ? 1 : 0, shop.is_active ? 1 : 0, 'not_required', 'approved', null,
+    'standard', shop.trial_end ?? null, shop.subscription_status || 'active', shop.trial_start ?? null, shop.trial_end ?? null, shop.last_notification_sent_at,
+    shop.created_at, shop.category, shop.city ?? null, 'standard', JSON.stringify(shop.theme_config),
     shop.opening_hours ? JSON.stringify(shop.opening_hours) : null, shop.owner_access_token_hash ?? null
   ]);
 }
@@ -1892,112 +1589,6 @@ async function allocateRecordId(entity: 'shops' | 'products' | 'orders') {
   return Number(row.id);
 }
 
-async function beginMerchantVerification(shop: ShopRecord, req: Request, email?: string) {
-  const callbackToken = randomUUID();
-  const configuredOrigin = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-  const callbackUrl = new URL('/api/merchant-verification/callback', configuredOrigin);
-  callbackUrl.searchParams.set('shop_id', String(shop.id));
-  callbackUrl.searchParams.set('token', callbackToken);
-  const session = await createDiditVerificationSession({ shopId: shop.id, callbackUrl: callbackUrl.toString(), email });
-  const timestamp = new Date().toISOString();
-  await dbTransaction(async (transaction) => {
-    await transaction.run(`
-    INSERT INTO merchant_verifications (
-      shop_id, provider, provider_session_id, callback_token_hash, status, submitted_at, decided_at, updated_at
-    ) VALUES (?, 'didit', ?, ?, 'pending', ?, NULL, ?)
-    ON CONFLICT(shop_id) DO UPDATE SET provider='didit', provider_session_id=excluded.provider_session_id,
-      callback_token_hash=excluded.callback_token_hash, status='pending', submitted_at=excluded.submitted_at,
-      decided_at=NULL, updated_at=excluded.updated_at
-    `, [shop.id, session.sessionId, hashAccessToken(callbackToken), timestamp, timestamp]);
-    await transaction.run("UPDATE shops SET merchant_verification_status = 'pending', is_active = 0, is_open = 0 WHERE id = ?", [shop.id]);
-  });
-  shop.merchant_verification_status = 'pending';
-  shop.is_active = false;
-  shop.is_open = false;
-  return session;
-}
-
-function mapDiditStatus(status: string): ShopRecord['merchant_verification_status'] | null {
-  if (status === 'Approved') return 'approved';
-  if (status === 'Declined') return 'rejected';
-  if (status === 'Expired' || status === 'Abandoned' || status === 'Kyc Expired') return 'retry_required';
-  if (status === 'Not Started' || status === 'In Progress' || status === 'In Review' || status === 'Resubmitted' || status === 'Awaiting User') return 'pending';
-  return null;
-}
-
-async function applyMerchantVerificationDecision(sessionId: string, providerStatus: string, eventId?: string) {
-  const nextStatus = mapDiditStatus(providerStatus);
-  if (!nextStatus) return null;
-  const result = await dbTransaction(async (transaction) => {
-    if (eventId) {
-      const insertedEvent = await transaction.run(
-        'INSERT INTO merchant_verification_webhook_events (event_id, received_at) VALUES (?, ?) ON CONFLICT(event_id) DO NOTHING',
-        [eventId, new Date().toISOString()],
-      );
-      if (insertedEvent.changes === 0) return null;
-    }
-
-    const verification = await transaction.get<{ shop_id: number; status: string }>(
-      `SELECT shop_id, status FROM merchant_verifications WHERE provider_session_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
-      [sessionId],
-    );
-    if (!verification) return null;
-    if ((verification.status === 'approved' || verification.status === 'rejected' || verification.status === 'retry_required')
-      && nextStatus === 'pending' && providerStatus !== 'Resubmitted') {
-      return { shopId: Number(verification.shop_id), status: verification.status as ShopRecord['merchant_verification_status'] };
-    }
-
-    const decidedAt = ['approved', 'rejected', 'retry_required'].includes(nextStatus) ? new Date().toISOString() : null;
-    await transaction.run(
-      `UPDATE merchant_verifications SET status = ?, decided_at = ?, updated_at = ?,
-        callback_token_hash = CASE WHEN ? = 'pending' THEN callback_token_hash ELSE NULL END
-       WHERE provider_session_id = ?`,
-      [nextStatus, decidedAt, new Date().toISOString(), nextStatus, sessionId],
-    );
-    await transaction.run(
-      'UPDATE shops SET merchant_verification_status = ?, is_active = ?, is_open = CASE WHEN ? = 1 THEN is_open ELSE 0 END WHERE id = ?',
-      [nextStatus, nextStatus === 'approved' ? 1 : 0, nextStatus === 'approved' ? 1 : 0, verification.shop_id],
-    );
-    return { shopId: Number(verification.shop_id), status: nextStatus };
-  });
-
-  if (result) {
-    const shop = shops.find((candidate) => candidate.id === result.shopId);
-    if (shop) {
-      shop.merchant_verification_status = result.status;
-      shop.is_active = result.status === 'approved';
-      if (!shop.is_active) shop.is_open = false;
-    }
-  }
-  return result;
-}
-
-async function purgeExpiredMerchantVerificationMetadata() {
-  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-  const expiredPendingIds = await dbTransaction(async (transaction) => {
-    const expired = await transaction.all<{ shop_id: number }>(
-      "SELECT shop_id FROM merchant_verifications WHERE status = 'pending' AND updated_at < ?",
-      [cutoff],
-    );
-    for (const row of expired) {
-      await transaction.run(
-        "UPDATE shops SET merchant_verification_status = 'retry_required', is_active = 0, is_open = 0 WHERE id = ? AND merchant_verification_status = 'pending'",
-        [row.shop_id],
-      );
-    }
-    await transaction.run('DELETE FROM merchant_verifications WHERE updated_at < ?', [cutoff]);
-    await transaction.run('DELETE FROM merchant_verification_webhook_events WHERE received_at < ?', [cutoff]);
-    return expired.map((row) => Number(row.shop_id));
-  });
-  for (const shop of shops) {
-    if (expiredPendingIds.includes(shop.id) && shop.merchant_verification_status === 'pending') {
-      shop.merchant_verification_status = 'retry_required';
-      shop.is_active = false;
-      shop.is_open = false;
-    }
-  }
-}
-
 async function startServer() {
   validateRuntimeConfig();
 
@@ -2054,7 +1645,6 @@ async function startServer() {
   app.use('/api/shops/:id/flash-bilan', requireMerchantAccess);
   app.use('/api/admin', requireAdminAccess);
   await initializeDatabase();
-  await purgeExpiredMerchantVerificationMetadata();
   await seedDatabaseIfEmpty();
 
   shops.forEach((shop) => {
@@ -2081,101 +1671,7 @@ async function startServer() {
 
   // Health check
   app.get('/api/health', (req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString(), whatsapp_cloud: 'locked' });
-  });
-
-  app.get('/api/merchant-verification/config', (_req: Request, res: Response) => {
-    res.setHeader('Cache-Control', 'no-store');
-    res.json({ required: isMerchantKycEnabled(), available: Boolean(getDiditConfiguration()) });
-  });
-
-  app.post('/api/webhooks/didit', async (req: Request, res: Response) => {
-    const configuration = getDiditConfiguration();
-    if (!configuration) return res.status(503).json({ error: 'Webhook KYC non configuré.' });
-    const event = req.body as Record<string, unknown> | undefined;
-    const signature = req.get('x-signature-v2');
-    const timestamp = req.get('x-timestamp');
-    if (!event || !verifyDiditWebhookSignature(event, signature, timestamp, configuration.webhookSecret)) {
-      return res.status(401).json({ error: 'Signature de webhook invalide.' });
-    }
-    const expectedEnvironment = process.env.DIDIT_ENVIRONMENT || (process.env.NODE_ENV === 'production' ? 'live' : 'sandbox');
-    if (event.environment !== expectedEnvironment) return res.status(403).json({ error: 'Environnement de webhook inattendu.' });
-    if (event.webhook_type !== 'status.updated') return res.status(204).end();
-
-    const sessionId = String(event.session_id || '');
-    const eventId = String(event.event_id || '');
-    if (!/^[A-Za-z0-9_-]{1,160}$/.test(sessionId) || !/^[A-Za-z0-9-]{1,100}$/.test(eventId)) {
-      return res.status(400).json({ error: 'Événement Didit invalide.' });
-    }
-    try {
-      const knownSession = await dbGet('SELECT 1 FROM merchant_verifications WHERE provider_session_id = ?', [sessionId]);
-      if (!knownSession) return res.status(404).json({ error: 'Session de vérification inconnue.' });
-      const decision = await fetchDiditDecision(sessionId, configuration);
-      const applied = await applyMerchantVerificationDecision(sessionId, decision.status, eventId);
-      if (!applied) return res.status(204).end();
-      res.status(204).end();
-    } catch {
-      res.status(503).json({ error: 'La décision Didit n’a pas pu être confirmée.' });
-    }
-  });
-
-  app.get('/api/merchant-verification/callback', rateLimitPublicRequest(30), async (req: Request, res: Response) => {
-    const shopId = Number(req.query.shop_id);
-    const callbackToken = String(req.query.token || '');
-    const sessionId = String(req.query.verificationSessionId || '');
-    const redirectToApp = (status: string) => {
-      const origin = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-      const destination = new URL('/app', origin);
-      destination.searchParams.set('merchant-verification', status);
-      return res.redirect(303, destination.toString());
-    };
-    if (!Number.isSafeInteger(shopId) || shopId <= 0 || !callbackToken || !sessionId) return redirectToApp('invalid');
-
-    try {
-      const verification = await dbGet<{ provider_session_id: string; callback_token_hash: string | null }>(
-        'SELECT provider_session_id, callback_token_hash FROM merchant_verifications WHERE shop_id = ?', [shopId],
-      );
-      if (!verification || !verification.callback_token_hash || verification.provider_session_id !== sessionId
-        || !timingSafeEqual(hashAccessToken(callbackToken), verification.callback_token_hash)) {
-        return redirectToApp('invalid');
-      }
-      const decision = await fetchDiditDecision(sessionId);
-      const claimedCallback = await dbRun(
-        'UPDATE merchant_verifications SET callback_token_hash = ? WHERE shop_id = ? AND callback_token_hash = ?',
-        [null, shopId, verification.callback_token_hash],
-      );
-      if (claimedCallback.changes !== 1) return redirectToApp('invalid');
-      const applied = await applyMerchantVerificationDecision(sessionId, decision.status);
-      if (!applied) return redirectToApp('invalid');
-      await createMerchantSession(res, shopId, req);
-      return redirectToApp(applied.status || 'pending');
-    } catch {
-      return redirectToApp('retry');
-    }
-  });
-
-  app.get('/api/shops/:id/merchant-verification', requireMerchantOwner, (req: Request, res: Response) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
-    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-    res.json({ verification_status: shop.merchant_verification_status || 'not_required' });
-  });
-
-  app.post('/api/shops/:id/merchant-verification/start', rateLimitPublicRequest(3), requireMerchantOwner, async (req: Request, res: Response) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
-    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-    if (!isMerchantKycEnabled() || !getDiditConfiguration()) {
-      return res.status(503).json({ error: 'La vérification d’identité n’est pas configurée.' });
-    }
-    if (!['rejected', 'retry_required'].includes(shop.merchant_verification_status || 'not_required')) {
-      return res.status(409).json({ error: 'Aucune nouvelle vérification ne peut être démarrée dans l’état actuel.' });
-    }
-    try {
-      const verification = await beginMerchantVerification(shop, req);
-      await persistShop(shop);
-      res.json({ success: true, verification_url: verification.url, verification_status: 'pending' });
-    } catch {
-      res.status(502).json({ error: 'Impossible de démarrer la vérification. Réessayez plus tard.' });
-    }
+    res.json({ status: 'ok', timestamp: new Date().toISOString(), integrations: { whatsapp_click_to_chat: 'available' } });
   });
 
   app.post('/api/analytics/page-view', rateLimitPublicRequest(120), async (req: Request, res: Response) => {
@@ -2291,7 +1787,6 @@ async function startServer() {
         welcome_message: shop.welcome_message,
         is_open: computeIsShopOpen(shop),
         is_active: shop.is_active,
-        merchant_verification_status: shop.merchant_verification_status || 'not_required',
         category: shop.category,
         city: shop.city,
         theme_config: shop.theme_config,
@@ -2484,14 +1979,7 @@ async function startServer() {
 
   // Create new shop (Onboarding with category and subscription tier)
   app.post('/api/shops', rateLimitPublicRequest(10), async (req: Request, res: Response) => {
-    const kycEnabled = isMerchantKycEnabled();
-    if (kycEnabled && !getDiditConfiguration()) {
-      return res.status(503).json({ error: 'La vérification d’identité des commerçants n’est pas encore configurée.' });
-    }
-    if (kycEnabled && req.body?.identity_verification_consent !== true) {
-      return res.status(400).json({ error: 'Votre accord est requis pour la vérification d’identité.' });
-    }
-    const { name, whatsapp_number, pin_code, pin, category, city, subscription_tier, welcome_message, theme_config, opening_hours } = req.body;
+    const { name, whatsapp_number, pin_code, pin, category, city, welcome_message, theme_config, opening_hours } = req.body;
     const effectivePin = pin_code || pin;
     const safeName = sanitizeTextField(name, 100);
     const safeCity = sanitizeTextField(city || 'Abidjan', 100);
@@ -2536,7 +2024,6 @@ async function startServer() {
 
     const shopCategory: ShopRecord['category'] = isShopCategory(category) ? category : 'other';
     const categoryDefaults = getCategoryDefaults(shopCategory);
-    const chosenTier: SubscriptionTier = normalizeSubscriptionTier(subscription_tier || 'standard');
     const hashedPin = hashPin(effectivePin);
     const ownerAccessToken = randomUUID();
 
@@ -2587,54 +2074,24 @@ async function startServer() {
       theme_color: categoryDefaults.primaryColor,
       welcome_message: normalizeWelcomeMessage(safeWelcomeMessage, shopCategory),
       is_open: false,
-      is_active: !kycEnabled,
-      merchant_verification_status: kycEnabled ? 'pending' : 'not_required',
-      payment_status: 'approved',
-      payment_deadline_at: null,
-      selected_subscription_tier: chosenTier,
-      subscription_expires_at: addDays(new Date(), 30),
+      is_active: true,
+      subscription_status: 'trialing',
+      trial_start: new Date().toISOString(),
+      trial_end: addDays(new Date(), TRIAL_DURATION_DAYS),
       last_notification_sent_at: null,
       created_at: new Date().toISOString(),
       category: shopCategory,
       city: safeCity,
-      subscription_tier: chosenTier,
       opening_hours: normalizedOpeningHours,
       theme_config: mergedThemeConfig,
     };
 
-    if (!kycEnabled && normalizedOpeningHours.enabled && !normalizedOpeningHours.manual_override) {
+    if (normalizedOpeningHours.enabled && !normalizedOpeningHours.manual_override) {
       newShop.is_open = computeIsShopOpen(newShop);
     }
 
     shops.push(newShop);
     await persistShop(newShop);
-
-    if (kycEnabled) {
-      try {
-        const contactEmail = typeof req.body?.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(req.body.email.trim())
-          ? req.body.email.trim().slice(0, 254)
-          : undefined;
-        const verification = await beginMerchantVerification(newShop, req, contactEmail);
-        await createMerchantSession(res, newShop.id, req);
-        return res.status(201).json({
-          success: true,
-          shop: toSafeShop(newShop),
-          verification_required: true,
-          verification_url: verification.url,
-          message: 'Votre boutique est créée. Terminez la vérification d’identité pour activer votre espace marchand.',
-        });
-      } catch (error) {
-        console.error('Merchant identity session could not be started.');
-        newShop.merchant_verification_status = 'retry_required';
-        newShop.is_active = false;
-        newShop.is_open = false;
-        await persistShop(newShop);
-        return res.status(503).json({
-          error: 'Votre boutique est créée mais la vérification n’a pas pu démarrer. Connectez-vous avec votre WhatsApp et votre PIN pour réessayer.',
-          account_created: true,
-        });
-      }
-    }
 
     await createMerchantSession(res, newShop.id, req);
     res.json({
@@ -2676,9 +2133,7 @@ async function startServer() {
       return res.status(401).json({ error: 'Code PIN incorrect à 6 chiffres.' });
     }
 
-    const verificationStatus = shop.merchant_verification_status || 'not_required';
-    const verificationPending = ['pending', 'rejected', 'retry_required'].includes(verificationStatus);
-    if (!shop.is_active && !verificationPending) {
+    if (!shop.is_active) {
       return res.status(403).json({
         error: 'Votre boutique est inactive. Contactez l’administration MaTable.ci pour la réactivation.',
       });
@@ -2698,7 +2153,6 @@ async function startServer() {
         welcome_message: shop.welcome_message,
         is_open: shop.is_open,
         is_active: shop.is_active,
-        merchant_verification_status: verificationStatus,
         category: shop.category,
         theme_config: shop.theme_config,
       },
@@ -2719,7 +2173,8 @@ async function startServer() {
     const state = await getSessionStateForResponse(req, res);
     if (state.userType === 'merchant' && state.shopId) {
       const shop = shops.find((candidate) => candidate.id === state.shopId);
-      return res.json({ ...state, merchantVerificationStatus: shop?.merchant_verification_status || 'not_required' });
+      const subscription = shop ? await refreshSubscriptionState(shop) : undefined;
+      return res.json({ ...state, subscription });
     }
     res.json(state);
   });
@@ -2730,178 +2185,13 @@ async function startServer() {
     const tokenHash = hashAccessToken(token);
     const shop = shops.find((candidate) => candidate.owner_access_token_hash === tokenHash);
     if (!shop) return res.status(401).json({ error: 'Lien d’accès invalide.' });
-    const verificationStatus = shop.merchant_verification_status || 'not_required';
-    if (!shop.is_active && !['pending', 'rejected', 'retry_required'].includes(verificationStatus)) {
+    if (!shop.is_active) {
       return res.status(403).json({
         error: 'Boutique inactive : contactez l’administrateur pour la réactivation.',
       });
     }
     await createMerchantSession(res, shop.id, req);
     res.json({ success: true, shop: toSafeShop(shop) });
-  });
-
-  app.post('/api/auth/merchant-recovery-request', rateLimitPublicRequest(5), async (req: Request, res: Response) => {
-    return res.status(410).json({ error: 'La récupération automatique est désactivée. Utilisez votre identifiant et votre mot de passe.' });
-    /*
-    if (EXTERNAL_INTEGRATIONS_LOCKED) {
-      return res.status(410).json({ error: 'La récupération automatique par WhatsApp est désactivée et verrouillée.' });
-    }
-    const phone = String(req.body?.phone || '').trim();
-    if (!phone) {
-      return res.status(400).json({ error: 'Numéro de boutique requis pour la récupération.' });
-    }
-
-    const shop = findShopByPhone(phone);
-    if (!shop) {
-      return res.status(404).json({ error: 'Aucune boutique correspondante trouvée.' });
-    }
-
-    const attempt = checkAndRegisterRecoveryAttempt(shop.id);
-    if (!attempt.allowed) {
-      return res.status(429).json({
-        error: 'Limite atteinte : vous avez déjà utilisé 2 récupérations sur 24h pour cette boutique.',
-        remaining: 0,
-        resetAt: attempt.resetAt,
-      });
-    }
-
-    const recoveryTemplateName = String(process.env.WHATSAPP_CLOUD_RECOVERY_TEMPLATE_NAME || '').trim();
-    const recoveryTemplateLanguage = String(process.env.WHATSAPP_CLOUD_RECOVERY_TEMPLATE_LANGUAGE || '').trim();
-    if (recoveryTemplateName && recoveryTemplateLanguage) {
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      const challengeId = randomUUID();
-      merchantRecoveryCodes.set(challengeId, {
-        shopId: shop.id,
-        codeHash: hashAccessToken(`recovery-code:${code}`),
-        expiresAt: Date.now() + RECOVERY_CODE_VALIDITY_MS,
-        attempts: 0,
-      });
-
-      const whatsappResult = await sendWhatsAppCloudTemplate(
-        shop.whatsapp_number,
-        recoveryTemplateName,
-        recoveryTemplateLanguage,
-        [{ type: 'text', text: code }],
-      );
-      if (!whatsappResult.sent) {
-        merchantRecoveryCodes.delete(challengeId);
-        return res.status(502).json({
-          error: whatsappResult.reason || 'Le code de récupération n’a pas pu être envoyé par WhatsApp.',
-          fallback_url: whatsappResult.fallbackUrl,
-        });
-      }
-
-      return res.json({
-        success: true,
-        message: 'Un code de récupération a été envoyé au numéro WhatsApp enregistré de la boutique.',
-        challenge_id: challengeId,
-        expires_in_minutes: Math.round(RECOVERY_CODE_VALIDITY_MS / 60000),
-        remaining: attempt.remaining,
-        resetAt: attempt.resetAt,
-        whatsapp_sent: true,
-        whatsapp_status: 'envoyé',
-      });
-    }
-
-    const recoveryToken = randomUUID();
-    merchantRecoveryTokens.set(recoveryToken, { shopId: shop.id, expiresAt: Date.now() + RECOVERY_TOKEN_VALIDITY_MS });
-    const appUrl = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-    const recoveryUrl = `${appUrl}/app?access=${encodeURIComponent(recoveryToken)}`;
-
-    const whatsappResult = await sendWhatsAppCloudText(
-      shop.whatsapp_number,
-      `Récupération d’accès MaTable.ci\nCliquez ici pour valider votre accès : ${recoveryUrl}\nCe lien expire dans 15 minutes.\nSi vous n’êtes pas à l’origine de cette demande, ignorez ce message.`
-    );
-
-    return res.json({
-      success: true,
-      message: whatsappResult.sent
-        ? 'Le lien de récupération a été envoyé au numéro WhatsApp enregistré de la boutique.'
-        : 'La demande a été enregistrée, mais WhatsApp Cloud n’a pas pu envoyer le lien au numéro enregistré.',
-      expires_in_minutes: Math.round(RECOVERY_TOKEN_VALIDITY_MS / 60000),
-      remaining: attempt.remaining,
-      resetAt: attempt.resetAt,
-      whatsapp_sent: whatsappResult.sent,
-      whatsapp_status: whatsappResult.sent ? 'envoyé' : (whatsappResult.reason || 'non envoyé'),
-      fallback_url: whatsappResult.fallbackUrl,
-    });
-    */
-  });
-
-  app.post('/api/auth/merchant-recovery-verify-code', rateLimitPublicRequest(10), async (req: Request, res: Response) => {
-    const challengeId = String(req.body?.challenge_id || '').trim();
-    const code = String(req.body?.code || '').trim();
-    const challenge = merchantRecoveryCodes.get(challengeId);
-    if (!challenge || challenge.expiresAt <= Date.now()) {
-      merchantRecoveryCodes.delete(challengeId);
-      return res.status(401).json({ error: 'Code de récupération expiré ou invalide.' });
-    }
-    if (!/^\d{6}$/.test(code)) {
-      return res.status(400).json({ error: 'Le code de récupération doit contenir 6 chiffres.' });
-    }
-    challenge.attempts += 1;
-    const validCode = timingSafeEqual(challenge.codeHash, hashAccessToken(`recovery-code:${code}`));
-    if (!validCode) {
-      if (challenge.attempts >= MAX_RECOVERY_CODE_ATTEMPTS) merchantRecoveryCodes.delete(challengeId);
-      return res.status(401).json({ error: 'Code de récupération incorrect ou expiré.' });
-    }
-
-    const shop = shops.find((candidate) => candidate.id === challenge.shopId);
-    merchantRecoveryCodes.delete(challengeId);
-    if (!shop || !shop.is_active) {
-      return res.status(401).json({ error: 'Boutique introuvable ou inactive.' });
-    }
-
-    const ownerAccessToken = await rotateMerchantAccessTokenForShop(shop.id, undefined);
-    return res.json({
-      success: true,
-      owner_access_token: ownerAccessToken,
-      shop: toSafeShop(shop),
-      message: 'Code validé. Votre accès privé a été renouvelé.',
-    });
-  });
-
-  app.post('/api/auth/merchant-recovery-confirm', async (req: Request, res: Response) => {
-    return res.status(410).json({ error: 'La récupération automatique est désactivée. Utilisez votre identifiant et votre mot de passe.' });
-    /*
-    if (EXTERNAL_INTEGRATIONS_LOCKED) {
-      return res.status(410).json({ error: 'La récupération automatique par WhatsApp est désactivée et verrouillée.' });
-    }
-    const recoveryToken = String(req.body?.recovery_token || '').trim();
-    if (!recoveryToken) {
-      return res.status(400).json({ error: 'Jeton de récupération requis.' });
-    }
-
-    const recovery = merchantRecoveryTokens.get(recoveryToken);
-    if (!recovery || recovery.expiresAt <= Date.now()) {
-      merchantRecoveryTokens.delete(recoveryToken);
-      return res.status(401).json({ error: 'Jeton de récupération expiré ou invalide.' });
-    }
-
-    const shop = shops.find((candidate) => candidate.id === recovery.shopId);
-    if (!shop || !shop.is_active) {
-      merchantRecoveryTokens.delete(recoveryToken);
-      return res.status(401).json({ error: 'Boutique introuvable ou inactive.' });
-    }
-
-    const newToken = await rotateMerchantAccessTokenForShop(shop.id, undefined);
-    merchantRecoveryTokens.delete(recoveryToken);
-    const appUrl = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-    const newAccessUrl = `${appUrl}/app?access=${encodeURIComponent(newToken)}`;
-    const whatsappResult = await sendWhatsAppCloudText(
-      shop.whatsapp_number,
-      `Votre accès privé MaTable.ci a été renouvelé.\nNouveau lien : ${newAccessUrl}\nLe précédent lien a été invalidé.\nConservez ce lien en lieu sûr.`
-    );
-
-    return res.json({
-      success: true,
-      shop: toSafeShop(shop),
-      owner_access_token: newToken,
-      message: 'Votre accès privé a été renouvelé automatiquement.',
-      whatsapp_sent: whatsappResult.sent,
-      whatsapp_status: whatsappResult.sent ? 'envoyé' : (whatsappResult.reason || 'non envoyé'),
-    });
-    */
   });
 
   app.post('/api/auth/admin-login', async (req: Request, res: Response) => {
@@ -3022,47 +2312,6 @@ async function startServer() {
 
   app.post('/api/auth/login', (req: Request, res: Response) => {
     res.status(410).json({ error: 'Endpoint obsolète. Utilisez /api/auth/merchant-login.' });
-  });
-
-  // Forgot PIN uses the same verified access-recovery flow; it never exposes or replaces a PIN directly.
-  app.post('/api/auth/merchant-forgot-pin', rateLimitPublicRequest(5), async (req: Request, res: Response) => {
-    return res.status(410).json({ error: 'La récupération automatique est désactivée. Utilisez votre identifiant et votre mot de passe.' });
-    /*
-    if (EXTERNAL_INTEGRATIONS_LOCKED) {
-      return res.status(410).json({ error: 'La récupération automatique par WhatsApp est désactivée et verrouillée.' });
-    }
-    const phone = String(req.body?.phone || '').trim();
-    const shop = findShopByPhone(phone);
-    if (!shop) return res.status(404).json({ error: 'Aucune boutique associée à ce numéro.' });
-
-    const attempt = checkAndRegisterRecoveryAttempt(shop.id);
-    if (!attempt.allowed) {
-      return res.status(429).json({ error: 'Limite de récupération atteinte pour cette boutique.', remaining: 0, resetAt: attempt.resetAt });
-    }
-
-    const recoveryToken = randomUUID();
-    merchantRecoveryTokens.set(recoveryToken, { shopId: shop.id, expiresAt: Date.now() + RECOVERY_TOKEN_VALIDITY_MS });
-    const appUrl = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-    const recoveryUrl = `${appUrl}/app?access=${encodeURIComponent(recoveryToken)}`;
-    const whatsappResult = await sendWhatsAppCloudText(
-      shop.whatsapp_number,
-      `PIN oublié MaTable.ci\nUtilisez ce lien sécurisé pour récupérer votre accès : ${recoveryUrl}\nLe lien expire dans 15 minutes. Si vous n’êtes pas à l’origine de cette demande, ignorez ce message.`
-    );
-
-    return res.json({
-      success: true,
-      message: whatsappResult.sent
-        ? 'Un lien sécurisé a été envoyé au numéro WhatsApp enregistré de la boutique.'
-        : 'La demande a été enregistrée, mais le lien n’a pas pu être envoyé automatiquement par WhatsApp.',
-      whatsapp_sent: whatsappResult.sent,
-      whatsapp_status: whatsappResult.sent ? 'envoyé' : (whatsappResult.reason || 'non envoyé'),
-    });
-    */
-  });
-
-  // Alias for backward compatibility
-  app.post('/api/auth/reset-pin', async (req: Request, res: Response) => {
-    return res.status(410).json({ error: 'La récupération automatique est désactivée. Utilisez votre identifiant et votre mot de passe.' });
   });
 
   // 3. PRODUCTS MANAGEMENT (Merchant /app)
@@ -3308,11 +2557,7 @@ async function startServer() {
           reservedProductIds.add(prod.id);
         }
 
-        const selectedModifiers = Array.isArray(item.selected_modifiers)
-          ? item.selected_modifiers
-          : typeof item.selected_modifiers === 'string'
-            ? [item.selected_modifiers]
-            : [];
+        const selectedModifiers = Array.isArray(item.selected_modifiers) ? item.selected_modifiers : [];
         const validSelectedModifiers = getValidSelectedModifiers(prod, selectedModifiers);
         for (const group of prod.modifier_groups || []) {
           const selectedInGroup = validSelectedModifiers.filter((label) => group.options.some((option) => (typeof option === 'string' ? option : option.label) === label));
@@ -3748,7 +2993,7 @@ async function startServer() {
       database_path: databaseMode === 'sqlite' ? process.env.MATABLE_DB_PATH || 'data/matable.db' : null,
       counts,
       latest_analytics_event_at: latestAnalytics?.created_at || null,
-      integrations: { whatsapp_cloud: 'locked', whatsapp_click_to_chat: 'available' },
+      integrations: { whatsapp_click_to_chat: 'available' },
     });
   });
 
@@ -3786,11 +3031,7 @@ async function startServer() {
       return res.status(404).json({ error: 'Boutique introuvable.' });
     }
 
-    if (!shop.is_active && shop.merchant_verification_status && !['approved', 'not_required'].includes(shop.merchant_verification_status)) {
-      return res.status(409).json({ error: 'La vérification d’identité doit être approuvée avant l’activation.' });
-    }
     shop.is_active = !shop.is_active;
-    if (shop.is_active) shop.payment_status = 'approved';
     await persistShop(shop);
     res.json({ success: true, is_active: shop.is_active, shop: toSafeShop(shop) });
   });

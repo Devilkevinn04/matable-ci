@@ -572,10 +572,6 @@ test('existing merchant full flow: login, product management, order lifecycle, b
 });
 
 test('new merchant registration flow is local and immediately usable', async () => {
-  const verificationConfig = await apiFetch('/api/merchant-verification/config');
-  assert.equal(verificationConfig.response.status, 200);
-  assert.equal(verificationConfig.payload.required, false);
-
   const phone = uniquePhone();
   const registration = await apiFetch('/api/shops', {
     method: 'POST',
@@ -586,15 +582,17 @@ test('new merchant registration flow is local and immediately usable', async () 
       pin_code: '654321',
       category: 'fashion',
       city: 'Abidjan',
-      subscription_tier: 'premium',
       welcome_message: 'Bienvenue chez Boutique Test Premium',
     }),
   });
 
   assert.equal(registration.response.status, 200, `Shop creation failed: ${JSON.stringify(registration.payload)}`);
   assert.match(String(registration.payload.message), /Boutique créée/i);
-  assert.equal(registration.payload.shop.merchant_verification_status, 'not_required');
   assert.equal(registration.payload.shop.is_active, true);
+  assert.equal(registration.payload.shop.subscription.status, 'trialing');
+  assert.equal(typeof registration.payload.shop.subscription.trialStart, 'string');
+  assert.equal(typeof registration.payload.shop.subscription.trialEnd, 'string');
+  assert.ok(registration.payload.shop.subscription.trialDaysRemaining >= 29);
   assert.ok(registration.payload.owner_access_token);
 
   const newShopId = registration.payload.shop.id;
@@ -725,7 +723,7 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   assert.equal(changedFingerprint.payload.authenticated, false);
 });
 
-test('recovery and security hardening: duplicate shop prevention and limited merchant recovery attempts', async () => {
+test('security hardening: duplicate shop prevention', async () => {
   const phone = uniquePhone();
   const first = await apiFetch('/api/shops', {
     method: 'POST',
@@ -736,7 +734,6 @@ test('recovery and security hardening: duplicate shop prevention and limited mer
       pin_code: '777777',
       category: 'fashion',
       city: 'Abidjan',
-      subscription_tier: 'standard',
     }),
   });
   assert.equal(first.response.status, 200);
@@ -750,29 +747,69 @@ test('recovery and security hardening: duplicate shop prevention and limited mer
       pin_code: '402138',
       category: 'fashion',
       city: 'Abidjan',
-      subscription_tier: 'premium',
     }),
   });
   assert.equal(duplicate.response.status, 409);
 
-  const recovery1 = await apiFetch('/api/auth/merchant-recovery-request', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone }),
-  });
-  assert.equal(recovery1.response.status, 410, JSON.stringify(recovery1.payload));
+});
 
-  const recovery2 = await apiFetch('/api/auth/merchant-recovery-request', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone }),
-  });
-  assert.equal(recovery2.response.status, 410, JSON.stringify(recovery2.payload));
+test('merchant A cannot mutate merchant B products', async () => {
+  const merchantAPhone = uniquePhone();
+  const merchantBPhone = uniquePhone();
+  const createShop = async (name: string, phone: string) => {
+    const response = await apiFetch('/api/shops', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, whatsapp_number: phone, pin_code: '638294', category: 'fashion', city: 'Abidjan' }),
+    });
+    assert.equal(response.response.status, 200, JSON.stringify(response.payload));
+    return response.payload.shop.id as number;
+  };
 
-  const recovery3 = await apiFetch('/api/auth/merchant-recovery-request', {
+  const merchantAShopId = await createShop('Boutique Marchand A', merchantAPhone);
+  const merchantBShopId = await createShop('Boutique Marchand B', merchantBPhone);
+
+  const loginB = await apiFetch('/api/auth/merchant-login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone }),
+    body: JSON.stringify({ phone: merchantBPhone, pin: '638294' }),
   });
-  assert.equal(recovery3.response.status, 410, JSON.stringify(recovery3.payload));
+  assert.equal(loginB.response.status, 200);
+  const product = await apiFetch(`/api/shops/${merchantBShopId}/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Produit privé B', price: 2500, stock: 4 }),
+  });
+  assert.equal(product.response.status, 200, JSON.stringify(product.payload));
+  const productId = product.payload.product.id;
+
+  const loginA = await apiFetch('/api/auth/merchant-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: merchantAPhone, pin: '638294' }),
+  });
+  assert.equal(loginA.response.status, 200);
+
+  const attempts = await Promise.all([
+    apiFetch(`/api/shops/${merchantBShopId}/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Intrusion', price: 1, stock: 1 }),
+    }),
+    apiFetch(`/api/shops/${merchantBShopId}/products/${productId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Produit détourné', price: 1, stock: 1 }),
+    }),
+    apiFetch(`/api/shops/${merchantBShopId}/products/${productId}/stock`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delta: -1 }),
+    }),
+    apiFetch(`/api/shops/${merchantBShopId}/products/${productId}/toggle-visibility`, { method: 'PATCH' }),
+    apiFetch(`/api/shops/${merchantBShopId}/products/${productId}`, { method: 'DELETE' }),
+  ]);
+
+  for (const attempt of attempts) assert.equal(attempt.response.status, 401, JSON.stringify(attempt.payload));
+  assert.notEqual(merchantAShopId, merchantBShopId);
 });

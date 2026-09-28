@@ -121,7 +121,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, tot
                       : 'bg-orange-50 text-orange-700 hover:bg-orange-100'
                   }`}
                 >
-                  Mobile Money souhaité ({orders.filter(o => ['mobile_money', 'orange_money', 'mtn_money', 'moov_money'].includes(o.payment_method_preference)).length})
+                  Mobile Money souhaité ({orders.filter(o => o.payment_method_preference === 'mobile_money').length})
                 </button>
                 <button
                   onClick={() => setOrderPaymentFilter('cash')}
@@ -262,7 +262,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, tot
                               <strong>{it.quantity}x</strong> {it.product_title}
                               {it.selected_size && <span className="text-slate-500 ml-1">(T:{it.selected_size})</span>}
                               {it.selected_color && <span className="text-slate-500 ml-1">({it.selected_color})</span>}
-                              {it.selected_modifiers && <span className="text-slate-500 ml-1">+ {it.selected_modifiers}</span>}
+                              {it.selected_modifiers?.length > 0 && <span className="text-slate-500 ml-1">+ {it.selected_modifiers.join(', ')}</span>}
                               <span className="text-slate-400 font-mono ml-1.5">({formatFCFA(it.unit_price * it.quantity)})</span>
                             </div>
                           ))}

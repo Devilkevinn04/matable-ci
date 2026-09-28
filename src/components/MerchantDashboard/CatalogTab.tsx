@@ -145,18 +145,18 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
             ) : filteredProducts.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 p-6">
                 <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <h3 className="font-bold text-slate-900 text-base">Aucun article trouvé</h3>
+                <h3 className="font-bold text-slate-900 text-base">{products.length === 0 && !catalogSearch && catalogFilter === 'all' ? 'Votre catalogue est vide' : 'Aucun article trouvé'}</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-5">
                   {catalogSearch || catalogFilter !== 'all'
                     ? 'Aucun produit ne correspond à vos filtres actuels.'
-                    : 'Ajoutez vos articles en renseignant le prix en FCFA, le stock et une photo compressée.'}
+                    : 'Ajoutez votre premier produit pour commencer à vendre. Vous pourrez renseigner son prix, son stock et sa photo.'}
                 </p>
                 <button
                   onClick={handleOpenAddModal}
                   className="py-2.5 px-4 rounded-xl bg-slate-900 text-white font-bold text-xs inline-flex items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Ajouter un article</span>
+                  <span>{products.length === 0 && !catalogSearch && catalogFilter === 'all' ? 'Ajouter mon premier produit' : 'Ajouter un article'}</span>
                 </button>
               </div>
             ) : (
