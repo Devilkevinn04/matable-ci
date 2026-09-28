@@ -9,6 +9,7 @@ import { ToastProvider } from './components/Toast';
 import { Footer } from './components/Footer';
 import { LegalPageKey, LegalPages } from './components/LegalPages';
 import { CookieBanner } from './components/CookieBanner';
+import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { CustomerAccount, CustomerAuth, CustomerUser } from './components/CustomerAuth';
 import { FaqPage } from './components/FaqPage';
 
@@ -351,6 +352,7 @@ export default function App() {
               </div>
             </div>
             <CookieBanner />
+            <WhatsAppFloatingButton />
           </motion.div>
         )}
       </AnimatePresence>
