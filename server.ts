@@ -5,9 +5,19 @@ import { createHash, randomUUID, timingSafeEqual as cryptoTimingSafeEqual } from
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { createServer as createViteServer } from 'vite';
-import { db, initializeDatabase } from './db.ts';
-import { hydrateLocalFromNeon, installNeonSyncMiddleware, neonEnabled, syncNeonFromLocal } from './neon-sync.ts';
+import { dbAll, dbGet, dbRun, dbTransaction, databaseMode, initializeDatabase } from './db.ts';
+import { createDiditVerificationSession, fetchDiditDecision, getDiditConfiguration, isMerchantKycEnabled, verifyDiditWebhookSignature } from './didit.ts';
 import { sendWhatsAppCloudTemplate, sendWhatsAppCloudText } from './whatsapp.ts';
+import { getCategoryDefaults, isShopCategory, normalizeCustomBannerImage, normalizeProductImage, normalizeWelcomeMessage } from './src/utils/categoryDefaults.ts';
+import type { ShopCategory } from './src/utils/categoryDefaults.ts';
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: { id: number };
+    }
+  }
+}
 
 const DEMO_MODE = String(process.env.DEMO_MODE || '').trim().toLowerCase() === 'true';
 
@@ -27,6 +37,8 @@ interface ShopOpeningHours {
   manual_override?: boolean;
 }
 
+// Legacy plan identifiers remain accepted for compatibility with older records,
+// while the V2 product experience stays free and not gated by tiers.
 export type SubscriptionTier = 'standard' | 'premium' | 'pro';
 
 export interface SubscriptionPlanConfig {
@@ -46,13 +58,14 @@ interface ShopRecord {
   welcome_message: string | null;
   is_open: boolean;
   is_active: boolean;
+  merchant_verification_status?: 'not_required' | 'pending' | 'approved' | 'rejected' | 'retry_required';
   payment_status: 'pending' | 'awaiting_review' | 'approved' | 'rejected' | 'suspended';
   payment_deadline_at?: string | null;
   selected_subscription_tier?: SubscriptionTier;
   subscription_expires_at: string;
   last_notification_sent_at: string | null;
   created_at: string;
-  category: 'fashion' | 'food' | 'beauty' | 'electronics' | 'home' | 'services' | 'health' | 'crafts' | 'education' | 'automotive' | 'other';
+  category: ShopCategory;
   city?: string;
   subscription_tier: SubscriptionTier;
   opening_hours?: ShopOpeningHours;
@@ -63,10 +76,24 @@ interface ShopRecord {
     font_family: 'Plus Jakarta Sans' | 'Playfair Display' | 'Cinzel' | 'Poppins';
     layout_style: 'grid_portrait' | 'card_landscape';
     theme_preset_id?: string;
+    brand_direction?: 'luxe' | 'moderne' | 'authentique';
     custom_banner_url?: string;
     logo_url?: string;
     event_mode_enabled?: boolean;
     event_banner_text?: string;
+    social_links?: {
+      instagram?: string;
+      facebook?: string;
+      tiktok?: string;
+      website?: string;
+      whatsapp?: string;
+    };
+    delivery_zones?: Array<{
+      label: string;
+      mode: 'livraison' | 'sur_place' | 'retirer';
+      fee: number;
+      description?: string;
+    }>;
     advanced_css?: {
       borderRadius?: 'rounded-none' | 'rounded-xl' | 'rounded-2xl' | 'rounded-3xl';
       shadowIntensity?: 'none' | 'subtle' | 'soft' | 'strong';
@@ -97,11 +124,13 @@ interface ProductRecord {
     max_selections?: number;
     options: { label: string; price_delta: number }[];
   }[];
+  attributes?: Record<string, string>;
 }
 
 interface OrderRecord {
   id: number;
   shop_id: number;
+  customer_user_id?: number;
   customer_name: string;
   customer_phone: string;
   delivery_location: string;
@@ -111,6 +140,8 @@ interface OrderRecord {
   total_amount: number;
   created_at: string;
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'expired';
+  whatsapp_tracking_available?: boolean;
+  whatsapp_clicked_at?: string | null;
   items?: {
     id: number;
     order_id: number;
@@ -124,12 +155,6 @@ interface OrderRecord {
   }[];
 }
 
-// In-memory Database with persistent initial seed
-let nextShopId = 5;
-let nextProductId = 11;
-let nextOrderId = 5;
-let nextItemId = 10;
-
 // Set realistic future dates for subscriptions
 const now = new Date();
 const addDays = (d: Date, days: number) => {
@@ -142,14 +167,14 @@ const addDays = (d: Date, days: number) => {
 function computeIsShopOpen(shop: ShopRecord): boolean {
   if (shop.opening_hours && shop.opening_hours.enabled && !shop.opening_hours.manual_override) {
     const d = new Date();
-    // Ivory Coast (Abidjan) is UTC+0
-    const currentMinutes = d.getUTCHours() * 60 + d.getUTCMinutes();
-    const currentDay = d.getUTCDay(); // 0 = Dimanche, 1 = Lundi...
+    const abidjanNow = new Date(d.toLocaleString('en-US', { timeZone: 'Africa/Abidjan' }));
+    const abidjanWeekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Abidjan', weekday: 'short' }).format(d);
+    const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const currentMinutes = abidjanNow.getHours() * 60 + abidjanNow.getMinutes();
+    const currentDay = dayMap[abidjanWeekday] ?? abidjanNow.getDay();
 
-    if (shop.opening_hours.days && shop.opening_hours.days.length > 0) {
-      if (!shop.opening_hours.days.includes(currentDay)) {
-        return false;
-      }
+    if (shop.opening_hours.days && shop.opening_hours.days.length > 0 && !shop.opening_hours.days.includes(currentDay)) {
+      return false;
     }
 
     const [openH, openM] = (shop.opening_hours.open_time || '08:00').split(':').map(Number);
@@ -159,10 +184,9 @@ function computeIsShopOpen(shop: ShopRecord): boolean {
 
     if (closeMinutes >= openMinutes) {
       return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
-    } else {
-      // Overnight (e.g. 18:00 to 02:00)
-      return currentMinutes >= openMinutes || currentMinutes <= closeMinutes;
     }
+
+    return currentMinutes >= openMinutes || currentMinutes <= closeMinutes;
   }
   return Boolean(shop.is_open);
 }
@@ -226,13 +250,17 @@ function isWeakShopPin(pin: unknown): boolean {
 }
 
 export function getSubscriptionPlanConfig(tier: SubscriptionTier | string): SubscriptionPlanConfig {
-  const normalizedTier = (tier === 'premium' || tier === 'pro' || tier === 'standard') ? tier : 'standard';
+  const normalizedTier = (tier === 'premium' || tier === 'pro' || tier === 'standard') ? String(tier) : 'standard';
   const options: Record<SubscriptionTier, SubscriptionPlanConfig> = {
-    standard: { tier: 'standard', amount: 3000, label: 'Standard', description: 'Vitrine + catalogue + commandes' },
-    premium: { tier: 'premium', amount: 4000, label: 'Premium', description: 'Tout Standard + thèmes premium' },
-    pro: { tier: 'pro', amount: 5000, label: 'Pro', description: 'Tout Premium + studio avancé' },
+    standard: { tier: 'standard', amount: 0, label: 'Gratuit', description: 'Vitrine + catalogue + commandes' },
+    premium: { tier: 'premium', amount: 0, label: 'Gratuit', description: 'Vitrine + catalogue + commandes' },
+    pro: { tier: 'pro', amount: 0, label: 'Gratuit', description: 'Vitrine + catalogue + commandes' },
   };
-  return options[normalizedTier];
+  return options[normalizedTier as SubscriptionTier];
+}
+
+export function normalizeSubscriptionTier(tier?: SubscriptionTier | string): SubscriptionTier {
+  return 'standard';
 }
 
 function toBusinessDateKey(value: string | Date, timeZone = 'Africa/Abidjan'): string {
@@ -354,30 +382,28 @@ export function buildPaymentInstructionMessage(
   tier: SubscriptionTier | string,
   amount: number,
   paymentLink: string,
-  paymentProvider: PaymentProvider = 'paystack',
+  paymentProvider: PaymentProvider = 'whatsapp',
 ): string {
   const plan = getSubscriptionPlanConfig(tier);
   const chosenAmount = Number.isFinite(amount) && amount > 0 ? amount : plan.amount;
-  const safePaymentLink = paymentLink || 'https://paystack.com/pay/matable-ci';
+  const safePaymentLink = paymentLink || 'https://wa.me/2250700000000?text=Je%20commande';
 
   if (paymentProvider === 'paystack') {
     return [
       `Bienvenue sur MaTable.ci, ${shopName}.`,
-      `Pour activer votre boutique, choisissez le forfait ${plan.label} (${chosenAmount} FCFA).`,
-      'Options disponibles : Standard 3000 FCFA | Premium 4000 FCFA | Pro 5000 FCFA.',
-      `Paiement requis : cliquez sur ce lien sécurisé Paystack pour finaliser votre paiement : ${safePaymentLink}`,
-      'Important : votre paiement doit être confirmé sur Paystack dans les 20 minutes. Sans confirmation, la boutique est suspendue automatiquement.',
-      'Une fois le paiement confirmé, la boutique est activée automatiquement sans validation manuelle.',
+      `Votre accès est ${plan.label.toLowerCase()} : aucun paiement requis pour lancer votre boutique.`,
+      `Le montant affiché est ${chosenAmount} FCFA, mais la V1 MaTable.ci reste gratuite et le parcours commande passe par WhatsApp.`,
+      `Commande : ouvrez ce lien pour finaliser votre demande : ${safePaymentLink}`,
+      'Aucun paiement requis. La commande est envoyée au commerçant via WhatsApp pour confirmation.',
     ].join('\n');
   }
 
   return [
     `Bienvenue sur MaTable.ci, ${shopName}.`,
-    `Pour activer votre boutique, choisissez le forfait ${plan.label} (${chosenAmount} FCFA).`,
-    'Options disponibles : Standard 3000 FCFA | Premium 4000 FCFA | Pro 5000 FCFA.',
-    `Paiement requis : cliquez sur ce lien sécurisé Paystack pour finaliser votre paiement : ${safePaymentLink}`,
-    'Important : votre paiement doit être confirmé sur Paystack dans les 20 minutes. Sans confirmation, la boutique est suspendue automatiquement.',
-    'Une fois le paiement confirmé, la boutique est activée automatiquement sans validation manuelle.',
+    `Votre accès est ${plan.label.toLowerCase()} : aucun paiement requis pour lancer votre boutique.`,
+    `Le montant affiché est ${chosenAmount} FCFA, mais la V1 MaTable.ci reste gratuite et le parcours commande passe par WhatsApp.`,
+    `Commande : ouvrez ce lien pour finaliser votre demande : ${safePaymentLink}`,
+    'Aucun paiement requis. La commande est envoyée au commerçant via WhatsApp pour confirmation.',
   ].join('\n');
 }
 
@@ -393,42 +419,45 @@ function getPaymentLinkForShop(shopName: string, selectedTier: SubscriptionTier)
   return `https://wa.me/${contactNumber}?text=${paymentText}`;
 }
 
-export function isPaymentReferenceProcessed(
+export async function isPaymentReferenceProcessed(
   provider: PaymentProvider | string,
   reference: string,
   shopId?: number,
-): boolean {
+): Promise<boolean> {
   const normalizedProvider = String(provider || 'paystack').trim() || 'paystack';
   const normalizedReference = String(reference || '').trim();
   if (!normalizedReference) return false;
 
   const row = shopId
-    ? db.prepare('SELECT 1 FROM payment_transactions WHERE provider = ? AND reference = ? AND shop_id = ? LIMIT 1').get(normalizedProvider, normalizedReference, shopId)
-    : db.prepare('SELECT 1 FROM payment_transactions WHERE provider = ? AND reference = ? LIMIT 1').get(normalizedProvider, normalizedReference);
+    ? await dbGet('SELECT 1 FROM payment_transactions WHERE provider = ? AND reference = ? AND shop_id = ? LIMIT 1', [normalizedProvider, normalizedReference, shopId])
+    : await dbGet('SELECT 1 FROM payment_transactions WHERE provider = ? AND reference = ? LIMIT 1', [normalizedProvider, normalizedReference]);
 
   return Boolean(row);
 }
 
-export function markPaymentReferenceProcessed(
+export async function markPaymentReferenceProcessed(
   provider: PaymentProvider | string,
   reference: string,
   shopId: number,
   tier: SubscriptionTier | string,
   amount: number,
-): boolean {
+): Promise<boolean> {
   const normalizedProvider = String(provider || 'paystack').trim() || 'paystack';
   const normalizedReference = String(reference || '').trim();
   if (!normalizedReference || !Number.isFinite(shopId)) {
     return false;
   }
 
-  const normalizedTier = ['standard', 'premium', 'pro'].includes(String(tier || 'standard')) ? String(tier) : 'standard';
+  const normalizedTier = normalizeSubscriptionTier(tier || 'standard');
   const normalizedAmount = Number.isFinite(amount) && amount > 0 ? Math.round(amount) : 0;
 
-  const result = db.prepare(`
-    INSERT OR IGNORE INTO payment_transactions (provider, reference, shop_id, tier, amount, transaction_date, processed_at)
-    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-  `).run(normalizedProvider, normalizedReference, shopId, normalizedTier, normalizedAmount, new Date().toISOString());
+  const result = databaseMode === 'postgresql'
+    ? await dbRun(`INSERT INTO payment_transactions (provider, reference, shop_id, tier, amount, transaction_date, processed_at)
+        VALUES (?, ?, ?, ?, ?, ?, NOW()) ON CONFLICT (provider, reference) DO NOTHING`,
+      [normalizedProvider, normalizedReference, shopId, normalizedTier, normalizedAmount, new Date().toISOString()])
+    : await dbRun(`INSERT OR IGNORE INTO payment_transactions (provider, reference, shop_id, tier, amount, transaction_date, processed_at)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+      [normalizedProvider, normalizedReference, shopId, normalizedTier, normalizedAmount, new Date().toISOString()]);
 
   return result.changes > 0;
 }
@@ -440,15 +469,13 @@ export async function activateShopSubscription(
   reference?: string,
   amount?: number,
 ): Promise<{ activated: boolean; already_processed: boolean; payment_status: ShopRecord['payment_status']; tier: SubscriptionTier; amount: number; message: string; }> {
-  const normalizedTier = ['standard', 'premium', 'pro'].includes(String(tier || shop.subscription_tier || 'standard'))
-    ? String(tier || shop.subscription_tier || 'standard') as SubscriptionTier
-    : (shop.selected_subscription_tier || shop.subscription_tier || 'standard');
+  const normalizedTier = normalizeSubscriptionTier(tier || shop.subscription_tier || shop.selected_subscription_tier || 'standard');
 
   const normalizedReference = reference ? String(reference).trim() : '';
   const planAmount = getSubscriptionPlanConfig(normalizedTier).amount;
   const normalizedAmount = Number.isFinite(Number(amount)) && Number(amount) > 0 ? Number(amount) : planAmount;
 
-  if (normalizedReference && isPaymentReferenceProcessed(provider, normalizedReference, shop.id)) {
+  if (normalizedReference && await isPaymentReferenceProcessed(provider, normalizedReference, shop.id)) {
     const currentTier = shop.subscription_tier || normalizedTier;
     return {
       activated: false,
@@ -461,16 +488,16 @@ export async function activateShopSubscription(
   }
 
   if (normalizedReference) {
-    markPaymentReferenceProcessed(provider, normalizedReference, shop.id, normalizedTier, normalizedAmount);
+    await markPaymentReferenceProcessed(provider, normalizedReference, shop.id, normalizedTier, normalizedAmount);
   }
 
   shop.subscription_tier = normalizedTier;
   shop.selected_subscription_tier = normalizedTier;
   shop.payment_status = 'approved';
-  shop.is_active = true;
+  shop.is_active = shop.merchant_verification_status === 'approved' || !shop.merchant_verification_status || shop.merchant_verification_status === 'not_required';
   shop.payment_deadline_at = null;
   shop.subscription_expires_at = new Date(Date.now() + 30 * 86400000).toISOString();
-  persistShop(shop);
+  await persistShop(shop);
 
   const confirmationMessage = `Paiement validé pour ${shop.name}. Votre boutique MaTable.ci est désormais activée pour 30 jours.`;
 
@@ -1053,9 +1080,10 @@ const hashPin = (pin: string) => bcrypt.hashSync(String(pin).trim(), 10);
 const hashAccessToken = (token: string) => createHash('sha256').update(token).digest('hex');
 const merchantSessions = new Map<string, { shopId: number; expiresAt: number; fingerprint: string }>();
 const adminSessions = new Map<string, { expiresAt: number; fingerprint: string }>();
+const customerSessions = new Map<string, { userId: number; expiresAt: number; fingerprint: string }>();
 
-export function saveMerchantSessionRecord(token: string, session: { shopId: number; expiresAt: number; fingerprint: string }) {
-  db.prepare(`
+export async function saveMerchantSessionRecord(token: string, session: { shopId: number; expiresAt: number; fingerprint: string }) {
+  await dbRun(`
     INSERT INTO merchant_sessions (token, shop_id, expires_at, fingerprint, created_at)
     VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(token) DO UPDATE SET
@@ -1063,39 +1091,62 @@ export function saveMerchantSessionRecord(token: string, session: { shopId: numb
       expires_at = excluded.expires_at,
       fingerprint = excluded.fingerprint,
       created_at = excluded.created_at
-  `).run(token, session.shopId, session.expiresAt, session.fingerprint, new Date().toISOString());
+  `, [token, session.shopId, session.expiresAt, session.fingerprint, new Date().toISOString()]);
 }
 
-export function getMerchantSessionRecord(token: string): { shopId: number; expiresAt: number; fingerprint: string } | null {
-  const row = db.prepare('SELECT shop_id, expires_at, fingerprint FROM merchant_sessions WHERE token = ?').get(token) as { shop_id: number; expires_at: number; fingerprint: string } | undefined;
+export async function getMerchantSessionRecord(token: string): Promise<{ shopId: number; expiresAt: number; fingerprint: string } | null> {
+  const row = await dbGet<{ shop_id: number; expires_at: number; fingerprint: string }>('SELECT shop_id, expires_at, fingerprint FROM merchant_sessions WHERE token = ?', [token]);
   if (!row) return null;
-  return { shopId: row.shop_id, expiresAt: row.expires_at, fingerprint: row.fingerprint };
+  return { shopId: Number(row.shop_id), expiresAt: Number(row.expires_at), fingerprint: row.fingerprint };
 }
 
-export function deleteMerchantSessionRecord(token: string) {
-  db.prepare('DELETE FROM merchant_sessions WHERE token = ?').run(token);
+export async function deleteMerchantSessionRecord(token: string) {
+  await dbRun('DELETE FROM merchant_sessions WHERE token = ?', [token]);
 }
 
-export function saveAdminSessionRecord(token: string, session: { expiresAt: number; fingerprint: string }) {
-  db.prepare(`
+export async function saveAdminSessionRecord(token: string, session: { expiresAt: number; fingerprint: string }) {
+  await dbRun(`
     INSERT INTO admin_sessions (token, expires_at, fingerprint, created_at)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(token) DO UPDATE SET
       expires_at = excluded.expires_at,
       fingerprint = excluded.fingerprint,
       created_at = excluded.created_at
-  `).run(token, session.expiresAt, session.fingerprint, new Date().toISOString());
+  `, [token, session.expiresAt, session.fingerprint, new Date().toISOString()]);
 }
 
-export function getAdminSessionRecord(token: string): { expiresAt: number; fingerprint: string } | null {
-  const row = db.prepare('SELECT expires_at, fingerprint FROM admin_sessions WHERE token = ?').get(token) as { expires_at: number; fingerprint: string } | undefined;
+export async function getAdminSessionRecord(token: string): Promise<{ expiresAt: number; fingerprint: string } | null> {
+  const row = await dbGet<{ expires_at: number; fingerprint: string }>('SELECT expires_at, fingerprint FROM admin_sessions WHERE token = ?', [token]);
   if (!row) return null;
-  return { expiresAt: row.expires_at, fingerprint: row.fingerprint };
+  return { expiresAt: Number(row.expires_at), fingerprint: row.fingerprint };
 }
 
-export function deleteAdminSessionRecord(token: string) {
-  db.prepare('DELETE FROM admin_sessions WHERE token = ?').run(token);
+export async function deleteAdminSessionRecord(token: string) {
+  await dbRun('DELETE FROM admin_sessions WHERE token = ?', [token]);
 }
+
+export async function saveCustomerSessionRecord(token: string, session: { userId: number; expiresAt: number; fingerprint: string }) {
+  await dbRun(`
+    INSERT INTO user_sessions (token, user_id, expires_at, fingerprint, created_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(token) DO UPDATE SET
+      user_id = excluded.user_id,
+      expires_at = excluded.expires_at,
+      fingerprint = excluded.fingerprint,
+      created_at = excluded.created_at
+  `, [token, session.userId, session.expiresAt, session.fingerprint, new Date().toISOString()]);
+}
+
+export async function getCustomerSessionRecord(token: string): Promise<{ userId: number; expiresAt: number; fingerprint: string } | null> {
+  const row = await dbGet<{ user_id: number; expires_at: number; fingerprint: string }>('SELECT user_id, expires_at, fingerprint FROM user_sessions WHERE token = ?', [token]);
+  if (!row) return null;
+  return { userId: Number(row.user_id), expiresAt: Number(row.expires_at), fingerprint: row.fingerprint };
+}
+
+export async function deleteCustomerSessionRecord(token: string) {
+  await dbRun('DELETE FROM user_sessions WHERE token = ?', [token]);
+}
+
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const merchantRecoveryAttempts = new Map<number, { count: number; resetAt: number }>();
 const merchantRecoveryTokens = new Map<string, { shopId: number; expiresAt: number }>();
@@ -1141,6 +1192,14 @@ function setSessionCookie(res: Response, token: string, fingerprint: string) {
   const maxAgeSeconds = Math.max(1, Math.floor(SESSION_DURATION_MS / 1000));
   const sessionCookie = `matable_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
   const fingerprintCookie = `matable_session_fp=${encodeURIComponent(fingerprint)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
+  res.setHeader('Set-Cookie', [sessionCookie, fingerprintCookie]);
+}
+
+function setCustomerSessionCookie(res: Response, token: string, fingerprint: string) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const maxAgeSeconds = Math.max(1, Math.floor(SESSION_DURATION_MS / 1000));
+  const sessionCookie = `matable_customer_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
+  const fingerprintCookie = `matable_customer_session_fp=${encodeURIComponent(fingerprint)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
   res.setHeader('Set-Cookie', [sessionCookie, fingerprintCookie]);
 }
 
@@ -1205,11 +1264,11 @@ export function isRequestFingerprintMatch(session: { fingerprint?: string } | nu
   return timingSafeEqual(current, session.fingerprint);
 }
 
-function createMerchantSession(res: Response, shopId: number, req: Request) {
+async function createMerchantSession(res: Response, shopId: number, req: Request) {
   const sessionToken = randomUUID();
   const session = { shopId, expiresAt: Date.now() + SESSION_DURATION_MS, fingerprint: buildSessionFingerprint(req) };
   merchantSessions.set(sessionToken, session);
-  saveMerchantSessionRecord(sessionToken, session);
+  await saveMerchantSessionRecord(sessionToken, session);
   setSessionCookie(res, sessionToken, session.fingerprint);
 }
 
@@ -1224,39 +1283,39 @@ function setAdminSessionCookie(res: Response, token: string) {
   res.setHeader('Set-Cookie', `matable_admin_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`);
 }
 
-function getAdminSession(req: Request): string | null {
+async function getAdminSession(req: Request): Promise<string | null> {
   const token = getCookie(req, 'matable_admin_session');
   let session = token ? adminSessions.get(token) : undefined;
 
   if (!session && token) {
-    session = getAdminSessionRecord(token) ?? undefined;
+    session = (await getAdminSessionRecord(token)) ?? undefined;
     if (session) adminSessions.set(token, session);
   }
 
   if (!token || !session || session.expiresAt <= Date.now()) {
     if (token) {
       adminSessions.delete(token);
-      deleteAdminSessionRecord(token);
+      await deleteAdminSessionRecord(token);
     }
     return null;
   }
 
   if (!isRequestFingerprintMatch(session, req)) {
     adminSessions.delete(token);
-    deleteAdminSessionRecord(token);
+    await deleteAdminSessionRecord(token);
     return null;
   }
 
   const renewedSession = { ...session, expiresAt: Date.now() + ADMIN_SESSION_DURATION_MS };
   adminSessions.set(token, renewedSession);
-  saveAdminSessionRecord(token, renewedSession);
+  await saveAdminSessionRecord(token, renewedSession);
   return token;
 }
 
-function getSessionStateForResponse(req: Request, res?: Response) {
+async function getSessionStateForResponse(req: Request, res?: Response) {
   const adminToken = getCookie(req, 'matable_admin_session');
   if (adminToken) {
-    const adminSessionToken = getAdminSession(req);
+    const adminSessionToken = await getAdminSession(req);
     if (adminSessionToken) {
       if (res) setAdminSessionCookie(res, adminSessionToken);
       return { authenticated: true, userType: 'admin', shopId: null };
@@ -1264,25 +1323,49 @@ function getSessionStateForResponse(req: Request, res?: Response) {
   }
 
   const merchantToken = getCookie(req, 'matable_session');
+  const customerToken = getCookie(req, 'matable_customer_session');
+  if (customerToken && !merchantToken) {
+    let customerSession = customerSessions.get(customerToken) ?? (await getCustomerSessionRecord(customerToken)) ?? undefined;
+    if (!customerSession) {
+      return { authenticated: false, userType: null, shopId: null, user: null };
+    }
+    if (customerSession.expiresAt <= Date.now()) {
+      customerSessions.delete(customerToken);
+      await deleteCustomerSessionRecord(customerToken);
+      return { authenticated: false, userType: null, shopId: null, user: null };
+    }
+    if (!isRequestFingerprintMatch(customerSession, req)) {
+      customerSessions.delete(customerToken);
+      await deleteCustomerSessionRecord(customerToken);
+      return { authenticated: false, userType: null, shopId: null, user: null };
+    }
+    const renewedSession = { ...customerSession, expiresAt: Date.now() + SESSION_DURATION_MS };
+    customerSessions.set(customerToken, renewedSession);
+    await saveCustomerSessionRecord(customerToken, renewedSession);
+    if (res) setCustomerSessionCookie(res, customerToken, renewedSession.fingerprint);
+    const user = await dbGet<{ id: number; name: string; phone: string; email: string }>('SELECT id, name, phone, email FROM users WHERE id = ?', [customerSession.userId]);
+    return { authenticated: true, userType: 'customer', shopId: null, user: user ? { id: user.id, name: user.name, phone: user.phone, email: user.email } : null };
+  }
+
   if (merchantToken) {
-    let merchantSession = merchantSessions.get(merchantToken) ?? getMerchantSessionRecord(merchantToken) ?? undefined;
+    let merchantSession = merchantSessions.get(merchantToken) ?? (await getMerchantSessionRecord(merchantToken)) ?? undefined;
     if (!merchantSession) {
       return { authenticated: false, userType: null, shopId: null };
     }
     if (merchantSession.expiresAt <= Date.now()) {
       merchantSessions.delete(merchantToken);
-      deleteMerchantSessionRecord(merchantToken);
+      await deleteMerchantSessionRecord(merchantToken);
       return { authenticated: false, userType: null, shopId: null };
     }
     if (!isRequestFingerprintMatch(merchantSession, req)) {
       merchantSessions.delete(merchantToken);
-      deleteMerchantSessionRecord(merchantToken);
+      await deleteMerchantSessionRecord(merchantToken);
       return { authenticated: false, userType: null, shopId: null };
     }
 
     const renewedSession = { ...merchantSession, expiresAt: Date.now() + SESSION_DURATION_MS };
     merchantSessions.set(merchantToken, renewedSession);
-    saveMerchantSessionRecord(merchantToken, renewedSession);
+    await saveMerchantSessionRecord(merchantToken, renewedSession);
     if (res) setSessionCookie(res, merchantToken, renewedSession.fingerprint);
     return { authenticated: true, userType: 'merchant', shopId: renewedSession.shopId };
   }
@@ -1290,16 +1373,84 @@ function getSessionStateForResponse(req: Request, res?: Response) {
   return { authenticated: false, userType: null, shopId: null };
 }
 
-function requireAdminAccess(req: Request, res: Response, next: express.NextFunction) {
-  if (!getAdminSession(req)) {
+async function requireCustomerAccess(req: Request, res: Response, next: express.NextFunction) {
+  const token = getCookie(req, 'matable_customer_session');
+  let session = token ? customerSessions.get(token) : undefined;
+
+  if (!session && token) {
+    session = (await getCustomerSessionRecord(token)) ?? undefined;
+    if (session) customerSessions.set(token, session);
+  }
+
+  if (!token || !session || session.expiresAt <= Date.now()) {
+    if (token) {
+      customerSessions.delete(token);
+      await deleteCustomerSessionRecord(token);
+    }
+    return res.status(401).json({ error: 'Authentification client requise.' });
+  }
+
+  if (!isRequestFingerprintMatch(session, req)) {
+    if (token) {
+      customerSessions.delete(token);
+      await deleteCustomerSessionRecord(token);
+    }
+    return res.status(401).json({ error: 'Session client rejetée pour sécurité.' });
+  }
+
+  const renewedSession = { ...session, expiresAt: Date.now() + SESSION_DURATION_MS };
+  customerSessions.set(token, renewedSession);
+  await saveCustomerSessionRecord(token, renewedSession);
+  res.setHeader('Set-Cookie', [
+    `matable_customer_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.max(1, Math.floor(SESSION_DURATION_MS / 1000))}${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`,
+    `matable_customer_session_fp=${encodeURIComponent(renewedSession.fingerprint)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.max(1, Math.floor(SESSION_DURATION_MS / 1000))}${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`,
+  ]);
+  req.user = { id: session.userId } as any;
+  next();
+}
+
+async function getCustomerSessionState(req: Request, res?: Response) {
+  const token = getCookie(req, 'matable_customer_session');
+  if (!token) return { authenticated: false, userType: null, user: null };
+  let session = customerSessions.get(token) ?? (await getCustomerSessionRecord(token)) ?? undefined;
+
+  if (!session) return { authenticated: false, userType: null, user: null };
+  if (session.expiresAt <= Date.now()) {
+    customerSessions.delete(token);
+    await deleteCustomerSessionRecord(token);
+    return { authenticated: false, userType: null, user: null };
+  }
+  if (!isRequestFingerprintMatch(session, req)) {
+    customerSessions.delete(token);
+    await deleteCustomerSessionRecord(token);
+    return { authenticated: false, userType: null, user: null };
+  }
+
+  const renewedSession = { ...session, expiresAt: Date.now() + SESSION_DURATION_MS };
+  customerSessions.set(token, renewedSession);
+  await saveCustomerSessionRecord(token, renewedSession);
+  if (res) setCustomerSessionCookie(res, token, renewedSession.fingerprint);
+
+  const user = await dbGet<{ id: number; name: string; phone: string; email: string; created_at: string; is_active: number }>('SELECT id, name, phone, email, created_at, is_active FROM users WHERE id = ?', [session.userId]);
+  if (!user) return { authenticated: false, userType: null, user: null };
+
+  return { authenticated: true, userType: 'customer', user: { id: user.id, name: user.name, phone: user.phone, email: user.email, created_at: user.created_at } };
+}
+
+async function requireAdminAccess(req: Request, res: Response, next: express.NextFunction) {
+  if (!await getAdminSession(req)) {
     return res.status(401).json({ error: 'Authentification super-admin requise.' });
   }
   next();
 }
 
+export function getRateLimitClientAddress(req: Pick<Request, 'ip' | 'socket'>) {
+  return req.ip || req.socket.remoteAddress || 'unknown';
+}
+
 function rateLimitPublicRequest(limit: number = MAX_PUBLIC_REQUESTS_PER_WINDOW) {
   return (req: Request, res: Response, next: express.NextFunction) => {
-    const key = `${req.method}:${req.path}:${req.socket.remoteAddress || 'unknown'}`;
+    const key = `${req.method}:${req.path}:${getRateLimitClientAddress(req)}`;
     const now = Date.now();
     const current = publicRequestLimits.get(key);
     if (!current || current.resetAt <= now) {
@@ -1315,12 +1466,12 @@ function rateLimitPublicRequest(limit: number = MAX_PUBLIC_REQUESTS_PER_WINDOW) 
   };
 }
 
-function requireMerchantAccess(req: Request, res: Response, next: express.NextFunction) {
+async function requireMerchantIdentity(req: Request, res: Response): Promise<ShopRecord | null> {
   const token = getCookie(req, 'matable_session');
   let session = token ? merchantSessions.get(token) : undefined;
 
   if (!session && token) {
-    session = getMerchantSessionRecord(token) ?? undefined;
+    session = (await getMerchantSessionRecord(token)) ?? undefined;
     if (session) {
       merchantSessions.set(token, session);
     }
@@ -1329,22 +1480,45 @@ function requireMerchantAccess(req: Request, res: Response, next: express.NextFu
   if (!session || session.expiresAt <= Date.now() || session.shopId !== Number(req.params.id)) {
     if (token) {
       merchantSessions.delete(token);
-      deleteMerchantSessionRecord(token);
+      await deleteMerchantSessionRecord(token);
     }
-    return res.status(401).json({ error: 'Session marchand invalide ou expirée.' });
+    res.status(401).json({ error: 'Session marchand invalide ou expirée.' });
+    return null;
   }
 
   if (!isRequestFingerprintMatch(session, req)) {
     if (token) {
       merchantSessions.delete(token);
-      deleteMerchantSessionRecord(token);
+      await deleteMerchantSessionRecord(token);
     }
     clearSessionCookie(res);
-    return res.status(401).json({ error: 'Session rejetée pour sécurité : appareil ou navigateur non reconnu.' });
+    res.status(401).json({ error: 'Session rejetée pour sécurité : appareil ou navigateur non reconnu.' });
+    return null;
   }
 
   const shop = shops.find((candidate) => candidate.id === session.shopId);
-  if (!shop || !shop.is_active) {
+  if (!shop) {
+    res.status(404).json({ error: 'Boutique introuvable.' });
+    return null;
+  }
+  return shop;
+}
+
+async function requireMerchantOwner(req: Request, res: Response, next: express.NextFunction) {
+  if (!await requireMerchantIdentity(req, res)) return;
+  next();
+}
+
+async function requireMerchantAccess(req: Request, res: Response, next: express.NextFunction) {
+  const shop = await requireMerchantIdentity(req, res);
+  if (!shop) return;
+
+  const verificationStatus = shop.merchant_verification_status || 'not_required';
+  if (verificationStatus !== 'approved' && verificationStatus !== 'not_required') {
+    if (req.method === 'GET') return next();
+    return res.status(403).json({ error: 'Terminez la vérification d’identité avant de gérer votre catalogue ou vos commandes.', verification_status: verificationStatus });
+  }
+  if (!shop.is_active) {
     return res.status(403).json({ error: 'Boutique inactive : contactez l’administration pour la réactivation.' });
   }
 
@@ -1389,7 +1563,7 @@ export function resetRecoveryAttemptsForTests() {
   merchantRecoveryCodes.clear();
 }
 
-export function rotateMerchantAccessTokenForShop(shopId: number, previousToken?: string): string {
+export async function rotateMerchantAccessTokenForShop(shopId: number, previousToken?: string): Promise<string> {
   const token = randomUUID();
   const shop = shops.find((candidate) => candidate.id === shopId);
   if (!shop) return token;
@@ -1402,27 +1576,31 @@ export function rotateMerchantAccessTokenForShop(shopId: number, previousToken?:
       shop.owner_access_token_hash = hashedToken;
     }
   }
-  persistShop(shop);
+  await persistShop(shop);
   return token;
 }
 
-setInterval(() => {
+setInterval(async () => {
   const now = Date.now();
   for (const [token, session] of merchantSessions) {
     if (session.expiresAt <= now) {
       merchantSessions.delete(token);
-      deleteMerchantSessionRecord(token);
+      await deleteMerchantSessionRecord(token);
     }
   }
-  db.prepare('DELETE FROM merchant_sessions WHERE expires_at <= ?').run(now);
+  await dbRun('DELETE FROM merchant_sessions WHERE expires_at <= ?', [now]);
   for (const [token, session] of adminSessions) {
     if (session.expiresAt <= now) {
       adminSessions.delete(token);
-      deleteAdminSessionRecord(token);
+      await deleteAdminSessionRecord(token);
     }
   }
-  db.prepare('DELETE FROM admin_sessions WHERE expires_at <= ?').run(now);
+  await dbRun('DELETE FROM admin_sessions WHERE expires_at <= ?', [now]);
 }, 15 * 60 * 1000).unref();
+
+setInterval(() => {
+  void purgeExpiredMerchantVerificationMetadata().catch(() => undefined);
+}, 24 * 60 * 60 * 1000).unref();
 
 const toSafeShop = (shop: ShopRecord) => {
   const {
@@ -1460,31 +1638,32 @@ const findShopByPhone = (phone: string) => {
   });
 };
 
-function seedDatabaseIfEmpty() {
+async function seedDatabaseIfEmpty() {
+  if (databaseMode === 'postgresql') return;
   if (process.env.NODE_ENV === 'production' && !shouldSeedDemoData()) {
     return;
   }
 
-  const shopRow = db.prepare('SELECT COUNT(*) as count FROM shops').get() as { count: number };
-  if (shopRow.count > 0) {
+  const shopRow = await dbGet<{ count: number }>('SELECT COUNT(*) as count FROM shops');
+  if (Number(shopRow?.count || 0) > 0) {
     return;
   }
 
-  const insertShop = db.prepare(`
+  const insertShop = `
     INSERT INTO shops (
       id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active,
       subscription_expires_at, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  `;
 
-  const insertProduct = db.prepare(`
+  const insertProduct = `
     INSERT INTO products (
       id, shop_id, title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, prep_time, modifier_groups
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  `;
 
   for (const shop of shops) {
-    insertShop.run(
+    await dbRun(insertShop, [
       shop.id,
       shop.name,
       shop.slug,
@@ -1501,10 +1680,10 @@ function seedDatabaseIfEmpty() {
       shop.city ?? null,
       shop.subscription_tier,
       JSON.stringify(shop.theme_config)
-    );
+    ]);
 
     for (const product of products.filter((p) => p.shop_id === shop.id)) {
-      insertProduct.run(
+      await dbRun(insertProduct, [
         product.id,
         product.shop_id,
         product.title,
@@ -1519,21 +1698,21 @@ function seedDatabaseIfEmpty() {
         product.lookbook_image ?? null,
         product.prep_time ?? null,
         product.modifier_groups ? JSON.stringify(product.modifier_groups) : null
-      );
+      ]);
     }
   }
 
-  const orderCount = db.prepare('SELECT COUNT(*) as count FROM orders').get() as { count: number };
-  if (orderCount.count === 0) {
-    const insertOrder = db.prepare(`
+  const orderCount = await dbGet<{ count: number }>('SELECT COUNT(*) as count FROM orders');
+  if (Number(orderCount?.count || 0) === 0) {
+    const insertOrder = `
       INSERT INTO orders (
         id, shop_id, customer_name, customer_phone, delivery_location, delivery_note,
         delivery_slot, payment_method_preference, total_amount, created_at, status, items
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    `;
 
     for (const order of orders) {
-      insertOrder.run(
+      await dbRun(insertOrder, [
         order.id,
         order.shop_id,
         order.customer_name,
@@ -1546,16 +1725,17 @@ function seedDatabaseIfEmpty() {
         order.created_at,
         order.status || 'pending',
         JSON.stringify(order.items ?? [])
-      );
+      ]);
     }
   }
 }
 
-function loadProductsFromDatabase() {
-  const rows = db.prepare('SELECT * FROM products ORDER BY id').all() as Record<string, unknown>[];
+async function loadProductsFromDatabase() {
+  const rows = await dbAll<Record<string, unknown>>('SELECT * FROM products ORDER BY id');
   return rows.map((row) => ({
     id: Number(row.id),
     shop_id: Number(row.shop_id),
+    customer_user_id: row.customer_user_id == null ? undefined : Number(row.customer_user_id),
     title: String(row.title),
     description: row.description ? String(row.description) : null,
     price: Number(row.price),
@@ -1563,21 +1743,27 @@ function loadProductsFromDatabase() {
     image_url: String(row.image_url ?? ''),
     is_available: Boolean(row.is_available),
     category: row.category ? String(row.category) : undefined,
-    sizes: row.sizes ? JSON.parse(String(row.sizes)) : undefined,
-    colors: row.colors ? JSON.parse(String(row.colors)) : undefined,
+    sizes: row.sizes ? (typeof row.sizes === 'string' ? JSON.parse(row.sizes) : row.sizes) : undefined,
+    colors: row.colors ? (typeof row.colors === 'string' ? JSON.parse(row.colors) : row.colors) : undefined,
     lookbook_image: row.lookbook_image ? String(row.lookbook_image) : undefined,
     prep_time: row.prep_time == null ? undefined : Number(row.prep_time),
-    modifier_groups: row.modifier_groups ? JSON.parse(String(row.modifier_groups)) : undefined,
+    modifier_groups: row.modifier_groups ? (typeof row.modifier_groups === 'string' ? JSON.parse(row.modifier_groups) : row.modifier_groups) : undefined,
+    attributes: row.attributes ? (typeof row.attributes === 'string' ? JSON.parse(row.attributes) : row.attributes) : undefined,
   })) as ProductRecord[];
 }
 
-function loadShopsFromDatabase() {
-  const rows = db.prepare('SELECT * FROM shops ORDER BY id').all() as Record<string, unknown>[];
+async function loadShopsFromDatabase() {
+  const rows = await dbAll<Record<string, unknown>>(`
+    SELECT shops.*, COALESCE(merchant_verifications.status, shops.merchant_verification_status, 'not_required') AS merchant_verification_status
+    FROM shops LEFT JOIN merchant_verifications ON merchant_verifications.shop_id = shops.id
+    ORDER BY shops.id
+  `);
   return rows.map((row) => ({
     id: Number(row.id), name: String(row.name), slug: String(row.slug),
     whatsapp_number: String(row.whatsapp_number), pin_code_hash: String(row.pin_code_hash),
     theme_color: String(row.theme_color || ''), welcome_message: row.welcome_message == null ? null : String(row.welcome_message),
     is_open: Boolean(row.is_open), is_active: Boolean(row.is_active),
+    merchant_verification_status: String(row.merchant_verification_status || 'not_required') as ShopRecord['merchant_verification_status'],
     payment_status: (String(row.payment_status || 'approved')) as ShopRecord['payment_status'],
     payment_deadline_at: row.payment_deadline_at == null ? null : String(row.payment_deadline_at),
     selected_subscription_tier: row.selected_subscription_tier ? String(row.selected_subscription_tier) as SubscriptionTier : undefined,
@@ -1585,49 +1771,66 @@ function loadShopsFromDatabase() {
     last_notification_sent_at: row.last_notification_sent_at == null ? null : String(row.last_notification_sent_at),
     created_at: String(row.created_at), category: String(row.category) as ShopRecord['category'],
     city: row.city == null ? undefined : String(row.city), subscription_tier: String(row.subscription_tier) as ShopRecord['subscription_tier'],
-    theme_config: row.theme_config ? JSON.parse(String(row.theme_config)) : {},
-    opening_hours: row.opening_hours ? JSON.parse(String(row.opening_hours)) : undefined,
+    theme_config: row.theme_config ? (typeof row.theme_config === 'string' ? JSON.parse(row.theme_config) : row.theme_config) : {},
+    opening_hours: row.opening_hours ? (typeof row.opening_hours === 'string' ? JSON.parse(row.opening_hours) : row.opening_hours) : undefined,
     owner_access_token_hash: row.owner_access_token_hash ? String(row.owner_access_token_hash) : null,
   })) as ShopRecord[];
 }
 
-function persistShop(shop: ShopRecord) {
-  db.prepare(`
-    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+async function persistShop(shop: ShopRecord) {
+  await dbRun(`
+    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET name=excluded.name, slug=excluded.slug, whatsapp_number=excluded.whatsapp_number,
       pin_code_hash=excluded.pin_code_hash, theme_color=excluded.theme_color, welcome_message=excluded.welcome_message,
       is_open=excluded.is_open, is_active=excluded.is_active, payment_status=excluded.payment_status,
+      merchant_verification_status=excluded.merchant_verification_status,
       payment_deadline_at=excluded.payment_deadline_at, selected_subscription_tier=excluded.selected_subscription_tier,
       subscription_expires_at=excluded.subscription_expires_at, last_notification_sent_at=excluded.last_notification_sent_at,
       category=excluded.category, city=excluded.city, subscription_tier=excluded.subscription_tier,
       theme_config=excluded.theme_config, opening_hours=excluded.opening_hours, owner_access_token_hash=excluded.owner_access_token_hash
-  `).run(
+  `, [
     shop.id, shop.name, shop.slug, shop.whatsapp_number, shop.pin_code_hash, shop.theme_color, shop.welcome_message,
-    shop.is_open ? 1 : 0, shop.is_active ? 1 : 0, shop.payment_status || 'approved', shop.payment_deadline_at ?? null,
+    shop.is_open ? 1 : 0, shop.is_active ? 1 : 0, shop.merchant_verification_status || 'not_required', shop.payment_status || 'approved', shop.payment_deadline_at ?? null,
     shop.selected_subscription_tier ?? shop.subscription_tier, shop.subscription_expires_at, shop.last_notification_sent_at,
     shop.created_at, shop.category, shop.city ?? null, shop.subscription_tier, JSON.stringify(shop.theme_config),
     shop.opening_hours ? JSON.stringify(shop.opening_hours) : null, shop.owner_access_token_hash ?? null
-  );
+  ]);
 }
 
-function persistProduct(product: ProductRecord) {
-  db.prepare(`
-    INSERT INTO products (id, shop_id, title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, prep_time, modifier_groups)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+async function persistProduct(product: ProductRecord) {
+  await dbRun(`
+    INSERT INTO products (id, shop_id, title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, prep_time, modifier_groups, attributes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET shop_id=excluded.shop_id, title=excluded.title, description=excluded.description,
       price=excluded.price, stock=excluded.stock, image_url=excluded.image_url, is_available=excluded.is_available,
       category=excluded.category, sizes=excluded.sizes, colors=excluded.colors, lookbook_image=excluded.lookbook_image, prep_time=excluded.prep_time,
-      modifier_groups=excluded.modifier_groups
-  `).run(
+      modifier_groups=excluded.modifier_groups, attributes=excluded.attributes
+  `, [
     product.id, product.shop_id, product.title, product.description ?? null, product.price, product.stock, product.image_url,
     product.is_available ? 1 : 0, product.category ?? null, product.sizes ? JSON.stringify(product.sizes) : null, product.colors ? JSON.stringify(product.colors) : null,
-    product.lookbook_image ?? null, product.prep_time ?? null, product.modifier_groups ? JSON.stringify(product.modifier_groups) : null
-  );
+    product.lookbook_image ?? null, product.prep_time ?? null, product.modifier_groups ? JSON.stringify(product.modifier_groups) : null,
+    product.attributes && Object.keys(product.attributes).length > 0 ? JSON.stringify(product.attributes) : null
+  ]);
 }
 
-function loadOrdersFromDatabase() {
-  const rows = db.prepare('SELECT * FROM orders ORDER BY created_at DESC, id DESC').all() as Record<string, unknown>[];
+function sanitizeProductAttributes(attributes: unknown, category: ShopCategory): Record<string, string> | undefined {
+  if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) return undefined;
+  const allowedFields = new Set(getCategoryDefaults(category).productAttributes.map((field) => field.key));
+  const entries = Object.entries(attributes as Record<string, unknown>)
+    .filter(([key, value]) => allowedFields.has(key) && typeof value === 'string')
+    .map(([key, value]) => [key, sanitizeTextField(value as string, 200)] as const)
+    .filter(([, value]) => value.length > 0);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+async function loadOrdersFromDatabase() {
+  const rows = await dbAll<Record<string, unknown>>(`
+    SELECT orders.*, order_whatsapp_tracking.order_id IS NOT NULL AS whatsapp_tracking_available,
+      order_whatsapp_tracking.clicked_at AS whatsapp_clicked_at
+    FROM orders LEFT JOIN order_whatsapp_tracking ON order_whatsapp_tracking.order_id = orders.id
+    ORDER BY orders.created_at DESC, orders.id DESC
+  `);
   return rows.map((row) => ({
     id: Number(row.id),
     shop_id: Number(row.shop_id),
@@ -1640,29 +1843,28 @@ function loadOrdersFromDatabase() {
     total_amount: Number(row.total_amount),
     created_at: String(row.created_at),
     status: (String(row.status || 'pending')) as OrderRecord['status'],
-    items: row.items ? JSON.parse(String(row.items)) : [],
+    whatsapp_tracking_available: Boolean(row.whatsapp_tracking_available),
+    whatsapp_clicked_at: row.whatsapp_clicked_at == null ? null : String(row.whatsapp_clicked_at),
+    customer_user_id: row.customer_user_id == null ? undefined : Number(row.customer_user_id),
+    items: row.items ? (typeof row.items === 'string' ? JSON.parse(row.items) : row.items) : [],
   })) as OrderRecord[];
 }
 
-function refreshRuntimeDataFromDatabase() {
-  const persistedShops = loadShopsFromDatabase();
+async function refreshRuntimeDataFromDatabase() {
+  const persistedShops = await loadShopsFromDatabase();
   shops.splice(0, shops.length, ...persistedShops);
-  products.splice(0, products.length, ...loadProductsFromDatabase());
-  orders.splice(0, orders.length, ...loadOrdersFromDatabase());
-  nextShopId = Math.max(0, ...shops.map((shop) => shop.id)) + 1;
-  nextProductId = Math.max(0, ...products.map((product) => product.id)) + 1;
-  nextOrderId = Math.max(0, ...orders.map((order) => order.id)) + 1;
-  nextItemId = Math.max(0, ...orders.flatMap((order) => (order.items || []).map((item) => item.id))) + 1;
+  products.splice(0, products.length, ...await loadProductsFromDatabase());
+  orders.splice(0, orders.length, ...await loadOrdersFromDatabase());
 }
 
-function persistOrder(order: OrderRecord) {
-  db.prepare(`
+async function persistOrder(order: OrderRecord) {
+  await dbRun(`
     INSERT INTO orders (
       id, shop_id, customer_name, customer_phone, delivery_location, delivery_note,
-      delivery_slot, payment_method_preference, total_amount, created_at, status, items
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      delivery_slot, payment_method_preference, total_amount, created_at, status, items, customer_user_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET status=excluded.status
-  `).run(
+  `, [
     order.id,
     order.shop_id,
     order.customer_name,
@@ -1674,8 +1876,126 @@ function persistOrder(order: OrderRecord) {
     order.total_amount,
     order.created_at,
     order.status || 'pending',
-    JSON.stringify(order.items ?? [])
-  );
+    JSON.stringify(order.items ?? []),
+    order.customer_user_id ?? null
+  ]);
+}
+
+async function allocateRecordId(entity: 'shops' | 'products' | 'orders') {
+  const row = await dbGet<{ id: number }>(`
+    INSERT INTO id_allocators (name, last_id)
+    SELECT ?, COALESCE(MAX(id), 0) + 1 FROM ${entity} WHERE TRUE
+    ON CONFLICT(name) DO UPDATE SET last_id = id_allocators.last_id + 1
+    RETURNING last_id AS id
+  `, [entity]);
+  if (!row) throw new Error(`Impossible d’allouer un identifiant pour ${entity}.`);
+  return Number(row.id);
+}
+
+async function beginMerchantVerification(shop: ShopRecord, req: Request, email?: string) {
+  const callbackToken = randomUUID();
+  const configuredOrigin = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const callbackUrl = new URL('/api/merchant-verification/callback', configuredOrigin);
+  callbackUrl.searchParams.set('shop_id', String(shop.id));
+  callbackUrl.searchParams.set('token', callbackToken);
+  const session = await createDiditVerificationSession({ shopId: shop.id, callbackUrl: callbackUrl.toString(), email });
+  const timestamp = new Date().toISOString();
+  await dbTransaction(async (transaction) => {
+    await transaction.run(`
+    INSERT INTO merchant_verifications (
+      shop_id, provider, provider_session_id, callback_token_hash, status, submitted_at, decided_at, updated_at
+    ) VALUES (?, 'didit', ?, ?, 'pending', ?, NULL, ?)
+    ON CONFLICT(shop_id) DO UPDATE SET provider='didit', provider_session_id=excluded.provider_session_id,
+      callback_token_hash=excluded.callback_token_hash, status='pending', submitted_at=excluded.submitted_at,
+      decided_at=NULL, updated_at=excluded.updated_at
+    `, [shop.id, session.sessionId, hashAccessToken(callbackToken), timestamp, timestamp]);
+    await transaction.run("UPDATE shops SET merchant_verification_status = 'pending', is_active = 0, is_open = 0 WHERE id = ?", [shop.id]);
+  });
+  shop.merchant_verification_status = 'pending';
+  shop.is_active = false;
+  shop.is_open = false;
+  return session;
+}
+
+function mapDiditStatus(status: string): ShopRecord['merchant_verification_status'] | null {
+  if (status === 'Approved') return 'approved';
+  if (status === 'Declined') return 'rejected';
+  if (status === 'Expired' || status === 'Abandoned' || status === 'Kyc Expired') return 'retry_required';
+  if (status === 'Not Started' || status === 'In Progress' || status === 'In Review' || status === 'Resubmitted' || status === 'Awaiting User') return 'pending';
+  return null;
+}
+
+async function applyMerchantVerificationDecision(sessionId: string, providerStatus: string, eventId?: string) {
+  const nextStatus = mapDiditStatus(providerStatus);
+  if (!nextStatus) return null;
+  const result = await dbTransaction(async (transaction) => {
+    if (eventId) {
+      const insertedEvent = await transaction.run(
+        'INSERT INTO merchant_verification_webhook_events (event_id, received_at) VALUES (?, ?) ON CONFLICT(event_id) DO NOTHING',
+        [eventId, new Date().toISOString()],
+      );
+      if (insertedEvent.changes === 0) return null;
+    }
+
+    const verification = await transaction.get<{ shop_id: number; status: string }>(
+      `SELECT shop_id, status FROM merchant_verifications WHERE provider_session_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+      [sessionId],
+    );
+    if (!verification) return null;
+    if ((verification.status === 'approved' || verification.status === 'rejected' || verification.status === 'retry_required')
+      && nextStatus === 'pending' && providerStatus !== 'Resubmitted') {
+      return { shopId: Number(verification.shop_id), status: verification.status as ShopRecord['merchant_verification_status'] };
+    }
+
+    const decidedAt = ['approved', 'rejected', 'retry_required'].includes(nextStatus) ? new Date().toISOString() : null;
+    await transaction.run(
+      `UPDATE merchant_verifications SET status = ?, decided_at = ?, updated_at = ?,
+        callback_token_hash = CASE WHEN ? = 'pending' THEN callback_token_hash ELSE NULL END
+       WHERE provider_session_id = ?`,
+      [nextStatus, decidedAt, new Date().toISOString(), nextStatus, sessionId],
+    );
+    await transaction.run(
+      'UPDATE shops SET merchant_verification_status = ?, is_active = ?, is_open = CASE WHEN ? = 1 THEN is_open ELSE 0 END WHERE id = ?',
+      [nextStatus, nextStatus === 'approved' ? 1 : 0, nextStatus === 'approved' ? 1 : 0, verification.shop_id],
+    );
+    return { shopId: Number(verification.shop_id), status: nextStatus };
+  });
+
+  if (result) {
+    const shop = shops.find((candidate) => candidate.id === result.shopId);
+    if (shop) {
+      shop.merchant_verification_status = result.status;
+      shop.is_active = result.status === 'approved';
+      if (!shop.is_active) shop.is_open = false;
+    }
+  }
+  return result;
+}
+
+async function purgeExpiredMerchantVerificationMetadata() {
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const expiredPendingIds = await dbTransaction(async (transaction) => {
+    const expired = await transaction.all<{ shop_id: number }>(
+      "SELECT shop_id FROM merchant_verifications WHERE status = 'pending' AND updated_at < ?",
+      [cutoff],
+    );
+    for (const row of expired) {
+      await transaction.run(
+        "UPDATE shops SET merchant_verification_status = 'retry_required', is_active = 0, is_open = 0 WHERE id = ? AND merchant_verification_status = 'pending'",
+        [row.shop_id],
+      );
+    }
+    await transaction.run('DELETE FROM merchant_verifications WHERE updated_at < ?', [cutoff]);
+    await transaction.run('DELETE FROM merchant_verification_webhook_events WHERE received_at < ?', [cutoff]);
+    return expired.map((row) => Number(row.shop_id));
+  });
+  for (const shop of shops) {
+    if (expiredPendingIds.includes(shop.id) && shop.merchant_verification_status === 'pending') {
+      shop.merchant_verification_status = 'retry_required';
+      shop.is_active = false;
+      shop.is_open = false;
+    }
+  }
 }
 
 async function startServer() {
@@ -1733,11 +2053,9 @@ async function startServer() {
   app.use('/api/shops/:id/orders', requireMerchantAccess);
   app.use('/api/shops/:id/flash-bilan', requireMerchantAccess);
   app.use('/api/admin', requireAdminAccess);
-  installNeonSyncMiddleware(app);
-
-  initializeDatabase();
-  const hydratedFromNeon = await hydrateLocalFromNeon();
-  seedDatabaseIfEmpty();
+  await initializeDatabase();
+  await purgeExpiredMerchantVerificationMetadata();
+  await seedDatabaseIfEmpty();
 
   shops.forEach((shop) => {
     if (!shop.pin_code_hash.startsWith('$2')) {
@@ -1745,28 +2063,20 @@ async function startServer() {
     }
   });
 
-  const persistedShops = loadShopsFromDatabase();
+  const persistedShops = await loadShopsFromDatabase();
   shops.splice(0, shops.length, ...persistedShops);
-  const persistedProducts = loadProductsFromDatabase();
+  const persistedProducts = await loadProductsFromDatabase();
   products.splice(0, products.length, ...persistedProducts);
-  const persistedOrders = loadOrdersFromDatabase();
+  const persistedOrders = await loadOrdersFromDatabase();
   orders.splice(0, orders.length, ...persistedOrders);
-  const persistedMerchantSessions = db.prepare('SELECT token, shop_id, expires_at, fingerprint FROM merchant_sessions WHERE expires_at > ?').all(Date.now()) as { token: string; shop_id: number; expires_at: number; fingerprint: string }[];
+  const persistedMerchantSessions = await dbAll<{ token: string; shop_id: number; expires_at: number; fingerprint: string }>('SELECT token, shop_id, expires_at, fingerprint FROM merchant_sessions WHERE expires_at > ?', [Date.now()]);
   for (const record of persistedMerchantSessions) {
     merchantSessions.set(record.token, { shopId: record.shop_id, expiresAt: record.expires_at, fingerprint: record.fingerprint });
   }
-  const persistedAdminSessions = db.prepare('SELECT token, expires_at, fingerprint FROM admin_sessions WHERE expires_at > ?').all(Date.now()) as { token: string; expires_at: number; fingerprint: string }[];
+  const persistedAdminSessions = await dbAll<{ token: string; expires_at: number; fingerprint: string }>('SELECT token, expires_at, fingerprint FROM admin_sessions WHERE expires_at > ?', [Date.now()]);
   for (const record of persistedAdminSessions) {
     adminSessions.set(record.token, { expiresAt: record.expires_at, fingerprint: record.fingerprint });
   }
-  nextOrderId = Math.max(0, ...orders.map((order) => order.id)) + 1;
-  nextItemId = Math.max(0, ...orders.flatMap((order) => (order.items || []).map((item) => item.id))) + 1;
-  nextShopId = Math.max(0, ...shops.map((shop) => shop.id)) + 1;
-  nextProductId = Math.max(0, ...products.map((product) => product.id)) + 1;
-  if (neonEnabled && !hydratedFromNeon) {
-    await syncNeonFromLocal();
-  }
-
   // --- API ROUTES ---
 
   // Health check
@@ -1774,7 +2084,101 @@ async function startServer() {
     res.json({ status: 'ok', timestamp: new Date().toISOString(), whatsapp_cloud: 'locked' });
   });
 
-  app.post('/api/analytics/page-view', rateLimitPublicRequest(120), (req: Request, res: Response) => {
+  app.get('/api/merchant-verification/config', (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ required: isMerchantKycEnabled(), available: Boolean(getDiditConfiguration()) });
+  });
+
+  app.post('/api/webhooks/didit', async (req: Request, res: Response) => {
+    const configuration = getDiditConfiguration();
+    if (!configuration) return res.status(503).json({ error: 'Webhook KYC non configuré.' });
+    const event = req.body as Record<string, unknown> | undefined;
+    const signature = req.get('x-signature-v2');
+    const timestamp = req.get('x-timestamp');
+    if (!event || !verifyDiditWebhookSignature(event, signature, timestamp, configuration.webhookSecret)) {
+      return res.status(401).json({ error: 'Signature de webhook invalide.' });
+    }
+    const expectedEnvironment = process.env.DIDIT_ENVIRONMENT || (process.env.NODE_ENV === 'production' ? 'live' : 'sandbox');
+    if (event.environment !== expectedEnvironment) return res.status(403).json({ error: 'Environnement de webhook inattendu.' });
+    if (event.webhook_type !== 'status.updated') return res.status(204).end();
+
+    const sessionId = String(event.session_id || '');
+    const eventId = String(event.event_id || '');
+    if (!/^[A-Za-z0-9_-]{1,160}$/.test(sessionId) || !/^[A-Za-z0-9-]{1,100}$/.test(eventId)) {
+      return res.status(400).json({ error: 'Événement Didit invalide.' });
+    }
+    try {
+      const knownSession = await dbGet('SELECT 1 FROM merchant_verifications WHERE provider_session_id = ?', [sessionId]);
+      if (!knownSession) return res.status(404).json({ error: 'Session de vérification inconnue.' });
+      const decision = await fetchDiditDecision(sessionId, configuration);
+      const applied = await applyMerchantVerificationDecision(sessionId, decision.status, eventId);
+      if (!applied) return res.status(204).end();
+      res.status(204).end();
+    } catch {
+      res.status(503).json({ error: 'La décision Didit n’a pas pu être confirmée.' });
+    }
+  });
+
+  app.get('/api/merchant-verification/callback', rateLimitPublicRequest(30), async (req: Request, res: Response) => {
+    const shopId = Number(req.query.shop_id);
+    const callbackToken = String(req.query.token || '');
+    const sessionId = String(req.query.verificationSessionId || '');
+    const redirectToApp = (status: string) => {
+      const origin = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+      const destination = new URL('/app', origin);
+      destination.searchParams.set('merchant-verification', status);
+      return res.redirect(303, destination.toString());
+    };
+    if (!Number.isSafeInteger(shopId) || shopId <= 0 || !callbackToken || !sessionId) return redirectToApp('invalid');
+
+    try {
+      const verification = await dbGet<{ provider_session_id: string; callback_token_hash: string | null }>(
+        'SELECT provider_session_id, callback_token_hash FROM merchant_verifications WHERE shop_id = ?', [shopId],
+      );
+      if (!verification || !verification.callback_token_hash || verification.provider_session_id !== sessionId
+        || !timingSafeEqual(hashAccessToken(callbackToken), verification.callback_token_hash)) {
+        return redirectToApp('invalid');
+      }
+      const decision = await fetchDiditDecision(sessionId);
+      const claimedCallback = await dbRun(
+        'UPDATE merchant_verifications SET callback_token_hash = ? WHERE shop_id = ? AND callback_token_hash = ?',
+        [null, shopId, verification.callback_token_hash],
+      );
+      if (claimedCallback.changes !== 1) return redirectToApp('invalid');
+      const applied = await applyMerchantVerificationDecision(sessionId, decision.status);
+      if (!applied) return redirectToApp('invalid');
+      await createMerchantSession(res, shopId, req);
+      return redirectToApp(applied.status || 'pending');
+    } catch {
+      return redirectToApp('retry');
+    }
+  });
+
+  app.get('/api/shops/:id/merchant-verification', requireMerchantOwner, (req: Request, res: Response) => {
+    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    res.json({ verification_status: shop.merchant_verification_status || 'not_required' });
+  });
+
+  app.post('/api/shops/:id/merchant-verification/start', rateLimitPublicRequest(3), requireMerchantOwner, async (req: Request, res: Response) => {
+    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (!isMerchantKycEnabled() || !getDiditConfiguration()) {
+      return res.status(503).json({ error: 'La vérification d’identité n’est pas configurée.' });
+    }
+    if (!['rejected', 'retry_required'].includes(shop.merchant_verification_status || 'not_required')) {
+      return res.status(409).json({ error: 'Aucune nouvelle vérification ne peut être démarrée dans l’état actuel.' });
+    }
+    try {
+      const verification = await beginMerchantVerification(shop, req);
+      await persistShop(shop);
+      res.json({ success: true, verification_url: verification.url, verification_status: 'pending' });
+    } catch {
+      res.status(502).json({ error: 'Impossible de démarrer la vérification. Réessayez plus tard.' });
+    }
+  });
+
+  app.post('/api/analytics/page-view', rateLimitPublicRequest(120), async (req: Request, res: Response) => {
     const shopId = req.body?.shop_id == null ? null : Number(req.body.shop_id);
     const sessionId = String(req.body?.session_id || '').trim();
     if (!sessionId || sessionId.length > 100 || (shopId !== null && !Number.isInteger(shopId))) {
@@ -1784,14 +2188,15 @@ async function startServer() {
       return res.status(404).json({ error: 'Boutique introuvable.' });
     }
     const today = new Date().toISOString().slice(0, 10);
-    const alreadyTracked = db.prepare(`
+    const shopCondition = shopId === null ? 'shop_id IS NULL' : 'shop_id = ?';
+    const analyticsParams = shopId === null ? [sessionId, `${today}%`] : [shopId, sessionId, `${today}%`];
+    const alreadyTracked = await dbGet(`
       SELECT 1 FROM analytics_events
-      WHERE shop_id IS ? AND event_type = 'page_view' AND session_id = ? AND created_at LIKE ?
+      WHERE ${shopCondition} AND event_type = 'page_view' AND session_id = ? AND created_at LIKE ?
       LIMIT 1
-    `).get(shopId, sessionId, `${today}%`);
+    `, analyticsParams);
     if (!alreadyTracked) {
-      db.prepare('INSERT INTO analytics_events (shop_id, event_type, session_id, path, created_at) VALUES (?, ?, ?, ?, ?)')
-        .run(shopId, 'page_view', sessionId, String(req.body?.path || '').slice(0, 300), new Date().toISOString());
+      await dbRun('INSERT INTO analytics_events (shop_id, event_type, session_id, path, created_at) VALUES (?, ?, ?, ?, ?)', [shopId, 'page_view', sessionId, String(req.body?.path || '').slice(0, 300), new Date().toISOString()]);
     }
     res.status(204).end();
   });
@@ -1799,32 +2204,39 @@ async function startServer() {
   // 1. SHOPS
   // Get all active public shops (for shop selector / discovery)
   app.get('/api/shops', (req: Request, res: Response) => {
-    const publicShops = shops.filter((shop) => shop.is_active).map((s) => ({
-      ...(() => {
-        const shopProducts = products.filter((product) => product.shop_id === s.id);
-        const availableProducts = shopProducts.filter((product) => product.is_available && product.stock > 0);
-        return {
-          products_preview: availableProducts.slice(0, 3).map((product) => ({
-            id: product.id,
-            title: product.title,
-            image_url: product.image_url,
-            price: product.price,
-          })),
-          products_count: availableProducts.length,
-        };
-      })(),
-      id: s.id,
-      name: s.name,
-      slug: s.slug,
-      theme_color: s.theme_color,
-      welcome_message: s.welcome_message,
-      is_open: computeIsShopOpen(s),
-      is_active: s.is_active,
-      category: s.category,
-      city: s.city,
-      theme_config: s.theme_config,
-      opening_hours: s.opening_hours,
-    }));
+    const publicShops = shops
+      .filter((shop) => shop.is_active)
+      .map((s) => ({
+        ...(() => {
+          const shopProducts = products.filter((product) => product.shop_id === s.id);
+          const availableProducts = shopProducts.filter((product) => product.is_available && product.stock > 0);
+          return {
+            products_preview: availableProducts.slice(0, 3).map((product) => ({
+              id: product.id,
+              title: product.title,
+              image_url: product.image_url,
+              price: product.price,
+            })),
+            products_count: availableProducts.length,
+          };
+        })(),
+        id: s.id,
+        name: s.name,
+        slug: s.slug,
+        theme_color: s.theme_color,
+        welcome_message: s.welcome_message,
+        is_open: computeIsShopOpen(s),
+        is_active: s.is_active,
+        category: s.category,
+        city: s.city,
+        theme_config: s.theme_config,
+        opening_hours: s.opening_hours,
+      }))
+      .sort((a, b) => {
+        const openPriority = Number(b.is_open) - Number(a.is_open);
+        if (openPriority !== 0) return openPriority;
+        return String(a.name).localeCompare(String(b.name));
+      });
     res.json(publicShops);
   });
 
@@ -1879,6 +2291,7 @@ async function startServer() {
         welcome_message: shop.welcome_message,
         is_open: computeIsShopOpen(shop),
         is_active: shop.is_active,
+        merchant_verification_status: shop.merchant_verification_status || 'not_required',
         category: shop.category,
         city: shop.city,
         theme_config: shop.theme_config,
@@ -1888,12 +2301,12 @@ async function startServer() {
     });
   });
 
-  app.post('/api/shops/:id/access-link', requireMerchantAccess, (req: Request, res: Response) => {
+  app.post('/api/shops/:id/access-link', requireMerchantAccess, async (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
     const shop = shops.find((candidate) => candidate.id === shopId);
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
 
-    const ownerAccessToken = rotateMerchantAccessTokenForShop(shop.id);
+    const ownerAccessToken = await rotateMerchantAccessTokenForShop(shop.id);
     const origin = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
     res.json({
       success: true,
@@ -1903,7 +2316,7 @@ async function startServer() {
   });
 
   // Toggle shop ordering status (Ouvert / Fermé) - POST /api/shops/:id/toggle-status
-  app.post('/api/shops/:id/toggle-status', (req: Request, res: Response) => {
+  app.post('/api/shops/:id/toggle-status', async (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
     const shop = shops.find((s) => s.id === shopId);
     if (!shop) {
@@ -1915,7 +2328,7 @@ async function startServer() {
     if (shop.opening_hours) {
       shop.opening_hours.manual_override = true;
     }
-    persistShop(shop);
+    await persistShop(shop);
 
     res.json({
       success: true,
@@ -1930,7 +2343,7 @@ async function startServer() {
     });
   });
 
-  app.patch('/api/shops/:id/toggle-status', (req: Request, res: Response) => {
+  app.patch('/api/shops/:id/toggle-status', async (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
     const shop = shops.find((s) => s.id === shopId);
     if (!shop) {
@@ -1942,7 +2355,7 @@ async function startServer() {
     if (shop.opening_hours) {
       shop.opening_hours.manual_override = true;
     }
-    persistShop(shop);
+    await persistShop(shop);
 
     res.json({
       success: true,
@@ -1958,7 +2371,7 @@ async function startServer() {
   });
 
   // Update shop appearance / theme_config (Merchant)
-  app.put('/api/shops/:id/theme', (req: Request, res: Response) => {
+  app.put('/api/shops/:id/theme', async (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
     const shop = shops.find((s) => s.id === shopId);
     if (!shop) {
@@ -1968,9 +2381,16 @@ async function startServer() {
     const { theme_config } = req.body;
     if (theme_config) {
       const requestedThemeConfig = { ...theme_config };
+      const requestedBrandDirection = ['luxe', 'moderne', 'authentique'].includes(requestedThemeConfig.brand_direction)
+        ? requestedThemeConfig.brand_direction as ShopRecord['theme_config']['brand_direction']
+        : shop.theme_config.brand_direction;
       shop.theme_config = {
         ...shop.theme_config,
         ...requestedThemeConfig,
+        ...(requestedBrandDirection ? { brand_direction: requestedBrandDirection } : {}),
+        ...(typeof requestedThemeConfig.custom_banner_url === 'string'
+          ? { custom_banner_url: normalizeCustomBannerImage(requestedThemeConfig.custom_banner_url, shop.category) }
+          : {}),
       };
       // Keep legacy theme_color in sync with primary_color
       if (requestedThemeConfig.primary_color) {
@@ -1978,13 +2398,13 @@ async function startServer() {
       }
     }
 
-    persistShop(shop);
+    await persistShop(shop);
 
     res.json({ success: true, shop: toSafeShop(shop), theme_config: shop.theme_config });
   });
 
   // Update shop settings (Merchant)
-  app.put('/api/shops/:id', requireMerchantAccess, (req: Request, res: Response) => {
+  app.put('/api/shops/:id', requireMerchantAccess, async (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
     const shop = shops.find((s) => s.id === shopId);
     if (!shop) {
@@ -2017,12 +2437,38 @@ async function startServer() {
       }
       shop.pin_code_hash = hashPin(rawPin);
     }
-    if (category && ['fashion', 'food', 'beauty', 'electronics', 'home', 'services', 'health', 'crafts', 'education', 'automotive', 'other'].includes(category)) {
+    if (isShopCategory(category)) {
       shop.category = category;
     }
     if (theme_config) {
       const requestedThemeConfig = { ...theme_config };
-      shop.theme_config = { ...shop.theme_config, ...requestedThemeConfig };
+      const requestedBrandDirection = ['luxe', 'moderne', 'authentique'].includes(requestedThemeConfig.brand_direction)
+        ? requestedThemeConfig.brand_direction as ShopRecord['theme_config']['brand_direction']
+        : shop.theme_config.brand_direction;
+      const sanitizedThemeConfig = {
+        ...shop.theme_config,
+        ...requestedThemeConfig,
+        ...(requestedBrandDirection ? { brand_direction: requestedBrandDirection } : {}),
+        ...(typeof requestedThemeConfig.custom_banner_url === 'string'
+          ? { custom_banner_url: normalizeCustomBannerImage(requestedThemeConfig.custom_banner_url, shop.category) }
+          : {}),
+        social_links: {
+          instagram: typeof requestedThemeConfig.social_links?.instagram === 'string' ? sanitizeTextField(String(requestedThemeConfig.social_links.instagram), 300) : (shop.theme_config.social_links?.instagram || ''),
+          facebook: typeof requestedThemeConfig.social_links?.facebook === 'string' ? sanitizeTextField(String(requestedThemeConfig.social_links.facebook), 300) : (shop.theme_config.social_links?.facebook || ''),
+          tiktok: typeof requestedThemeConfig.social_links?.tiktok === 'string' ? sanitizeTextField(String(requestedThemeConfig.social_links.tiktok), 300) : (shop.theme_config.social_links?.tiktok || ''),
+          website: typeof requestedThemeConfig.social_links?.website === 'string' ? sanitizeTextField(String(requestedThemeConfig.social_links.website), 300) : (shop.theme_config.social_links?.website || ''),
+          whatsapp: typeof requestedThemeConfig.social_links?.whatsapp === 'string' ? sanitizeTextField(String(requestedThemeConfig.social_links.whatsapp), 300) : (shop.theme_config.social_links?.whatsapp || ''),
+        },
+        delivery_zones: Array.isArray(requestedThemeConfig.delivery_zones)
+          ? requestedThemeConfig.delivery_zones.slice(0, 8).map((zone: any) => ({
+              label: sanitizeTextField(String(zone?.label || 'Zone locale'), 80),
+              mode: zone?.mode === 'sur_place' || zone?.mode === 'retirer' ? zone.mode : 'livraison',
+              fee: Number(zone?.fee || 0),
+              description: zone?.description ? sanitizeTextField(String(zone.description), 120) : '',
+            }))
+          : (shop.theme_config.delivery_zones || []),
+      };
+      shop.theme_config = sanitizedThemeConfig;
     }
     if (opening_hours) {
       shop.opening_hours = {
@@ -2031,18 +2477,46 @@ async function startServer() {
       };
     }
 
-    persistShop(shop);
+    await persistShop(shop);
 
     res.json({ success: true, shop: toSafeShop(shop) });
   });
 
   // Create new shop (Onboarding with category and subscription tier)
   app.post('/api/shops', rateLimitPublicRequest(10), async (req: Request, res: Response) => {
-    const { name, whatsapp_number, pin_code, pin, category, city, subscription_tier, welcome_message } = req.body;
+    const kycEnabled = isMerchantKycEnabled();
+    if (kycEnabled && !getDiditConfiguration()) {
+      return res.status(503).json({ error: 'La vérification d’identité des commerçants n’est pas encore configurée.' });
+    }
+    if (kycEnabled && req.body?.identity_verification_consent !== true) {
+      return res.status(400).json({ error: 'Votre accord est requis pour la vérification d’identité.' });
+    }
+    const { name, whatsapp_number, pin_code, pin, category, city, subscription_tier, welcome_message, theme_config, opening_hours } = req.body;
     const effectivePin = pin_code || pin;
     const safeName = sanitizeTextField(name, 100);
     const safeCity = sanitizeTextField(city || 'Abidjan', 100);
     const safeWelcomeMessage = sanitizeTextField(welcome_message, 300);
+    const requestedThemeConfig = theme_config && typeof theme_config === 'object' ? theme_config : {};
+    const normalizedOpeningHours = {
+      enabled: Boolean(opening_hours?.enabled),
+      open_time: typeof opening_hours?.open_time === 'string' ? opening_hours.open_time.slice(0, 5) : '08:00',
+      close_time: typeof opening_hours?.close_time === 'string' ? opening_hours.close_time.slice(0, 5) : '22:00',
+      days: Array.isArray(opening_hours?.days)
+        ? opening_hours.days.filter((day: unknown): day is number => typeof day === 'number' && Number.isInteger(day) && day >= 0 && day <= 6).slice(0, 7)
+        : [0, 1, 2, 3, 4, 5, 6],
+      manual_override: Boolean(opening_hours?.manual_override),
+    };
+    const socialLinks = {
+      ...(requestedThemeConfig.social_links || {}),
+    };
+    const deliveryZones = Array.isArray(requestedThemeConfig.delivery_zones)
+      ? requestedThemeConfig.delivery_zones.slice(0, 8).map((zone: any) => ({
+          label: String(zone?.label || 'Zone locale'),
+          mode: zone?.mode === 'sur_place' || zone?.mode === 'retirer' ? zone.mode : 'livraison',
+          fee: Number(zone?.fee || 0),
+          description: zone?.description ? String(zone.description).slice(0, 120) : undefined,
+        }))
+      : [];
 
     if (safeName.length < 2 || !whatsapp_number || !/^[0-9]{6}$/.test(String(effectivePin || '').trim())) {
       return res.status(400).json({ error: 'Nom, numéro WhatsApp et code PIN requis.' });
@@ -2051,7 +2525,7 @@ async function startServer() {
       return res.status(400).json({ error: 'Le code PIN est trop simple ou invalide. Utilisez un PIN à 6 chiffres fort.' });
     }
 
-    const reservedShopId = nextShopId;
+    const reservedShopId = await allocateRecordId('shops');
     const normalizedWhatsAppPhone = normalizeWhatsAppPhone(whatsapp_number);
     if (!normalizedWhatsAppPhone) {
       return res.status(400).json({ error: 'Numéro WhatsApp ivoirien invalide. Utilisez +225 suivi de 10 chiffres.' });
@@ -2060,8 +2534,9 @@ async function startServer() {
       return res.status(409).json({ error: 'Ce numéro WhatsApp est déjà associé à une boutique. Utilisez son lien privé de gestion.' });
     }
 
-    const shopCategory: ShopRecord['category'] = ['fashion', 'food', 'beauty', 'electronics', 'home', 'services', 'health', 'crafts', 'education', 'automotive', 'other'].includes(category) ? category as ShopRecord['category'] : 'fashion';
-    const chosenTier: SubscriptionTier = 'standard';
+    const shopCategory: ShopRecord['category'] = isShopCategory(category) ? category : 'other';
+    const categoryDefaults = getCategoryDefaults(shopCategory);
+    const chosenTier: SubscriptionTier = normalizeSubscriptionTier(subscription_tier || 'standard');
     const hashedPin = hashPin(effectivePin);
     const ownerAccessToken = randomUUID();
 
@@ -2074,13 +2549,33 @@ async function startServer() {
       .replace(/^-|-$/g, '') || `boutique-${Date.now()}`;
     const uniqueSlug = shops.some((shop) => shop.slug === slug) ? `${slug}-${Date.now().toString().slice(-5)}` : slug;
 
-    const defaultPrimaryColor = shopCategory === 'food' ? '#C2410C' : '#0F172A';
-    const defaultSecondaryColor = shopCategory === 'food' ? '#FEF2F2' : '#F8FAFC';
-    const defaultBanner = shopCategory === 'food'
-      ? 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=1200&auto=format&fit=crop&q=80'
-      : 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200&auto=format&fit=crop&q=80';
-
-    nextShopId += 1;
+    const mergedThemeConfig = {
+      primary_color: requestedThemeConfig.primary_color || categoryDefaults.primaryColor,
+      secondary_color: requestedThemeConfig.secondary_color || categoryDefaults.secondaryColor,
+      font_family: requestedThemeConfig.font_family || 'Plus Jakarta Sans',
+      layout_style: requestedThemeConfig.layout_style || categoryDefaults.layoutStyle,
+      theme_preset_id: requestedThemeConfig.theme_preset_id || categoryDefaults.themePresetId,
+      brand_direction: ['luxe', 'moderne', 'authentique'].includes(requestedThemeConfig.brand_direction)
+        ? requestedThemeConfig.brand_direction as ShopRecord['theme_config']['brand_direction']
+        : categoryDefaults.brandDirection,
+      custom_banner_url: normalizeCustomBannerImage(requestedThemeConfig.custom_banner_url, shopCategory),
+      logo_url: requestedThemeConfig.logo_url || '',
+      event_mode_enabled: Boolean(requestedThemeConfig.event_mode_enabled),
+      event_banner_text: requestedThemeConfig.event_banner_text || '🎉 Commande rapide • Livraison et retrait disponibles',
+      social_links: {
+        instagram: typeof requestedThemeConfig.social_links?.instagram === 'string' ? String(requestedThemeConfig.social_links.instagram).trim() : '',
+        facebook: typeof requestedThemeConfig.social_links?.facebook === 'string' ? String(requestedThemeConfig.social_links.facebook).trim() : '',
+        tiktok: typeof requestedThemeConfig.social_links?.tiktok === 'string' ? String(requestedThemeConfig.social_links.tiktok).trim() : '',
+        website: typeof requestedThemeConfig.social_links?.website === 'string' ? String(requestedThemeConfig.social_links.website).trim() : '',
+        whatsapp: typeof requestedThemeConfig.social_links?.whatsapp === 'string' ? String(requestedThemeConfig.social_links.whatsapp).trim() : '',
+      },
+      delivery_zones: deliveryZones,
+      advanced_css: {
+        borderRadius: requestedThemeConfig.advanced_css?.borderRadius || 'rounded-xl',
+        shadowIntensity: requestedThemeConfig.advanced_css?.shadowIntensity || 'subtle',
+        accentGlow: Boolean(requestedThemeConfig.advanced_css?.accentGlow),
+      },
+    };
 
     const newShop: ShopRecord = {
       id: reservedShopId,
@@ -2089,10 +2584,11 @@ async function startServer() {
       whatsapp_number: normalizedWhatsAppPhone,
       pin_code_hash: hashedPin,
       owner_access_token_hash: hashAccessToken(ownerAccessToken),
-      theme_color: defaultPrimaryColor,
-      welcome_message: safeWelcomeMessage || `Bienvenue chez ${safeName} ! Retrouvez nos meilleurs articles et commandez directement sur WhatsApp.`,
+      theme_color: categoryDefaults.primaryColor,
+      welcome_message: normalizeWelcomeMessage(safeWelcomeMessage, shopCategory),
       is_open: false,
-      is_active: true,
+      is_active: !kycEnabled,
+      merchant_verification_status: kycEnabled ? 'pending' : 'not_required',
       payment_status: 'approved',
       payment_deadline_at: null,
       selected_subscription_tier: chosenTier,
@@ -2102,27 +2598,45 @@ async function startServer() {
       category: shopCategory,
       city: safeCity,
       subscription_tier: chosenTier,
-      theme_config: {
-        primary_color: defaultPrimaryColor,
-        secondary_color: defaultSecondaryColor,
-        font_family: 'Plus Jakarta Sans',
-        layout_style: shopCategory === 'food' ? 'card_landscape' : 'grid_portrait',
-        theme_preset_id: shopCategory === 'food' ? 'food_braise' : 'fashion_minimal',
-        custom_banner_url: defaultBanner,
-        logo_url: '',
-        event_mode_enabled: false,
-        advanced_css: {
-          borderRadius: 'rounded-xl',
-          shadowIntensity: 'subtle',
-          accentGlow: false,
-        },
-      },
+      opening_hours: normalizedOpeningHours,
+      theme_config: mergedThemeConfig,
     };
 
-    shops.push(newShop);
-    persistShop(newShop);
+    if (!kycEnabled && normalizedOpeningHours.enabled && !normalizedOpeningHours.manual_override) {
+      newShop.is_open = computeIsShopOpen(newShop);
+    }
 
-    createMerchantSession(res, newShop.id, req);
+    shops.push(newShop);
+    await persistShop(newShop);
+
+    if (kycEnabled) {
+      try {
+        const contactEmail = typeof req.body?.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(req.body.email.trim())
+          ? req.body.email.trim().slice(0, 254)
+          : undefined;
+        const verification = await beginMerchantVerification(newShop, req, contactEmail);
+        await createMerchantSession(res, newShop.id, req);
+        return res.status(201).json({
+          success: true,
+          shop: toSafeShop(newShop),
+          verification_required: true,
+          verification_url: verification.url,
+          message: 'Votre boutique est créée. Terminez la vérification d’identité pour activer votre espace marchand.',
+        });
+      } catch (error) {
+        console.error('Merchant identity session could not be started.');
+        newShop.merchant_verification_status = 'retry_required';
+        newShop.is_active = false;
+        newShop.is_open = false;
+        await persistShop(newShop);
+        return res.status(503).json({
+          error: 'Votre boutique est créée mais la vérification n’a pas pu démarrer. Connectez-vous avec votre WhatsApp et votre PIN pour réessayer.',
+          account_created: true,
+        });
+      }
+    }
+
+    await createMerchantSession(res, newShop.id, req);
     res.json({
       success: true,
       shop: toSafeShop(newShop),
@@ -2133,7 +2647,7 @@ async function startServer() {
 
   // 2. AUTHENTICATION (Phone + 6-digit PIN)
   // Explicit route for merchant login
-  app.post('/api/auth/merchant-login', (req: Request, res: Response) => {
+  app.post('/api/auth/merchant-login', async (req: Request, res: Response) => {
     const { phone, pin } = req.body;
     if (!phone || !pin) {
       return res.status(400).json({ error: 'Numéro de téléphone et code PIN requis.' });
@@ -2162,13 +2676,15 @@ async function startServer() {
       return res.status(401).json({ error: 'Code PIN incorrect à 6 chiffres.' });
     }
 
-    if (!shop.is_active) {
+    const verificationStatus = shop.merchant_verification_status || 'not_required';
+    const verificationPending = ['pending', 'rejected', 'retry_required'].includes(verificationStatus);
+    if (!shop.is_active && !verificationPending) {
       return res.status(403).json({
         error: 'Votre boutique est inactive. Contactez l’administration MaTable.ci pour la réactivation.',
       });
     }
 
-    createMerchantSession(res, shop.id, req);
+    await createMerchantSession(res, shop.id, req);
     loginAttempts.delete(attemptKey);
 
     res.json({
@@ -2182,39 +2698,45 @@ async function startServer() {
         welcome_message: shop.welcome_message,
         is_open: shop.is_open,
         is_active: shop.is_active,
+        merchant_verification_status: verificationStatus,
         category: shop.category,
         theme_config: shop.theme_config,
       },
     });
   });
 
-  app.post('/api/auth/logout', (req: Request, res: Response) => {
+  app.post('/api/auth/logout', async (req: Request, res: Response) => {
     const token = getCookie(req, 'matable_session');
     if (token) {
       merchantSessions.delete(token);
-      deleteMerchantSessionRecord(token);
+      await deleteMerchantSessionRecord(token);
     }
     clearSessionCookie(res);
     res.json({ success: true });
   });
 
-  app.get('/api/auth/session', (req: Request, res: Response) => {
-    const state = getSessionStateForResponse(req, res);
+  app.get('/api/auth/session', async (req: Request, res: Response) => {
+    const state = await getSessionStateForResponse(req, res);
+    if (state.userType === 'merchant' && state.shopId) {
+      const shop = shops.find((candidate) => candidate.id === state.shopId);
+      return res.json({ ...state, merchantVerificationStatus: shop?.merchant_verification_status || 'not_required' });
+    }
     res.json(state);
   });
 
-  app.post('/api/auth/merchant-access-login', (req: Request, res: Response) => {
+  app.post('/api/auth/merchant-access-login', async (req: Request, res: Response) => {
     const token = String(req.body?.access_token || '').trim();
     if (!token || token.length > 200) return res.status(400).json({ error: 'Lien d’accès invalide.' });
     const tokenHash = hashAccessToken(token);
     const shop = shops.find((candidate) => candidate.owner_access_token_hash === tokenHash);
     if (!shop) return res.status(401).json({ error: 'Lien d’accès invalide.' });
-    if (!shop.is_active) {
+    const verificationStatus = shop.merchant_verification_status || 'not_required';
+    if (!shop.is_active && !['pending', 'rejected', 'retry_required'].includes(verificationStatus)) {
       return res.status(403).json({
         error: 'Boutique inactive : contactez l’administrateur pour la réactivation.',
       });
     }
-    createMerchantSession(res, shop.id, req);
+    await createMerchantSession(res, shop.id, req);
     res.json({ success: true, shop: toSafeShop(shop) });
   });
 
@@ -2330,7 +2852,7 @@ async function startServer() {
       return res.status(401).json({ error: 'Boutique introuvable ou inactive.' });
     }
 
-    const ownerAccessToken = rotateMerchantAccessTokenForShop(shop.id, undefined);
+    const ownerAccessToken = await rotateMerchantAccessTokenForShop(shop.id, undefined);
     return res.json({
       success: true,
       owner_access_token: ownerAccessToken,
@@ -2362,7 +2884,7 @@ async function startServer() {
       return res.status(401).json({ error: 'Boutique introuvable ou inactive.' });
     }
 
-    const newToken = rotateMerchantAccessTokenForShop(shop.id, undefined);
+    const newToken = await rotateMerchantAccessTokenForShop(shop.id, undefined);
     merchantRecoveryTokens.delete(recoveryToken);
     const appUrl = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
     const newAccessUrl = `${appUrl}/app?access=${encodeURIComponent(newToken)}`;
@@ -2382,7 +2904,7 @@ async function startServer() {
     */
   });
 
-  app.post('/api/auth/admin-login', (req: Request, res: Response) => {
+  app.post('/api/auth/admin-login', async (req: Request, res: Response) => {
     const configuredKey = String(process.env.ADMIN_ACCESS_KEY || '').trim();
     if (!configuredKey) {
       return res.status(503).json({ error: 'ADMIN_ACCESS_KEY doit être configurée côté serveur.' });
@@ -2398,18 +2920,103 @@ async function startServer() {
     const token = randomUUID();
     const adminSession = { expiresAt: Date.now() + ADMIN_SESSION_DURATION_MS, fingerprint: buildSessionFingerprint(req) };
     adminSessions.set(token, adminSession);
-    saveAdminSessionRecord(token, adminSession);
+    await saveAdminSessionRecord(token, adminSession);
     setAdminSessionCookie(res, token);
     res.json({ success: true });
   });
 
-  app.post('/api/auth/admin-logout', (req: Request, res: Response) => {
-    const token = getAdminSession(req);
+  app.post('/api/auth/admin-logout', async (req: Request, res: Response) => {
+    const token = await getAdminSession(req);
     if (token) {
       adminSessions.delete(token);
-      deleteAdminSessionRecord(token);
+      await deleteAdminSessionRecord(token);
     }
     res.setHeader('Set-Cookie', 'matable_admin_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+    res.json({ success: true });
+  });
+
+  app.post('/api/auth/customer-register', rateLimitPublicRequest(20), async (req: Request, res: Response) => {
+    const { name, phone, email, password } = req.body || {};
+    const safeName = sanitizeTextField(String(name || ''), 80).trim();
+    const safePhone = String(phone || '').trim();
+    const safeEmail = String(email || '').trim().toLowerCase();
+    const safePassword = String(password || '');
+
+    if (!safeName || safeName.length < 2) {
+      return res.status(400).json({ error: 'Le nom est requis.' });
+    }
+    const phoneIsValidIvorian = /^\+?225\d{8,12}$/.test(safePhone);
+    if (!safePhone || !phoneIsValidIvorian) {
+      return res.status(400).json({ error: 'Le téléphone est requis au format ivoirien.' });
+    }
+    if (!safeEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) {
+      return res.status(400).json({ error: 'Un email valide est requis.' });
+    }
+    if (!safePassword || safePassword.length < 8) {
+      return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères.' });
+    }
+
+    const existing = await dbGet<{ id: number }>('SELECT id FROM users WHERE email = ? OR phone = ?', [safeEmail, safePhone]);
+    if (existing) {
+      return res.status(409).json({ error: 'Un compte existe déjà avec cet email ou ce téléphone.' });
+    }
+
+    const passwordHash = bcrypt.hashSync(safePassword, 10);
+    const inserted = await dbGet<{ id: number }>('INSERT INTO users (name, phone, email, password_hash, created_at, is_active) VALUES (?, ?, ?, ?, ?, 1) RETURNING id', [safeName, safePhone, safeEmail, passwordHash, new Date().toISOString()]);
+    const user = inserted ? await dbGet<{ id: number; name: string; phone: string; email: string; created_at: string }>('SELECT id, name, phone, email, created_at FROM users WHERE id = ?', [inserted.id]) : undefined;
+    if (!user) return res.status(500).json({ error: 'Impossible de créer le compte.' });
+
+    const token = randomUUID();
+    const session = { userId: user.id, expiresAt: Date.now() + SESSION_DURATION_MS, fingerprint: buildSessionFingerprint(req) };
+    customerSessions.set(token, session);
+    await saveCustomerSessionRecord(token, session);
+    setCustomerSessionCookie(res, token, session.fingerprint);
+
+    res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone, email: user.email, created_at: user.created_at } });
+  });
+
+  app.post('/api/auth/customer-login', rateLimitPublicRequest(20), async (req: Request, res: Response) => {
+    const { email, password } = req.body || {};
+    const safeEmail = String(email || '').trim().toLowerCase();
+    const safePassword = String(password || '');
+
+    if (!safeEmail || !safePassword) {
+      return res.status(400).json({ error: 'Email et mot de passe requis.' });
+    }
+
+    const user = await dbGet<{ id: number; name: string; phone: string; email: string; password_hash: string; created_at: string; is_active: number }>('SELECT * FROM users WHERE email = ?', [safeEmail]);
+    if (!user || !bcrypt.compareSync(safePassword, user.password_hash)) {
+      return res.status(401).json({ error: 'Identifiants invalides.' });
+    }
+
+    if (!user.is_active) {
+      return res.status(403).json({ error: 'Compte client désactivé.' });
+    }
+
+    const token = randomUUID();
+    const session = { userId: user.id, expiresAt: Date.now() + SESSION_DURATION_MS, fingerprint: buildSessionFingerprint(req) };
+    customerSessions.set(token, session);
+    await saveCustomerSessionRecord(token, session);
+    setCustomerSessionCookie(res, token, session.fingerprint);
+
+    res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone, email: user.email, created_at: user.created_at } });
+  });
+
+  app.get('/api/auth/customer-session', async (req: Request, res: Response) => {
+    const state = await getCustomerSessionState(req, res);
+    res.json({ ...state, authenticated: !!state.authenticated });
+  });
+
+  app.post('/api/auth/customer-logout', async (req: Request, res: Response) => {
+    const token = getCookie(req, 'matable_customer_session');
+    if (token) {
+      customerSessions.delete(token);
+      await deleteCustomerSessionRecord(token);
+    }
+    res.setHeader('Set-Cookie', [
+      'matable_customer_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+      'matable_customer_session_fp=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+    ]);
     res.json({ success: true });
   });
 
@@ -2465,12 +3072,13 @@ async function startServer() {
     res.json(shopProducts);
   });
 
-  app.post('/api/shops/:id/products', (req: Request, res: Response) => {
+  app.post('/api/shops/:id/products', async (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
-    if (!shops.some((shop) => shop.id === shopId)) {
+    const shop = shops.find((candidate) => candidate.id === shopId);
+    if (!shop) {
       return res.status(404).json({ error: 'Boutique introuvable.' });
     }
-    const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, prep_time, modifier_groups } = req.body;
+    const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, prep_time, modifier_groups, attributes } = req.body;
 
     const safeTitle = sanitizeTextField(title, 120);
     const numericPrice = Number(price);
@@ -2480,13 +3088,13 @@ async function startServer() {
     }
 
     const newProduct: ProductRecord = {
-      id: nextProductId++,
+      id: await allocateRecordId('products'),
       shop_id: shopId,
       title: safeTitle,
       description: description ? sanitizeTextField(description, 500) : null,
       price: numericPrice,
       stock: numericStock,
-      image_url: image_url || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80',
+      image_url: normalizeProductImage(image_url),
       is_available: is_available !== undefined ? Boolean(is_available) : true,
       category: category ? String(category).trim() : undefined,
       sizes: Array.isArray(sizes) ? sizes : undefined,
@@ -2494,14 +3102,15 @@ async function startServer() {
       lookbook_image: lookbook_image || undefined,
       prep_time: prep_time !== undefined ? Number(prep_time) : undefined,
       modifier_groups: Array.isArray(modifier_groups) ? modifier_groups : undefined,
+      attributes: sanitizeProductAttributes(attributes, shop.category),
     };
 
     products.unshift(newProduct);
-    persistProduct(newProduct);
+    await persistProduct(newProduct);
     res.json({ success: true, product: newProduct });
   });
 
-  app.put('/api/shops/:id/products/:productId', (req: Request, res: Response) => {
+  app.put('/api/shops/:id/products/:productId', async (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
     const productId = Number(req.params.productId);
     const product = products.find((p) => p.id === productId);
@@ -2509,7 +3118,8 @@ async function startServer() {
       return res.status(404).json({ error: 'Produit introuvable.' });
     }
 
-    const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, prep_time, modifier_groups } = req.body;
+    const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, prep_time, modifier_groups, attributes } = req.body;
+    const shop = shops.find((candidate) => candidate.id === shopId);
     if (title !== undefined) {
       const safeTitle = sanitizeTextField(title, 120);
       if (safeTitle.length < 2) return res.status(400).json({ error: 'Titre de produit invalide.' });
@@ -2526,7 +3136,7 @@ async function startServer() {
       if (!Number.isSafeInteger(numericStock) || numericStock < 0) return res.status(400).json({ error: 'Stock de produit invalide.' });
       product.stock = numericStock;
     }
-    if (image_url !== undefined) product.image_url = image_url;
+    if (image_url !== undefined) product.image_url = normalizeProductImage(image_url);
     if (is_available !== undefined) product.is_available = Boolean(is_available);
     if (category !== undefined) product.category = category ? String(category).trim() : undefined;
     if (sizes !== undefined) product.sizes = Array.isArray(sizes) ? sizes : undefined;
@@ -2534,14 +3144,15 @@ async function startServer() {
     if (lookbook_image !== undefined) product.lookbook_image = lookbook_image;
     if (prep_time !== undefined) product.prep_time = Number(prep_time);
     if (modifier_groups !== undefined) product.modifier_groups = Array.isArray(modifier_groups) ? modifier_groups : undefined;
+    if (attributes !== undefined && shop) product.attributes = sanitizeProductAttributes(attributes, shop.category);
 
-    persistProduct(product);
+    await persistProduct(product);
 
     res.json({ success: true, product });
   });
 
   // Fast stock stepper (+1 or -1)
-  app.patch('/api/shops/:id/products/:productId/stock', (req: Request, res: Response) => {
+  app.patch('/api/shops/:id/products/:productId/stock', async (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
     const productId = Number(req.params.productId);
     const product = products.find((p) => p.id === productId);
@@ -2556,13 +3167,13 @@ async function startServer() {
     }
     product.stock = Math.max(0, product.stock + change);
     product.is_available = product.stock > 0 && product.is_available;
-    persistProduct(product);
+    await persistProduct(product);
 
     res.json({ success: true, stock: product.stock, product });
   });
 
   // Toggle visibility (Masquer / Afficher)
-  app.patch('/api/shops/:id/products/:productId/toggle-visibility', (req: Request, res: Response) => {
+  app.patch('/api/shops/:id/products/:productId/toggle-visibility', async (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
     const productId = Number(req.params.productId);
     const product = products.find((p) => p.id === productId);
@@ -2571,11 +3182,11 @@ async function startServer() {
     }
 
     product.is_available = !product.is_available;
-    persistProduct(product);
+    await persistProduct(product);
     res.json({ success: true, is_available: product.is_available, product });
   });
 
-  app.delete('/api/shops/:id/products/:productId', (req: Request, res: Response) => {
+  app.delete('/api/shops/:id/products/:productId', async (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
     const productId = Number(req.params.productId);
     const index = products.findIndex((p) => p.id === productId && p.shop_id === shopId);
@@ -2584,12 +3195,12 @@ async function startServer() {
     }
 
     products.splice(index, 1);
-    db.prepare('DELETE FROM products WHERE id = ? AND shop_id = ?').run(productId, Number(req.params.id));
+    await dbRun('DELETE FROM products WHERE id = ? AND shop_id = ?', [productId, Number(req.params.id)]);
     res.json({ success: true });
   });
 
   // 4. ORDERS & AUTOMATIC STOCK DECREMENTATION
-  app.post('/api/orders', rateLimitPublicRequest(30), (req: Request, res: Response) => {
+  app.post('/api/orders', rateLimitPublicRequest(30), async (req: Request, res: Response) => {
     const { shop_id, customer_name, customer_phone, delivery_location, delivery_note, delivery_slot, payment_method_preference, items, website, form_started_at } = req.body;
 
     if (String(website || '').trim()) {
@@ -2647,7 +3258,20 @@ async function startServer() {
       });
     }
 
-    const atomicOrderCreation = db.transaction(() => {
+    const customerSession = await getCustomerSessionState(req);
+    const customerUserId = customerSession.authenticated ? customerSession.user?.id : undefined;
+    const whatsappTrackingToken = randomUUID();
+    const stockUpdates: { product: ProductRecord; stock: number; isAvailable: boolean }[] = [];
+    try {
+      const createdOrder = await dbTransaction(async (transaction) => {
+      const orderIdRecord = await transaction.get<{ id: number }>(`
+        INSERT INTO id_allocators (name, last_id)
+        SELECT ?, COALESCE(MAX(id), 0) + 1 FROM orders WHERE TRUE
+        ON CONFLICT(name) DO UPDATE SET last_id = id_allocators.last_id + 1
+        RETURNING last_id AS id
+      `, ['orders']);
+      if (!orderIdRecord) throw new Error('Impossible d’allouer un identifiant de commande.');
+      const orderId = Number(orderIdRecord.id);
       const orderItemRecords: any[] = [];
       let calculatedTotal = 0;
       const reservedProductIds = new Set<number>();
@@ -2661,7 +3285,7 @@ async function startServer() {
 
         const qty = Number(item.quantity);
         const stockQuantity = reservedProductIds.has(prod.id) ? 0 : (requestedQuantities.get(prod.id) || 0);
-        const stockRow = db.prepare('SELECT stock, is_available FROM products WHERE id = ? AND shop_id = ?').get(prod.id, shop.id) as { stock: number; is_available: number } | undefined;
+        const stockRow = await transaction.get<{ stock: number; is_available: number }>(`SELECT stock, is_available FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`, [prod.id, shop.id]);
         if (!stockRow) {
           throw Object.assign(new Error(`Article #${productId} introuvable dans le catalogue.`), { statusCode: 400 });
         }
@@ -2670,6 +3294,18 @@ async function startServer() {
         }
         if (stockQuantity > 0 && stockRow.stock < stockQuantity) {
           throw Object.assign(new Error(`Stock insuffisant pour "${prod.title}". Seulement ${stockRow.stock} unité(s) disponible(s).`), { statusCode: 409, product_id: prod.id, stock: stockRow.stock });
+        }
+        if (stockQuantity > 0) {
+          const stock = Number(stockRow.stock) - stockQuantity;
+          const update = await transaction.run(
+            'UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ? AND stock >= ?',
+            [stock, stock > 0 ? 1 : 0, prod.id, shop.id, stockQuantity],
+          );
+          if (update.changes !== 1) {
+            throw Object.assign(new Error(`Le stock de "${prod.title}" vient de changer. Réessayez la commande.`), { statusCode: 409, product_id: prod.id, stock: Number(stockRow.stock) });
+          }
+          stockUpdates.push({ product: prod, stock, isAvailable: stock > 0 });
+          reservedProductIds.add(prod.id);
         }
 
         const selectedModifiers = Array.isArray(item.selected_modifiers)
@@ -2685,13 +3321,11 @@ async function startServer() {
           }
         }
         const unitPrice = getProductUnitPriceWithModifiers(prod, validSelectedModifiers);
-        // A pending request does not reserve stock. Stock is reserved only when the seller confirms it.
-
         calculatedTotal += unitPrice * Number(item.quantity);
 
         orderItemRecords.push({
-          id: nextItemId++,
-          order_id: nextOrderId,
+          id: orderItemRecords.length + 1,
+          order_id: orderId,
           product_id: prod.id,
           product_title: prod.title,
           quantity: Number(item.quantity),
@@ -2703,8 +3337,9 @@ async function startServer() {
       }
 
       const newOrder: OrderRecord = {
-        id: nextOrderId++,
+        id: orderId,
         shop_id: shop.id,
+        customer_user_id: customerUserId,
         customer_name: validatedCustomer.customer_name || customer_name,
         customer_phone: validatedCustomer.customer_phone || customer_phone,
         delivery_location: validatedCustomer.delivery_location || delivery_location,
@@ -2713,22 +3348,50 @@ async function startServer() {
         payment_method_preference: payment_method_preference || 'to_confirm',
         total_amount: calculatedTotal,
         created_at: new Date().toISOString(),
-        status: 'pending',
+        status: 'confirmed',
+        whatsapp_tracking_available: true,
+        whatsapp_clicked_at: null,
         items: orderItemRecords,
       };
 
-      orders.unshift(newOrder);
-      persistOrder(newOrder);
+      await transaction.run(`
+        INSERT INTO orders (
+          id, shop_id, customer_name, customer_phone, delivery_location, delivery_note,
+          delivery_slot, payment_method_preference, total_amount, created_at, status, items, customer_user_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        newOrder.id,
+        newOrder.shop_id,
+        newOrder.customer_name,
+        newOrder.customer_phone,
+        newOrder.delivery_location,
+        newOrder.delivery_note ?? null,
+        newOrder.delivery_slot ?? null,
+        newOrder.payment_method_preference,
+        newOrder.total_amount,
+        newOrder.created_at,
+        newOrder.status,
+        JSON.stringify(newOrder.items ?? []),
+        newOrder.customer_user_id ?? null,
+      ]);
+
+      await transaction.run(
+        'INSERT INTO order_whatsapp_tracking (order_id, token_hash, clicked_at) VALUES (?, ?, NULL)',
+        [orderId, hashAccessToken(whatsappTrackingToken)],
+      );
 
       return newOrder;
-    });
-
-    try {
-      const createdOrder = atomicOrderCreation();
+      });
+      for (const update of stockUpdates) {
+        update.product.stock = update.stock;
+        update.product.is_available = update.isAvailable;
+      }
+      orders.unshift(createdOrder);
       res.json({
         success: true,
         order: createdOrder,
-        message: 'Demande de commande enregistrée. Le stock sera réservé après confirmation du vendeur.',
+        whatsapp_tracking_token: whatsappTrackingToken,
+        message: 'Commande acceptée automatiquement et stock réservé. Contactez le vendeur sur WhatsApp pour échanger sur la livraison et le paiement.',
       });
     } catch (error: unknown) {
       const err = error as any;
@@ -2742,6 +3405,39 @@ async function startServer() {
     }
   });
 
+  app.post('/api/orders/:id/whatsapp-click', rateLimitPublicRequest(60), async (req: Request, res: Response) => {
+    const orderId = Number(req.params.id);
+    const token = typeof req.body?.token === 'string' ? req.body.token : '';
+    if (!Number.isSafeInteger(orderId) || orderId <= 0 || token.length < 20 || token.length > 200) {
+      return res.status(404).json({ error: 'Suivi de commande introuvable.' });
+    }
+
+    const tracking = await dbGet<{ token_hash: string; clicked_at: string | null }>(
+      'SELECT token_hash, clicked_at FROM order_whatsapp_tracking WHERE order_id = ?',
+      [orderId],
+    );
+    if (!tracking || !timingSafeEqual(hashAccessToken(token), String(tracking.token_hash))) {
+      return res.status(404).json({ error: 'Suivi de commande introuvable.' });
+    }
+
+    const clickedAt = tracking.clicked_at || new Date().toISOString();
+    if (!tracking.clicked_at) {
+      await dbRun('UPDATE order_whatsapp_tracking SET clicked_at = COALESCE(clicked_at, ?) WHERE order_id = ?', [clickedAt, orderId]);
+    }
+    const order = orders.find((candidate) => candidate.id === orderId);
+    if (order) order.whatsapp_clicked_at = clickedAt;
+    res.json({ success: true, clicked_at: clickedAt });
+  });
+
+  app.get('/api/auth/customer-orders', async (req: Request, res: Response) => {
+    const customerSession = await getCustomerSessionState(req, res);
+    if (!customerSession.authenticated || !customerSession.user) {
+      return res.status(401).json({ error: 'Authentification client requise.' });
+    }
+
+    res.json({ orders: orders.filter((order) => order.customer_user_id === customerSession.user?.id) });
+  });
+
   // Merchant orders history
   app.get('/api/shops/:id/orders', (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
@@ -2750,7 +3446,7 @@ async function startServer() {
   });
 
   // Update order status & automatic restock on cancellation
-  app.patch('/api/shops/:id/orders/:orderId/status', (req: Request, res: Response) => {
+  app.patch('/api/shops/:id/orders/:orderId/status', async (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
     const orderId = Number(req.params.orderId);
     const { status } = req.body;
@@ -2783,8 +3479,10 @@ async function startServer() {
       return res.status(409).json({ error: `Transition impossible : ${previousStatus} → ${status}.` });
     }
 
+
+    const stockUpdates: { product: ProductRecord; stock: number; isAvailable: boolean }[] = [];
     try {
-      db.transaction(() => {
+      await dbTransaction(async (transaction) => {
         const quantities = new Map<number, number>();
         for (const item of order.items || []) {
           quantities.set(item.product_id, (quantities.get(item.product_id) || 0) + Number(item.quantity || 1));
@@ -2798,10 +3496,15 @@ async function startServer() {
           for (const [productId, quantity] of quantities) {
             const prod = products.find((candidate) => candidate.id === productId && candidate.shop_id === shopId);
             if (!prod) continue;
-            prod.stock += quantity;
-            prod.is_available = prod.stock > 0;
-            db.prepare('UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ?')
-              .run(prod.stock, prod.is_available ? 1 : 0, prod.id, shopId);
+            const stockRow = await transaction.get<{ stock: number }>(
+              `SELECT stock FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+              [prod.id, shopId],
+            );
+            if (!stockRow) continue;
+            const stock = Number(stockRow.stock) + quantity;
+            const isAvailable = stock > 0;
+            await transaction.run('UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ?', [stock, isAvailable ? 1 : 0, prod.id, shopId]);
+            stockUpdates.push({ product: prod, stock, isAvailable });
           }
         }
 
@@ -2811,20 +3514,32 @@ async function startServer() {
             if (!prod) {
               throw Object.assign(new Error('Un article de cette commande n’existe plus dans le catalogue.'), { statusCode: 409 });
             }
-            const stockRow = db.prepare('SELECT stock FROM products WHERE id = ? AND shop_id = ?').get(productId, shopId) as { stock: number } | undefined;
-            if (!stockRow || stockRow.stock < quantity) {
-              throw Object.assign(new Error(`Stock insuffisant pour réactiver « ${prod.title} ».`), { statusCode: 409, product_id: productId, stock: stockRow?.stock ?? 0 });
+            const stockRow = await transaction.get<{ stock: number }>(
+              `SELECT stock FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+              [productId, shopId],
+            );
+            const currentStock = Number(stockRow?.stock || 0);
+            if (!stockRow || currentStock < quantity) {
+              throw Object.assign(new Error(`Stock insuffisant pour réactiver « ${prod.title} ».`), { statusCode: 409, product_id: productId, stock: currentStock });
             }
-            prod.stock = stockRow.stock - quantity;
-            prod.is_available = prod.stock > 0;
-            db.prepare('UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ? AND stock >= ?')
-              .run(prod.stock, prod.is_available ? 1 : 0, productId, shopId, quantity);
+            const stock = currentStock - quantity;
+            const isAvailable = stock > 0;
+            const update = await transaction.run('UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ? AND stock >= ?', [stock, isAvailable ? 1 : 0, productId, shopId, quantity]);
+            if (update.changes !== 1) {
+              throw Object.assign(new Error(`Stock insuffisant pour réactiver « ${prod.title} ».`), { statusCode: 409, product_id: productId, stock: currentStock });
+            }
+            stockUpdates.push({ product: prod, stock, isAvailable });
           }
         }
 
         order.status = status as OrderRecord['status'];
-        db.prepare('UPDATE orders SET status = ? WHERE id = ? AND shop_id = ?').run(status, order.id, shopId);
-      })();
+        await transaction.run('UPDATE orders SET status = ? WHERE id = ? AND shop_id = ?', [status, order.id, shopId]);
+      });
+      for (const update of stockUpdates) {
+        update.product.stock = update.stock;
+        update.product.is_available = update.isAvailable;
+      }
+      order.status = status as OrderRecord['status'];
     } catch (error: unknown) {
       const err = error as { message?: string; statusCode?: number; product_id?: number; stock?: number };
       const payload: Record<string, unknown> = { error: err.message || 'Transition de commande impossible.' };
@@ -2944,39 +3659,41 @@ async function startServer() {
     });
   });
 
-  app.get('/api/admin/analytics', (req: Request, res: Response) => {
-    refreshRuntimeDataFromDatabase();
+  app.get('/api/admin/analytics', async (req: Request, res: Response) => {
+    await refreshRuntimeDataFromDatabase();
     const requestedDays = Number(req.query.days);
     const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 90) : 30;
     const since = new Date(Date.now() - days * 86400000).toISOString();
-    const daily = db.prepare(`
+    const daily = await dbAll<{ date: string; page_views: number; unique_visitors: number }>(`
       SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS page_views,
         COUNT(DISTINCT session_id) AS unique_visitors
       FROM analytics_events WHERE event_type = 'page_view' AND created_at >= ?
       GROUP BY date ORDER BY date ASC
-    `).all(since) as { date: string; page_views: number; unique_visitors: number }[];
-    const orderDaily = db.prepare(`
+    `, [since]);
+    const orderDaily = await dbAll<{ date: string; orders: number; sales: number }>(`
       SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
       FROM orders WHERE created_at >= ? GROUP BY date ORDER BY date ASC
-    `).all(since) as { date: string; orders: number; sales: number }[];
+    `, [since]);
 
     const validOrderStatuses = new Set(['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'expired']);
-    const byShop = shops.map((shop) => {
-      const traffic = db.prepare(`
+    const byShop = (await Promise.all(shops.map(async (shop) => {
+      const traffic = await dbGet<{ page_views: number; unique_visitors: number }>(`
         SELECT COUNT(*) AS page_views, COUNT(DISTINCT session_id) AS unique_visitors
         FROM analytics_events WHERE event_type = 'page_view' AND shop_id = ? AND created_at >= ?
-      `).get(shop.id, since) as { page_views: number; unique_visitors: number };
+      `, [shop.id, since]);
+      const pageViews = Number(traffic?.page_views || 0);
+      const uniqueVisitors = Number(traffic?.unique_visitors || 0);
       const shopOrders = orders.filter((order) => order.shop_id === shop.id && order.created_at >= since);
       const sales = shopOrders
         .filter((order) => validOrderStatuses.has(order.status ?? 'pending') && order.status !== 'cancelled')
         .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
       return {
         shop_id: shop.id, shop_name: shop.name, slug: shop.slug,
-        page_views: traffic.page_views, unique_visitors: traffic.unique_visitors,
+        page_views: pageViews, unique_visitors: uniqueVisitors,
         orders: shopOrders.length, sales,
-        conversion_rate: traffic.unique_visitors ? Number(((shopOrders.length / traffic.unique_visitors) * 100).toFixed(1)) : 0,
+        conversion_rate: uniqueVisitors ? Number(((shopOrders.length / uniqueVisitors) * 100).toFixed(1)) : 0,
       };
-    }).sort((a, b) => b.page_views - a.page_views);
+    }))).sort((a, b) => b.page_views - a.page_views);
     const totalViews = byShop.reduce((sum, shop) => sum + shop.page_views, 0);
     const totalVisitors = byShop.reduce((sum, shop) => sum + shop.unique_visitors, 0);
     const totalAnalyticsOrders = byShop.reduce((sum, shop) => sum + shop.orders, 0);
@@ -2992,8 +3709,8 @@ async function startServer() {
 
   // 6. SUPER-ADMIN DASHBOARD (/admin)
   // "Dashboard Super-Admin (Votre Tour de Contrôle — /admin)"
-  app.get('/api/admin/shops', (req: Request, res: Response) => {
-    refreshRuntimeDataFromDatabase();
+  app.get('/api/admin/shops', async (req: Request, res: Response) => {
+    await refreshRuntimeDataFromDatabase();
     const adminShops = shops.map((s) => {
       const shopOrders = orders.filter((order) => order.shop_id === s.id);
       const actionableOrders = shopOrders.filter((order) => order.status !== 'cancelled' && order.status !== 'expired');
@@ -3015,28 +3732,28 @@ async function startServer() {
     res.json(adminShops);
   });
 
-  app.get('/api/admin/health', (req: Request, res: Response) => {
-    refreshRuntimeDataFromDatabase();
-    const latestAnalytics = db.prepare('SELECT created_at FROM analytics_events ORDER BY created_at DESC LIMIT 1').get() as { created_at?: string } | undefined;
+  app.get('/api/admin/health', async (req: Request, res: Response) => {
+    await refreshRuntimeDataFromDatabase();
+    const latestAnalytics = await dbGet<{ created_at?: string }>('SELECT created_at FROM analytics_events ORDER BY created_at DESC LIMIT 1');
     const counts = {
-      shops: Number((db.prepare('SELECT COUNT(*) AS count FROM shops').get() as { count: number }).count),
-      products: Number((db.prepare('SELECT COUNT(*) AS count FROM products').get() as { count: number }).count),
-      orders: Number((db.prepare('SELECT COUNT(*) AS count FROM orders').get() as { count: number }).count),
+      shops: Number((await dbGet<{ count: number }>('SELECT COUNT(*) AS count FROM shops'))?.count || 0),
+      products: Number((await dbGet<{ count: number }>('SELECT COUNT(*) AS count FROM products'))?.count || 0),
+      orders: Number((await dbGet<{ count: number }>('SELECT COUNT(*) AS count FROM orders'))?.count || 0),
     };
 
     res.json({
       status: 'ok',
       checked_at: new Date().toISOString(),
-      database: 'sqlite',
-      database_path: process.env.MATABLE_DB_PATH || 'data/matable.db',
+      database: databaseMode,
+      database_path: databaseMode === 'sqlite' ? process.env.MATABLE_DB_PATH || 'data/matable.db' : null,
       counts,
       latest_analytics_event_at: latestAnalytics?.created_at || null,
       integrations: { whatsapp_cloud: 'locked', whatsapp_click_to_chat: 'available' },
     });
   });
 
-  app.get('/api/admin/orders', (req: Request, res: Response) => {
-    refreshRuntimeDataFromDatabase();
+  app.get('/api/admin/orders', async (req: Request, res: Response) => {
+    await refreshRuntimeDataFromDatabase();
     const requestedLimit = Number(req.query.limit);
     const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
     const requestedStatus = String(req.query.status || 'all');
@@ -3062,26 +3779,29 @@ async function startServer() {
   });
 
   // Manual ON/OFF toggle
-  app.patch('/api/admin/shops/:id/toggle-active', (req: Request, res: Response) => {
+  app.patch('/api/admin/shops/:id/toggle-active', async (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
     const shop = shops.find((s) => s.id === shopId);
     if (!shop) {
       return res.status(404).json({ error: 'Boutique introuvable.' });
     }
 
+    if (!shop.is_active && shop.merchant_verification_status && !['approved', 'not_required'].includes(shop.merchant_verification_status)) {
+      return res.status(409).json({ error: 'La vérification d’identité doit être approuvée avant l’activation.' });
+    }
     shop.is_active = !shop.is_active;
     if (shop.is_active) shop.payment_status = 'approved';
-    persistShop(shop);
+    await persistShop(shop);
     res.json({ success: true, is_active: shop.is_active, shop: toSafeShop(shop) });
   });
 
-  app.post('/api/admin/shops/:id/access-link', (req: Request, res: Response) => {
+  app.post('/api/admin/shops/:id/access-link', async (req: Request, res: Response) => {
     const shopId = Number(req.params.id);
     const shop = shops.find((candidate) => candidate.id === shopId);
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const ownerAccessToken = randomUUID();
     shop.owner_access_token_hash = hashAccessToken(ownerAccessToken);
-    persistShop(shop);
+    await persistShop(shop);
     const publicUrl = `${String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')}/${shop.slug}`;
     const accessUrl = `${String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')}/app?access=${encodeURIComponent(ownerAccessToken)}`;
     res.json({ success: true, shop: toSafeShop(shop), public_url: publicUrl, access_url: accessUrl });
@@ -3202,6 +3922,15 @@ async function startServer() {
       .replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${escapeHtml(content.description)}" />`);
   };
 
+  const shouldServePublicHtml = (req: Request) => {
+    const accept = String(req.headers.accept || '');
+    const ua = String(req.headers['user-agent'] || '').toLowerCase();
+    const isGet = req.method === 'GET';
+    const isLikelyHtml = accept.includes('text/html') || accept.includes('*/*') || accept === '' || (!accept.includes('application/json') && !accept.includes('application/javascript'));
+    const isSocialCrawler = ua.includes('whatsapp') || ua.includes('facebookexternalhit') || ua.includes('twitterbot') || ua.includes('linkedin');
+    return isGet && isLikelyHtml && !isSocialCrawler;
+  };
+
   app.get('/robots.txt', (req: Request, res: Response) => {
     const origin = getPublicOrigin(req);
     res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /admin\nDisallow: /api/\nSitemap: ${origin}/sitemap.xml\n`);
@@ -3220,7 +3949,10 @@ async function startServer() {
   // Vite middleware for development vs. Production static serving
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.NODE_ENV === 'test' ? false : { port: Math.min(PORT + 1, 65535) },
+      },
       appType: 'spa',
     });
 
@@ -3232,7 +3964,7 @@ async function startServer() {
       const targetShop = matchSlug && !['app', 'admin'].includes(matchSlug) ? shops.find((s) => s.slug === matchSlug) : null;
       const legalPage = matchSlug && ['mentions-legales', 'confidentialite', 'cgu', 'cookies'].includes(matchSlug) ? matchSlug : null;
 
-      if (targetShop && (req.headers.accept?.includes('text/html') || req.headers['user-agent']?.toLowerCase().includes('whatsapp') || req.headers['user-agent']?.toLowerCase().includes('facebookexternalhit'))) {
+      if (targetShop && shouldServePublicHtml(req)) {
         try {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
@@ -3243,7 +3975,7 @@ async function startServer() {
           return next(e);
         }
       }
-      if (legalPage && req.headers.accept?.includes('text/html')) {
+      if (legalPage && shouldServePublicHtml(req)) {
         try {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
@@ -3275,12 +4007,12 @@ async function startServer() {
       const targetShop = matchSlug && !['app', 'admin'].includes(matchSlug) ? shops.find((s) => s.slug === matchSlug) : null;
       const legalPage = matchSlug && ['mentions-legales', 'confidentialite', 'cgu', 'cookies'].includes(matchSlug) ? matchSlug : null;
 
-      if (targetShop && baseHtml) {
+      if (targetShop && baseHtml && shouldServePublicHtml(req)) {
         const customHtml = injectShopOpenGraph(baseHtml, targetShop, req);
         return res.status(200).set({ 'Content-Type': 'text/html' }).send(customHtml);
       }
 
-      if (legalPage && baseHtml) {
+      if (legalPage && baseHtml && shouldServePublicHtml(req)) {
         return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectLegalSeo(baseHtml, legalPage, req));
       }
 

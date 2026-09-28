@@ -1,7 +1,7 @@
 {
   "name": "MaTable.ci",
-  "description": "Plateforme e-commerce ultra-lean et prise de commande WhatsApp pour commerçants indépendants en Côte d'Ivoire.",
+  "description": "Plateforme de découverte locale et de commande via WhatsApp pour boutiques indépendantes en Côte d'Ivoire.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_PAYSTACK_SUBSCRIPTIONS", "MAJOR_CAPABILITY_WHATSAPP_NOTIFICATIONS"]
+  "majorCapabilities": []
 }
 

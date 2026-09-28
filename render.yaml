@@ -18,6 +18,16 @@ services:
         generateValue: true
       - key: DATABASE_URL
         sync: false
+      - key: DIDIT_ENVIRONMENT
+        value: sandbox
+      - key: MERCHANT_KYC_MODE
+        value: disabled
+      - key: DIDIT_API_KEY
+        sync: false
+      - key: DIDIT_WORKFLOW_ID
+        sync: false
+      - key: DIDIT_WEBHOOK_SECRET
+        sync: false
       - key: WHATSAPP_CLOUD_ENABLED
         value: false
       - key: PAYMENT_CONTACT_PHONE

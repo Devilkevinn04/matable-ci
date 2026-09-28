@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   ShoppingBag, 
   Phone, 
@@ -15,22 +16,44 @@ import {
   ChevronDown,
   ChevronUp,
   Tag,
-  UtensilsCrossed,
-  Shirt,
   Search
 } from 'lucide-react';
 import { Shop, Product, CartItem } from '../types';
 import { formatFCFA, generateWhatsAppOrderReceipt, getProductUnitPrice } from '../utils/format';
 import { getContrastTextColor, normalizeHex } from '../utils/color';
+import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDisplay, getWelcomeMessageForDisplay } from '../utils/categoryDefaults';
+import { CategoryProductImage } from './CategoryProductImage';
 import { useToast } from './Toast';
 import { hasAnalyticsConsent } from './CookieBanner';
+import { CustomerUser } from './CustomerAuth';
+import { CustomerCheckoutAuth } from './CustomerCheckoutAuth';
 
 interface CustomerStorefrontProps {
   shopSlug: string;
   onSelectShop?: (slug: string) => void;
+  customerUser?: CustomerUser | null;
+  onCustomerAuthenticated?: (user: CustomerUser) => void;
 }
 
-export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug }) => {
+function getCartStorageKey(shopSlug: string) {
+  return `matable_cart_${shopSlug}`;
+}
+
+function readStoredCart(shopSlug: string): CartItem[] {
+  try {
+    const storedCart = sessionStorage.getItem(getCartStorageKey(shopSlug));
+    if (!storedCart) return [];
+    const parsed: unknown = JSON.parse(storedCart);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is CartItem =>
+      Boolean(item && typeof item === 'object' && item.product && typeof item.product.id === 'number' && Number.isInteger(item.quantity) && item.quantity > 0)
+    );
+  } catch {
+    return [];
+  }
+}
+
+export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug, customerUser, onCustomerAuthenticated }) => {
   const toast = useToast();
   const [shop, setShop] = useState<Shop | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -41,9 +64,23 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // Cart state
-  const [cart, setCart] = useState<CartItem[]>([]);
+  // Keep an in-progress cart when a customer opens another page and returns.
+  const [cartState, setCartState] = useState<{ shopSlug: string; items: CartItem[] }>(() => ({
+    shopSlug,
+    items: readStoredCart(shopSlug),
+  }));
+  const cart = cartState.shopSlug === shopSlug ? cartState.items : [];
+  const setCart: React.Dispatch<React.SetStateAction<CartItem[]>> = (update) => {
+    setCartState((previous) => {
+      const currentItems = previous.shopSlug === shopSlug ? previous.items : readStoredCart(shopSlug);
+      return {
+        shopSlug,
+        items: typeof update === 'function' ? update(currentItems) : update,
+      };
+    });
+  };
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const cartHistoryEntry = useRef(false);
 
   // Truncation toggle map for product descriptions
   const [expandedDescriptions, setExpandedDescriptions] = useState<Record<number, boolean>>({});
@@ -62,20 +99,66 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [deliverySlot, setDeliverySlot] = useState('Dès que prêt (30-45 min)');
   const [paymentMethod, setPaymentMethod] = useState<'wave' | 'mobile_money' | 'cash' | 'to_confirm'>('to_confirm');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [orderSuccess, setOrderSuccess] = useState<{ orderId: number; whatsappUrl: string; whatsappText: string } | null>(null);
+  const [showCheckoutAuth, setShowCheckoutAuth] = useState(false);
+  const [checkoutAuthUser, setCheckoutAuthUser] = useState<CustomerUser | null>(null);
+  const [guestCheckoutConfirmed, setGuestCheckoutConfirmed] = useState(false);
+  const [orderSuccess, setOrderSuccess] = useState<{ orderId: number; whatsappUrl: string; whatsappText: string; whatsappTrackingToken: string } | null>(null);
   const [messageCopied, setMessageCopied] = useState(false);
-  const [whatsappBlocked, setWhatsappBlocked] = useState(false);
   const [formStartedAt] = useState(() => Date.now());
   const [website, setWebsite] = useState('');
 
   useEffect(() => {
     if (!isCartOpen) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setIsCartOpen(false);
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
+    };
   }, [isCartOpen]);
+
+  useEffect(() => {
+    const restoreCartDrawer = () => {
+      const drawerIsInHistory = Boolean(window.history.state?.matableCartDrawer);
+      cartHistoryEntry.current = drawerIsInHistory;
+      setIsCartOpen(drawerIsInHistory);
+    };
+    window.addEventListener('popstate', restoreCartDrawer);
+    return () => window.removeEventListener('popstate', restoreCartDrawer);
+  }, []);
+
+  useEffect(() => {
+    if (isCartOpen) {
+      if (!window.history.state?.matableCartDrawer) {
+        window.history.pushState({ ...(window.history.state || {}), matableCartDrawer: true }, '', window.location.href);
+      }
+      cartHistoryEntry.current = true;
+      return;
+    }
+
+    if (cartHistoryEntry.current && window.history.state?.matableCartDrawer) {
+      cartHistoryEntry.current = false;
+      window.history.back();
+    }
+  }, [isCartOpen]);
+
+  useEffect(() => {
+    if (cartState.shopSlug !== shopSlug) {
+      setCartState({ shopSlug, items: readStoredCart(shopSlug) });
+      return;
+    }
+    try {
+      const storageKey = getCartStorageKey(shopSlug);
+      if (cartState.items.length > 0) sessionStorage.setItem(storageKey, JSON.stringify(cartState.items));
+      else sessionStorage.removeItem(storageKey);
+    } catch {
+      // The in-memory cart remains available when browser storage is disabled.
+    }
+  }, [cartState, shopSlug]);
 
   // Ces deux useMemo doivent être déclarés avant les "return" conditionnels
   // ci-dessous (loading / error / boutique inactive), sinon React appelle un
@@ -138,9 +221,14 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
   useEffect(() => {
     fetchShopData();
-    setCart([]);
     setOrderSuccess(null);
   }, [shopSlug]);
+
+  useEffect(() => {
+    if (!customerUser) return;
+    setCustomerName(customerUser.name);
+    setCustomerPhone(customerUser.phone);
+  }, [customerUser]);
 
   useEffect(() => {
     if (!shop?.id || !hasAnalyticsConsent()) return;
@@ -162,8 +250,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
     const origin = window.location.origin;
     const canonicalUrl = `${origin}/${shop.slug}`;
-    const description = (shop.welcome_message || `Découvrez le catalogue de ${shop.name} et commandez directement sur WhatsApp.`).slice(0, 160);
-    const image = shop.theme_config?.custom_banner_url || `${origin}/icon-512.svg`;
+    const description = getWelcomeMessageForDisplay(shop.welcome_message, shop.category).slice(0, 160);
+    const image = getBannerImageForDisplay(shop.theme_config?.custom_banner_url, shop.category);
     const upsertMeta = (selector: string, attribute: 'name' | 'property', key: string, content: string) => {
       let element = document.head.querySelector<HTMLMetaElement>(selector);
       if (!element) {
@@ -221,7 +309,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           priceCurrency: 'XOF',
           price: product.price,
           availability: 'https://schema.org/InStock',
-          itemOffered: { '@type': 'Product', name: product.title, description: product.description || undefined, image: product.image_url },
+          itemOffered: { '@type': 'Product', name: product.title, description: product.description || undefined, image: getProductImageForDisplay(product.image_url, shop.category) },
         })),
       },
     });
@@ -305,12 +393,18 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     return sum + item.quantity * unitPrice;
   }, 0);
 
+  const authenticatedCustomer = customerUser || checkoutAuthUser;
+
   // Handle WhatsApp Checkout
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!shop || cart.length === 0) return;
     if (!customerName.trim() || !customerPhone.trim()) {
       toast.error('Veuillez renseigner votre nom et votre numéro de téléphone.');
+      return;
+    }
+    if (!authenticatedCustomer && !guestCheckoutConfirmed) {
+      setShowCheckoutAuth(true);
       return;
     }
 
@@ -385,10 +479,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         orderId: data.order.id,
         whatsappUrl: url,
         whatsappText: text,
+        whatsappTrackingToken: String(data.whatsapp_tracking_token || ''),
       });
-      setWhatsappBlocked(false);
       setMessageCopied(false);
-      toast.success('Demande de commande enregistrée. Ouvrez WhatsApp pour confirmer avec le vendeur.');
+      toast.success('Commande acceptée automatiquement. Vous pouvez contacter le commerçant sur WhatsApp.');
 
       // Update only local stock so the confirmation screen stays mounted.
       const confirmedQuantities = new Map<number, number>();
@@ -466,7 +560,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           Boutique temporairement indisponible
         </div>
         <p className="text-slate-600 text-sm leading-relaxed mb-6">
-          L'abonnement de cette boutique est arrivé à échéance. Le propriétaire doit renouveler son accès auprès de l'administration MaTable.ci pour réactiver son catalogue.
+          Cette boutique est temporairement indisponible. Le commerçant peut la réactiver depuis son espace de gestion lorsque la vitrine est de nouveau ouverte.
         </p>
       </div>
     );
@@ -476,8 +570,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const primaryColor = normalizeHex(shop.theme_config?.primary_color || shop.theme_color || '#0F172A');
   const secondaryColor = normalizeHex(shop.theme_config?.secondary_color || '#F8FAFC');
   const fontFamily = shop.theme_config?.font_family || 'Plus Jakarta Sans';
-  const layoutStyle = shop.theme_config?.layout_style || (shop.category === 'food' ? 'card_landscape' : 'grid_portrait');
-  const bannerUrl = shop.theme_config?.custom_banner_url;
+  const categoryDefaults = getCategoryDefaults(shop.category);
+  const layoutStyle = shop.theme_config?.layout_style || categoryDefaults.layoutStyle;
+  const bannerUrl = getBannerImageForDisplay(shop.theme_config?.custom_banner_url, shop.category);
   const logoUrl = shop.theme_config?.logo_url;
   const isEventMode = shop.theme_config?.event_mode_enabled;
   const eventBannerText = shop.theme_config?.event_banner_text;
@@ -491,6 +586,17 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     shop.theme_config?.advanced_css?.shadowIntensity === 'strong' ? 'shadow-lg' :
     shop.theme_config?.advanced_css?.shadowIntensity === 'soft' ? 'shadow-md' : 'shadow-2xs';
   const glowStyle = shop.theme_config?.advanced_css?.accentGlow ? { boxShadow: `0 0 20px ${primaryColor}40` } : {};
+
+  const hoursSummary = shop.opening_hours?.enabled
+    ? `${shop.opening_hours.open_time || '08:00'}–${shop.opening_hours.close_time || '22:00'} · ${shop.opening_hours.days && shop.opening_hours.days.length > 0 && shop.opening_hours.days.length < 7 ? `${shop.opening_hours.days.length} jours / semaine` : '7 jours / semaine'}`
+    : 'Horaires flexibles selon le commerçant';
+
+  const serviceHighlights = [
+    shop.is_open ? 'Boutique ouverte' : 'Commande à la reprise',
+    shop.theme_config?.delivery_zones?.length ? `${shop.theme_config.delivery_zones.length} zones de service` : 'Service local',
+    shop.theme_config?.social_links && Object.values(shop.theme_config.social_links).some(Boolean) ? 'Réseaux publics vérifiés' : 'Contact direct WhatsApp',
+    shop.city ? `Service à ${shop.city}` : 'Abidjan & environs',
+  ];
 
   return (
     <div 
@@ -515,7 +621,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 className="w-11 h-11 rounded-xl flex items-center justify-center font-black text-lg shrink-0 shadow-sm transition-transform hover:scale-105"
                 style={{ backgroundColor: primaryColor, color: primaryTextColor }}
               >
-                {shop.category === 'food' ? <UtensilsCrossed className="w-5 h-5" /> : <Shirt className="w-5 h-5" />}
+                <span aria-hidden="true">{categoryDefaults.icon}</span>
               </div>
             )}
             <div className="min-w-0">
@@ -570,7 +676,20 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       {bannerUrl && (
         <div className="max-w-3xl mx-auto px-4 pt-4">
           <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-2xs">
-            <img src={bannerUrl} alt={`Bannière de ${shop.name}`} className="h-40 w-full object-cover sm:h-52" />
+            <img
+              src={bannerUrl}
+              alt={`Illustration de la boutique ${shop.name}`}
+              className="h-40 w-full object-cover sm:h-52"
+              onError={(event) => {
+                const element = event.currentTarget;
+                if (element.dataset.placeholderAttempted !== 'true' && element.src !== categoryDefaults.bannerPlaceholderImageUrl) {
+                  element.dataset.placeholderAttempted = 'true';
+                  element.src = categoryDefaults.bannerPlaceholderImageUrl;
+                } else {
+                  element.hidden = true;
+                }
+              }}
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent" />
             <p className="absolute bottom-3 left-4 right-4 text-sm font-black text-white drop-shadow sm:text-base">{shop.name}</p>
           </div>
@@ -585,8 +704,31 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         </div>
       )}
 
-      {/* 2. Welcome Slogan & Sector Badges */}
+      {/* 2. Boutique overview + checklist flow */}
       <div className="max-w-3xl mx-auto px-4 pt-4">
+        <div className="mb-4 p-4 rounded-2xl bg-[#fffdf9] border border-[#ded8ce] shadow-sm surface-card">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="ui-kicker">Boutique</p>
+              <h2 className="text-lg font-black text-slate-900 mt-1">{shop.name}</h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsCartOpen(true)}
+              className="primary-button px-3 py-2 text-xs"
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              Commander
+            </button>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-600">
+            <span className="rounded-full bg-slate-100 px-2 py-1">{categoryDefaults.label}</span>
+            {shop.city && <span className="rounded-full bg-slate-100 px-2 py-1">{shop.city}</span>}
+            <span className="rounded-full bg-slate-100 px-2 py-1">{shop.is_open ? 'Ouvert' : 'Fermé'}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-1">Sur place / livraison</span>
+          </div>
+        </div>
+
         {/* Closed warning */}
         {!shop.is_open && (
           <div className="mb-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-3 shadow-2xs">
@@ -603,15 +745,94 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         )}
 
         {/* Welcome message / Slogan */}
-        {shop.welcome_message && (
+        {getWelcomeMessageForDisplay(shop.welcome_message, shop.category) && (
           <div className="p-4 rounded-2xl bg-[#fffdf9] border border-[#ded8ce] shadow-sm mb-5">
             <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
               <Sparkles className="w-3.5 h-3.5" style={{ color: primaryColor }} />
-              <span>Mot du commerçant</span>
+              <span>{shop.welcome_message ? 'Mot du commerçant' : 'Présentation'}</span>
             </div>
             <p className="text-slate-800 text-sm font-medium leading-relaxed italic">
-              « {shop.welcome_message} »
+              « {getWelcomeMessageForDisplay(shop.welcome_message, shop.category)} »
             </p>
+          </div>
+        )}
+
+        <div className="mb-5 rounded-2xl border border-[#ded8ce] bg-[#fffdf9] p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Confiance & service</p>
+              <h3 className="text-base font-black text-slate-900 mt-1">Pourquoi choisir cette boutique</h3>
+            </div>
+            <div className="inline-flex items-center gap-1 rounded-full bg-[#edf7f2] px-2 py-1 text-[10px] font-black text-[#155c3d]">
+              <MapPin className="w-3 h-3" />
+              {shop.city || 'Abidjan'}
+            </div>
+          </div>
+
+          <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-700">
+              <Clock className="w-3.5 h-3.5 text-[#1D6B57] shrink-0" />
+              <span>Horaires</span>
+            </div>
+            <span className="text-[11px] font-black text-slate-800">{hoursSummary}</span>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            {serviceHighlights.map((item) => (
+              <div key={item} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-[11px] font-bold text-slate-700">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#1D6B57] shrink-0" />
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {(shop.theme_config?.social_links || shop.theme_config?.delivery_zones?.length) && (
+          <div className="mb-5 rounded-2xl border border-[#ded8ce] bg-[#fffdf9] p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Contact & livraison</p>
+                <h3 className="text-base font-black text-slate-900 mt-1">Réseaux et zones de service</h3>
+              </div>
+              <div className="inline-flex items-center gap-1 rounded-full bg-[#edf7f2] px-2 py-1 text-[10px] font-black text-[#155c3d]">
+                <MapPin className="w-3 h-3" />
+                {shop.city || 'Abidjan'}
+              </div>
+            </div>
+
+            {shop.theme_config?.social_links && Object.values(shop.theme_config.social_links).some(Boolean) && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {shop.theme_config.social_links.instagram && (
+                  <a href={shop.theme_config.social_links.instagram} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Instagram</a>
+                )}
+                {shop.theme_config.social_links.facebook && (
+                  <a href={shop.theme_config.social_links.facebook} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Facebook</a>
+                )}
+                {shop.theme_config.social_links.website && (
+                  <a href={shop.theme_config.social_links.website} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Site web</a>
+                )}
+                {shop.theme_config.social_links.whatsapp && (
+                  <a href={shop.theme_config.social_links.whatsapp} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">WhatsApp</a>
+                )}
+              </div>
+            )}
+
+            {shop.theme_config?.delivery_zones && shop.theme_config.delivery_zones.length > 0 && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {shop.theme_config.delivery_zones.map((zone, index) => (
+                  <div key={`${zone.label}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-black text-slate-800">{zone.label}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{zone.mode}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-600">
+                      <span>{zone.description || 'Service disponible'}</span>
+                      <span className="font-black text-[#1D6B57]">{zone.fee ? `${zone.fee.toLocaleString('fr-FR')} FCFA` : 'Gratuit'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -619,12 +840,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="font-black text-slate-900 text-lg sm:text-xl">
-              Articles disponibles ({products.length})
+              Catalogue ({products.length})
             </h2>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              {shop.category === 'food' 
-                ? '🍲 Plats frais & préparations minute à Abidjan' 
-                : '👗 Collection prêt-à-porter & lingerie fine'}
+              {categoryDefaults.catalogDescription}
             </p>
           </div>
           <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700">
@@ -728,6 +947,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               const activeSize = selectedSizes[product.id];
               const activeColor = selectedColors[product.id];
               const activeMods = selectedModifiers[product.id] || [];
+              const selectedUnitPrice = getProductUnitPrice(product, activeMods);
+              const selectedModifierTotal = selectedUnitPrice - product.price;
 
               return (
                 <div 
@@ -741,15 +962,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       ? 'aspect-3/4' 
                       : 'aspect-16/9 sm:aspect-4/3'
                   }`}>
-                    <img 
-                      src={product.image_url} 
-                      alt={product.title}
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80';
-                      }}
+                    <CategoryProductImage
+                      imageUrl={product.image_url}
+                      category={shop.category}
+                      title={product.title}
+                      className="absolute inset-0 h-full w-full transition-transform duration-500 hover:scale-105"
                     />
 
                     {/* Category specific badges on photo */}
@@ -869,6 +1086,21 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       </div>
                     )}
 
+                    {product.attributes && Object.entries(product.attributes).some(([, value]) => value.trim()) && (
+                      <dl className="mb-3 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-slate-100 pt-2">
+                        {Object.entries(product.attributes).filter(([, value]) => value.trim()).map(([key, value]) => {
+                          const field = categoryDefaults.productAttributes.find((candidate) => candidate.key === key);
+                          if (!field) return null;
+                          return (
+                            <div key={key} className="min-w-0 text-xs">
+                              <dt className="text-[10px] font-semibold text-slate-400">{field.label}</dt>
+                              <dd className="truncate font-bold text-slate-700">{value}</dd>
+                            </div>
+                          );
+                        })}
+                      </dl>
+                    )}
+
                     {/* Food: Accompaniment / Modifier Selector */}
                     {shop.category === 'food' && product.modifier_groups && product.modifier_groups.length > 0 && (
                       <div className="mb-3 pt-2 border-t border-slate-100">
@@ -921,8 +1153,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                           className="font-black text-lg tracking-tight"
                           style={{ color: primaryColor }}
                         >
-                          {formatFCFA(product.price)}
+                          {formatFCFA(selectedUnitPrice)}
                         </span>
+                        {selectedModifierTotal > 0 && (
+                          <span className="mt-0.5 block text-[10px] font-medium text-slate-500">
+                            {formatFCFA(product.price)} + {formatFCFA(selectedModifierTotal)} de supplément
+                          </span>
+                        )}
                       </div>
 
                       <div className="text-right">
@@ -1000,7 +1237,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
       {/* 4. FLOATING BOTTOM BAR (Cart Summary) */}
       {totalCartCount > 0 && !isCartOpen && (
-        <div className="fixed bottom-3 inset-x-0 px-4 z-40 max-w-lg mx-auto">
+        createPortal(<div className="fixed inset-x-0 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-lg px-4">
           <button
             id="floating-cart-btn"
             onClick={() => setIsCartOpen(true)}
@@ -1027,12 +1264,12 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               <ArrowRight className="w-4 h-4" />
             </div>
           </button>
-        </div>
+        </div>, document.body)
       )}
 
       {/* 5. CHECKOUT DRAWER / MODAL */}
       {isCartOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/60 backdrop-blur-xs p-0 sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsCartOpen(false); }}>
+        createPortal(<div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 backdrop-blur-xs sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsCartOpen(false); }}>
           <div 
             role="dialog"
             aria-modal="true"
@@ -1070,34 +1307,37 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     <CheckCircle2 className="w-10 h-10" />
                   </div>
                   <h4 className="text-xl font-extrabold text-slate-900 mb-1">
-                    Demande de commande envoyée ! (N° {orderSuccess.orderId})
+                    Commande acceptée automatiquement (N° {orderSuccess.orderId})
                   </h4>
                   <p className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full inline-block font-semibold mb-4">
-                    ✓ Commande enregistrée sur MaTable.ci
+                    ✓ Stock réservé · commande validée
                   </p>
                   <p className="text-sm text-slate-600 max-w-sm mx-auto mb-6 leading-relaxed">
-                    Le vendeur confirme la disponibilité, le montant final et le paiement direct avec vous sur WhatsApp.
+                    Votre commande est enregistrée sans validation manuelle. Contactez le commerçant sur WhatsApp pour convenir de la livraison et du paiement.
                   </p>
 
-                  <button
-                    type="button"
+                  <a
+                    href={orderSuccess.whatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     onClick={() => {
-                      const whatsappWindow = window.open(orderSuccess.whatsappUrl, '_blank', 'noopener,noreferrer');
-                      if (!whatsappWindow) {
-                        setWhatsappBlocked(true);
+                      if (orderSuccess.whatsappTrackingToken) {
+                        void fetch(`/api/orders/${orderSuccess.orderId}/whatsapp-click`, {
+                          method: 'POST',
+                          keepalive: true,
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ token: orderSuccess.whatsappTrackingToken }),
+                        }).catch(() => undefined);
                       }
                     }}
                     className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base shadow-lg hover:shadow-emerald-600/30 flex items-center justify-center gap-3 transition-all"
                   >
                     <Phone className="w-5 h-5 fill-white" />
-                    <span>Continuer sur WhatsApp</span>
-                  </button>
-
-                  {whatsappBlocked && (
-                    <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-                      Le navigateur bloque WhatsApp. Copiez le message ci-dessous puis ouvrez WhatsApp manuellement.
-                    </p>
-                  )}
+                    <span>Contacter le commerçant sur WhatsApp</span>
+                  </a>
+                  <p className="mt-2 text-[11px] leading-5 text-slate-500">
+                    La boutique verra si vous cliquez sur ce bouton. MaTable.ci ne peut pas confirmer l’ouverture de WhatsApp ni l’envoi du message.
+                  </p>
 
                   <button
                     type="button"
@@ -1137,10 +1377,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         key={idx}
                         className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-[#F8F3EC] border border-[#E4D9C8]"
                       >
-                        <img 
-                          src={item.product.image_url} 
-                          alt={item.product.title}
-                          className="w-12 h-12 rounded-lg object-cover shrink-0"
+                        <CategoryProductImage
+                          imageUrl={item.product.image_url}
+                          category={shop.category}
+                          title={item.product.title}
+                          className="h-12 w-12 shrink-0 rounded-lg"
                         />
                         <div className="min-w-0 flex-1">
                           <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
@@ -1183,6 +1424,23 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       </div>
                     ))}
                   </div>
+
+                  {showCheckoutAuth && !authenticatedCustomer && (
+                    <CustomerCheckoutAuth
+                      onAuthenticated={(user) => {
+                        setCheckoutAuthUser(user);
+                        setCustomerName(user.name);
+                        setCustomerPhone(user.phone);
+                        onCustomerAuthenticated?.(user);
+                        setShowCheckoutAuth(false);
+                        window.setTimeout(() => (document.getElementById('checkout-form') as HTMLFormElement | null)?.requestSubmit(), 0);
+                      }}
+                      onContinueAsGuest={() => {
+                        setGuestCheckoutConfirmed(true);
+                        setShowCheckoutAuth(false);
+                      }}
+                    />
+                  )}
 
                   {/* Customer Information Form */}
                   <form id="checkout-form" onSubmit={handleCheckout} className="space-y-4 pt-2 border-t border-slate-200">
@@ -1378,7 +1636,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               )}
             </div>
           </div>
-        </div>
+        </div>, document.body)
       )}
     </div>
   );

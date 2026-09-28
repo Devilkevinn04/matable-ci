@@ -1,4 +1,5 @@
 import { CartItem, Product, Shop } from '../types';
+import { getCategoryDefaults } from './categoryDefaults';
 
 export function getProductUnitPrice(product: Product, selectedModifiers?: string[]): number {
   const selected = new Set((selectedModifiers || []).map(value => value.trim()).filter(Boolean));
@@ -58,7 +59,7 @@ export function generateWhatsAppOrderReceipt(
 
   const lines: string[] = [
     `🛒 *COMMANDE MATABLE.CI*`,
-    `🏪 *Boutique :* ${shop.name} (${shop.category === 'food' ? 'Restauration' : 'Mode & Lingerie'})`,
+    `🏪 *Boutique :* ${shop.name} (${getCategoryDefaults(shop.category).label})`,
     `----------------------------------------`,
     `👤 *Client :* ${customerName.trim()}`,
     `📞 *Téléphone :* ${customerPhone.trim()}`,

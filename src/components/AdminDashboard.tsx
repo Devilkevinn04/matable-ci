@@ -24,6 +24,7 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import { Shop } from '../types';
+import { getCategoryDefaults } from '../utils/categoryDefaults';
 
 interface AdminShopItem extends Shop {
   products_count: number;
@@ -57,7 +58,7 @@ interface AdminHealth {
   status: string;
   checked_at: string;
   database: string;
-  database_path: string;
+  database_path: string | null;
   counts: { shops: number; products: number; orders: number };
   latest_analytics_event_at: string | null;
   integrations: { whatsapp_cloud: string; whatsapp_click_to_chat: string };
@@ -535,7 +536,7 @@ export const AdminDashboard: React.FC = () => {
           {adminHealth && (
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3"><span className="text-[10px] font-bold text-emerald-700">Service</span><strong className="mt-1 block text-sm text-emerald-900">Opérationnel</strong></div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><span className="text-[10px] font-bold text-slate-500">Stockage</span><strong className="mt-1 block text-sm text-slate-900">SQLite persistant</strong></div>
+              <div className={`rounded-2xl border p-3 ${adminHealth.database === 'postgresql' ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}><span className={`text-[10px] font-bold ${adminHealth.database === 'postgresql' ? 'text-emerald-700' : 'text-amber-800'}`}>Base réellement utilisée</span><strong className={`mt-1 block text-sm ${adminHealth.database === 'postgresql' ? 'text-emerald-950' : 'text-amber-950'}`}>{adminHealth.database === 'sqlite' ? 'SQLite (fichier local)' : adminHealth.database === 'postgresql' ? 'PostgreSQL (Neon)' : adminHealth.database}</strong><span className={`mt-1 block text-[10px] leading-4 ${adminHealth.database === 'postgresql' ? 'text-emerald-800' : 'text-amber-900'}`}>{adminHealth.database === 'postgresql' ? 'Connexion persistante activée en production.' : 'SQLite convient au développement et aux tests locaux.'}</span></div>
               <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3"><span className="text-[10px] font-bold text-sky-700">Commandes</span><strong className="mt-1 block text-sm text-sky-900">{adminHealth.counts.orders}</strong></div>
             </div>
           )}
@@ -647,9 +648,23 @@ export const AdminDashboard: React.FC = () => {
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-black text-slate-900 text-base">{shop.name}</h3>
                       <span className="text-[10px] text-slate-400 font-mono">/{shop.slug}</span>
-                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${shop.category === 'food' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'}`}>
-                        {shop.category === 'food' ? '🍲 Restauration' : '👗 Mode'}
+                      <span
+                        className="text-[10px] font-extrabold px-2 py-0.5 rounded-md"
+                        style={{ color: getCategoryDefaults(shop.category).primaryColor, backgroundColor: `${getCategoryDefaults(shop.category).primaryColor}1A` }}
+                      >
+                        {getCategoryDefaults(shop.category).icon} {getCategoryDefaults(shop.category).label}
                       </span>
+                      {shop.merchant_verification_status && shop.merchant_verification_status !== 'not_required' && (
+                        <span className={`rounded-md px-2 py-0.5 text-[10px] font-extrabold ${
+                          shop.merchant_verification_status === 'approved'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : shop.merchant_verification_status === 'pending'
+                              ? 'bg-amber-50 text-amber-700'
+                              : 'bg-rose-50 text-rose-700'
+                        }`}>
+                          {shop.merchant_verification_status === 'approved' ? 'Identité vérifiée' : shop.merchant_verification_status === 'pending' ? 'Vérification en cours' : shop.merchant_verification_status === 'rejected' ? 'Vérification refusée' : 'Vérification à reprendre'}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">

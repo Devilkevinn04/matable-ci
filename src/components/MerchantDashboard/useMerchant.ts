@@ -1,0 +1,1261 @@
+import { useState, useEffect } from 'react';
+import { useToast } from '../Toast';
+import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks } from '../../types';
+import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../../utils/format';
+import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
+import { buildProductSavePayload, createProductDraft, productToDraft } from './productForm';
+
+export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, openRegistration: boolean = false) => {
+  const toast = useToast();
+
+  // Authentication state
+  const [currentShop, setCurrentShop] = useState<Shop | null>(null);
+  // True while the initial session check is in-flight (prevents flash of login screen)
+  const [isSessionLoading, setIsSessionLoading] = useState(true);
+  // Confirm modal (replaces native browser confirm())
+  const [confirmModal, setConfirmModal] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [phoneInput, setPhoneInput] = useState('');
+  const [pinInput, setPinInput] = useState('');
+  const [accessCodeInput, setAccessCodeInput] = useState('');
+  const [showAccessCode, setShowAccessCode] = useState(false);
+  const [showPinInput, setShowPinInput] = useState(false);
+  const [showRegPin, setShowRegPin] = useState(false);
+  const [showSettingsPin, setShowSettingsPin] = useState(false);
+  const [authMode, setAuthMode] = useState<'private' | 'quick'>('private');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryInfo, setRecoveryInfo] = useState<{ message: string; status: string; url?: string; challengeId?: string } | null>(null);
+  const [recoveryCodeInput, setRecoveryCodeInput] = useState('');
+  const [forgotPinInfo, setForgotPinInfo] = useState<{ message: string; whatsappUrl: string } | null>(null);
+
+  // Quick Register Modal state
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [regName, setRegName] = useState('');
+  const [regPhone, setRegPhone] = useState('+225');
+  const [regPin, setRegPin] = useState('');
+  const [regCity, setRegCity] = useState('Abidjan');
+  const [regCityOther, setRegCityOther] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regKycConsent, setRegKycConsent] = useState(false);
+  const [merchantKycRequired, setMerchantKycRequired] = useState(false);
+  const [merchantKycAvailable, setMerchantKycAvailable] = useState(false);
+  const [merchantKycConfigLoaded, setMerchantKycConfigLoaded] = useState(false);
+  const [regCategory, setRegCategory] = useState<ShopCategory>('fashion');
+  const [regLoading, setRegLoading] = useState(false);
+  const [registrationLinks, setRegistrationLinks] = useState<{
+    publicUrl: string;
+    privateUrl: string;
+    whatsappUrl: string;
+    emailUrl: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (openRegistration && !currentShop) setIsRegisterModalOpen(true);
+  }, [openRegistration, currentShop]);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch('/api/merchant-verification/config')
+      .then(async (response) => {
+        if (!response.ok) throw new Error('KYC configuration unavailable');
+        return response.json();
+      })
+      .then((config) => {
+        if (!mounted) return;
+        setMerchantKycRequired(Boolean(config.required));
+        setMerchantKycAvailable(Boolean(config.available));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setMerchantKycRequired(true);
+        setMerchantKycAvailable(false);
+      })
+      .finally(() => {
+        if (mounted) setMerchantKycConfigLoaded(true);
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  // Active view tab
+  const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'settings'>('catalog');
+  const [settingsSubTab, setSettingsSubTab] = useState<'themes' | 'general' | 'hours' | 'bilan'>('themes');
+
+  // Products & Orders data
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [flashBilan, setFlashBilan] = useState<FlashBilan | null>(null);
+  const [dataLoading, setDataLoading] = useState(false);
+
+  // Catalog search & filter
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [catalogFilter, setCatalogFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | 'hidden'>('all');
+
+  // Orders search & filter
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderPaymentFilter, setOrderPaymentFilter] = useState<'all' | 'wave' | 'mobile_money' | 'cash' | 'to_confirm'>('all');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | OrderStatus>('all');
+
+  // Product Add/Edit Modal
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [prodTitle, setProdTitle] = useState('');
+  const [prodCategory, setProdCategory] = useState('');
+  const [prodDescription, setProdDescription] = useState('');
+  const [prodPrice, setProdPrice] = useState<number | ''>('');
+  const [prodStock, setProdStock] = useState<number | ''>(10);
+  const [prodImage, setProdImage] = useState('');
+  const [prodLookbookImage, setProdLookbookImage] = useState('');
+  const [prodSizes, setProdSizes] = useState('');
+  const [prodColors, setProdColors] = useState('');
+  const [prodPrepTime, setProdPrepTime] = useState<number | ''>('');
+  const [prodModifiers, setProdModifiers] = useState('');
+  const [prodModifierMaxSelections, setProdModifierMaxSelections] = useState<number | ''>(2);
+  const [prodAttributes, setProdAttributes] = useState<Record<string, string>>({});
+  const [prodIsAvailable, setProdIsAvailable] = useState(true);
+  const [imageCompressing, setImageCompressing] = useState(false);
+  const [compressedSizeKB, setCompressedSizeKB] = useState<number | null>(null);
+  const [originalImageSizeKB, setOriginalImageSizeKB] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!isRegisterModalOpen && !isProductModalOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (isProductModalOpen) setIsProductModalOpen(false);
+      else setIsRegisterModalOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isProductModalOpen, isRegisterModalOpen]);
+
+  // Shop Settings state
+  const [settingsName, setSettingsName] = useState('');
+  const [settingsWelcome, setSettingsWelcome] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(true);
+  const [settingsPhone, setSettingsPhone] = useState('');
+  const [settingsCity, setSettingsCity] = useState('Abidjan');
+  const [settingsNewPin, setSettingsNewPin] = useState('');
+  const [settingsSocialLinks, setSettingsSocialLinks] = useState<ShopSocialLinks>({
+    instagram: '',
+    facebook: '',
+    tiktok: '',
+    website: '',
+    whatsapp: '',
+  });
+  const [settingsDeliveryZones, setSettingsDeliveryZones] = useState<ShopDeliveryZone[]>([]);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // Automated Opening Hours State
+  const [hoursEnabled, setHoursEnabled] = useState(false);
+  const [openTime, setOpenTime] = useState('08:00');
+  const [closeTime, setCloseTime] = useState('22:00');
+  const [activeDays, setActiveDays] = useState<number[]>([1, 2, 3, 4, 5, 6, 0]);
+  const [manualOverride, setManualOverride] = useState(false);
+  const [hoursSaved, setHoursSaved] = useState(false);
+
+  // Flash Bilan copy state
+  const [cronRunning, setCronRunning] = useState(false);
+  const [cronResult, setCronResult] = useState<any>(null);
+  const [copiedBilan, setCopiedBilan] = useState(false);
+
+  // Restore session from server-side cookie — but ONLY when no ?access= token is in the URL.
+  // If ?access= is present, the second useEffect handles auth and this one must stay silent
+  // to avoid the race condition that causes a blank page (currentShop set too early).
+  useEffect(() => {
+    const savedRegistrationLinks = localStorage.getItem('matable_registration_links');
+    if (savedRegistrationLinks) {
+      try {
+        setRegistrationLinks(JSON.parse(savedRegistrationLinks));
+      } catch {
+        localStorage.removeItem('matable_registration_links');
+      }
+    }
+
+    // If there is an access token in the URL, skip session restore entirely.
+    // The access-token useEffect below will handle it.
+    const hasAccessToken = Boolean(new URLSearchParams(window.location.search).get('access'));
+    if (hasAccessToken) {
+      setIsSessionLoading(false);
+      return;
+    }
+
+    fetch('/api/auth/session')
+      .then(async (res) => {
+        const data = await res.json();
+        if (res.ok && data.authenticated && data.userType === 'merchant' && data.shopId) {
+          await loadShopData(Number(data.shopId));
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => setIsSessionLoading(false));
+  }, []);
+
+  // Handle admin impersonation / magic-link via ?access= token.
+  // Runs once on mount (dep array is empty-like: only runs when accessToken exists).
+  useEffect(() => {
+    const accessToken = new URLSearchParams(window.location.search).get('access');
+    if (!accessToken) return;
+
+    const openSession = (data: { shop: Shop }) => {
+      window.history.replaceState({}, '', '/app');
+      setCurrentShop(data.shop);
+      syncShopSettings(data.shop);
+      loadShopData(data.shop.id).finally(() => setIsSessionLoading(false));
+    };
+
+    fetch('/api/auth/merchant-access-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: accessToken }),
+    }).then(async (res) => {
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lien privé invalide.');
+      openSession(data);
+    }).catch((error: Error) => {
+      setAuthError(error.message);
+      setIsSessionLoading(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const syncShopSettings = (shop: Shop) => {
+    setSettingsName(shop.name);
+    setSettingsWelcome(shop.welcome_message || '');
+    setSettingsOpen(shop.is_open);
+    setSettingsPhone(shop.whatsapp_number || '');
+    setSettingsCity(shop.city || 'Abidjan');
+    setSettingsNewPin('');
+    setSettingsSocialLinks({
+      instagram: shop.theme_config?.social_links?.instagram || '',
+      facebook: shop.theme_config?.social_links?.facebook || '',
+      tiktok: shop.theme_config?.social_links?.tiktok || '',
+      website: shop.theme_config?.social_links?.website || '',
+      whatsapp: shop.theme_config?.social_links?.whatsapp || '',
+    });
+    setSettingsDeliveryZones(Array.isArray(shop.theme_config?.delivery_zones) ? shop.theme_config.delivery_zones.map((zone) => ({
+      label: String(zone.label || ''),
+      mode: zone.mode === 'sur_place' || zone.mode === 'retirer' ? zone.mode : 'livraison',
+      fee: Number(zone.fee || 0),
+      description: zone.description ? String(zone.description).slice(0, 120) : '',
+    })) : []);
+
+    if (shop.opening_hours) {
+      setHoursEnabled(Boolean(shop.opening_hours.enabled));
+      setOpenTime(shop.opening_hours.open_time || '08:00');
+      setCloseTime(shop.opening_hours.close_time || '22:00');
+      setActiveDays(shop.opening_hours.days && shop.opening_hours.days.length > 0 ? shop.opening_hours.days : [1, 2, 3, 4, 5, 6, 0]);
+      setManualOverride(Boolean(shop.opening_hours.manual_override));
+    } else {
+      setHoursEnabled(false);
+      setOpenTime('08:00');
+      setCloseTime('22:00');
+      setActiveDays([1, 2, 3, 4, 5, 6, 0]);
+      setManualOverride(false);
+    }
+  };
+
+  // Fetch products, orders, and flash bilan
+  const loadShopData = async (shopId: number) => {
+    setDataLoading(true);
+    try {
+      // 1. Load shop details & products
+      const shopRes = await fetch(`/api/shops/${shopId}`);
+      if (shopRes.status === 401) {
+        setCurrentShop(null);
+        setProducts([]);
+        setOrders([]);
+        setFlashBilan(null);
+        setAuthError('Votre session a expiré. Veuillez vous reconnecter.');
+        return;
+      }
+      if (shopRes.ok) {
+        const sData = await shopRes.json();
+        setCurrentShop(sData.shop);
+        syncShopSettings(sData.shop);
+        setProducts(sData.products || []);
+      }
+
+      // 2. Load orders
+      const ordersRes = await fetch(`/api/shops/${shopId}/orders`);
+      if (ordersRes.status === 401) {
+        setCurrentShop(null);
+        setProducts([]);
+        setOrders([]);
+        setFlashBilan(null);
+        setAuthError('Votre session a expiré. Veuillez vous reconnecter.');
+        return;
+      }
+      if (ordersRes.ok) {
+        const oData = await ordersRes.json();
+        setOrders(Array.isArray(oData) ? oData : (oData.orders || []));
+      }
+
+      // 3. Load Flash Bilan
+      const bilanRes = await fetch(`/api/shops/${shopId}/flash-bilan`);
+      if (bilanRes.status === 401) {
+        setCurrentShop(null);
+        setProducts([]);
+        setOrders([]);
+        setFlashBilan(null);
+        setAuthError('Votre session a expiré. Veuillez vous reconnecter.');
+        return;
+      }
+      if (bilanRes.ok) {
+        const bData = await bilanRes.json();
+        setFlashBilan(bData);
+      }
+    } catch (err) {
+      console.error('Error loading merchant data', err);
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  // Secure access handler using the unique merchant access link/token generated at shop creation.
+  const handlePrivateAccessLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setForgotPinInfo(null);
+    if (!accessCodeInput.trim()) {
+      setAuthError('Veuillez renseigner votre code d’accès privé.');
+      return;
+    }
+
+    setAuthLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/merchant-access-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_token: accessCodeInput.trim() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Code d’accès invalide.');
+      }
+
+      window.history.replaceState({}, '', '/app');
+      setCurrentShop(data.shop);
+      syncShopSettings(data.shop);
+      loadShopData(data.shop.id);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAuthError(error.message || 'Erreur lors de la connexion');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Legacy compatibility retained only for older records; the public V2 model remains free and active.
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setForgotPinInfo(null);
+
+    if (phoneInput.includes('@')) {
+      setAuthError('Utilisez le numéro WhatsApp saisi lors de la création de la boutique, pas l’adresse email.');
+      return;
+    }
+
+    setAuthLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/merchant-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: phoneInput.trim(),
+          pin: pinInput.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Identifiants invalides');
+      }
+
+      setCurrentShop(data.shop);
+      syncShopSettings(data.shop);
+      loadShopData(data.shop.id);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAuthError(error.message || 'Erreur lors de la connexion');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Register New Shop
+  const handleRegisterShop = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!merchantKycConfigLoaded) {
+      toast.error('Chargement de la configuration d’inscription. Réessayez dans un instant.');
+      return;
+    }
+    if (!regName.trim() || !regPhone.trim() || !/^\d{6}$/.test(regPin.trim())) {
+      toast.error('Renseignez le nom, le WhatsApp et un PIN de 6 chiffres.');
+      return;
+    }
+    if (merchantKycRequired && !merchantKycAvailable) {
+      toast.error('La vérification d’identité est momentanément indisponible. Réessayez plus tard.');
+      return;
+    }
+    if (merchantKycRequired && !regKycConsent) {
+      toast.error('Votre accord est requis pour lancer la vérification d’identité.');
+      return;
+    }
+    setRegLoading(true);
+    try {
+      const res = await fetch('/api/shops', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: regName.trim(),
+          whatsapp_number: regPhone.trim(),
+          pin: regPin.trim(),
+          pin_code: regPin.trim(),
+          city: regCity === 'Autre ville / commune' ? regCityOther.trim() : regCity.trim(),
+          category: regCategory,
+          email: regEmail.trim() || undefined,
+          identity_verification_consent: regKycConsent,
+          welcome_message: CATEGORY_DEFAULTS[regCategory].welcomeMessage,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.account_created) {
+          setIsRegisterModalOpen(false);
+          setAuthMode('private');
+          setPhoneInput(regPhone.trim());
+          setAuthError(data.error || 'Votre boutique est créée. Connectez-vous pour reprendre la vérification.');
+          return;
+        }
+        throw new Error(data.error || 'Erreur lors de la création de la boutique');
+      }
+
+      if (data.verification_required && data.verification_url) {
+        localStorage.removeItem('matable_registration_links');
+        setRegistrationLinks(null);
+        window.location.assign(data.verification_url);
+        return;
+      }
+
+      setCurrentShop(data.shop);
+      syncShopSettings(data.shop);
+      setIsRegisterModalOpen(false);
+      const publicUrl = `${window.location.origin}/${data.shop.slug}`;
+      const privateUrl = `${window.location.origin}/app?access=${encodeURIComponent(data.owner_access_token)}`;
+      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable.ci. Vitrine : ${publicUrl} | Connexion : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
+      setRegistrationLinks({
+        publicUrl,
+        privateUrl,
+        whatsappUrl: `https://wa.me/${data.shop.whatsapp_number.replace(/\D/g, '')}?text=${encodeURIComponent(accessMessage)}`,
+        emailUrl: `mailto:${regEmail.trim()}?subject=${encodeURIComponent(`Accès MaTable.ci - ${data.shop.name}`)}&body=${encodeURIComponent(accessMessage)}`,
+      });
+      localStorage.setItem('matable_registration_links', JSON.stringify({
+        publicUrl,
+        privateUrl,
+        whatsappUrl: `https://wa.me/${data.shop.whatsapp_number.replace(/\D/g, '')}?text=${encodeURIComponent(accessMessage)}`,
+        emailUrl: `mailto:${regEmail.trim()}?subject=${encodeURIComponent(`Accès MaTable.ci - ${data.shop.name}`)}&body=${encodeURIComponent(accessMessage)}`,
+      }));
+      loadShopData(data.shop.id);
+    } catch (err: unknown) {
+      const error = err as Error;
+      toast.error(error.message || 'Erreur lors de la création de la boutique');
+    } finally {
+      setRegLoading(false);
+    }
+  };
+
+  const copyRegistrationLinks = async () => {
+    if (!registrationLinks) return;
+    const text = `Vitrine : ${registrationLinks.publicUrl}\nConnexion : ${registrationLinks.privateUrl}`;
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        textarea.remove();
+        if (!copied) throw new Error('copy_failed');
+      }
+      toast.success('Liens copiés dans le presse-papiers.');
+    } catch {
+      toast.error('La copie a échoué. Sélectionnez les liens manuellement.');
+    }
+  };
+
+  const copyOwnerLink = async (kind: 'public' | 'private') => {
+    if (!currentShop) return;
+    try {
+      let link = `${window.location.origin}/${currentShop.slug}`;
+      if (kind === 'private') {
+        const res = await fetch(`/api/shops/${currentShop.id}/access-link`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Impossible de générer le lien privé.');
+        link = data.access_url;
+      }
+      await navigator.clipboard.writeText(link);
+      toast.success(kind === 'public' ? 'Lien vitrine copié.' : 'Lien privé copié.');
+    } catch {
+      toast.error('La copie a échoué. Vérifiez les permissions du navigateur.');
+    }
+  };
+
+  // Forgot PIN handler
+  const handleForgotPin = async () => {
+    if (!phoneInput.trim()) {
+      setAuthError('Veuillez d’abord renseigner votre numéro de téléphone.');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/auth/merchant-forgot-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneInput.trim() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Numéro introuvable');
+      }
+
+      setForgotPinInfo(data);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAuthError(error.message || 'Erreur lors de la récupération du code PIN');
+    }
+  };
+
+  const handleRecoveryRequest = async () => {
+    if (!phoneInput.trim()) {
+      setAuthError('Veuillez renseigner votre numéro de téléphone pour récupérer l’accès.');
+      return;
+    }
+
+    setRecoveryLoading(true);
+    setAuthError(null);
+    setRecoveryInfo(null);
+
+    try {
+      const res = await fetch('/api/auth/merchant-recovery-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneInput.trim() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Impossible de lancer la récupération.');
+      }
+
+      setRecoveryInfo({
+        message: data.message || (data.whatsapp_sent ? 'Un lien de récupération a été envoyé sur WhatsApp.' : 'La demande de récupération a été enregistrée.'),
+        status: data.whatsapp_status || 'ok',
+        url: data.fallback_url,
+        challengeId: data.challenge_id,
+      });
+      setRecoveryCodeInput('');
+      setAccessCodeInput('');
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAuthError(error.message || 'Erreur lors de la récupération de l’accès.');
+    } finally {
+      setRecoveryLoading(false);
+    }
+  };
+
+  const handleRecoveryCodeVerification = async () => {
+    if (!recoveryInfo?.challengeId || !/^\d{6}$/.test(recoveryCodeInput.trim())) {
+      setAuthError('Saisissez le code de récupération à 6 chiffres reçu sur WhatsApp.');
+      return;
+    }
+
+    setRecoveryLoading(true);
+    setAuthError(null);
+    try {
+      const res = await fetch('/api/auth/merchant-recovery-verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challenge_id: recoveryInfo.challengeId, code: recoveryCodeInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.owner_access_token) {
+        throw new Error(data.error || 'Code de récupération invalide.');
+      }
+      window.location.assign(`/app?access=${encodeURIComponent(data.owner_access_token)}`);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAuthError(error.message || 'Impossible de vérifier le code de récupération.');
+    } finally {
+      setRecoveryLoading(false);
+    }
+  };
+
+  // Logout handler
+  const handleLogout = () => {
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+    setCurrentShop(null);
+    setProducts([]);
+    setOrders([]);
+    setFlashBilan(null);
+  };
+
+  // Toggle Shop Open/Closed (toggle-status)
+  const handleToggleShopStatus = async () => {
+    if (!currentShop) return;
+    const newStatus = !currentShop.is_open;
+    try {
+      const res = await fetch(`/api/shops/${currentShop.id}/toggle-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_open: newStatus }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentShop(prev => (prev ? { ...prev, is_open: data.is_open } : null));
+        setSettingsOpen(data.is_open);
+        setManualOverride(true);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Impossible de modifier le statut de la boutique.');
+      }
+    } catch {
+      toast.error('Impossible de contacter le serveur.');
+    }
+  };
+
+  // Save Opening Hours Configuration
+  const handleSaveOpeningHours = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!currentShop) return;
+
+    try {
+      const updatedHours = {
+        enabled: hoursEnabled,
+        open_time: openTime,
+        close_time: closeTime,
+        days: activeDays,
+        manual_override: manualOverride,
+      };
+
+      const res = await fetch(`/api/shops/${currentShop.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          opening_hours: updatedHours,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentShop(data.shop);
+        setHoursSaved(true);
+        setTimeout(() => setHoursSaved(false), 3000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Impossible de sauvegarder les horaires.');
+      }
+    } catch {
+      toast.error('Erreur lors de la mise à jour des horaires.');
+    }
+  };
+
+  // Reset manual override to follow automated schedule
+  const handleResetManualOverride = async () => {
+    if (!currentShop) return;
+    try {
+      const updatedHours = {
+        ...(currentShop.opening_hours || { enabled: hoursEnabled, open_time: openTime, close_time: closeTime, days: activeDays }),
+        manual_override: false,
+      };
+
+      const res = await fetch(`/api/shops/${currentShop.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          opening_hours: updatedHours,
+        }),
+      });
+
+      if (res.ok) {
+        setManualOverride(false);
+        await loadShopData(currentShop.id);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Impossible de reprendre le planning.');
+      }
+    } catch {
+      toast.error('Impossible de contacter le serveur.');
+    }
+  };
+
+  // Refresh the merchant's own bilan; the global cron remains admin-controlled.
+  const handleTriggerCronBilan = async () => {
+    setCronRunning(true);
+    try {
+      if (!currentShop) return;
+      const res = await fetch(`/api/shops/${currentShop.id}/flash-bilan`);
+      if (res.ok) {
+        const data = await res.json();
+        setCronResult(data);
+        if (currentShop) {
+          await loadShopData(currentShop.id);
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Impossible d’actualiser le bilan.');
+      }
+    } catch {
+      toast.error('Impossible de contacter le serveur.');
+    } finally {
+      setCronRunning(false);
+    }
+  };
+
+  // Quick Stock Step (+1 or -1)
+  const handleQuickStockChange = async (productId: number, delta: number) => {
+    if (!currentShop) return;
+    const previousProduct = products.find((product) => product.id === productId);
+    if (!previousProduct) return;
+
+    try {
+      // Optimistic update
+      setProducts(prev => prev.map(p => {
+        if (p.id === productId) {
+          const newStock = Math.max(0, p.stock + delta);
+          return {
+    addDeliveryZone,
+    updateDeliveryZone,
+    removeDeliveryZone, ...p, stock: newStock };
+        }
+        return p;
+      }));
+
+      const res = await fetch(`/api/shops/${currentShop.id}/products/${productId}/stock`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delta }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProducts(prev => prev.map(p => (p.id === productId ? { ...p, stock: data.stock } : p)));
+      } else {
+        setProducts(prev => prev.map(p => (p.id === productId ? previousProduct : p)));
+        toast.error('Impossible de mettre à jour le stock.');
+      }
+    } catch {
+      setProducts(prev => prev.map(p => (p.id === productId ? previousProduct : p)));
+      toast.error('Impossible de mettre à jour le stock.');
+    }
+  };
+
+  // Quick Toggle Visibility (Masquer / Afficher)
+  const handleQuickToggleVisibility = async (productId: number) => {
+    if (!currentShop) return;
+    try {
+      const res = await fetch(`/api/shops/${currentShop.id}/products/${productId}/toggle-visibility`, {
+        method: 'PATCH',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProducts(prev => prev.map(p => (p.id === productId ? { ...p, is_available: data.is_available } : p)));
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Impossible de modifier la visibilité.');
+      }
+    } catch {
+      toast.error('Impossible de contacter le serveur.');
+    }
+  };
+
+  // Open modal for new product
+  const handleOpenAddModal = () => {
+    const draft = createProductDraft(currentShop?.category);
+    setEditingProduct(null);
+    setProdTitle(draft.title);
+    setProdCategory(draft.category);
+    setProdDescription(draft.description);
+    setProdPrice(draft.price);
+    setProdStock(draft.stock);
+    setProdLookbookImage(draft.lookbook_image);
+    setProdImage(draft.image_url);
+    setProdSizes(draft.sizes);
+    setProdColors(draft.colors);
+    setProdPrepTime(draft.prep_time);
+    setProdModifiers(draft.modifiers);
+    setProdModifierMaxSelections(draft.modifier_max_selections);
+    setProdAttributes(draft.attributes);
+    setProdIsAvailable(draft.is_available);
+    setCompressedSizeKB(null);
+    setOriginalImageSizeKB(null);
+    setIsProductModalOpen(true);
+  };
+
+  // Open modal for editing product
+  const handleOpenEditModal = (prod: Product) => {
+    const draft = productToDraft(prod);
+    setEditingProduct(prod);
+    setProdTitle(draft.title);
+    setProdCategory(draft.category);
+    setProdDescription(draft.description);
+    setProdPrice(draft.price);
+    setProdStock(draft.stock);
+    setProdImage(draft.image_url);
+    setProdLookbookImage(draft.lookbook_image);
+    setProdSizes(draft.sizes);
+    setProdColors(draft.colors);
+    setProdPrepTime(draft.prep_time);
+    setProdModifiers(draft.modifiers);
+    setProdModifierMaxSelections(draft.modifier_max_selections);
+    setProdAttributes(draft.attributes);
+    setProdIsAvailable(draft.is_available);
+    setCompressedSizeKB(null);
+    setOriginalImageSizeKB(null);
+    setIsProductModalOpen(true);
+  };
+
+  // Internal function — executes the actual status PATCH (called directly or via confirm modal)
+  const executeUpdateOrderStatus = async (orderId: number, newStatus: OrderStatus) => {
+    if (!currentShop) return;
+    try {
+      const res = await fetch(`/api/shops/${currentShop.id}/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur de mise à jour du statut.');
+
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      toast.success(data.message || 'Statut mis à jour.');
+
+      // Refresh products to sync restocked quantities
+      const prodRes = await fetch(`/api/shops/${currentShop.id}/products`);
+      if (prodRes.ok) {
+        const prods = await prodRes.json();
+        setProducts(prods);
+      }
+    } catch (err: unknown) {
+      const e = err as Error;
+      toast.error(e.message || 'Erreur lors de la mise à jour du statut.');
+    }
+  };
+
+  // Update Order Status (with automatic restock on cancellation)
+  const handleUpdateOrderStatus = (orderId: number, newStatus: OrderStatus) => {
+    if (!currentShop) return;
+
+    if (newStatus === 'cancelled') {
+      setConfirmModal({
+        message: 'Annuler cette commande ? Les articles seront automatiquement remis en stock.',
+        onConfirm: () => executeUpdateOrderStatus(orderId, newStatus),
+      });
+      return;
+    }
+    executeUpdateOrderStatus(orderId, newStatus);
+  };
+
+  // Handle client-side image compression (< 100 KB)
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) {
+      toast.error('Choisissez une image de 8 Mo maximum.');
+      e.target.value = '';
+      return;
+    }
+
+    try {
+      setImageCompressing(true);
+      setOriginalImageSizeKB(Math.round(file.size / 1024));
+      const { dataUrl, sizeKB } = await compressImageClientSide(file, 900, 100);
+      setProdImage(dataUrl);
+      setCompressedSizeKB(sizeKB);
+    } catch {
+      toast.error("Erreur lors de la compression de l'image.");
+    } finally {
+      setImageCompressing(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleLookbookImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) {
+      toast.error('Choisissez une image de 8 Mo maximum.');
+      e.target.value = '';
+      return;
+    }
+
+    try {
+      const { dataUrl } = await compressImageClientSide(file, 900, 100);
+      setProdLookbookImage(dataUrl);
+    } catch {
+      toast.error("Erreur lors de la compression de l'image.");
+    }
+    e.target.value = '';
+  };
+
+  // Save Product (Add or Edit)
+  const handleSaveProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentShop || !prodTitle.trim() || prodPrice === '') return;
+
+    const payload = buildProductSavePayload({
+      title: prodTitle.trim(),
+      category: prodCategory,
+      description: prodDescription,
+      price: prodPrice,
+      stock: prodStock,
+      image_url: prodImage,
+      lookbook_image: prodLookbookImage,
+      sizes: prodSizes,
+      colors: prodColors,
+      prep_time: prodPrepTime,
+      modifiers: prodModifiers,
+      modifier_max_selections: prodModifierMaxSelections,
+      attributes: prodAttributes,
+      is_available: prodIsAvailable,
+    }, currentShop.category);
+
+    try {
+      if (editingProduct) {
+        // Edit existing
+        const res = await fetch(`/api/shops/${currentShop.id}/products/${editingProduct.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setProducts(prev => prev.map(p => (p.id === editingProduct.id ? data.product : p)));
+          setIsProductModalOpen(false);
+          toast.success('Article modifié avec succès !');
+        } else {
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.error || "Impossible de modifier l'article.");
+        }
+      } else {
+        // Add new
+        const res = await fetch(`/api/shops/${currentShop.id}/products`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setProducts(prev => [data.product, ...prev]);
+          setIsProductModalOpen(false);
+          toast.success('Article ajouté au catalogue !');
+        } else {
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.error || "Impossible d'ajouter l'article.");
+        }
+      }
+    } catch {
+      toast.error("Erreur lors de l'enregistrement de l'article");
+    }
+  };
+
+  // Delete Product
+  const handleDeleteProduct = async (productId: number) => {
+    if (!currentShop) return;
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cet article du catalogue ?')) return;
+
+    try {
+      const res = await fetch(`/api/shops/${currentShop.id}/products/${productId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setProducts(prev => prev.filter(p => p.id !== productId));
+        toast.success('Article supprimé du catalogue.');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Impossible de supprimer l'article.");
+      }
+    } catch {
+      toast.error("Erreur lors de la suppression de l'article");
+    }
+  };
+
+  const addDeliveryZone = () => {
+    setSettingsDeliveryZones((prev) => [...prev, { label: '', mode: 'livraison', fee: 0, description: '' }]);
+  };
+
+  const updateDeliveryZone = (index: number, field: keyof ShopDeliveryZone, value: string | number) => {
+    setSettingsDeliveryZones((prev) => prev.map((zone, zoneIndex) => {
+      if (zoneIndex !== index) return zone;
+      if (field === 'mode') {
+        return { ...zone, mode: (value === 'sur_place' || value === 'retirer' ? value : 'livraison') as ShopDeliveryZone['mode'] };
+      }
+      if (field === 'fee') {
+        return { ...zone, fee: Number(value || 0) };
+      }
+      return { ...zone, [field]: value };
+    }));
+  };
+
+  const removeDeliveryZone = (index: number) => {
+    setSettingsDeliveryZones((prev) => prev.filter((_, zoneIndex) => zoneIndex !== index));
+  };
+
+  // Save General Shop Settings
+  const handleSaveGeneralSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentShop) return;
+
+    const sanitizedSocialLinks = {
+      instagram: settingsSocialLinks.instagram?.trim() || '',
+      facebook: settingsSocialLinks.facebook?.trim() || '',
+      tiktok: settingsSocialLinks.tiktok?.trim() || '',
+      website: settingsSocialLinks.website?.trim() || '',
+      whatsapp: settingsSocialLinks.whatsapp?.trim() || '',
+    };
+
+    const sanitizedDeliveryZones = settingsDeliveryZones
+      .filter((zone) => zone.label.trim() || (zone.description ?? '').trim() || Number(zone.fee || 0) > 0)
+      .map((zone) => ({
+        label: zone.label.trim() || 'Zone locale',
+        mode: zone.mode === 'sur_place' || zone.mode === 'retirer' ? zone.mode : 'livraison',
+        fee: Number(zone.fee || 0),
+        description: (zone.description ?? '').trim(),
+      }));
+
+    try {
+      const res = await fetch(`/api/shops/${currentShop.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: settingsName.trim() || currentShop.name,
+          welcome_message: settingsWelcome,
+          is_open: settingsOpen,
+          whatsapp_number: settingsPhone.trim(),
+          city: settingsCity.trim(),
+          pin_code: settingsNewPin.trim() ? settingsNewPin.trim() : undefined,
+          theme_config: {
+            social_links: sanitizedSocialLinks,
+            delivery_zones: sanitizedDeliveryZones,
+          },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentShop(data.shop);
+        syncShopSettings(data.shop);
+        setSettingsSaved(true);
+        setSettingsNewPin('');
+        toast.success('Paramètres enregistrés avec succès !');
+        setTimeout(() => setSettingsSaved(false), 3000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || 'Impossible de sauvegarder les paramètres.');
+      }
+    } catch {
+      toast.error('Erreur lors de la mise à jour des paramètres');
+    }
+  };
+
+
+  return {
+    currentShop,
+    isSessionLoading,
+    confirmModal,
+    phoneInput,
+    pinInput,
+    accessCodeInput,
+    showAccessCode,
+    showPinInput,
+    showRegPin,
+    showSettingsPin,
+    authMode,
+    authError,
+    authLoading,
+    recoveryLoading,
+    recoveryInfo,
+    recoveryCodeInput,
+    forgotPinInfo,
+    isRegisterModalOpen,
+    regName,
+    regPhone,
+    regPin,
+    regCity,
+    regCityOther,
+    regEmail,
+    regKycConsent,
+    merchantKycRequired,
+    merchantKycAvailable,
+    merchantKycConfigLoaded,
+    regCategory,
+    regLoading,
+    registrationLinks,
+    activeTab,
+    settingsSubTab,
+    products,
+    orders,
+    flashBilan,
+    dataLoading,
+    catalogSearch,
+    catalogFilter,
+    orderSearch,
+    orderPaymentFilter,
+    orderStatusFilter,
+    isProductModalOpen,
+    editingProduct,
+    prodTitle,
+    prodCategory,
+    prodDescription,
+    prodPrice,
+    prodStock,
+    prodImage,
+    prodLookbookImage,
+    prodSizes,
+    prodColors,
+    prodPrepTime,
+    prodModifiers,
+    prodModifierMaxSelections,
+    prodAttributes,
+    prodIsAvailable,
+    imageCompressing,
+    compressedSizeKB,
+    originalImageSizeKB,
+    settingsName,
+    settingsWelcome,
+    settingsOpen,
+    settingsPhone,
+    settingsCity,
+    settingsNewPin,
+    settingsSocialLinks,
+    settingsDeliveryZones,
+    settingsSaved,
+    hoursEnabled,
+    openTime,
+    closeTime,
+    activeDays,
+    manualOverride,
+    hoursSaved,
+    cronRunning,
+    cronResult,
+    copiedBilan,
+    setCurrentShop,
+    setIsSessionLoading,
+    setConfirmModal,
+    setPhoneInput,
+    setPinInput,
+    setAccessCodeInput,
+    setShowAccessCode,
+    setShowPinInput,
+    setShowRegPin,
+    setShowSettingsPin,
+    setAuthMode,
+    setAuthError,
+    setAuthLoading,
+    setRecoveryLoading,
+    setRecoveryInfo,
+    setRecoveryCodeInput,
+    setForgotPinInfo,
+    setIsRegisterModalOpen,
+    setRegName,
+    setRegPhone,
+    setRegPin,
+    setRegCity,
+    setRegCityOther,
+    setRegEmail,
+    setRegKycConsent,
+    setRegCategory,
+    setRegLoading,
+    setRegistrationLinks,
+    setActiveTab,
+    setSettingsSubTab,
+    setProducts,
+    setOrders,
+    setFlashBilan,
+    setDataLoading,
+    setCatalogSearch,
+    setCatalogFilter,
+    setOrderSearch,
+    setOrderPaymentFilter,
+    setOrderStatusFilter,
+    setIsProductModalOpen,
+    setEditingProduct,
+    setProdTitle,
+    setProdCategory,
+    setProdDescription,
+    setProdPrice,
+    setProdStock,
+    setProdImage,
+    setProdLookbookImage,
+    setProdSizes,
+    setProdColors,
+    setProdPrepTime,
+    setProdModifiers,
+    setProdModifierMaxSelections,
+    setProdAttributes,
+    setProdIsAvailable,
+    setImageCompressing,
+    setCompressedSizeKB,
+    setOriginalImageSizeKB,
+    setSettingsName,
+    setSettingsWelcome,
+    setSettingsOpen,
+    setSettingsPhone,
+    setSettingsCity,
+    setSettingsNewPin,
+    setSettingsSocialLinks,
+    setSettingsDeliveryZones,
+    setSettingsSaved,
+    setHoursEnabled,
+    setOpenTime,
+    setCloseTime,
+    setActiveDays,
+    setManualOverride,
+    setHoursSaved,
+    setCronRunning,
+    setCronResult,
+    setCopiedBilan,
+
+    handlePrivateAccessLogin,
+    handleLogin,
+    handleRegisterShop,
+    handleForgotPin,
+    handleRecoveryRequest,
+    handleRecoveryCodeVerification,
+    handleLogout,
+    handleToggleShopStatus,
+    handleSaveOpeningHours,
+    handleResetManualOverride,
+    handleTriggerCronBilan,
+    handleQuickStockChange,
+    handleQuickToggleVisibility,
+    handleOpenAddModal,
+    handleOpenEditModal,
+    handleUpdateOrderStatus,
+    handleImageUpload,
+    handleLookbookImageUpload,
+    handleSaveProduct,
+    handleDeleteProduct,
+    handleSaveGeneralSettings,
+    toast,
+    addDeliveryZone,
+    updateDeliveryZone,
+    removeDeliveryZone,
+
+    loadShopData,
+    syncShopSettings,
+    copyRegistrationLinks,
+    copyOwnerLink
+  };
+};
+export type MerchantState = ReturnType<typeof useMerchantDashboard>;

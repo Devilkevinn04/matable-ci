@@ -44,7 +44,13 @@ function updateCookieJar(headers: Headers) {
     if (idx <= 0) continue;
     const name = nameValue.slice(0, idx).trim();
     const value = nameValue.slice(idx + 1).trim();
-    if (name === 'matable_session' || name === 'matable_admin_session' || name === 'matable_session_fp') {
+    if (
+      name === 'matable_session' ||
+      name === 'matable_admin_session' ||
+      name === 'matable_session_fp' ||
+      name === 'matable_customer_session' ||
+      name === 'matable_customer_session_fp'
+    ) {
       nextCookies.set(name, value);
     }
   }
@@ -108,6 +114,175 @@ after(async () => {
     serverProcess.kill('SIGTERM');
     await delay(500);
   }
+});
+
+test('customer registration and login are supported with email, phone, and password', async () => {
+  const unique = Date.now();
+  const email = `client${unique}@example.com`;
+  const phone = `+225070${String(unique).slice(-8)}`;
+
+  const register = await apiFetch('/api/auth/customer-register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Client Test',
+      phone,
+      email,
+      password: 'MotDePasse!123',
+    }),
+  });
+
+  assert.equal(register.response.status, 200, `Unexpected register response: ${JSON.stringify(register.payload)}`);
+  assert.equal(register.payload.success, true);
+  assert.equal(register.payload.user.email, email);
+
+  const session = await apiFetch('/api/auth/customer-session');
+  assert.equal(session.response.status, 200, `Unexpected session response: ${JSON.stringify(session.payload)}`);
+  assert.equal(session.payload.authenticated, true);
+  assert.equal(session.payload.userType, 'customer');
+
+  const genericSession = await apiFetch('/api/auth/session');
+  assert.equal(genericSession.response.status, 200, `Unexpected generic session response: ${JSON.stringify(genericSession.payload)}`);
+  assert.equal(genericSession.payload.authenticated, true);
+  assert.equal(genericSession.payload.userType, 'customer');
+
+  const login = await apiFetch('/api/auth/customer-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email,
+      password: 'MotDePasse!123',
+    }),
+  });
+
+  assert.equal(login.response.status, 200, `Unexpected login response: ${JSON.stringify(login.payload)}`);
+  assert.equal(login.payload.success, true);
+  assert.equal(login.payload.user.email, email);
+
+  const logout = await apiFetch('/api/auth/customer-logout', { method: 'POST' });
+  assert.equal(logout.response.status, 200, `Unexpected logout response: ${JSON.stringify(logout.payload)}`);
+  assert.equal(logout.payload.success, true);
+});
+
+test('guest and authenticated checkout accepts orders, reserves stock, and tracks the WhatsApp handoff', async () => {
+  const merchantPhone = uniquePhone();
+  const registration = await apiFetch('/api/shops', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Boutique Parcours Client', whatsapp_number: merchantPhone, pin_code: '638294', category: 'food' }),
+  });
+  assert.equal(registration.response.status, 200, JSON.stringify(registration.payload));
+  const shopId = registration.payload.shop.id;
+
+  const opened = await apiFetch(`/api/shops/${shopId}/toggle-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_open: true }),
+  });
+  assert.equal(opened.response.status, 200, JSON.stringify(opened.payload));
+
+  const createdProduct = await apiFetch(`/api/shops/${shopId}/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Plat du jour test client', price: 2500, stock: 6, is_available: true }),
+  });
+  assert.equal(createdProduct.response.status, 200, JSON.stringify(createdProduct.payload));
+  const productId = createdProduct.payload.product.id;
+
+  const guestOrder = await apiFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shopId,
+      customer_name: 'Client invité',
+      customer_phone: uniquePhone(),
+      delivery_location: 'Cocody Angré',
+      total_amount: 1,
+      status: 'confirmed',
+      items: [{ product_id: productId, quantity: 2 }],
+    }),
+  });
+  assert.equal(guestOrder.response.status, 200, JSON.stringify(guestOrder.payload));
+  assert.equal(guestOrder.payload.order.customer_user_id, undefined);
+  assert.equal(guestOrder.payload.order.total_amount, 5000);
+  assert.equal(guestOrder.payload.order.status, 'confirmed');
+  assert.equal(guestOrder.payload.order.whatsapp_tracking_available, true);
+  assert.equal(typeof guestOrder.payload.whatsapp_tracking_token, 'string');
+
+  const invalidTrackingClick = await apiFetch(`/api/orders/${guestOrder.payload.order.id}/whatsapp-click`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: 'invalid-tracking-token-value' }),
+  });
+  assert.equal(invalidTrackingClick.response.status, 404);
+  const trackingClick = await apiFetch(`/api/orders/${guestOrder.payload.order.id}/whatsapp-click`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: guestOrder.payload.whatsapp_tracking_token }),
+  });
+  assert.equal(trackingClick.response.status, 200, JSON.stringify(trackingClick.payload));
+  const repeatedTrackingClick = await apiFetch(`/api/orders/${guestOrder.payload.order.id}/whatsapp-click`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: guestOrder.payload.whatsapp_tracking_token }),
+  });
+  assert.equal(repeatedTrackingClick.payload.clicked_at, trackingClick.payload.clicked_at);
+
+  const customerEmail = `checkout${Date.now()}@example.ci`;
+  const customerPhone = uniquePhone();
+  const customerRegistration = await apiFetch('/api/auth/customer-register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Client Compte', phone: customerPhone, email: customerEmail, password: 'MotDePasse!123' }),
+  });
+  assert.equal(customerRegistration.response.status, 200, JSON.stringify(customerRegistration.payload));
+
+  const accountOrder = await apiFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shopId,
+      customer_name: 'Nom du formulaire',
+      customer_phone: uniquePhone(),
+      delivery_location: 'Marcory Résidentiel',
+      items: [{ product_id: productId, quantity: 3 }],
+    }),
+  });
+  assert.equal(accountOrder.response.status, 200, JSON.stringify(accountOrder.payload));
+  assert.equal(accountOrder.payload.order.customer_user_id, customerRegistration.payload.user.id);
+  assert.equal(accountOrder.payload.order.status, 'confirmed');
+
+  const customerHistory = await apiFetch('/api/auth/customer-orders');
+  assert.equal(customerHistory.response.status, 200, JSON.stringify(customerHistory.payload));
+  assert.deepEqual(customerHistory.payload.orders.map((order: any) => order.id), [accountOrder.payload.order.id]);
+
+  const merchantOrders = await apiFetch(`/api/shops/${shopId}/orders`);
+  assert.equal(merchantOrders.response.status, 200, JSON.stringify(merchantOrders.payload));
+  const trackedGuestOrder = merchantOrders.payload.find((order: any) => order.id === guestOrder.payload.order.id);
+  assert.equal(trackedGuestOrder.customer_user_id, undefined);
+  assert.equal(trackedGuestOrder.whatsapp_tracking_available, true);
+  assert.equal(trackedGuestOrder.whatsapp_clicked_at, trackingClick.payload.clicked_at);
+  assert.equal(JSON.stringify(merchantOrders.payload).includes(guestOrder.payload.whatsapp_tracking_token), false);
+  assert.equal(merchantOrders.payload.find((order: any) => order.id === accountOrder.payload.order.id).customer_user_id, customerRegistration.payload.user.id);
+
+  const stockAfterOrderCreation = await apiFetch(`/api/shops/${shopId}/products`);
+  assert.equal(stockAfterOrderCreation.payload[0].stock, 1);
+
+  const cancelled = await apiFetch(`/api/shops/${shopId}/orders/${guestOrder.payload.order.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'cancelled' }),
+  });
+  assert.equal(cancelled.response.status, 200, JSON.stringify(cancelled.payload));
+  const stockAfterCancellation = await apiFetch(`/api/shops/${shopId}/products`);
+  assert.equal(stockAfterCancellation.payload[0].stock, 3);
+
+  const invalidTransition = await apiFetch(`/api/shops/${shopId}/orders/${accountOrder.payload.order.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'refunded' }),
+  });
+  assert.equal(invalidTransition.response.status, 400);
 });
 
 test('concurrent single-item orders cannot oversell the last unit', async () => {
@@ -182,13 +357,14 @@ test('concurrent single-item orders cannot oversell the last unit', async () => 
   ]);
 
   const successfulOrders = orderAttempts.filter((attempt) => attempt.response.status === 200).length;
-  assert.equal(successfulOrders, 3, `Expected all three pending requests to be recorded, got ${successfulOrders}`);
+  assert.equal(successfulOrders, 1, `Expected one of three auto-accepted orders to reserve the last unit, got ${successfulOrders}`);
+  assert.equal(orderAttempts.find((attempt) => attempt.response.status === 200)?.payload.order.status, 'confirmed');
 
   const productAfter = await apiFetch(`/api/shops/1/products`);
   assert.equal(productAfter.response.status, 200);
   const updatedProduct = productAfter.payload.find((item: any) => item.id === createdProduct.id);
   assert.ok(updatedProduct);
-  assert.equal(updatedProduct.stock, 1);
+  assert.equal(updatedProduct.stock, 0);
 
   const duplicateProductCreate = await apiFetch('/api/shops/1/products', {
     method: 'POST',
@@ -221,9 +397,10 @@ test('concurrent single-item orders cannot oversell the last unit', async () => 
     }),
   });
   assert.equal(duplicateOrder.response.status, 200, JSON.stringify(duplicateOrder.payload));
+  assert.equal(duplicateOrder.payload.order.status, 'confirmed');
   const duplicateProductAfter = await apiFetch(`/api/shops/1/products`);
   const duplicateProductState = duplicateProductAfter.payload.find((item: any) => item.id === duplicateProduct.id);
-  assert.equal(duplicateProductState.stock, 5);
+  assert.equal(duplicateProductState.stock, 1);
 });
 
 test('existing merchant full flow: login, product management, order lifecycle, billing snapshot, and store status toggle', async () => {
@@ -259,6 +436,50 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal(productList.response.status, 200);
   assert.ok(productList.payload.some((product: any) => product.id === createdProduct.id));
 
+  const productEdit = await apiFetch(`/api/shops/1/products/${createdProduct.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Produit marchand modifié', price: 2600, stock: 5 }),
+  });
+  assert.equal(productEdit.response.status, 200, JSON.stringify(productEdit.payload));
+  assert.equal(productEdit.payload.product.title, 'Produit marchand modifié');
+
+  const hideProduct = await apiFetch(`/api/shops/1/products/${createdProduct.id}/toggle-visibility`, { method: 'PATCH' });
+  assert.equal(hideProduct.response.status, 200, JSON.stringify(hideProduct.payload));
+  assert.equal(hideProduct.payload.is_available, false);
+  const showProduct = await apiFetch(`/api/shops/1/products/${createdProduct.id}/toggle-visibility`, { method: 'PATCH' });
+  assert.equal(showProduct.response.status, 200, JSON.stringify(showProduct.payload));
+  assert.equal(showProduct.payload.is_available, true);
+
+  const temporaryProduct = await apiFetch('/api/shops/1/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Article test suppression', price: 900, stock: 1 }),
+  });
+  assert.equal(temporaryProduct.response.status, 200, JSON.stringify(temporaryProduct.payload));
+  const temporaryProductId = temporaryProduct.payload.product.id;
+  const stockDown = await apiFetch(`/api/shops/1/products/${temporaryProductId}/stock`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ delta: -5 }),
+  });
+  assert.equal(stockDown.response.status, 200, JSON.stringify(stockDown.payload));
+  assert.equal(stockDown.payload.stock, 0);
+  assert.equal(stockDown.payload.product.is_available, false);
+  const stockUp = await apiFetch(`/api/shops/1/products/${temporaryProductId}/stock`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ delta: 2 }),
+  });
+  assert.equal(stockUp.response.status, 200, JSON.stringify(stockUp.payload));
+  assert.equal(stockUp.payload.stock, 2);
+  assert.equal(stockUp.payload.product.is_available, false);
+  const showRestockedProduct = await apiFetch(`/api/shops/1/products/${temporaryProductId}/toggle-visibility`, { method: 'PATCH' });
+  assert.equal(showRestockedProduct.payload.is_available, true);
+  const deleteProduct = await apiFetch(`/api/shops/1/products/${temporaryProductId}`, { method: 'DELETE' });
+  assert.equal(deleteProduct.response.status, 200, JSON.stringify(deleteProduct.payload));
+  assert.equal((await apiFetch('/api/shops/1/products')).payload.some((product: any) => product.id === temporaryProductId), false);
+
   const order = await apiFetch('/api/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -277,9 +498,11 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal(order.payload.success, true);
   const orderId = order.payload.order.id;
 
-  const stockBeforeConfirmation = await apiFetch('/api/shops/1/products');
-  const productBeforeConfirmation = stockBeforeConfirmation.payload.find((item: any) => item.id === createdProduct.id);
-  assert.equal(productBeforeConfirmation.stock, 5);
+  assert.equal(order.payload.order.status, 'confirmed');
+  assert.equal(order.payload.order.whatsapp_tracking_available, true);
+  const stockAfterOrderCreation = await apiFetch('/api/shops/1/products');
+  const productAfterOrderCreation = stockAfterOrderCreation.payload.find((item: any) => item.id === createdProduct.id);
+  assert.equal(productAfterOrderCreation.stock, 3);
 
   const orderCheck = await apiFetch(`/api/shops/1/orders`);
   assert.equal(orderCheck.response.status, 200);
@@ -293,9 +516,9 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal(statusUpdate.response.status, 200);
   assert.equal(statusUpdate.payload.order.status, 'confirmed');
 
-  const stockAfterConfirmation = await apiFetch('/api/shops/1/products');
-  const productAfterConfirmation = stockAfterConfirmation.payload.find((item: any) => item.id === createdProduct.id);
-  assert.equal(productAfterConfirmation.stock, 3);
+  const stockAfterRepeatedConfirmation = await apiFetch('/api/shops/1/products');
+  const productAfterRepeatedConfirmation = stockAfterRepeatedConfirmation.payload.find((item: any) => item.id === createdProduct.id);
+  assert.equal(productAfterRepeatedConfirmation.stock, 3);
 
   const cancelledUpdate = await apiFetch(`/api/shops/1/orders/${orderId}/status`, {
     method: 'PATCH',
@@ -304,6 +527,9 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   });
   assert.equal(cancelledUpdate.response.status, 200);
   assert.equal(cancelledUpdate.payload.order.status, 'cancelled');
+  const stockAfterCancellation = await apiFetch('/api/shops/1/products');
+  const productAfterCancellation = stockAfterCancellation.payload.find((item: any) => item.id === createdProduct.id);
+  assert.equal(productAfterCancellation.stock, 5);
 
   const competingOrder = await apiFetch('/api/orders', {
     method: 'POST',
@@ -318,12 +544,7 @@ test('existing merchant full flow: login, product management, order lifecycle, b
     }),
   });
   assert.equal(competingOrder.response.status, 200, JSON.stringify(competingOrder.payload));
-  const competingStatus = await apiFetch(`/api/shops/1/orders/${competingOrder.payload.order.id}/status`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'confirmed' }),
-  });
-  assert.equal(competingStatus.response.status, 200, JSON.stringify(competingStatus.payload));
+  assert.equal(competingOrder.payload.order.status, 'confirmed');
 
   const unsafeReactivation = await apiFetch(`/api/shops/1/orders/${orderId}/status`, {
     method: 'PATCH',
@@ -351,6 +572,10 @@ test('existing merchant full flow: login, product management, order lifecycle, b
 });
 
 test('new merchant registration flow is local and immediately usable', async () => {
+  const verificationConfig = await apiFetch('/api/merchant-verification/config');
+  assert.equal(verificationConfig.response.status, 200);
+  assert.equal(verificationConfig.payload.required, false);
+
   const phone = uniquePhone();
   const registration = await apiFetch('/api/shops', {
     method: 'POST',
@@ -368,6 +593,8 @@ test('new merchant registration flow is local and immediately usable', async () 
 
   assert.equal(registration.response.status, 200, `Shop creation failed: ${JSON.stringify(registration.payload)}`);
   assert.match(String(registration.payload.message), /Boutique créée/i);
+  assert.equal(registration.payload.shop.merchant_verification_status, 'not_required');
+  assert.equal(registration.payload.shop.is_active, true);
   assert.ok(registration.payload.owner_access_token);
 
   const newShopId = registration.payload.shop.id;
@@ -422,6 +649,9 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   });
   assert.equal(insecureConfirmation.response.status, 404);
 
+  const adminHealthBeforeLogin = await apiFetch('/api/admin/health');
+  assert.equal(adminHealthBeforeLogin.response.status, 401);
+
   const adminWrongKey = await apiFetch('/api/auth/admin-login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -445,6 +675,23 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   assert.equal(adminSessionStateAfterRefresh.response.status, 200, JSON.stringify(adminSessionStateAfterRefresh.payload));
   assert.equal(adminSessionStateAfterRefresh.payload.authenticated, true);
 
+  const adminHealth = await apiFetch('/api/admin/health');
+  assert.equal(adminHealth.response.status, 200, JSON.stringify(adminHealth.payload));
+  assert.equal(adminHealth.payload.status, 'ok');
+  assert.equal(typeof adminHealth.payload.counts.shops, 'number');
+
+  const adminShops = await apiFetch('/api/admin/shops');
+  assert.equal(adminShops.response.status, 200, JSON.stringify(adminShops.payload));
+  assert.ok(adminShops.payload.some((shop: any) => shop.id === shopId));
+
+  const adminOrders = await apiFetch('/api/admin/orders?limit=10');
+  assert.equal(adminOrders.response.status, 200, JSON.stringify(adminOrders.payload));
+  assert.ok(Array.isArray(adminOrders.payload.orders));
+
+  const adminAnalytics = await apiFetch('/api/admin/analytics?days=7');
+  assert.equal(adminAnalytics.response.status, 200, JSON.stringify(adminAnalytics.payload));
+  assert.equal(adminAnalytics.payload.days, 7);
+
   const accessLink = await apiFetch(`/api/admin/shops/${shopId}/access-link`, { method: 'POST' });
   assert.equal(accessLink.response.status, 200);
   assert.ok(String(accessLink.payload.access_url).includes('/app?access='));
@@ -463,6 +710,13 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   const rejectedShop = listAfterReject.payload.find((item: any) => item.id === shopId);
   assert.ok(rejectedShop);
   assert.equal(rejectedShop.is_active, true);
+
+  const disableShop = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, { method: 'PATCH' });
+  assert.equal(disableShop.response.status, 200, JSON.stringify(disableShop.payload));
+  assert.equal(disableShop.payload.is_active, false);
+  const enableShop = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, { method: 'PATCH' });
+  assert.equal(enableShop.response.status, 200, JSON.stringify(enableShop.payload));
+  assert.equal(enableShop.payload.is_active, true);
 
   const changedFingerprint = await apiFetch('/api/auth/session', {
     headers: { 'Accept-Language': 'en-US' },

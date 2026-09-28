@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS id_allocators (
+  name TEXT PRIMARY KEY,
+  last_id BIGINT NOT NULL
+);

@@ -2,16 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Navigation } from './components/Navigation';
 import { CustomerStorefront } from './components/CustomerStorefront';
-import { MerchantDashboard } from './components/MerchantDashboard';
+import { MerchantDashboard } from './components/MerchantDashboard/index';
 import { AdminDashboard } from './components/AdminDashboard';
 import { PublicDirectory } from './components/PublicDirectory';
 import { ToastProvider } from './components/Toast';
 import { Footer } from './components/Footer';
 import { LegalPageKey, LegalPages } from './components/LegalPages';
 import { CookieBanner } from './components/CookieBanner';
+import { CustomerAccount, CustomerAuth, CustomerUser } from './components/CustomerAuth';
+import { FaqPage } from './components/FaqPage';
 
 export default function App() {
-  const [isBooting, setIsBooting] = useState(false);
+  const [isBooting, setIsBooting] = useState(true);
   const initialPath = window.location.pathname;
   const legalPageMap: Record<string, LegalPageKey> = {
     'mentions-legales': 'mentions-legales',
@@ -20,16 +22,23 @@ export default function App() {
     cookies: 'cookies',
   };
   const initialLegalPage = legalPageMap[initialPath.replace(/^\//, '').replace(/\/$/, '')] || null;
+  const initialFaqPage = initialPath.replace(/^\//, '').replace(/\/$/, '') === 'faq';
   const initialRole = initialPath.includes('/admin') ? 'admin' : initialPath.includes('/app') ? 'merchant' : 'storefront';
+  const initialCustomerView = initialPath === '/connexion' ? 'auth' : initialPath === '/inscription' ? 'register' : initialPath === '/compte' ? 'account' : 'none';
   const initialShopSlug = initialPath.length > 1 && initialRole === 'storefront'
     ? initialPath.substring(1).split('/')[0]
     : 'aya-chic';
   const [currentRole, setCurrentRole] = useState<'storefront' | 'merchant' | 'admin'>(initialRole);
   const [selectedShopSlug, setSelectedShopSlug] = useState<string>(initialShopSlug);
   const [showDirectory, setShowDirectory] = useState(initialPath === '/');
+  const [isFaqPage, setIsFaqPage] = useState(initialFaqPage);
   const [availableShops, setAvailableShops] = useState<{ slug: string; name: string; category?: string }[]>([]);
+  const [customerUser, setCustomerUser] = useState<CustomerUser | null>(null);
+  const [customerView, setCustomerView] = useState<'none' | 'auth' | 'register' | 'account'>(initialCustomerView);
+  const [openMerchantRegistration, setOpenMerchantRegistration] = useState(false);
+  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant';
 
-  const loadingSteps = ['Quartier', 'Boutiques', 'Commandes', 'Émotion'];
+  const loadingSteps = ['Découvrir', 'Boutiques', 'Catalogue', 'Commander'];
 
   useEffect(() => {
     const bootTimer = window.setTimeout(() => setIsBooting(false), 1800);
@@ -48,8 +57,17 @@ export default function App() {
   }, [currentRole]);
 
   useEffect(() => {
+    fetch('/api/auth/customer-session', { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => {
+        if (data.authenticated && data.user) setCustomerUser(data.user);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     const path = window.location.pathname;
-    if (initialLegalPage) {
+    if (initialLegalPage || initialFaqPage) {
       setCurrentRole('storefront');
       setShowDirectory(false);
     } else if (path.includes('/admin')) {
@@ -57,6 +75,10 @@ export default function App() {
       setShowDirectory(false);
     } else if (path.includes('/app')) {
       setCurrentRole('merchant');
+      setShowDirectory(false);
+    } else if (path === '/connexion' || path === '/inscription' || path === '/compte') {
+      setCurrentRole('storefront');
+      setCustomerView(path === '/inscription' ? 'register' : path === '/compte' ? 'account' : 'auth');
       setShowDirectory(false);
     } else if (path.length > 1) {
       const slug = path.substring(1).split('/')[0];
@@ -66,6 +88,51 @@ export default function App() {
         setShowDirectory(false);
       }
     }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      const faqPath = path.replace(/^\//, '').replace(/\/$/, '') === 'faq';
+      setIsFaqPage(faqPath);
+      if (faqPath) {
+        setCurrentRole('storefront');
+        setCustomerView('none');
+        setShowDirectory(false);
+        return;
+      }
+      if (path === '/connexion' || path === '/inscription' || path === '/compte') {
+        setCurrentRole('storefront');
+        setCustomerView(path === '/inscription' ? 'register' : path === '/compte' ? 'account' : 'auth');
+        setShowDirectory(false);
+        return;
+      }
+      if (path.includes('/admin')) {
+        setCurrentRole('admin');
+        setCustomerView('none');
+        setShowDirectory(false);
+        return;
+      }
+      if (path.includes('/app')) {
+        setCurrentRole('merchant');
+        setCustomerView('none');
+        setShowDirectory(false);
+        return;
+      }
+      if (path === '/') {
+        setCurrentRole('storefront');
+        setCustomerView('none');
+        setShowDirectory(true);
+        return;
+      }
+      setCurrentRole('storefront');
+      setCustomerView('none');
+      setSelectedShopSlug(path.substring(1).split('/')[0]);
+      setShowDirectory(false);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   useEffect(() => {
@@ -95,6 +162,15 @@ export default function App() {
     const canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (canonical) canonical.href = `${window.location.origin}/${initialLegalPage}`;
   }, [initialLegalPage]);
+
+  useEffect(() => {
+    if (!isFaqPage) return;
+    document.title = 'Questions fréquentes | MaTable.ci';
+    const description = document.head.querySelector<HTMLMetaElement>('meta[name="description"]');
+    if (description) description.content = 'Réponses aux questions fréquentes sur les commandes, les comptes clients et les boutiques MaTable.ci.';
+    const canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (canonical) canonical.href = `${window.location.origin}/faq`;
+  }, [isFaqPage]);
 
   return (
     <ToastProvider>
@@ -186,7 +262,7 @@ export default function App() {
           >
             <div className="page-shell">
               <div className="surface-shell">
-                <Navigation
+                {!hasStandaloneAccountFlow && <Navigation
                   currentRole={currentRole}
                   onChangeRole={(role) => {
                     setCurrentRole(role);
@@ -200,11 +276,27 @@ export default function App() {
                   }}
                   isDirectory={currentRole === 'storefront' && showDirectory}
                   isLegalPage={Boolean(initialLegalPage)}
-                />
+                  customerUser={customerUser}
+                  onOpenCustomerAuth={() => { setCurrentRole('storefront'); setCustomerView('auth'); setShowDirectory(false); window.history.pushState({}, '', '/connexion'); }}
+                  onOpenCustomerAccount={() => { setCurrentRole('storefront'); setCustomerView('account'); setShowDirectory(false); window.history.pushState({}, '', '/compte'); }}
+                  onLogoutCustomer={async () => { await fetch('/api/auth/customer-logout', { method: 'POST', credentials: 'include' }); setCustomerUser(null); setCustomerView('none'); setShowDirectory(true); window.history.pushState({}, '', '/'); }}
+                />}
 
                 <div id="main-content" className="flex-1 app-shell" tabIndex={-1}>
-                  {initialLegalPage ? (
+                  {isFaqPage ? (
+                    <FaqPage />
+                  ) : initialLegalPage ? (
                     <LegalPages page={initialLegalPage} />
+                  ) : customerView === 'auth' || customerView === 'register' ? (
+                    <CustomerAuth
+                      initialMode={customerView === 'register' ? 'register' : 'login'}
+                      onAuthenticated={(user) => { setCustomerUser(user); setCustomerView('account'); window.history.pushState({}, '', '/compte'); }}
+                      onBack={() => { setCustomerView('none'); setShowDirectory(true); window.history.pushState({}, '', '/'); }}
+                      onMerchantLogin={() => { setCurrentRole('merchant'); setCustomerView('none'); setShowDirectory(false); setOpenMerchantRegistration(false); window.history.pushState({}, '', '/app'); }}
+                      onMerchantRegister={() => { setCurrentRole('merchant'); setCustomerView('none'); setShowDirectory(false); setOpenMerchantRegistration(true); window.history.pushState({}, '', '/app'); }}
+                    />
+                  ) : customerView === 'account' ? (
+                    customerUser ? <CustomerAccount user={customerUser} onLogout={async () => { await fetch('/api/auth/customer-logout', { method: 'POST', credentials: 'include' }); setCustomerUser(null); setCustomerView('none'); setShowDirectory(true); window.history.pushState({}, '', '/'); }} onBack={() => { setCustomerView('none'); setShowDirectory(true); window.history.pushState({}, '', '/'); }} /> : <CustomerAuth onBack={() => { setCustomerView('none'); setShowDirectory(true); window.history.pushState({}, '', '/'); }} onAuthenticated={(user) => { setCustomerUser(user); setCustomerView('account'); }} onMerchantLogin={() => { setCurrentRole('merchant'); setCustomerView('none'); setShowDirectory(false); setOpenMerchantRegistration(false); window.history.pushState({}, '', '/app'); }} onMerchantRegister={() => { setCurrentRole('merchant'); setCustomerView('none'); setShowDirectory(false); setOpenMerchantRegistration(true); window.history.pushState({}, '', '/app'); }} />
                   ) : currentRole === 'storefront' && (
                     showDirectory ? (
                       <PublicDirectory
@@ -217,12 +309,15 @@ export default function App() {
                         onCreateShop={() => {
                           setCurrentRole('merchant');
                           setShowDirectory(false);
+                          setOpenMerchantRegistration(true);
                           window.history.pushState({}, '', '/app');
                         }}
                       />
                     ) : (
                       <CustomerStorefront
                         shopSlug={selectedShopSlug}
+                        customerUser={customerUser}
+                        onCustomerAuthenticated={setCustomerUser}
                         onSelectShop={(slug) => setSelectedShopSlug(slug)}
                       />
                     )
@@ -230,7 +325,15 @@ export default function App() {
 
                   {currentRole === 'merchant' && (
                     <MerchantDashboard
+                      openRegistration={openMerchantRegistration}
                       currentShopSlug={selectedShopSlug}
+                      onBackToDirectory={() => {
+                        setCurrentRole('storefront');
+                        setCustomerView('none');
+                        setShowDirectory(true);
+                        setOpenMerchantRegistration(false);
+                        window.history.pushState({}, '', '/');
+                      }}
                       onOpenStorefront={(slug) => {
                         setSelectedShopSlug(slug);
                         setCurrentRole('storefront');
@@ -244,7 +347,7 @@ export default function App() {
                     <AdminDashboard />
                   )}
                 </div>
-                <Footer compact={Boolean(initialLegalPage)} />
+                {!hasStandaloneAccountFlow && <Footer compact={Boolean(initialLegalPage)} />}
               </div>
             </div>
             <CookieBanner />

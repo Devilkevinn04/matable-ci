@@ -12,7 +12,8 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
         <a href="/" className="site-footer-brand">MaTable<span>.ci</span></a>
         <p>Des boutiques locales, des produits vrais et une commande simple.</p>
       </div>
-      <nav className="site-footer-links" aria-label="Liens juridiques">
+      <nav className="site-footer-links" aria-label="Aide et informations">
+        <a href="/faq">Questions fréquentes</a>
         <a href="/mentions-legales">Mentions légales</a>
         <a href="/confidentialite">Confidentialité</a>
         <a href="/cgu">CGU</a>

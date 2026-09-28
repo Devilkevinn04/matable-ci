@@ -7,8 +7,10 @@
   --ink-soft: #6f6a61;
   --primary: #176b55;
   --primary-deep: #0f4d3d;
+  --primary-soft: #e4f1ec;
   --secondary: #c98b4a;
   --secondary-deep: #93602e;
+  --secondary-soft: #f9f0e6;
   --gold: #d7a15b;
   --gold-deep: #a87335;
   --surface: #e9e4da;
@@ -23,6 +25,9 @@
   --frame: 18px;
   --shadow: 0 12px 30px rgba(37, 35, 31, 0.08);
   --shadow-strong: 0 18px 42px rgba(37, 35, 31, 0.13);
+  --radius-lg: 1.25rem;
+  --radius-md: 0.9rem;
+  --radius-sm: 0.7rem;
 }
 
 html {
@@ -71,6 +76,80 @@ body {
   font-family: 'Avenir Next', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   color: var(--ink);
   background: linear-gradient(180deg, #faf8f3 0%, var(--bg) 55%, #eee9df 100%);
+}
+
+button, a {
+  transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease, background-color 180ms ease, border-color 180ms ease;
+}
+
+.ui-kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--primary-deep);
+}
+
+.surface-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 253, 249, 0.94);
+  box-shadow: var(--shadow);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid rgba(33, 27, 23, 0.1);
+}
+
+.pill-soft {
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+}
+
+.pill-warm {
+  background: var(--secondary-soft);
+  color: var(--secondary-deep);
+}
+
+.primary-button,
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  border-radius: 0.9rem;
+  padding: 0.8rem 1rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  border: 2px solid rgba(33, 27, 23, 0.9);
+  cursor: pointer;
+}
+
+.primary-button {
+  background: linear-gradient(135deg, var(--primary) 0%, #1f8a6d 100%);
+  color: #fff;
+  box-shadow: 0 12px 22px rgba(23, 107, 85, 0.22);
+}
+
+.primary-button:hover,
+.secondary-button:hover {
+  transform: translateY(-1px);
+}
+
+.secondary-button {
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
 }
 
 
@@ -612,7 +691,7 @@ h1, h2, h3, h4, .display-font {
 }
 
 .public-directory {
-  background: linear-gradient(180deg, #faf8f3 0%, #f1eee7 58%, #e9e4da 100%);
+  background: var(--bg);
 }
 
 .storefront-page input:focus,
@@ -635,9 +714,8 @@ h1, h2, h3, h4, .display-font {
   color: var(--primary);
   text-decoration: underline;
   text-decoration-color: var(--gold);
-  text-decoration-thickness: 0.12em;
-  text-underline-offset: 0.1em;
-  transform: rotate(-2deg);
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.14em;
 }
 
 .hero-signals {
@@ -650,14 +728,14 @@ h1, h2, h3, h4, .display-font {
   display: inline-flex;
   align-items: center;
   gap: 0.38rem;
-  padding: 0.5rem 0.7rem;
-  border: 1px solid rgba(33, 27, 23, 0.12);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.66);
+  padding: 0.25rem 0.2rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--ink-soft);
   font-size: 0.68rem;
   font-weight: 800;
-  box-shadow: 0 8px 18px rgba(33, 27, 23, 0.06);
+  box-shadow: none;
 }
 
 .hero-signal-dot {
@@ -706,7 +784,7 @@ h1, h2, h3, h4, .display-font {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent 40%, rgba(255,255,255,0.06));
+  background: none;
   pointer-events: none;
 }
 
@@ -723,9 +801,9 @@ h1, h2, h3, h4, .display-font {
 }
 
 .featured-shop-card {
-  border: 3px solid rgba(33, 27, 23, 0.94);
-  box-shadow: 0 22px 40px rgba(33, 27, 23, 0.12);
-  background: linear-gradient(135deg, rgba(31, 20, 15, 0.88), rgba(58, 35, 26, 0.72));
+  border: 0;
+  box-shadow: none;
+  background: var(--primary-deep);
 }
 
 .luxe-hero::before {
@@ -742,13 +820,12 @@ h1, h2, h3, h4, .display-font {
 }
 
 .warm-cta {
-  background: var(--primary);
-  box-shadow: 0 10px 22px rgba(23, 107, 85, 0.18);
+  background: var(--primary-deep);
+  box-shadow: none;
 }
 
 .warm-cta:hover {
-  filter: saturate(1.1);
-  transform: translateY(-1px);
+  background: var(--primary);
 }
 
 button:hover {

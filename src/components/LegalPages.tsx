@@ -87,6 +87,10 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
               <p>MaTable.ci ne collecte ni ne conserve aucun paiement effectué entre le client et le vendeur. Les modalités de paiement, de livraison, de disponibilité et de finalisation de la vente sont convenues directement entre les parties, notamment via WhatsApp ou tout autre canal de communication accepté par le vendeur.</p>
             </section>
             <section>
+              <h2>Suivi du lien WhatsApp</h2>
+              <p>Lorsqu’un client clique sur le bouton de contact WhatsApp après une commande, MaTable.ci enregistre ce clic pour l’indiquer au commerçant. Ce signal ne permet pas de savoir si WhatsApp s’est ouvert ni si le message a été envoyé. Le contenu des échanges WhatsApp n’est pas collecté par cette mesure.</p>
+            </section>
+            <section>
               <h2>Conservation et sécurité</h2>
               <p>Les données sont conservées pendant la durée nécessaire à la fourniture du service, à la gestion des demandes de commande et au respect des obligations légales applicables. Les accès aux espaces professionnels et administrateurs sont protégés par des sessions sécurisées et des contrôles d’authentification.</p>
             </section>

@@ -1,15 +1,7 @@
-export type ShopCategory =
-  | 'fashion'
-  | 'food'
-  | 'beauty'
-  | 'electronics'
-  | 'home'
-  | 'services'
-  | 'health'
-  | 'crafts'
-  | 'education'
-  | 'automotive'
-  | 'other';
+import type { ShopCategory } from './utils/categoryDefaults';
+export type { ShopCategory } from './utils/categoryDefaults';
+// Legacy tier identifiers remain accepted for compatibility with older records,
+// while the V2 product experience stays free and not gated by tiers.
 export type SubscriptionTier = 'standard' | 'premium' | 'pro';
 
 export interface ThemeAdvancedCSS {
@@ -18,16 +10,36 @@ export interface ThemeAdvancedCSS {
   accentGlow?: boolean;
 }
 
+export type BrandDirection = 'luxe' | 'moderne' | 'authentique';
+
+export interface ShopSocialLinks {
+  instagram?: string;
+  facebook?: string;
+  tiktok?: string;
+  website?: string;
+  whatsapp?: string;
+}
+
+export interface ShopDeliveryZone {
+  label: string;
+  mode: 'livraison' | 'sur_place' | 'retirer';
+  fee: number;
+  description?: string;
+}
+
 export interface ThemeConfig {
   primary_color: string;
   secondary_color: string;
   font_family: 'Plus Jakarta Sans' | 'Playfair Display' | 'Cinzel' | 'Poppins';
   layout_style: 'grid_portrait' | 'card_landscape';
   theme_preset_id?: string;
+  brand_direction?: BrandDirection;
   custom_banner_url?: string;
   logo_url?: string;
   event_mode_enabled?: boolean;
   event_banner_text?: string;
+  social_links?: ShopSocialLinks;
+  delivery_zones?: ShopDeliveryZone[];
   advanced_css?: ThemeAdvancedCSS;
 }
 
@@ -49,6 +61,7 @@ export interface Shop {
   welcome_message: string | null;
   is_open: boolean;
   is_active: boolean;
+  merchant_verification_status?: 'not_required' | 'pending' | 'approved' | 'rejected' | 'retry_required';
   payment_status?: 'pending' | 'awaiting_review' | 'approved' | 'rejected' | 'suspended';
   payment_deadline_at?: string | null;
   payment_provider?: 'whatsapp' | 'paystack';
@@ -96,6 +109,7 @@ export interface Product {
   image_url: string;
   is_available: boolean;
   category?: string;
+  attributes?: Record<string, string>;
   // Fashion specific
   sizes?: string[]; // e.g. ['S', 'M', 'L', 'XL']
   colors?: (ProductColor | string)[];
@@ -129,6 +143,8 @@ export interface Order {
   total_amount: number;
   created_at: string;
   status: OrderStatus;
+  whatsapp_tracking_available?: boolean;
+  whatsapp_clicked_at?: string | null;
   items?: OrderItem[];
 }
 

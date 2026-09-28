@@ -1,4 +1,5 @@
 import { ThemeConfig, ShopCategory, SubscriptionTier } from '../types';
+import { getCategoryDefaults } from './categoryDefaults';
 
 export interface ThemePreset {
   id: string;
@@ -7,24 +8,15 @@ export interface ThemePreset {
   description: string;
   config: ThemeConfig;
   previewGradient: string;
+  previewColors?: [string, string];
   badge: string;
 }
 
 export const SUBSCRIPTION_POLICY = {
   standard: {
-    label: 'Standard',
-    description: 'Vitrine, catalogue, commandes WhatsApp, stock et thème de base.',
-    features: ['Vitrine publique', 'Catalogue et stock', 'Commandes Wave/Mobile Money', 'Logo de boutique', 'Couleurs et police de base'],
-  },
-  premium: {
-    label: 'Premium',
-    description: 'Tout Standard, avec personnalisation commerciale et promotions.',
-    features: ['Tout Standard', 'Galerie de thèmes Premium', 'Bannière personnalisée', 'Bandeau promotionnel', 'Studio Marketing 9:16'],
-  },
-  pro: {
-    label: 'Pro',
-    description: 'Tout Premium, avec contrôle visuel avancé et thèmes Elite.',
-    features: ['Tout Premium', 'Thèmes Pro / Elite', 'CSS avancé', 'Arrondis et ombres personnalisés', 'Halo lumineux des boutons'],
+    label: 'Inclus',
+    description: 'Vitrine, catalogue, commandes WhatsApp, stock et personnalisation visuelle sans abonnement.',
+    features: ['Vitrine publique', 'Catalogue et stock', 'Commandes WhatsApp', 'Logo de boutique', 'Couleurs et police de base'],
   },
 } as const;
 
@@ -35,7 +27,7 @@ export const FASHION_PRESETS: ThemePreset[] = [
     category: 'fashion',
     description: 'Typographie sobre, grand espace blanc, mise en valeur des coupes et matières.',
     previewGradient: 'from-slate-900 to-slate-700',
-    badge: 'Standard & +',
+    badge: 'Inclus',
     config: {
       primary_color: '#0F172A',
       secondary_color: '#F8FAFC',
@@ -57,7 +49,7 @@ export const FASHION_PRESETS: ThemePreset[] = [
     category: 'fashion',
     description: 'Palette chaude framboise/or, finitions arrondies, ambiance boutique créateur.',
     previewGradient: 'from-rose-600 to-amber-500',
-    badge: 'Premium & Pro',
+    badge: 'Inclus',
     config: {
       primary_color: '#E11D48',
       secondary_color: '#FFF1F2',
@@ -79,7 +71,7 @@ export const FASHION_PRESETS: ThemePreset[] = [
     category: 'fashion',
     description: 'Typographie serif élégante (Playfair), contrastes profonds, lookbook immersif.',
     previewGradient: 'from-amber-700 to-rose-950',
-    badge: 'Pro / Elite',
+    badge: 'Inclus',
     config: {
       primary_color: '#9F1239',
       secondary_color: '#FFF7ED',
@@ -105,7 +97,7 @@ export const FOOD_PRESETS: ThemePreset[] = [
     category: 'food',
     description: 'Ambiance chaleureuse braisée, rouge piment et accents dorés croustillants.',
     previewGradient: 'from-amber-600 to-red-700',
-    badge: 'Standard & +',
+    badge: 'Inclus',
     config: {
       primary_color: '#C2410C', // Orange braise
       secondary_color: '#FEF2F2',
@@ -127,7 +119,7 @@ export const FOOD_PRESETS: ThemePreset[] = [
     category: 'food',
     description: 'Vert forêt naturel et typographie soignée, idéal pour traiteurs et cuisine raffinée.',
     previewGradient: 'from-emerald-700 to-teal-900',
-    badge: 'Premium & Pro',
+    badge: 'Inclus',
     config: {
       primary_color: '#15803D',
       secondary_color: '#F0FDF4',
@@ -149,7 +141,7 @@ export const FOOD_PRESETS: ThemePreset[] = [
     category: 'food',
     description: 'Jaune mangue & ambre dynamique, badges préparation minute et sauces au choix.',
     previewGradient: 'from-amber-500 to-orange-600',
-    badge: 'Pro / Elite',
+    badge: 'Inclus',
     config: {
       primary_color: '#D97706',
       secondary_color: '#FFFBEB',
@@ -169,17 +161,37 @@ export const FOOD_PRESETS: ThemePreset[] = [
 ];
 
 export function getDefaultThemeForCategory(category: ShopCategory): ThemeConfig {
-  if (category === 'food') {
-    return { ...FOOD_PRESETS[0].config };
-  }
-  return { ...FASHION_PRESETS[0].config };
+  const defaults = getCategoryDefaults(category);
+  return {
+    primary_color: defaults.primaryColor,
+    secondary_color: defaults.secondaryColor,
+    font_family: 'Plus Jakarta Sans',
+    layout_style: defaults.layoutStyle,
+    theme_preset_id: defaults.themePresetId,
+    brand_direction: defaults.brandDirection,
+    custom_banner_url: '',
+    event_mode_enabled: false,
+  };
 }
 
 export function getAllPresetsForCategory(category: ShopCategory): ThemePreset[] {
-  return category === 'food' ? FOOD_PRESETS : FASHION_PRESETS;
+  if (category === 'food') return FOOD_PRESETS;
+  if (category === 'fashion') return FASHION_PRESETS;
+
+  const defaults = getCategoryDefaults(category);
+  return [{
+    id: defaults.themePresetId || `${category}_starter`,
+    name: `Style ${defaults.label}`,
+    category,
+    description: `Une présentation pensée pour les boutiques ${defaults.label.toLowerCase()}.`,
+    config: getDefaultThemeForCategory(category),
+    previewGradient: '',
+    previewColors: [defaults.primaryColor, defaults.secondaryColor],
+    badge: 'Inclus',
+  }];
 }
 
-export function isFeatureAllowed(tier: SubscriptionTier, feature: 'preset_gallery' | 'custom_banner' | 'event_banner' | 'advanced_css'): boolean {
+export function isFeatureAllowed(_tier: SubscriptionTier, _feature: 'preset_gallery' | 'custom_banner' | 'event_banner' | 'advanced_css'): boolean {
   return true;
 }
 

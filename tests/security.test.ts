@@ -14,11 +14,13 @@ import {
   isPaymentReferenceProcessed,
   markPaymentReferenceProcessed,
   activateShopSubscription,
+  normalizeSubscriptionTier,
   escapeHtml,
   sanitizeTextField,
   validateCustomerOrderInput,
   validateRuntimeConfig,
   shouldSeedDemoData,
+  getRateLimitClientAddress,
   saveMerchantSessionRecord,
   getMerchantSessionRecord,
   deleteMerchantSessionRecord,
@@ -94,6 +96,17 @@ test('ignores spoofed x-forwarded-for values when binding a session fingerprint'
   assert.equal(isRequestFingerprintMatch({ fingerprint: buildSessionFingerprint(firstReq) }, secondReq), true);
 });
 
+test('uses the Express-resolved client IP for public rate limits behind trusted proxies', () => {
+  assert.equal(getRateLimitClientAddress({
+    ip: '203.0.113.42',
+    socket: { remoteAddress: '10.0.0.10' },
+  } as any), '203.0.113.42');
+  assert.equal(getRateLimitClientAddress({
+    ip: undefined,
+    socket: { remoteAddress: '10.0.0.10' },
+  } as any), '10.0.0.10');
+});
+
 test('keeps a merchant session valid when the client IP changes', () => {
   const firstReq = {
     headers: {
@@ -112,7 +125,7 @@ test('keeps a merchant session valid when the client IP changes', () => {
   assert.equal(isRequestFingerprintMatch({ fingerprint: buildSessionFingerprint(firstReq) }, secondReq), true);
 });
 
-test('persists merchant sessions in SQLite so they survive a server restart', () => {
+test('persists merchant session records through the configured database adapter', async () => {
   const token = 'restart-session-test-token';
   const session = {
     shopId: 42,
@@ -120,11 +133,11 @@ test('persists merchant sessions in SQLite so they survive a server restart', ()
     fingerprint: 'session-fingerprint-v1',
   };
 
-  saveMerchantSessionRecord(token, session);
-  assert.deepEqual(getMerchantSessionRecord(token), session);
+  await saveMerchantSessionRecord(token, session);
+  assert.deepEqual(await getMerchantSessionRecord(token), session);
 
-  deleteMerchantSessionRecord(token);
-  assert.equal(getMerchantSessionRecord(token), null);
+  await deleteMerchantSessionRecord(token);
+  assert.equal(await getMerchantSessionRecord(token), null);
 });
 
 test('limits merchant recovery attempts to two per 24h window', () => {
@@ -136,57 +149,66 @@ test('limits merchant recovery attempts to two per 24h window', () => {
   assert.equal(checkAndRegisterRecoveryAttempt(999).remaining, 0);
 });
 
-test('rotates the merchant access token during a valid recovery flow', () => {
+test('rotates the merchant access token during a valid recovery flow', async () => {
   const oldToken = 'old-token-123';
-  const newToken = rotateMerchantAccessTokenForShop(1, oldToken);
+  const newToken = await rotateMerchantAccessTokenForShop(1, oldToken);
 
   assert.ok(newToken);
   assert.notEqual(newToken, oldToken);
   assert.equal(newToken.length > 10, true);
 });
 
-test('keeps Paystack as the only active payment provider when it is configured', () => {
+test('keeps the free V1 model and WhatsApp ordering flow active', () => {
   process.env.PAYSTACK_PUBLIC_KEY = 'pk_test_demo';
   process.env.PAYSTACK_SECRET_KEY = 'sk_test_demo';
   process.env.PAYSTACK_WEBHOOK_SECRET = 'whsec_demo';
 
-  const message = buildPaymentInstructionMessage('Boutique Demo', 'premium', 4000, 'https://paystack.com/test', 'paystack');
+  const message = buildPaymentInstructionMessage('Boutique Demo', 'premium', 0, 'https://wa.me/2250700000000?text=Je%20commande', 'whatsapp');
 
-  assert.equal(message.includes('Paystack'), true);
-  assert.equal(message.includes('WhatsApp'), false);
-  assert.equal(message.includes('Envoyez votre reçu'), false);
+  assert.equal(message.includes('gratuit'), true);
+  assert.equal(message.includes('Paystack'), false);
+  assert.equal(message.includes('WhatsApp'), true);
+  assert.equal(message.includes('Aucun paiement requis'), true);
 });
 
-test('exposes the three paid subscription plans with the expected amounts', () => {
+test('keeps the V1 experience free and compatible with legacy plan identifiers', () => {
   assert.deepEqual(getSubscriptionPlanConfig('standard'), {
     tier: 'standard',
-    amount: 3000,
-    label: 'Standard',
+    amount: 0,
+    label: 'Gratuit',
     description: 'Vitrine + catalogue + commandes',
   });
 
   assert.deepEqual(getSubscriptionPlanConfig('premium'), {
     tier: 'premium',
-    amount: 4000,
-    label: 'Premium',
-    description: 'Tout Standard + thèmes premium',
+    amount: 0,
+    label: 'Gratuit',
+    description: 'Vitrine + catalogue + commandes',
   });
 
   assert.deepEqual(getSubscriptionPlanConfig('pro'), {
     tier: 'pro',
-    amount: 5000,
-    label: 'Pro',
-    description: 'Tout Premium + studio avancé',
+    amount: 0,
+    label: 'Gratuit',
+    description: 'Vitrine + catalogue + commandes',
   });
 });
 
-test('builds a clear WhatsApp payment instruction with the 20-minute deadline', () => {
-  const message = buildPaymentInstructionMessage('Boutique Demo', 'premium', 4000, 'https://wa.me/2250700000000?text=Je%20paie');
+test('normalizes legacy tier identifiers to the free V2 standard tier', () => {
+  assert.equal(normalizeSubscriptionTier('premium'), 'standard');
+  assert.equal(normalizeSubscriptionTier('pro'), 'standard');
+  assert.equal(normalizeSubscriptionTier('standard'), 'standard');
+  assert.equal(normalizeSubscriptionTier(undefined), 'standard');
+  assert.equal(normalizeSubscriptionTier('unknown'), 'standard');
+});
+
+test('builds a clear WhatsApp ordering instruction without any payment wall', () => {
+  const message = buildPaymentInstructionMessage('Boutique Demo', 'premium', 0, 'https://wa.me/2250700000000?text=Je%20commande');
 
   assert.match(message, /Boutique Demo/);
-  assert.match(message, /4000/);
-  assert.match(message, /20 minutes/i);
-  assert.match(message, /https:\/\/wa\.me\/2250700000000\?text=Je%20paie/i);
+  assert.match(message, /gratuit/i);
+  assert.match(message, /WhatsApp/i);
+  assert.match(message, /https:\/\/wa\.me\/2250700000000\?text=Je%20commande/i);
 });
 
 test('treats a processed Paystack reference as the source of truth for activation', async () => {
@@ -213,9 +235,9 @@ test('treats a processed Paystack reference as the source of truth for activatio
     theme_config: { primary_color: '#0f172a', secondary_color: '#f8fafc', font_family: 'Plus Jakarta Sans', layout_style: 'grid_portrait' },
   } as any;
 
-  assert.equal(isPaymentReferenceProcessed('paystack', reference, shop.id), false);
-  assert.equal(markPaymentReferenceProcessed('paystack', reference, shop.id, 'premium', 4000), true);
-  assert.equal(isPaymentReferenceProcessed('paystack', reference, shop.id), true);
+  assert.equal(await isPaymentReferenceProcessed('paystack', reference, shop.id), false);
+  assert.equal(await markPaymentReferenceProcessed('paystack', reference, shop.id, 'premium', 4000), true);
+  assert.equal(await isPaymentReferenceProcessed('paystack', reference, shop.id), true);
 
   const activated = await activateShopSubscription(shop, 'premium', 'paystack', reference, 4000);
 
@@ -224,7 +246,7 @@ test('treats a processed Paystack reference as the source of truth for activatio
   assert.equal(shop.payment_status, 'approved');
   assert.equal(shop.is_active, true);
   assert.equal(shop.subscription_expires_at.length > 0, true);
-  assert.equal(isPaymentReferenceProcessed('paystack', reference, shop.id), true);
+  assert.equal(await isPaymentReferenceProcessed('paystack', reference, shop.id), true);
 });
 
 test('escapes HTML in merchant-controlled shop metadata before rendering', () => {
@@ -277,6 +299,7 @@ test('skips demo data seeding in production unless explicitly enabled', () => {
 test('rejects placeholder production app URLs', () => {
   const previous = {
     NODE_ENV: process.env.NODE_ENV,
+    DATABASE_URL: process.env.DATABASE_URL,
     ADMIN_ACCESS_KEY: process.env.ADMIN_ACCESS_KEY,
     APP_URL: process.env.APP_URL,
     PORT: process.env.PORT,
@@ -285,6 +308,7 @@ test('rejects placeholder production app URLs', () => {
 
   try {
     process.env.NODE_ENV = 'production';
+    process.env.DATABASE_URL = 'postgresql://matable:strongpass@ep-demo.us-east-1.aws.neon.tech/matable';
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
     process.env.APP_URL = 'https://example.com';
     process.env.PORT = '3000';
@@ -293,6 +317,7 @@ test('rejects placeholder production app URLs', () => {
     assert.throws(() => validateRuntimeConfig(), /APP_URL.*example/i);
   } finally {
     if (previous.NODE_ENV === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous.NODE_ENV;
+    if (previous.DATABASE_URL === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = previous.DATABASE_URL;
     if (previous.ADMIN_ACCESS_KEY === undefined) delete process.env.ADMIN_ACCESS_KEY; else process.env.ADMIN_ACCESS_KEY = previous.ADMIN_ACCESS_KEY;
     if (previous.APP_URL === undefined) delete process.env.APP_URL; else process.env.APP_URL = previous.APP_URL;
     if (previous.PORT === undefined) delete process.env.PORT; else process.env.PORT = previous.PORT;
@@ -303,6 +328,7 @@ test('rejects placeholder production app URLs', () => {
 test('rejects unsafe production configuration', () => {
   const previous = {
     NODE_ENV: process.env.NODE_ENV,
+    DATABASE_URL: process.env.DATABASE_URL,
     ADMIN_ACCESS_KEY: process.env.ADMIN_ACCESS_KEY,
     APP_URL: process.env.APP_URL,
     PORT: process.env.PORT,
@@ -311,6 +337,7 @@ test('rejects unsafe production configuration', () => {
 
   try {
     process.env.NODE_ENV = 'production';
+    process.env.DATABASE_URL = 'postgresql://matable:strongpass@ep-demo.us-east-1.aws.neon.tech/matable';
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
     process.env.APP_URL = 'https://matable.ci';
     process.env.PORT = '3000';

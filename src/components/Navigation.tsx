@@ -1,5 +1,6 @@
 import React from 'react';
 import { Store, ShieldCheck, ShoppingBag, ArrowLeft } from 'lucide-react';
+import { CustomerUser } from './CustomerAuth';
 
 interface NavigationProps {
   currentRole: 'storefront' | 'merchant' | 'admin';
@@ -7,6 +8,10 @@ interface NavigationProps {
   onOpenDirectory: () => void;
   isDirectory?: boolean;
   isLegalPage?: boolean;
+  customerUser?: CustomerUser | null;
+  onOpenCustomerAuth: () => void;
+  onOpenCustomerAccount: () => void;
+  onLogoutCustomer: () => void;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -15,6 +20,10 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenDirectory,
   isDirectory = false,
   isLegalPage = false,
+  customerUser = null,
+  onOpenCustomerAuth,
+  onOpenCustomerAccount,
+  onLogoutCustomer,
 }) => {
   return (
     <header className="sticky top-0 z-50 border-b border-[#ded8ce] bg-[#fffdf9]/95 backdrop-blur-xl">
@@ -51,9 +60,15 @@ export const Navigation: React.FC<NavigationProps> = ({
             </span>
           )}
           {currentRole !== 'admin' && (
-            <button onClick={() => onChangeRole('merchant')} className="nav-pill nav-pill-muted">
-              <Store className="w-3.5 h-3.5" /> Espace propriétaire
-            </button>
+            <>
+              {customerUser ? (
+                <>
+                  <button onClick={onOpenCustomerAccount} className="nav-pill nav-pill-strong"><ShoppingBag className="w-3.5 h-3.5" /> Mon compte</button>
+                  <button onClick={onLogoutCustomer} className="nav-pill nav-pill-muted">Déconnexion</button>
+                </>
+              ) : null}
+              <button onClick={() => onChangeRole('merchant')} className="nav-pill nav-pill-muted"><Store className="w-3.5 h-3.5" /> Espace propriétaire</button>
+            </>
           )}
         </nav>
 
