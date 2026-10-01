@@ -8,6 +8,13 @@ const migrationVersions = [
   '003_merchant_identity_verification',
   '004_merchant_verification_status_and_retention',
   '005_order_whatsapp_tracking',
+  '006_product_gallery_images',
+  '007_merchant_owner_email',
+  '008_customer_first_last_name',
+  '009_merchant_identity_prototype',
+  '010_shop_publication_status',
+  '011_merchant_identity_decision_method',
+  '012_merchant_identity_document_back',
 ];
 const connectionString = process.env.DATABASE_URL;
 
@@ -35,7 +42,7 @@ try {
       AND table_type = 'BASE TABLE'
   `);
   const tableNames = new Set(existingTables.rows.map((row: { table_name: string }) => row.table_name));
-  const requiredTables = ['shops', 'products', 'orders', 'merchant_sessions', 'admin_sessions', 'analytics_events', 'payment_transactions'];
+  const requiredTables = ['shops', 'products', 'orders', 'merchant_sessions', 'admin_sessions', 'analytics_events'];
   const missingTables = requiredTables.filter((table) => !tableNames.has(table));
   if (missingTables.length > 0) {
     throw new Error(`Expected application tables are missing: ${missingTables.join(', ')}`);

@@ -1,7 +1,8 @@
 import React from 'react';
-import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Sparkles, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes } from 'lucide-react';
+import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Sparkles, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes, ShieldCheck } from 'lucide-react';
 import { MerchantState } from './useMerchant';
 import { ThemeCustomizer } from '../ThemeCustomizer';
+import { MerchantIdentityVerification } from './MerchantIdentityVerification';
 import { cleanPhoneForWhatsApp, formatFCFA } from '../../utils/format';
 
 interface SettingsTabProps {
@@ -38,57 +39,70 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
 
           <div className="space-y-6">
             {/* Settings Sub-Tab Navigation */}
-            <div className="bg-white p-2 rounded-2xl border border-slate-200 flex flex-wrap sm:flex-nowrap items-center gap-2">
+            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 sm:grid-cols-3 lg:grid-cols-5">
               <button
                 type="button"
                 onClick={() => setSettingsSubTab('themes')}
-                className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-colors ${
+                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${
                   settingsSubTab === 'themes'
                     ? 'bg-slate-900 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 <Palette className="w-4 h-4" />
-                <span>Thèmes & Style</span>
+                <span className="truncate">Thèmes & style</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setSettingsSubTab('general')}
-                className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-colors ${
+                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${
                   settingsSubTab === 'general'
                     ? 'bg-slate-900 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 <Store className="w-4 h-4" />
-                <span>Coordonnées</span>
+                <span className="truncate">Coordonnées</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setSettingsSubTab('hours')}
-                className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-colors ${
+                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${
                   settingsSubTab === 'hours'
                     ? 'bg-slate-900 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 <Clock className="w-4 h-4" />
-                <span>Horaires d'Ouverture</span>
+                <span className="truncate">Horaires</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setSettingsSubTab('bilan')}
-                className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-colors ${
+                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${
                   settingsSubTab === 'bilan'
                     ? 'bg-slate-900 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 <Send className="w-4 h-4" />
-                <span>Flash Bilan 20h</span>
+                <span className="truncate">Flash bilan</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingsSubTab('verification')}
+                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${
+                  settingsSubTab === 'verification'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span className="truncate">Vérification</span>
               </button>
             </div>
 
@@ -100,6 +114,25 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                   setCurrentShop(updated);
                 }}
               />
+            )}
+
+            {settingsSubTab === 'verification' && currentShop && (
+              <MerchantIdentityVerification shopId={currentShop.id} />
+            )}
+
+            {settingsSubTab === 'subscription' && currentShop && (
+              <section className="max-w-3xl space-y-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+                <div>
+                  <p className="text-xs font-bold uppercase text-emerald-800">Abonnement</p>
+                  <h3 className="mt-1 text-lg font-extrabold text-slate-900">Votre formule</h3>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">Formule</span><strong className="mt-1 block capitalize text-slate-900">{currentShop.subscription?.plan || 'Standard'}</strong></div>
+                  <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">État</span><strong className="mt-1 block text-slate-900">{currentShop.subscription?.status === 'trialing' ? 'Essai gratuit' : currentShop.subscription?.status === 'active' ? 'Actif' : 'À régulariser'}</strong></div>
+                  <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">Fin de l’essai</span><strong className="mt-1 block text-slate-900">{currentShop.subscription?.trialEnd ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(currentShop.subscription.trialEnd)) : 'Non démarré'}</strong></div>
+                </div>
+                <p className="text-xs leading-5 text-slate-600">Aucun paiement n’est actuellement déclenché depuis MaTable.ci. Les formules et renouvellements seront activés après l’intégration d’un prestataire de paiement.</p>
+              </section>
             )}
 
             {/* Sub-Tab 2: GENERAL SETTINGS */}

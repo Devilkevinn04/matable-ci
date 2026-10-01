@@ -21,8 +21,10 @@ import {
 import { Shop, Product, CartItem } from '../types';
 import { formatFCFA, generateWhatsAppOrderReceipt, getProductUnitPrice } from '../utils/format';
 import { getContrastTextColor, normalizeHex } from '../utils/color';
+import { requiresShopSwitchConfirmation } from '../utils/cart';
 import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDisplay, getWelcomeMessageForDisplay } from '../utils/categoryDefaults';
 import { CategoryProductImage } from './CategoryProductImage';
+import { CustomerProductCard } from './CustomerProductCard';
 import { useToast } from './Toast';
 import { hasAnalyticsConsent } from './CookieBanner';
 import { CustomerUser } from './CustomerAuth';
@@ -35,21 +37,31 @@ interface CustomerStorefrontProps {
   onCustomerAuthenticated?: (user: CustomerUser) => void;
 }
 
-function getCartStorageKey(shopSlug: string) {
-  return `matable_cart_${shopSlug}`;
+const ACTIVE_CART_STORAGE_KEY = 'matable_active_cart';
+type CartState = { shopSlug: string; items: CartItem[] };
+
+function validCartItems(value: unknown): CartItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is CartItem =>
+    Boolean(item && typeof item === 'object' && item.product && typeof item.product.id === 'number' && Number.isInteger(item.quantity) && item.quantity > 0)
+  );
 }
 
-function readStoredCart(shopSlug: string): CartItem[] {
+function readStoredCart(shopSlug: string): CartState {
   try {
-    const storedCart = sessionStorage.getItem(getCartStorageKey(shopSlug));
-    if (!storedCart) return [];
-    const parsed: unknown = JSON.parse(storedCart);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is CartItem =>
-      Boolean(item && typeof item === 'object' && item.product && typeof item.product.id === 'number' && Number.isInteger(item.quantity) && item.quantity > 0)
-    );
+    const activeCart = sessionStorage.getItem(ACTIVE_CART_STORAGE_KEY);
+    if (activeCart) {
+      const parsed: unknown = JSON.parse(activeCart);
+      if (parsed && typeof parsed === 'object' && 'shopSlug' in parsed && 'items' in parsed) {
+        const saved = parsed as { shopSlug: unknown; items: unknown };
+        if (typeof saved.shopSlug === 'string') return { shopSlug: saved.shopSlug, items: validCartItems(saved.items) };
+      }
+    }
+
+    const legacyCart = sessionStorage.getItem(`matable_cart_${shopSlug}`);
+    return { shopSlug, items: legacyCart ? validCartItems(JSON.parse(legacyCart)) : [] };
   } catch {
-    return [];
+    return { shopSlug, items: [] };
   }
 }
 
@@ -65,14 +77,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   // Keep an in-progress cart when a customer opens another page and returns.
-  const [cartState, setCartState] = useState<{ shopSlug: string; items: CartItem[] }>(() => ({
-    shopSlug,
-    items: readStoredCart(shopSlug),
-  }));
+  const [cartState, setCartState] = useState<CartState>(() => readStoredCart(shopSlug));
   const cart = cartState.shopSlug === shopSlug ? cartState.items : [];
   const setCart: React.Dispatch<React.SetStateAction<CartItem[]>> = (update) => {
     setCartState((previous) => {
-      const currentItems = previous.shopSlug === shopSlug ? previous.items : readStoredCart(shopSlug);
+      const currentItems = previous.shopSlug === shopSlug ? previous.items : [];
       return {
         shopSlug,
         items: typeof update === 'function' ? update(currentItems) : update,
@@ -81,6 +90,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   };
   const [isCartOpen, setIsCartOpen] = useState(false);
   const cartHistoryEntry = useRef(false);
+  const [pendingShopSwitchProduct, setPendingShopSwitchProduct] = useState<Product | null>(null);
 
   // Truncation toggle map for product descriptions
   const [expandedDescriptions, setExpandedDescriptions] = useState<Record<number, boolean>>({});
@@ -101,7 +111,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCheckoutAuth, setShowCheckoutAuth] = useState(false);
   const [checkoutAuthUser, setCheckoutAuthUser] = useState<CustomerUser | null>(null);
-  const [guestCheckoutConfirmed, setGuestCheckoutConfirmed] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ orderId: number; whatsappUrl: string; whatsappText: string; whatsappTrackingToken: string } | null>(null);
   const [messageCopied, setMessageCopied] = useState(false);
   const [formStartedAt] = useState(() => Date.now());
@@ -147,14 +156,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   }, [isCartOpen]);
 
   useEffect(() => {
-    if (cartState.shopSlug !== shopSlug) {
-      setCartState({ shopSlug, items: readStoredCart(shopSlug) });
-      return;
-    }
+    if (cartState.shopSlug !== shopSlug) return;
     try {
-      const storageKey = getCartStorageKey(shopSlug);
-      if (cartState.items.length > 0) sessionStorage.setItem(storageKey, JSON.stringify(cartState.items));
-      else sessionStorage.removeItem(storageKey);
+      if (cartState.items.length > 0) sessionStorage.setItem(ACTIVE_CART_STORAGE_KEY, JSON.stringify(cartState));
+      else sessionStorage.removeItem(ACTIVE_CART_STORAGE_KEY);
     } catch {
       // The in-memory cart remains available when browser storage is disabled.
     }
@@ -330,40 +335,38 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   };
 
   // Cart actions with variant support
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, replaceOtherShop = false) => {
     if (product.stock <= 0) return;
     const currentSize = selectedSizes[product.id];
     const currentColor = selectedColors[product.id];
     const currentMods = selectedModifiers[product.id] || [];
-
-    setCart(prev => {
-      // Find matching item with same variants
-      const existingIndex = prev.findIndex(item => 
-        item.product.id === product.id &&
-        item.selected_size === currentSize &&
-        item.selected_color === currentColor &&
-        JSON.stringify(item.selected_modifiers || []) === JSON.stringify(currentMods)
+    const addProduct = (items: CartItem[]) => {
+      const existingIndex = items.findIndex((item) =>
+        item.product.id === product.id
+        && item.selected_size === currentSize
+        && item.selected_color === currentColor
+        && JSON.stringify(item.selected_modifiers || []) === JSON.stringify(currentMods)
       );
-
       if (existingIndex > -1) {
-        const existing = prev[existingIndex];
-        if (existing.quantity >= product.stock) return prev;
-        const updated = [...prev];
+        const existing = items[existingIndex];
+        if (existing.quantity >= product.stock) return items;
+        const updated = [...items];
         updated[existingIndex] = { ...existing, quantity: existing.quantity + 1 };
         return updated;
       }
+      return [...items, { product, quantity: 1, selected_size: currentSize, selected_color: currentColor, selected_modifiers: currentMods }];
+    };
 
-      return [
-        ...prev, 
-        { 
-          product, 
-          quantity: 1,
-          selected_size: currentSize,
-          selected_color: currentColor,
-          selected_modifiers: currentMods
-        }
-      ];
-    });
+    if (requiresShopSwitchConfirmation(cartState.shopSlug, shopSlug, cartState.items.length)) {
+      if (!replaceOtherShop) {
+        setPendingShopSwitchProduct(product);
+        return;
+      }
+      setCartState({ shopSlug, items: addProduct([]) });
+      return;
+    }
+
+    setCart(addProduct);
   };
 
   const updateQuantity = (index: number, delta: number) => {
@@ -403,7 +406,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       toast.error('Veuillez renseigner votre nom et votre numéro de téléphone.');
       return;
     }
-    if (!authenticatedCustomer && !guestCheckoutConfirmed) {
+    if (!authenticatedCustomer) {
       setShowCheckoutAuth(true);
       return;
     }
@@ -673,6 +676,22 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         </div>
       </header>
 
+      {pendingShopSwitchProduct && requiresShopSwitchConfirmation(cartState.shopSlug, shopSlug, cartState.items.length) && (
+        createPortal(
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingShopSwitchProduct(null); }}>
+            <section role="dialog" aria-modal="true" aria-labelledby="shop-switch-title" className="w-full max-w-md rounded-2xl border-2 border-[#211712] bg-[#fffaf2] p-5 shadow-2xl">
+              <h2 id="shop-switch-title" className="text-lg font-black text-[#211712]">Votre panier appartient à une autre boutique</h2>
+              <p className="mt-2 text-sm leading-6 text-[#4a3a30]">Pour commander chez {shop?.name}, il faut remplacer le panier de « {cartState.shopSlug} ». Votre commande restera liée à une seule boutique.</p>
+              <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button type="button" onClick={() => setPendingShopSwitchProduct(null)} className="min-h-11 rounded-xl border-2 border-[#ded8ce] bg-white px-4 text-sm font-bold text-[#211712]">Garder ce panier</button>
+                <button type="button" onClick={() => { const product = pendingShopSwitchProduct; setPendingShopSwitchProduct(null); addToCart(product, true); }} className="min-h-11 rounded-xl border-2 border-[#211712] bg-[#1d6b57] px-4 text-sm font-bold text-white">Vider et continuer</button>
+              </div>
+            </section>
+          </div>,
+          document.body,
+        )
+      )}
+
       {bannerUrl && (
         <div className="max-w-3xl mx-auto px-4 pt-4">
           <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-2xs">
@@ -936,315 +955,45 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4'
               : 'grid grid-cols-1 sm:grid-cols-2 gap-4'
           }>
-            {filteredProducts.map(product => {
-              const qtyInCart = getProductQuantityInCart(product.id);
-              const isOutOfStock = product.stock <= 0;
-              const isExpanded = expandedDescriptions[product.id];
-              const desc = product.description || '';
-              const shouldTruncate = desc.length > 130;
-
-              // Interactive selections for this product
-              const activeSize = selectedSizes[product.id];
-              const activeColor = selectedColors[product.id];
-              const activeMods = selectedModifiers[product.id] || [];
-              const selectedUnitPrice = getProductUnitPrice(product, activeMods);
-              const selectedModifierTotal = selectedUnitPrice - product.price;
-
+            {filteredProducts.map((product) => {
+              const activeModifiers = selectedModifiers[product.id] || [];
+              const cartIndex = cart.findIndex((item) => item.product.id === product.id);
               return (
-                <div 
+                <CustomerProductCard
                   key={product.id}
-                  id={`product-card-${product.id}`}
-                  className={`bg-[#fffdf9] border border-[#ded8ce] ${cardRadius} ${shadowClass} overflow-hidden flex flex-col transition-all hover:border-[#176b55] hover:-translate-y-0.5`}
-                >
-                  {/* Photo with dynamic aspect ratio */}
-                  <div className={`relative bg-slate-100 overflow-hidden ${
-                    layoutStyle === 'grid_portrait' 
-                      ? 'aspect-3/4' 
-                      : 'aspect-16/9 sm:aspect-4/3'
-                  }`}>
-                    <CategoryProductImage
-                      imageUrl={product.image_url}
-                      category={shop.category}
-                      title={product.title}
-                      className="absolute inset-0 h-full w-full transition-transform duration-500 hover:scale-105"
-                    />
-
-                    {/* Category specific badges on photo */}
-                    {product.prep_time && (
-                      <span className="absolute top-2.5 left-2.5 bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-amber-400" />
-                        <span>{product.prep_time} min</span>
-                      </span>
-                    )}
-
-                    {isOutOfStock && (
-                      <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[2px] flex items-center justify-center">
-                        <span className="bg-rose-600 text-white font-black text-xs px-3.5 py-1.5 rounded-full shadow-lg">
-                          Rupture de stock
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {product.lookbook_image && (
-                    <img
-                      src={product.lookbook_image}
-                      alt={`Lookbook de ${product.title}`}
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      className="h-24 w-full object-cover border-b border-slate-100"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  )}
-
-                  {Array.isArray(product.gallery_images) && product.gallery_images.length > 0 && (
-                    <div className="flex gap-1.5 overflow-x-auto border-b border-slate-100 p-1.5">
-                      {product.gallery_images.map((image, index) => (
-                        <img
-                          key={index}
-                          src={image}
-                          alt={`Photo ${index + 1} de ${product.title}`}
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          className="h-16 w-16 shrink-0 rounded-lg object-cover"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Card Content */}
-                  <div className="p-4 flex flex-col flex-1">
-                    {/* Title */}
-                    <h3 className="font-extrabold text-slate-900 text-base leading-snug mb-1">
-                      {product.title}
-                    </h3>
-
-                    {/* Description */}
-                    {desc ? (
-                      <div className="mb-3">
-                        <p className="text-slate-600 text-xs leading-relaxed">
-                          {shouldTruncate && !isExpanded 
-                            ? `${desc.slice(0, 130)}...` 
-                            : desc}
-                        </p>
-                        {shouldTruncate && (
-                          <button
-                            type="button"
-                            onClick={() => toggleDescription(product.id)}
-                            className="text-[11px] font-bold text-slate-800 hover:text-slate-950 flex items-center gap-0.5 mt-1"
-                          >
-                            {isExpanded ? (
-                              <><span>Moins de détails</span><ChevronUp className="w-3 h-3" /></>
-                            ) : (
-                              <><span>Détails & conseils</span><ChevronDown className="w-3 h-3" /></>
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="mb-2" />
-                    )}
-
-                    {/* Fashion: Size & Color Selectors */}
-                    {shop.category === 'fashion' && (
-                      <div className="space-y-2 mb-3 pt-2 border-t border-slate-100">
-                        {product.sizes && product.sizes.length > 0 && (
-                          <div>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                              Taille disponible :
-                            </span>
-                            <div className="flex flex-wrap gap-1.5">
-                              {product.sizes.map(size => (
-                                <button
-                                  key={size}
-                                  type="button"
-                                  onClick={() => setSelectedSizes(prev => ({ ...prev, [product.id]: size }))}
-                                  className={`py-1 px-2.5 rounded-lg text-xs font-bold border transition-all ${
-                                    activeSize === size
-                                      ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                                  }`}
-                                >
-                                  {size}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {product.colors && product.colors.length > 0 && (
-                          <div>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                              Couleur :
-                            </span>
-                            <div className="flex flex-wrap gap-1.5">
-                              {product.colors.map(col => {
-                                const colName = typeof col === 'string' ? col : col.name;
-                                return (
-                                  <button
-                                    key={colName}
-                                    type="button"
-                                    onClick={() => setSelectedColors(prev => ({ ...prev, [product.id]: colName }))}
-                                    className={`py-1 px-2.5 rounded-lg text-xs font-semibold border transition-all ${
-                                      activeColor === colName
-                                        ? 'border-slate-900 bg-slate-100 text-slate-900 font-bold ring-1 ring-slate-900'
-                                        : 'border-slate-200 bg-white text-slate-600'
-                                    }`}
-                                  >
-                                    {colName}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {product.attributes && Object.entries(product.attributes).some(([, value]) => value.trim()) && (
-                      <dl className="mb-3 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-slate-100 pt-2">
-                        {Object.entries(product.attributes).filter(([, value]) => value.trim()).map(([key, value]) => {
-                          const field = categoryDefaults.productAttributes.find((candidate) => candidate.key === key);
-                          if (!field) return null;
-                          return (
-                            <div key={key} className="min-w-0 text-xs">
-                              <dt className="text-[10px] font-semibold text-slate-400">{field.label}</dt>
-                              <dd className="truncate font-bold text-slate-700">{value}</dd>
-                            </div>
-                          );
-                        })}
-                      </dl>
-                    )}
-
-                    {/* Food: Accompaniment / Modifier Selector */}
-                    {shop.category === 'food' && product.modifier_groups && product.modifier_groups.length > 0 && (
-                      <div className="mb-3 pt-2 border-t border-slate-100">
-                        {product.modifier_groups.map(group => (
-                          <div key={group.name}>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                              {group.name} {group.max_selections && group.max_selections > 1 ? `(jusqu’à ${group.max_selections})` : '(1 choix)'} :
-                            </span>
-                            <div className="flex flex-wrap gap-1.5">
-                              {group.options.map(opt => {
-                                const optLabel = typeof opt === 'string' ? opt : opt.label;
-                                const isSelected = activeMods.includes(optLabel);
-                                return (
-                                  <button
-                                    key={optLabel}
-                                    type="button"
-                                    onClick={() => {
-                                        const maxSelections = Math.max(1, group.max_selections || 1);
-                                      setSelectedModifiers(prev => {
-                                        const current = prev[product.id] || [];
-                                        const currentForGroup = current.filter(value => group.options.some(option => (typeof option === 'string' ? option : option.label) === value));
-                                        if (!isSelected && currentForGroup.length >= maxSelections) return prev;
-                                        return {
-                                          ...prev,
-                                          [product.id]: isSelected ? current.filter(o => o !== optLabel) : [...current, optLabel],
-                                        };
-                                      });
-                                    }}
-                                    className={`py-1 px-2.5 rounded-lg text-xs font-bold border transition-all ${
-                                      isSelected
-                                        ? 'bg-[#1D6B57] text-white border-[#154F41] shadow-[2px_2px_0_rgba(21,79,65,0.2)]'
-                                        : 'bg-[#F7F3ED] text-[#211712] border-[#E4D9C8] hover:bg-[#F5EADC]'
-                                    }`}
-                                  >
-                                    {optLabel}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Price & Stock info */}
-                    <div className="mt-auto pt-2 border-t border-slate-100 flex items-baseline justify-between gap-2 mb-3">
-                      <div>
-                        <span className="text-[11px] text-slate-400 font-bold block">Prix unitaire</span>
-                        <span 
-                          className="font-black text-lg tracking-tight"
-                          style={{ color: primaryColor }}
-                        >
-                          {formatFCFA(selectedUnitPrice)}
-                        </span>
-                        {selectedModifierTotal > 0 && (
-                          <span className="mt-0.5 block text-[10px] font-medium text-slate-500">
-                            {formatFCFA(product.price)} + {formatFCFA(selectedModifierTotal)} de supplément
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="text-right">
-                        {isOutOfStock ? (
-                          <span className="inline-block text-[11px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
-                            Épuisé
-                          </span>
-                        ) : product.stock <= 3 ? (
-                          <span className="inline-block text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
-                            Plus que {product.stock} dispo
-                          </span>
-                        ) : (
-                          <span className="inline-block text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                            ✓ En stock ({product.stock})
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Add to Cart / Quantity Selector */}
-                    <div>
-                      {isOutOfStock ? (
-                        <button
-                          disabled
-                          className="w-full py-2.5 px-4 rounded-xl font-bold text-xs bg-slate-100 text-slate-400 cursor-not-allowed"
-                        >
-                          Indisponible
-                        </button>
-                      ) : qtyInCart > 0 ? (
-                        <div className="flex items-center justify-between bg-slate-100 rounded-xl p-1 border border-slate-200">
-                          <button
-                            id={`qty-minus-${product.id}`}
-                            onClick={() => {
-                              const itemIndex = cart.findIndex(i => i.product.id === product.id);
-                              if (itemIndex > -1) updateQuantity(itemIndex, -1);
-                            }}
-                            className="w-9 h-9 rounded-lg bg-white shadow-2xs flex items-center justify-center text-slate-700 font-bold hover:bg-slate-50 transition-colors"
-                            aria-label="Diminuer"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <span className="font-extrabold text-xs text-slate-900 px-2 truncate">
-                            {qtyInCart} dans le panier
-                          </span>
-                          <button
-                            id={`qty-plus-${product.id}`}
-                            onClick={() => addToCart(product)}
-                            disabled={qtyInCart >= product.stock}
-                            className="w-9 h-9 rounded-lg bg-white shadow-2xs flex items-center justify-center text-slate-700 font-bold hover:bg-slate-50 disabled:opacity-40 transition-colors"
-                            aria-label="Augmenter"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          id={`add-btn-${product.id}`}
-                          onClick={() => addToCart(product)}
-                          disabled={!shop.is_open}
-                          className="w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-white shadow-[4px_4px_0_rgba(33,23,18,0.9)] hover:opacity-95 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed border-[2px] border-[#211712]"
-                          style={{ backgroundColor: primaryColor, ...glowStyle }}
-                        >
-                          <ShoppingBag className="w-4 h-4" />
-                          <span>Ajouter au panier</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                  product={product}
+                  category={shop.category}
+                  categoryDefaults={categoryDefaults}
+                  isShopOpen={shop.is_open}
+                  layoutStyle={layoutStyle}
+                  cardRadius={cardRadius}
+                  shadowClass={shadowClass}
+                  primaryColor={primaryColor}
+                  primaryTextColor={primaryTextColor}
+                  glowStyle={glowStyle}
+                  quantityInCart={getProductQuantityInCart(product.id)}
+                  isDescriptionExpanded={Boolean(expandedDescriptions[product.id])}
+                  activeSize={selectedSizes[product.id]}
+                  activeColor={selectedColors[product.id]}
+                  activeModifiers={activeModifiers}
+                  selectedUnitPrice={getProductUnitPrice(product, activeModifiers)}
+                  onToggleDescription={() => toggleDescription(product.id)}
+                  onSelectSize={(size) => setSelectedSizes((previous) => ({ ...previous, [product.id]: size }))}
+                  onSelectColor={(color) => setSelectedColors((previous) => ({ ...previous, [product.id]: color }))}
+                  onToggleModifier={(groupName, optionLabel, maxSelections) => {
+                    const group = product.modifier_groups?.find((candidate) => candidate.name === groupName);
+                    if (!group) return;
+                    setSelectedModifiers((previous) => {
+                      const current = previous[product.id] || [];
+                      const currentForGroup = current.filter((value) => group.options.some((option) => (typeof option === 'string' ? option : option.label) === value));
+                      const isSelected = current.includes(optionLabel);
+                      if (!isSelected && currentForGroup.length >= maxSelections) return previous;
+                      return { ...previous, [product.id]: isSelected ? current.filter((value) => value !== optionLabel) : [...current, optionLabel] };
+                    });
+                  }}
+                  onAddToCart={() => addToCart(product)}
+                  onDecreaseQuantity={() => { if (cartIndex > -1) updateQuantity(cartIndex, -1); }}
+                />
               );
             })}
           </div>
@@ -1450,10 +1199,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         onCustomerAuthenticated?.(user);
                         setShowCheckoutAuth(false);
                         window.setTimeout(() => (document.getElementById('checkout-form') as HTMLFormElement | null)?.requestSubmit(), 0);
-                      }}
-                      onContinueAsGuest={() => {
-                        setGuestCheckoutConfirmed(true);
-                        setShowCheckoutAuth(false);
                       }}
                     />
                   )}

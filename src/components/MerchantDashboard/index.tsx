@@ -32,7 +32,12 @@ import {
   RotateCcw,
   Calendar,
   Upload,
-  Boxes
+  Boxes,
+  LayoutDashboard,
+  Menu,
+  ShieldCheck,
+  CreditCard,
+  MessageCircle,
 } from 'lucide-react';
 import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks } from '../../types';
 import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../../utils/format';
@@ -65,12 +70,13 @@ import { CatalogTab } from './CatalogTab';
 import { OrdersTab } from './OrdersTab';
 import { SettingsTab } from './SettingsTab';
 import { ProductModal } from './ProductModal';
+import { MerchantIdentityVerification } from './MerchantIdentityVerification';
+import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
 
 export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStorefront, onBackToDirectory, openRegistration = false }) => {
 
   const merchantState = useMerchantDashboard(onOpenStorefront, openRegistration);
-  const [quickStartStep, setQuickStartStep] = useState(0);
-  const [showQuickStart, setShowQuickStart] = useState(false);
+  const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
   const {
     addDeliveryZone,
     updateDeliveryZone,
@@ -97,7 +103,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     regEmail,
     regCategory,
     regLoading,
-    registrationLinks,
+    trialStarting,
     activeTab,
     settingsSubTab,
     products,
@@ -218,8 +224,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     handlePrivateAccessLogin,
     handleLogin,
     handleRegisterShop,
+      handleStartTrial,
     handleLogout,
     handleToggleShopStatus,
+    handlePublicationStatusChange,
     handleSaveOpeningHours,
     handleResetManualOverride,
     handleTriggerCronBilan,
@@ -235,40 +243,69 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     toast,
     loadShopData,
     syncShopSettings,
-    copyRegistrationLinks,
     copyOwnerLink
   } = merchantState;
 
   useEffect(() => {
-    if (!currentShop) {
-      setShowQuickStart(false);
-      return;
-    }
-    try {
-      setShowQuickStart(localStorage.getItem(`matable_quick_start_seen_${currentShop.id}`) !== 'true');
-    } catch {
-      setShowQuickStart(false);
-    }
-  }, [currentShop?.id]);
-
-  const closeQuickStart = () => {
-    if (currentShop) {
-      try {
-        localStorage.setItem(`matable_quick_start_seen_${currentShop.id}`, 'true');
-      } catch {
-        // The guide remains dismissible when local storage is unavailable.
-      }
-    }
-    setShowQuickStart(false);
-  };
+    if (!isSettingsDrawerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setIsSettingsDrawerOpen(false); };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isSettingsDrawerOpen]);
 
   if (!merchantState.currentShop) return <AuthScreens state={merchantState} onBackToDirectory={onBackToDirectory} />;
+
+  const merchantIdentityVerified = !merchantState.currentShop.merchant_verification_status
+    || ['not_required', 'verified'].includes(merchantState.currentShop.merchant_verification_status);
+  if (merchantState.currentShop.subscription?.status === 'not_started') {
+    return (
+      <>
+        <div className="fixed right-4 top-4 z-10 flex gap-2">
+          <button type="button" onClick={onBackToDirectory} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Annuaire</button>
+          <button type="button" onClick={handleLogout} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Déconnexion</button>
+        </div>
+        <MerchantTrialOnboarding shop={merchantState.currentShop} isStarting={trialStarting} onStart={handleStartTrial} />
+      </>
+    );
+  }
+  if (['expired', 'past_due', 'suspended', 'cancelled'].includes(merchantState.currentShop.subscription?.status || '')) {
+    return <MerchantTrialOnboarding shop={merchantState.currentShop} isStarting={false} onStart={handleStartTrial} mode="expired" />;
+  }
+  if (!merchantIdentityVerified) {
+    return (
+      <main className="merchant-pre-dashboard min-h-screen bg-[#f4f6f1] px-4 py-6 sm:px-6 sm:py-10">
+        <div className="mx-auto max-w-4xl">
+          <div className="mb-4 flex justify-end gap-2">
+            <button type="button" onClick={onBackToDirectory} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Annuaire</button>
+            <a href={`https://wa.me/2250102749775?text=${encodeURIComponent(`Bonjour, j’ai besoin d’aide pour la vérification de ${merchantState.currentShop.name}.`)}`} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-900"><MessageCircle className="h-3.5 w-3.5" />Aide</a>
+            <button type="button" onClick={handleLogout} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Déconnexion</button>
+          </div>
+          <p className="mb-4 text-sm font-bold text-slate-600">Essai gratuit · {merchantState.currentShop.subscription?.trialDaysRemaining ?? 0} jours restants</p>
+          <MerchantIdentityVerification
+            shopId={merchantState.currentShop.id}
+            onStatusChange={(status) => setCurrentShop((shop) => shop ? { ...shop, merchant_verification_status: status.status as Shop['merchant_verification_status'] } : null)}
+          />
+        </div>
+      </main>
+    );
+  }
 
   // 2. AUTHENTICATED -> MERCHANT DASHBOARD
   const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
   const avgBasket = orders.length > 0 ? Math.round(totalRevenue / orders.length) : 0;
   const lowStockCount = products.filter(p => p.stock > 0 && p.stock <= 3).length;
   const outOfStockCount = products.filter(p => p.stock === 0).length;
+  const isShopVerified = !currentShop.merchant_verification_status || ['not_required', 'verified'].includes(currentShop.merchant_verification_status);
+  const hasActiveSubscription = currentShop.subscription?.isActive !== false;
+  const isShopPublished = hasActiveSubscription && (currentShop.publication_status
+    ? currentShop.publication_status === 'active'
+    : currentShop.is_active && isShopVerified);
+  const isShopLaunchReady = isShopPublished;
 
   // Filter products for catalog tab
   const filteredProducts = products.filter(p => {
@@ -322,47 +359,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   return (
     <div className="merchant-dashboard min-h-screen pb-20">
-      {showQuickStart && (
-        <div className="fixed inset-0 z-50 flex h-screen max-h-screen items-start justify-center overflow-y-auto bg-[#211712]/55 px-4 py-6 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-labelledby="quick-start-title">
-          <section className="w-full max-w-lg overflow-hidden rounded-2xl border-[3px] border-[#211712] bg-[#fffaf2] shadow-[8px_8px_0_rgba(33,23,18,0.9)]">
-            <div className="flex items-center justify-between gap-3 bg-[#1d6b57] px-5 py-4 text-white">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#f7e7c7]">Premiers pas</p>
-                <h2 id="quick-start-title" className="mt-1 text-xl font-black">Bienvenue sur MaTable 👋</h2>
-              </div>
-              <button type="button" onClick={closeQuickStart} className="rounded-full px-2 py-1 text-sm font-bold text-white/80 hover:bg-white/10">Passer</button>
-            </div>
-            <div className="p-5 sm:p-6">
-              {[
-                { title: 'Votre boutique', text: 'Vérifiez son nom, sa description, son logo et ses horaires.', icon: <Store className="h-6 w-6" /> },
-                { title: 'Vos produits', text: 'Ajoutez vos articles avec un prix, une photo et un stock.', icon: <Package className="h-6 w-6" /> },
-                { title: 'Recevez des commandes', text: 'Vos clients commandent depuis votre vitrine et vous les contactez sur WhatsApp.', icon: <ShoppingBag className="h-6 w-6" /> },
-                { title: 'Partagez votre lien', text: 'Diffusez votre vitrine sur WhatsApp, Instagram ou Facebook.', icon: <Send className="h-6 w-6" /> },
-              ].map((step, index) => index === quickStartStep && (
-                <div key={step.title} className="animate-in fade-in duration-200">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#edf7f2] text-[#155c3d]">{step.icon}</div>
-                  <p className="mt-5 text-xs font-black uppercase tracking-[0.14em] text-[#e6572b]">Étape {index + 1} sur 4</p>
-                  <h3 className="mt-2 text-2xl font-black text-[#211712]">{step.title}</h3>
-                  <p className="mt-2 max-w-md text-sm leading-6 text-[#68756c]">{step.text}</p>
-                </div>
-              ))}
-              <div className="mt-6 flex gap-1.5" aria-label="Progression du guide">
-                {[0, 1, 2, 3].map((step) => <span key={step} className={`h-1.5 flex-1 rounded-full ${step <= quickStartStep ? 'bg-[#155c3d]' : 'bg-[#ded8ce]'}`} />)}
-              </div>
-              <div className="mt-5 flex items-center justify-between gap-3">
-                <button type="button" onClick={() => setQuickStartStep((step) => Math.max(0, step - 1))} disabled={quickStartStep === 0} className="rounded-full px-4 py-2 text-sm font-bold text-[#68756c] disabled:invisible">Retour</button>
-                <button type="button" onClick={() => quickStartStep === 3 ? closeQuickStart() : setQuickStartStep((step) => step + 1)} className="rounded-full bg-[#0f4d3d] px-5 py-3 text-sm font-black text-white hover:bg-[#176b55]">
-                  {quickStartStep === 3 ? 'Commencer' : 'Suivant'} <ChevronRight className="ml-1 inline h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </section>
-        </div>
-      )}
       {/* Top Shop Control Bar */}
       <div className="bg-[#fffaf2] border-b-[3px] border-[#211712] sticky top-0 z-30 shadow-[0_8px_0_rgba(33,23,18,0.08)]">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="mx-auto grid max-w-5xl gap-3 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
             {currentShop.theme_config?.logo_url ? (
               <img
                 src={currentShop.theme_config.logo_url}
@@ -383,8 +383,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
                   {getCategoryDefaults(currentShop.category).icon} {getCategoryDefaults(currentShop.category).label}
                 </span>
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  GRATUIT
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${currentShop.subscription?.status === 'trialing' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : currentShop.subscription?.status === 'expired' ? 'bg-rose-50 text-rose-800 border-rose-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                  {currentShop.subscription?.status === 'trialing' ? `ESSAI · ${currentShop.subscription.trialDaysRemaining} j` : currentShop.subscription?.status === 'expired' ? 'ESSAI TERMINÉ' : 'ABONNÉE'}
                 </span>
               </div>
               <p className="truncate text-xs text-slate-500">
@@ -393,49 +393,49 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             </div>
           </div>
 
-          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-            {/* Open/Close toggle */}
+          <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3">
             <button
               onClick={handleToggleShopStatus}
-              className={`flex flex-1 justify-center py-2 px-3.5 rounded-xl font-bold text-xs items-center gap-1.5 transition-colors sm:flex-none ${
+              className={`flex min-h-11 min-w-0 w-full items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-center text-[11px] font-bold transition-colors sm:text-xs ${
                 currentShop.is_open
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
                   : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
               }`}
             >
-              <span className={`w-2 h-2 rounded-full ${currentShop.is_open ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-              <span>{currentShop.is_open ? 'Boutique Ouverte' : 'Boutique Fermée'}</span>
+              <span className={`h-2 w-2 shrink-0 rounded-full ${currentShop.is_open ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+              <span className="truncate">{currentShop.is_open ? 'Boutique ouverte' : 'Boutique fermée'}</span>
             </button>
 
-            {/* View storefront preview */}
-            <button
-              onClick={() => onOpenStorefront(currentShop.slug)}
-              className="flex flex-1 justify-center py-2 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs items-center gap-1.5 transition-colors shadow-2xs sm:flex-none"
-            >
-              <span>Voir ma vitrine</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => copyOwnerLink('public')}
-              className="flex flex-1 justify-center py-2 px-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-bold text-xs items-center gap-1.5 transition-colors sm:flex-none"
-            >
-              <Copy className="w-3.5 h-3.5" /> Copier vitrine
-            </button>
-
-            <button
-              type="button"
-              onClick={() => copyOwnerLink('private')}
-              className="flex flex-1 justify-center py-2 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs items-center gap-1.5 transition-colors sm:flex-none"
-            >
-              <Key className="w-3.5 h-3.5" /> Copier accès
-            </button>
+            {!isShopVerified ? (
+              <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('verification'); }} className="flex min-h-11 min-w-0 w-full items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-2 py-2 text-center text-[11px] font-bold text-amber-950 transition-colors hover:bg-amber-100 sm:text-xs">
+                <span className="truncate">Identité à vérifier</span>
+              </button>
+            ) : !hasActiveSubscription ? (
+              <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="flex min-h-11 min-w-0 w-full items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-2 py-2 text-center text-[11px] font-bold text-amber-950 transition-colors hover:bg-amber-100 sm:text-xs">
+                Abonnement requis
+              </button>
+            ) : isShopPublished ? (
+              <button
+                onClick={() => onOpenStorefront(currentShop.slug)}
+                className="flex min-h-11 min-w-0 w-full items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-2 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-slate-800 sm:text-xs"
+              >
+                <span className="truncate">Voir ma vitrine</span>
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handlePublicationStatusChange('active')}
+                className="flex min-h-11 min-w-0 w-full items-center justify-center rounded-xl bg-slate-900 px-2 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-slate-800 sm:text-xs"
+              >
+                <span className="truncate">Publier ma boutique</span>
+              </button>
+            )}
 
             {/* Logout button */}
             <button
               onClick={handleLogout}
-              className="flex-1 py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-colors sm:flex-none"
+              className="min-h-11 min-w-0 w-full truncate rounded-xl border border-slate-200 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition-colors hover:bg-slate-100 sm:text-xs"
               title="Se déconnecter"
             >
               Déconnexion
@@ -466,103 +466,140 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         )}
       </div>
 
-      {registrationLinks && (
-        <div className="max-w-5xl mx-auto px-4 pt-5">
-          <div className="rounded-[1.6rem] border-[3px] border-[#211712] bg-gradient-to-r from-[#edf7f2] via-[#fffaf2] to-[#edf2fb] p-4 shadow-[5px_5px_0_rgba(33,23,18,0.96)]">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="font-black text-emerald-950 text-sm">Votre boutique est créée</h2>
-                <p className="text-xs text-emerald-800 mt-1">Conservez votre lien vitrine et votre espace privé. Votre boutique est disponible dès maintenant.</p>
-              </div>
-            </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-              <a href={registrationLinks.publicUrl} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-900 text-xs font-bold">Voir ma vitrine</a>
-              <button type="button" onClick={() => navigator.clipboard.writeText(registrationLinks.publicUrl).then(() => toast.success('Lien vitrine copié.')).catch(() => toast.error('La copie a échoué.'))} className="px-3 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-900 text-xs font-bold">Copier la vitrine</button>
-              <button type="button" onClick={() => navigator.clipboard.writeText(registrationLinks.privateUrl).then(() => toast.success('Lien privé copié.')).catch(() => toast.error('La copie a échoué.'))} className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold">Copier l’accès</button>
-              <a href={registrationLinks.whatsappUrl} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold">Partager sur WhatsApp</a>
-              {registrationLinks.emailUrl && <a href={registrationLinks.emailUrl} className="px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold">Préparer un email</a>}
-              <button type="button" onClick={copyRegistrationLinks} className="px-3 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-900 text-xs font-bold">Copier les liens d’accès</button>
-            </div>
-          </div>
+      {currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining <= 10 && (
+        <div className={`flex flex-col gap-2 border-t px-4 py-2 text-xs font-semibold sm:flex-row sm:items-center sm:justify-between ${currentShop.subscription.trialDaysRemaining <= 1 ? 'border-rose-200 bg-rose-50 text-rose-950' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
+          <span>{currentShop.subscription.trialDaysRemaining <= 1 ? 'Votre essai se termine demain.' : `Votre essai se termine dans ${currentShop.subscription.trialDaysRemaining} jours.`} Les paiements ne sont pas encore activés.</span>
+          <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="self-start font-extrabold underline underline-offset-2 sm:self-auto">Voir mon forfait</button>
         </div>
       )}
 
       <div className="max-w-5xl mx-auto px-4 pt-5">
         <section className="rounded-2xl border-2 border-[#211712] bg-[#fffaf2] p-4 shadow-[4px_4px_0_rgba(33,23,18,0.18)]" aria-labelledby="setup-checklist-title">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#e6572b]">Mise en route</p>
-              <h2 id="setup-checklist-title" className="mt-1 text-base font-black text-[#211712]">Votre boutique est presque prête</h2>
-            </div>
-            <span className="self-start rounded-full bg-[#edf7f2] px-3 py-1 text-xs font-black text-[#155c3d] sm:self-auto">
-              {[Boolean(currentShop.name), Boolean(currentShop.theme_config?.logo_url), products.length > 0, products.length >= 3, currentShop.is_open, Boolean(registrationLinks)].filter(Boolean).length}/6 étapes
-            </span>
-          </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              { label: 'Ajouter le nom de ma boutique', done: Boolean(currentShop.name), action: () => setActiveTab('settings') },
-              { label: 'Ajouter une photo ou un logo', done: Boolean(currentShop.theme_config?.logo_url), action: () => setActiveTab('settings') },
-              { label: 'Ajouter mon premier produit', done: products.length > 0, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
-              { label: 'Ajouter au moins 3 produits', done: products.length >= 3, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
-              { label: 'Publier ma boutique', done: currentShop.is_open, action: handleToggleShopStatus },
-              { label: 'Partager ma boutique', done: Boolean(registrationLinks), action: () => copyOwnerLink('public') },
-            ].map((step) => (
-              <button key={step.label} type="button" onClick={step.action} className="flex items-center gap-2 rounded-xl border border-[#ded8ce] bg-white px-3 py-2.5 text-left text-xs font-bold text-[#34463d] transition hover:border-[#176b55] hover:bg-[#edf7f2]">
-                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${step.done ? 'bg-[#155c3d] text-white' : 'border-2 border-[#b7c1b9] text-transparent'}`}>
-                  <Check className="h-3 w-3" aria-hidden="true" />
+          <details className="group">
+            <summary className="flex cursor-pointer list-none flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#e6572b]">Mise en route</p>
+                <h2 id="setup-checklist-title" className="mt-1 text-base font-black text-[#211712]">Votre boutique est presque prête</h2>
+              </div>
+              <div className="flex items-center gap-3 self-start sm:self-auto">
+                <span className="rounded-full bg-[#edf7f2] px-3 py-1 text-xs font-black text-[#155c3d]">
+                  {[Boolean(currentShop.name), Boolean(currentShop.theme_config?.logo_url), products.length > 0, products.length >= 3, isShopLaunchReady, isShopPublished].filter(Boolean).length}/6 étapes
                 </span>
-                <span>{step.label}</span>
-              </button>
-            ))}
-          </div>
+                <span className="text-xs font-bold text-[#176b55] group-open:hidden">Voir les étapes</span>
+                <span className="hidden text-xs font-bold text-[#176b55] group-open:inline">Masquer</span>
+                <ChevronRight className="h-4 w-4 text-[#176b55] transition-transform group-open:rotate-90" />
+              </div>
+            </summary>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                { label: 'Ajouter le nom de ma boutique', done: Boolean(currentShop.name), action: () => { setActiveTab('settings'); setSettingsSubTab('general'); } },
+                { label: 'Ajouter une photo ou un logo', done: Boolean(currentShop.theme_config?.logo_url), action: () => { setActiveTab('settings'); setSettingsSubTab('themes'); } },
+                { label: 'Ajouter mon premier produit', done: products.length > 0, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
+                { label: 'Ajouter au moins 3 produits', done: products.length >= 3, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
+                {
+                  label: !isShopVerified
+                    ? 'Vérifier mon identité'
+                    : !hasActiveSubscription
+                      ? 'Abonnement requis'
+                      : isShopPublished ? 'Boutique publiée' : 'Publier ma boutique',
+                  done: isShopLaunchReady,
+                  action: !isShopVerified
+                    ? () => { setActiveTab('settings'); setSettingsSubTab('verification'); }
+                    : !hasActiveSubscription
+                      ? () => { setSettingsSubTab('subscription'); setActiveTab('settings'); }
+                      : isShopPublished
+                        ? () => onOpenStorefront(currentShop.slug)
+                        : () => void handlePublicationStatusChange('active'),
+                },
+                { label: 'Partager ma boutique', done: isShopPublished, action: () => isShopPublished ? copyOwnerLink('public') : toast.error('Publiez votre boutique avant de partager son lien public.') },
+              ].map((step) => (
+                <button key={step.label} type="button" onClick={step.action} className="flex min-h-11 items-center gap-2 rounded-xl border border-[#ded8ce] bg-white px-3 py-2.5 text-left text-xs font-bold text-[#34463d] transition hover:border-[#176b55] hover:bg-[#edf7f2]">
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${step.done ? 'bg-[#155c3d] text-white' : 'border-2 border-[#b7c1b9] text-transparent'}`}>
+                    <Check className="h-3 w-3" aria-hidden="true" />
+                  </span>
+                  <span>{step.label}</span>
+                </button>
+              ))}
+            </div>
+          </details>
         </section>
       </div>
 
       {/* Main Container */}
       <div className="max-w-5xl mx-auto px-4 py-6">
-        {/* Navigation Tabs */}
-        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 border-b-[2px] border-[#211712]">
-          <button
-            onClick={() => setActiveTab('catalog')}
-            className={`py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all shrink-0 border-[2px] ${
-              activeTab === 'catalog'
-                ? 'bg-[#1b3a63] text-white border-[#211712] shadow-[3px_3px_0_rgba(33,23,18,0.95)]'
-                : 'bg-[#fffaf2] text-[#211712] border-[#211712] hover:bg-white'
-            }`}
-          >
-            <Package className="w-4 h-4" />
-            <span>Catalogue ({products.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('orders')}
-            className={`py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all shrink-0 border-[2px] ${
-              activeTab === 'orders'
-                ? 'bg-[#1b3a63] text-white border-[#211712] shadow-[3px_3px_0_rgba(33,23,18,0.95)]'
-                : 'bg-[#fffaf2] text-[#211712] border-[#211712] hover:bg-white'
-            }`}
-          >
-            <ShoppingBag className="w-4 h-4" />
-            <span>Commandes ({orders.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all shrink-0 border-[2px] ${
-              activeTab === 'settings'
-                ? 'bg-[#1b3a63] text-white border-[#211712] shadow-[3px_3px_0_rgba(33,23,18,0.95)]'
-                : 'bg-[#fffaf2] text-[#211712] border-[#211712] hover:bg-white'
-            }`}
-          >
-            <Palette className="w-4 h-4" />
-            <span>Thème & Paramètres</span>
-          </button>
+        <div className="mb-6 border-b-[2px] border-[#211712] pb-3">
+          <nav aria-label="Navigation principale commerçant" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { id: 'overview' as const, label: 'Accueil', icon: LayoutDashboard },
+              { id: 'catalog' as const, label: `Catalogue (${products.length})`, icon: Package },
+              { id: 'orders' as const, label: `Commandes (${orders.length})`, icon: ShoppingBag },
+            ].map(({ id, label, icon: Icon }) => (
+              <button key={id} type="button" onClick={() => setActiveTab(id)} className={`flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border-[2px] px-2 py-2.5 text-center text-xs font-bold transition-all sm:px-3 sm:text-sm ${activeTab === id ? 'border-[#211712] bg-[#1b3a63] text-white shadow-[3px_3px_0_rgba(33,23,18,0.95)]' : 'border-[#211712] bg-[#fffaf2] text-[#211712] hover:bg-white'}`}>
+                <Icon className="h-4 w-4 shrink-0" /><span className="truncate">{label}</span>
+              </button>
+            ))}
+            <button type="button" aria-expanded={isSettingsDrawerOpen} onClick={() => setIsSettingsDrawerOpen(true)} className="inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border-[2px] border-[#211712] bg-[#fffaf2] px-3 py-2.5 text-xs font-bold text-[#211712] transition hover:bg-white sm:text-sm">
+              <Menu className="h-4 w-4 shrink-0" /><span>Menu</span>
+            </button>
+          </nav>
         </div>
+
+        {activeTab === 'overview' && (
+          <section className="space-y-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div><p className="text-xs font-bold uppercase text-[#176b55]">Vue d’ensemble</p><h2 className="mt-1 text-xl font-black text-[#211712]">Bonjour, {currentShop.name}</h2><p className="mt-1 text-sm text-slate-600">Votre espace de travail pour aujourd’hui.</p></div>
+              <span className={`self-start rounded-full px-3 py-1.5 text-xs font-extrabold ${isShopPublished ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-950'}`}>{isShopPublished ? 'Boutique publiée' : !isShopVerified ? 'Vérification en cours' : 'Boutique en brouillon'}</span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { label: 'Commandes', value: orders.length },
+                { label: 'Articles au catalogue', value: `${products.length}${currentShop.subscription?.status === 'trialing' ? '/6' : ''}` },
+                { label: 'Essai restant', value: currentShop.subscription?.status === 'trialing' ? `${currentShop.subscription.trialDaysRemaining} jours` : '—' },
+                { label: 'Ouverture commerciale', value: currentShop.is_open ? 'Ouverte' : 'Fermée' },
+              ].map((metric) => <div key={metric.label} className="rounded-xl border border-[#dce4dc] bg-white p-4"><p className="text-xs font-semibold text-slate-500">{metric.label}</p><strong className="mt-2 block text-xl font-black text-[#211712]">{metric.value}</strong></div>)}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => { setActiveTab('catalog'); if (!(currentShop.subscription?.status === 'trialing' && products.length >= 6)) handleOpenAddModal(); }} disabled={currentShop.subscription?.status === 'trialing' && products.length >= 6} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#0f4d3d] px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />Ajouter un article</button>
+              <button type="button" onClick={() => setActiveTab('orders')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800"><ShoppingBag className="h-4 w-4" />Consulter les commandes</button>
+            </div>
+          </section>
+        )}
 
         {activeTab === 'catalog' && <CatalogTab state={merchantState} filteredProducts={filteredProducts} />}
         {activeTab === 'orders' && <OrdersTab state={merchantState} filteredOrders={filteredOrders} totalRevenue={totalRevenue} avgBasket={avgBasket} />}
         {activeTab === 'settings' && <SettingsTab state={merchantState} />}
       </div>
+
+      {isSettingsDrawerOpen && (
+        <div className="fixed inset-0 z-[70]">
+          <button type="button" aria-label="Fermer le menu" onClick={() => setIsSettingsDrawerOpen(false)} className="absolute inset-0 bg-[#211712]/55" />
+          <aside role="dialog" aria-modal="true" aria-labelledby="merchant-menu-title" className="absolute inset-y-0 right-0 flex h-dvh w-full flex-col overflow-y-auto border-l-[3px] border-[#211712] bg-[#fffaf2] p-5 shadow-2xl sm:w-1/2">
+            <header className="flex items-start justify-between gap-3 border-b border-[#ded8ce] pb-4">
+              <div><p className="text-[10px] font-black uppercase text-[#e6572b]">MaTable.ci</p><h2 id="merchant-menu-title" className="mt-1 text-xl font-black text-[#211712]">Ma boutique</h2></div>
+              <button type="button" onClick={() => setIsSettingsDrawerOpen(false)} aria-label="Fermer le menu" className="rounded-lg border border-slate-300 bg-white p-2 text-slate-700"><X className="h-4 w-4" /></button>
+            </header>
+            <nav className="mt-5 space-y-5" aria-label="Réglages et services">
+              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Boutique</p><div className="space-y-1">
+                {[
+                  ['themes', 'Apparence', Palette],
+                  ['general', 'Informations & livraison', Store],
+                  ['hours', 'Horaires', Clock],
+                ].map(([tab, label, Icon]) => <button key={tab as string} type="button" onClick={() => { setSettingsSubTab(tab as typeof settingsSubTab); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><Icon className="h-4 w-4 text-emerald-800" />{label as string}</button>)}
+              </div></div>
+              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Vérification</p><button type="button" onClick={() => { setSettingsSubTab('verification'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><ShieldCheck className="h-4 w-4 text-emerald-800" />Identité</button></div>
+              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Abonnement</p><button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><CreditCard className="h-4 w-4 text-emerald-800" />Mon forfait</button></div>
+              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Analyse</p><button type="button" onClick={() => { setSettingsSubTab('bilan'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><Send className="h-4 w-4 text-emerald-800" />Bilan WhatsApp</button></div>
+              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Partage</p>
+                <button type="button" disabled={!isShopPublished} onClick={() => void copyOwnerLink('public')} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-45"><Copy className="h-4 w-4 text-emerald-800" />Lien vitrine</button>
+                <button type="button" onClick={() => void copyOwnerLink('private')} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><Key className="h-4 w-4 text-emerald-800" />Lien d’accès privé</button>
+                {!isShopPublished && <p className="px-3 text-[11px] leading-5 text-slate-500">Le lien public sera disponible après publication.</p>}
+              </div>
+            </nav>
+            <a href={`https://wa.me/2250102749775?text=${encodeURIComponent(`Bonjour, j’ai besoin d’aide pour la boutique ${currentShop.name}.`)}`} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"><MessageCircle className="h-4 w-4" />Aide et assistance</a>
+            <button type="button" onClick={handleLogout} className="mt-auto flex min-h-11 items-center gap-3 border-t border-[#ded8ce] pt-4 text-sm font-bold text-rose-800"><X className="h-4 w-4" />Déconnexion</button>
+          </aside>
+        </div>
+      )}
       <ProductModal state={merchantState} />
     </div>
   );

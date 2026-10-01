@@ -32,6 +32,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
   } = state;
   const lowStockCount = products.filter((product) => product.stock > 0 && product.stock <= 3).length;
   const outOfStockCount = products.filter((product) => product.stock === 0).length;
+  const trialCatalogLimited = currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0;
+  const trialCatalogFull = trialCatalogLimited && products.length >= 6;
 
   return (
     <>
@@ -43,17 +45,19 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
               <div>
                 <h2 className="text-lg font-black text-slate-900">Articles du catalogue</h2>
                 <p className="text-xs text-slate-500">
-                  {getCategoryDefaults(currentShop.category).catalogDescription}
+                  {trialCatalogLimited ? `Essai gratuit · ${products.length}/6 articles · ${currentShop.subscription?.trialDaysRemaining} jours restants` : getCategoryDefaults(currentShop.category).catalogDescription}
                 </p>
               </div>
 
               <button
                 id="add-product-modal-btn"
                 onClick={handleOpenAddModal}
-                className="py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors self-start sm:self-auto"
+                disabled={trialCatalogFull}
+                title={trialCatalogFull ? 'La période d’essai est limitée à 6 articles.' : undefined}
+                className="py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors self-start sm:self-auto disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <Plus className="w-4 h-4" />
-                <span>Ajouter un article</span>
+                <span>{trialCatalogFull ? 'Limite d’essai atteinte' : 'Ajouter un article'}</span>
               </button>
             </div>
 
@@ -153,10 +157,12 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                 </p>
                 <button
                   onClick={handleOpenAddModal}
-                  className="py-2.5 px-4 rounded-xl bg-slate-900 text-white font-bold text-xs inline-flex items-center gap-1.5"
+                  disabled={trialCatalogFull}
+                  title={trialCatalogFull ? 'La période d’essai est limitée à 6 articles.' : undefined}
+                  className="py-2.5 px-4 rounded-xl bg-slate-900 text-white font-bold text-xs inline-flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>{products.length === 0 && !catalogSearch && catalogFilter === 'all' ? 'Ajouter mon premier produit' : 'Ajouter un article'}</span>
+                  <span>{trialCatalogFull ? 'Limite d’essai atteinte' : products.length === 0 && !catalogSearch && catalogFilter === 'all' ? 'Ajouter mon premier produit' : 'Ajouter un article'}</span>
                 </button>
               </div>
             ) : (

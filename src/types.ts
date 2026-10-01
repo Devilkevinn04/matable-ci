@@ -2,8 +2,8 @@ import type { ShopCategory } from './utils/categoryDefaults';
 export type { ShopCategory } from './utils/categoryDefaults';
 // Legacy tier identifiers remain accepted for compatibility with older records,
 // while the V2 product experience stays free and not gated by tiers.
-export type SubscriptionTier = 'standard';
-export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'cancelled' | 'expired' | 'suspended';
+export type SubscriptionTier = 'standard' | 'premium' | 'pro';
+export type SubscriptionStatus = 'not_started' | 'trialing' | 'active' | 'past_due' | 'cancelled' | 'expired' | 'suspended';
 
 export interface ThemeAdvancedCSS {
   borderRadius?: 'rounded-none' | 'rounded-xl' | 'rounded-2xl' | 'rounded-3xl';
@@ -62,6 +62,8 @@ export interface Shop {
   welcome_message: string | null;
   is_open: boolean;
   is_active: boolean;
+  publication_status?: 'draft' | 'active' | 'suspended';
+  merchant_verification_status?: 'not_required' | 'pending' | 'submitted' | 'under_review' | 'verified' | 'rejected';
   last_notification_sent_at: string | null;
   created_at: string;
   category: ShopCategory;

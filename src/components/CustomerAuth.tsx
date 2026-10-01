@@ -5,6 +5,8 @@ import { AuthExperienceLayout } from './AuthExperienceLayout';
 export interface CustomerUser {
   id: number;
   name: string;
+  first_name: string;
+  last_name: string;
   phone: string;
   email: string;
   created_at: string;
@@ -12,16 +14,18 @@ export interface CustomerUser {
 
 interface CustomerAuthProps {
   initialMode?: 'login' | 'register';
+  onModeChange: (mode: 'login' | 'register') => void;
   onAuthenticated: (user: CustomerUser) => void;
   onBack: () => void;
   onMerchantLogin: () => void;
   onMerchantRegister: () => void;
 }
 
-export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login', onAuthenticated, onBack, onMerchantLogin, onMerchantRegister }) => {
+export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login', onModeChange, onAuthenticated, onBack, onMerchantLogin, onMerchantRegister }) => {
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [accountType, setAccountType] = useState<'customer' | 'merchant'>('customer');
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('+225');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,7 +43,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(mode === 'login' ? { email, password } : { name, phone: normalizeCustomerPhone(phone), email, password }),
+        body: JSON.stringify(mode === 'login' ? { email, password } : { first_name: firstName, last_name: lastName, phone: normalizeCustomerPhone(phone), email, password }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de terminer la demande.');
@@ -55,7 +59,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
     setMode(nextMode);
     setAccountType('customer');
     setError('');
-    window.history.pushState({}, '', nextMode === 'login' ? '/connexion' : '/inscription');
+    onModeChange(nextMode);
   };
 
   return (
@@ -96,7 +100,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-4">
-          {mode === 'register' && <label className="block text-sm font-semibold text-[#34463d]">Nom complet<input value={name} onChange={(event) => setName(event.target.value)} required autoComplete="name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="Votre nom et prénom" /></label>}
+          {mode === 'register' && <div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm font-semibold text-[#34463d]">Prénom<input value={firstName} onChange={(event) => setFirstName(event.target.value)} required autoComplete="given-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="Votre prénom" /></label><label className="block text-sm font-semibold text-[#34463d]">Nom<input value={lastName} onChange={(event) => setLastName(event.target.value)} required autoComplete="family-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="Votre nom" /></label></div>}
           {mode === 'register' && <label className="block text-sm font-semibold text-[#34463d]">Numéro de téléphone<input type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="tel" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="+225 07 00 00 00 00" /></label>}
           <label className="block text-sm font-semibold text-[#34463d]">Adresse e-mail<div className="relative mt-1.5"><Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#869188]" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-11 pr-4 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="vous@exemple.ci" /></div></label>
           <label className="block text-sm font-semibold text-[#34463d]">Mot de passe<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="8 caractères minimum" /></label>

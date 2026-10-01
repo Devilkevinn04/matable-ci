@@ -54,6 +54,59 @@ function uniquePhone() {
   return `+22507${suffix}`.slice(0, 15);
 }
 
+function uniqueEmail() {
+  return `merchant-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+}
+
+async function submitAndApproveShop(shopId: number, merchantCookie: string) {
+  const trialStart = await fetch(`${BASE_URL}/api/shops/${shopId}/start-trial`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier: 'standard' }),
+  });
+  assert.equal(trialStart.status, 200, await trialStart.text());
+  const testPng = `data:image/png;base64,${Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from([0])]).toString('base64')}`;
+  const submission = await fetch(`${BASE_URL}/api/shops/${shopId}/identity-verification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ document_type: 'cni', document_number: `CI${shopId}${Date.now()}`, document_image: testPng, document_back_image: testPng, selfie_image: testPng, face_distance: 0.42, identity_data: { first_name: 'Test', last_name: 'Marchand' } }),
+  });
+  assert.equal(submission.status, 201, await submission.text());
+  const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'super-admin-demo-key' }),
+  });
+  assert.equal(adminLogin.status, 200);
+  const adminCookie = adminLogin.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(adminCookie);
+  const decision = await fetch(`${BASE_URL}/api/admin/identity-verifications/${shopId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: JSON.stringify({ status: 'verified' }),
+  });
+  assert.equal(decision.status, 200, await decision.text());
+  const publication = await fetch(`${BASE_URL}/api/shops/${shopId}/publication-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ publication_status: 'active' }),
+  });
+  assert.equal(publication.status, 200, await publication.text());
+}
+
+async function loginAndApproveShop(shop: { id: number; owner_access_token: string }): Promise<string> {
+  const login = await fetch(`${BASE_URL}/api/auth/merchant-access-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: shop.owner_access_token }),
+  });
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(cookie);
+  await submitAndApproveShop(shop.id, cookie);
+  return cookie;
+}
+
 test('public directory shows active shops from the local onboarding flow', async () => {
   const publicShops = await fetch(`${BASE_URL}/api/shops`);
   assert.equal(publicShops.status, 200);
@@ -63,12 +116,14 @@ test('public directory shows active shops from the local onboarding flow', async
   assert.ok(payload.every((shop: any) => shop.is_active === true));
 
   const newPhone = uniquePhone();
+  const ownerEmail = uniqueEmail();
   const created = await fetch(`${BASE_URL}/api/shops`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: 'Boutique privée de test',
       whatsapp_number: newPhone,
+      email: ownerEmail,
       pin_code: '456789',
       category: 'fashion',
       city: 'Abidjan',
@@ -78,16 +133,54 @@ test('public directory shows active shops from the local onboarding flow', async
   assert.equal(created.status, 200);
   const createdShop = await created.json();
   assert.match(String(createdShop.message), /Boutique créée/i);
+  assert.equal(createdShop.shop.owner_email, undefined);
+  const testDb = new Database(TEST_DB_PATH);
+  try {
+    const savedShop = testDb.prepare('SELECT owner_email FROM shops WHERE id = ?').get(createdShop.shop.id) as { owner_email: string };
+    assert.equal(savedShop.owner_email, ownerEmail);
+  } finally {
+    testDb.close();
+  }
 
   const directoryAfterCreate = await fetch(`${BASE_URL}/api/shops`);
   const directoryPayload = await directoryAfterCreate.json();
   const found = directoryPayload.find((shop: any) => shop.slug === createdShop.shop.slug);
-  assert.ok(found);
+  assert.equal(found, undefined, 'Pending shops must not appear in the public directory');
 
   const publicBySlug = await fetch(`${BASE_URL}/api/shops/${createdShop.shop.slug}`);
-  assert.equal(publicBySlug.status, 200);
-  const publicData = await publicBySlug.json();
-  assert.equal(publicData.shop.is_active, true);
+  assert.equal(publicBySlug.status, 404);
+  const sitemap = await fetch(`${BASE_URL}/sitemap.xml`);
+  assert.equal((await sitemap.text()).includes(createdShop.shop.slug), false, 'Pending shops must not appear in the public sitemap');
+});
+
+test('global security headers are present and API responses are not cached', async () => {
+  const response = await fetch(`${BASE_URL}/api/health`);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(response.headers.get('x-frame-options'), 'DENY');
+  assert.equal(response.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+  assert.equal(response.headers.get('permissions-policy'), 'camera=(self), microphone=(), geolocation=()');
+  assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin');
+  assert.match(response.headers.get('cache-control') || '', /no-store/);
+  assert.equal(response.headers.get('x-powered-by'), null);
+});
+
+test('robots and sitemap routes are served by the SEO router', async () => {
+  const robots = await fetch(`${BASE_URL}/robots.txt`);
+  assert.equal(robots.status, 200);
+  assert.match(await robots.text(), /Sitemap: .*\/sitemap\.xml/);
+
+  const sitemap = await fetch(`${BASE_URL}/sitemap.xml`);
+  assert.equal(sitemap.status, 200);
+  assert.match(sitemap.headers.get('content-type') || '', /application\/xml/);
+  assert.match(await sitemap.text(), /<urlset/);
+});
+
+test('merchant access-link pages are not cached and do not leak their URL as referrer', async () => {
+  const response = await fetch(`${BASE_URL}/app?access=one-time-secret`);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('cache-control') || '', /no-store/);
+  assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
 });
 
 test('shop and product API defaults are category-aware and product placeholders are not persisted', async () => {
@@ -97,6 +190,7 @@ test('shop and product API defaults are category-aware and product placeholders 
     body: JSON.stringify({
       name: 'Atelier beauté API',
       whatsapp_number: uniquePhone(),
+      email: uniqueEmail(),
       pin_code: '274915',
       category: 'beauty',
       theme_config: {
@@ -118,6 +212,14 @@ test('shop and product API defaults are category-aware and product placeholders 
   assert.equal(login.status, 200);
   const cookie = login.headers.get('set-cookie')?.split(';')[0];
   assert.ok(cookie);
+  await submitAndApproveShop(createdPayload.shop.id, cookie);
+
+  const reusedLogin = await fetch(`${BASE_URL}/api/auth/merchant-access-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: createdPayload.owner_access_token }),
+  });
+  assert.equal(reusedLogin.status, 401);
 
   const productResponse = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/products`, {
     method: 'POST',
@@ -210,8 +312,8 @@ test('rejects unauthenticated payment activation and merchant mutations', async 
   assert.equal(productMutation.status, 401);
 
   const protectedMutations: Array<{ path: string; method: string; body?: unknown }> = [
-    { path: '/api/shops/1/toggle-status', method: 'POST', body: { is_open: true } },
     { path: '/api/shops/1/toggle-status', method: 'PATCH', body: { is_open: true } },
+    { path: '/api/shops/1/publication-status', method: 'PATCH', body: { publication_status: 'active' } },
     { path: '/api/shops/1/theme', method: 'PUT', body: { theme_config: { primary_color: '#176b55' } } },
     { path: '/api/shops/1', method: 'PUT', body: { name: 'Modification non autorisée' } },
     { path: '/api/shops/1/orders/1/status', method: 'PATCH', body: { status: 'confirmed' } },
@@ -232,6 +334,13 @@ test('rejects unauthenticated payment activation and merchant mutations', async 
     assert.equal(response.status, 401, `${mutation.method} ${mutation.path} must require an authenticated merchant`);
   }
 
+  const removedToggleMethod = await fetch(`${BASE_URL}/api/shops/1/toggle-status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_open: true }),
+  });
+  assert.equal(removedToggleMethod.status, 404);
+
   const protectedReads = [
     '/api/shops/1/products',
     '/api/shops/1/orders',
@@ -241,7 +350,7 @@ test('rejects unauthenticated payment activation and merchant mutations', async 
     assert.equal((await fetch(`${BASE_URL}${route}`)).status, 401, `${route} must require an authenticated merchant`);
   }
 
-  for (const route of ['/api/admin/shops', '/api/admin/orders', '/api/admin/analytics', '/api/admin/health']) {
+  for (const route of ['/api/admin/shops', '/api/admin/orders', '/api/admin/analytics', '/api/admin/health', '/api/admin/identity-verifications']) {
     assert.equal((await fetch(`${BASE_URL}${route}`)).status, 401, `${route} must require an authenticated admin`);
   }
 });
@@ -254,6 +363,7 @@ test('registration flow is coherent without external payment or WhatsApp API', a
     body: JSON.stringify({
       name: 'Boutique Paiement Test',
       whatsapp_number: newPhone,
+      email: uniqueEmail(),
       pin_code: '987654',
       category: 'food',
       city: 'San Pedro',
@@ -280,6 +390,7 @@ test('shop metadata keeps social links and delivery zones for the storefront che
     body: JSON.stringify({
       name: 'Boutique Checklist Social',
       whatsapp_number: newPhone,
+      email: uniqueEmail(),
       pin_code: '112233',
       category: 'fashion',
       city: 'Yopougon',
@@ -301,6 +412,7 @@ test('shop metadata keeps social links and delivery zones for the storefront che
   const createdPayload = await created.json();
   assert.ok(createdPayload.shop.theme_config?.social_links?.instagram);
   assert.deepEqual(createdPayload.shop.theme_config?.delivery_zones?.[0]?.label, 'Cocody');
+  await loginAndApproveShop({ id: createdPayload.shop.id, owner_access_token: createdPayload.owner_access_token });
 
   const publicBySlug = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.slug}`);
   assert.equal(publicBySlug.status, 200);
@@ -317,6 +429,7 @@ test('merchant can update storefront social links and service zones', async () =
     body: JSON.stringify({
       name: 'Boutique Métadonnées Merchant',
       whatsapp_number: newPhone,
+      email: uniqueEmail(),
       pin_code: '445566',
       category: 'beauty',
       city: 'Yopougon',
@@ -334,6 +447,8 @@ test('merchant can update storefront social links and service zones', async () =
   assert.equal(merchantLogin.status, 200);
   const merchantCookies = merchantLogin.headers.get('set-cookie');
   const merchantCookieHeader = merchantCookies ? merchantCookies.split(';')[0] : undefined;
+  assert.ok(merchantCookieHeader);
+  await submitAndApproveShop(createdPayload.shop.id, merchantCookieHeader);
 
   const updateRes = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}`, {
     method: 'PUT',
@@ -398,6 +513,7 @@ test('onboarding preserves explicit opening-hours and keeps the storefront open 
     body: JSON.stringify({
       name: 'Boutique Horaires Publics',
       whatsapp_number: newPhone,
+      email: uniqueEmail(),
       pin_code: '778899',
       category: 'food',
       city: 'Abidjan',
@@ -416,12 +532,14 @@ test('onboarding preserves explicit opening-hours and keeps the storefront open 
   const createdPayload = await created.json();
   assert.equal(createdPayload.shop.opening_hours.enabled, true);
   assert.equal(createdPayload.shop.opening_hours.open_time, '00:00');
+  await loginAndApproveShop({ id: createdPayload.shop.id, owner_access_token: createdPayload.owner_access_token });
 
   const publicBySlug = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.slug}`);
   assert.equal(publicBySlug.status, 200);
   const publicData = await publicBySlug.json();
   assert.equal(publicData.shop.opening_hours.enabled, true);
   assert.equal(publicData.shop.is_open, true);
+
 });
 
 test('public directory prioritizes open shops before closed ones in discovery order', async () => {
@@ -432,6 +550,7 @@ test('public directory prioritizes open shops before closed ones in discovery or
     body: JSON.stringify({
       name: 'Boutique Fermée Prioritaire',
       whatsapp_number: closedPhone,
+      email: uniqueEmail(),
       pin_code: '332211',
       category: 'beauty',
       city: 'Abidjan',
@@ -471,6 +590,7 @@ test('public directory prioritizes open shops before closed ones in discovery or
     body: JSON.stringify({
       name: 'Boutique Ouverte Prioritaire',
       whatsapp_number: openPhone,
+      email: uniqueEmail(),
       pin_code: '112244',
       category: 'food',
       city: 'Yopougon',
@@ -480,6 +600,14 @@ test('public directory prioritizes open shops before closed ones in discovery or
   });
   assert.equal(openCreate.status, 200);
   const openPayload = await openCreate.json();
+  const closedMerchantCookie = await loginAndApproveShop({ id: closedPayload.shop.id, owner_access_token: closedPayload.owner_access_token });
+  await loginAndApproveShop({ id: openPayload.shop.id, owner_access_token: openPayload.owner_access_token });
+  const closeShop = await fetch(`${BASE_URL}/api/shops/${closedPayload.shop.id}/toggle-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: closedMerchantCookie },
+    body: JSON.stringify({ is_open: false }),
+  });
+  assert.equal(closeShop.status, 200, await closeShop.text());
 
   const directory = await fetch(`${BASE_URL}/api/shops`);
   assert.equal(directory.status, 200);
@@ -499,6 +627,7 @@ test('shop pages expose canonical SEO metadata for social sharing and indexing',
     body: JSON.stringify({
       name: 'Boutique SEO Test',
       whatsapp_number: newPhone,
+      email: uniqueEmail(),
       pin_code: '667788',
       category: 'fashion',
       city: 'Abidjan',
@@ -510,6 +639,7 @@ test('shop pages expose canonical SEO metadata for social sharing and indexing',
   });
   assert.equal(created.status, 200);
   const createdPayload = await created.json();
+  await loginAndApproveShop({ id: createdPayload.shop.id, owner_access_token: createdPayload.owner_access_token });
 
   const publicPage = await fetch(`${BASE_URL}/${encodeURIComponent(createdPayload.shop.slug)}`);
   assert.equal(publicPage.status, 200);
@@ -527,6 +657,7 @@ test('free onboarding keeps the shop active without subscription controls', asyn
     body: JSON.stringify({
       name: 'Boutique Rappel Test',
       whatsapp_number: uniquePhone(),
+      email: uniqueEmail(),
       pin_code: '223344',
       category: 'food',
       city: 'Bouaké',

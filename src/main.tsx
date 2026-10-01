@@ -1,7 +1,14 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import App from './App.tsx';
 import './index.css';
+
+try {
+  window.localStorage.removeItem('matable_registration_links');
+} catch {
+  // Storage may be unavailable in restricted browser contexts.
+}
 
 if ('serviceWorker' in navigator) {
   const isLocalDevelopment = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
@@ -29,6 +36,8 @@ if ('serviceWorker' in navigator) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </StrictMode>,
 );

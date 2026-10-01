@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import Database from 'better-sqlite3';
 
 const TEST_PORT = 43123;
 const TEST_DB_PATH = path.join(process.cwd(), 'data', `matable-test-${Date.now()}.db`);
@@ -88,6 +89,26 @@ function uniquePhone() {
   return `+22507${random}`.slice(0, 15);
 }
 
+function uniqueEmail() {
+  return `merchant-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+}
+
+async function registerCustomer(firstName = 'Client', lastName = 'Test') {
+  const registered = await apiFetch('/api/auth/customer-register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      first_name: firstName,
+      last_name: lastName,
+      phone: uniquePhone(),
+      email: `client-${Date.now()}-${Math.random().toString(36).slice(2)}@example.ci`,
+      password: 'MotDePasse!123',
+    }),
+  });
+  assert.equal(registered.response.status, 200, JSON.stringify(registered.payload));
+  return registered.payload.user;
+}
+
 before(async () => {
   cookieJar = '';
   serverProcess = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
@@ -125,7 +146,8 @@ test('customer registration and login are supported with email, phone, and passw
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      name: 'Client Test',
+      first_name: 'Client',
+      last_name: 'Test',
       phone,
       email,
       password: 'MotDePasse!123',
@@ -135,6 +157,8 @@ test('customer registration and login are supported with email, phone, and passw
   assert.equal(register.response.status, 200, `Unexpected register response: ${JSON.stringify(register.payload)}`);
   assert.equal(register.payload.success, true);
   assert.equal(register.payload.user.email, email);
+  assert.equal(register.payload.user.first_name, 'Client');
+  assert.equal(register.payload.user.last_name, 'Test');
 
   const session = await apiFetch('/api/auth/customer-session');
   assert.equal(session.response.status, 200, `Unexpected session response: ${JSON.stringify(session.payload)}`);
@@ -159,20 +183,70 @@ test('customer registration and login are supported with email, phone, and passw
   assert.equal(login.payload.success, true);
   assert.equal(login.payload.user.email, email);
 
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const failedLogin = await apiFetch('/api/auth/customer-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: 'MotDePasseIncorrect!' }),
+    });
+    assert.equal(failedLogin.response.status, 401);
+    assert.equal(failedLogin.payload.error, 'Identifiants invalides.');
+  }
+
+  const lockedLogin = await apiFetch('/api/auth/customer-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: 'MotDePasse!123' }),
+  });
+  assert.equal(lockedLogin.response.status, 429);
+  assert.ok(Number(lockedLogin.response.headers.get('retry-after')) > 0);
+
+  const testDb = new Database(TEST_DB_PATH);
+  try {
+    const persistedName = testDb.prepare('SELECT first_name, last_name FROM users WHERE email = ?').get(email) as { first_name: string; last_name: string };
+    assert.equal(persistedName.first_name, 'Client');
+    assert.equal(persistedName.last_name, 'Test');
+    testDb.prepare('UPDATE users SET is_active = 0 WHERE email = ?').run(email);
+  } finally {
+    testDb.close();
+  }
+  const disabledCustomerOrders = await apiFetch('/api/auth/customer-orders');
+  assert.equal(disabledCustomerOrders.response.status, 401);
+
   const logout = await apiFetch('/api/auth/customer-logout', { method: 'POST' });
   assert.equal(logout.response.status, 200, `Unexpected logout response: ${JSON.stringify(logout.payload)}`);
   assert.equal(logout.payload.success, true);
 });
 
-test('guest and authenticated checkout accepts orders, reserves stock, and tracks the WhatsApp handoff', async () => {
+test('checkout requires a client account and tracks the WhatsApp handoff', async () => {
   const merchantPhone = uniquePhone();
   const registration = await apiFetch('/api/shops', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Boutique Parcours Client', whatsapp_number: merchantPhone, pin_code: '638294', category: 'food' }),
+    body: JSON.stringify({ name: 'Boutique Parcours Client', whatsapp_number: merchantPhone, email: uniqueEmail(), pin_code: '638294', category: 'food' }),
   });
   assert.equal(registration.response.status, 200, JSON.stringify(registration.payload));
   const shopId = registration.payload.shop.id;
+  assert.equal(registration.payload.shop.publication_status, 'draft');
+  const ownerShopState = await apiFetch(`/api/shops/${shopId}`);
+  assert.equal(ownerShopState.response.status, 200, JSON.stringify(ownerShopState.payload));
+  assert.equal(ownerShopState.payload.shop.merchant_verification_status, 'pending');
+  assert.equal(ownerShopState.payload.shop.publication_status, 'draft');
+  const pendingPublication = await apiFetch(`/api/shops/${shopId}/publication-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ publication_status: 'active' }),
+  });
+  assert.equal(pendingPublication.response.status, 409, JSON.stringify(pendingPublication.payload));
+  assert.equal(pendingPublication.payload.blocked_by, 'verification');
+
+  const trialStart = await apiFetch(`/api/shops/${shopId}/start-trial`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tier: 'standard' }),
+  });
+  assert.equal(trialStart.response.status, 200, JSON.stringify(trialStart.payload));
+  assert.equal(trialStart.payload.shop.subscription.status, 'trialing');
 
   const opened = await apiFetch(`/api/shops/${shopId}/toggle-status`, {
     method: 'PATCH',
@@ -189,7 +263,7 @@ test('guest and authenticated checkout accepts orders, reserves stock, and track
   assert.equal(createdProduct.response.status, 200, JSON.stringify(createdProduct.payload));
   const productId = createdProduct.payload.product.id;
 
-  const guestOrder = await apiFetch('/api/orders', {
+  const unauthenticatedOrder = await apiFetch('/api/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -202,40 +276,95 @@ test('guest and authenticated checkout accepts orders, reserves stock, and track
       items: [{ product_id: productId, quantity: 2 }],
     }),
   });
-  assert.equal(guestOrder.response.status, 200, JSON.stringify(guestOrder.payload));
-  assert.equal(guestOrder.payload.order.customer_user_id, undefined);
-  assert.equal(guestOrder.payload.order.total_amount, 5000);
-  assert.equal(guestOrder.payload.order.status, 'confirmed');
-  assert.equal(guestOrder.payload.order.whatsapp_tracking_available, true);
-  assert.equal(typeof guestOrder.payload.whatsapp_tracking_token, 'string');
-
-  const invalidTrackingClick = await apiFetch(`/api/orders/${guestOrder.payload.order.id}/whatsapp-click`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: 'invalid-tracking-token-value' }),
-  });
-  assert.equal(invalidTrackingClick.response.status, 404);
-  const trackingClick = await apiFetch(`/api/orders/${guestOrder.payload.order.id}/whatsapp-click`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: guestOrder.payload.whatsapp_tracking_token }),
-  });
-  assert.equal(trackingClick.response.status, 200, JSON.stringify(trackingClick.payload));
-  const repeatedTrackingClick = await apiFetch(`/api/orders/${guestOrder.payload.order.id}/whatsapp-click`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: guestOrder.payload.whatsapp_tracking_token }),
-  });
-  assert.equal(repeatedTrackingClick.payload.clicked_at, trackingClick.payload.clicked_at);
+  assert.equal(unauthenticatedOrder.response.status, 401, JSON.stringify(unauthenticatedOrder.payload));
+  const stockAfterGuestRejection = await apiFetch(`/api/shops/${shopId}/products`);
+  assert.equal(stockAfterGuestRejection.payload[0].stock, 6);
 
   const customerEmail = `checkout${Date.now()}@example.ci`;
   const customerPhone = uniquePhone();
   const customerRegistration = await apiFetch('/api/auth/customer-register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Client Compte', phone: customerPhone, email: customerEmail, password: 'MotDePasse!123' }),
+    body: JSON.stringify({ first_name: 'Client', last_name: 'Compte', phone: customerPhone, email: customerEmail, password: 'MotDePasse!123' }),
   });
   assert.equal(customerRegistration.response.status, 200, JSON.stringify(customerRegistration.payload));
+  assert.equal(customerRegistration.payload.user.first_name, 'Client');
+  assert.equal(customerRegistration.payload.user.last_name, 'Compte');
+
+  const pendingOrder = await apiFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shopId,
+      customer_name: 'Client vérification',
+      customer_phone: uniquePhone(),
+      delivery_location: 'Cocody Angré',
+      items: [{ product_id: productId, quantity: 1 }],
+    }),
+  });
+  assert.equal(pendingOrder.response.status, 403, JSON.stringify(pendingOrder.payload));
+
+  const testPng = `data:image/png;base64,${Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from([0])]).toString('base64')}`;
+  const verificationSubmission = await apiFetch(`/api/shops/${shopId}/identity-verification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      document_type: 'cni',
+      document_number: `CI${Date.now()}1234`,
+      document_image: testPng,
+      document_back_image: testPng,
+      selfie_image: testPng,
+      face_distance: 0.42,
+      identity_data: { first_name: 'Client', last_name: 'Test', birth_date: '1990-01-01', ocr_text: 'Texte OCR privé de test' },
+    }),
+  });
+  assert.equal(verificationSubmission.response.status, 201, JSON.stringify(verificationSubmission.payload));
+  assert.equal(verificationSubmission.payload.status, 'under_review');
+  assert.equal(verificationSubmission.payload.decision_method, 'manual_review');
+
+  const adminLogin = await apiFetch('/api/auth/admin-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'super-admin-demo-key' }),
+  });
+  assert.equal(adminLogin.response.status, 200, JSON.stringify(adminLogin.payload));
+  const verificationQueue = await apiFetch('/api/admin/identity-verifications');
+  assert.equal(verificationQueue.response.status, 200, JSON.stringify(verificationQueue.payload));
+  const verificationRecord = verificationQueue.payload.verifications.find((record: any) => record.shop_id === shopId);
+  assert.equal(verificationRecord.identity_data.first_name, 'Client');
+  assert.equal('document_ciphertext' in verificationRecord, false);
+  assert.equal(verificationRecord.decision_method, 'manual_review');
+  assert.equal(Boolean(verificationRecord.has_document_back), true);
+  const adminShopStates = await apiFetch('/api/admin/shops');
+  assert.equal(adminShopStates.response.status, 200, JSON.stringify(adminShopStates.payload));
+  const adminShop = adminShopStates.payload.find((shop: any) => shop.id === shopId);
+  assert.equal(adminShop.merchant_verification_status, 'under_review');
+
+  const secureMedia = await apiFetch(`/api/admin/identity-verifications/${shopId}/media/document`);
+  assert.equal(secureMedia.response.status, 200);
+  const secureBackMedia = await apiFetch(`/api/admin/identity-verifications/${shopId}/media/back`);
+  assert.equal(secureBackMedia.response.status, 200);
+  const reviewDecision = await apiFetch(`/api/admin/identity-verifications/${shopId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'verified', reviewer_note: 'Contrôle manuel effectué.' }),
+  });
+  assert.equal(reviewDecision.response.status, 200, JSON.stringify(reviewDecision.payload));
+  const adminLogout = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
+  assert.equal(adminLogout.response.status, 200, JSON.stringify(adminLogout.payload));
+
+  const approvedButDraftDirectory = await apiFetch('/api/shops');
+  assert.equal(approvedButDraftDirectory.payload.some((shop: any) => shop.id === shopId), false);
+
+  const ownerPublication = await apiFetch(`/api/shops/${shopId}/publication-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ publication_status: 'active' }),
+  });
+  assert.equal(ownerPublication.response.status, 200, JSON.stringify(ownerPublication.payload));
+  assert.equal(ownerPublication.payload.publication_status, 'active');
+  const publishedDirectory = await apiFetch('/api/shops');
+  assert.equal(publishedDirectory.payload.some((shop: any) => shop.id === shopId), true);
 
   const accountOrder = await apiFetch('/api/orders', {
     method: 'POST',
@@ -252,30 +381,48 @@ test('guest and authenticated checkout accepts orders, reserves stock, and track
   assert.equal(accountOrder.payload.order.customer_user_id, customerRegistration.payload.user.id);
   assert.equal(accountOrder.payload.order.status, 'confirmed');
 
+  const invalidTrackingClick = await apiFetch(`/api/orders/${accountOrder.payload.order.id}/whatsapp-click`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: 'invalid-tracking-token-value' }),
+  });
+  assert.equal(invalidTrackingClick.response.status, 404);
+  const trackingClick = await apiFetch(`/api/orders/${accountOrder.payload.order.id}/whatsapp-click`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: accountOrder.payload.whatsapp_tracking_token }),
+  });
+  assert.equal(trackingClick.response.status, 200, JSON.stringify(trackingClick.payload));
+  const repeatedTrackingClick = await apiFetch(`/api/orders/${accountOrder.payload.order.id}/whatsapp-click`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: accountOrder.payload.whatsapp_tracking_token }),
+  });
+  assert.equal(repeatedTrackingClick.payload.clicked_at, trackingClick.payload.clicked_at);
+
   const customerHistory = await apiFetch('/api/auth/customer-orders');
   assert.equal(customerHistory.response.status, 200, JSON.stringify(customerHistory.payload));
   assert.deepEqual(customerHistory.payload.orders.map((order: any) => order.id), [accountOrder.payload.order.id]);
 
   const merchantOrders = await apiFetch(`/api/shops/${shopId}/orders`);
   assert.equal(merchantOrders.response.status, 200, JSON.stringify(merchantOrders.payload));
-  const trackedGuestOrder = merchantOrders.payload.find((order: any) => order.id === guestOrder.payload.order.id);
-  assert.equal(trackedGuestOrder.customer_user_id, undefined);
-  assert.equal(trackedGuestOrder.whatsapp_tracking_available, true);
-  assert.equal(trackedGuestOrder.whatsapp_clicked_at, trackingClick.payload.clicked_at);
-  assert.equal(JSON.stringify(merchantOrders.payload).includes(guestOrder.payload.whatsapp_tracking_token), false);
+  const trackedOrder = merchantOrders.payload.find((order: any) => order.id === accountOrder.payload.order.id);
+  assert.equal(trackedOrder.whatsapp_tracking_available, true);
+  assert.equal(trackedOrder.whatsapp_clicked_at, trackingClick.payload.clicked_at);
+  assert.equal(JSON.stringify(merchantOrders.payload).includes(accountOrder.payload.whatsapp_tracking_token), false);
   assert.equal(merchantOrders.payload.find((order: any) => order.id === accountOrder.payload.order.id).customer_user_id, customerRegistration.payload.user.id);
 
   const stockAfterOrderCreation = await apiFetch(`/api/shops/${shopId}/products`);
-  assert.equal(stockAfterOrderCreation.payload[0].stock, 1);
+  assert.equal(stockAfterOrderCreation.payload[0].stock, 3);
 
-  const cancelled = await apiFetch(`/api/shops/${shopId}/orders/${guestOrder.payload.order.id}/status`, {
+  const cancelled = await apiFetch(`/api/shops/${shopId}/orders/${accountOrder.payload.order.id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: 'cancelled' }),
   });
   assert.equal(cancelled.response.status, 200, JSON.stringify(cancelled.payload));
   const stockAfterCancellation = await apiFetch(`/api/shops/${shopId}/products`);
-  assert.equal(stockAfterCancellation.payload[0].stock, 3);
+  assert.equal(stockAfterCancellation.payload[0].stock, 6);
 
   const invalidTransition = await apiFetch(`/api/shops/${shopId}/orders/${accountOrder.payload.order.id}/status`, {
     method: 'PATCH',
@@ -283,6 +430,71 @@ test('guest and authenticated checkout accepts orders, reserves stock, and track
     body: JSON.stringify({ status: 'refunded' }),
   });
   assert.equal(invalidTransition.response.status, 400);
+});
+
+test('clear local KYC checks auto-verify but still require explicit publication', async () => {
+  const registration = await apiFetch('/api/shops', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Boutique KYC automatique', whatsapp_number: uniquePhone(), email: uniqueEmail(), pin_code: '684219', category: 'fashion' }),
+  });
+  assert.equal(registration.response.status, 200, JSON.stringify(registration.payload));
+  const shopId = registration.payload.shop.id;
+  const trialStart = await apiFetch(`/api/shops/${shopId}/start-trial`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tier: 'standard' }),
+  });
+  assert.equal(trialStart.response.status, 200, JSON.stringify(trialStart.payload));
+  const documentNumber = 'CI12345678';
+  const image = `data:image/png;base64,${Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from([0])]).toString('base64')}`;
+  const verification = await apiFetch(`/api/shops/${shopId}/identity-verification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      document_type: 'cni',
+      document_number: documentNumber,
+      document_image: image,
+      document_back_image: image,
+      selfie_image: image,
+      face_distance: 0.48,
+      identity_data: {
+        first_name: 'Amina',
+        last_name: 'Kouame',
+        birth_date: '1994-05-12',
+        ocr_text: `REPUBLIC OF COTE D IVOIRE CARTE NATIONALE D IDENTITE ${documentNumber} NOM KOUAME PRENOMS AMINA`,
+        ocr_confidence: 82,
+      },
+    }),
+  });
+  assert.equal(verification.response.status, 201, JSON.stringify(verification.payload));
+  assert.equal(verification.payload.status, 'verified');
+  assert.equal(verification.payload.decision_method, 'local_auto');
+
+  const hiddenBeforePublication = await fetch(`${BASE_URL}/api/shops/${registration.payload.shop.slug}`);
+  assert.equal(hiddenBeforePublication.status, 404);
+  const publication = await apiFetch(`/api/shops/${shopId}/publication-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ publication_status: 'active' }),
+  });
+  assert.equal(publication.response.status, 200, JSON.stringify(publication.payload));
+  for (let index = 0; index < 6; index += 1) {
+    const product = await apiFetch(`/api/shops/${shopId}/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: `Article d’essai ${index + 1}`, price: 1500, stock: 2 }),
+    });
+    assert.equal(product.response.status, 200, JSON.stringify(product.payload));
+  }
+  const seventhTrialProduct = await apiFetch(`/api/shops/${shopId}/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Article d’essai supplémentaire', price: 1500, stock: 2 }),
+  });
+  assert.equal(seventhTrialProduct.response.status, 409, JSON.stringify(seventhTrialProduct.payload));
+  const visibleAfterPublication = await fetch(`${BASE_URL}/api/shops/${registration.payload.shop.slug}`);
+  assert.equal(visibleAfterPublication.status, 200);
 });
 
 test('concurrent single-item orders cannot oversell the last unit', async () => {
@@ -310,6 +522,8 @@ test('concurrent single-item orders cannot oversell the last unit', async () => 
   });
   const createdProduct = productCreate.payload.product;
   assert.ok(createdProduct.id);
+
+  await registerCustomer('Concurrent', 'Client');
 
   const orderAttempts = await Promise.all([
     apiFetch('/api/orders', {
@@ -480,6 +694,7 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal(deleteProduct.response.status, 200, JSON.stringify(deleteProduct.payload));
   assert.equal((await apiFetch('/api/shops/1/products')).payload.some((product: any) => product.id === temporaryProductId), false);
 
+  await registerCustomer('Commande', 'Client');
   const order = await apiFetch('/api/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -579,6 +794,7 @@ test('new merchant registration flow is local and immediately usable', async () 
     body: JSON.stringify({
       name: 'Boutique Test Premium',
       whatsapp_number: phone,
+      email: uniqueEmail(),
       pin_code: '654321',
       category: 'fashion',
       city: 'Abidjan',
@@ -589,13 +805,31 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.equal(registration.response.status, 200, `Shop creation failed: ${JSON.stringify(registration.payload)}`);
   assert.match(String(registration.payload.message), /Boutique créée/i);
   assert.equal(registration.payload.shop.is_active, true);
-  assert.equal(registration.payload.shop.subscription.status, 'trialing');
-  assert.equal(typeof registration.payload.shop.subscription.trialStart, 'string');
-  assert.equal(typeof registration.payload.shop.subscription.trialEnd, 'string');
-  assert.ok(registration.payload.shop.subscription.trialDaysRemaining >= 29);
+  assert.equal(registration.payload.shop.is_open, true);
+  assert.equal(registration.payload.shop.subscription.status, 'not_started');
+  assert.equal(registration.payload.shop.subscription.trialStart, null);
+  assert.equal(registration.payload.shop.subscription.trialEnd, null);
   assert.ok(registration.payload.owner_access_token);
 
   const newShopId = registration.payload.shop.id;
+  const trialStart = await apiFetch(`/api/shops/${newShopId}/start-trial`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tier: 'premium' }),
+  });
+  assert.equal(trialStart.response.status, 200, JSON.stringify(trialStart.payload));
+  assert.equal(trialStart.payload.shop.subscription.plan, 'premium');
+  assert.equal(typeof trialStart.payload.shop.subscription.trialStart, 'string');
+  assert.equal(typeof trialStart.payload.shop.subscription.trialEnd, 'string');
+  assert.equal(trialStart.payload.shop.subscription.trialDaysRemaining, 30);
+  const persistedDatabase = new Database(TEST_DB_PATH, { readonly: true });
+  try {
+    const savedPlan = persistedDatabase.prepare('SELECT selected_subscription_tier, subscription_status FROM shops WHERE id = ?').get(newShopId) as { selected_subscription_tier: string; subscription_status: string };
+    assert.equal(savedPlan.selected_subscription_tier, 'premium');
+    assert.equal(savedPlan.subscription_status, 'trialing');
+  } finally {
+    persistedDatabase.close();
+  }
 
   const merchantLogin = await apiFetch('/api/auth/merchant-login', {
     method: 'POST',
@@ -604,6 +838,15 @@ test('new merchant registration flow is local and immediately usable', async () 
   });
   assert.equal(merchantLogin.response.status, 200, JSON.stringify(merchantLogin.payload));
   assert.equal(merchantLogin.payload.shop.is_active, true);
+  assert.equal(merchantLogin.payload.shop.is_open, true);
+
+  const ownerClosesShop = await apiFetch(`/api/shops/${newShopId}/toggle-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_open: false }),
+  });
+  assert.equal(ownerClosesShop.response.status, 200, JSON.stringify(ownerClosesShop.payload));
+  assert.equal(ownerClosesShop.payload.is_open, false);
 
   const merchantSessionState = await apiFetch('/api/auth/session');
   assert.equal(merchantSessionState.response.status, 200, JSON.stringify(merchantSessionState.payload));
@@ -617,6 +860,15 @@ test('new merchant registration flow is local and immediately usable', async () 
     body: JSON.stringify({ access_token: registration.payload.owner_access_token }),
   });
   assert.equal(privateAccessLogin.response.status, 200, JSON.stringify(privateAccessLogin.payload));
+  assert.equal(privateAccessLogin.payload.shop.owner_email, undefined);
+  assert.equal(privateAccessLogin.payload.shop.owner_access_token_hash, undefined);
+
+  const reusedPrivateAccessLogin = await apiFetch('/api/auth/merchant-access-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: registration.payload.owner_access_token }),
+  });
+  assert.equal(reusedPrivateAccessLogin.response.status, 401);
 
   const ownerLinks = await apiFetch(`/api/shops/${newShopId}/access-link`, { method: 'POST' });
   assert.equal(ownerLinks.response.status, 200, JSON.stringify(ownerLinks.payload));
@@ -631,6 +883,7 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
     body: JSON.stringify({
       name: 'Boutique Admin Test',
       whatsapp_number: phone,
+      email: uniqueEmail(),
       pin_code: '111111',
       category: 'food',
       city: 'Yamoussoukro',
@@ -725,12 +978,14 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
 
 test('security hardening: duplicate shop prevention', async () => {
   const phone = uniquePhone();
+  const email = uniqueEmail();
   const first = await apiFetch('/api/shops', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: 'Boutique Récupération',
       whatsapp_number: phone,
+      email,
       pin_code: '777777',
       category: 'fashion',
       city: 'Abidjan',
@@ -738,18 +993,33 @@ test('security hardening: duplicate shop prevention', async () => {
   });
   assert.equal(first.response.status, 200);
 
+  const missingEmail = await apiFetch('/api/shops', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Sans e-mail', whatsapp_number: uniquePhone(), pin_code: '456789', category: 'fashion' }),
+  });
+  assert.equal(missingEmail.response.status, 400);
+
   const duplicate = await apiFetch('/api/shops', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: 'Deuxième boutique même numéro',
       whatsapp_number: phone,
+      email: uniqueEmail(),
       pin_code: '402138',
       category: 'fashion',
       city: 'Abidjan',
     }),
   });
   assert.equal(duplicate.response.status, 409);
+
+  const duplicateEmail = await apiFetch('/api/shops', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'E-mail déjà utilisé', whatsapp_number: uniquePhone(), email: email.toUpperCase(), pin_code: '402138', category: 'fashion' }),
+  });
+  assert.equal(duplicateEmail.response.status, 409);
 
 });
 
@@ -760,7 +1030,7 @@ test('merchant A cannot mutate merchant B products', async () => {
     const response = await apiFetch('/api/shops', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, whatsapp_number: phone, pin_code: '638294', category: 'fashion', city: 'Abidjan' }),
+      body: JSON.stringify({ name, whatsapp_number: phone, email: uniqueEmail(), pin_code: '638294', category: 'fashion', city: 'Abidjan' }),
     });
     assert.equal(response.response.status, 200, JSON.stringify(response.payload));
     return response.payload.shop.id as number;
@@ -789,6 +1059,12 @@ test('merchant A cannot mutate merchant B products', async () => {
     body: JSON.stringify({ phone: merchantAPhone, pin: '638294' }),
   });
   assert.equal(loginA.response.status, 200);
+  const merchantACookie = (loginA.response.headers.getSetCookie?.() || [])
+    .map((cookie) => cookie.split(';')[0])
+    .filter((cookie) => /^(matable_session|matable_session_fp)=/.test(cookie))
+    .join('; ');
+  assert.match(merchantACookie, /matable_session=/);
+  assert.match(merchantACookie, /matable_session_fp=/);
 
   const attempts = await Promise.all([
     apiFetch(`/api/shops/${merchantBShopId}/products`, {
@@ -811,5 +1087,11 @@ test('merchant A cannot mutate merchant B products', async () => {
   ]);
 
   for (const attempt of attempts) assert.equal(attempt.response.status, 401, JSON.stringify(attempt.payload));
+  const publishOtherShop = await fetch(`${BASE_URL}/api/shops/${merchantBShopId}/publication-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantACookie },
+    body: JSON.stringify({ publication_status: 'active' }),
+  });
+  assert.equal(publishOtherShop.status, 401, await publishOtherShop.text());
   assert.notEqual(merchantAShopId, merchantBShopId);
 });

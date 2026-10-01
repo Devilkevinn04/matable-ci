@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useToast } from '../Toast';
-import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks } from '../../types';
+import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks, SubscriptionTier } from '../../types';
 import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../../utils/format';
 import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
 import { buildProductSavePayload, createProductDraft, productToDraft } from './productForm';
@@ -35,6 +35,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [regEmail, setRegEmail] = useState('');
   const [regCategory, setRegCategory] = useState<ShopCategory>('fashion');
   const [regLoading, setRegLoading] = useState(false);
+  const [trialStarting, setTrialStarting] = useState(false);
   const [registrationLinks, setRegistrationLinks] = useState<{
     publicUrl: string;
     privateUrl: string;
@@ -47,8 +48,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   }, [openRegistration, currentShop]);
 
   // Active view tab
-  const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'settings'>('catalog');
-  const [settingsSubTab, setSettingsSubTab] = useState<'themes' | 'general' | 'hours' | 'bilan'>('themes');
+  const [activeTab, setActiveTab] = useState<'overview' | 'catalog' | 'orders' | 'settings'>('overview');
+  const [settingsSubTab, setSettingsSubTab] = useState<'themes' | 'general' | 'hours' | 'bilan' | 'verification' | 'subscription'>('themes');
 
   // Products & Orders data
   const [products, setProducts] = useState<Product[]>([]);
@@ -132,15 +133,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   // If ?access= is present, the second useEffect handles auth and this one must stay silent
   // to avoid the race condition that causes a blank page (currentShop set too early).
   useEffect(() => {
-    const savedRegistrationLinks = localStorage.getItem('matable_registration_links');
-    if (savedRegistrationLinks) {
-      try {
-        setRegistrationLinks(JSON.parse(savedRegistrationLinks));
-      } catch {
-        localStorage.removeItem('matable_registration_links');
-      }
-    }
-
     // If there is an access token in the URL, skip session restore entirely.
     // The access-token useEffect below will handle it.
     const hasAccessToken = Boolean(new URLSearchParams(window.location.search).get('access'));
@@ -165,9 +157,9 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   useEffect(() => {
     const accessToken = new URLSearchParams(window.location.search).get('access');
     if (!accessToken) return;
+    window.history.replaceState({}, '', '/app');
 
     const openSession = (data: { shop: Shop }) => {
-      window.history.replaceState({}, '', '/app');
       setCurrentShop(data.shop);
       syncShopSettings(data.shop);
       loadShopData(data.shop.id).finally(() => setIsSessionLoading(false));
@@ -357,8 +349,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   // Register New Shop
   const handleRegisterShop = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regName.trim() || !regPhone.trim() || !/^\d{6}$/.test(regPin.trim())) {
-      toast.error('Renseignez le nom, le WhatsApp et un PIN de 6 chiffres.');
+    if (!regName.trim() || !regPhone.trim() || !regEmail.trim() || !/^\d{6}$/.test(regPin.trim())) {
+      toast.error('Renseignez le nom, l’e-mail, le WhatsApp et un PIN de 6 chiffres.');
       return;
     }
     setRegLoading(true);
@@ -373,7 +365,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
           pin_code: regPin.trim(),
           city: regCity === 'Autre ville / commune' ? regCityOther.trim() : regCity.trim(),
           category: regCategory,
-          email: regEmail.trim() || undefined,
+          email: regEmail.trim(),
           welcome_message: CATEGORY_DEFAULTS[regCategory].welcomeMessage,
         }),
       });
@@ -388,19 +380,13 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       setIsRegisterModalOpen(false);
       const publicUrl = `${window.location.origin}/${data.shop.slug}`;
       const privateUrl = `${window.location.origin}/app?access=${encodeURIComponent(data.owner_access_token)}`;
-      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable.ci. Vitrine : ${publicUrl} | Connexion : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
+      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable.ci et en attente de vérification. Vitrine publique après vérification et publication : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
       setRegistrationLinks({
         publicUrl,
         privateUrl,
         whatsappUrl: `https://wa.me/${data.shop.whatsapp_number.replace(/\D/g, '')}?text=${encodeURIComponent(accessMessage)}`,
         emailUrl: `mailto:${regEmail.trim()}?subject=${encodeURIComponent(`Accès MaTable.ci - ${data.shop.name}`)}&body=${encodeURIComponent(accessMessage)}`,
       });
-      localStorage.setItem('matable_registration_links', JSON.stringify({
-        publicUrl,
-        privateUrl,
-        whatsappUrl: `https://wa.me/${data.shop.whatsapp_number.replace(/\D/g, '')}?text=${encodeURIComponent(accessMessage)}`,
-        emailUrl: `mailto:${regEmail.trim()}?subject=${encodeURIComponent(`Accès MaTable.ci - ${data.shop.name}`)}&body=${encodeURIComponent(accessMessage)}`,
-      }));
       loadShopData(data.shop.id);
     } catch (err: unknown) {
       const error = err as Error;
@@ -432,6 +418,27 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       toast.success('Liens copiés dans le presse-papiers.');
     } catch {
       toast.error('La copie a échoué. Sélectionnez les liens manuellement.');
+    }
+  };
+
+  const handleStartTrial = async (tier: SubscriptionTier) => {
+    if (!currentShop) return;
+    setTrialStarting(true);
+    try {
+      const response = await fetch(`/api/shops/${currentShop.id}/start-trial`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de démarrer l’essai.');
+      setCurrentShop(data.shop);
+      syncShopSettings(data.shop);
+      toast.success('Votre essai gratuit de 30 jours a commencé.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Impossible de contacter le serveur.');
+    } finally {
+      setTrialStarting(false);
     }
   };
 
@@ -467,7 +474,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     const newStatus = !currentShop.is_open;
     try {
       const res = await fetch(`/api/shops/${currentShop.id}/toggle-status`, {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_open: newStatus }),
       });
@@ -482,6 +489,23 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       }
     } catch {
       toast.error('Impossible de contacter le serveur.');
+    }
+  };
+
+  const handlePublicationStatusChange = async (publicationStatus: 'draft' | 'active') => {
+    if (!currentShop) return;
+    try {
+      const response = await fetch(`/api/shops/${currentShop.id}/publication-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publication_status: publicationStatus }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Impossible de modifier la publication.');
+      setCurrentShop((shop) => shop ? { ...shop, publication_status: data.publication_status } : null);
+      toast.success(publicationStatus === 'active' ? 'Votre boutique est publiée.' : 'Votre boutique n’est plus publiée.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Impossible de contacter le serveur.');
     }
   };
 
@@ -978,6 +1002,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     regEmail,
     regCategory,
     regLoading,
+    trialStarting,
     registrationLinks,
     activeTab,
     settingsSubTab,
@@ -1104,8 +1129,10 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     handlePrivateAccessLogin,
     handleLogin,
     handleRegisterShop,
+    handleStartTrial,
     handleLogout,
     handleToggleShopStatus,
+    handlePublicationStatusChange,
     handleSaveOpeningHours,
     handleResetManualOverride,
     handleTriggerCronBilan,

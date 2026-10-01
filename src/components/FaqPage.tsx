@@ -18,8 +18,8 @@ const faqSections = [
         answer: 'Le dashboard indique si vous avez cliqué sur le bouton qui mène à WhatsApp. Ce suivi ne permet pas de savoir si WhatsApp s’est effectivement ouvert ni si le message prérempli a été envoyé.',
       },
       {
-        question: 'Puis-je commander sans créer de compte ?',
-        answer: 'Oui. Vous pouvez continuer en invité au moment de la commande. Pour retrouver vos commandes associées dans votre espace personnel, connectez-vous à votre compte avant de commander.',
+        question: 'Faut-il un compte pour passer commande ?',
+        answer: 'Oui. Vous pouvez parcourir les boutiques et préparer votre panier librement. La connexion ou la création de votre compte MaTable.ci sera demandée au moment de finaliser la commande, et votre panier sera conservé.',
       },
       {
         question: 'Comment suivre ou modifier ma commande ?',

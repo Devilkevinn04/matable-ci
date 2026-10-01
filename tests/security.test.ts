@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { dbGet } from '../db.ts';
+import { canPublishShop, canReceiveShopOrders, evaluateLocalIdentityVerification, isShopPubliclyVisible } from '../server/services/businessRules.ts';
 import {
   isBlockedStaticAsset,
   buildSessionFingerprint,
@@ -36,6 +39,66 @@ test('calculates the merchant trial state on the server', () => {
   assert.equal(expiredState.trialDaysRemaining, 0);
   assert.equal(expiredState.status, 'expired');
   assert.equal(expiredState.isActive, false);
+});
+
+test('publication eligibility is independent from the shop opening toggle', () => {
+  const currentDate = new Date('2026-10-01T12:00:00.000Z');
+  const shop = {
+    id: 1,
+    is_active: true,
+    is_open: false,
+    publication_status: 'active',
+    merchant_verification_status: 'verified',
+    subscription_status: 'trialing',
+    trial_start: '2026-10-01T00:00:00.000Z',
+    trial_end: '2026-10-31T00:00:00.000Z',
+    opening_hours: { enabled: false, open_time: '08:00', close_time: '22:00' },
+  } as any;
+
+  assert.equal(canPublishShop(shop, currentDate), true);
+  assert.equal(canPublishShop({ ...shop, publication_status: 'draft' }, currentDate), true);
+  assert.equal(isShopPubliclyVisible(shop, currentDate), true);
+  assert.equal(canReceiveShopOrders(shop, currentDate), false);
+  assert.equal(canReceiveShopOrders({ ...shop, is_open: true }, currentDate), true);
+});
+
+test('publication requires an active shop, verified identity and eligible subscription', () => {
+  const currentDate = new Date('2026-10-01T12:00:00.000Z');
+  const shop = {
+    id: 2,
+    is_active: true,
+    is_open: true,
+    publication_status: 'active',
+    merchant_verification_status: 'verified',
+    subscription_status: 'trialing',
+    trial_start: '2026-10-01T00:00:00.000Z',
+    trial_end: '2026-10-31T00:00:00.000Z',
+  } as any;
+
+  assert.equal(isShopPubliclyVisible({ ...shop, publication_status: 'draft' }, currentDate), false);
+  assert.equal(isShopPubliclyVisible({ ...shop, publication_status: 'suspended' }, currentDate), false);
+  assert.equal(isShopPubliclyVisible({ ...shop, merchant_verification_status: 'pending' }, currentDate), false);
+  assert.equal(isShopPubliclyVisible({ ...shop, subscription_status: 'past_due' }, currentDate), false);
+  assert.equal(isShopPubliclyVisible({ ...shop, is_active: false }, currentDate), false);
+});
+
+test('local identity checks automatically approve only clear OCR and face-match results', () => {
+  const documentNumber = 'CI12345678';
+  const ocrText = `REPUBLIQUE DE COTE D IVOIRE CARTE NATIONALE D IDENTITE ${documentNumber} NOM KOUAME PRENOMS AMINA`;
+  const accepted = evaluateLocalIdentityVerification({
+    faceDistance: 0.48,
+    ocrConfidence: 82,
+    ocrText,
+    documentNumber,
+    firstName: 'Amina',
+    lastName: 'Kouame',
+  });
+  assert.equal(accepted.automaticApproval, true);
+
+  const uncertainFace = evaluateLocalIdentityVerification({ faceDistance: 0.9, ocrConfidence: 82, ocrText, documentNumber, firstName: 'Amina', lastName: 'Kouame' });
+  assert.equal(uncertainFace.automaticApproval, false);
+  const uncertainOcr = evaluateLocalIdentityVerification({ faceDistance: 0.48, ocrConfidence: 20, ocrText, documentNumber, firstName: 'Amina', lastName: 'Kouame' });
+  assert.equal(uncertainOcr.automaticApproval, false);
 });
 test('counts only actionable orders in revenue and status totals', () => {
   const orders = [
@@ -145,6 +208,9 @@ test('persists merchant session records through the configured database adapter'
 
   await saveMerchantSessionRecord(token, session);
   assert.deepEqual(await getMerchantSessionRecord(token), session);
+  const storedTokenHash = createHash('sha256').update(`matable-session:${token}`).digest('hex');
+  assert.ok(await dbGet('SELECT token FROM merchant_sessions WHERE token = ?', [storedTokenHash]));
+  assert.equal(await dbGet('SELECT token FROM merchant_sessions WHERE token = ?', [token]), undefined);
 
   await deleteMerchantSessionRecord(token);
   assert.equal(await getMerchantSessionRecord(token), null);
@@ -159,18 +225,21 @@ test('rotates the merchant access token when an admin renews access', async () =
   assert.equal(newToken.length > 10, true);
 });
 
-test('keeps the V1 experience on the free standard plan', () => {
+test('exposes the documented monthly subscription plan catalog', () => {
   assert.deepEqual(getSubscriptionPlanConfig('standard'), {
     tier: 'standard',
-    amount: 0,
-    label: 'Gratuit',
-    description: 'Vitrine + catalogue + commandes',
+    amount: 3000,
+    label: 'Standard',
+    description: 'Les outils essentiels pour démarrer.',
   });
-
+  assert.equal(getSubscriptionPlanConfig('premium').amount, 4000);
+  assert.equal(getSubscriptionPlanConfig('pro').amount, 5000);
 });
 
-test('normalizes the V1 tier to standard', () => {
+test('normalizes unknown subscription tiers to standard', () => {
   assert.equal(normalizeSubscriptionTier('standard'), 'standard');
+  assert.equal(normalizeSubscriptionTier('premium'), 'premium');
+  assert.equal(normalizeSubscriptionTier('pro'), 'pro');
   assert.equal(normalizeSubscriptionTier(undefined), 'standard');
 });
 

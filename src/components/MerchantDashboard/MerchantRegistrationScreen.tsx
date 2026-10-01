@@ -41,7 +41,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
       <div className="mb-5">
         <p className="text-sm font-bold text-[#e6572b]">Espace commerçant</p>
         <h2 className="mt-1 text-[30px] font-extrabold leading-tight text-[#25231f]">Créer ma boutique</h2>
-        <p className="mt-2 text-sm leading-6 text-[#68756c]">Votre vitrine et vos outils de gestion sont gratuits.</p>
+        <p className="mt-2 text-sm leading-6 text-[#68756c]">Créez votre espace, choisissez une formule et profitez de 30 jours d’essai gratuit avant tout paiement.</p>
       </div>
 
       <form onSubmit={handleRegisterShop} className="space-y-4">
@@ -81,12 +81,12 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
             </div>
           </label>
           <label className="block text-sm font-semibold text-[#34463d]">
-            E-mail <span className="font-normal text-[#879087]">(facultatif)</span>
-            <input type="email" value={regEmail} onChange={(event) => setRegEmail(event.target.value)} autoComplete="email" placeholder="vous@exemple.ci" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none focus:border-[#176b55]" />
+            E-mail
+            <input type="email" value={regEmail} onChange={(event) => setRegEmail(event.target.value)} required autoComplete="email" placeholder="vous@exemple.ci" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none focus:border-[#176b55]" />
           </label>
         </div>
 
-        <p className="rounded-[14px] bg-[#edf3ec] px-4 py-3 text-xs leading-5 text-[#426458]">Votre boutique et votre vitrine seront prêtes après la création.</p>
+        <p className="rounded-[14px] bg-[#edf3ec] px-4 py-3 text-xs leading-5 text-[#426458]">Votre espace privé sera accessible dès la création. La vitrine publique et les commandes seront activées après la vérification de votre identité.</p>
         <button type="submit" disabled={regLoading} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
           {regLoading ? 'Création en cours...' : 'Créer ma boutique'} <ArrowRight className="h-4 w-4" />
         </button>

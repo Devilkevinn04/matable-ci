@@ -6,6 +6,55 @@ import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { createServer as createViteServer } from 'vite';
 import { dbAll, dbGet, dbRun, dbTransaction, databaseMode, initializeDatabase } from './db.ts';
+import { createSeoRouter } from './server/routes/seo.ts';
+import { createProductRouter } from './server/routes/products.ts';
+import { createAuthRouter } from './server/routes/auth.ts';
+import { createMerchantOrdersRouter } from './server/routes/merchantOrders.ts';
+import { createOrderRouter } from './server/routes/orders.ts';
+import { createAdminRouter } from './server/routes/admin.ts';
+import { createPublicShopsRouter } from './server/routes/publicShops.ts';
+import { createShopManagementRouter } from './server/routes/shopManagement.ts';
+import { createShopRegistrationRouter } from './server/routes/shopRegistration.ts';
+import { createMerchantVerificationRouter } from './server/routes/merchantVerification.ts';
+import { createTelemetryRouter } from './server/routes/telemetry.ts';
+import { toCustomerProfile } from './server/services/customerProfile.ts';
+import { applySecurityHeaders } from './server/middleware/securityHeaders.ts';
+import type { OrderRecord, ProductRecord, ShopOpeningHours, ShopRecord, SubscriptionPlanConfig, SubscriptionState, SubscriptionStatus, SubscriptionTier } from './server/types.ts';
+import { loadProductsFromDatabase, persistProduct } from './server/repositories/products.ts';
+import { loadShopsFromDatabase, persistShop } from './server/repositories/shops.ts';
+import { loadOrdersFromDatabase, persistOrder } from './server/repositories/orders.ts';
+import { allocateRecordId } from './server/repositories/ids.ts';
+import {
+  deleteAdminSessionRecord,
+  deleteCustomerSessionRecord,
+  deleteMerchantSessionRecord,
+  getAdminSessionRecord,
+  getCustomerSessionRecord,
+  getMerchantSessionRecord,
+  migrateExistingSessionTokens,
+  saveAdminSessionRecord,
+  saveCustomerSessionRecord,
+  saveMerchantSessionRecord,
+} from './server/repositories/sessions.ts';
+import {
+  computeIsShopOpen,
+  escapeHtml,
+  getProductUnitPriceWithModifiers,
+  getSubscriptionState,
+  getValidSelectedModifiers,
+  isShopPubliclyVisible,
+  isSameBusinessDay,
+  isWeakShopPin,
+  normalizeWhatsAppPhone,
+  summarizeOrderMetrics,
+} from './server/services/businessRules.ts';
+export { getSubscriptionPlanConfig, normalizeSubscriptionTier, getSubscriptionState, summarizeOrderMetrics, escapeHtml } from './server/services/businessRules.ts';
+export type { SubscriptionPlanConfig, SubscriptionState, SubscriptionStatus, SubscriptionTier } from './server/types.ts';
+export {
+  deleteMerchantSessionRecord,
+  getMerchantSessionRecord,
+  saveMerchantSessionRecord,
+} from './server/repositories/sessions.ts';
 import { getCategoryDefaults, isShopCategory, normalizeCustomBannerImage, normalizeProductImage, normalizeWelcomeMessage, sanitizeGalleryImages } from './src/utils/categoryDefaults.ts';
 import type { ShopCategory } from './src/utils/categoryDefaults.ts';
 
@@ -27,139 +76,7 @@ export function shouldSeedDemoData(): boolean {
   return String(process.env.DEMO_MODE || '').trim().toLowerCase() === 'true';
 }
 
-interface ShopOpeningHours {
-  enabled: boolean;
-  open_time: string; // "08:00"
-  close_time: string; // "22:00"
-  days?: number[];
-  manual_override?: boolean;
-}
-
-export type SubscriptionTier = 'standard';
-export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'cancelled' | 'expired' | 'suspended';
-
 const TRIAL_DURATION_DAYS = 30;
-
-export interface SubscriptionPlanConfig {
-  tier: SubscriptionTier;
-  amount: number;
-  label: string;
-  description: string;
-}
-
-export interface SubscriptionState {
-  plan: SubscriptionTier;
-  status: SubscriptionStatus;
-  trialStart: string | null;
-  trialEnd: string | null;
-  trialDaysRemaining: number;
-  isActive: boolean;
-}
-
-interface ShopRecord {
-  id: number;
-  name: string;
-  slug: string;
-  whatsapp_number: string;
-  pin_code_hash: string;
-  theme_color: string;
-  welcome_message: string | null;
-  is_open: boolean;
-  is_active: boolean;
-  subscription_status?: SubscriptionStatus;
-  trial_start?: string | null;
-  trial_end?: string | null;
-  last_notification_sent_at: string | null;
-  created_at: string;
-  category: ShopCategory;
-  city?: string;
-  opening_hours?: ShopOpeningHours;
-  owner_access_token_hash?: string | null;
-  theme_config: {
-    primary_color: string;
-    secondary_color: string;
-    font_family: 'Plus Jakarta Sans' | 'Playfair Display' | 'Cinzel' | 'Poppins';
-    layout_style: 'grid_portrait' | 'card_landscape';
-    theme_preset_id?: string;
-    brand_direction?: 'luxe' | 'moderne' | 'authentique';
-    custom_banner_url?: string;
-    logo_url?: string;
-    event_mode_enabled?: boolean;
-    event_banner_text?: string;
-    social_links?: {
-      instagram?: string;
-      facebook?: string;
-      tiktok?: string;
-      website?: string;
-      whatsapp?: string;
-    };
-    delivery_zones?: Array<{
-      label: string;
-      mode: 'livraison' | 'sur_place' | 'retirer';
-      fee: number;
-      description?: string;
-    }>;
-    advanced_css?: {
-      borderRadius?: 'rounded-none' | 'rounded-xl' | 'rounded-2xl' | 'rounded-3xl';
-      shadowIntensity?: 'none' | 'subtle' | 'soft' | 'strong';
-      accentGlow?: boolean;
-    };
-  };
-}
-
-interface ProductRecord {
-  id: number;
-  shop_id: number;
-  title: string;
-  description: string | null;
-  price: number;
-  stock: number;
-  image_url: string;
-  is_available: boolean;
-  category?: string;
-  // Fashion attributes
-  sizes?: string[];
-  colors?: { name: string; hex: string }[];
-  lookbook_image?: string;
-  gallery_images?: string[];
-  // Food attributes
-  prep_time?: number; // minutes
-  modifier_groups?: {
-    name: string;
-    required?: boolean;
-    max_selections?: number;
-    options: { label: string; price_delta: number }[];
-  }[];
-  attributes?: Record<string, string>;
-}
-
-interface OrderRecord {
-  id: number;
-  shop_id: number;
-  customer_user_id?: number;
-  customer_name: string;
-  customer_phone: string;
-  delivery_location: string;
-  delivery_note?: string;
-  delivery_slot?: string;
-  payment_method_preference: 'wave' | 'mobile_money' | 'cash' | 'to_confirm';
-  total_amount: number;
-  created_at: string;
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'expired';
-  whatsapp_tracking_available?: boolean;
-  whatsapp_clicked_at?: string | null;
-  items?: {
-    id: number;
-    order_id: number;
-    product_id: number;
-    product_title?: string;
-    quantity: number;
-    unit_price: number;
-    selected_size?: string;
-    selected_color?: string;
-    selected_modifiers?: string[];
-  }[];
-}
 
 // Set realistic future dates for subscriptions
 const now = new Date();
@@ -169,125 +86,6 @@ const addDays = (d: Date, days: number) => {
   return res.toISOString().split('T')[0];
 };
 
-// Automatic Shop Opening/Closing Engine (GMT / UTC+0 Ivory Coast)
-function computeIsShopOpen(shop: ShopRecord): boolean {
-  if (shop.opening_hours && shop.opening_hours.enabled && !shop.opening_hours.manual_override) {
-    const d = new Date();
-    const abidjanNow = new Date(d.toLocaleString('en-US', { timeZone: 'Africa/Abidjan' }));
-    const abidjanWeekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Abidjan', weekday: 'short' }).format(d);
-    const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-    const currentMinutes = abidjanNow.getHours() * 60 + abidjanNow.getMinutes();
-    const currentDay = dayMap[abidjanWeekday] ?? abidjanNow.getDay();
-
-    if (shop.opening_hours.days && shop.opening_hours.days.length > 0 && !shop.opening_hours.days.includes(currentDay)) {
-      return false;
-    }
-
-    const [openH, openM] = (shop.opening_hours.open_time || '08:00').split(':').map(Number);
-    const [closeH, closeM] = (shop.opening_hours.close_time || '22:00').split(':').map(Number);
-    const openMinutes = (openH || 0) * 60 + (openM || 0);
-    const closeMinutes = (closeH || 0) * 60 + (closeM || 0);
-
-    if (closeMinutes >= openMinutes) {
-      return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
-    }
-
-    return currentMinutes >= openMinutes || currentMinutes <= closeMinutes;
-  }
-  return Boolean(shop.is_open);
-}
-
-function getProductUnitPriceWithModifiers(product: ProductRecord, selectedModifiers: string[] = []): number {
-  const selected = new Set(selectedModifiers.map((value) => value.trim()).filter(Boolean));
-
-  if (!product.modifier_groups || product.modifier_groups.length === 0) {
-    return product.price;
-  }
-
-  let modifierTotal = 0;
-
-  for (const group of product.modifier_groups) {
-    for (const option of group.options) {
-      const label = typeof option === 'string' ? option : option.label;
-      if (selected.has(label)) {
-        modifierTotal += typeof option === 'string' ? 0 : Number(option.price_delta || 0);
-      }
-    }
-  }
-
-  return product.price + modifierTotal;
-}
-
-function getValidSelectedModifiers(product: ProductRecord, selectedModifiers: string[]) {
-  const selected = new Set(selectedModifiers.map((value) => value.trim()).filter(Boolean));
-  const valid: string[] = [];
-  for (const group of product.modifier_groups || []) {
-    const labels = group.options.map((option) => option.label).filter((label) => selected.has(label));
-    const maxSelections = Math.max(1, Number(group.max_selections || 1));
-    valid.push(...labels.slice(0, maxSelections));
-  }
-  return valid;
-}
-
-function normalizeWhatsAppPhone(phone: unknown): string | null {
-  const cleaned = String(phone ?? '').replace(/\D/g, '').replace(/^00/, '');
-  if (/^(01|05|07)\d{8}$/.test(cleaned)) return `+225${cleaned}`;
-  if (/^225(01|05|07)\d{8}$/.test(cleaned)) return `+${cleaned}`;
-  return null;
-}
-
-function isWeakShopPin(pin: unknown): boolean {
-  const normalized = String(pin ?? '').trim();
-  if (!/^\d{6}$/.test(normalized)) {
-    return true;
-  }
-
-  const blockedPins = new Set([
-    '000000',
-    '000001',
-    '111222',
-    '123123',
-    '123456',
-    '222222',
-    '999999',
-  ]);
-
-  return blockedPins.has(normalized);
-}
-
-export function getSubscriptionPlanConfig(tier: SubscriptionTier | string): SubscriptionPlanConfig {
-  return { tier: 'standard', amount: 0, label: 'Gratuit', description: 'Vitrine + catalogue + commandes' };
-}
-
-export function normalizeSubscriptionTier(tier?: SubscriptionTier | string): SubscriptionTier {
-  return 'standard';
-}
-
-export function getSubscriptionState(
-  shop: Pick<ShopRecord, 'subscription_status' | 'trial_start' | 'trial_end'>,
-  now = new Date(),
-): SubscriptionState {
-  const plan = 'standard';
-  const trialStart = shop.trial_start || null;
-  const trialEnd = shop.trial_end || null;
-  const trialEndTime = trialEnd ? Date.parse(trialEnd) : NaN;
-  const trialDaysRemaining = Number.isFinite(trialEndTime)
-    ? Math.max(0, Math.ceil((trialEndTime - now.getTime()) / 86400000))
-    : 0;
-  const configuredStatus = shop.subscription_status || (trialDaysRemaining > 0 ? 'trialing' : 'active');
-  const status: SubscriptionStatus = configuredStatus === 'trialing' && trialEnd && trialDaysRemaining === 0
-    ? 'expired'
-    : configuredStatus;
-  return {
-    plan,
-    status,
-    trialStart,
-    trialEnd,
-    trialDaysRemaining,
-    isActive: status === 'trialing' || status === 'active',
-  };
-}
-
 async function refreshSubscriptionState(shop: ShopRecord): Promise<SubscriptionState> {
   const state = getSubscriptionState(shop);
   if (shop.subscription_status === 'trialing' && state.status === 'expired') {
@@ -295,71 +93,6 @@ async function refreshSubscriptionState(shop: ShopRecord): Promise<SubscriptionS
     await persistShop(shop);
   }
   return state;
-}
-
-function toBusinessDateKey(value: string | Date, timeZone = 'Africa/Abidjan'): string {
-  const date = value instanceof Date ? value : new Date(value);
-  return new Intl.DateTimeFormat('fr-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date).replace(/\//g, '-');
-}
-
-function isSameBusinessDay(value: string | Date, referenceDate: Date = new Date(), timeZone = 'Africa/Abidjan'): boolean {
-  return toBusinessDateKey(value, timeZone) === toBusinessDateKey(referenceDate, timeZone);
-}
-
-export function summarizeOrderMetrics<T extends { shop_id: number; total_amount: number; created_at: string; status?: string }>(
-  orders: T[],
-  shopId?: number,
-  referenceDate: Date = new Date(),
-) {
-  const filteredOrders = (typeof shopId === 'number'
-    ? orders.filter((order) => order.shop_id === shopId)
-    : orders
-  ).filter((order) => isSameBusinessDay(order.created_at, referenceDate));
-
-  const received = filteredOrders.length;
-  const pending = filteredOrders.filter((order) => order.status === 'pending').length;
-  const confirmed = filteredOrders.filter((order) => order.status === 'confirmed').length;
-  const delivered = filteredOrders.filter((order) => order.status === 'delivered').length;
-  const cancelled = filteredOrders.filter((order) => order.status === 'cancelled').length;
-
-  const caOrdered = filteredOrders
-    .filter((order) => order.status !== 'cancelled')
-    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
-  const caConfirmed = filteredOrders
-    .filter((order) => order.status === 'confirmed')
-    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
-  const caDelivered = filteredOrders
-    .filter((order) => order.status === 'delivered')
-    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
-
-  const panierMoyenLivre = delivered > 0 ? Math.round(caDelivered / delivered) : 0;
-
-  return {
-    received,
-    pending,
-    confirmed,
-    delivered,
-    cancelled,
-    total_orders: received,
-    ca_ordered: caOrdered,
-    ca_confirmed: caConfirmed,
-    ca_delivered: caDelivered,
-    panier_moyen_livre: panierMoyenLivre,
-  };
-}
-
-export function escapeHtml(value: string | null | undefined): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }
 
 export function sanitizeTextField(value: string | null | undefined, maxLength = 200): string {
@@ -832,73 +565,9 @@ const merchantSessions = new Map<string, { shopId: number; expiresAt: number; fi
 const adminSessions = new Map<string, { expiresAt: number; fingerprint: string }>();
 const customerSessions = new Map<string, { userId: number; expiresAt: number; fingerprint: string }>();
 
-export async function saveMerchantSessionRecord(token: string, session: { shopId: number; expiresAt: number; fingerprint: string }) {
-  await dbRun(`
-    INSERT INTO merchant_sessions (token, shop_id, expires_at, fingerprint, created_at)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(token) DO UPDATE SET
-      shop_id = excluded.shop_id,
-      expires_at = excluded.expires_at,
-      fingerprint = excluded.fingerprint,
-      created_at = excluded.created_at
-  `, [token, session.shopId, session.expiresAt, session.fingerprint, new Date().toISOString()]);
-}
-
-export async function getMerchantSessionRecord(token: string): Promise<{ shopId: number; expiresAt: number; fingerprint: string } | null> {
-  const row = await dbGet<{ shop_id: number; expires_at: number; fingerprint: string }>('SELECT shop_id, expires_at, fingerprint FROM merchant_sessions WHERE token = ?', [token]);
-  if (!row) return null;
-  return { shopId: Number(row.shop_id), expiresAt: Number(row.expires_at), fingerprint: row.fingerprint };
-}
-
-export async function deleteMerchantSessionRecord(token: string) {
-  await dbRun('DELETE FROM merchant_sessions WHERE token = ?', [token]);
-}
-
-export async function saveAdminSessionRecord(token: string, session: { expiresAt: number; fingerprint: string }) {
-  await dbRun(`
-    INSERT INTO admin_sessions (token, expires_at, fingerprint, created_at)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(token) DO UPDATE SET
-      expires_at = excluded.expires_at,
-      fingerprint = excluded.fingerprint,
-      created_at = excluded.created_at
-  `, [token, session.expiresAt, session.fingerprint, new Date().toISOString()]);
-}
-
-export async function getAdminSessionRecord(token: string): Promise<{ expiresAt: number; fingerprint: string } | null> {
-  const row = await dbGet<{ expires_at: number; fingerprint: string }>('SELECT expires_at, fingerprint FROM admin_sessions WHERE token = ?', [token]);
-  if (!row) return null;
-  return { expiresAt: Number(row.expires_at), fingerprint: row.fingerprint };
-}
-
-export async function deleteAdminSessionRecord(token: string) {
-  await dbRun('DELETE FROM admin_sessions WHERE token = ?', [token]);
-}
-
-export async function saveCustomerSessionRecord(token: string, session: { userId: number; expiresAt: number; fingerprint: string }) {
-  await dbRun(`
-    INSERT INTO user_sessions (token, user_id, expires_at, fingerprint, created_at)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(token) DO UPDATE SET
-      user_id = excluded.user_id,
-      expires_at = excluded.expires_at,
-      fingerprint = excluded.fingerprint,
-      created_at = excluded.created_at
-  `, [token, session.userId, session.expiresAt, session.fingerprint, new Date().toISOString()]);
-}
-
-export async function getCustomerSessionRecord(token: string): Promise<{ userId: number; expiresAt: number; fingerprint: string } | null> {
-  const row = await dbGet<{ user_id: number; expires_at: number; fingerprint: string }>('SELECT user_id, expires_at, fingerprint FROM user_sessions WHERE token = ?', [token]);
-  if (!row) return null;
-  return { userId: Number(row.user_id), expiresAt: Number(row.expires_at), fingerprint: row.fingerprint };
-}
-
-export async function deleteCustomerSessionRecord(token: string) {
-  await dbRun('DELETE FROM user_sessions WHERE token = ?', [token]);
-}
-
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const publicRequestLimits = new Map<string, { count: number; resetAt: number }>();
+const DUMMY_CUSTOMER_PASSWORD_HASH = bcrypt.hashSync(randomUUID(), 10);
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -943,6 +612,11 @@ function setCustomerSessionCookie(res: Response, token: string, fingerprint: str
   const sessionCookie = `matable_customer_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
   const fingerprintCookie = `matable_customer_session_fp=${encodeURIComponent(fingerprint)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
   res.setHeader('Set-Cookie', [sessionCookie, fingerprintCookie]);
+}
+
+function clearCustomerSessionCookie(res: Response) {
+  const expiredBase = '; Path=/; HttpOnly; SameSite=Lax; Max-Age=0';
+  res.setHeader('Set-Cookie', [`matable_customer_session=;${expiredBase}`, `matable_customer_session_fp=;${expiredBase}`]);
 }
 
 export function validateRuntimeConfig(): void {
@@ -1079,14 +753,21 @@ async function getSessionStateForResponse(req: Request, res?: Response) {
     if (!isRequestFingerprintMatch(customerSession, req)) {
       customerSessions.delete(customerToken);
       await deleteCustomerSessionRecord(customerToken);
+      if (res) clearCustomerSessionCookie(res);
+      return { authenticated: false, userType: null, shopId: null, user: null };
+    }
+    const user = await dbGet<{ id: number; name: string; first_name: string | null; last_name: string | null; phone: string; email: string; is_active: number }>('SELECT id, name, first_name, last_name, phone, email, is_active FROM users WHERE id = ?', [customerSession.userId]);
+    if (!user || !user.is_active) {
+      customerSessions.delete(customerToken);
+      await deleteCustomerSessionRecord(customerToken);
+      if (res) clearCustomerSessionCookie(res);
       return { authenticated: false, userType: null, shopId: null, user: null };
     }
     const renewedSession = { ...customerSession, expiresAt: Date.now() + SESSION_DURATION_MS };
     customerSessions.set(customerToken, renewedSession);
     await saveCustomerSessionRecord(customerToken, renewedSession);
     if (res) setCustomerSessionCookie(res, customerToken, renewedSession.fingerprint);
-    const user = await dbGet<{ id: number; name: string; phone: string; email: string }>('SELECT id, name, phone, email FROM users WHERE id = ?', [customerSession.userId]);
-    return { authenticated: true, userType: 'customer', shopId: null, user: user ? { id: user.id, name: user.name, phone: user.phone, email: user.email } : null };
+    return { authenticated: true, userType: 'customer', shopId: null, user: toCustomerProfile(user) };
   }
 
   if (merchantToken) {
@@ -1142,6 +823,14 @@ async function requireCustomerAccess(req: Request, res: Response, next: express.
     return res.status(401).json({ error: 'Session client rejetée pour sécurité.' });
   }
 
+  const user = await dbGet<{ is_active: number }>('SELECT is_active FROM users WHERE id = ?', [session.userId]);
+  if (!user || !user.is_active) {
+    customerSessions.delete(token);
+    await deleteCustomerSessionRecord(token);
+    clearCustomerSessionCookie(res);
+    return res.status(401).json({ error: 'Authentification client requise.' });
+  }
+
   const renewedSession = { ...session, expiresAt: Date.now() + SESSION_DURATION_MS };
   customerSessions.set(token, renewedSession);
   await saveCustomerSessionRecord(token, renewedSession);
@@ -1167,6 +856,15 @@ async function getCustomerSessionState(req: Request, res?: Response) {
   if (!isRequestFingerprintMatch(session, req)) {
     customerSessions.delete(token);
     await deleteCustomerSessionRecord(token);
+    if (res) clearCustomerSessionCookie(res);
+    return { authenticated: false, userType: null, user: null };
+  }
+
+  const user = await dbGet<{ id: number; name: string; first_name: string | null; last_name: string | null; phone: string; email: string; created_at: string; is_active: number }>('SELECT id, name, first_name, last_name, phone, email, created_at, is_active FROM users WHERE id = ?', [session.userId]);
+  if (!user || !user.is_active) {
+    customerSessions.delete(token);
+    await deleteCustomerSessionRecord(token);
+    if (res) clearCustomerSessionCookie(res);
     return { authenticated: false, userType: null, user: null };
   }
 
@@ -1175,10 +873,7 @@ async function getCustomerSessionState(req: Request, res?: Response) {
   await saveCustomerSessionRecord(token, renewedSession);
   if (res) setCustomerSessionCookie(res, token, renewedSession.fingerprint);
 
-  const user = await dbGet<{ id: number; name: string; phone: string; email: string; created_at: string; is_active: number }>('SELECT id, name, phone, email, created_at, is_active FROM users WHERE id = ?', [session.userId]);
-  if (!user) return { authenticated: false, userType: null, user: null };
-
-  return { authenticated: true, userType: 'customer', user: { id: user.id, name: user.name, phone: user.phone, email: user.email, created_at: user.created_at } };
+  return { authenticated: true, userType: 'customer', user: toCustomerProfile(user) };
 }
 
 async function requireAdminAccess(req: Request, res: Response, next: express.NextFunction) {
@@ -1264,6 +959,14 @@ async function requireMerchantAccess(req: Request, res: Response, next: express.
   next();
 }
 
+async function requireMerchantOwnShop(req: Request, res: Response, next: express.NextFunction) {
+  const shop = await requireMerchantIdentity(req, res);
+  if (!shop) return;
+  if (!shop.is_active) return res.status(403).json({ error: 'Boutique inactive : contactez l’administration pour la réactivation.' });
+  if (Number(req.params.id) !== shop.id) return res.status(403).json({ error: 'Accès refusé à cette boutique.' });
+  next();
+}
+
 function isLoginRateLimited(key: string): boolean {
   const current = loginAttempts.get(key);
   if (!current || current.resetAt <= Date.now()) {
@@ -1272,6 +975,26 @@ function isLoginRateLimited(key: string): boolean {
   }
   current.count += 1;
   return current.count > MAX_LOGIN_ATTEMPTS;
+}
+
+function getCustomerLoginLockSeconds(key: string): number {
+  const current = loginAttempts.get(key);
+  if (!current) return 0;
+  if (current.resetAt <= Date.now()) {
+    loginAttempts.delete(key);
+    return 0;
+  }
+  return current.count >= MAX_LOGIN_ATTEMPTS ? Math.ceil((current.resetAt - Date.now()) / 1000) : 0;
+}
+
+function recordCustomerLoginFailure(key: string): number {
+  const current = loginAttempts.get(key);
+  if (!current || current.resetAt <= Date.now()) {
+    loginAttempts.set(key, { count: 1, resetAt: Date.now() + LOGIN_WINDOW_MS });
+    return 1;
+  }
+  current.count += 1;
+  return current.count;
 }
 
 export async function rotateMerchantAccessTokenForShop(shopId: number, previousToken?: string): Promise<string> {
@@ -1307,6 +1030,12 @@ setInterval(async () => {
     }
   }
   await dbRun('DELETE FROM admin_sessions WHERE expires_at <= ?', [now]);
+  for (const [key, attempt] of loginAttempts) {
+    if (attempt.resetAt <= now) loginAttempts.delete(key);
+  }
+  for (const [key, limit] of publicRequestLimits) {
+    if (limit.resetAt <= now) publicRequestLimits.delete(key);
+  }
 }, 15 * 60 * 1000).unref();
 
 const toSafeShop = (shop: ShopRecord) => {
@@ -1314,6 +1043,7 @@ const toSafeShop = (shop: ShopRecord) => {
   const {
     pin_code_hash: _pinCodeHash,
     owner_access_token_hash: _ownerAccessTokenHash,
+    owner_email: _ownerEmail,
     ...safeShop
   } = shop;
   return { ...safeShop, subscription };
@@ -1355,8 +1085,8 @@ async function seedDatabaseIfEmpty() {
   const insertShop = `
     INSERT INTO shops (
       id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active,
-      subscription_expires_at, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      publication_status, subscription_expires_at, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   const insertProduct = `
@@ -1376,6 +1106,7 @@ async function seedDatabaseIfEmpty() {
       shop.welcome_message,
       shop.is_open ? 1 : 0,
       shop.is_active ? 1 : 0,
+      shop.publication_status || (shop.is_active ? 'active' : 'suspended'),
       shop.trial_end ?? null,
       shop.last_notification_sent_at,
       shop.created_at,
@@ -1433,86 +1164,6 @@ async function seedDatabaseIfEmpty() {
   }
 }
 
-async function loadProductsFromDatabase() {
-  const rows = await dbAll<Record<string, unknown>>('SELECT * FROM products ORDER BY id');
-  return rows.map((row) => ({
-    id: Number(row.id),
-    shop_id: Number(row.shop_id),
-    customer_user_id: row.customer_user_id == null ? undefined : Number(row.customer_user_id),
-    title: String(row.title),
-    description: row.description ? String(row.description) : null,
-    price: Number(row.price),
-    stock: Number(row.stock),
-    image_url: String(row.image_url ?? ''),
-    is_available: Boolean(row.is_available),
-    category: row.category ? String(row.category) : undefined,
-    sizes: row.sizes ? (typeof row.sizes === 'string' ? JSON.parse(row.sizes) : row.sizes) : undefined,
-    colors: row.colors ? (typeof row.colors === 'string' ? JSON.parse(row.colors) : row.colors) : undefined,
-    lookbook_image: row.lookbook_image ? String(row.lookbook_image) : undefined,
-    gallery_images: row.gallery_images ? (typeof row.gallery_images === 'string' ? JSON.parse(row.gallery_images) : row.gallery_images) : undefined,
-    prep_time: row.prep_time == null ? undefined : Number(row.prep_time),
-    modifier_groups: row.modifier_groups ? (typeof row.modifier_groups === 'string' ? JSON.parse(row.modifier_groups) : row.modifier_groups) : undefined,
-    attributes: row.attributes ? (typeof row.attributes === 'string' ? JSON.parse(row.attributes) : row.attributes) : undefined,
-  })) as ProductRecord[];
-}
-
-async function loadShopsFromDatabase() {
-  const rows = await dbAll<Record<string, unknown>>('SELECT shops.* FROM shops ORDER BY shops.id');
-  return rows.map((row) => ({
-    id: Number(row.id), name: String(row.name), slug: String(row.slug),
-    whatsapp_number: String(row.whatsapp_number), pin_code_hash: String(row.pin_code_hash),
-    theme_color: String(row.theme_color || ''), welcome_message: row.welcome_message == null ? null : String(row.welcome_message),
-    is_open: Boolean(row.is_open), is_active: Boolean(row.is_active),
-    subscription_status: row.subscription_status ? String(row.subscription_status) as SubscriptionStatus : undefined,
-    trial_start: row.trial_start == null ? null : String(row.trial_start),
-    trial_end: row.trial_end == null ? null : String(row.trial_end),
-    last_notification_sent_at: row.last_notification_sent_at == null ? null : String(row.last_notification_sent_at),
-    created_at: String(row.created_at), category: String(row.category) as ShopRecord['category'],
-    city: row.city == null ? undefined : String(row.city),
-    theme_config: row.theme_config ? (typeof row.theme_config === 'string' ? JSON.parse(row.theme_config) : row.theme_config) : {},
-    opening_hours: row.opening_hours ? (typeof row.opening_hours === 'string' ? JSON.parse(row.opening_hours) : row.opening_hours) : undefined,
-    owner_access_token_hash: row.owner_access_token_hash ? String(row.owner_access_token_hash) : null,
-  })) as ShopRecord[];
-}
-
-async function persistShop(shop: ShopRecord) {
-  await dbRun(`
-    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, subscription_status, trial_start, trial_end, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET name=excluded.name, slug=excluded.slug, whatsapp_number=excluded.whatsapp_number,
-      pin_code_hash=excluded.pin_code_hash, theme_color=excluded.theme_color, welcome_message=excluded.welcome_message,
-      is_open=excluded.is_open, is_active=excluded.is_active, payment_status=excluded.payment_status,
-      merchant_verification_status=excluded.merchant_verification_status,
-      payment_deadline_at=excluded.payment_deadline_at, selected_subscription_tier=excluded.selected_subscription_tier,
-      subscription_expires_at=excluded.subscription_expires_at, last_notification_sent_at=excluded.last_notification_sent_at,
-      subscription_status=excluded.subscription_status, trial_start=excluded.trial_start, trial_end=excluded.trial_end,
-      category=excluded.category, city=excluded.city, subscription_tier=excluded.subscription_tier,
-      theme_config=excluded.theme_config, opening_hours=excluded.opening_hours, owner_access_token_hash=excluded.owner_access_token_hash
-  `, [
-    shop.id, shop.name, shop.slug, shop.whatsapp_number, shop.pin_code_hash, shop.theme_color, shop.welcome_message,
-    shop.is_open ? 1 : 0, shop.is_active ? 1 : 0, 'not_required', 'approved', null,
-    'standard', shop.trial_end ?? null, shop.subscription_status || 'active', shop.trial_start ?? null, shop.trial_end ?? null, shop.last_notification_sent_at,
-    shop.created_at, shop.category, shop.city ?? null, 'standard', JSON.stringify(shop.theme_config),
-    shop.opening_hours ? JSON.stringify(shop.opening_hours) : null, shop.owner_access_token_hash ?? null
-  ]);
-}
-
-async function persistProduct(product: ProductRecord) {
-  await dbRun(`
-    INSERT INTO products (id, shop_id, title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET shop_id=excluded.shop_id, title=excluded.title, description=excluded.description,
-      price=excluded.price, stock=excluded.stock, image_url=excluded.image_url, is_available=excluded.is_available,
-      category=excluded.category, sizes=excluded.sizes, colors=excluded.colors, lookbook_image=excluded.lookbook_image, gallery_images=excluded.gallery_images, prep_time=excluded.prep_time,
-      modifier_groups=excluded.modifier_groups, attributes=excluded.attributes
-  `, [
-    product.id, product.shop_id, product.title, product.description ?? null, product.price, product.stock, product.image_url,
-    product.is_available ? 1 : 0, product.category ?? null, product.sizes ? JSON.stringify(product.sizes) : null, product.colors ? JSON.stringify(product.colors) : null,
-    product.lookbook_image ?? null, product.gallery_images && product.gallery_images.length > 0 ? JSON.stringify(product.gallery_images) : null, product.prep_time ?? null, product.modifier_groups ? JSON.stringify(product.modifier_groups) : null,
-    product.attributes && Object.keys(product.attributes).length > 0 ? JSON.stringify(product.attributes) : null
-  ]);
-}
-
 function sanitizeProductAttributes(attributes: unknown, category: ShopCategory): Record<string, string> | undefined {
   if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) return undefined;
   const allowedFields = new Set(getCategoryDefaults(category).productAttributes.map((field) => field.key));
@@ -1523,32 +1174,6 @@ function sanitizeProductAttributes(attributes: unknown, category: ShopCategory):
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
-async function loadOrdersFromDatabase() {
-  const rows = await dbAll<Record<string, unknown>>(`
-    SELECT orders.*, order_whatsapp_tracking.order_id IS NOT NULL AS whatsapp_tracking_available,
-      order_whatsapp_tracking.clicked_at AS whatsapp_clicked_at
-    FROM orders LEFT JOIN order_whatsapp_tracking ON order_whatsapp_tracking.order_id = orders.id
-    ORDER BY orders.created_at DESC, orders.id DESC
-  `);
-  return rows.map((row) => ({
-    id: Number(row.id),
-    shop_id: Number(row.shop_id),
-    customer_name: String(row.customer_name),
-    customer_phone: String(row.customer_phone),
-    delivery_location: String(row.delivery_location),
-    delivery_note: row.delivery_note ? String(row.delivery_note) : undefined,
-    delivery_slot: row.delivery_slot ? String(row.delivery_slot) : undefined,
-    payment_method_preference: String(row.payment_method_preference || 'to_confirm') as OrderRecord['payment_method_preference'],
-    total_amount: Number(row.total_amount),
-    created_at: String(row.created_at),
-    status: (String(row.status || 'pending')) as OrderRecord['status'],
-    whatsapp_tracking_available: Boolean(row.whatsapp_tracking_available),
-    whatsapp_clicked_at: row.whatsapp_clicked_at == null ? null : String(row.whatsapp_clicked_at),
-    customer_user_id: row.customer_user_id == null ? undefined : Number(row.customer_user_id),
-    items: row.items ? (typeof row.items === 'string' ? JSON.parse(row.items) : row.items) : [],
-  })) as OrderRecord[];
-}
-
 async function refreshRuntimeDataFromDatabase() {
   const persistedShops = await loadShopsFromDatabase();
   shops.splice(0, shops.length, ...persistedShops);
@@ -1556,76 +1181,14 @@ async function refreshRuntimeDataFromDatabase() {
   orders.splice(0, orders.length, ...await loadOrdersFromDatabase());
 }
 
-async function persistOrder(order: OrderRecord) {
-  await dbRun(`
-    INSERT INTO orders (
-      id, shop_id, customer_name, customer_phone, delivery_location, delivery_note,
-      delivery_slot, payment_method_preference, total_amount, created_at, status, items, customer_user_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET status=excluded.status
-  `, [
-    order.id,
-    order.shop_id,
-    order.customer_name,
-    order.customer_phone,
-    order.delivery_location,
-    order.delivery_note ?? null,
-    order.delivery_slot ?? null,
-    order.payment_method_preference,
-    order.total_amount,
-    order.created_at,
-    order.status || 'pending',
-    JSON.stringify(order.items ?? []),
-    order.customer_user_id ?? null
-  ]);
-}
-
-async function allocateRecordId(entity: 'shops' | 'products' | 'orders') {
-  const row = await dbGet<{ id: number }>(`
-    INSERT INTO id_allocators (name, last_id)
-    SELECT ?, COALESCE(MAX(id), 0) + 1 FROM ${entity} WHERE TRUE
-    ON CONFLICT(name) DO UPDATE SET last_id = id_allocators.last_id + 1
-    RETURNING last_id AS id
-  `, [entity]);
-  if (!row) throw new Error(`Impossible d’allouer un identifiant pour ${entity}.`);
-  return Number(row.id);
-}
-
 async function startServer() {
   validateRuntimeConfig();
 
   const app = express();
   const PORT = Number(process.env.PORT || 3000);
+  const verificationRouters = createMerchantVerificationRouter({ dbRun, dbGet, dbAll, requireMerchantOwnShop, shops });
 
-  app.disable('x-powered-by');
-  app.use((req: Request, res: Response, next: express.NextFunction) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-    if (process.env.NODE_ENV === 'production') {
-      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-    }
-    if (req.path.startsWith('/api/')) {
-      res.setHeader('Cache-Control', 'no-store');
-    }
-    if (process.env.NODE_ENV === 'production') {
-      res.setHeader('Content-Security-Policy', [
-        "default-src 'self'",
-        "base-uri 'self'",
-        "frame-ancestors 'none'",
-        "form-action 'self' https://wa.me https://api.whatsapp.com",
-        "img-src 'self' data: https:",
-        "font-src 'self' data:",
-        "style-src 'self' 'unsafe-inline'",
-        "script-src 'self'",
-        "connect-src 'self'",
-        'upgrade-insecure-requests',
-      ].join('; '));
-    }
-    next();
-  });
+  applySecurityHeaders(app);
 
   const trustedProxyHops = Number(process.env.TRUST_PROXY_HOPS || 0);
   app.set('trust proxy', Number.isInteger(trustedProxyHops) && trustedProxyHops > 0 ? trustedProxyHops : false);
@@ -1640,13 +1203,22 @@ async function startServer() {
   });
 
   app.use(express.json({ limit: '2mb' }));
-  app.use('/api/shops/:id/toggle-status', requireMerchantAccess);
-  app.use('/api/shops/:id/theme', requireMerchantAccess);
-  app.use('/api/shops/:id/products', requireMerchantAccess);
-  app.use('/api/shops/:id/orders', requireMerchantAccess);
-  app.use('/api/shops/:id/flash-bilan', requireMerchantAccess);
   app.use('/api/admin', requireAdminAccess);
+  app.use('/api/admin', createAdminRouter({
+    shops,
+    products,
+    orders,
+    databaseMode,
+    dbAll,
+    dbGet,
+    refreshRuntimeDataFromDatabase,
+    persistShop,
+    toSafeShop,
+    rotateMerchantAccessTokenForShop,
+  }));
+  app.use('/api/admin/identity-verifications', verificationRouters.adminRouter);
   await initializeDatabase();
+  await migrateExistingSessionTokens();
   await seedDatabaseIfEmpty();
 
   shops.forEach((shop) => {
@@ -1661,1421 +1233,137 @@ async function startServer() {
   products.splice(0, products.length, ...persistedProducts);
   const persistedOrders = await loadOrdersFromDatabase();
   orders.splice(0, orders.length, ...persistedOrders);
-  const persistedMerchantSessions = await dbAll<{ token: string; shop_id: number; expires_at: number; fingerprint: string }>('SELECT token, shop_id, expires_at, fingerprint FROM merchant_sessions WHERE expires_at > ?', [Date.now()]);
-  for (const record of persistedMerchantSessions) {
-    merchantSessions.set(record.token, { shopId: record.shop_id, expiresAt: record.expires_at, fingerprint: record.fingerprint });
-  }
-  const persistedAdminSessions = await dbAll<{ token: string; expires_at: number; fingerprint: string }>('SELECT token, expires_at, fingerprint FROM admin_sessions WHERE expires_at > ?', [Date.now()]);
-  for (const record of persistedAdminSessions) {
-    adminSessions.set(record.token, { expiresAt: record.expires_at, fingerprint: record.fingerprint });
-  }
   // --- API ROUTES ---
 
-  // Health check
-  app.get('/api/health', (req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString(), integrations: { whatsapp_click_to_chat: 'available' } });
-  });
+  app.use('/api', createTelemetryRouter({ shops, rateLimitPublicRequest, dbGet, dbRun }));
 
-  app.post('/api/analytics/page-view', rateLimitPublicRequest(120), async (req: Request, res: Response) => {
-    const shopId = req.body?.shop_id == null ? null : Number(req.body.shop_id);
-    const sessionId = String(req.body?.session_id || '').trim();
-    if (!sessionId || sessionId.length > 100 || (shopId !== null && !Number.isInteger(shopId))) {
-      return res.status(400).json({ error: 'Événement analytics invalide.' });
-    }
-    if (shopId !== null && !shops.some((shop) => shop.id === shopId)) {
-      return res.status(404).json({ error: 'Boutique introuvable.' });
-    }
-    const today = new Date().toISOString().slice(0, 10);
-    const shopCondition = shopId === null ? 'shop_id IS NULL' : 'shop_id = ?';
-    const analyticsParams = shopId === null ? [sessionId, `${today}%`] : [shopId, sessionId, `${today}%`];
-    const alreadyTracked = await dbGet(`
-      SELECT 1 FROM analytics_events
-      WHERE ${shopCondition} AND event_type = 'page_view' AND session_id = ? AND created_at LIKE ?
-      LIMIT 1
-    `, analyticsParams);
-    if (!alreadyTracked) {
-      await dbRun('INSERT INTO analytics_events (shop_id, event_type, session_id, path, created_at) VALUES (?, ?, ?, ?, ?)', [shopId, 'page_view', sessionId, String(req.body?.path || '').slice(0, 300), new Date().toISOString()]);
-    }
-    res.status(204).end();
-  });
+  // Health check
 
   // 1. SHOPS
-  // Get all active public shops (for shop selector / discovery)
-  app.get('/api/shops', (req: Request, res: Response) => {
-    const publicShops = shops
-      .filter((shop) => shop.is_active)
-      .map((s) => ({
-        ...(() => {
-          const shopProducts = products.filter((product) => product.shop_id === s.id);
-          const availableProducts = shopProducts.filter((product) => product.is_available && product.stock > 0);
-          return {
-            products_preview: availableProducts.slice(0, 3).map((product) => ({
-              id: product.id,
-              title: product.title,
-              image_url: product.image_url,
-              price: product.price,
-            })),
-            products_count: availableProducts.length,
-          };
-        })(),
-        id: s.id,
-        name: s.name,
-        slug: s.slug,
-        theme_color: s.theme_color,
-        welcome_message: s.welcome_message,
-        is_open: computeIsShopOpen(s),
-        is_active: s.is_active,
-        category: s.category,
-        city: s.city,
-        theme_config: s.theme_config,
-        opening_hours: s.opening_hours,
-      }))
-      .sort((a, b) => {
-        const openPriority = Number(b.is_open) - Number(a.is_open);
-        if (openPriority !== 0) return openPriority;
-        return String(a.name).localeCompare(String(b.name));
-      });
-    res.json(publicShops);
-  });
+  app.use('/api/shops', createPublicShopsRouter({
+    shops,
+    products,
+    merchantSessions,
+    getCookie,
+    isRequestFingerprintMatch,
+    computeIsShopOpen,
+  }));
+  app.use('/api/shops', createShopManagementRouter({
+    shops,
+    requireMerchantAccess,
+    requireMerchantOwnShop,
+    addDays,
+    trialDurationDays: TRIAL_DURATION_DAYS,
+    rotateMerchantAccessTokenForShop,
+    persistShop,
+    toSafeShop,
+    normalizeWhatsAppPhone,
+    isWeakShopPin,
+    hashPin,
+    isShopCategory,
+    normalizeCustomBannerImage,
+    sanitizeTextField,
+  }));
+  app.use('/api/shops', verificationRouters.merchantRouter);
 
-  // Get single shop by slug or id (Storefront or Merchant Dashboard)
-  app.get('/api/shops/:slug', (req: Request, res: Response) => {
-    const param = req.params.slug;
-    const isIdQuery = !isNaN(Number(param));
-    const shop = shops.find((s) => s.slug === param || s.id.toString() === param);
-    if (!shop) {
-      return res.status(404).json({ error: 'Boutique introuvable' });
-    }
+  app.use('/api/shops', createShopRegistrationRouter({
+    shops,
+    rateLimitPublicRequest,
+    allocateShopId: () => allocateRecordId('shops'),
+    normalizeWhatsAppPhone,
+    isWeakShopPin,
+    hashPin,
+    hashAccessToken,
+    isShopCategory,
+    getCategoryDefaults,
+    normalizeCustomBannerImage,
+    normalizeWelcomeMessage,
+    sanitizeTextField,
+    addDays,
+    trialDurationDays: TRIAL_DURATION_DAYS,
+    computeIsShopOpen,
+    persistShop,
+    createMerchantSession,
+    toSafeShop,
+    dbGet,
+  }));
 
-    const token = getCookie(req, 'matable_session');
-    const session = token ? merchantSessions.get(token) : undefined;
-    const isMerchantForShop = !!(session && session.shopId === shop.id && session.expiresAt > Date.now());
-
-    if (isMerchantForShop && !isRequestFingerprintMatch(session, req)) {
-      return res.status(401).json({ error: 'Session rejetée : le navigateur ne correspond plus à celui utilisé lors de la connexion.' });
-    }
-
-    if (isIdQuery && !isMerchantForShop) {
-      return res.status(401).json({ error: 'Accès marchand requis pour ce catalogue.' });
-    }
-
-    // If shop subscription is expired/disabled (is_active === false) and queried publicly
-    if (!shop.is_active && !isMerchantForShop) {
-      return res.json({
-        shop: {
-          id: shop.id,
-          name: shop.name,
-          slug: shop.slug,
-          is_active: false,
-          category: shop.category,
-          theme_config: shop.theme_config,
-          welcome_message: 'Boutique temporairement indisponible.',
-        },
-        products: [],
-      });
-    }
-
-    const shopProducts = isIdQuery
-      ? products.filter((p) => p.shop_id === shop.id)
-      : products.filter((p) => p.shop_id === shop.id && p.is_available);
-
-    res.json({
-      shop: {
-        id: shop.id,
-        name: shop.name,
-        slug: shop.slug,
-        whatsapp_number: shop.whatsapp_number,
-        theme_color: shop.theme_color,
-        welcome_message: shop.welcome_message,
-        is_open: computeIsShopOpen(shop),
-        is_active: shop.is_active,
-        category: shop.category,
-        city: shop.city,
-        theme_config: shop.theme_config,
-        opening_hours: shop.opening_hours,
-      },
-      products: shopProducts,
-    });
-  });
-
-  app.post('/api/shops/:id/access-link', requireMerchantAccess, async (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shop = shops.find((candidate) => candidate.id === shopId);
-    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-
-    const ownerAccessToken = await rotateMerchantAccessTokenForShop(shop.id);
-    const origin = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-    res.json({
-      success: true,
-      public_url: `${origin}/${encodeURIComponent(shop.slug)}`,
-      access_url: `${origin}/app?access=${encodeURIComponent(ownerAccessToken)}`,
-    });
-  });
-
-  // Toggle shop ordering status (Ouvert / Fermé) - POST /api/shops/:id/toggle-status
-  app.post('/api/shops/:id/toggle-status', async (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shop = shops.find((s) => s.id === shopId);
-    if (!shop) {
-      return res.status(404).json({ error: 'Boutique introuvable' });
-    }
-
-    const { is_open } = req.body;
-    shop.is_open = is_open !== undefined ? Boolean(is_open) : !shop.is_open;
-    if (shop.opening_hours) {
-      shop.opening_hours.manual_override = true;
-    }
-    await persistShop(shop);
-
-    res.json({
-      success: true,
-      is_open: shop.is_open,
-      shop: {
-        ...toSafeShop(shop),
-        is_open: shop.is_open,
-      },
-      message: shop.is_open 
-        ? 'Prise de commande activée sur la boutique.' 
-        : 'Prise de commande désactivée sur la boutique.'
-    });
-  });
-
-  app.patch('/api/shops/:id/toggle-status', async (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shop = shops.find((s) => s.id === shopId);
-    if (!shop) {
-      return res.status(404).json({ error: 'Boutique introuvable' });
-    }
-
-    const { is_open } = req.body;
-    shop.is_open = is_open !== undefined ? Boolean(is_open) : !shop.is_open;
-    if (shop.opening_hours) {
-      shop.opening_hours.manual_override = true;
-    }
-    await persistShop(shop);
-
-    res.json({
-      success: true,
-      is_open: shop.is_open,
-      shop: {
-        ...toSafeShop(shop),
-        is_open: shop.is_open,
-      },
-      message: shop.is_open 
-        ? 'Prise de commande activée sur la boutique.' 
-        : 'Prise de commande désactivée sur la boutique.'
-    });
-  });
-
-  // Update shop appearance / theme_config (Merchant)
-  app.put('/api/shops/:id/theme', async (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shop = shops.find((s) => s.id === shopId);
-    if (!shop) {
-      return res.status(404).json({ error: 'Boutique introuvable' });
-    }
-
-    const { theme_config } = req.body;
-    if (theme_config) {
-      const requestedThemeConfig = { ...theme_config };
-      const requestedBrandDirection = ['luxe', 'moderne', 'authentique'].includes(requestedThemeConfig.brand_direction)
-        ? requestedThemeConfig.brand_direction as ShopRecord['theme_config']['brand_direction']
-        : shop.theme_config.brand_direction;
-      shop.theme_config = {
-        ...shop.theme_config,
-        ...requestedThemeConfig,
-        ...(requestedBrandDirection ? { brand_direction: requestedBrandDirection } : {}),
-        ...(typeof requestedThemeConfig.custom_banner_url === 'string'
-          ? { custom_banner_url: normalizeCustomBannerImage(requestedThemeConfig.custom_banner_url, shop.category) }
-          : {}),
-      };
-      // Keep legacy theme_color in sync with primary_color
-      if (requestedThemeConfig.primary_color) {
-        shop.theme_color = requestedThemeConfig.primary_color;
-      }
-    }
-
-    await persistShop(shop);
-
-    res.json({ success: true, shop: toSafeShop(shop), theme_config: shop.theme_config });
-  });
-
-  // Update shop settings (Merchant)
-  app.put('/api/shops/:id', requireMerchantAccess, async (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shop = shops.find((s) => s.id === shopId);
-    if (!shop) {
-      return res.status(404).json({ error: 'Boutique introuvable' });
-    }
-
-    const { theme_color, welcome_message, is_open, whatsapp_number, name, category, theme_config, city, pin_code, opening_hours } = req.body;
-    if (theme_color !== undefined) {
-      shop.theme_color = theme_color;
-      if (shop.theme_config) shop.theme_config.primary_color = theme_color;
-    }
-    if (welcome_message !== undefined) shop.welcome_message = welcome_message;
-    if (is_open !== undefined) {
-      shop.is_open = Boolean(is_open);
-      if (shop.opening_hours) shop.opening_hours.manual_override = true;
-    }
-    if (whatsapp_number !== undefined) {
-      const normalizedPhone = normalizeWhatsAppPhone(whatsapp_number);
-      if (!normalizedPhone) {
-        return res.status(400).json({ error: 'Numéro WhatsApp ivoirien invalide. Utilisez +225 suivi de 10 chiffres.' });
-      }
-      shop.whatsapp_number = normalizedPhone;
-    }
-    if (name !== undefined) shop.name = name;
-    if (city !== undefined) shop.city = city;
-    if (pin_code !== undefined && String(pin_code).trim()) {
-      const rawPin = String(pin_code).trim();
-      if (isWeakShopPin(rawPin)) {
-        return res.status(400).json({ error: 'Le code PIN est trop simple ou invalide. Utilisez un PIN à 6 chiffres fort.' });
-      }
-      shop.pin_code_hash = hashPin(rawPin);
-    }
-    if (isShopCategory(category)) {
-      shop.category = category;
-    }
-    if (theme_config) {
-      const requestedThemeConfig = { ...theme_config };
-      const requestedBrandDirection = ['luxe', 'moderne', 'authentique'].includes(requestedThemeConfig.brand_direction)
-        ? requestedThemeConfig.brand_direction as ShopRecord['theme_config']['brand_direction']
-        : shop.theme_config.brand_direction;
-      const sanitizedThemeConfig = {
-        ...shop.theme_config,
-        ...requestedThemeConfig,
-        ...(requestedBrandDirection ? { brand_direction: requestedBrandDirection } : {}),
-        ...(typeof requestedThemeConfig.custom_banner_url === 'string'
-          ? { custom_banner_url: normalizeCustomBannerImage(requestedThemeConfig.custom_banner_url, shop.category) }
-          : {}),
-        social_links: {
-          instagram: typeof requestedThemeConfig.social_links?.instagram === 'string' ? sanitizeTextField(String(requestedThemeConfig.social_links.instagram), 300) : (shop.theme_config.social_links?.instagram || ''),
-          facebook: typeof requestedThemeConfig.social_links?.facebook === 'string' ? sanitizeTextField(String(requestedThemeConfig.social_links.facebook), 300) : (shop.theme_config.social_links?.facebook || ''),
-          tiktok: typeof requestedThemeConfig.social_links?.tiktok === 'string' ? sanitizeTextField(String(requestedThemeConfig.social_links.tiktok), 300) : (shop.theme_config.social_links?.tiktok || ''),
-          website: typeof requestedThemeConfig.social_links?.website === 'string' ? sanitizeTextField(String(requestedThemeConfig.social_links.website), 300) : (shop.theme_config.social_links?.website || ''),
-          whatsapp: typeof requestedThemeConfig.social_links?.whatsapp === 'string' ? sanitizeTextField(String(requestedThemeConfig.social_links.whatsapp), 300) : (shop.theme_config.social_links?.whatsapp || ''),
-        },
-        delivery_zones: Array.isArray(requestedThemeConfig.delivery_zones)
-          ? requestedThemeConfig.delivery_zones.slice(0, 8).map((zone: any) => ({
-              label: sanitizeTextField(String(zone?.label || 'Zone locale'), 80),
-              mode: zone?.mode === 'sur_place' || zone?.mode === 'retirer' ? zone.mode : 'livraison',
-              fee: Number(zone?.fee || 0),
-              description: zone?.description ? sanitizeTextField(String(zone.description), 120) : '',
-            }))
-          : (shop.theme_config.delivery_zones || []),
-      };
-      shop.theme_config = sanitizedThemeConfig;
-    }
-    if (opening_hours) {
-      shop.opening_hours = {
-        ...(shop.opening_hours || { enabled: false, open_time: '08:00', close_time: '22:00', manual_override: false }),
-        ...opening_hours,
-      };
-    }
-
-    await persistShop(shop);
-
-    res.json({ success: true, shop: toSafeShop(shop) });
-  });
-
-  // Create new shop (Onboarding with category and subscription tier)
-  app.post('/api/shops', rateLimitPublicRequest(10), async (req: Request, res: Response) => {
-    const { name, whatsapp_number, pin_code, pin, category, city, welcome_message, theme_config, opening_hours } = req.body;
-    const effectivePin = pin_code || pin;
-    const safeName = sanitizeTextField(name, 100);
-    const safeCity = sanitizeTextField(city || 'Abidjan', 100);
-    const safeWelcomeMessage = sanitizeTextField(welcome_message, 300);
-    const requestedThemeConfig = theme_config && typeof theme_config === 'object' ? theme_config : {};
-    const normalizedOpeningHours = {
-      enabled: Boolean(opening_hours?.enabled),
-      open_time: typeof opening_hours?.open_time === 'string' ? opening_hours.open_time.slice(0, 5) : '08:00',
-      close_time: typeof opening_hours?.close_time === 'string' ? opening_hours.close_time.slice(0, 5) : '22:00',
-      days: Array.isArray(opening_hours?.days)
-        ? opening_hours.days.filter((day: unknown): day is number => typeof day === 'number' && Number.isInteger(day) && day >= 0 && day <= 6).slice(0, 7)
-        : [0, 1, 2, 3, 4, 5, 6],
-      manual_override: Boolean(opening_hours?.manual_override),
-    };
-    const socialLinks = {
-      ...(requestedThemeConfig.social_links || {}),
-    };
-    const deliveryZones = Array.isArray(requestedThemeConfig.delivery_zones)
-      ? requestedThemeConfig.delivery_zones.slice(0, 8).map((zone: any) => ({
-          label: String(zone?.label || 'Zone locale'),
-          mode: zone?.mode === 'sur_place' || zone?.mode === 'retirer' ? zone.mode : 'livraison',
-          fee: Number(zone?.fee || 0),
-          description: zone?.description ? String(zone.description).slice(0, 120) : undefined,
-        }))
-      : [];
-
-    if (safeName.length < 2 || !whatsapp_number || !/^[0-9]{6}$/.test(String(effectivePin || '').trim())) {
-      return res.status(400).json({ error: 'Nom, numéro WhatsApp et code PIN requis.' });
-    }
-    if (isWeakShopPin(effectivePin)) {
-      return res.status(400).json({ error: 'Le code PIN est trop simple ou invalide. Utilisez un PIN à 6 chiffres fort.' });
-    }
-
-    const reservedShopId = await allocateRecordId('shops');
-    const normalizedWhatsAppPhone = normalizeWhatsAppPhone(whatsapp_number);
-    if (!normalizedWhatsAppPhone) {
-      return res.status(400).json({ error: 'Numéro WhatsApp ivoirien invalide. Utilisez +225 suivi de 10 chiffres.' });
-    }
-    if (shops.some((shop) => shop.whatsapp_number === normalizedWhatsAppPhone)) {
-      return res.status(409).json({ error: 'Ce numéro WhatsApp est déjà associé à une boutique. Utilisez son lien privé de gestion.' });
-    }
-
-    const shopCategory: ShopRecord['category'] = isShopCategory(category) ? category : 'other';
-    const categoryDefaults = getCategoryDefaults(shopCategory);
-    const hashedPin = hashPin(effectivePin);
-    const ownerAccessToken = randomUUID();
-
-    const slug = safeName
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') || `boutique-${Date.now()}`;
-    const uniqueSlug = shops.some((shop) => shop.slug === slug) ? `${slug}-${Date.now().toString().slice(-5)}` : slug;
-
-    const mergedThemeConfig = {
-      primary_color: requestedThemeConfig.primary_color || categoryDefaults.primaryColor,
-      secondary_color: requestedThemeConfig.secondary_color || categoryDefaults.secondaryColor,
-      font_family: requestedThemeConfig.font_family || 'Plus Jakarta Sans',
-      layout_style: requestedThemeConfig.layout_style || categoryDefaults.layoutStyle,
-      theme_preset_id: requestedThemeConfig.theme_preset_id || categoryDefaults.themePresetId,
-      brand_direction: ['luxe', 'moderne', 'authentique'].includes(requestedThemeConfig.brand_direction)
-        ? requestedThemeConfig.brand_direction as ShopRecord['theme_config']['brand_direction']
-        : categoryDefaults.brandDirection,
-      custom_banner_url: normalizeCustomBannerImage(requestedThemeConfig.custom_banner_url, shopCategory),
-      logo_url: requestedThemeConfig.logo_url || '',
-      event_mode_enabled: Boolean(requestedThemeConfig.event_mode_enabled),
-      event_banner_text: requestedThemeConfig.event_banner_text || '🎉 Commande rapide • Livraison et retrait disponibles',
-      social_links: {
-        instagram: typeof requestedThemeConfig.social_links?.instagram === 'string' ? String(requestedThemeConfig.social_links.instagram).trim() : '',
-        facebook: typeof requestedThemeConfig.social_links?.facebook === 'string' ? String(requestedThemeConfig.social_links.facebook).trim() : '',
-        tiktok: typeof requestedThemeConfig.social_links?.tiktok === 'string' ? String(requestedThemeConfig.social_links.tiktok).trim() : '',
-        website: typeof requestedThemeConfig.social_links?.website === 'string' ? String(requestedThemeConfig.social_links.website).trim() : '',
-        whatsapp: typeof requestedThemeConfig.social_links?.whatsapp === 'string' ? String(requestedThemeConfig.social_links.whatsapp).trim() : '',
-      },
-      delivery_zones: deliveryZones,
-      advanced_css: {
-        borderRadius: requestedThemeConfig.advanced_css?.borderRadius || 'rounded-xl',
-        shadowIntensity: requestedThemeConfig.advanced_css?.shadowIntensity || 'subtle',
-        accentGlow: Boolean(requestedThemeConfig.advanced_css?.accentGlow),
-      },
-    };
-
-    const newShop: ShopRecord = {
-      id: reservedShopId,
-      name: safeName,
-      slug: uniqueSlug,
-      whatsapp_number: normalizedWhatsAppPhone,
-      pin_code_hash: hashedPin,
-      owner_access_token_hash: hashAccessToken(ownerAccessToken),
-      theme_color: categoryDefaults.primaryColor,
-      welcome_message: normalizeWelcomeMessage(safeWelcomeMessage, shopCategory),
-      is_open: false,
-      is_active: true,
-      subscription_status: 'trialing',
-      trial_start: new Date().toISOString(),
-      trial_end: addDays(new Date(), TRIAL_DURATION_DAYS),
-      last_notification_sent_at: null,
-      created_at: new Date().toISOString(),
-      category: shopCategory,
-      city: safeCity,
-      opening_hours: normalizedOpeningHours,
-      theme_config: mergedThemeConfig,
-    };
-
-    if (normalizedOpeningHours.enabled && !normalizedOpeningHours.manual_override) {
-      newShop.is_open = computeIsShopOpen(newShop);
-    }
-
-    shops.push(newShop);
-    await persistShop(newShop);
-
-    await createMerchantSession(res, newShop.id, req);
-    res.json({
-      success: true,
-      shop: toSafeShop(newShop),
-      owner_access_token: ownerAccessToken,
-      message: 'Boutique créée. Les commandes clients sont envoyées au vendeur via un reçu WhatsApp à ouvrir manuellement.',
-    });
-  });
-
-  // 2. AUTHENTICATION (Phone + 6-digit PIN)
-  // Explicit route for merchant login
-  app.post('/api/auth/merchant-login', async (req: Request, res: Response) => {
-    const { phone, pin } = req.body;
-    if (!phone || !pin) {
-      return res.status(400).json({ error: 'Numéro de téléphone et code PIN requis.' });
-    }
-
-    const attemptKey = `${req.ip}:${String(phone).replace(/\D/g, '')}`;
-    if (isLoginRateLimited(attemptKey)) {
-      return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
-    }
-
-    const cleanInputPhone = phone.replace(/[^0-9]/g, '');
-    const shop = shops.find((s) => {
-      const cleanShopPhone = s.whatsapp_number.replace(/[^0-9]/g, '');
-      return (
-        cleanShopPhone.includes(cleanInputPhone) ||
-        cleanInputPhone.includes(cleanShopPhone) ||
-        cleanShopPhone.slice(-8) === cleanInputPhone.slice(-8)
-      );
-    });
-
-    if (!shop) {
-      return res.status(404).json({ error: 'Aucune boutique associée à ce numéro de téléphone.' });
-    }
-
-    if (!verifyPin(pin, shop.pin_code_hash)) {
-      return res.status(401).json({ error: 'Code PIN incorrect à 6 chiffres.' });
-    }
-
-    if (!shop.is_active) {
-      return res.status(403).json({
-        error: 'Votre boutique est inactive. Contactez l’administration MaTable.ci pour la réactivation.',
-      });
-    }
-
-    await createMerchantSession(res, shop.id, req);
-    loginAttempts.delete(attemptKey);
-
-    res.json({
-      success: true,
-      shop: {
-        id: shop.id,
-        name: shop.name,
-        slug: shop.slug,
-        whatsapp_number: shop.whatsapp_number,
-        theme_color: shop.theme_color,
-        welcome_message: shop.welcome_message,
-        is_open: shop.is_open,
-        is_active: shop.is_active,
-        category: shop.category,
-        theme_config: shop.theme_config,
-      },
-    });
-  });
-
-  app.post('/api/auth/logout', async (req: Request, res: Response) => {
-    const token = getCookie(req, 'matable_session');
-    if (token) {
-      merchantSessions.delete(token);
-      await deleteMerchantSessionRecord(token);
-    }
-    clearSessionCookie(res);
-    res.json({ success: true });
-  });
-
-  app.get('/api/auth/session', async (req: Request, res: Response) => {
-    const state = await getSessionStateForResponse(req, res);
-    if (state.userType === 'merchant' && state.shopId) {
-      const shop = shops.find((candidate) => candidate.id === state.shopId);
-      const subscription = shop ? await refreshSubscriptionState(shop) : undefined;
-      return res.json({ ...state, subscription });
-    }
-    res.json(state);
-  });
-
-  app.post('/api/auth/merchant-access-login', async (req: Request, res: Response) => {
-    const token = String(req.body?.access_token || '').trim();
-    if (!token || token.length > 200) return res.status(400).json({ error: 'Lien d’accès invalide.' });
-    const tokenHash = hashAccessToken(token);
-    const shop = shops.find((candidate) => candidate.owner_access_token_hash === tokenHash);
-    if (!shop) return res.status(401).json({ error: 'Lien d’accès invalide.' });
-    if (!shop.is_active) {
-      return res.status(403).json({
-        error: 'Boutique inactive : contactez l’administrateur pour la réactivation.',
-      });
-    }
-    await createMerchantSession(res, shop.id, req);
-    res.json({ success: true, shop: toSafeShop(shop) });
-  });
-
-  app.post('/api/auth/admin-login', async (req: Request, res: Response) => {
-    const configuredKey = String(process.env.ADMIN_ACCESS_KEY || '').trim();
-    if (!configuredKey) {
-      return res.status(503).json({ error: 'ADMIN_ACCESS_KEY doit être configurée côté serveur.' });
-    }
-    const adminAttemptKey = `${req.ip}:admin`;
-    if (isLoginRateLimited(adminAttemptKey)) {
-      return res.status(429).json({ error: 'Trop de tentatives de connexion admin. Réessayez plus tard.' });
-    }
-    if (!timingSafeEqual(String(req.body?.key || ''), configuredKey)) {
-      return res.status(401).json({ error: 'Clé super-admin incorrecte.' });
-    }
-    loginAttempts.delete(adminAttemptKey);
-    const token = randomUUID();
-    const adminSession = { expiresAt: Date.now() + ADMIN_SESSION_DURATION_MS, fingerprint: buildSessionFingerprint(req) };
-    adminSessions.set(token, adminSession);
-    await saveAdminSessionRecord(token, adminSession);
-    setAdminSessionCookie(res, token);
-    res.json({ success: true });
-  });
-
-  app.post('/api/auth/admin-logout', async (req: Request, res: Response) => {
-    const token = await getAdminSession(req);
-    if (token) {
-      adminSessions.delete(token);
-      await deleteAdminSessionRecord(token);
-    }
-    res.setHeader('Set-Cookie', 'matable_admin_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
-    res.json({ success: true });
-  });
-
-  app.post('/api/auth/customer-register', rateLimitPublicRequest(20), async (req: Request, res: Response) => {
-    const { name, phone, email, password } = req.body || {};
-    const safeName = sanitizeTextField(String(name || ''), 80).trim();
-    const safePhone = String(phone || '').trim();
-    const safeEmail = String(email || '').trim().toLowerCase();
-    const safePassword = String(password || '');
-
-    if (!safeName || safeName.length < 2) {
-      return res.status(400).json({ error: 'Le nom est requis.' });
-    }
-    const phoneIsValidIvorian = /^\+?225\d{8,12}$/.test(safePhone);
-    if (!safePhone || !phoneIsValidIvorian) {
-      return res.status(400).json({ error: 'Le téléphone est requis au format ivoirien.' });
-    }
-    if (!safeEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) {
-      return res.status(400).json({ error: 'Un email valide est requis.' });
-    }
-    if (!safePassword || safePassword.length < 8) {
-      return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères.' });
-    }
-
-    const existing = await dbGet<{ id: number }>('SELECT id FROM users WHERE email = ? OR phone = ?', [safeEmail, safePhone]);
-    if (existing) {
-      return res.status(409).json({ error: 'Un compte existe déjà avec cet email ou ce téléphone.' });
-    }
-
-    const passwordHash = bcrypt.hashSync(safePassword, 10);
-    const inserted = await dbGet<{ id: number }>('INSERT INTO users (name, phone, email, password_hash, created_at, is_active) VALUES (?, ?, ?, ?, ?, 1) RETURNING id', [safeName, safePhone, safeEmail, passwordHash, new Date().toISOString()]);
-    const user = inserted ? await dbGet<{ id: number; name: string; phone: string; email: string; created_at: string }>('SELECT id, name, phone, email, created_at FROM users WHERE id = ?', [inserted.id]) : undefined;
-    if (!user) return res.status(500).json({ error: 'Impossible de créer le compte.' });
-
-    const token = randomUUID();
-    const session = { userId: user.id, expiresAt: Date.now() + SESSION_DURATION_MS, fingerprint: buildSessionFingerprint(req) };
-    customerSessions.set(token, session);
-    await saveCustomerSessionRecord(token, session);
-    setCustomerSessionCookie(res, token, session.fingerprint);
-
-    res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone, email: user.email, created_at: user.created_at } });
-  });
-
-  app.post('/api/auth/customer-login', rateLimitPublicRequest(20), async (req: Request, res: Response) => {
-    const { email, password } = req.body || {};
-    const safeEmail = String(email || '').trim().toLowerCase();
-    const safePassword = String(password || '');
-
-    if (!safeEmail || !safePassword) {
-      return res.status(400).json({ error: 'Email et mot de passe requis.' });
-    }
-
-    const user = await dbGet<{ id: number; name: string; phone: string; email: string; password_hash: string; created_at: string; is_active: number }>('SELECT * FROM users WHERE email = ?', [safeEmail]);
-    if (!user || !bcrypt.compareSync(safePassword, user.password_hash)) {
-      return res.status(401).json({ error: 'Identifiants invalides.' });
-    }
-
-    if (!user.is_active) {
-      return res.status(403).json({ error: 'Compte client désactivé.' });
-    }
-
-    const token = randomUUID();
-    const session = { userId: user.id, expiresAt: Date.now() + SESSION_DURATION_MS, fingerprint: buildSessionFingerprint(req) };
-    customerSessions.set(token, session);
-    await saveCustomerSessionRecord(token, session);
-    setCustomerSessionCookie(res, token, session.fingerprint);
-
-    res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone, email: user.email, created_at: user.created_at } });
-  });
-
-  app.get('/api/auth/customer-session', async (req: Request, res: Response) => {
-    const state = await getCustomerSessionState(req, res);
-    res.json({ ...state, authenticated: !!state.authenticated });
-  });
-
-  app.post('/api/auth/customer-logout', async (req: Request, res: Response) => {
-    const token = getCookie(req, 'matable_customer_session');
-    if (token) {
-      customerSessions.delete(token);
-      await deleteCustomerSessionRecord(token);
-    }
-    res.setHeader('Set-Cookie', [
-      'matable_customer_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
-      'matable_customer_session_fp=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
-    ]);
-    res.json({ success: true });
-  });
-
-  app.post('/api/auth/login', (req: Request, res: Response) => {
-    res.status(410).json({ error: 'Endpoint obsolète. Utilisez /api/auth/merchant-login.' });
-  });
+  app.use('/api/auth', createAuthRouter({
+    shops,
+    sessionDurationMs: SESSION_DURATION_MS,
+    adminSessionDurationMs: ADMIN_SESSION_DURATION_MS,
+    dummyCustomerPasswordHash: DUMMY_CUSTOMER_PASSWORD_HASH,
+    merchantSessions,
+    customerSessions,
+    adminSessions,
+    loginAttempts,
+    rateLimitPublicRequest,
+    isLoginRateLimited,
+    getCustomerLoginLockSeconds,
+    recordCustomerLoginFailure,
+    getRateLimitClientAddress,
+    verifyPin,
+    toSafeShop,
+    createMerchantSession,
+    getCookie,
+    clearSessionCookie,
+    clearCustomerSessionCookie,
+    getSessionStateForResponse,
+    refreshSubscriptionState,
+    deleteMerchantSessionRecord,
+    deleteCustomerSessionRecord,
+    hashAccessToken,
+    dbGet,
+    dbRun,
+    sanitizeTextField,
+    getCustomerSessionState,
+    getAdminSession,
+    deleteAdminSessionRecord,
+    saveAdminSessionRecord,
+    saveCustomerSessionRecord,
+    setAdminSessionCookie,
+    setCustomerSessionCookie,
+    buildSessionFingerprint,
+  }));
 
   // 3. PRODUCTS MANAGEMENT (Merchant /app)
-  app.get('/api/shops/:id/products', (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shopProducts = products.filter((p) => p.shop_id === shopId);
-    res.json(shopProducts);
-  });
-
-  app.post('/api/shops/:id/products', async (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shop = shops.find((candidate) => candidate.id === shopId);
-    if (!shop) {
-      return res.status(404).json({ error: 'Boutique introuvable.' });
-    }
-    const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
-
-    const safeTitle = sanitizeTextField(title, 120);
-    const numericPrice = Number(price);
-    const numericStock = Number(stock ?? 0);
-    if (safeTitle.length < 2 || !Number.isSafeInteger(numericPrice) || numericPrice < 0 || !Number.isSafeInteger(numericStock) || numericStock < 0) {
-      return res.status(400).json({ error: 'Titre et prix obligatoires.' });
-    }
-
-    const newProduct: ProductRecord = {
-      id: await allocateRecordId('products'),
-      shop_id: shopId,
-      title: safeTitle,
-      description: description ? sanitizeTextField(description, 500) : null,
-      price: numericPrice,
-      stock: numericStock,
-      image_url: normalizeProductImage(image_url),
-      is_available: is_available !== undefined ? Boolean(is_available) : true,
-      category: category ? String(category).trim() : undefined,
-      sizes: Array.isArray(sizes) ? sizes : undefined,
-      colors: Array.isArray(colors) ? colors : undefined,
-      lookbook_image: lookbook_image || undefined,
-      gallery_images: sanitizeGalleryImages(gallery_images),
-      prep_time: prep_time !== undefined ? Number(prep_time) : undefined,
-      modifier_groups: Array.isArray(modifier_groups) ? modifier_groups : undefined,
-      attributes: sanitizeProductAttributes(attributes, shop.category),
-    };
-
-    products.unshift(newProduct);
-    await persistProduct(newProduct);
-    res.json({ success: true, product: newProduct });
-  });
-
-  app.put('/api/shops/:id/products/:productId', async (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const productId = Number(req.params.productId);
-    const product = products.find((p) => p.id === productId);
-    if (!product || product.shop_id !== shopId) {
-      return res.status(404).json({ error: 'Produit introuvable.' });
-    }
-
-    const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
-    const shop = shops.find((candidate) => candidate.id === shopId);
-    if (title !== undefined) {
-      const safeTitle = sanitizeTextField(title, 120);
-      if (safeTitle.length < 2) return res.status(400).json({ error: 'Titre de produit invalide.' });
-      product.title = safeTitle;
-    }
-    if (description !== undefined) product.description = description ? sanitizeTextField(description, 500) : null;
-    if (price !== undefined) {
-      const numericPrice = Number(price);
-      if (!Number.isSafeInteger(numericPrice) || numericPrice < 0) return res.status(400).json({ error: 'Prix de produit invalide.' });
-      product.price = numericPrice;
-    }
-    if (stock !== undefined) {
-      const numericStock = Number(stock);
-      if (!Number.isSafeInteger(numericStock) || numericStock < 0) return res.status(400).json({ error: 'Stock de produit invalide.' });
-      product.stock = numericStock;
-    }
-    if (image_url !== undefined) product.image_url = normalizeProductImage(image_url);
-    if (is_available !== undefined) product.is_available = Boolean(is_available);
-    if (category !== undefined) product.category = category ? String(category).trim() : undefined;
-    if (sizes !== undefined) product.sizes = Array.isArray(sizes) ? sizes : undefined;
-    if (colors !== undefined) product.colors = Array.isArray(colors) ? colors : undefined;
-    if (lookbook_image !== undefined) product.lookbook_image = lookbook_image;
-    if (gallery_images !== undefined) product.gallery_images = sanitizeGalleryImages(gallery_images);
-    if (prep_time !== undefined) product.prep_time = Number(prep_time);
-    if (modifier_groups !== undefined) product.modifier_groups = Array.isArray(modifier_groups) ? modifier_groups : undefined;
-    if (attributes !== undefined && shop) product.attributes = sanitizeProductAttributes(attributes, shop.category);
-
-    await persistProduct(product);
-
-    res.json({ success: true, product });
-  });
-
-  // Fast stock stepper (+1 or -1)
-  app.patch('/api/shops/:id/products/:productId/stock', async (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const productId = Number(req.params.productId);
-    const product = products.find((p) => p.id === productId);
-    if (!product || product.shop_id !== shopId) {
-      return res.status(404).json({ error: 'Produit introuvable.' });
-    }
-
-    const { delta } = req.body;
-    const change = Number(delta);
-    if (!Number.isInteger(change) || Math.abs(change) > 100000) {
-      return res.status(400).json({ error: 'Variation de stock invalide.' });
-    }
-    product.stock = Math.max(0, product.stock + change);
-    product.is_available = product.stock > 0 && product.is_available;
-    await persistProduct(product);
-
-    res.json({ success: true, stock: product.stock, product });
-  });
-
-  // Toggle visibility (Masquer / Afficher)
-  app.patch('/api/shops/:id/products/:productId/toggle-visibility', async (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const productId = Number(req.params.productId);
-    const product = products.find((p) => p.id === productId);
-    if (!product || product.shop_id !== shopId) {
-      return res.status(404).json({ error: 'Produit introuvable.' });
-    }
-
-    product.is_available = !product.is_available;
-    await persistProduct(product);
-    res.json({ success: true, is_available: product.is_available, product });
-  });
-
-  app.delete('/api/shops/:id/products/:productId', async (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const productId = Number(req.params.productId);
-    const index = products.findIndex((p) => p.id === productId && p.shop_id === shopId);
-    if (index === -1) {
-      return res.status(404).json({ error: 'Produit introuvable.' });
-    }
-
-    products.splice(index, 1);
-    await dbRun('DELETE FROM products WHERE id = ? AND shop_id = ?', [productId, Number(req.params.id)]);
-    res.json({ success: true });
-  });
-
-  // 4. ORDERS & AUTOMATIC STOCK DECREMENTATION
-  app.post('/api/orders', rateLimitPublicRequest(30), async (req: Request, res: Response) => {
-    const { shop_id, customer_name, customer_phone, delivery_location, delivery_note, delivery_slot, payment_method_preference, items, website, form_started_at } = req.body;
-
-    if (String(website || '').trim()) {
-      return res.status(400).json({ error: 'Requête rejetée.' });
-    }
-    if (form_started_at !== undefined) {
-      const formAge = Date.now() - Number(form_started_at);
-      if (!Number.isFinite(formAge) || formAge < 1200 || formAge > 2 * 60 * 60 * 1000) {
-        return res.status(400).json({ error: 'Veuillez remplir le formulaire avant de commander.' });
-      }
-    }
-
-    if (!shop_id || !customer_name || !customer_phone || !delivery_location || !Array.isArray(items) || items.length === 0 || items.length > 50) {
-      return res.status(400).json({ error: 'Champs requis manquants pour la commande.' });
-    }
-
-    const validatedCustomer = validateCustomerOrderInput({
-      customer_name,
-      customer_phone,
-      delivery_location,
-      delivery_note,
-    });
-
-    if (!validatedCustomer.ok) {
-      return res.status(400).json({ error: validatedCustomer.error || 'Données client invalides.' });
-    }
-
-    const shop = shops.find((s) => s.id === Number(shop_id));
-    if (!shop) {
-      return res.status(404).json({ error: 'Boutique introuvable.' });
-    }
-    if (!shop.is_active) {
-      return res.status(403).json({ error: 'Cette boutique est inactive.' });
-    }
-
-    const allowedPaymentPreferences = new Set(['wave', 'mobile_money', 'cash', 'to_confirm', undefined, null, '']);
-    if (!allowedPaymentPreferences.has(payment_method_preference)) {
-      return res.status(400).json({ error: 'Mode de paiement souhaité invalide.' });
-    }
-
-    const requestedQuantities = new Map<number, number>();
-    for (const item of items) {
-      const productId = Number(item.product_id);
-      const quantity = Number(item.quantity);
-      if (!Number.isInteger(productId) || !Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
-        return res.status(400).json({ error: 'Article ou quantité invalide.' });
-      }
-      requestedQuantities.set(productId, (requestedQuantities.get(productId) || 0) + quantity);
-    }
-
-    const isOpen = computeIsShopOpen(shop);
-    if (!isOpen) {
-      return res.status(400).json({
-        error: 'Cette boutique est actuellement fermée. La prise de commande est temporairement désactivée.',
-      });
-    }
-
-    const customerSession = await getCustomerSessionState(req);
-    const customerUserId = customerSession.authenticated ? customerSession.user?.id : undefined;
-    const whatsappTrackingToken = randomUUID();
-    const stockUpdates: { product: ProductRecord; stock: number; isAvailable: boolean }[] = [];
-    try {
-      const createdOrder = await dbTransaction(async (transaction) => {
-      const orderIdRecord = await transaction.get<{ id: number }>(`
-        INSERT INTO id_allocators (name, last_id)
-        SELECT ?, COALESCE(MAX(id), 0) + 1 FROM orders WHERE TRUE
-        ON CONFLICT(name) DO UPDATE SET last_id = id_allocators.last_id + 1
-        RETURNING last_id AS id
-      `, ['orders']);
-      if (!orderIdRecord) throw new Error('Impossible d’allouer un identifiant de commande.');
-      const orderId = Number(orderIdRecord.id);
-      const orderItemRecords: any[] = [];
-      let calculatedTotal = 0;
-      const reservedProductIds = new Set<number>();
-
-      for (const item of items) {
-        const productId = Number(item.product_id);
-        const prod = products.find((p) => p.id === productId);
-        if (!prod || prod.shop_id !== shop.id) {
-          throw Object.assign(new Error(`Article #${productId} introuvable dans le catalogue.`), { statusCode: 400 });
-        }
-
-        const qty = Number(item.quantity);
-        const stockQuantity = reservedProductIds.has(prod.id) ? 0 : (requestedQuantities.get(prod.id) || 0);
-        const stockRow = await transaction.get<{ stock: number; is_available: number }>(`SELECT stock, is_available FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`, [prod.id, shop.id]);
-        if (!stockRow) {
-          throw Object.assign(new Error(`Article #${productId} introuvable dans le catalogue.`), { statusCode: 400 });
-        }
-        if (stockQuantity > 0 && (!stockRow.is_available || stockRow.stock <= 0)) {
-          throw Object.assign(new Error(`L'article "${prod.title}" est en rupture de stock.`), { statusCode: 409, product_id: prod.id, stock: 0 });
-        }
-        if (stockQuantity > 0 && stockRow.stock < stockQuantity) {
-          throw Object.assign(new Error(`Stock insuffisant pour "${prod.title}". Seulement ${stockRow.stock} unité(s) disponible(s).`), { statusCode: 409, product_id: prod.id, stock: stockRow.stock });
-        }
-        if (stockQuantity > 0) {
-          const stock = Number(stockRow.stock) - stockQuantity;
-          const update = await transaction.run(
-            'UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ? AND stock >= ?',
-            [stock, stock > 0 ? 1 : 0, prod.id, shop.id, stockQuantity],
-          );
-          if (update.changes !== 1) {
-            throw Object.assign(new Error(`Le stock de "${prod.title}" vient de changer. Réessayez la commande.`), { statusCode: 409, product_id: prod.id, stock: Number(stockRow.stock) });
-          }
-          stockUpdates.push({ product: prod, stock, isAvailable: stock > 0 });
-          reservedProductIds.add(prod.id);
-        }
-
-        const selectedModifiers = Array.isArray(item.selected_modifiers) ? item.selected_modifiers : [];
-        const validSelectedModifiers = getValidSelectedModifiers(prod, selectedModifiers);
-        for (const group of prod.modifier_groups || []) {
-          const selectedInGroup = validSelectedModifiers.filter((label) => group.options.some((option) => (typeof option === 'string' ? option : option.label) === label));
-          if (group.required && selectedInGroup.length === 0) {
-            throw Object.assign(new Error(`Veuillez choisir une option pour « ${group.name} » dans "${prod.title}".`), { statusCode: 400, product_id: prod.id });
-          }
-        }
-        const unitPrice = getProductUnitPriceWithModifiers(prod, validSelectedModifiers);
-        calculatedTotal += unitPrice * Number(item.quantity);
-
-        orderItemRecords.push({
-          id: orderItemRecords.length + 1,
-          order_id: orderId,
-          product_id: prod.id,
-          product_title: prod.title,
-          quantity: Number(item.quantity),
-          unit_price: unitPrice,
-          selected_size: item.selected_size,
-          selected_color: item.selected_color,
-          selected_modifiers: validSelectedModifiers,
-        });
-      }
-
-      const newOrder: OrderRecord = {
-        id: orderId,
-        shop_id: shop.id,
-        customer_user_id: customerUserId,
-        customer_name: validatedCustomer.customer_name || customer_name,
-        customer_phone: validatedCustomer.customer_phone || customer_phone,
-        delivery_location: validatedCustomer.delivery_location || delivery_location,
-        delivery_note: validatedCustomer.delivery_note || delivery_note,
-        delivery_slot,
-        payment_method_preference: payment_method_preference || 'to_confirm',
-        total_amount: calculatedTotal,
-        created_at: new Date().toISOString(),
-        status: 'confirmed',
-        whatsapp_tracking_available: true,
-        whatsapp_clicked_at: null,
-        items: orderItemRecords,
-      };
-
-      await transaction.run(`
-        INSERT INTO orders (
-          id, shop_id, customer_name, customer_phone, delivery_location, delivery_note,
-          delivery_slot, payment_method_preference, total_amount, created_at, status, items, customer_user_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        newOrder.id,
-        newOrder.shop_id,
-        newOrder.customer_name,
-        newOrder.customer_phone,
-        newOrder.delivery_location,
-        newOrder.delivery_note ?? null,
-        newOrder.delivery_slot ?? null,
-        newOrder.payment_method_preference,
-        newOrder.total_amount,
-        newOrder.created_at,
-        newOrder.status,
-        JSON.stringify(newOrder.items ?? []),
-        newOrder.customer_user_id ?? null,
-      ]);
-
-      await transaction.run(
-        'INSERT INTO order_whatsapp_tracking (order_id, token_hash, clicked_at) VALUES (?, ?, NULL)',
-        [orderId, hashAccessToken(whatsappTrackingToken)],
-      );
-
-      return newOrder;
-      });
-      for (const update of stockUpdates) {
-        update.product.stock = update.stock;
-        update.product.is_available = update.isAvailable;
-      }
-      orders.unshift(createdOrder);
-      res.json({
-        success: true,
-        order: createdOrder,
-        whatsapp_tracking_token: whatsappTrackingToken,
-        message: 'Commande acceptée automatiquement et stock réservé. Contactez le vendeur sur WhatsApp pour échanger sur la livraison et le paiement.',
-      });
-    } catch (error: unknown) {
-      const err = error as any;
-      const statusCode = Number(err?.statusCode) || 409;
-      const payload: Record<string, unknown> = {
-        error: err?.message || 'Stock insuffisant pour une ou plusieurs références.',
-      };
-      if (err?.product_id !== undefined) payload.product_id = err.product_id;
-      if (err?.stock !== undefined) payload.stock = err.stock;
-      res.status(statusCode).json(payload);
-    }
-  });
-
-  app.post('/api/orders/:id/whatsapp-click', rateLimitPublicRequest(60), async (req: Request, res: Response) => {
-    const orderId = Number(req.params.id);
-    const token = typeof req.body?.token === 'string' ? req.body.token : '';
-    if (!Number.isSafeInteger(orderId) || orderId <= 0 || token.length < 20 || token.length > 200) {
-      return res.status(404).json({ error: 'Suivi de commande introuvable.' });
-    }
-
-    const tracking = await dbGet<{ token_hash: string; clicked_at: string | null }>(
-      'SELECT token_hash, clicked_at FROM order_whatsapp_tracking WHERE order_id = ?',
-      [orderId],
-    );
-    if (!tracking || !timingSafeEqual(hashAccessToken(token), String(tracking.token_hash))) {
-      return res.status(404).json({ error: 'Suivi de commande introuvable.' });
-    }
-
-    const clickedAt = tracking.clicked_at || new Date().toISOString();
-    if (!tracking.clicked_at) {
-      await dbRun('UPDATE order_whatsapp_tracking SET clicked_at = COALESCE(clicked_at, ?) WHERE order_id = ?', [clickedAt, orderId]);
-    }
-    const order = orders.find((candidate) => candidate.id === orderId);
-    if (order) order.whatsapp_clicked_at = clickedAt;
-    res.json({ success: true, clicked_at: clickedAt });
-  });
-
-  app.get('/api/auth/customer-orders', async (req: Request, res: Response) => {
-    const customerSession = await getCustomerSessionState(req, res);
-    if (!customerSession.authenticated || !customerSession.user) {
-      return res.status(401).json({ error: 'Authentification client requise.' });
-    }
-
-    res.json({ orders: orders.filter((order) => order.customer_user_id === customerSession.user?.id) });
-  });
-
-  // Merchant orders history
-  app.get('/api/shops/:id/orders', (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shopOrders = orders.filter((o) => o.shop_id === shopId);
-    res.json(shopOrders);
-  });
-
-  // Update order status & automatic restock on cancellation
-  app.patch('/api/shops/:id/orders/:orderId/status', async (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const orderId = Number(req.params.orderId);
-    const { status } = req.body;
-
-    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'expired'];
-    if (!status || !validStatuses.includes(status)) {
-      return res.status(400).json({ error: 'Statut invalide. Valeurs possibles : pending, confirmed, preparing, ready, delivered, cancelled, expired.' });
-    }
-
-    const order = orders.find((o) => o.id === orderId && o.shop_id === shopId);
-    if (!order) {
-      return res.status(404).json({ error: 'Commande introuvable.' });
-    }
-
-    const previousStatus = order.status || 'pending';
-    if (previousStatus === status) {
-      return res.json({ success: true, order });
-    }
-
-    const allowedTransitions: Record<string, string[]> = {
-      pending: ['confirmed', 'cancelled'],
-      confirmed: ['preparing', 'delivered', 'cancelled'],
-      preparing: ['ready', 'cancelled'],
-      ready: ['delivered', 'cancelled'],
-      delivered: [],
-      cancelled: ['confirmed'],
-      expired: [],
-    };
-    if (!allowedTransitions[previousStatus]?.includes(status)) {
-      return res.status(409).json({ error: `Transition impossible : ${previousStatus} → ${status}.` });
-    }
-
-
-    const stockUpdates: { product: ProductRecord; stock: number; isAvailable: boolean }[] = [];
-    try {
-      await dbTransaction(async (transaction) => {
-        const quantities = new Map<number, number>();
-        for (const item of order.items || []) {
-          quantities.set(item.product_id, (quantities.get(item.product_id) || 0) + Number(item.quantity || 1));
-        }
-
-        const stockReservedStatuses = new Set(['confirmed', 'preparing', 'ready', 'delivered']);
-        const wasStockReserved = stockReservedStatuses.has(previousStatus);
-        const willReserveStock = stockReservedStatuses.has(status);
-
-        if (status === 'cancelled' && wasStockReserved) {
-          for (const [productId, quantity] of quantities) {
-            const prod = products.find((candidate) => candidate.id === productId && candidate.shop_id === shopId);
-            if (!prod) continue;
-            const stockRow = await transaction.get<{ stock: number }>(
-              `SELECT stock FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
-              [prod.id, shopId],
-            );
-            if (!stockRow) continue;
-            const stock = Number(stockRow.stock) + quantity;
-            const isAvailable = stock > 0;
-            await transaction.run('UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ?', [stock, isAvailable ? 1 : 0, prod.id, shopId]);
-            stockUpdates.push({ product: prod, stock, isAvailable });
-          }
-        }
-
-        if (willReserveStock && !wasStockReserved) {
-          for (const [productId, quantity] of quantities) {
-            const prod = products.find((candidate) => candidate.id === productId && candidate.shop_id === shopId);
-            if (!prod) {
-              throw Object.assign(new Error('Un article de cette commande n’existe plus dans le catalogue.'), { statusCode: 409 });
-            }
-            const stockRow = await transaction.get<{ stock: number }>(
-              `SELECT stock FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
-              [productId, shopId],
-            );
-            const currentStock = Number(stockRow?.stock || 0);
-            if (!stockRow || currentStock < quantity) {
-              throw Object.assign(new Error(`Stock insuffisant pour réactiver « ${prod.title} ».`), { statusCode: 409, product_id: productId, stock: currentStock });
-            }
-            const stock = currentStock - quantity;
-            const isAvailable = stock > 0;
-            const update = await transaction.run('UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ? AND stock >= ?', [stock, isAvailable ? 1 : 0, productId, shopId, quantity]);
-            if (update.changes !== 1) {
-              throw Object.assign(new Error(`Stock insuffisant pour réactiver « ${prod.title} ».`), { statusCode: 409, product_id: productId, stock: currentStock });
-            }
-            stockUpdates.push({ product: prod, stock, isAvailable });
-          }
-        }
-
-        order.status = status as OrderRecord['status'];
-        await transaction.run('UPDATE orders SET status = ? WHERE id = ? AND shop_id = ?', [status, order.id, shopId]);
-      });
-      for (const update of stockUpdates) {
-        update.product.stock = update.stock;
-        update.product.is_available = update.isAvailable;
-      }
-      order.status = status as OrderRecord['status'];
-    } catch (error: unknown) {
-      const err = error as { message?: string; statusCode?: number; product_id?: number; stock?: number };
-      const payload: Record<string, unknown> = { error: err.message || 'Transition de commande impossible.' };
-      if (err.product_id !== undefined) payload.product_id = err.product_id;
-      if (err.stock !== undefined) payload.stock = err.stock;
-      return res.status(Number(err.statusCode) || 409).json(payload);
-    }
-
-    res.json({
-      success: true,
-      order,
-      message: status === 'confirmed' && previousStatus === 'pending'
-        ? 'Commande confirmée et stock réservé.'
-        : status === 'cancelled'
-          ? 'Demande annulée.'
-          : `Statut mis à jour (${status}).`,
-    });
-  });
-
-  // 5. FLASH BILAN AUTOMATISATION (20h)
-  // "Un script automatisé (Cron Job) calcule chaque jour à 20h le total des ventes, le nombre de commandes et la liste des articles les plus vendus pour l'envoyer au marchand."
-  app.get('/api/shops/:id/flash-bilan', (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shop = shops.find((s) => s.id === shopId);
-    if (!shop) {
-      return res.status(404).json({ error: 'Boutique introuvable.' });
-    }
-
-    const shopOrders = orders.filter((o) => o.shop_id === shopId && isSameBusinessDay(o.created_at));
-    const metrics = summarizeOrderMetrics(orders, shopId);
-    const totalSales = metrics.ca_ordered;
-
-    // Calculate top selling products of the day
-    const productSalesMap: Record<number, { title: string; quantity: number; revenue: number }> = {};
-    shopOrders.forEach((order) => {
-      (order.items || []).forEach((item) => {
-        if (!productSalesMap[item.product_id]) {
-          productSalesMap[item.product_id] = {
-            title: item.product_title || `Article #${item.product_id}`,
-            quantity: 0,
-            revenue: 0,
-          };
-        }
-        productSalesMap[item.product_id].quantity += item.quantity;
-        productSalesMap[item.product_id].revenue += (item.unit_price || 0) * item.quantity;
-      });
-    });
-
-    const topSellingProducts = Object.values(productSalesMap)
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 5)
-      .map((p) => ({
-        title: p.title,
-        quantity_sold: p.quantity,
-        revenue: p.revenue,
-      }));
-
-    const shopProducts = products.filter((p) => p.shop_id === shopId);
-    const lowStock = shopProducts.filter((p) => p.stock > 0 && p.stock <= 3);
-    const outOfStock = shopProducts.filter((p) => p.stock === 0);
-
-    const todayStr = new Date().toLocaleDateString('fr-FR', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-
-    const lines: string[] = [
-      `🌙 *FLASH BILAN — ${todayStr.toUpperCase()}*`,
-      `🏪 *Boutique :* ${shop.name}`,
-      `📅 *Période :* ${todayStr}`,
-      `----------------------------------------`,
-      `🧾 *Commandes reçues :* ${metrics.received}`,
-      `✅ *Confirmées :* ${metrics.confirmed}`,
-      `🚚 *Terminées :* ${metrics.delivered}`,
-      `❌ *Annulées :* ${metrics.cancelled}`,
-      `💰 *Valeur des commandes enregistrées :* ${new Intl.NumberFormat('fr-FR').format(metrics.ca_ordered)} FCFA`,
-      `✅ *Valeur des commandes confirmées :* ${new Intl.NumberFormat('fr-FR').format(metrics.ca_confirmed)} FCFA`,
-      `🚚 *Valeur des commandes terminées :* ${new Intl.NumberFormat('fr-FR').format(metrics.ca_delivered)} FCFA`,
-      `🧺 *Panier moyen livré :* ${new Intl.NumberFormat('fr-FR').format(metrics.panier_moyen_livre)} FCFA`,
-      `----------------------------------------`,
-      `ℹ️ *MaTable.ci ne collecte aucun paiement.* Les paiements sont convenus directement entre le client et le vendeur.`,
-    ];
-
-    if (topSellingProducts.length > 0) {
-      lines.push(`🏆 *ARTICLES LES PLUS VENDUS :*`);
-      topSellingProducts.forEach((p, idx) => {
-        lines.push(` ${idx + 1}. *${p.title}* : ${p.quantity_sold} unité(s) (${new Intl.NumberFormat('fr-FR').format(p.revenue)} FCFA)`);
-      });
-      lines.push(`----------------------------------------`);
-    }
-
-    if (outOfStock.length > 0) {
-      lines.push(`🚨 *RUPTURES DE STOCK (${outOfStock.length}) :*`);
-      outOfStock.forEach((p) => lines.push(` • ${p.title} (0 restant)`));
-      lines.push(`----------------------------------------`);
-    }
-
-    if (lowStock.length > 0) {
-      lines.push(`⚠️ *ALERTE STOCK BAS (${lowStock.length}) :*`);
-      lowStock.forEach((p) => lines.push(` • ${p.title} (${p.stock} restant(s))`));
-      lines.push(`----------------------------------------`);
-    }
-
-    lines.push(`Bravo pour cette journée de vente ! À demain pour de nouvelles commandes. 🚀`);
-
-    res.json({
-      date: todayStr,
-      total_sales: totalSales,
-      orders_count: shopOrders.length,
-      total_orders: shopOrders.length,
-      top_selling_products: topSellingProducts,
-      low_stock_products: lowStock.map((p) => ({ id: p.id, title: p.title, stock: p.stock })),
-      out_of_stock_products: outOfStock.map((p) => ({ id: p.id, title: p.title })),
-      whatsapp_message: lines.join('\n'),
-    });
-  });
-
-  app.get('/api/admin/analytics', async (req: Request, res: Response) => {
-    await refreshRuntimeDataFromDatabase();
-    const requestedDays = Number(req.query.days);
-    const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 90) : 30;
-    const since = new Date(Date.now() - days * 86400000).toISOString();
-    const daily = await dbAll<{ date: string; page_views: number; unique_visitors: number }>(`
-      SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS page_views,
-        COUNT(DISTINCT session_id) AS unique_visitors
-      FROM analytics_events WHERE event_type = 'page_view' AND created_at >= ?
-      GROUP BY date ORDER BY date ASC
-    `, [since]);
-    const orderDaily = await dbAll<{ date: string; orders: number; sales: number }>(`
-      SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
-      FROM orders WHERE created_at >= ? GROUP BY date ORDER BY date ASC
-    `, [since]);
-
-    const validOrderStatuses = new Set(['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'expired']);
-    const byShop = (await Promise.all(shops.map(async (shop) => {
-      const traffic = await dbGet<{ page_views: number; unique_visitors: number }>(`
-        SELECT COUNT(*) AS page_views, COUNT(DISTINCT session_id) AS unique_visitors
-        FROM analytics_events WHERE event_type = 'page_view' AND shop_id = ? AND created_at >= ?
-      `, [shop.id, since]);
-      const pageViews = Number(traffic?.page_views || 0);
-      const uniqueVisitors = Number(traffic?.unique_visitors || 0);
-      const shopOrders = orders.filter((order) => order.shop_id === shop.id && order.created_at >= since);
-      const sales = shopOrders
-        .filter((order) => validOrderStatuses.has(order.status ?? 'pending') && order.status !== 'cancelled')
-        .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
-      return {
-        shop_id: shop.id, shop_name: shop.name, slug: shop.slug,
-        page_views: pageViews, unique_visitors: uniqueVisitors,
-        orders: shopOrders.length, sales,
-        conversion_rate: uniqueVisitors ? Number(((shopOrders.length / uniqueVisitors) * 100).toFixed(1)) : 0,
-      };
-    }))).sort((a, b) => b.page_views - a.page_views);
-    const totalViews = byShop.reduce((sum, shop) => sum + shop.page_views, 0);
-    const totalVisitors = byShop.reduce((sum, shop) => sum + shop.unique_visitors, 0);
-    const totalAnalyticsOrders = byShop.reduce((sum, shop) => sum + shop.orders, 0);
-    res.json({
-      days, since, daily, order_daily: orderDaily, by_shop: byShop,
-      totals: {
-        page_views: totalViews, unique_visitors: totalVisitors, orders: totalAnalyticsOrders,
-        sales: byShop.reduce((sum, shop) => sum + shop.sales, 0),
-        conversion_rate: totalVisitors ? Number(((totalAnalyticsOrders / totalVisitors) * 100).toFixed(1)) : 0,
-      },
-    });
-  });
-
-  // 6. SUPER-ADMIN DASHBOARD (/admin)
-  // "Dashboard Super-Admin (Votre Tour de Contrôle — /admin)"
-  app.get('/api/admin/shops', async (req: Request, res: Response) => {
-    await refreshRuntimeDataFromDatabase();
-    const adminShops = shops.map((s) => {
-      const shopOrders = orders.filter((order) => order.shop_id === s.id);
-      const actionableOrders = shopOrders.filter((order) => order.status !== 'cancelled' && order.status !== 'expired');
-      return {
-        ...toSafeShop(s),
-        products_count: products.filter((p) => p.shop_id === s.id).length,
-        orders_count: actionableOrders.length,
-        total_sales: actionableOrders.reduce((sum, order) => sum + order.total_amount, 0),
-        average_order_value: (() => {
-          return actionableOrders.length
-            ? Math.round(actionableOrders.reduce((sum, order) => sum + order.total_amount, 0) / actionableOrders.length)
-            : 0;
-        })(),
-        last_order_at: actionableOrders
-          .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.created_at ?? null,
-      };
-    });
-
-    res.json(adminShops);
-  });
-
-  app.get('/api/admin/health', async (req: Request, res: Response) => {
-    await refreshRuntimeDataFromDatabase();
-    const latestAnalytics = await dbGet<{ created_at?: string }>('SELECT created_at FROM analytics_events ORDER BY created_at DESC LIMIT 1');
-    const counts = {
-      shops: Number((await dbGet<{ count: number }>('SELECT COUNT(*) AS count FROM shops'))?.count || 0),
-      products: Number((await dbGet<{ count: number }>('SELECT COUNT(*) AS count FROM products'))?.count || 0),
-      orders: Number((await dbGet<{ count: number }>('SELECT COUNT(*) AS count FROM orders'))?.count || 0),
-    };
-
-    res.json({
-      status: 'ok',
-      checked_at: new Date().toISOString(),
-      database: databaseMode,
-      database_path: databaseMode === 'sqlite' ? process.env.MATABLE_DB_PATH || 'data/matable.db' : null,
-      counts,
-      latest_analytics_event_at: latestAnalytics?.created_at || null,
-      integrations: { whatsapp_click_to_chat: 'available' },
-    });
-  });
-
-  app.get('/api/admin/orders', async (req: Request, res: Response) => {
-    await refreshRuntimeDataFromDatabase();
-    const requestedLimit = Number(req.query.limit);
-    const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
-    const requestedStatus = String(req.query.status || 'all');
-    const allowedStatuses = new Set(['pending', 'confirmed', 'delivered', 'cancelled']);
-    const filteredOrders = orders
-      .filter((order) => requestedStatus === 'all' || (allowedStatuses.has(requestedStatus) && order.status === requestedStatus))
-      .sort((a, b) => b.created_at.localeCompare(a.created_at))
-      .slice(0, limit)
-      .map((order) => ({
-        id: order.id,
-        shop_id: order.shop_id,
-        shop_name: shops.find((shop) => shop.id === order.shop_id)?.name || 'Boutique inconnue',
-        customer_name: order.customer_name,
-        customer_phone: order.customer_phone,
-        delivery_location: order.delivery_location,
-        total_amount: order.total_amount,
-        status: order.status,
-        created_at: order.created_at,
-        items_count: (order.items || []).reduce((sum, item) => sum + item.quantity, 0),
-      }));
-
-    res.json({ orders: filteredOrders, total: filteredOrders.length, status: requestedStatus });
-  });
-
-  // Manual ON/OFF toggle
-  app.patch('/api/admin/shops/:id/toggle-active', async (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shop = shops.find((s) => s.id === shopId);
-    if (!shop) {
-      return res.status(404).json({ error: 'Boutique introuvable.' });
-    }
-
-    shop.is_active = !shop.is_active;
-    await persistShop(shop);
-    res.json({ success: true, is_active: shop.is_active, shop: toSafeShop(shop) });
-  });
-
-  app.post('/api/admin/shops/:id/access-link', async (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shop = shops.find((candidate) => candidate.id === shopId);
-    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-    const ownerAccessToken = randomUUID();
-    shop.owner_access_token_hash = hashAccessToken(ownerAccessToken);
-    await persistShop(shop);
-    const publicUrl = `${String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')}/${shop.slug}`;
-    const accessUrl = `${String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')}/app?access=${encodeURIComponent(ownerAccessToken)}`;
-    res.json({ success: true, shop: toSafeShop(shop), public_url: publicUrl, access_url: accessUrl });
-  });
-
-  app.post('/api/admin/shops/:id/notification', (req: Request, res: Response) => {
-    const shopId = Number(req.params.id);
-    const shop = shops.find((candidate) => candidate.id === shopId);
-    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-
-    const templates: Record<string, string> = {
-      welcome: `Bonjour ${shop.name}, votre espace MaTable.ci est prêt. Pensez à compléter votre catalogue et à partager votre vitrine avec vos clients.`,
-      catalog: `Bonjour ${shop.name}, pensez à vérifier vos articles, vos prix et vos disponibilités afin que votre vitrine MaTable.ci reste à jour.`,
-      orders: `Bonjour ${shop.name}, pensez à consulter vos nouvelles commandes et à confirmer rapidement les demandes reçues via MaTable.ci.`,
-      support: `Bonjour ${shop.name}, nous vous contactons au sujet de votre boutique MaTable.ci. Répondez à ce message si vous avez besoin d’aide.`,
-    };
-    const template = String(req.body?.template || '').trim();
-    if (!templates[template]) return res.status(400).json({ error: 'Modèle de notification invalide.' });
-
-    const message = templates[template];
-    const phone = shop.whatsapp_number.replace(/\D/g, '');
-    res.json({
-      success: true,
-      delivery_mode: 'whatsapp_click_to_chat',
-      template,
-      message,
-      whatsapp_url: `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
-    });
-  });
+  app.use('/api/shops/:id/products', createProductRouter({
+    products,
+    findShop: (shopId) => shops.find((shop) => shop.id === shopId),
+    requireMerchantAccess,
+    allocateProductId: () => allocateRecordId('products'),
+    persistProduct,
+    deleteProduct: async (productId, shopId) => {
+      await dbRun('DELETE FROM products WHERE id = ? AND shop_id = ?', [productId, shopId]);
+    },
+    sanitizeTextField,
+    normalizeProductImage,
+    sanitizeGalleryImages,
+    sanitizeProductAttributes,
+  }));
+
+  app.use('/api/shops', createMerchantOrdersRouter({
+    shops,
+    products,
+    orders,
+    requireMerchantAccess,
+    isSameBusinessDay,
+    summarizeOrderMetrics,
+  }));
+
+  app.use('/api', createOrderRouter({
+    shops,
+    products,
+    orders,
+    rateLimitPublicRequest,
+    validateCustomerOrderInput,
+    computeIsShopOpen,
+    getCustomerSessionState,
+    hashAccessToken,
+    timingSafeEqual,
+    getValidSelectedModifiers,
+    getProductUnitPriceWithModifiers,
+  }));
 
   const getPublicOrigin = (req: Request) => String(process.env.APP_URL || `${req.protocol || 'https'}://${req.get('host') || 'matable.ci'}`).replace(/\/$/, '');
 
@@ -3176,20 +1464,7 @@ async function startServer() {
     return isGet && isLikelyHtml && !isSocialCrawler;
   };
 
-  app.get('/robots.txt', (req: Request, res: Response) => {
-    const origin = getPublicOrigin(req);
-    res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /admin\nDisallow: /api/\nSitemap: ${origin}/sitemap.xml\n`);
-  });
-
-  app.get('/sitemap.xml', (req: Request, res: Response) => {
-    const origin = getPublicOrigin(req);
-    const urls = [
-      `${origin}/`,
-      ...shops.filter((shop) => shop.is_active).map((shop) => `${origin}/${encodeURIComponent(shop.slug)}`),
-    ];
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map((url) => `<url><loc>${escapeHtml(url)}</loc><changefreq>daily</changefreq><priority>${url === `${origin}/` ? '1.0' : '0.8'}</priority></url>`).join('')}</urlset>`;
-    res.type('application/xml').send(xml);
-  });
+  app.use(createSeoRouter({ shops, getPublicOrigin, escapeHtml }));
 
   // Vite middleware for development vs. Production static serving
   if (process.env.NODE_ENV !== 'production') {
@@ -3202,11 +1477,28 @@ async function startServer() {
     });
 
     app.use(async (req: Request, res: Response, next: express.NextFunction) => {
+      if (req.path === '/app' && typeof req.query.access === 'string' && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(200).set({
+            'Content-Type': 'text/html',
+            'Cache-Control': 'no-store',
+            'Referrer-Policy': 'no-referrer',
+          }).end(transformed);
+        } catch (error) {
+          return next(error);
+        }
+      }
+
       const url = req.originalUrl.split('?')[0];
       const matchSlug = url.length > 1 && !url.startsWith('/api') && !url.startsWith('/@') && !url.includes('.')
         ? url.substring(1).split('/')[0]
         : null;
-      const targetShop = matchSlug && !['app', 'admin'].includes(matchSlug) ? shops.find((s) => s.slug === matchSlug) : null;
+      const targetShop = matchSlug && !['app', 'admin'].includes(matchSlug)
+        ? shops.find((shop) => shop.slug === matchSlug && isShopPubliclyVisible(shop))
+        : null;
       const legalPage = matchSlug && ['mentions-legales', 'confidentialite', 'cgu', 'cookies'].includes(matchSlug) ? matchSlug : null;
 
       if (targetShop && shouldServePublicHtml(req)) {
@@ -3247,9 +1539,20 @@ async function startServer() {
     app.use(express.static(distPath, { index: false }));
 
     app.get('/{*splat}', (req: Request, res: Response) => {
+      if (req.path === '/app' && typeof req.query.access === 'string') {
+        return res.sendFile(indexHtmlPath, {
+          headers: {
+            'Cache-Control': 'no-store',
+            'Referrer-Policy': 'no-referrer',
+          },
+        });
+      }
+
       const url = req.originalUrl.split('?')[0];
       const matchSlug = url.length > 1 && !url.startsWith('/api') && !url.includes('.') ? url.substring(1).split('/')[0] : null;
-      const targetShop = matchSlug && !['app', 'admin'].includes(matchSlug) ? shops.find((s) => s.slug === matchSlug) : null;
+      const targetShop = matchSlug && !['app', 'admin'].includes(matchSlug)
+        ? shops.find((shop) => shop.slug === matchSlug && isShopPubliclyVisible(shop))
+        : null;
       const legalPage = matchSlug && ['mentions-legales', 'confidentialite', 'cgu', 'cookies'].includes(matchSlug) ? matchSlug : null;
 
       if (targetShop && baseHtml && shouldServePublicHtml(req)) {

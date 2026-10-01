@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDisplay, isShopCategory, normalizeCustomBannerImage } from '../utils/categoryDefaults';
-import { ArrowRight, MapPin, Search, Store, Sparkles, ShoppingBag, X } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock3, MapPin, Search, Store, Sparkles, X } from 'lucide-react';
 import { shopMatchesDirectorySearch } from '../utils/directorySearch';
 
 interface DirectoryShop {
@@ -38,8 +38,6 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenS
     shopMatchesDirectorySearch(shop, query, categoryLabel(shop.category))
       && (category === 'all' || shop.category === category)
   ), [shops, query, category]);
-  const openShops = shops.filter(shop => shop.is_open).length;
-  const productCount = shops.reduce((total, shop) => total + (shop.products_count || 0), 0);
   const featuredShop = shops.find(shop => shop.is_open && (shop.products_count || 0) > 0) || shops[0];
   const popularSearches = ['Attiéké', 'Wax', 'Cocody', 'Lingerie', 'Grillades'];
   const getShopImage = (shop: DirectoryShop) => normalizeCustomBannerImage(shop.theme_config?.custom_banner_url, shop.category)
@@ -49,18 +47,17 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenS
   const getShopColor = (shop: DirectoryShop) => shop.theme_color || shop.theme_config?.primary_color || '#176b55';
   const getHoursSummary = (shop: DirectoryShop) => {
     const hours = shop.opening_hours;
-    if (!hours || !hours.enabled) return 'Horaire libre';
+    if (!hours || !hours.enabled) return 'Horaires non renseignés';
     if (hours.days && hours.days.length > 0 && hours.days.length < 7) {
-      return `Ouvert ${hours.open_time || '08:00'}–${hours.close_time || '22:00'} · ${hours.days.length} j/s`;
+      return `${hours.open_time || '08:00'}–${hours.close_time || '22:00'} · ${hours.days.length} j/s`;
     }
-    return `Ouvert ${hours.open_time || '08:00'}–${hours.close_time || '22:00'} · 7j/7`;
+    return `${hours.open_time || '08:00'}–${hours.close_time || '22:00'} · 7j/7`;
   };
 
   return (
     <main className="public-directory min-h-screen text-[#25231f]">
       <section className="mx-auto w-full max-w-7xl px-5 pb-12 pt-8 sm:pb-16 sm:pt-12">
-        <div className="grid items-end gap-8 lg:grid-cols-[1fr_0.72fr]">
-          <div className="max-w-3xl animate-in fade-in slide-in-from-bottom-3 duration-500">
+        <div className="max-w-4xl animate-in fade-in slide-in-from-bottom-3 duration-500">
             <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[#0f4d3d]">
             <Sparkles className="h-4 w-4 text-[#e6572b]" /> Découvrez près de vous
             </div>
@@ -71,21 +68,6 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenS
               <span><span className="hero-signal-dot hero-signal-dot-green" /> Catalogue en ligne</span>
               <span><span className="hero-signal-dot hero-signal-dot-gold" /> Commande WhatsApp</span>
             </div>
-          </div>
-          <div className="directory-summary rounded-xl border border-[#ded8ce] bg-[#fffdf9] p-5 text-[#25231f] sm:p-6">
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#6f6a61]">Aujourd’hui sur MaTable</p>
-            <div className="mt-5 grid grid-cols-2 divide-x divide-[#ded8ce]">
-              <div className="pr-4">
-                <strong className="block text-3xl font-bold leading-none text-[#25231f]">{shops.length}</strong>
-                <p className="mt-2 text-xs font-medium text-[#6f6a61]">boutiques</p>
-              </div>
-              <div className="pl-4">
-                <strong className="block text-3xl font-bold leading-none text-[#176b55]">{openShops}</strong>
-                <p className="mt-2 text-xs font-medium text-[#6f6a61]">ouvertes</p>
-              </div>
-            </div>
-            <p className="mt-5 border-t border-[#ded8ce] pt-4 text-sm leading-6 text-[#6f6a61]">Des commerces proches, des catalogues clairs, un contact direct.</p>
-          </div>
         </div>
 
         {featuredShop && !query.trim() && category === 'all' && (
@@ -137,8 +119,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenS
         </div>
 
         <div className="mt-10 flex items-end justify-between gap-3">
-          <div><p className="text-xs font-bold uppercase tracking-[0.1em] text-[#e6572b]">{query.trim() || category !== 'all' ? 'Résultats' : 'À découvrir'}</p><h2 aria-live="polite" className="mt-1 text-xl font-semibold text-[#25231f]">{filteredShops.length} boutique{filteredShops.length === 1 ? '' : 's'} disponible{filteredShops.length === 1 ? '' : 's'}</h2></div>
-          <span className="text-xs text-slate-500 hidden sm:flex items-center gap-1"><ShoppingBag className="w-3.5 h-3.5" /> {productCount} articles référencés</span>
+          <div><p className="text-xs font-bold uppercase tracking-[0.1em] text-[#e6572b]">{query.trim() || category !== 'all' ? 'Résultats' : 'À découvrir'}</p><h2 aria-live="polite" className="mt-1 text-xl font-semibold text-[#25231f]">{query.trim() || category !== 'all' ? 'Boutiques correspondantes' : 'Boutiques à découvrir'}</h2></div>
         </div>
 
         {filteredShops.length === 0 ? (
@@ -175,15 +156,17 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenS
                     <img src={shop.theme_config.logo_url} alt={shop.name} className="absolute left-4 bottom-3 w-9 h-9 rounded-xl object-cover border-2 border-white bg-white shadow-sm" />
                   ) : null}
                   <span className="absolute bottom-3 left-4 text-[10px] font-semibold uppercase tracking-wider text-white">{categoryLabel(shop.category)}</span>
-                  <span className={`absolute right-3 top-3 rounded-full px-2 py-1 text-[10px] font-semibold ${shop.is_open ? 'bg-[#e4f1ec] text-[#0f4d3d]' : 'bg-[#f6f3ed] text-[#6f6a61]'}`}>{shop.is_open ? 'Ouverte' : 'Fermée'}</span>
+                  <span aria-label={shop.is_open ? 'Boutique ouverte maintenant' : 'Boutique fermée actuellement'} className={`absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full border-2 border-white px-3 py-1.5 text-[11px] font-black shadow-md ${shop.is_open ? 'bg-[#0f4d3d] text-white' : 'bg-[#fff4e5] text-[#7a3e00]'}`}>
+                    {shop.is_open ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : <Clock3 className="h-4 w-4" aria-hidden="true" />}
+                    {shop.is_open ? 'OUVERTE' : 'FERMÉE'}
+                  </span>
                 </div>
                 <div className="p-4">
                   <h3 className="text-base font-semibold text-[#25231f]">{shop.name}</h3>
                   <p className="mt-1 flex items-center gap-1 text-xs text-[#6f6a61]"><MapPin className="h-3.5 w-3.5" /> {shop.city || 'Côte d’Ivoire'}</p>
-                  <p className="mt-2 flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] text-[#6f6a61]"><span className="inline-block h-1.5 w-1.5 rounded-full bg-[#176b55]" />{getHoursSummary(shop)}</p>
+                  <p className="mt-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[#6f6a61]"><Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{getHoursSummary(shop)}</p>
                   <p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-[#6f6a61]">{shop.welcome_message || 'Découvrez le catalogue et commandez directement.'}</p>
                   <div className="mt-3 flex flex-wrap gap-1.5">
-                    {shop.is_open ? <span className="rounded-sm bg-[#e4f1ec] px-2 py-1 text-[10px] font-semibold text-[#0f4d3d]">Ouverte</span> : <span className="rounded-sm bg-[#f6f3ed] px-2 py-1 text-[10px] font-semibold text-[#6f6a61]">Fermée</span>}
                     <span className="rounded-sm bg-[#f9f0e6] px-2 py-1 text-[10px] font-semibold text-[#93602e]">Livraison</span>
                     <span className="rounded-sm bg-[#e8eceb] px-2 py-1 text-[10px] font-semibold text-[#52635b]">Sur place</span>
                   </div>
@@ -207,7 +190,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenS
                     {!shop.products_preview?.length && <span className="self-center text-[11px] font-medium text-[#93602e]">Collection en préparation</span>}
                   </div>
                   <div className="mt-4 flex items-center justify-between gap-2 border-t border-[#eee9df] pt-3">
-                    <span className="text-[11px] font-medium text-[#6f6a61]">{shop.products_count || 0} articles disponibles</span>
+                    <span className="text-[11px] font-medium text-[#6f6a61]">{shop.products_count ? 'Catalogue en ligne' : 'Catalogue en préparation'}</span>
                     <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0f4d3d]">Découvrir <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></span>
                   </div>
                 </div>

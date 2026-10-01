@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Navigation } from './components/Navigation';
 import { CustomerStorefront } from './components/CustomerStorefront';
 import { MerchantDashboard } from './components/MerchantDashboard/index';
@@ -13,29 +14,80 @@ import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { CustomerAccount, CustomerAuth, CustomerUser } from './components/CustomerAuth';
 import { FaqPage } from './components/FaqPage';
 
+const legalPageMap: Record<string, LegalPageKey> = {
+  'mentions-legales': 'mentions-legales',
+  confidentialite: 'confidentialite',
+  cgu: 'cgu',
+  cookies: 'cookies',
+};
+const legalMetadata: Record<LegalPageKey, { title: string; description: string }> = {
+  'mentions-legales': {
+    title: 'Mentions légales | MaTable.ci',
+    description: 'Mentions légales et responsabilités de la plateforme MaTable.ci.',
+  },
+  confidentialite: {
+    title: 'Politique de confidentialité | MaTable.ci',
+    description: 'Politique de confidentialité et traitement des données sur MaTable.ci.',
+  },
+  cgu: {
+    title: 'Conditions générales d’utilisation | MaTable.ci',
+    description: 'Conditions générales d’utilisation des vitrines et services MaTable.ci.',
+  },
+  cookies: {
+    title: 'Politique relative aux cookies | MaTable.ci',
+    description: 'Informations sur les cookies et traceurs utilisés par MaTable.ci.',
+  },
+};
+const defaultPageMetadata = {
+  title: 'MaTable.ci — Boutiques locales en Côte d’Ivoire',
+  description: 'Découvrez des boutiques locales en Côte d’Ivoire, consultez leurs catalogues et commandez directement sur WhatsApp avec MaTable.ci.',
+};
+const faqMetadata = {
+  title: 'Questions fréquentes | MaTable.ci',
+  description: 'Réponses aux questions fréquentes sur les commandes, les comptes clients et les boutiques MaTable.ci.',
+};
+
+function StorefrontRoute({ customerUser, onCustomerAuthenticated }: {
+  customerUser: CustomerUser | null;
+  onCustomerAuthenticated: (user: CustomerUser) => void;
+}) {
+  const { slug = '' } = useParams();
+  return <CustomerStorefront shopSlug={slug} customerUser={customerUser} onCustomerAuthenticated={onCustomerAuthenticated} />;
+}
+
+function NotFoundPage() {
+  return (
+    <div className="not-found-page">
+      <p className="text-sm font-black uppercase tracking-[0.18em] text-[#176b55]">Erreur 404</p>
+      <h1 className="text-2xl font-black text-slate-900">Cette page n’existe pas</h1>
+      <p className="mt-2 mb-6 text-sm text-slate-600">Vérifiez l’adresse ou revenez à l’annuaire.</p>
+      <a href="/" className="inline-flex items-center justify-center rounded-xl bg-[#176b55] px-5 py-3 font-bold text-white">Retour aux boutiques</a>
+    </div>
+  );
+}
+
 export default function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [isBooting, setIsBooting] = useState(true);
-  const initialPath = window.location.pathname;
-  const legalPageMap: Record<string, LegalPageKey> = {
-    'mentions-legales': 'mentions-legales',
-    confidentialite: 'confidentialite',
-    cgu: 'cgu',
-    cookies: 'cookies',
-  };
-  const initialLegalPage = legalPageMap[initialPath.replace(/^\//, '').replace(/\/$/, '')] || null;
-  const initialFaqPage = initialPath.replace(/^\//, '').replace(/\/$/, '') === 'faq';
-  const initialRole = initialPath.includes('/admin') ? 'admin' : initialPath.includes('/app') ? 'merchant' : 'storefront';
-  const initialCustomerView = initialPath === '/connexion' ? 'auth' : initialPath === '/inscription' ? 'register' : initialPath === '/compte' ? 'account' : 'none';
-  const initialShopSlug = initialPath.length > 1 && initialRole === 'storefront'
-    ? initialPath.substring(1).split('/')[0]
-    : 'aya-chic';
-  const [currentRole, setCurrentRole] = useState<'storefront' | 'merchant' | 'admin'>(initialRole);
-  const [selectedShopSlug, setSelectedShopSlug] = useState<string>(initialShopSlug);
-  const [showDirectory, setShowDirectory] = useState(initialPath === '/');
-  const [isFaqPage, setIsFaqPage] = useState(initialFaqPage);
+  const path = location.pathname;
+  const normalizedPath = path.replace(/^\//, '').replace(/\/$/, '');
+  const legalPage = legalPageMap[normalizedPath] || null;
+  const isFaqPage = normalizedPath === 'faq';
+  const currentRole: 'storefront' | 'merchant' | 'admin' = path === '/admin' || path.startsWith('/admin/')
+    ? 'admin'
+    : path === '/app' || path.startsWith('/app/')
+      ? 'merchant'
+      : 'storefront';
+  const customerView: 'none' | 'auth' | 'register' | 'account' = path === '/connexion'
+    ? 'auth'
+    : path === '/inscription'
+      ? 'register'
+      : path === '/compte'
+        ? 'account'
+        : 'none';
   const [availableShops, setAvailableShops] = useState<{ slug: string; name: string; category?: string }[]>([]);
   const [customerUser, setCustomerUser] = useState<CustomerUser | null>(null);
-  const [customerView, setCustomerView] = useState<'none' | 'auth' | 'register' | 'account'>(initialCustomerView);
   const [openMerchantRegistration, setOpenMerchantRegistration] = useState(false);
   const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant';
 
@@ -55,7 +107,7 @@ export default function App() {
         }
       })
       .catch(err => console.error(err));
-  }, [currentRole]);
+  }, []);
 
   useEffect(() => {
     fetch('/api/auth/customer-session', { credentials: 'include' })
@@ -67,111 +119,51 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const path = window.location.pathname;
-    if (initialLegalPage || initialFaqPage) {
-      setCurrentRole('storefront');
-      setShowDirectory(false);
-    } else if (path.includes('/admin')) {
-      setCurrentRole('admin');
-      setShowDirectory(false);
-    } else if (path.includes('/app')) {
-      setCurrentRole('merchant');
-      setShowDirectory(false);
-    } else if (path === '/connexion' || path === '/inscription' || path === '/compte') {
-      setCurrentRole('storefront');
-      setCustomerView(path === '/inscription' ? 'register' : path === '/compte' ? 'account' : 'auth');
-      setShowDirectory(false);
-    } else if (path.length > 1) {
-      const slug = path.substring(1).split('/')[0];
-      if (slug) {
-        setSelectedShopSlug(slug);
-        setCurrentRole('storefront');
-        setShowDirectory(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const handlePopState = () => {
-      const path = window.location.pathname;
-      const faqPath = path.replace(/^\//, '').replace(/\/$/, '') === 'faq';
-      setIsFaqPage(faqPath);
-      if (faqPath) {
-        setCurrentRole('storefront');
-        setCustomerView('none');
-        setShowDirectory(false);
-        return;
-      }
-      if (path === '/connexion' || path === '/inscription' || path === '/compte') {
-        setCurrentRole('storefront');
-        setCustomerView(path === '/inscription' ? 'register' : path === '/compte' ? 'account' : 'auth');
-        setShowDirectory(false);
-        return;
-      }
-      if (path.includes('/admin')) {
-        setCurrentRole('admin');
-        setCustomerView('none');
-        setShowDirectory(false);
-        return;
-      }
-      if (path.includes('/app')) {
-        setCurrentRole('merchant');
-        setCustomerView('none');
-        setShowDirectory(false);
-        return;
-      }
-      if (path === '/') {
-        setCurrentRole('storefront');
-        setCustomerView('none');
-        setShowDirectory(true);
-        return;
-      }
-      setCurrentRole('storefront');
-      setCustomerView('none');
-      setSelectedShopSlug(path.substring(1).split('/')[0]);
-      setShowDirectory(false);
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  useEffect(() => {
-    if (!initialLegalPage) return;
-    const legalMeta: Record<LegalPageKey, { title: string; description: string }> = {
-      'mentions-legales': {
-        title: 'Mentions légales | MaTable.ci',
-        description: 'Mentions légales et responsabilités de la plateforme MaTable.ci.',
-      },
-      confidentialite: {
-        title: 'Politique de confidentialité | MaTable.ci',
-        description: 'Politique de confidentialité et traitement des données sur MaTable.ci.',
-      },
-      cgu: {
-        title: 'Conditions générales d’utilisation | MaTable.ci',
-        description: 'Conditions générales d’utilisation des vitrines et services MaTable.ci.',
-      },
-      cookies: {
-        title: 'Politique relative aux cookies | MaTable.ci',
-        description: 'Informations sur les cookies et traceurs utilisés par MaTable.ci.',
-      },
-    };
-    const metadata = legalMeta[initialLegalPage];
+    const isPrivateRoute = path === '/app' || path.startsWith('/app/') || path === '/admin' || path.startsWith('/admin/') || path === '/compte';
+    const isInvalidNestedRoute = !legalPage && !isFaqPage && !isPrivateRoute && path.split('/').filter(Boolean).length > 1;
+    const metadata = legalPage
+      ? legalMetadata[legalPage]
+      : isFaqPage
+        ? faqMetadata
+        : isInvalidNestedRoute
+          ? { title: 'Page introuvable | MaTable.ci', description: 'La page demandée est introuvable sur MaTable.ci.' }
+          : defaultPageMetadata;
+    const canonicalUrl = `${window.location.origin}${path || '/'}`;
     document.title = metadata.title;
     const description = document.head.querySelector<HTMLMetaElement>('meta[name="description"]');
     if (description) description.content = metadata.description;
     const canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
-    if (canonical) canonical.href = `${window.location.origin}/${initialLegalPage}`;
-  }, [initialLegalPage]);
+    if (canonical) canonical.href = canonicalUrl;
+    const robots = document.head.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    if (robots) robots.content = isPrivateRoute || isInvalidNestedRoute ? 'noindex, nofollow' : 'index, follow, max-image-preview:large';
+    const openGraphTitle = document.head.querySelector<HTMLMetaElement>('meta[property="og:title"]');
+    if (openGraphTitle) openGraphTitle.content = metadata.title;
+    const openGraphDescription = document.head.querySelector<HTMLMetaElement>('meta[property="og:description"]');
+    if (openGraphDescription) openGraphDescription.content = metadata.description;
+    const openGraphUrl = document.head.querySelector<HTMLMetaElement>('meta[property="og:url"]');
+    if (openGraphUrl) openGraphUrl.content = canonicalUrl;
+    const twitterTitle = document.head.querySelector<HTMLMetaElement>('meta[name="twitter:title"]');
+    if (twitterTitle) twitterTitle.content = metadata.title;
+    const twitterDescription = document.head.querySelector<HTMLMetaElement>('meta[name="twitter:description"]');
+    if (twitterDescription) twitterDescription.content = metadata.description;
+  }, [path, legalPage, isFaqPage]);
 
-  useEffect(() => {
-    if (!isFaqPage) return;
-    document.title = 'Questions fréquentes | MaTable.ci';
-    const description = document.head.querySelector<HTMLMetaElement>('meta[name="description"]');
-    if (description) description.content = 'Réponses aux questions fréquentes sur les commandes, les comptes clients et les boutiques MaTable.ci.';
-    const canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
-    if (canonical) canonical.href = `${window.location.origin}/faq`;
-  }, [isFaqPage]);
+  const renderCustomerAuth = (initialMode: 'login' | 'register') => (
+    <CustomerAuth
+      initialMode={initialMode}
+      onModeChange={(mode) => navigate(mode === 'register' ? '/inscription' : '/connexion')}
+      onAuthenticated={(user) => { setCustomerUser(user); navigate('/compte'); }}
+      onBack={() => navigate('/')}
+      onMerchantLogin={() => { setOpenMerchantRegistration(false); navigate('/app'); }}
+      onMerchantRegister={() => { setOpenMerchantRegistration(true); navigate('/app'); }}
+    />
+  );
+
+  const logoutCustomer = async () => {
+    await fetch('/api/auth/customer-logout', { method: 'POST', credentials: 'include' });
+    setCustomerUser(null);
+    navigate('/');
+  };
 
   return (
     <ToastProvider>
@@ -265,90 +257,37 @@ export default function App() {
               <div className="surface-shell">
                 {!hasStandaloneAccountFlow && <Navigation
                   currentRole={currentRole}
-                  onChangeRole={(role) => {
-                    setCurrentRole(role);
-                    setShowDirectory(false);
-                    window.history.pushState({}, '', role === 'admin' ? '/admin' : role === 'merchant' ? '/app' : '/');
-                  }}
-                  onOpenDirectory={() => {
-                    setCurrentRole('storefront');
-                    setShowDirectory(true);
-                    window.history.pushState({}, '', '/');
-                  }}
-                  isDirectory={currentRole === 'storefront' && showDirectory}
-                  isLegalPage={Boolean(initialLegalPage)}
+                  onChangeRole={(role) => navigate(role === 'admin' ? '/admin' : role === 'merchant' ? '/app' : '/')}
+                  onOpenDirectory={() => navigate('/')}
+                  isDirectory={path === '/'}
+                  isLegalPage={Boolean(legalPage)}
                   customerUser={customerUser}
-                  onOpenCustomerAuth={() => { setCurrentRole('storefront'); setCustomerView('auth'); setShowDirectory(false); window.history.pushState({}, '', '/connexion'); }}
-                  onOpenCustomerAccount={() => { setCurrentRole('storefront'); setCustomerView('account'); setShowDirectory(false); window.history.pushState({}, '', '/compte'); }}
-                  onLogoutCustomer={async () => { await fetch('/api/auth/customer-logout', { method: 'POST', credentials: 'include' }); setCustomerUser(null); setCustomerView('none'); setShowDirectory(true); window.history.pushState({}, '', '/'); }}
+                  onOpenCustomerAuth={() => navigate('/connexion')}
+                  onOpenCustomerAccount={() => navigate('/compte')}
+                  onLogoutCustomer={logoutCustomer}
                 />}
 
                 <div id="main-content" className="flex-1 app-shell" tabIndex={-1}>
-                  {isFaqPage ? (
-                    <FaqPage />
-                  ) : initialLegalPage ? (
-                    <LegalPages page={initialLegalPage} />
-                  ) : customerView === 'auth' || customerView === 'register' ? (
-                    <CustomerAuth
-                      initialMode={customerView === 'register' ? 'register' : 'login'}
-                      onAuthenticated={(user) => { setCustomerUser(user); setCustomerView('account'); window.history.pushState({}, '', '/compte'); }}
-                      onBack={() => { setCustomerView('none'); setShowDirectory(true); window.history.pushState({}, '', '/'); }}
-                      onMerchantLogin={() => { setCurrentRole('merchant'); setCustomerView('none'); setShowDirectory(false); setOpenMerchantRegistration(false); window.history.pushState({}, '', '/app'); }}
-                      onMerchantRegister={() => { setCurrentRole('merchant'); setCustomerView('none'); setShowDirectory(false); setOpenMerchantRegistration(true); window.history.pushState({}, '', '/app'); }}
-                    />
-                  ) : customerView === 'account' ? (
-                    customerUser ? <CustomerAccount user={customerUser} onLogout={async () => { await fetch('/api/auth/customer-logout', { method: 'POST', credentials: 'include' }); setCustomerUser(null); setCustomerView('none'); setShowDirectory(true); window.history.pushState({}, '', '/'); }} onBack={() => { setCustomerView('none'); setShowDirectory(true); window.history.pushState({}, '', '/'); }} /> : <CustomerAuth onBack={() => { setCustomerView('none'); setShowDirectory(true); window.history.pushState({}, '', '/'); }} onAuthenticated={(user) => { setCustomerUser(user); setCustomerView('account'); }} onMerchantLogin={() => { setCurrentRole('merchant'); setCustomerView('none'); setShowDirectory(false); setOpenMerchantRegistration(false); window.history.pushState({}, '', '/app'); }} onMerchantRegister={() => { setCurrentRole('merchant'); setCustomerView('none'); setShowDirectory(false); setOpenMerchantRegistration(true); window.history.pushState({}, '', '/app'); }} />
-                  ) : currentRole === 'storefront' && (
-                    showDirectory ? (
-                      <PublicDirectory
-                        shops={availableShops}
-                        onOpenShop={(slug) => {
-                          setSelectedShopSlug(slug);
-                          setShowDirectory(false);
-                          window.history.pushState({}, '', `/${slug}`);
-                        }}
-                        onCreateShop={() => {
-                          setCurrentRole('merchant');
-                          setShowDirectory(false);
-                          setOpenMerchantRegistration(true);
-                          window.history.pushState({}, '', '/app');
-                        }}
-                      />
-                    ) : (
-                      <CustomerStorefront
-                        shopSlug={selectedShopSlug}
-                        customerUser={customerUser}
-                        onCustomerAuthenticated={setCustomerUser}
-                        onSelectShop={(slug) => setSelectedShopSlug(slug)}
-                      />
-                    )
-                  )}
-
-                  {currentRole === 'merchant' && (
-                    <MerchantDashboard
-                      openRegistration={openMerchantRegistration}
-                      currentShopSlug={selectedShopSlug}
-                      onBackToDirectory={() => {
-                        setCurrentRole('storefront');
-                        setCustomerView('none');
-                        setShowDirectory(true);
-                        setOpenMerchantRegistration(false);
-                        window.history.pushState({}, '', '/');
-                      }}
-                      onOpenStorefront={(slug) => {
-                        setSelectedShopSlug(slug);
-                        setCurrentRole('storefront');
-                        setShowDirectory(false);
-                        window.history.pushState({}, '', `/${slug}`);
-                      }}
-                    />
-                  )}
-
-                  {currentRole === 'admin' && (
-                    <AdminDashboard />
-                  )}
+                  <Routes>
+                    <Route path="/" element={<PublicDirectory shops={availableShops} onOpenShop={(slug) => navigate(`/${slug}`)} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app'); }} />} />
+                    <Route path="/faq" element={<FaqPage />} />
+                    <Route path="/mentions-legales" element={<LegalPages page="mentions-legales" />} />
+                    <Route path="/confidentialite" element={<LegalPages page="confidentialite" />} />
+                    <Route path="/cgu" element={<LegalPages page="cgu" />} />
+                    <Route path="/cookies" element={<LegalPages page="cookies" />} />
+                    <Route path="/connexion" element={renderCustomerAuth('login')} />
+                    <Route path="/inscription" element={renderCustomerAuth('register')} />
+                    <Route path="/compte" element={customerUser
+                      ? <CustomerAccount user={customerUser} onLogout={logoutCustomer} onBack={() => navigate('/')} />
+                      : renderCustomerAuth('login')
+                    } />
+                    <Route path="/app/*" element={<MerchantDashboard openRegistration={openMerchantRegistration} onBackToDirectory={() => { setOpenMerchantRegistration(false); navigate('/'); }} onOpenStorefront={(slug) => navigate(`/${slug}`)} />} />
+                    <Route path="/admin/*" element={<AdminDashboard />} />
+                    <Route path="/:slug" element={<StorefrontRoute customerUser={customerUser} onCustomerAuthenticated={setCustomerUser} />} />
+                    <Route path="*" element={<NotFoundPage />} />
+                  </Routes>
                 </div>
-                {!hasStandaloneAccountFlow && <Footer compact={Boolean(initialLegalPage)} />}
+                {!hasStandaloneAccountFlow && <Footer compact={Boolean(legalPage)} />}
               </div>
             </div>
             <CookieBanner />

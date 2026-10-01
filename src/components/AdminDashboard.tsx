@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { Shop } from '../types';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
+import { AdminIdentityVerificationPanel } from './AdminIdentityVerificationPanel';
 
 interface AdminShopItem extends Shop {
   products_count: number;
@@ -90,6 +91,7 @@ export const AdminDashboard: React.FC = () => {
   const [notificationShopId, setNotificationShopId] = useState('');
   const [notificationTemplate, setNotificationTemplate] = useState<typeof ownerNotificationTemplates[number]['id']>('welcome');
   const [notificationLoading, setNotificationLoading] = useState(false);
+  const [selectedVerificationShopId, setSelectedVerificationShopId] = useState<number | null>(null);
 
   const fetchAdminShops = async () => {
     try {
@@ -358,6 +360,12 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const pendingVerificationShops = shops.filter((shop) => ['submitted', 'under_review'].includes(shop.merchant_verification_status || ''));
+  const focusVerificationShop = (shopId: number) => {
+    setSelectedVerificationShopId(shopId);
+    window.setTimeout(() => document.getElementById(`identity-verification-shop-${shopId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
+  };
+
   return (
     <div className="admin-dashboard min-h-screen pb-20">
       <header className="relative overflow-hidden border-b-[3px] border-[#211712] bg-[#fffaf2] text-[#211712]">
@@ -419,6 +427,23 @@ export const AdminDashboard: React.FC = () => {
           >
             <Check className="w-4 h-4 text-emerald-600" />
             <span>{actionNotice}</span>
+          </motion.div>
+        )}
+
+        {pendingVerificationShops.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            role="status"
+            className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+              <p><strong>{pendingVerificationShops.length} dossier(s) d’identité à examiner.</strong> Les photos attendent une validation visuelle.</p>
+            </div>
+            <button type="button" onClick={() => focusVerificationShop(pendingVerificationShops[0].id)} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-amber-900 px-3 py-2 text-xs font-bold text-white hover:bg-amber-800">
+              Ouvrir le premier dossier
+            </button>
           </motion.div>
         )}
 
@@ -582,6 +607,8 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </section>
 
+        <AdminIdentityVerificationPanel selectedShopId={selectedVerificationShopId} />
+
         <section className="chart-panel p-4 md:p-5">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2">
@@ -654,6 +681,11 @@ export const AdminDashboard: React.FC = () => {
                       >
                         {getCategoryDefaults(shop.category).icon} {getCategoryDefaults(shop.category).label}
                       </span>
+                      {['submitted', 'under_review'].includes(shop.merchant_verification_status || '') && (
+                        <button type="button" onClick={() => focusVerificationShop(shop.id)} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-extrabold text-amber-900 transition hover:bg-amber-100">
+                          <Eye className="h-3 w-3" /> {shop.merchant_verification_status === 'under_review' ? 'Revue en cours' : 'À examiner'}
+                        </button>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">

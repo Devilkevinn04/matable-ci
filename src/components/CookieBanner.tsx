@@ -21,28 +21,37 @@ export const hasAnalyticsConsent = (): boolean => {
   }
 };
 
+export const saveCookiePreferences = (analyticsEnabled: boolean): boolean => {
+  try {
+    window.localStorage.setItem(PREFS_KEY, JSON.stringify({ essential: true, analytics: analyticsEnabled }));
+    window.localStorage.setItem(CONSENT_KEY, analyticsEnabled ? 'accepted' : 'refused');
+    window.dispatchEvent(new Event('matable-cookie-preferences-updated'));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const CookieBanner: React.FC = () => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    try {
-      const prefsRaw = window.localStorage.getItem(PREFS_KEY);
-      const hasUserChoice = Boolean(prefsRaw) || Boolean(window.localStorage.getItem(CONSENT_KEY));
-      setVisible(!hasUserChoice);
-    } catch {
-      setVisible(false);
-    }
+    const syncVisibility = () => {
+      try {
+        const prefsRaw = window.localStorage.getItem(PREFS_KEY);
+        const hasUserChoice = Boolean(prefsRaw) || Boolean(window.localStorage.getItem(CONSENT_KEY));
+        setVisible(!hasUserChoice);
+      } catch {
+        setVisible(false);
+      }
+    };
+    syncVisibility();
+    window.addEventListener('matable-cookie-preferences-updated', syncVisibility);
+    return () => window.removeEventListener('matable-cookie-preferences-updated', syncVisibility);
   }, []);
 
   const persistPreferences = (analyticsEnabled: boolean) => {
-    const preferences = {
-      essential: true,
-      analytics: analyticsEnabled,
-      preferences: analyticsEnabled,
-    };
-
-    window.localStorage.setItem(PREFS_KEY, JSON.stringify(preferences));
-    window.localStorage.setItem(CONSENT_KEY, analyticsEnabled ? 'accepted' : 'refused');
+    saveCookiePreferences(analyticsEnabled);
   };
 
   const choose = (analyticsEnabled: boolean) => {

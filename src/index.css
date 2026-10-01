@@ -1093,6 +1093,9 @@ button:hover {
   box-shadow: 0 14px 28px rgba(37, 211, 102, 0.48);
 }
 
+body:has(.merchant-dashboard) .whatsapp-float-btn,
+body:has(.merchant-pre-dashboard) .whatsapp-float-btn { display: none; }
+
 @media (max-width: 720px) {
   .whatsapp-float-btn { right: 0.85rem; bottom: 0.85rem; width: 3.1rem; height: 3.1rem; }
 }
