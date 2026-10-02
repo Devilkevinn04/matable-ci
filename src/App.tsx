@@ -14,6 +14,8 @@ import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { CustomerAccount, CustomerAuth, CustomerUser } from './components/CustomerAuth';
 import { FaqPage } from './components/FaqPage';
 import { AccountRecoveryPage } from './components/AccountRecoveryPage';
+import { ProductModal } from './components/MerchantDashboard/ProductModal';
+import type { MerchantState } from './components/MerchantDashboard/useMerchant';
 
 const legalPageMap: Record<string, LegalPageKey> = {
   'mentions-legales': 'mentions-legales',
@@ -71,6 +73,84 @@ function NotFoundPage() {
   );
 }
 
+function ProductModalDevPreview() {
+  const [isProductModalOpen, setIsProductModalOpen] = useState(true);
+  const [prodTitle, setProdTitle] = useState('Poulet braisé entier');
+  const [prodCategory, setProdCategory] = useState('Grillades');
+  const [prodDescription, setProdDescription] = useState('Poulet mariné aux épices, braisé au feu de bois et servi avec son accompagnement.');
+  const [prodPrice, setProdPrice] = useState<number | ''>(4500);
+  const [prodStock, setProdStock] = useState<number | ''>(12);
+  const [prodPrepTime, setProdPrepTime] = useState<number | ''>(25);
+  const [prodModifiers, setProdModifiers] = useState('Accompagnement : Attiéké, Alloco (+500 F), Frites');
+  const [prodModifierMaxSelections, setProdModifierMaxSelections] = useState<number | ''>(2);
+  const [prodAttributes, setProdAttributes] = useState<Record<string, string>>({});
+  const [prodIsAvailable, setProdIsAvailable] = useState(true);
+  const [prodLookbookImage, setProdLookbookImage] = useState('');
+
+  const previewState = {
+    currentShop: { category: 'food' },
+    isProductModalOpen,
+    setIsProductModalOpen,
+    editingProduct: null,
+    prodTitle,
+    setProdTitle,
+    prodCategory,
+    setProdCategory,
+    prodDescription,
+    setProdDescription,
+    prodPrice,
+    setProdPrice,
+    prodStock,
+    setProdStock,
+    prodImage: '',
+    setProdImage: () => undefined,
+    prodLookbookImage,
+    setProdLookbookImage,
+    prodGalleryImages: [],
+    prodSizes: '',
+    setProdSizes: () => undefined,
+    prodColors: '',
+    setProdColors: () => undefined,
+    prodPrepTime,
+    setProdPrepTime,
+    prodModifiers,
+    setProdModifiers,
+    prodModifierMaxSelections,
+    setProdModifierMaxSelections,
+    prodAttributes,
+    setProdAttributes,
+    prodIsAvailable,
+    setProdIsAvailable,
+    imageCompressing: false,
+    compressedSizeKB: null,
+    originalImageSizeKB: null,
+    handleSaveProduct: (event: React.FormEvent) => event.preventDefault(),
+    handleImageUpload: () => undefined,
+    handleLookbookImageUpload: () => undefined,
+    handleGalleryImageUpload: () => undefined,
+    handleRemoveGalleryImage: () => undefined,
+  } as unknown as MerchantState;
+
+  return (
+    <>
+      <div className="min-h-screen bg-[#f6f3ed] p-4 text-slate-800 sm:p-8">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div>
+            <p className="text-xs font-bold uppercase text-emerald-800">Aperçu local · données fictives</p>
+            <h1 className="mt-1 text-lg font-extrabold">Formulaire article</h1>
+          </div>
+          {!isProductModalOpen && (
+            <button type="button" onClick={() => setIsProductModalOpen(true)} className="rounded-lg bg-emerald-800 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-900">
+              Ouvrir le formulaire
+            </button>
+          )}
+        </div>
+      </div>
+      <ProductModal state={previewState} />
+    </>
+  );
+}
+
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -95,7 +175,8 @@ export default function App() {
   const [availableShops, setAvailableShops] = useState<{ slug: string; name: string; category?: string }[]>([]);
   const [customerUser, setCustomerUser] = useState<CustomerUser | null>(null);
   const [openMerchantRegistration, setOpenMerchantRegistration] = useState(false);
-  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isRecoveryPage;
+  const isProductModalPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/article-form';
+  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isRecoveryPage || isProductModalPreview;
   const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !legalPage && !isFaqPage && customerView === 'none';
 
   const loadingSteps = ['Découvrir', 'Boutiques', 'Catalogue', 'Commander'];
@@ -127,8 +208,10 @@ export default function App() {
 
   useEffect(() => {
     const isPrivateRoute = path === '/app' || path.startsWith('/app/') || path === '/admin' || path.startsWith('/admin/') || path === '/compte';
-    const isInvalidNestedRoute = !legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && path.split('/').filter(Boolean).length > 1;
-    const metadata = legalPage
+    const isInvalidNestedRoute = !legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && path.split('/').filter(Boolean).length > 1;
+    const metadata = isProductModalPreview
+      ? { title: 'Aperçu du formulaire article | MaTable.ci', description: 'Prévisualisation locale du formulaire de création d’article.' }
+      : legalPage
       ? legalMetadata[legalPage]
       : isFaqPage
         ? faqMetadata
@@ -144,7 +227,7 @@ export default function App() {
     const canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (canonical) canonical.href = canonicalUrl;
     const robots = document.head.querySelector<HTMLMetaElement>('meta[name="robots"]');
-    if (robots) robots.content = isPrivateRoute || isInvalidNestedRoute ? 'noindex, nofollow' : 'index, follow, max-image-preview:large';
+    if (robots) robots.content = isPrivateRoute || isInvalidNestedRoute || isProductModalPreview ? 'noindex, nofollow' : 'index, follow, max-image-preview:large';
     const openGraphTitle = document.head.querySelector<HTMLMetaElement>('meta[property="og:title"]');
     if (openGraphTitle) openGraphTitle.content = metadata.title;
     const openGraphDescription = document.head.querySelector<HTMLMetaElement>('meta[property="og:description"]');
@@ -278,6 +361,7 @@ export default function App() {
 
                 <div id="main-content" className="flex-1 app-shell" tabIndex={-1}>
                   <Routes>
+                    <Route path="/__preview/article-form" element={isProductModalPreview ? <ProductModalDevPreview /> : <NotFoundPage />} />
                     <Route path="/" element={<PublicDirectory shops={availableShops} onOpenShop={(slug) => navigate(`/${slug}`)} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app'); }} />} />
                     <Route path="/faq" element={<FaqPage />} />
                     <Route path="/recuperation-acces" element={<AccountRecoveryPage initialAccountType={new URLSearchParams(location.search).get('type') === 'merchant' ? 'merchant' : 'customer'} onBack={() => navigate(new URLSearchParams(location.search).get('type') === 'merchant' ? '/app' : '/connexion')} />} />

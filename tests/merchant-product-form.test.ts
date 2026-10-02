@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildProductSavePayload, createProductDraft, productToDraft } from '../src/components/MerchantDashboard/productForm';
+import { buildProductSavePayload, createProductDraft, parseProductModifierGroups, productToDraft, serializeProductModifierGroups } from '../src/components/MerchantDashboard/productForm';
 import { CATEGORY_DEFAULTS } from '../src/utils/categoryDefaults';
 import { Product } from '../src/types';
 
@@ -72,6 +72,18 @@ test('serializes a Food draft into the existing API shape and bounds modifier se
   assert.equal(payload.modifier_groups?.[0].max_selections, 5);
   assert.deepEqual(payload.modifier_groups?.map((group) => group.name), ['Sauce', 'Extras']);
   assert.equal(payload.modifier_groups?.[1].options[0].price_delta, 500);
+});
+
+test('round-trips structured modifier groups and option surcharges', () => {
+  const source = 'Sauce: Piment, Doux | Extras: Alloco (+500 F)';
+  const groups = parseProductModifierGroups(source);
+
+  assert.deepEqual(groups, [
+    { name: 'Sauce', options: ['Piment', 'Doux'] },
+    { name: 'Extras', options: ['Alloco (+500 F)'] },
+  ]);
+  assert.equal(serializeProductModifierGroups(groups), source);
+  assert.equal(serializeProductModifierGroups([...groups, { name: 'Boisson', options: ['Jus maison (+250 F)'] }]), `${source} | Boisson: Jus maison (+250 F)`);
 });
 
 test('does not serialize Food-specific modifiers for another category', () => {

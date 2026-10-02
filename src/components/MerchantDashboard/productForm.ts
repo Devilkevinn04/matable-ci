@@ -51,6 +51,34 @@ export interface ProductSavePayload {
   is_available: boolean;
 }
 
+export interface ProductModifierGroupDraft {
+  name: string;
+  options: string[];
+}
+
+export function parseProductModifierGroups(value: string): ProductModifierGroupDraft[] {
+  if (!value.trim()) return [];
+
+  return value.split('|').map((groupText, groupIndex) => {
+    const parts = groupText.split(':');
+    const name = parts.length > 1 ? parts[0].trim() : `Options ${groupIndex + 1}`;
+    const optionText = parts.length > 1 ? parts[1] : parts[0];
+
+    return {
+      name,
+      options: optionText.split(',').map((option) => option.trim()).filter(Boolean),
+    };
+  });
+}
+
+export function serializeProductModifierGroups(groups: ProductModifierGroupDraft[]): string {
+  return groups.map((group, index) => {
+    const name = group.name.trim() || `Options ${index + 1}`;
+    const options = group.options.map((option) => option.trim()).filter(Boolean).join(', ');
+    return `${name}: ${options}`;
+  }).join(' | ');
+}
+
 export function createProductDraft(category: unknown): ProductDraft {
   const defaults = getCategoryDefaults(category);
   return {
