@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowRight, Mail, UserRound } from 'lucide-react';
 import { CustomerUser } from './CustomerAuth';
+import { CustomerOAuthButtons } from './CustomerOAuthButtons';
 
 interface CustomerCheckoutAuthProps {
   onAuthenticated: (user: CustomerUser) => void;
@@ -47,6 +48,7 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
         <button type="button" onClick={() => { setMode('register'); setError(''); }} className={`rounded-lg px-2 py-2 text-xs font-black ${mode === 'register' ? 'bg-[#211712] text-white' : 'text-[#4a3a30]'}`}>Créer un compte</button>
         <button type="button" onClick={() => { setMode('login'); setError(''); }} className={`rounded-lg px-2 py-2 text-xs font-black ${mode === 'login' ? 'bg-[#211712] text-white' : 'text-[#4a3a30]'}`}>Se connecter</button>
       </div>
+      <div className="mt-4"><CustomerOAuthButtons returnTo={`${window.location.pathname}${window.location.search}`} /></div>
       <form onSubmit={submit} className="mt-4 space-y-3">
         {mode === 'register' && <div className="grid gap-3 sm:grid-cols-2"><label className="block text-xs font-black text-[#211712]">Prénom<input value={firstName} onChange={(event) => setFirstName(event.target.value)} required autoComplete="given-name" className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-[#1d6b57]" placeholder="Votre prénom" /></label><label className="block text-xs font-black text-[#211712]">Nom<input value={lastName} onChange={(event) => setLastName(event.target.value)} required autoComplete="family-name" className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-[#1d6b57]" placeholder="Votre nom" /></label></div>}
         {mode === 'register' && <label className="block text-xs font-black text-[#211712]">Téléphone<input value={phone} onChange={(event) => setPhone(event.target.value)} required className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-[#1d6b57]" placeholder="07 00 00 00 00" /></label>}
@@ -54,6 +56,7 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
         <label className="block text-xs font-black text-[#211712]">Mot de passe<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-[#1d6b57]" placeholder="8 caractères minimum" /></label>
         {error && <p role="alert" className="rounded-xl border-2 border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{error}</p>}
         <button type="submit" disabled={isSubmitting} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#211712] bg-[#ff6a3d] px-3 py-3 text-sm font-black text-white shadow-[3px_3px_0_rgba(33,23,18,0.95)] disabled:opacity-60">{isSubmitting ? 'Vérification...' : mode === 'register' ? 'Créer et continuer' : 'Se connecter et continuer'} <ArrowRight className="h-4 w-4" /></button>
+        {mode === 'login' && <a href="/recuperation-acces?type=customer" className="block py-1 text-center text-xs font-semibold text-[#52635b] underline underline-offset-2 hover:text-[#0f4d3d]">Mot de passe oublié ?</a>}
       </form>
     </section>
   );

@@ -9,6 +9,7 @@ import {
   X, 
   Plus, 
   Minus, 
+  ArrowLeft,
   ArrowRight, 
   Info,
   Clock,
@@ -611,8 +612,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     >
       {/* 1. Header & Shop Identity */}
       <header className="bg-[#fffdf9]/95 backdrop-blur-md border-b border-[#ded8ce] sticky top-0 z-30 shadow-sm">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
+            <a href="/" aria-label="Retour à l’annuaire" title="Retour à l’annuaire" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"><ArrowLeft className="h-4 w-4" /></a>
             {logoUrl ? (
               <img
                 src={logoUrl}
@@ -658,9 +660,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             </div>
             <button
               id="cart-header-btn"
-              onClick={() => setIsCartOpen(true)}
+              onClick={() => totalCartCount > 0 ? setIsCartOpen(true) : document.getElementById('store-catalogue')?.scrollIntoView({ behavior: 'smooth' })}
               className="relative p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 transition-all flex items-center gap-1.5"
-              aria-label="Voir le panier"
+              aria-label={totalCartCount > 0 ? 'Voir le panier' : 'Découvrir le catalogue'}
             >
               <ShoppingBag className="w-5 h-5 text-slate-800" />
               {totalCartCount > 0 && (
@@ -693,12 +695,16 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       )}
 
       {bannerUrl && (
-        <div className="max-w-3xl mx-auto px-4 pt-4">
+        <div className="max-w-6xl mx-auto px-4 pt-4">
           <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-2xs">
+            <div aria-hidden="true" className="absolute inset-0 z-0 flex flex-col items-center justify-center gap-2" style={{ backgroundColor: secondaryColor, color: primaryColor }}>
+              <span className="text-7xl">{categoryDefaults.icon}</span>
+              <span className="text-xs font-black uppercase">{categoryDefaults.label}</span>
+            </div>
             <img
               src={bannerUrl}
               alt={`Illustration de la boutique ${shop.name}`}
-              className="h-40 w-full object-cover sm:h-52"
+              className="relative z-10 h-48 w-full object-cover sm:h-72"
               onError={(event) => {
                 const element = event.currentTarget;
                 if (element.dataset.placeholderAttempted !== 'true' && element.src !== categoryDefaults.bannerPlaceholderImageUrl) {
@@ -709,45 +715,28 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 }
               }}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent" />
-            <p className="absolute bottom-3 left-4 right-4 text-sm font-black text-white drop-shadow sm:text-base">{shop.name}</p>
+            <div className="absolute inset-0 z-20 bg-gradient-to-t from-slate-950/80 via-slate-950/10 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:justify-between sm:p-6">
+              <div className="max-w-2xl text-white drop-shadow">
+                <p className="text-[10px] font-black uppercase text-white/80">{categoryDefaults.label} · {shop.city || 'Côte d’Ivoire'}</p>
+                <p className="mt-1 line-clamp-2 text-sm font-semibold sm:text-base">{getWelcomeMessageForDisplay(shop.welcome_message, shop.category)}</p>
+              </div>
+              <a href="#store-catalogue" className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-white/70 bg-white px-4 py-2 text-sm font-bold text-slate-900 transition hover:bg-slate-100">Voir le catalogue<ArrowRight className="h-4 w-4" /></a>
+            </div>
           </div>
         </div>
       )}
 
       {isEventMode && eventBannerText && (
-        <div className="max-w-3xl mx-auto px-4 pt-3">
+        <div className="max-w-6xl mx-auto px-4 pt-3">
           <div className="rounded-xl px-3 py-2 text-center text-xs font-black" style={{ backgroundColor: primaryColor, color: primaryTextColor }}>
             {eventBannerText}
           </div>
         </div>
       )}
 
-      {/* 2. Boutique overview + checklist flow */}
-      <div className="max-w-3xl mx-auto px-4 pt-4">
-        <div className="mb-4 p-4 rounded-2xl bg-[#fffdf9] border border-[#ded8ce] shadow-sm surface-card">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="ui-kicker">Boutique</p>
-              <h2 className="text-lg font-black text-slate-900 mt-1">{shop.name}</h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsCartOpen(true)}
-              className="primary-button px-3 py-2 text-xs"
-            >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              Commander
-            </button>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-600">
-            <span className="rounded-full bg-slate-100 px-2 py-1">{categoryDefaults.label}</span>
-            {shop.city && <span className="rounded-full bg-slate-100 px-2 py-1">{shop.city}</span>}
-            <span className="rounded-full bg-slate-100 px-2 py-1">{shop.is_open ? 'Ouvert' : 'Fermé'}</span>
-            <span className="rounded-full bg-slate-100 px-2 py-1">Sur place / livraison</span>
-          </div>
-        </div>
-
+      {/* Main storefront content */}
+      <div className="max-w-6xl mx-auto px-4 pt-4">
         {/* Closed warning */}
         {!shop.is_open && (
           <div className="mb-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-3 shadow-2xs">
@@ -763,100 +752,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           </div>
         )}
 
-        {/* Welcome message / Slogan */}
-        {getWelcomeMessageForDisplay(shop.welcome_message, shop.category) && (
-          <div className="p-4 rounded-2xl bg-[#fffdf9] border border-[#ded8ce] shadow-sm mb-5">
-            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-              <Sparkles className="w-3.5 h-3.5" style={{ color: primaryColor }} />
-              <span>{shop.welcome_message ? 'Mot du commerçant' : 'Présentation'}</span>
-            </div>
-            <p className="text-slate-800 text-sm font-medium leading-relaxed italic">
-              « {getWelcomeMessageForDisplay(shop.welcome_message, shop.category)} »
-            </p>
-          </div>
-        )}
-
-        <div className="mb-5 rounded-2xl border border-[#ded8ce] bg-[#fffdf9] p-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Confiance & service</p>
-              <h3 className="text-base font-black text-slate-900 mt-1">Pourquoi choisir cette boutique</h3>
-            </div>
-            <div className="inline-flex items-center gap-1 rounded-full bg-[#edf7f2] px-2 py-1 text-[10px] font-black text-[#155c3d]">
-              <MapPin className="w-3 h-3" />
-              {shop.city || 'Abidjan'}
-            </div>
-          </div>
-
-          <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-700">
-              <Clock className="w-3.5 h-3.5 text-[#1D6B57] shrink-0" />
-              <span>Horaires</span>
-            </div>
-            <span className="text-[11px] font-black text-slate-800">{hoursSummary}</span>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            {serviceHighlights.map((item) => (
-              <div key={item} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-[11px] font-bold text-slate-700">
-                <CheckCircle2 className="w-3.5 h-3.5 text-[#1D6B57] shrink-0" />
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {(shop.theme_config?.social_links || shop.theme_config?.delivery_zones?.length) && (
-          <div className="mb-5 rounded-2xl border border-[#ded8ce] bg-[#fffdf9] p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Contact & livraison</p>
-                <h3 className="text-base font-black text-slate-900 mt-1">Réseaux et zones de service</h3>
-              </div>
-              <div className="inline-flex items-center gap-1 rounded-full bg-[#edf7f2] px-2 py-1 text-[10px] font-black text-[#155c3d]">
-                <MapPin className="w-3 h-3" />
-                {shop.city || 'Abidjan'}
-              </div>
-            </div>
-
-            {shop.theme_config?.social_links && Object.values(shop.theme_config.social_links).some(Boolean) && (
-              <div className="flex flex-wrap gap-2 mb-3">
-                {shop.theme_config.social_links.instagram && (
-                  <a href={shop.theme_config.social_links.instagram} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Instagram</a>
-                )}
-                {shop.theme_config.social_links.facebook && (
-                  <a href={shop.theme_config.social_links.facebook} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Facebook</a>
-                )}
-                {shop.theme_config.social_links.website && (
-                  <a href={shop.theme_config.social_links.website} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Site web</a>
-                )}
-                {shop.theme_config.social_links.whatsapp && (
-                  <a href={shop.theme_config.social_links.whatsapp} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">WhatsApp</a>
-                )}
-              </div>
-            )}
-
-            {shop.theme_config?.delivery_zones && shop.theme_config.delivery_zones.length > 0 && (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {shop.theme_config.delivery_zones.map((zone, index) => (
-                  <div key={`${zone.label}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-black text-slate-800">{zone.label}</span>
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{zone.mode}</span>
-                    </div>
-                    <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-600">
-                      <span>{zone.description || 'Service disponible'}</span>
-                      <span className="font-black text-[#1D6B57]">{zone.fee ? `${zone.fee.toLocaleString('fr-FR')} FCFA` : 'Gratuit'}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Catalog Section Header */}
-        <div className="flex items-center justify-between mb-4">
+        <div id="store-catalogue" className="scroll-mt-24 flex items-center justify-between mb-4">
           <div>
             <h2 className="font-black text-slate-900 text-lg sm:text-xl">
               Catalogue ({products.length})
@@ -878,7 +775,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Rechercher un plat, un article ou un mot-clé..."
+              aria-label={`Rechercher dans le catalogue de ${shop.name}`}
+              placeholder="Rechercher dans le catalogue..."
               className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-white border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-2xs placeholder:text-slate-400"
             />
             {searchQuery && (
@@ -932,9 +830,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             - Food: 1:1 or 16:9 landscape cards with prep_time & modifiers
         */}
         {products.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
-            <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-600 font-medium text-sm">Le catalogue est en cours de mise à jour.</p>
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center sm:py-14">
+            <ShoppingBag className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+            <h3 className="text-base font-black text-slate-900">La sélection arrive bientôt</h3>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">Cette boutique prépare son catalogue. Vous pouvez contacter le commerçant pour connaître les articles disponibles.</p>
+            <a href={`https://wa.me/${shop.whatsapp_number.replace(/\D/g, '')}?text=${encodeURIComponent(`Bonjour, je souhaite connaître les articles disponibles chez ${shop.name}.`)}`} target="_blank" rel="noreferrer" className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold text-white" style={{ backgroundColor: primaryColor }}><Phone className="h-4 w-4" />Demander le catalogue</a>
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 p-6">
@@ -998,6 +898,17 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             })}
           </div>
         )}
+
+        <details className="mt-8 rounded-xl border border-[#ded8ce] bg-[#fffdf9] px-4 py-3 shadow-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+            <div><p className="text-[10px] font-black uppercase text-slate-500">Informations pratiques</p><h3 className="mt-1 text-sm font-black text-slate-900">Horaires, livraison & contact</h3></div>
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#edf7f2] px-2 py-1 text-[10px] font-black text-[#155c3d]"><MapPin className="h-3 w-3" />{shop.city || 'Abidjan'}</span>
+          </summary>
+          <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="flex items-center gap-2 text-[11px] font-bold text-slate-700"><Clock className="h-3.5 w-3.5 text-[#1D6B57]" />Horaires</span><span className="text-right text-[11px] font-black text-slate-800">{hoursSummary}</span></div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">{serviceHighlights.map((item) => <div key={item} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-[11px] font-bold text-slate-700"><CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#1D6B57]" /><span>{item}</span></div>)}</div>
+          {shop.theme_config?.social_links && Object.values(shop.theme_config.social_links).some(Boolean) && <div className="mt-3 flex flex-wrap gap-2">{shop.theme_config.social_links.instagram && <a href={shop.theme_config.social_links.instagram} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Instagram</a>}{shop.theme_config.social_links.facebook && <a href={shop.theme_config.social_links.facebook} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Facebook</a>}{shop.theme_config.social_links.website && <a href={shop.theme_config.social_links.website} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Site web</a>}{shop.theme_config.social_links.whatsapp && <a href={shop.theme_config.social_links.whatsapp} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">WhatsApp</a>}</div>}
+          {shop.theme_config?.delivery_zones && shop.theme_config.delivery_zones.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{shop.theme_config.delivery_zones.map((zone, index) => <div key={`${zone.label}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5"><div className="flex items-center justify-between gap-2"><span className="text-xs font-black text-slate-800">{zone.label}</span><span className="text-[10px] font-bold uppercase text-slate-500">{zone.mode}</span></div><div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-600"><span>{zone.description || 'Service disponible'}</span><span className="font-black text-[#1D6B57]">{zone.fee ? `${zone.fee.toLocaleString('fr-FR')} FCFA` : 'Gratuit'}</span></div></div>)}</div>}
+        </details>
       </div>
 
       {/* 4. FLOATING BOTTOM BAR (Cart Summary) */}

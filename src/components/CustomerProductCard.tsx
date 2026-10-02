@@ -55,6 +55,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   onDecreaseQuantity,
 }) => {
   const outOfStock = product.stock <= 0;
+  const hasProductPhoto = Boolean(product.image_url?.trim());
   const description = product.description || '';
   const shouldTruncate = description.length > 130;
   const selectedModifierTotal = selectedUnitPrice - product.price;
@@ -64,7 +65,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
       id={`product-card-${product.id}`}
       className={`bg-[#fffdf9] border border-[#ded8ce] ${cardRadius} ${shadowClass} overflow-hidden flex flex-col transition-all hover:border-[#176b55] hover:-translate-y-0.5`}
     >
-      <div className={`relative bg-slate-100 overflow-hidden ${layoutStyle === 'grid_portrait' ? 'aspect-3/4' : 'aspect-16/9 sm:aspect-4/3'}`}>
+      <div className={`relative bg-slate-100 overflow-hidden ${layoutStyle === 'grid_portrait' && hasProductPhoto ? 'aspect-3/4' : 'aspect-16/9 sm:aspect-4/3'}`}>
         <CategoryProductImage imageUrl={product.image_url} category={category} title={product.title} className="absolute inset-0 h-full w-full transition-transform duration-500 hover:scale-105" />
         {product.prep_time && <span className="absolute top-2.5 left-2.5 bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1"><Clock className="w-3 h-3 text-amber-400" /><span>{product.prep_time} min</span></span>}
         {outOfStock && <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[2px] flex items-center justify-center"><span className="bg-rose-600 text-white font-black text-xs px-3.5 py-1.5 rounded-full shadow-lg">Rupture de stock</span></div>}

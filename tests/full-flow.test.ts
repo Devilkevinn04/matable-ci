@@ -116,6 +116,12 @@ before(async () => {
     env: {
       ...process.env,
       ADMIN_ACCESS_KEY: 'super-admin-demo-key',
+      GOOGLE_OAUTH_CLIENT_ID: '',
+      GOOGLE_OAUTH_CLIENT_SECRET: '',
+      APPLE_SERVICE_ID: '',
+      APPLE_TEAM_ID: '',
+      APPLE_KEY_ID: '',
+      APPLE_PRIVATE_KEY: '',
       NODE_ENV: 'test',
       PORT: String(TEST_PORT),
       MATABLE_DB_PATH: TEST_DB_PATH,
@@ -216,6 +222,28 @@ test('customer registration and login are supported with email, phone, and passw
   const logout = await apiFetch('/api/auth/customer-logout', { method: 'POST' });
   assert.equal(logout.response.status, 200, `Unexpected logout response: ${JSON.stringify(logout.payload)}`);
   assert.equal(logout.payload.success, true);
+});
+
+test('social login remains unavailable until provider credentials are configured', async () => {
+  const providers = await apiFetch('/api/auth/customer-oauth/providers');
+  assert.equal(providers.response.status, 200);
+  assert.deepEqual(providers.payload, { google: false, apple: false });
+
+  const pending = await apiFetch('/api/auth/customer-oauth/pending');
+  assert.deepEqual(pending.payload, { pending: false });
+
+  const unavailableGoogle = await apiFetch('/api/auth/customer-oauth/google/start');
+  assert.equal(unavailableGoogle.response.status, 503);
+
+  const unknownProvider = await apiFetch('/api/auth/customer-oauth/unknown/start');
+  assert.equal(unknownProvider.response.status, 404);
+
+  const invalidCompletion = await apiFetch('/api/auth/customer-oauth/complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ first_name: 'Client', last_name: 'Test', phone: '+2250700000000' }),
+  });
+  assert.equal(invalidCompletion.response.status, 401);
 });
 
 test('checkout requires a client account and tracks the WhatsApp handoff', async () => {

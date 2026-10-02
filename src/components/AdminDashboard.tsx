@@ -22,6 +22,7 @@ import {
   Users,
   Activity,
   ShoppingBag,
+  LogOut,
 } from 'lucide-react';
 import { Shop } from '../types';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
@@ -73,6 +74,7 @@ const ownerNotificationTemplates = [
 ] as const;
 
 export const AdminDashboard: React.FC = () => {
+  const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'identity' | 'audience' | 'operations'>('overview');
   const [shops, setShops] = useState<AdminShopItem[]>([]);
   const [adminKey, setAdminKey] = useState('');
   const [showAdminKey, setShowAdminKey] = useState(false);
@@ -80,6 +82,7 @@ export const AdminDashboard: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [orderSearch, setOrderSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [sortBy, setSortBy] = useState<'sales' | 'orders' | 'name'>('sales');
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -183,6 +186,15 @@ export const AdminDashboard: React.FC = () => {
     }
     setAdminKey('');
     await fetchAdminShops();
+  };
+
+  const handleAdminLogout = async () => {
+    await fetch('/api/auth/admin-logout', { method: 'POST' });
+    setIsAuthenticated(false);
+    setAdminKey('');
+    setAdminHealth(null);
+    setAdminOrders([]);
+    setAnalytics(null);
   };
 
   const maxDailyViews = Math.max(1, ...(analytics?.daily.map(day => day.page_views) || [0]));
@@ -304,6 +316,11 @@ export const AdminDashboard: React.FC = () => {
     if (sortBy === 'orders') return b.orders_count - a.orders_count;
     return a.name.localeCompare(b.name);
   });
+  const filteredAdminOrders = adminOrders.filter((order) => {
+    const query = orderSearch.trim().toLowerCase();
+    return !query || [order.shop_name, order.customer_name, order.customer_phone, String(order.id)]
+      .some((value) => value.toLowerCase().includes(query));
+  });
 
   const activeShopsCount = shops.filter(s => s.is_active).length;
   const totalSales = shops.reduce((sum, shop) => sum + shop.total_sales, 0);
@@ -363,6 +380,7 @@ export const AdminDashboard: React.FC = () => {
   const pendingVerificationShops = shops.filter((shop) => ['submitted', 'under_review'].includes(shop.merchant_verification_status || ''));
   const focusVerificationShop = (shopId: number) => {
     setSelectedVerificationShopId(shopId);
+    setAdminView('identity');
     window.setTimeout(() => document.getElementById(`identity-verification-shop-${shopId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
   };
 
@@ -370,7 +388,7 @@ export const AdminDashboard: React.FC = () => {
     <div className="admin-dashboard min-h-screen pb-20">
       <header className="relative overflow-hidden border-b-[3px] border-[#211712] bg-[#fffaf2] text-[#211712]">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(232,169,58,0.18),transparent_20%),radial-gradient(circle_at_top_right,_rgba(27,58,99,0.12),transparent_30%)]" />
-        <div className="relative max-w-6xl mx-auto px-4 py-6">
+        <div className="relative max-w-6xl mx-auto px-4 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="brand-mark brand-mark-header">
@@ -382,7 +400,7 @@ export const AdminDashboard: React.FC = () => {
                   <span className="dashboard-chip dashboard-chip-soft">Tour de contrôle</span>
                 </div>
                 <p className="text-[11px] text-[#4a3a30] mt-0.5 leading-4 max-w-xl">
-                  Gestion des boutiques et alertes automatiques
+                  Administration des boutiques, commandes et vérifications
                 </p>
               </div>
             </div>
@@ -398,11 +416,14 @@ export const AdminDashboard: React.FC = () => {
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                 <span>Actualiser</span>
               </button>
+              <button type="button" onClick={() => void handleAdminLogout()} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border-2 border-[#211712] bg-white px-3 py-2 text-xs font-black text-[#211712] transition hover:bg-rose-50">
+                <LogOut className="h-4 w-4" /> Déconnexion
+              </button>
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-            {[{ label: 'Total Boutiques', value: shops.length, tone: 'bg-white border-[#211712]' }, { label: 'Actives', value: `${activeShopsCount}/${shops.length}`, tone: 'bg-[#edf7f2] border-[#211712] text-[#155c3d]' }, { label: 'Valeur des commandes', value: `${new Intl.NumberFormat('fr-FR').format(totalSales)} F`, tone: 'bg-[#edf7f2] border-[#211712] text-[#155c3d]' }, { label: 'Commandes', value: totalOrders, tone: 'bg-[#eef5ff] border-[#211712] text-[#1b3a63]' }, { label: 'Panier moyen', value: `${new Intl.NumberFormat('fr-FR').format(averageOrderValue)} F`, tone: 'bg-[#f9e7d6] border-[#211712] text-[#b93712]' }].map((item, index) => (
+          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[{ label: 'Boutiques actives', value: `${activeShopsCount}/${shops.length}`, tone: 'bg-[#edf7f2] border-[#211712] text-[#155c3d]' }, { label: 'Valeur des commandes', value: `${new Intl.NumberFormat('fr-FR').format(totalSales)} F`, tone: 'bg-[#edf7f2] border-[#211712] text-[#155c3d]' }, { label: 'Commandes', value: totalOrders, tone: 'bg-[#eef5ff] border-[#211712] text-[#1b3a63]' }, { label: 'Panier moyen', value: `${new Intl.NumberFormat('fr-FR').format(averageOrderValue)} F`, tone: 'bg-[#f9e7d6] border-[#211712] text-[#b93712]' }].map((item, index) => (
               <motion.div
                 key={item.label}
                 initial={{ opacity: 0, y: 16 }}
@@ -447,6 +468,64 @@ export const AdminDashboard: React.FC = () => {
           </motion.div>
         )}
 
+        <nav aria-label="Navigation super-admin" className="sticky top-0 z-20 grid grid-cols-2 gap-2 border-b-2 border-[#211712] bg-[#f6f3ed]/95 py-3 backdrop-blur sm:grid-cols-3 lg:grid-cols-6">
+          {[
+            { id: 'overview' as const, label: 'Accueil', icon: Activity },
+            { id: 'shops' as const, label: `Boutiques (${shops.length})`, icon: Store },
+            { id: 'orders' as const, label: 'Commandes', icon: ShoppingBag },
+            { id: 'identity' as const, label: `Identité (${pendingVerificationShops.length})`, icon: ShieldCheck },
+            { id: 'audience' as const, label: 'Audience', icon: BarChart3 },
+            { id: 'operations' as const, label: 'Opérations', icon: Activity },
+          ].map(({ id, label, icon: Icon }) => (
+            <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border-2 px-2 py-2 text-center text-xs font-bold transition sm:text-sm ${adminView === id ? 'border-[#211712] bg-[#1b3a63] text-white shadow-[3px_3px_0_rgba(33,23,18,0.95)]' : 'border-[#211712] bg-[#fffaf2] text-[#211712] hover:bg-white'}`}>
+              <Icon className="h-4 w-4 shrink-0" /><span className="truncate">{label}</span>
+            </button>
+          ))}
+        </nav>
+
+        {adminView === 'overview' && (
+          <section aria-labelledby="admin-overview-title" className="space-y-4">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div><p className="text-xs font-bold uppercase text-[#176b55]">Accueil</p><h2 id="admin-overview-title" className="mt-1 text-xl font-black text-[#211712]">Vue d’ensemble</h2></div>
+              <p className="text-xs text-slate-500">Actualisation automatique toutes les 30 secondes</p>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <section aria-labelledby="admin-follow-up-title" className="chart-panel p-4 md:p-5">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3"><div><h3 id="admin-follow-up-title" className="text-sm font-black text-slate-900">Dossiers à suivre</h3><p className="mt-1 text-xs text-slate-500">Vérifications nécessitant une revue.</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">{pendingVerificationShops.length}</span></div>
+                {pendingVerificationShops.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucun dossier en attente.</p> : <div className="divide-y divide-slate-200">{pendingVerificationShops.slice(0, 5).map((shop) => <div key={shop.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-900">{shop.name}</p><p className="mt-1 text-xs text-slate-500">{shop.merchant_verification_status === 'under_review' ? 'Revue en cours' : 'À examiner'} · {shop.whatsapp_number}</p></div><button type="button" onClick={() => focusVerificationShop(shop.id)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700">Ouvrir</button></div>)}</div>}
+                {pendingVerificationShops.length > 5 && <button type="button" onClick={() => setAdminView('identity')} className="mt-2 text-xs font-bold text-sky-800 underline underline-offset-2">Voir les {pendingVerificationShops.length} dossiers</button>}
+              </section>
+              <section aria-labelledby="admin-recent-orders-title" className="chart-panel p-4 md:p-5">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3"><div><h3 id="admin-recent-orders-title" className="text-sm font-black text-slate-900">Commandes récentes</h3><p className="mt-1 text-xs text-slate-500">Dernières demandes enregistrées.</p></div><button type="button" onClick={() => setAdminView('orders')} className="shrink-0 text-xs font-bold text-sky-800 underline underline-offset-2">Toutes les commandes</button></div>
+                {adminOrders.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucune commande enregistrée.</p> : <div className="divide-y divide-slate-200">{adminOrders.slice(0, 5).map((order) => <div key={order.id} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-900">#{order.id} · {order.shop_name}</p><p className="mt-1 truncate text-xs text-slate-500">{order.customer_name} · {new Date(order.created_at).toLocaleDateString('fr-FR')}</p></div><div className="shrink-0 text-right"><strong className="block text-sm text-slate-900">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} F</strong><span className="text-[10px] font-semibold text-slate-500">{order.status}</span></div></div>)}</div>}
+              </section>
+            </div>
+            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3"><Activity className="h-5 w-5 shrink-0 text-emerald-700" /><div><p className="text-sm font-bold text-slate-900">État du service</p><p className="text-xs text-slate-500">{adminHealth ? `${adminHealth.database === 'postgresql' ? 'PostgreSQL (Neon)' : 'SQLite'} · ${adminHealth.status === 'ok' ? 'Opérationnel' : adminHealth.status}` : 'Vérification en cours'}</p></div></div>
+              <button type="button" onClick={() => setAdminView('operations')} className="min-h-10 shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">Détails opérations</button>
+            </div>
+          </section>
+        )}
+
+        {adminView === 'orders' && (
+          <section aria-labelledby="admin-orders-title" className="chart-panel p-4 md:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div><h2 id="admin-orders-title" className="text-sm font-black text-slate-900">Commandes récentes</h2><p className="mt-1 text-xs text-slate-500">Les 50 dernières commandes chargées par le service.</p></div>
+              <button type="button" onClick={() => exportOperationsCsv(`matable-commandes-${new Date().toISOString().slice(0, 10)}.csv`, ['ID', 'Boutique', 'Client', 'Téléphone', 'Montant', 'Statut', 'Date'], filteredAdminOrders.map(order => [order.id, order.shop_name, order.customer_name, order.customer_phone, order.total_amount, order.status, order.created_at]))} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
+            </div>
+            <label className="relative mt-4 block"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input type="search" value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Rechercher boutique, client, téléphone ou numéro" className="min-h-10 w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-sky-700" /></label>
+            <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
+              {filteredAdminOrders.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucune commande correspondante.</p> : filteredAdminOrders.map((order) => (
+                <article key={order.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0"><h3 className="truncate text-sm font-bold text-slate-900">#{order.id} · {order.shop_name}</h3><p className="mt-1 truncate text-xs text-slate-600">{order.customer_name} · {order.items_count} article(s)</p><p className="mt-1 text-xs text-slate-500">{order.customer_phone} · {new Date(order.created_at).toLocaleString('fr-FR')}</p></div>
+                  <div className="flex shrink-0 items-center justify-between gap-4 sm:justify-end"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{order.status}</span><strong className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} FCFA</strong></div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {adminView === 'audience' && (
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -543,14 +622,16 @@ export const AdminDashboard: React.FC = () => {
             <p className="mt-4 text-xs text-slate-500">Chargement des données d’audience…</p>
           )}
         </motion.section>
+        )}
 
+        {adminView === 'operations' && (
         <section className="chart-panel p-4 md:p-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Activity className="w-5 h-5 text-emerald-600" />
               <div>
                 <h2 className="font-black text-slate-900 text-sm">Centre opérationnel</h2>
-                <p className="text-[11px] text-slate-500">État du service, commandes récentes et alertes de stock.</p>
+                <p className="text-[11px] text-slate-500">État du service, stockage et outils de contact propriétaire.</p>
               </div>
             </div>
             <button type="button" onClick={fetchOperations} disabled={operationsLoading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">
@@ -588,46 +669,14 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="mt-5 grid lg:grid-cols-2 gap-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-xs font-black text-slate-800">Commandes récentes</h3>
-                <button type="button" onClick={() => exportOperationsCsv(`matable-commandes-${new Date().toISOString().slice(0, 10)}.csv`, ['ID', 'Boutique', 'Client', 'Téléphone', 'Montant', 'Statut', 'Date'], adminOrders.map(order => [order.id, order.shop_name, order.customer_name, order.customer_phone, order.total_amount, order.status, order.created_at]))} className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-900"><Download className="w-3 h-3" /> CSV</button>
-              </div>
-              <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
-                {adminOrders.length === 0 ? <p className="text-[11px] text-slate-500">Aucune commande enregistrée.</p> : adminOrders.slice(0, 8).map(order => (
-                  <div key={order.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-[11px]">
-                    <div className="min-w-0"><p className="truncate font-bold text-slate-800">#{order.id} · {order.shop_name}</p><p className="truncate text-slate-500">{order.customer_name} · {order.items_count} article(s)</p></div>
-                    <div className="shrink-0 text-right"><p className="font-black text-slate-800">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} F</p><span className="text-[9px] font-bold uppercase text-slate-500">{order.status}</span></div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
         </section>
+        )}
 
+        {adminView === 'identity' && (
         <AdminIdentityVerificationPanel selectedShopId={selectedVerificationShopId} />
+        )}
 
-        <section className="chart-panel p-4 md:p-5">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-violet-600" />
-              <div>
-                <h2 className="font-black text-slate-900 text-sm">Pilotage global</h2>
-                <p className="text-[11px] text-slate-500 leading-4">Analyse globale des boutiques et alertes.</p>
-              </div>
-            </div>
-            <button onClick={exportShopsCsv} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">
-              <Download className="w-3.5 h-3.5" /> Exporter CSV
-            </button>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3"><span className="text-[11px] text-emerald-700 font-bold block">Valeur des commandes</span><strong className="text-lg text-emerald-900">{new Intl.NumberFormat('fr-FR').format(totalSales)} F</strong></div>
-            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3"><span className="text-[11px] text-sky-700 font-bold block">Commandes</span><strong className="text-lg text-sky-900">{totalOrders}</strong></div>
-          </div>
-        </section>
-
+        {adminView === 'shops' && <>
         <div className="chart-panel p-3 md:p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="relative flex-1">
@@ -658,11 +707,13 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         <div className="overflow-hidden rounded-[1.7rem] border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.06)]">
-          <div className="border-b border-slate-200 bg-slate-50/80 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 p-4">
             <h2 className="font-black text-slate-900 text-sm">Liste des commerçants</h2>
+            <button type="button" onClick={exportShopsCsv} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
           </div>
 
           <div className="divide-y divide-slate-200">
+            {filteredShops.length === 0 && <p className="p-5 text-sm text-slate-500">Aucune boutique ne correspond à ces critères.</p>}
             {filteredShops.map((shop) => {
               return (
                 <motion.div
@@ -712,6 +763,7 @@ export const AdminDashboard: React.FC = () => {
             })}
           </div>
         </div>
+        </>}
 
       </main>
     </div>

@@ -40,6 +40,12 @@ APP_URL="http://localhost:3000"
 TRUST_PROXY_HOPS="0"
 ADMIN_ACCESS_KEY="CHANGE_ME_ADMIN_KEY"
 KYC_ENCRYPTION_KEY=""
+GOOGLE_OAUTH_CLIENT_ID=""
+GOOGLE_OAUTH_CLIENT_SECRET=""
+APPLE_SERVICE_ID=""
+APPLE_TEAM_ID=""
+APPLE_KEY_ID=""
+APPLE_PRIVATE_KEY=""
 
 WHATSAPP_ADMIN_PHONE="+2250700000000"
 # Les paiements intégrés et les notifications automatiques WhatsApp ne sont pas utilisés dans la V1.
@@ -76,6 +82,12 @@ Les valeurs initiales de catégorie (message, présentation, exemples de produit
 ## WhatsApp
 
 Le projet utilise uniquement le click-to-chat `wa.me`. Le navigateur prépare le reçu de commande et le client choisit lui-même de l’envoyer au vendeur.
+
+## Connexion Google et Apple
+
+La connexion sociale client est facultative et reste masquée tant qu’un fournisseur n’est pas entièrement configuré. Les secrets restent uniquement dans l’environnement serveur. Déclarez dans les consoles OAuth les URL de retour exactes `https://votre-domaine/api/auth/customer-oauth/google/callback` et `https://votre-domaine/api/auth/customer-oauth/apple/callback`, puis renseignez les identifiants correspondants ci-dessus (ou dans Render). En local, utilisez l’URL et le port configurés dans `APP_URL`.
+
+Les jetons OIDC sont vérifiés côté serveur avec issuer, audience, nonce, PKCE et e-mail vérifié. Une identité sociale dont l’e-mail vérifié correspond à un compte client existant est liée à ce compte; un nouveau compte doit fournir un téléphone ivoirien avant sa création. Les commandes et sessions restent associées au même profil client. Google/Apple ne peuvent pas être activés en production avant la configuration des identifiants et URL autorisées dans leurs consoles.
 
 ## Sécurité et vérifications
 

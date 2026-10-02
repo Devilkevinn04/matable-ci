@@ -103,7 +103,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             </section>
             <section>
               <h2>Données traitées</h2>
-              <p>Selon votre usage, nous traitons les informations de compte client (prénom, nom, téléphone, adresse e-mail et mot de passe sous forme hachée), les informations de boutique et de son responsable, le catalogue, les prix, stocks et horaires, ainsi que les données techniques de session nécessaires à la sécurité.</p>
+              <p>Selon votre usage, nous traitons les informations de compte client (prénom, nom, téléphone, adresse e-mail et mot de passe sous forme hachée), les informations de boutique et de son responsable, le catalogue, les prix, stocks et horaires, ainsi que les données techniques de session nécessaires à la sécurité. Si vous choisissez Google ou Apple, nous recevons l’identifiant propre à ce fournisseur et les informations de profil qu’il transmet (notamment l’e-mail vérifié et, lorsqu’il est disponible, le nom). Le mot de passe de votre compte Google ou Apple ne nous est jamais transmis.</p>
               <p>Pour une commande, nous traitons le nom, le téléphone, le lieu et les indications de livraison, le créneau éventuel, les articles, quantités, options, montant recalculé, statut et date. Le moyen de paiement enregistré est une préférence (espèces, mobile money, Wave ou à convenir), et non une donnée de carte ou une preuve de paiement.</p>
             </section>
             <section>

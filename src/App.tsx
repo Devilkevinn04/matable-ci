@@ -13,6 +13,7 @@ import { CookieBanner } from './components/CookieBanner';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 import { CustomerAccount, CustomerAuth, CustomerUser } from './components/CustomerAuth';
 import { FaqPage } from './components/FaqPage';
+import { AccountRecoveryPage } from './components/AccountRecoveryPage';
 
 const legalPageMap: Record<string, LegalPageKey> = {
   'mentions-legales': 'mentions-legales',
@@ -46,6 +47,10 @@ const faqMetadata = {
   title: 'Questions fréquentes | MaTable.ci',
   description: 'Réponses aux questions fréquentes sur les commandes, les comptes clients et les boutiques MaTable.ci.',
 };
+const recoveryMetadata = {
+  title: 'Récupérer l’accès à votre compte | MaTable.ci',
+  description: 'Contacter l’assistance pour récupérer l’accès à un compte client ou commerçant MaTable.ci.',
+};
 
 function StorefrontRoute({ customerUser, onCustomerAuthenticated }: {
   customerUser: CustomerUser | null;
@@ -74,6 +79,7 @@ export default function App() {
   const normalizedPath = path.replace(/^\//, '').replace(/\/$/, '');
   const legalPage = legalPageMap[normalizedPath] || null;
   const isFaqPage = normalizedPath === 'faq';
+  const isRecoveryPage = normalizedPath === 'recuperation-acces';
   const currentRole: 'storefront' | 'merchant' | 'admin' = path === '/admin' || path.startsWith('/admin/')
     ? 'admin'
     : path === '/app' || path.startsWith('/app/')
@@ -89,7 +95,8 @@ export default function App() {
   const [availableShops, setAvailableShops] = useState<{ slug: string; name: string; category?: string }[]>([]);
   const [customerUser, setCustomerUser] = useState<CustomerUser | null>(null);
   const [openMerchantRegistration, setOpenMerchantRegistration] = useState(false);
-  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant';
+  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isRecoveryPage;
+  const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !legalPage && !isFaqPage && customerView === 'none';
 
   const loadingSteps = ['Découvrir', 'Boutiques', 'Catalogue', 'Commander'];
 
@@ -120,11 +127,13 @@ export default function App() {
 
   useEffect(() => {
     const isPrivateRoute = path === '/app' || path.startsWith('/app/') || path === '/admin' || path.startsWith('/admin/') || path === '/compte';
-    const isInvalidNestedRoute = !legalPage && !isFaqPage && !isPrivateRoute && path.split('/').filter(Boolean).length > 1;
+    const isInvalidNestedRoute = !legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && path.split('/').filter(Boolean).length > 1;
     const metadata = legalPage
       ? legalMetadata[legalPage]
       : isFaqPage
         ? faqMetadata
+        : isRecoveryPage
+          ? recoveryMetadata
         : isInvalidNestedRoute
           ? { title: 'Page introuvable | MaTable.ci', description: 'La page demandée est introuvable sur MaTable.ci.' }
           : defaultPageMetadata;
@@ -146,7 +155,7 @@ export default function App() {
     if (twitterTitle) twitterTitle.content = metadata.title;
     const twitterDescription = document.head.querySelector<HTMLMetaElement>('meta[name="twitter:description"]');
     if (twitterDescription) twitterDescription.content = metadata.description;
-  }, [path, legalPage, isFaqPage]);
+  }, [path, legalPage, isFaqPage, isRecoveryPage]);
 
   const renderCustomerAuth = (initialMode: 'login' | 'register') => (
     <CustomerAuth
@@ -255,7 +264,7 @@ export default function App() {
           >
             <div className="page-shell">
               <div className="surface-shell">
-                {!hasStandaloneAccountFlow && <Navigation
+                {!hasStandaloneAccountFlow && currentRole !== 'admin' && !isCustomerStorefront && <Navigation
                   currentRole={currentRole}
                   onChangeRole={(role) => navigate(role === 'admin' ? '/admin' : role === 'merchant' ? '/app' : '/')}
                   onOpenDirectory={() => navigate('/')}
@@ -271,6 +280,7 @@ export default function App() {
                   <Routes>
                     <Route path="/" element={<PublicDirectory shops={availableShops} onOpenShop={(slug) => navigate(`/${slug}`)} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app'); }} />} />
                     <Route path="/faq" element={<FaqPage />} />
+                    <Route path="/recuperation-acces" element={<AccountRecoveryPage initialAccountType={new URLSearchParams(location.search).get('type') === 'merchant' ? 'merchant' : 'customer'} onBack={() => navigate(new URLSearchParams(location.search).get('type') === 'merchant' ? '/app' : '/connexion')} />} />
                     <Route path="/mentions-legales" element={<LegalPages page="mentions-legales" />} />
                     <Route path="/confidentialite" element={<LegalPages page="confidentialite" />} />
                     <Route path="/cgu" element={<LegalPages page="cgu" />} />
@@ -287,11 +297,11 @@ export default function App() {
                     <Route path="*" element={<NotFoundPage />} />
                   </Routes>
                 </div>
-                {!hasStandaloneAccountFlow && <Footer compact={Boolean(legalPage)} />}
+                {!hasStandaloneAccountFlow && currentRole !== 'admin' && <Footer compact={Boolean(legalPage)} />}
               </div>
             </div>
             <CookieBanner />
-            <WhatsAppFloatingButton />
+            {currentRole !== 'admin' && !hasStandaloneAccountFlow && <WhatsAppFloatingButton />}
           </motion.div>
         )}
       </AnimatePresence>

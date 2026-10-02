@@ -127,6 +127,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                 <ChevronRight className="w-4 h-4" />
               </button>
             </form>
+          <a href="/recuperation-acces?type=merchant" className="mt-3 block text-center text-xs font-semibold text-[#52635b] underline underline-offset-2 hover:text-[#0f4d3d]">PIN ou accès oublié ?</a>
           <div className="relative mt-5 pt-4 border-t-[2px] border-[#211712] text-center">
             <p className="text-xs text-[#4a3a30] max-w-sm mx-auto mb-3">
               Vous n’avez pas encore de boutique ? Créez-la ici. Pour vous reconnecter ensuite, utilisez le numéro WhatsApp et le code PIN choisis à la création.

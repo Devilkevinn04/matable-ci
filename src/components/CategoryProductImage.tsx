@@ -1,5 +1,5 @@
 import React from 'react';
-import { getCategoryDefaults, getProductImageForDisplay, normalizeProductImage } from '../utils/categoryDefaults';
+import { getCategoryDefaults, normalizeProductImage } from '../utils/categoryDefaults';
 
 interface CategoryProductImageProps {
   imageUrl?: string | null;
@@ -19,32 +19,17 @@ export const CategoryProductImage: React.FC<CategoryProductImageProps> = ({
   children,
 }) => {
   const defaults = getCategoryDefaults(category);
-  const isPlaceholder = !normalizeProductImage(imageUrl);
-  const placeholderUrl = defaults.productPlaceholderImageUrl;
+  const normalizedImage = normalizeProductImage(imageUrl);
+  const isPlaceholder = !normalizedImage;
 
   return (
     <div className={`relative overflow-hidden bg-slate-100 ${className}`}>
-      <div aria-hidden="true" className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-slate-100 text-slate-500">
-        <span className="text-2xl">{defaults.icon}</span>
-        <span className="text-[10px] font-semibold">{defaults.label}</span>
+      <div aria-hidden="true" className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center" style={{ backgroundColor: defaults.secondaryColor, color: defaults.primaryColor }}>
+        <span className="grid h-16 w-16 place-items-center rounded-2xl border border-current/15 bg-white/75 text-4xl">{defaults.icon}</span>
+        <span className="line-clamp-2 max-w-full text-sm font-black">{title}</span>
+        {isPlaceholder && <span className="text-[10px] font-bold uppercase">Photo à venir · {defaults.label}</span>}
       </div>
-      <img
-        src={getProductImageForDisplay(imageUrl, category)}
-        alt={isPlaceholder ? `Illustration indicative : ${defaults.label}` : title}
-        loading={loading}
-        referrerPolicy="no-referrer"
-        className="relative z-10 h-full w-full object-cover"
-        onError={(event) => {
-          const element = event.currentTarget;
-          if (element.dataset.placeholderAttempted !== 'true' && element.src !== placeholderUrl) {
-            element.dataset.placeholderAttempted = 'true';
-            element.src = placeholderUrl;
-            element.alt = `Illustration indicative : ${defaults.label}`;
-            return;
-          }
-          element.hidden = true;
-        }}
-      />
+      {normalizedImage && <img src={normalizedImage} alt={title} loading={loading} referrerPolicy="no-referrer" className="relative z-10 h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />}
       {children}
     </div>
   );

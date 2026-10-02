@@ -1203,6 +1203,7 @@ async function startServer() {
   });
 
   app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ extended: false, limit: '16kb' }));
   app.use('/api/admin', requireAdminAccess);
   app.use('/api/admin', createAdminRouter({
     shops,

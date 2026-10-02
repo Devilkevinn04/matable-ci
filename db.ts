@@ -76,6 +76,10 @@ const sqliteSchema = `
     token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at INTEGER NOT NULL,
     fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS customer_oauth_identities (
+    provider TEXT NOT NULL, provider_user_id TEXT NOT NULL, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    email TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (provider, provider_user_id)
+  );
   CREATE TABLE IF NOT EXISTS merchant_identity_verifications (
     shop_id INTEGER PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
     document_type TEXT NOT NULL, document_number_hash TEXT NOT NULL UNIQUE,
@@ -222,6 +226,11 @@ const postgresMigrations = [
     token TEXT PRIMARY KEY, user_id BIGINT NOT NULL, expires_at BIGINT NOT NULL,
     fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS customer_oauth_identities (
+    provider TEXT NOT NULL, provider_user_id TEXT NOT NULL, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    email TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (provider, provider_user_id)
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_customer_oauth_user_id ON customer_oauth_identities(user_id)',
   'ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_user_id BIGINT',
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT ''",
