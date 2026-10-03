@@ -49,6 +49,8 @@ export interface ShopRecord {
   trial_end?: string | null;
   subscription_expires_at?: string | null;
   last_notification_sent_at: string | null;
+  whatsapp_subscription_reminders_enabled?: boolean;
+  whatsapp_subscription_reminders_consent_at?: string | null;
   created_at: string;
   category: ShopCategory;
   city?: string;

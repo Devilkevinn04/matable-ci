@@ -19,6 +19,7 @@ import { createMerchantVerificationRouter } from './server/routes/merchantVerifi
 import { createTelemetryRouter } from './server/routes/telemetry.ts';
 import { createKadevPayRouter } from './server/routes/kadevPay.ts';
 import { toCustomerProfile } from './server/services/customerProfile.ts';
+import { getWhatsAppSubscriptionReminderConfig, sendWhatsAppSubscriptionReminder } from './server/services/whatsappNotifications.ts';
 import { applySecurityHeaders } from './server/middleware/securityHeaders.ts';
 import type { OrderRecord, ProductRecord, ShopOpeningHours, ShopRecord, SubscriptionPlanConfig, SubscriptionState, SubscriptionStatus, SubscriptionTier } from './server/types.ts';
 import { loadProductsFromDatabase, persistProduct } from './server/repositories/products.ts';
@@ -40,6 +41,7 @@ import {
 import {
   computeIsShopOpen,
   escapeHtml,
+    getSubscriptionReminderAt,
   getProductUnitPriceWithModifiers,
   getSubscriptionState,
   getValidSelectedModifiers,
@@ -89,11 +91,51 @@ const addDays = (d: Date, days: number) => {
 
 async function refreshSubscriptionState(shop: ShopRecord): Promise<SubscriptionState> {
   const state = getSubscriptionState(shop);
-  if (shop.subscription_status === 'trialing' && state.status === 'expired') {
+  if (state.status === 'expired' && shop.subscription_status !== 'expired') {
     shop.subscription_status = 'expired';
     await persistShop(shop);
   }
   return state;
+}
+
+async function processSubscriptionAutomation() {
+  const now = new Date();
+  const reminderConfig = getWhatsAppSubscriptionReminderConfig();
+  for (const shop of shops) {
+    try {
+      await refreshSubscriptionState(shop);
+      if (!reminderConfig || !shop.whatsapp_subscription_reminders_enabled || shop.last_notification_sent_at) continue;
+      const subscription = getSubscriptionState(shop, now);
+      const reminderAt = getSubscriptionReminderAt(shop, now);
+      const expiresAt = subscription.status === 'trialing' ? subscription.trialEnd : subscription.expiresAt;
+      if (!subscription.isActive || !reminderAt || !expiresAt || now < reminderAt) continue;
+
+      const claimedAt = now.toISOString();
+      const claim = await dbRun(
+        'UPDATE shops SET last_notification_sent_at = ? WHERE id = ? AND last_notification_sent_at IS NULL',
+        [claimedAt, shop.id],
+      );
+      if (claim.changes !== 1) continue;
+      shop.last_notification_sent_at = claimedAt;
+
+      const delivery = await sendWhatsAppSubscriptionReminder(shop, expiresAt, reminderConfig);
+      if (!delivery.sent) {
+        shop.last_notification_sent_at = null;
+        await dbRun('UPDATE shops SET last_notification_sent_at = NULL WHERE id = ? AND last_notification_sent_at = ?', [shop.id, claimedAt]);
+        console.error(`Automatic subscription reminder failed for shop ${shop.id}: ${delivery.error || 'unknown_error'}`);
+        continue;
+      }
+
+      await persistShop(shop);
+      await dbRun(`INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at)
+        VALUES (?, ?, ?, ?, ?)`, [
+        'system', 'subscription_reminder_sent', shop.id,
+        JSON.stringify({ expires_at: expiresAt, channel: 'whatsapp_business' }), claimedAt,
+      ]);
+    } catch (error) {
+      console.error(`Subscription automation failed for shop ${shop.id}.`, error);
+    }
+  }
 }
 
 export function sanitizeTextField(value: string | null | undefined, maxLength = 200): string {
@@ -1037,6 +1079,12 @@ setInterval(async () => {
   for (const [key, limit] of publicRequestLimits) {
     if (limit.resetAt <= now) publicRequestLimits.delete(key);
   }
+  try {
+    for (const shop of shops) await refreshSubscriptionState(shop);
+  } catch (error) {
+    console.error('Unable to synchronize expired subscriptions.', error);
+  }
+  await processSubscriptionAutomation();
 }, 15 * 60 * 1000).unref();
 
 const toSafeShop = (shop: ShopRecord) => {
@@ -1220,6 +1268,7 @@ async function startServer() {
     databaseMode,
     dbAll,
     dbGet,
+    dbRun,
     refreshRuntimeDataFromDatabase,
     persistShop,
     toSafeShop,
@@ -1583,6 +1632,7 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server MaTable.ci running on port ${PORT}`);
+    void processSubscriptionAutomation();
   });
 }
 

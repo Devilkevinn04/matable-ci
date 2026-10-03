@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { dbGet } from '../db.ts';
-import { canPublishShop, canReceiveShopOrders, evaluateLocalIdentityVerification, isShopPubliclyVisible } from '../server/services/businessRules.ts';
+import { canPublishShop, canReceiveShopOrders, evaluateLocalIdentityVerification, getSubscriptionReminderAt, isShopPubliclyVisible, isSubscriptionReminderDue } from '../server/services/businessRules.ts';
 import {
   isBlockedStaticAsset,
   buildSessionFingerprint,
@@ -39,6 +39,29 @@ test('calculates the merchant trial state on the server', () => {
   assert.equal(expiredState.trialDaysRemaining, 0);
   assert.equal(expiredState.status, 'expired');
   assert.equal(expiredState.isActive, false);
+});
+
+test('subscriptions remain active through their expiry date and offer a reminder two days beforehand', () => {
+  const trial = {
+    subscription_status: 'trialing',
+    trial_start: '2026-09-03T10:00:00.000Z',
+    trial_end: '2026-10-03',
+    selected_subscription_tier: 'standard',
+  } as const;
+  const lastTrialDay = getSubscriptionState(trial, new Date('2026-10-03T23:59:00.000Z'));
+  const nextDay = getSubscriptionState(trial, new Date('2026-10-04T00:00:00.000Z'));
+  assert.equal(lastTrialDay.status, 'trialing');
+  assert.equal(lastTrialDay.trialDaysRemaining, 1);
+  assert.equal(nextDay.status, 'expired');
+  assert.equal(nextDay.trialDaysRemaining, 0);
+  assert.equal(getSubscriptionReminderAt(trial, new Date('2026-10-01T00:00:00.000Z'))?.toISOString(), '2026-10-01T00:00:00.000Z');
+  assert.equal(isSubscriptionReminderDue(trial, new Date('2026-09-30T23:59:59.000Z')), false);
+  assert.equal(isSubscriptionReminderDue(trial, new Date('2026-10-01T00:00:00.000Z')), true);
+  assert.equal(isSubscriptionReminderDue(trial, new Date('2026-10-04T00:00:00.000Z')), false);
+
+  const paid = { ...trial, subscription_status: 'active', trial_end: null, subscription_expires_at: '2026-10-03T12:00:00.000Z' };
+  assert.equal(getSubscriptionState(paid, new Date('2026-10-03T23:59:00.000Z')).status, 'active');
+  assert.equal(getSubscriptionState(paid, new Date('2026-10-04T00:00:00.000Z')).status, 'expired');
 });
 
 test('publication eligibility is independent from the shop opening toggle', () => {

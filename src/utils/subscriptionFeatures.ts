@@ -55,6 +55,19 @@ const featureMinimumTier: Record<SubscriptionFeature, SubscriptionTier> = {
   advanced_analytics: 'pro',
 };
 
+export function getSubscriptionAccessCutoff(value: string | Date): number | null {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  const businessDate = new Intl.DateTimeFormat('fr-CA', {
+    timeZone: 'Africa/Abidjan',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+  const dayStart = Date.parse(`${businessDate}T00:00:00.000Z`);
+  return Number.isFinite(dayStart) ? dayStart + 86400000 : null;
+}
+
 export function isSubscriptionFeatureIncluded(
   tier: string | null | undefined,
   feature: SubscriptionFeature,

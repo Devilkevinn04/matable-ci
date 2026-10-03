@@ -20,6 +20,8 @@ export async function loadShopsFromDatabase(): Promise<ShopRecord[]> {
     trial_end: row.trial_end == null ? null : String(row.trial_end),
     subscription_expires_at: row.subscription_expires_at == null ? null : String(row.subscription_expires_at),
     last_notification_sent_at: row.last_notification_sent_at == null ? null : String(row.last_notification_sent_at),
+    whatsapp_subscription_reminders_enabled: Boolean(row.whatsapp_subscription_reminders_enabled),
+    whatsapp_subscription_reminders_consent_at: row.whatsapp_subscription_reminders_consent_at == null ? null : String(row.whatsapp_subscription_reminders_consent_at),
     created_at: String(row.created_at),
     category: String(row.category) as ShopRecord['category'],
     city: row.city == null ? undefined : String(row.city),
@@ -34,14 +36,16 @@ export async function loadShopsFromDatabase(): Promise<ShopRecord[]> {
 
 export async function persistShop(shop: ShopRecord): Promise<void> {
   await dbRun(`
-    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, publication_status, featured_until, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, subscription_status, trial_start, trial_end, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash, owner_email)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, publication_status, featured_until, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, subscription_status, trial_start, trial_end, last_notification_sent_at, whatsapp_subscription_reminders_enabled, whatsapp_subscription_reminders_consent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash, owner_email)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET name=excluded.name, slug=excluded.slug, whatsapp_number=excluded.whatsapp_number,
       pin_code_hash=excluded.pin_code_hash, theme_color=excluded.theme_color, welcome_message=excluded.welcome_message,
       is_open=excluded.is_open, is_active=excluded.is_active, publication_status=excluded.publication_status, featured_until=excluded.featured_until, payment_status=excluded.payment_status,
       merchant_verification_status=excluded.merchant_verification_status,
       payment_deadline_at=excluded.payment_deadline_at, selected_subscription_tier=excluded.selected_subscription_tier,
       subscription_expires_at=excluded.subscription_expires_at, last_notification_sent_at=excluded.last_notification_sent_at,
+      whatsapp_subscription_reminders_enabled=excluded.whatsapp_subscription_reminders_enabled,
+      whatsapp_subscription_reminders_consent_at=excluded.whatsapp_subscription_reminders_consent_at,
       subscription_status=excluded.subscription_status, trial_start=excluded.trial_start, trial_end=excluded.trial_end,
       category=excluded.category, city=excluded.city, subscription_tier=excluded.subscription_tier,
       theme_config=excluded.theme_config, opening_hours=excluded.opening_hours, owner_access_token_hash=excluded.owner_access_token_hash,
@@ -51,6 +55,7 @@ export async function persistShop(shop: ShopRecord): Promise<void> {
     shop.is_open ? 1 : 0, shop.is_active ? 1 : 0, shop.publication_status || (shop.is_active ? 'active' : 'suspended'), shop.featured_until ?? null,
     shop.merchant_verification_status || 'not_required', 'approved', null,
     shop.selected_subscription_tier || 'standard', shop.subscription_expires_at ?? null, shop.subscription_status || 'active', shop.trial_start ?? null, shop.trial_end ?? null, shop.last_notification_sent_at,
+    shop.whatsapp_subscription_reminders_enabled ? 1 : 0, shop.whatsapp_subscription_reminders_consent_at ?? null,
     shop.created_at, shop.category, shop.city ?? null, shop.selected_subscription_tier || 'standard', JSON.stringify(shop.theme_config),
     shop.opening_hours ? JSON.stringify(shop.opening_hours) : null, shop.owner_access_token_hash ?? null, shop.owner_email ?? null,
   ]);

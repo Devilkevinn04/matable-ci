@@ -67,6 +67,20 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     res.json({ success: true, shop: toSafeShop(shop), trial_days: trialDurationDays, plan: getSubscriptionPlanConfig(tier) });
   });
 
+  router.patch('/:id/subscription-reminder-consent', requireMerchantOwnShop, async (req, res) => {
+    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'Le consentement doit être activé ou désactivé.' });
+    shop.whatsapp_subscription_reminders_enabled = req.body.enabled;
+    shop.whatsapp_subscription_reminders_consent_at = req.body.enabled ? new Date().toISOString() : null;
+    await persistShop(shop);
+    res.json({
+      success: true,
+      enabled: shop.whatsapp_subscription_reminders_enabled,
+      consent_at: shop.whatsapp_subscription_reminders_consent_at,
+    });
+  });
+
   router.get('/:id/analytics', requireMerchantOwnShop, async (req, res) => {
     const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
@@ -238,6 +252,10 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     if (whatsapp_number !== undefined) {
       const normalizedPhone = normalizeWhatsAppPhone(whatsapp_number);
       if (!normalizedPhone) return res.status(400).json({ error: 'Numéro WhatsApp ivoirien invalide. Utilisez +225 suivi de 10 chiffres.' });
+      if (normalizedPhone !== shop.whatsapp_number) {
+        shop.whatsapp_subscription_reminders_enabled = false;
+        shop.whatsapp_subscription_reminders_consent_at = null;
+      }
       shop.whatsapp_number = normalizedPhone;
     }
     if (name !== undefined) shop.name = name;

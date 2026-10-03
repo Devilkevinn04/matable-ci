@@ -1,5 +1,5 @@
 import type { OrderRecord, ProductRecord, ShopRecord, SubscriptionPlanConfig, SubscriptionState, SubscriptionStatus, SubscriptionTier } from '../types.ts';
-import { isSubscriptionFeatureIncluded, SUBSCRIPTION_PLANS, type SubscriptionFeature } from '../../src/utils/subscriptionFeatures.ts';
+import { getSubscriptionAccessCutoff, isSubscriptionFeatureIncluded, SUBSCRIPTION_PLANS, type SubscriptionFeature } from '../../src/utils/subscriptionFeatures.ts';
 
 export function computeIsShopOpen(shop: ShopRecord): boolean {
   if (shop.opening_hours && shop.opening_hours.enabled && !shop.opening_hours.manual_override) {
@@ -132,6 +132,10 @@ export function normalizeSubscriptionTier(tier?: SubscriptionTier | string): Sub
   return tier === 'premium' || tier === 'pro' ? tier : 'standard';
 }
 
+function subscriptionExpiryCutoff(value: string): number {
+  return getSubscriptionAccessCutoff(value) ?? NaN;
+}
+
 export function canUseSubscriptionFeature(
   shop: Pick<ShopRecord, 'subscription_status' | 'trial_start' | 'trial_end' | 'subscription_expires_at' | 'selected_subscription_tier'>,
   feature: SubscriptionFeature,
@@ -150,13 +154,17 @@ export function getSubscriptionState(
   const trialEnd = shop.trial_end || null;
   const expiresAt = shop.subscription_expires_at || null;
   const trialEndTime = trialEnd ? Date.parse(trialEnd) : NaN;
-  const expiresAtTime = expiresAt ? Date.parse(expiresAt) : NaN;
-  const trialDaysRemaining = Number.isFinite(trialEndTime)
-    ? Math.max(0, Math.ceil((trialEndTime - currentDate.getTime()) / 86400000))
+  const trialCutoff = trialEnd ? subscriptionExpiryCutoff(trialEnd) : NaN;
+  const expiresAtCutoff = expiresAt ? subscriptionExpiryCutoff(expiresAt) : NaN;
+  const rawTrialDaysRemaining = Number.isFinite(trialEndTime)
+    ? Math.ceil((trialEndTime - currentDate.getTime()) / 86400000)
+    : 0;
+  const trialDaysRemaining = Number.isFinite(trialCutoff) && trialCutoff > currentDate.getTime()
+    ? Math.max(1, rawTrialDaysRemaining)
     : 0;
   const configuredStatus = shop.subscription_status || (trialDaysRemaining > 0 ? 'trialing' : 'active');
-  const status: SubscriptionStatus = (configuredStatus === 'trialing' && trialEnd && trialDaysRemaining === 0)
-    || (configuredStatus === 'active' && Number.isFinite(expiresAtTime) && expiresAtTime <= currentDate.getTime())
+  const status: SubscriptionStatus = (configuredStatus === 'trialing' && trialEnd && trialCutoff <= currentDate.getTime())
+    || (configuredStatus === 'active' && Number.isFinite(expiresAtCutoff) && expiresAtCutoff <= currentDate.getTime())
     ? 'expired'
     : configuredStatus;
   return {
@@ -168,6 +176,30 @@ export function getSubscriptionState(
     trialDaysRemaining,
     isActive: status === 'trialing' || status === 'active',
   };
+}
+
+export function getSubscriptionReminderAt(
+  shop: Pick<ShopRecord, 'subscription_status' | 'trial_start' | 'trial_end' | 'subscription_expires_at' | 'selected_subscription_tier'>,
+  currentDate = new Date(),
+): Date | null {
+  const subscription = getSubscriptionState(shop, currentDate);
+  const endDate = subscription.status === 'trialing'
+    ? subscription.trialEnd
+    : subscription.status === 'active'
+      ? subscription.expiresAt
+      : null;
+  const endTime = endDate ? Date.parse(endDate) : NaN;
+  return Number.isFinite(endTime) ? new Date(endTime - 2 * 86400000) : null;
+}
+
+export function isSubscriptionReminderDue(
+  shop: Pick<ShopRecord, 'subscription_status' | 'trial_start' | 'trial_end' | 'subscription_expires_at' | 'selected_subscription_tier'>,
+  currentDate = new Date(),
+): boolean {
+  const reminderAt = getSubscriptionReminderAt(shop, currentDate);
+  return getSubscriptionState(shop, currentDate).isActive
+    && reminderAt !== null
+    && currentDate.getTime() >= reminderAt.getTime();
 }
 
 function toBusinessDateKey(value: string | Date, timeZone = 'Africa/Abidjan'): string {

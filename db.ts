@@ -34,7 +34,8 @@ const sqliteSchema = `
     merchant_verification_status TEXT NOT NULL DEFAULT 'not_required',
     selected_subscription_tier TEXT, subscription_expires_at TEXT,
     subscription_status TEXT NOT NULL DEFAULT 'active', trial_start TEXT, trial_end TEXT,
-    last_notification_sent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
+    last_notification_sent_at TEXT, whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
+    whatsapp_subscription_reminders_consent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
     city TEXT, owner_email TEXT, subscription_tier TEXT NOT NULL, theme_config TEXT, opening_hours TEXT,
     owner_access_token_hash TEXT
   );
@@ -72,6 +73,10 @@ const sqliteSchema = `
     token TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, fingerprint TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS admin_audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT NOT NULL, action TEXT NOT NULL,
+    shop_id INTEGER REFERENCES shops(id) ON DELETE SET NULL, details TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT NOT NULL,
     first_name TEXT NOT NULL DEFAULT '', last_name TEXT NOT NULL DEFAULT '',
@@ -103,6 +108,8 @@ const sqliteSchema = `
   CREATE INDEX IF NOT EXISTS idx_analytics_events_shop_created_at ON analytics_events(shop_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_merchant_sessions_shop_id ON merchant_sessions(shop_id);
   CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
+  CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created ON admin_audit_logs(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_shop_created ON admin_audit_logs(shop_id, created_at DESC);
 `;
 
 if (sqliteDb) {
@@ -130,6 +137,8 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'trial_start', 'TEXT');
   addColumn('shops', 'trial_end', 'TEXT');
   addColumn('shops', 'subscription_expires_at', 'TEXT');
+  addColumn('shops', 'whatsapp_subscription_reminders_enabled', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('shops', 'whatsapp_subscription_reminders_consent_at', 'TEXT');
   addColumn('subscription_payment_intents', 'payment_type', "TEXT NOT NULL DEFAULT 'subscription'");
   if (!hadPublicationStatus) {
     connection.exec(`UPDATE shops SET publication_status = CASE
@@ -170,7 +179,8 @@ const postgresMigrations = [
     merchant_verification_status TEXT NOT NULL DEFAULT 'not_required',
     selected_subscription_tier TEXT, subscription_expires_at TEXT,
     subscription_status TEXT NOT NULL DEFAULT 'active', trial_start TEXT, trial_end TEXT,
-    last_notification_sent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
+    last_notification_sent_at TEXT, whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
+    whatsapp_subscription_reminders_consent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
     city TEXT, owner_email TEXT, subscription_tier TEXT NOT NULL, theme_config JSONB, opening_hours JSONB,
     owner_access_token_hash TEXT
   )`,
@@ -210,6 +220,12 @@ const postgresMigrations = [
     token TEXT PRIMARY KEY, expires_at BIGINT NOT NULL,
     fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS admin_audit_logs (
+    id BIGSERIAL PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL,
+    shop_id INTEGER REFERENCES shops(id) ON DELETE SET NULL, details TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created ON admin_audit_logs(created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_shop_created ON admin_audit_logs(shop_id, created_at DESC)',
   'ALTER TABLE orders ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT \'pending\'',
   'ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_user_id BIGINT',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT',
@@ -226,6 +242,8 @@ const postgresMigrations = [
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS trial_start TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS trial_end TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_expires_at TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS whatsapp_subscription_reminders_consent_at TEXT',
   'CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_shop_created ON subscription_payment_intents(shop_id, created_at DESC)',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS opening_hours JSONB',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_access_token_hash TEXT',

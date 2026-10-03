@@ -34,6 +34,16 @@ services:
         sync: false
       - key: VITE_WHATSAPP_ADMIN_PHONE
         sync: false
+      - key: WHATSAPP_CLOUD_API_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_SUBSCRIPTION_REMINDER_TEMPLATE
+        sync: false
+      - key: WHATSAPP_GRAPH_API_VERSION
+        sync: false
+      - key: WHATSAPP_TEMPLATE_LANGUAGE
+        value: fr
       - key: KADEVPAY_PUBLIC_KEY
         sync: false
       - key: KADEVPAY_WEBHOOK_SECRET

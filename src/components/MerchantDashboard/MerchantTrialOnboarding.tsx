@@ -3,6 +3,7 @@ import { Check, LoaderCircle, MessageCircle, ShieldCheck } from 'lucide-react';
 import type { Shop, SubscriptionTier } from '../../types';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 import { SUBSCRIPTION_PLANS } from '../../utils/subscriptionFeatures';
+import { WhatsAppSubscriptionReminderConsent } from './WhatsAppSubscriptionReminderConsent';
 
 interface KadevPayCheckoutOptions {
   public_key: string;
@@ -33,13 +34,28 @@ interface MerchantTrialOnboardingProps {
 const plans = Object.values(SUBSCRIPTION_PLANS);
 
 export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'start' }: MerchantTrialOnboardingProps) {
-  const [selectedTier, setSelectedTier] = useState<SubscriptionTier>('standard');
+  const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(shop.subscription?.plan || 'standard');
   const [isKadevPayReady, setIsKadevPayReady] = useState(false);
   const [isPaymentStarting, setIsPaymentStarting] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState('');
   const didReceivePaymentSuccess = useRef(false);
   const selectedPlan = plans.find((plan) => plan.tier === selectedTier) || plans[0];
   const supportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour l’espace commerçant de ${shop.name}.`);
+  const isTrialExpired = mode === 'expired' && Boolean(shop.subscription?.trialEnd) && !shop.subscription?.expiresAt;
+  const expiredTitle = isTrialExpired
+    ? 'Votre période d’essai est terminée'
+    : shop.subscription?.status === 'past_due'
+      ? 'Votre paiement est à régulariser'
+      : shop.subscription?.status === 'suspended'
+        ? 'Votre abonnement est suspendu'
+        : shop.subscription?.status === 'cancelled'
+          ? 'Votre abonnement est résilié'
+          : 'Votre abonnement est arrivé à échéance';
+  const expiredDescription = isTrialExpired
+    ? 'Choisissez une formule mensuelle et réglez-la avec KadevPay. Votre vitrine redeviendra accessible après confirmation sécurisée du paiement.'
+    : shop.subscription?.status === 'past_due'
+      ? 'Le dernier paiement n’a pas été confirmé. Choisissez une formule et réglez-la avec KadevPay pour réactiver votre vitrine.'
+      : 'Choisissez une formule mensuelle et réglez-la avec KadevPay. Votre accès sera réactivé après confirmation sécurisée du paiement.';
 
   useEffect(() => {
     if (mode !== 'expired') return;
@@ -129,14 +145,14 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
       <div className="mx-auto max-w-4xl">
         <header className="border-b border-[#dce4dc] pb-6">
           <p className="text-xs font-extrabold uppercase text-[#176b55]">MaTable.ci · Espace commerçant</p>
-          <h1 className="mt-2 text-2xl font-black sm:text-3xl">{mode === 'expired' ? 'Votre période d’essai est terminée' : `Bienvenue, ${shop.name}`}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? 'Choisissez une formule mensuelle et réglez-la avec KadevPay. Votre accès sera renouvelé après confirmation sécurisée du paiement.' : 'Votre essai gratuit de 30 jours commence lorsque vous le démarrez. Configurez votre boutique et testez les fonctionnalités sans paiement aujourd’hui.'}</p>
+          <h1 className="mt-2 text-2xl font-black sm:text-3xl">{mode === 'expired' ? expiredTitle : `Bienvenue, ${shop.name}`}</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? expiredDescription : 'Votre essai gratuit de 30 jours commence lorsque vous le démarrez. Configurez votre boutique et testez les fonctionnalités sans paiement aujourd’hui.'}</p>
           {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-emerald-800 underline underline-offset-2"><MessageCircle className="h-4 w-4" />Contacter l’équipe</a>}
         </header>
 
         <section className="mt-7" aria-labelledby="plan-heading">
           <div className="flex items-center gap-2">
-            <h2 id="plan-heading" className="text-lg font-extrabold">Choisissez la formule à essayer</h2>
+            <h2 id="plan-heading" className="text-lg font-extrabold">{mode === 'expired' ? 'Choisissez votre formule de renouvellement' : 'Choisissez la formule à essayer'}</h2>
             <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-900">{mode === 'expired' ? 'Formules mensuelles' : '30 jours gratuits'}</span>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-3" role="radiogroup" aria-label="Formule après la période d’essai">
@@ -169,8 +185,10 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
 
         <aside className="mt-5 flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-sky-800" />
-          <p>La formule choisie est enregistrée pour la suite. Aucun débit ni paiement n’est effectué pendant cette étape.</p>
+          <p>{mode === 'expired' ? 'Le paiement est demandé par KadevPay et l’abonnement ne sera réactivé qu’après confirmation du webhook signé.' : 'La formule choisie est enregistrée pour la suite. Aucun débit ni paiement n’est effectué pendant cette étape.'}</p>
         </aside>
+
+        {mode === 'expired' && <div className="mt-5 rounded-xl border border-slate-200 bg-white px-4"><WhatsAppSubscriptionReminderConsent shop={shop} /></div>}
 
         <div className="mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
           {mode === 'expired' ? (

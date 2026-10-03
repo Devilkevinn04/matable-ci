@@ -19,6 +19,7 @@ const migrationVersions = [
   '014_shop_featured_until',
   '015_kadevpay_subscription_payments',
   '016_subscription_payment_type',
+  '017_admin_subscription_actions',
 ];
 const connectionString = process.env.DATABASE_URL;
 

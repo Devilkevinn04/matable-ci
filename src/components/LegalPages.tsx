@@ -71,7 +71,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
           <p className="legal-kicker">MaTable.ci · Côte d’Ivoire</p>
           <h1>{content.title}</h1>
           <p>{content.intro}</p>
-          <small>Dernière mise à jour : 1 octobre 2026</small>
+          <small>Dernière mise à jour : 3 octobre 2026</small>
         </header>
 
         {page === 'mentions-legales' && (
@@ -108,8 +108,9 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             </section>
             <section>
               <h2>Données traitées</h2>
-              <p>Selon votre usage, nous traitons les informations de compte client (prénom, nom, téléphone, adresse e-mail et mot de passe sous forme hachée), les informations de boutique et de son responsable, le catalogue, les prix, stocks et horaires, ainsi que les données techniques de session nécessaires à la sécurité. Si vous choisissez Google ou Apple, nous recevons l’identifiant propre à ce fournisseur et les informations de profil qu’il transmet (notamment l’e-mail vérifié et, lorsqu’il est disponible, le nom). Le mot de passe de votre compte Google ou Apple ne nous est jamais transmis.</p>
-              <p>Pour une commande, nous traitons le nom, le téléphone, le lieu et les indications de livraison, le créneau éventuel, les articles, quantités, options, montant recalculé, statut et date. Le moyen de paiement enregistré est une préférence (espèces, mobile money, Wave ou à convenir), et non une donnée de carte ou une preuve de paiement.</p>
+              <p>Pour créer un compte client, nous traitons le prénom, le nom, le téléphone, l’adresse e-mail et le mot de passe sous forme hachée. Si vous choisissez Google ou Apple, nous recevons l’identifiant propre à ce fournisseur et les informations de profil qu’il transmet, notamment l’e-mail vérifié et, lorsqu’il est disponible, le nom. Le mot de passe de votre compte Google ou Apple ne nous est jamais transmis. Les informations du compte client sont distinctes de l’abonnement d’une boutique.</p>
+              <p>Pour une commande, nous traitons le nom, le téléphone, le lieu et les indications de livraison, le créneau éventuel, les articles, quantités, options, montant recalculé, statut, date et l’identifiant du compte client associé. Le moyen de paiement enregistré est une préférence (espèces, mobile money, Wave ou à convenir), et non une donnée de carte ou une preuve de paiement.</p>
+              <p>Lorsqu’un commerçant active le rappel WhatsApp, nous enregistrons son choix et sa date de consentement. Si l’intégration WhatsApp Business est configurée, le numéro WhatsApp de la boutique, son nom et la date d’échéance de l’abonnement sont transmis à Meta pour envoyer le modèle de rappel approuvé. Pour un renouvellement lancé par le commerçant, KadevPay reçoit les données nécessaires au paiement; MaTable.ci conserve l’intention, le montant, la formule, le statut, la référence fournisseur et les dates de traitement. MaTable.ci ne stocke pas de numéro de carte bancaire.</p>
             </section>
             <section>
               <h2>Vérification d’identité des commerçants</h2>
@@ -118,11 +119,13 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             </section>
             <section>
               <h2>Finalités et bases d’utilisation</h2>
-              <p>Les données servent à créer et gérer les comptes, publier les vitrines, traiter les commandes et leur suivi, assurer la vérification des commerçants, fournir l’assistance, protéger les comptes et prévenir les abus. Les statistiques de fréquentation ne sont envoyées que si vous les autorisez dans la bannière ou sur la page Cookies. Les données nécessaires à une fonctionnalité sont utilisées pour fournir celle-ci; les statistiques reposent sur votre choix; les mesures de sécurité répondent au fonctionnement et à la protection du service.</p>
+              <p>Les données servent à créer et gérer les comptes, publier les vitrines, traiter les commandes et leur suivi, assurer la vérification des commerçants, effectuer les renouvellements demandés, fournir l’assistance, protéger les comptes et prévenir les abus. Les statistiques de fréquentation ne sont enregistrées que si vous les autorisez dans la bannière ou sur la page Cookies. Les rappels automatiques d’échéance par WhatsApp ne sont envoyés qu’aux commerçants ayant activé cette option; le consentement peut être retiré dans les réglages de l’abonnement. Les données nécessaires à une fonctionnalité sont utilisées pour la fournir; les statistiques et les rappels reposent sur vos choix.</p>
             </section>
             <section>
-              <h2>Commandes et services tiers</h2>
-              <p>MaTable.ci ne collecte pas le paiement de la vente. Le commerçant reçoit les informations nécessaires à la préparation de la commande. Si vous choisissez d’ouvrir WhatsApp, vous quittez MaTable.ci; WhatsApp/Meta traite alors les informations que vous lui transmettez selon ses propres conditions. MaTable.ci enregistre uniquement le clic de redirection associé à la commande, pas l’ouverture effective de l’application ni l’envoi ou le contenu du message.</p>
+              <h2>Comptes clients, commandes et services tiers</h2>
+              <p>La fin ou la suspension de l’abonnement d’un commerçant ne supprime pas les comptes clients et ne supprime pas automatiquement leurs commandes déjà enregistrées. Elle rend la vitrine concernée indisponible et bloque les nouvelles commandes auprès de cette boutique tant qu’elle n’est pas réactivée. Le compte client reste utilisable pour consulter les autres boutiques accessibles. Les demandes d’accès ou d’effacement de données restent possibles via l’assistance, sous réserve des obligations applicables.</p>
+              <p>MaTable.ci ne collecte pas le paiement des commandes clients. Le commerçant reçoit les informations nécessaires à leur préparation. Si vous choisissez d’ouvrir WhatsApp pour envoyer une commande, vous quittez MaTable.ci; WhatsApp/Meta traite alors les informations que vous lui transmettez selon ses propres conditions. MaTable.ci enregistre le clic de redirection associé à la commande, pas l’ouverture effective de l’application ni l’envoi ou le contenu du message.</p>
+              <p>Pour les rappels d’abonnement, Meta reçoit le numéro WhatsApp professionnel, le nom de la boutique et la date d’échéance uniquement après consentement du commerçant et si l’intégration est activée. Lorsqu’un commerçant initie un renouvellement, KadevPay traite le paiement selon ses propres conditions. Les comptes clients ne sont pas utilisés pour les rappels d’abonnement des commerçants.</p>
             </section>
             <section>
               <h2>Destinataires et hébergement</h2>
@@ -130,7 +133,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             </section>
             <section>
               <h2>Durées de conservation</h2>
-              <p>Les données sont conservées selon la durée nécessaire aux comptes, boutiques, commandes, vérifications et obligations applicables. À la date de cette politique, l’application ne configure ni échéance de conservation ni purge automatique pour les comptes, commandes, images KYC ou événements statistiques. Une demande d’effacement peut être adressée à l’assistance; elle sera examinée au regard des obligations de conservation et des données nécessaires à la sécurité ou aux litiges. L’exploitant doit définir les durées par catégorie et mettre en place leur application avant la production.</p>
+              <p>Les données sont conservées selon la durée nécessaire aux comptes, boutiques, commandes, vérifications et obligations applicables. À la date de cette politique, l’application ne configure pas de durée maximale ni de purge automatique pour les comptes clients, commandes, images KYC ou événements statistiques. Les informations de consentement aux rappels et le journal des actions administratives sont conservés en base; aucune purge automatique n’est actuellement configurée pour ces éléments. Une demande d’effacement peut être adressée à l’assistance; elle sera examinée au regard des obligations de conservation et des données nécessaires à la sécurité ou aux litiges. L’exploitant doit définir les durées par catégorie et mettre en place leur application.</p>
             </section>
             <section>
               <h2>Sécurité et droits</h2>

@@ -53,6 +53,19 @@ interface AdminFinance {
     collected_amount: number;
     pending_count: number;
     pending_amount: number;
+    failed_count: number;
+    refunded_count: number;
+    mrr: number;
+    active_subscriptions: number;
+    mrr_by_tier: { tier: string; count: number; amount: number }[];
+    active_trials: number;
+    trials_expiring_7d: number;
+    completed_trials: number;
+    converted_trials: number;
+    trial_conversion_rate: number;
+    past_due_subscriptions: number;
+    whatsapp_reminders_enabled: boolean;
+    whatsapp_reminder_opt_ins: number;
     subscriptions: { count: number; amount: number };
     promotions: { count: number; amount: number };
   };
@@ -70,6 +83,47 @@ interface AdminFinance {
     created_at: string;
     paid_at: string | null;
   }[];
+}
+
+interface AdminSubscriptionShop {
+  id: number;
+  name: string;
+  slug: string;
+  whatsapp_number: string;
+  owner_email: string | null;
+  whatsapp_reminders_opt_in: boolean;
+  plan: string;
+  status: string;
+  is_active: boolean;
+  publication_status: string | null;
+  merchant_verification_status: string | null;
+  trial_start: string | null;
+  trial_end: string | null;
+  trial_days_remaining: number | null;
+  subscription_expires_at: string | null;
+  next_renewal_at: string | null;
+  created_at: string;
+  products_count: number;
+  orders_count: number;
+  last_order_at: string | null;
+}
+
+interface AdminSubscriptions {
+  summary: {
+    mrr: number;
+    active_subscriptions: number;
+    mrr_by_tier: { tier: string; count: number; amount: number }[];
+    active_trials: number;
+    trials_expiring_7d: number;
+    completed_trials: number;
+    converted_trials: number;
+    trial_conversion_rate: number;
+    past_due_subscriptions: number;
+    whatsapp_reminders_enabled: boolean;
+    whatsapp_reminder_opt_ins: number;
+  };
+  shops: AdminSubscriptionShop[];
+  audit_logs: { id: number; action: string; shop_id: number | null; shop_name: string | null; details: string; created_at: string }[];
 }
 
 interface AdminOrder {
@@ -100,10 +154,21 @@ const ownerNotificationTemplates = [
   { id: 'catalog', label: 'Rappel catalogue à jour' },
   { id: 'orders', label: 'Rappel nouvelles commandes' },
   { id: 'support', label: 'Proposition d’assistance' },
+  { id: 'trial_expiring', label: 'Relance essai arrivant à échéance' },
 ] as const;
 
+const subscriptionStatusLabels: Record<string, string> = {
+  trialing: 'Essai actif',
+  active: 'Payé',
+  expired: 'Expiré',
+  past_due: 'À régulariser',
+  suspended: 'Suspendu',
+  cancelled: 'Résilié',
+  not_started: 'Non démarré',
+};
+
 export const AdminDashboard: React.FC = () => {
-  const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'identity' | 'audience' | 'finance' | 'operations'>('overview');
+  const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'identity' | 'audience' | 'finance' | 'subscriptions' | 'operations'>('overview');
   const [shops, setShops] = useState<AdminShopItem[]>([]);
   const [adminKey, setAdminKey] = useState('');
   const [showAdminKey, setShowAdminKey] = useState(false);
@@ -119,6 +184,14 @@ export const AdminDashboard: React.FC = () => {
   const [analyticsDays, setAnalyticsDays] = useState(30);
   const [finance, setFinance] = useState<AdminFinance | null>(null);
   const [financeDays, setFinanceDays] = useState(90);
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
+  const [paymentTypeFilter, setPaymentTypeFilter] = useState('all');
+  const [paymentSearch, setPaymentSearch] = useState('');
+  const [subscriptions, setSubscriptions] = useState<AdminSubscriptions | null>(null);
+  const [subscriptionStatusFilter, setSubscriptionStatusFilter] = useState('all');
+  const [subscriptionSearch, setSubscriptionSearch] = useState('');
+  const [trialExtensionDays, setTrialExtensionDays] = useState(7);
+  const [subscriptionActionShopId, setSubscriptionActionShopId] = useState<number | null>(null);
   const [adminOrders, setAdminOrders] = useState<AdminOrder[]>([]);
   const [adminHealth, setAdminHealth] = useState<AdminHealth | null>(null);
   const [operationsLoading, setOperationsLoading] = useState(false);
@@ -152,6 +225,7 @@ export const AdminDashboard: React.FC = () => {
         setIsAuthenticated(true);
         await fetchAnalytics(analyticsDays);
         await fetchFinance(financeDays);
+        await fetchSubscriptions();
         await fetchOperations();
       } else if (res.status === 401) {
         setIsAuthenticated(false);
@@ -202,6 +276,16 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const fetchSubscriptions = async () => {
+    try {
+      const res = await fetch('/api/admin/subscriptions');
+      if (!res.ok) throw new Error('Impossible de charger les abonnements.');
+      setSubscriptions(await res.json());
+    } catch {
+      showNotice('La vue abonnements est momentanément indisponible.');
+    }
+  };
+
   useEffect(() => {
     fetchAdminShops();
   }, []);
@@ -239,6 +323,52 @@ export const AdminDashboard: React.FC = () => {
     setAdminOrders([]);
     setAnalytics(null);
     setFinance(null);
+  };
+
+  const handleExtendTrial = async (shop: AdminSubscriptionShop) => {
+    setSubscriptionActionShopId(shop.id);
+    try {
+      const response = await fetch(`/api/admin/subscriptions/${shop.id}/extend-trial`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days: trialExtensionDays }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de prolonger l’essai.');
+      showNotice(`Essai prolongé de ${trialExtensionDays} jours pour ${shop.name}.`);
+      await fetchSubscriptions();
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Impossible de prolonger l’essai.');
+    } finally {
+      setSubscriptionActionShopId(null);
+    }
+  };
+
+  const handlePrepareTrialReminder = async (shop: AdminSubscriptionShop) => {
+    if (!shop.whatsapp_reminders_opt_in) {
+      showNotice('Le commerçant doit d’abord autoriser les rappels WhatsApp.');
+      return;
+    }
+    const popup = window.open('about:blank', '_blank');
+    if (!popup) {
+      showNotice('Autorisez les fenêtres pop-up pour ouvrir WhatsApp.');
+      return;
+    }
+    try {
+      const response = await fetch(`/api/admin/shops/${shop.id}/notification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template: 'trial_expiring' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de préparer la relance WhatsApp.');
+      popup.location.href = data.whatsapp_url;
+      showNotice(`Message de relance prêt pour ${shop.name}. Il restera à le valider dans WhatsApp.`);
+      await fetchSubscriptions();
+    } catch (error) {
+      popup.close();
+      showNotice(error instanceof Error ? error.message : 'Impossible de préparer la relance WhatsApp.');
+    }
   };
 
   const maxDailyViews = Math.max(1, ...(analytics?.daily.map(day => day.page_views) || [0]));
@@ -306,6 +436,7 @@ export const AdminDashboard: React.FC = () => {
         setShops(prev =>
           prev.map(s => (s.id === shopId ? { ...s, ...data.shop } : s))
         );
+        await fetchSubscriptions();
         showNotice('Statut boutique mis à jour.');
       } else {
         showNotice(data.error || 'Impossible de mettre à jour le statut.');
@@ -389,6 +520,22 @@ export const AdminDashboard: React.FC = () => {
     return !query || [order.shop_name, order.customer_name, order.customer_phone, String(order.id)]
       .some((value) => value.toLowerCase().includes(query));
   });
+  const filteredFinancePayments = (finance?.payments || []).filter((payment) => {
+    const query = paymentSearch.trim().toLowerCase();
+    const matchesQuery = !query || [payment.shop_name, payment.provider_reference || '', payment.id]
+      .some((value) => value.toLowerCase().includes(query));
+    return matchesQuery
+      && (paymentStatusFilter === 'all' || payment.status === paymentStatusFilter)
+      && (paymentTypeFilter === 'all' || payment.payment_type === paymentTypeFilter);
+  });
+  const filteredSubscriptions = (subscriptions?.shops || []).filter((shop) => {
+    const query = subscriptionSearch.trim().toLowerCase();
+    const matchesQuery = !query || [shop.name, shop.whatsapp_number, shop.owner_email || '', shop.slug]
+      .some((value) => value.toLowerCase().includes(query));
+    return matchesQuery && (subscriptionStatusFilter === 'all' || shop.status === subscriptionStatusFilter);
+  });
+  const expiringTrials = (subscriptions?.shops || []).filter((shop) => shop.status === 'trialing'
+    && shop.trial_days_remaining !== null && shop.trial_days_remaining <= 7);
 
   const activeShopsCount = shops.filter(s => s.is_active).length;
   const totalSales = shops.reduce((sum, shop) => sum + shop.total_sales, 0);
@@ -454,8 +601,8 @@ export const AdminDashboard: React.FC = () => {
 
   return (
     <div className="admin-dashboard min-h-screen pb-20">
-      <header className="relative overflow-hidden border-b-[3px] border-[#211712] bg-[#fffaf2] text-[#211712]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(232,169,58,0.18),transparent_20%),radial-gradient(circle_at_top_right,_rgba(27,58,99,0.12),transparent_30%)]" />
+      <header className="relative overflow-hidden border-b border-slate-200 bg-white/90 text-slate-900 backdrop-blur-sm">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(148,163,184,0.08),transparent_20%),radial-gradient(circle_at_top_right,_rgba(15,118,110,0.06),transparent_30%)]" />
         <div className="relative max-w-6xl mx-auto px-4 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -490,20 +637,6 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {[{ label: 'Boutiques actives', value: `${activeShopsCount}/${shops.length}`, tone: 'bg-[#edf7f2] border-[#211712] text-[#155c3d]' }, { label: 'Valeur des commandes', value: `${new Intl.NumberFormat('fr-FR').format(totalSales)} F`, tone: 'bg-[#edf7f2] border-[#211712] text-[#155c3d]' }, { label: 'Commandes', value: totalOrders, tone: 'bg-[#eef5ff] border-[#211712] text-[#1b3a63]' }, { label: 'Panier moyen', value: `${new Intl.NumberFormat('fr-FR').format(averageOrderValue)} F`, tone: 'bg-[#f9e7d6] border-[#211712] text-[#b93712]' }].map((item, index) => (
-              <motion.div
-                key={item.label}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.04, duration: 0.3 }}
-                className={`rounded-2xl border-[2px] p-3 ${item.tone}`}
-              >
-                <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#4a3a30]">{item.label}</span>
-                <span className="mt-2 block text-xl font-black text-[#211712]">{item.value}</span>
-              </motion.div>
-            ))}
-          </div>
         </div>
       </header>
 
@@ -519,7 +652,7 @@ export const AdminDashboard: React.FC = () => {
           </motion.div>
         )}
 
-        {pendingVerificationShops.length > 0 && (
+        {adminView === 'overview' && pendingVerificationShops.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -536,7 +669,8 @@ export const AdminDashboard: React.FC = () => {
           </motion.div>
         )}
 
-        <nav aria-label="Navigation super-admin" className="sticky top-0 z-20 grid grid-cols-2 gap-2 border-b-2 border-[#211712] bg-[#f6f3ed]/95 py-3 backdrop-blur sm:grid-cols-3 lg:grid-cols-7">
+        <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
+        <nav aria-label="Navigation super-admin" className="sticky top-2 z-20 flex min-w-0 gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white/90 p-1.5 backdrop-blur-sm lg:top-6 lg:flex-col lg:overflow-visible">
           {[
             { id: 'overview' as const, label: 'Accueil', icon: Activity },
             { id: 'shops' as const, label: `Boutiques (${shops.length})`, icon: Store },
@@ -544,19 +678,35 @@ export const AdminDashboard: React.FC = () => {
             { id: 'identity' as const, label: `Identité (${pendingVerificationShops.length})`, icon: ShieldCheck },
             { id: 'audience' as const, label: 'Audience', icon: BarChart3 },
             { id: 'finance' as const, label: 'Finances', icon: CreditCard },
+            { id: 'subscriptions' as const, label: 'Abonnements', icon: RefreshCw },
             { id: 'operations' as const, label: 'Opérations', icon: Activity },
           ].map(({ id, label, icon: Icon }) => (
-            <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border-2 px-2 py-2 text-center text-xs font-bold transition sm:text-sm ${adminView === id ? 'border-[#211712] bg-[#1b3a63] text-white shadow-[3px_3px_0_rgba(33,23,18,0.95)]' : 'border-[#211712] bg-[#fffaf2] text-[#211712] hover:bg-white'}`}>
-              <Icon className="h-4 w-4 shrink-0" /><span className="truncate">{label}</span>
+            <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-11 min-w-max items-center justify-start gap-2 rounded-lg border px-3 py-2 text-left text-xs font-bold transition sm:text-sm lg:w-full ${adminView === id ? 'border-slate-900 bg-slate-900 text-white shadow-sm' : 'border-transparent bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
+              <Icon className="h-4 w-4 shrink-0" /><span>{label}</span>
             </button>
           ))}
         </nav>
 
+        <div className="min-w-0 space-y-6">
         {adminView === 'overview' && (
           <section aria-labelledby="admin-overview-title" className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-2">
               <div><p className="text-xs font-bold uppercase text-[#176b55]">Accueil</p><h2 id="admin-overview-title" className="mt-1 text-xl font-black text-[#211712]">Vue d’ensemble</h2></div>
               <p className="text-xs text-slate-500">Actualisation automatique toutes les 30 secondes</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {[{ label: 'Boutiques actives', value: `${activeShopsCount}/${shops.length}`, tone: 'bg-emerald-50 border-emerald-100 text-emerald-900' }, { label: 'Valeur des commandes', value: `${new Intl.NumberFormat('fr-FR').format(totalSales)} F`, tone: 'bg-sky-50 border-sky-100 text-sky-900' }, { label: 'Commandes', value: totalOrders, tone: 'bg-slate-100 border-slate-200 text-slate-900' }, { label: 'Panier moyen', value: `${new Intl.NumberFormat('fr-FR').format(averageOrderValue)} F`, tone: 'bg-amber-50 border-amber-100 text-amber-900' }].map((item, index) => (
+                <motion.div
+                  key={item.label}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.04, duration: 0.3 }}
+                  className={`rounded-2xl border p-3 shadow-sm ${item.tone}`}
+                >
+                  <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600">{item.label}</span>
+                  <span className="mt-2 block text-xl font-black text-slate-900">{item.value}</span>
+                </motion.div>
+              ))}
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <section aria-labelledby="admin-follow-up-title" className="chart-panel p-4 md:p-5">
@@ -694,43 +844,147 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         {adminView === 'finance' && (
-          <section aria-labelledby="admin-finance-title" className="space-y-4">
+          <section aria-labelledby="admin-finance-title" className="space-y-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div><p className="text-xs font-bold uppercase text-emerald-800">Recettes MaTable.ci</p><h2 id="admin-finance-title" className="mt-1 text-xl font-black text-slate-900">Abonnements et promotions</h2><p className="mt-1 text-xs text-slate-500">Seuls les paiements confirmés par webhook sont comptés comme encaissés.</p></div>
-              <div className="flex flex-wrap items-center gap-2">
-                <select aria-label="Période du journal financier" value={financeDays} onChange={(event) => { const days = Number(event.target.value); setFinanceDays(days); void fetchFinance(days); }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">
-                  <option value={30}>30 derniers jours</option>
-                  <option value={90}>90 derniers jours</option>
-                  <option value={180}>180 derniers jours</option>
-                  <option value={365}>365 derniers jours</option>
-                </select>
-                <button type="button" disabled={!finance} onClick={() => finance && exportOperationsCsv(`matable-paiements-${new Date().toISOString().slice(0, 10)}.csv`, ['Date', 'Boutique', 'Type', 'Formule', 'Montant', 'Devise', 'Statut', 'Référence'], finance.payments.map((payment) => [payment.paid_at || payment.created_at, payment.shop_name, payment.payment_type === 'promotion' ? 'Promotion' : 'Abonnement', payment.tier, payment.amount, payment.currency, payment.status, payment.provider_reference || '']))} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"><Download className="h-4 w-4" />Exporter CSV</button>
-              </div>
+              <div><p className="text-xs font-bold uppercase text-emerald-800">Recettes MaTable.ci</p><h2 id="admin-finance-title" className="mt-1 text-xl font-black text-slate-900">Argent</h2><p className="mt-1 text-xs text-slate-500">Le MRR ne compte que les abonnements actifs. Les encaissements suivent les confirmations KadevPay.</p></div>
+              <select aria-label="Période du journal financier" value={financeDays} onChange={(event) => { const days = Number(event.target.value); setFinanceDays(days); void fetchFinance(days); }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                <option value={30}>30 derniers jours</option>
+                <option value={90}>90 derniers jours</option>
+                <option value={180}>180 derniers jours</option>
+                <option value={365}>365 derniers jours</option>
+              </select>
             </div>
-            {!finance ? <p role="status" className="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500">Chargement du journal financier…</p> : <>
+            {!finance ? <p role="status" className="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500">Chargement des données financières…</p> : <>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <article className="rounded-lg border border-emerald-200 bg-emerald-50 p-4"><p className="text-xs font-semibold text-emerald-900">Fonds confirmés</p><p className="mt-1 text-2xl font-black text-emerald-950">{new Intl.NumberFormat('fr-FR').format(finance.summary.collected_amount)} FCFA</p><p className="mt-1 text-xs text-emerald-800">{finance.summary.confirmed_count} paiement(s) confirmé(s)</p></article>
-                <article className="rounded-lg border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-semibold text-amber-900">En attente</p><p className="mt-1 text-2xl font-black text-amber-950">{new Intl.NumberFormat('fr-FR').format(finance.summary.pending_amount)} FCFA</p><p className="mt-1 text-xs text-amber-800">{finance.summary.pending_count} paiement(s) en attente</p></article>
-                <article className="rounded-lg border border-slate-200 bg-white p-4"><p className="text-xs font-semibold text-slate-600">Abonnements</p><p className="mt-1 text-2xl font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(finance.summary.subscriptions.amount)} FCFA</p><p className="mt-1 text-xs text-slate-500">{finance.summary.subscriptions.count} renouvellement(s) confirmé(s)</p></article>
-                <article className="rounded-lg border border-slate-200 bg-white p-4"><p className="text-xs font-semibold text-slate-600">Promotions</p><p className="mt-1 text-2xl font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(finance.summary.promotions.amount)} FCFA</p><p className="mt-1 text-xs text-slate-500">{finance.summary.promotions.count} paiement(s) confirmé(s)</p></article>
+                <article className="rounded-lg border border-emerald-200 bg-emerald-50 p-4"><p className="text-xs font-semibold text-emerald-900">MRR actuel</p><p className="mt-1 text-2xl font-black text-emerald-950">{new Intl.NumberFormat('fr-FR').format(finance.summary.mrr)} FCFA</p><p className="mt-1 text-xs text-emerald-800">{finance.summary.active_subscriptions} abonnement(s) actifs</p></article>
+                <article className="rounded-lg border border-sky-100 bg-sky-50 p-4"><p className="text-xs font-semibold text-sky-900">Encaissements période</p><p className="mt-1 text-2xl font-black text-sky-950">{new Intl.NumberFormat('fr-FR').format(finance.summary.collected_amount)} FCFA</p><p className="mt-1 text-xs text-sky-800">{finance.summary.confirmed_count} paiement(s) confirmé(s)</p></article>
+                <article className="rounded-lg border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-semibold text-amber-900">Revenus promotions</p><p className="mt-1 text-2xl font-black text-amber-950">{new Intl.NumberFormat('fr-FR').format(finance.summary.promotions.amount)} FCFA</p><p className="mt-1 text-xs text-amber-800">{finance.summary.promotions.count} paiement(s)</p></article>
+                <article className="rounded-lg border border-rose-200 bg-rose-50 p-4"><p className="text-xs font-semibold text-rose-900">Paiements à vérifier</p><p className="mt-1 text-2xl font-black text-rose-950">{finance.summary.failed_count + finance.summary.refunded_count + finance.summary.past_due_subscriptions}</p><p className="mt-1 text-xs text-rose-800">{finance.summary.failed_count} échec(s) · {finance.summary.refunded_count} remboursement(s) · {finance.summary.past_due_subscriptions} abonnement(s) en retard</p></article>
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(240px,1fr)]">
-                <section className="rounded-lg border border-slate-200 bg-white p-4" aria-labelledby="admin-payments-list-title">
-                  <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3"><div><h3 id="admin-payments-list-title" className="text-sm font-black text-slate-900">Journal des paiements</h3><p className="mt-1 text-xs text-slate-500">Les 200 événements les plus récents sur {finance.days} jours.</p></div><button type="button" onClick={() => void fetchFinance(financeDays)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700">Actualiser</button></div>
-                  {finance.payments.length === 0 ? <p className="py-8 text-center text-sm text-slate-500">Aucun paiement d’abonnement sur cette période.</p> : <div className="mt-2 divide-y divide-slate-200">
-                    {finance.payments.map((payment) => <article key={payment.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <section className="border-y border-slate-200 py-4" aria-label="MRR par formule">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div><h3 className="text-sm font-black text-slate-900">MRR par formule</h3><p className="mt-1 text-xs text-slate-500">Revenu mensuel théorique des forfaits actifs.</p></div>
+                  <div className="flex flex-wrap gap-x-6 gap-y-2">
+                    {finance.summary.mrr_by_tier.map((tier) => <div key={tier.tier} className="min-w-24"><p className="text-xs font-semibold capitalize text-slate-500">{tier.tier} · {tier.count}</p><p className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(tier.amount)} F</p></div>)}
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
+                  <div><p className="text-xs text-slate-500">Essais actifs</p><strong className="text-slate-900">{finance.summary.active_trials}</strong></div>
+                  <div><p className="text-xs text-slate-500">Fin sous 7 jours</p><strong className="text-slate-900">{finance.summary.trials_expiring_7d}</strong></div>
+                  <div><p className="text-xs text-slate-500">Essais terminés</p><strong className="text-slate-900">{finance.summary.completed_trials}</strong></div>
+                  <div><p className="text-xs text-slate-500">Conversion essai → payant</p><strong className="text-slate-900">{finance.summary.converted_trials} · {finance.summary.trial_conversion_rate}%</strong></div>
+                </div>
+              </section>
+
+              <section aria-labelledby="admin-payments-list-title" className="space-y-3">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div><h3 id="admin-payments-list-title" className="text-sm font-black text-slate-900">Journal des paiements</h3><p className="mt-1 text-xs text-slate-500">Jusqu’aux 200 derniers paiements et intentions sur {finance.days} jours.</p></div>
+                  <button type="button" disabled={filteredFinancePayments.length === 0} onClick={() => exportOperationsCsv(`matable-paiements-${new Date().toISOString().slice(0, 10)}.csv`, ['Date', 'Boutique', 'Type', 'Formule', 'Montant', 'Devise', 'Statut', 'Référence'], filteredFinancePayments.map((payment) => [payment.paid_at || payment.created_at, payment.shop_name, payment.payment_type === 'promotion' ? 'Promotion' : 'Abonnement', payment.tier, payment.amount, payment.currency, payment.status, payment.provider_reference || payment.id]))} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"><Download className="h-4 w-4" />Exporter la sélection</button>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-[minmax(180px,1fr)_180px_180px]">
+                  <input type="search" value={paymentSearch} onChange={(event) => setPaymentSearch(event.target.value)} placeholder="Rechercher boutique ou référence" aria-label="Rechercher un paiement" className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-700" />
+                  <select aria-label="Filtrer par type de paiement" value={paymentTypeFilter} onChange={(event) => setPaymentTypeFilter(event.target.value)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700"><option value="all">Tous les types</option><option value="subscription">Abonnements</option><option value="promotion">Promotions</option></select>
+                  <select aria-label="Filtrer par statut de paiement" value={paymentStatusFilter} onChange={(event) => setPaymentStatusFilter(event.target.value)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700"><option value="all">Tous les statuts</option><option value="paid">Confirmés</option><option value="pending">En attente</option><option value="failed">Échecs</option><option value="cancelled">Annulés</option><option value="refunded">Remboursés</option></select>
+                </div>
+                <div className="divide-y divide-slate-200 border-y border-slate-200">
+                  {filteredFinancePayments.length === 0 ? <p className="py-8 text-center text-sm text-slate-500">Aucun paiement correspondant à ces filtres.</p> : filteredFinancePayments.map((payment) => {
+                    const isPaid = payment.status === 'paid';
+                    const isPending = payment.status === 'pending';
+                    const statusLabel = isPaid ? 'Confirmé' : isPending ? 'En attente' : payment.status === 'refunded' ? 'Remboursé' : payment.status === 'cancelled' ? 'Annulé' : 'Échec';
+                    return <article key={payment.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0"><h4 className="truncate text-sm font-bold text-slate-900">{payment.shop_name} · {payment.payment_type === 'promotion' ? 'Promotion' : `Abonnement ${payment.tier}`}</h4><p className="mt-1 truncate text-xs text-slate-500">{payment.provider_reference || payment.id}</p><p className="mt-1 text-xs text-slate-500">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(payment.paid_at || payment.created_at))}</p></div>
-                      <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${payment.status === 'paid' ? 'bg-emerald-100 text-emerald-900' : payment.status === 'pending' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700'}`}>{payment.status === 'paid' ? 'Confirmé' : payment.status === 'pending' ? 'En attente' : 'Échec'}</span><strong className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(payment.amount)} {payment.currency}</strong></div>
-                    </article>)}
-                  </div>}
-                </section>
-                <aside className="rounded-lg border border-slate-200 bg-white p-4" aria-labelledby="admin-plans-title">
-                  <h3 id="admin-plans-title" className="text-sm font-black text-slate-900">Classement par formule</h3>
-                  {finance.by_tier.length === 0 ? <p className="mt-4 text-sm text-slate-500">Aucun abonnement confirmé.</p> : <div className="mt-3 divide-y divide-slate-200">{finance.by_tier.map((tier) => <div key={tier.tier} className="flex items-center justify-between gap-3 py-3"><div><p className="text-sm font-bold capitalize text-slate-900">{tier.tier}</p><p className="text-xs text-slate-500">{tier.count} paiement(s)</p></div><strong className="text-sm text-slate-900">{new Intl.NumberFormat('fr-FR').format(tier.amount)} F</strong></div>)}</div>}
-                  <p className="mt-4 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">Les promotions ne sont pas encore vendues en ligne. Le montant restera nul jusqu’à la définition d’un tarif et l’activation de leur parcours de paiement.</p>
-                </aside>
+                      <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${isPaid ? 'bg-emerald-100 text-emerald-900' : isPending ? 'bg-amber-100 text-amber-900' : 'bg-rose-100 text-rose-900'}`}>{statusLabel}</span><strong className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(payment.amount)} {payment.currency}</strong></div>
+                    </article>;
+                  })}
+                </div>
+                <p className="text-xs text-slate-500">Les promotions restent à zéro tant que leur tarif et leur parcours de paiement ne sont pas activés. Les remboursements ne sont comptés que si leur statut est remonté au journal.</p>
+              </section>
+            </>}
+          </section>
+        )}
+
+        {adminView === 'subscriptions' && (
+          <section aria-labelledby="admin-subscriptions-title" className="space-y-5">
+            <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase text-emerald-800">Revenus récurrents</p>
+                <h2 id="admin-subscriptions-title" className="mt-1 text-xl font-black text-slate-900">Abonnements</h2>
+                <p className="mt-1 text-xs text-slate-500">{subscriptions?.summary.whatsapp_reminders_enabled ? `Rappels automatiques à J−2 · ${subscriptions.summary.whatsapp_reminder_opt_ins} boutique(s) consentante(s).` : 'Configurez WhatsApp Business API pour activer les rappels automatiques ; les relances manuelles restent disponibles.'}</p>
               </div>
+              <button type="button" onClick={() => void fetchSubscriptions()} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">Actualiser</button>
+            </header>
+
+            {!subscriptions ? <p role="status" className="border-y border-slate-200 py-6 text-sm text-slate-500">Chargement des abonnements…</p> : <>
+              <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                <div className="border-l-2 border-emerald-600 pl-3"><p className="text-xs text-slate-500">MRR actif</p><strong className="text-lg font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(subscriptions.summary.mrr)} F</strong></div>
+                <div className="border-l-2 border-sky-600 pl-3"><p className="text-xs text-slate-500">Abonnements payants</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.active_subscriptions}</strong></div>
+                <div className="border-l-2 border-amber-500 pl-3"><p className="text-xs text-slate-500">Essais actifs · fin sous 7 j</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.active_trials} · {subscriptions.summary.trials_expiring_7d}</strong></div>
+                <div className="border-l-2 border-rose-600 pl-3"><p className="text-xs text-slate-500">Conversion essai → payant</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.converted_trials}/{subscriptions.summary.completed_trials} · {subscriptions.summary.trial_conversion_rate}%</strong></div>
+              </div>
+
+              <section aria-labelledby="trials-expiring-title" className="border-y border-amber-200 py-4">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div><h3 id="trials-expiring-title" className="text-sm font-black text-slate-900">Essais à relancer</h3><p className="mt-1 text-xs text-slate-500">Échéance dans les 7 prochains jours · l’envoi reste à confirmer dans WhatsApp.</p></div>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">Prolonger de
+                    <select aria-label="Durée de prolongation d’essai" value={trialExtensionDays} onChange={(event) => setTrialExtensionDays(Number(event.target.value))} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-700">
+                      <option value={7}>7 jours</option><option value={14}>14 jours</option><option value={30}>30 jours</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="mt-3 divide-y divide-amber-100">
+                  {expiringTrials.length === 0 ? <p className="py-4 text-sm text-slate-500">Aucun essai n’expire sous 7 jours.</p> : expiringTrials.map((shop) => (
+                    <article key={shop.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0"><h4 className="truncate text-sm font-bold text-slate-900">{shop.name}</h4><p className="mt-1 text-xs text-slate-500">{shop.plan} · {shop.trial_days_remaining === 1 ? 'échéance demain' : `${shop.trial_days_remaining} jours restants`} · fin le {shop.trial_end ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.trial_end)) : 'date inconnue'}</p></div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        {shop.whatsapp_reminders_opt_in ? <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handlePrepareTrialReminder(shop)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-emerald-700 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50"><Send className="h-3.5 w-3.5" />Relancer WhatsApp</button> : <span className="self-center text-xs text-slate-500">Opt-in WhatsApp requis</span>}
+                        <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleExtendTrial(shop)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"><Clock className="h-3.5 w-3.5" />Prolonger</button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <section aria-labelledby="subscription-list-title" className="space-y-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div><h3 id="subscription-list-title" className="text-sm font-black text-slate-900">Toutes les boutiques</h3><p className="mt-1 text-xs text-slate-500">Formule, état, prochaine échéance et activité.</p></div>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(180px,1fr)_180px]">
+                    <input type="search" value={subscriptionSearch} onChange={(event) => setSubscriptionSearch(event.target.value)} placeholder="Rechercher une boutique…" aria-label="Rechercher un abonnement" className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-700" />
+                    <select aria-label="Filtrer les abonnements par statut" value={subscriptionStatusFilter} onChange={(event) => setSubscriptionStatusFilter(event.target.value)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">
+                      <option value="all">Tous les statuts</option><option value="trialing">Essai actif</option><option value="active">Payé</option><option value="expired">Expiré</option><option value="past_due">À régulariser</option><option value="suspended">Suspendu</option><option value="not_started">Non démarré</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="divide-y divide-slate-200 border-y border-slate-200">
+                  {filteredSubscriptions.length === 0 ? <p className="py-6 text-sm text-slate-500">Aucun abonnement ne correspond à ces critères.</p> : filteredSubscriptions.map((shop) => {
+                    const canExtendTrial = shop.status === 'trialing'
+                      || shop.status === 'expired' && Boolean(shop.trial_end) && !shop.subscription_expires_at;
+                    const statusTone = shop.status === 'active' ? 'bg-emerald-100 text-emerald-900'
+                      : shop.status === 'trialing' ? 'bg-sky-100 text-sky-900'
+                        : shop.status === 'past_due' || shop.status === 'expired' ? 'bg-amber-100 text-amber-950'
+                          : 'bg-slate-100 text-slate-700';
+                    return <article key={shop.id} className="flex flex-col gap-3 py-4 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-bold text-slate-900">{shop.name}</h4><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-slate-700">{shop.plan}</span><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${statusTone}`}>{subscriptionStatusLabels[shop.status] || shop.status}</span>{!shop.is_active && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-900">Boutique suspendue</span>}</div>
+                        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{shop.whatsapp_number}</span><span>{shop.products_count} article(s)</span><span>{shop.orders_count} commande(s)</span><span>{shop.publication_status === 'active' ? 'Publiée' : 'Non publiée'}</span><span>{shop.whatsapp_reminders_opt_in ? 'Rappel WhatsApp activé' : 'Sans opt-in WhatsApp'}</span><span>Inscrite le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.created_at))}</span></div>
+                        <p className="mt-1 text-xs text-slate-500">{shop.status === 'trialing' ? 'Fin d’essai' : 'Prochain renouvellement'} : {shop.next_renewal_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.next_renewal_at)) : 'Non défini'} · Dernière commande : {shop.last_order_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.last_order_at)) : 'aucune'}</p>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        {shop.status === 'trialing' && shop.trial_days_remaining !== null && shop.trial_days_remaining <= 7 && shop.whatsapp_reminders_opt_in && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handlePrepareTrialReminder(shop)} className="min-h-9 rounded-lg border border-emerald-700 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50">WhatsApp</button>}
+                        {canExtendTrial && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleExtendTrial(shop)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Prolonger l’essai</button>}
+                        <button type="button" onClick={() => void handleToggleActive(shop.id)} className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-bold ${shop.is_active ? 'border-rose-200 text-rose-800 hover:bg-rose-50' : 'border-emerald-200 text-emerald-800 hover:bg-emerald-50'}`}>{shop.is_active ? 'Suspendre' : 'Réactiver'}</button>
+                      </div>
+                    </article>;
+                  })}
+                </div>
+              </section>
+
+              <section aria-labelledby="subscription-audit-title" className="border-t border-slate-200 pt-4">
+                <h3 id="subscription-audit-title" className="text-sm font-black text-slate-900">Actions admin récentes</h3>
+                {subscriptions.audit_logs.length === 0 ? <p className="mt-2 text-xs text-slate-500">Les prolongations et relances apparaîtront ici.</p> : <div className="mt-2 divide-y divide-slate-200">
+                  {subscriptions.audit_logs.slice(0, 8).map((entry) => <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs"><span className="font-semibold text-slate-800">{entry.action === 'trial_extended' ? 'Essai prolongé' : entry.action === 'trial_reminder_prepared' ? 'Relance WhatsApp préparée' : entry.action === 'shop_suspended' ? 'Boutique suspendue' : entry.action === 'shop_reactivated' ? 'Boutique réactivée' : entry.action} · {entry.shop_name || 'Boutique supprimée'}</span><time className="text-slate-500">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(entry.created_at))}</time></div>)}
+                </div>}
+              </section>
             </>}
           </section>
         )}
@@ -896,6 +1150,8 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
         </>}
+        </div>
+        </div>
 
       </main>
     </div>

@@ -44,6 +44,7 @@ import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../.
 import { ThemeCustomizer } from '../ThemeCustomizer';
 import { useToast } from '../Toast';
 import { CATEGORY_DEFAULTS, getCategoryDefaults, SHOP_CATEGORIES } from '../../utils/categoryDefaults';
+import { getSubscriptionAccessCutoff } from '../../utils/subscriptionFeatures';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 
 interface MerchantDashboardProps {
@@ -248,6 +249,32 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   } = merchantState;
 
   useEffect(() => {
+    const subscription = currentShop?.subscription;
+    const expiresAt = subscription?.status === 'trialing'
+      ? subscription.trialEnd
+      : subscription?.status === 'active'
+        ? subscription.expiresAt
+        : null;
+    if (!expiresAt) return;
+    const accessCutoff = getSubscriptionAccessCutoff(expiresAt);
+    if (accessCutoff === null) return;
+
+    let timeoutId: number | undefined;
+    const refreshAtExpiry = () => {
+      const remaining = accessCutoff - Date.now();
+      if (remaining <= 0) {
+        window.location.reload();
+        return;
+      }
+      timeoutId = window.setTimeout(refreshAtExpiry, Math.min(remaining, 6 * 60 * 60 * 1000));
+    };
+    refreshAtExpiry();
+    return () => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, [currentShop?.id, currentShop?.subscription?.status, currentShop?.subscription?.trialEnd, currentShop?.subscription?.expiresAt]);
+
+  useEffect(() => {
     if (!isSettingsDrawerOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -361,9 +388,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   });
 
   return (
-    <div className="merchant-dashboard min-h-screen pb-20">
+    <div className="merchant-dashboard min-h-screen pb-20 bg-[#f6f7f4]">
       {/* Top Shop Control Bar */}
-      <div className="bg-[#fffaf2] border-b-[3px] border-[#211712] sticky top-0 z-30 shadow-[0_8px_0_rgba(33,23,18,0.08)]">
+      <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur-sm">
         <div className="mx-auto grid max-w-5xl gap-3 px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
             {currentShop.theme_config?.logo_url ? (
@@ -469,28 +496,29 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         )}
       </div>
 
-      {currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining <= 10 && (
+      {activeTab === 'overview' && currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining <= 10 && (
         <div className={`flex flex-col gap-2 border-t px-4 py-2 text-xs font-semibold sm:flex-row sm:items-center sm:justify-between ${currentShop.subscription.trialDaysRemaining <= 1 ? 'border-rose-200 bg-rose-50 text-rose-950' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
           <span>{currentShop.subscription.trialDaysRemaining <= 1 ? 'Votre essai se termine demain.' : `Votre essai se termine dans ${currentShop.subscription.trialDaysRemaining} jours.`} Le renouvellement KadevPay sera disponible à la fin de l’essai.</span>
           <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="self-start font-extrabold underline underline-offset-2 sm:self-auto">Voir mon forfait</button>
         </div>
       )}
 
+      {activeTab === 'overview' && (
       <div className="max-w-5xl mx-auto px-4 pt-5">
-        <section className="rounded-2xl border-2 border-[#211712] bg-[#fffaf2] p-4 shadow-[4px_4px_0_rgba(33,23,18,0.18)]" aria-labelledby="setup-checklist-title">
+        <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm" aria-labelledby="setup-checklist-title">
           <details className="group">
             <summary className="flex cursor-pointer list-none flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#e6572b]">Mise en route</p>
-                <h2 id="setup-checklist-title" className="mt-1 text-base font-black text-[#211712]">Votre boutique est presque prête</h2>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Mise en route</p>
+                <h2 id="setup-checklist-title" className="mt-1 text-base font-black text-slate-900">Votre boutique est presque prête</h2>
               </div>
               <div className="flex items-center gap-3 self-start sm:self-auto">
-                <span className="rounded-full bg-[#edf7f2] px-3 py-1 text-xs font-black text-[#155c3d]">
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
                   {[Boolean(currentShop.name), Boolean(currentShop.theme_config?.logo_url), products.length > 0, products.length >= 3, isShopLaunchReady, isShopPublished].filter(Boolean).length}/6 étapes
                 </span>
-                <span className="text-xs font-bold text-[#176b55] group-open:hidden">Voir les étapes</span>
-                <span className="hidden text-xs font-bold text-[#176b55] group-open:inline">Masquer</span>
-                <ChevronRight className="h-4 w-4 text-[#176b55] transition-transform group-open:rotate-90" />
+                <span className="text-xs font-bold text-slate-600 group-open:hidden">Voir les étapes</span>
+                <span className="hidden text-xs font-bold text-slate-600 group-open:inline">Masquer</span>
+                <ChevronRight className="h-4 w-4 text-slate-600 transition-transform group-open:rotate-90" />
               </div>
             </summary>
             <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -516,8 +544,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 },
                 { label: 'Partager ma boutique', done: isShopPublished, action: () => isShopPublished ? copyOwnerLink('public') : toast.error('Publiez votre boutique avant de partager son lien public.') },
               ].map((step) => (
-                <button key={step.label} type="button" onClick={step.action} className="flex min-h-11 items-center gap-2 rounded-xl border border-[#ded8ce] bg-white px-3 py-2.5 text-left text-xs font-bold text-[#34463d] transition hover:border-[#176b55] hover:bg-[#edf7f2]">
-                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${step.done ? 'bg-[#155c3d] text-white' : 'border-2 border-[#b7c1b9] text-transparent'}`}>
+                <button key={step.label} type="button" onClick={step.action} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-left text-xs font-bold text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50">
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${step.done ? 'bg-emerald-600 text-white' : 'border-2 border-slate-300 bg-white text-transparent'}`}>
                     <Check className="h-3 w-3" aria-hidden="true" />
                   </span>
                   <span>{step.label}</span>
@@ -527,27 +555,28 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           </details>
         </section>
       </div>
+      )}
 
       {/* Main Container */}
-      <div className="max-w-5xl mx-auto px-4 py-6">
-        <div className="mb-6 border-b-[2px] border-[#211712] pb-3">
-          <nav aria-label="Navigation principale commerçant" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mx-auto max-w-6xl px-4 py-6">
+        <div className="grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start">
+          <nav aria-label="Navigation principale commerçant" className="flex min-w-0 gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 lg:sticky lg:top-28 lg:flex-col lg:overflow-visible">
             {[
               { id: 'overview' as const, label: 'Accueil', icon: LayoutDashboard },
               { id: 'catalog' as const, label: `Catalogue (${products.length})`, icon: Package },
               { id: 'orders' as const, label: `Commandes (${orders.length})`, icon: ShoppingBag },
             ].map(({ id, label, icon: Icon }) => (
-              <button key={id} type="button" onClick={() => setActiveTab(id)} className={`flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border-[2px] px-2 py-2.5 text-center text-xs font-bold transition-all sm:px-3 sm:text-sm ${activeTab === id ? 'border-[#211712] bg-[#1b3a63] text-white shadow-[3px_3px_0_rgba(33,23,18,0.95)]' : 'border-[#211712] bg-[#fffaf2] text-[#211712] hover:bg-white'}`}>
-                <Icon className="h-4 w-4 shrink-0" /><span className="truncate">{label}</span>
+              <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => setActiveTab(id)} className={`flex min-h-11 min-w-max items-center justify-start gap-2 rounded-lg border px-3 py-2.5 text-left text-xs font-bold transition-all sm:text-sm lg:w-full ${activeTab === id ? 'border-slate-900 bg-slate-900 text-white shadow-sm' : 'border-transparent bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
+                <Icon className="h-4 w-4 shrink-0" /><span>{label}</span>
               </button>
             ))}
-            <button type="button" aria-expanded={isSettingsDrawerOpen} onClick={() => setIsSettingsDrawerOpen(true)} className="inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border-[2px] border-[#211712] bg-[#fffaf2] px-3 py-2.5 text-xs font-bold text-[#211712] transition hover:bg-white sm:text-sm">
-              <Menu className="h-4 w-4 shrink-0" /><span>Menu</span>
+            <button type="button" aria-expanded={isSettingsDrawerOpen} onClick={() => setIsSettingsDrawerOpen(true)} className="inline-flex min-h-11 min-w-max items-center justify-start gap-2 rounded-lg border border-transparent bg-white px-3 py-2.5 text-left text-xs font-bold text-slate-700 transition hover:bg-slate-50 sm:text-sm lg:w-full">
+              <Menu className="h-4 w-4 shrink-0" /><span>Réglages</span>
             </button>
           </nav>
-        </div>
 
-        {activeTab === 'overview' && (
+          <div className="min-w-0">
+          {activeTab === 'overview' && (
           <section className="space-y-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div><p className="text-xs font-bold uppercase text-[#176b55]">Vue d’ensemble</p><h2 className="mt-1 text-xl font-black text-[#211712]">Bonjour, {currentShop.name}</h2><p className="mt-1 text-sm text-slate-600">Votre espace de travail pour aujourd’hui.</p></div>
@@ -559,18 +588,20 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 { label: 'Articles au catalogue', value: `${products.length}${currentShop.subscription?.status === 'trialing' ? '/6' : ''}` },
                 { label: 'Essai restant', value: currentShop.subscription?.status === 'trialing' ? `${currentShop.subscription.trialDaysRemaining} jours` : '—' },
                 { label: 'Ouverture commerciale', value: currentShop.is_open ? 'Ouverte' : 'Fermée' },
-              ].map((metric) => <div key={metric.label} className="rounded-xl border border-[#dce4dc] bg-white p-4"><p className="text-xs font-semibold text-slate-500">{metric.label}</p><strong className="mt-2 block text-xl font-black text-[#211712]">{metric.value}</strong></div>)}
+              ].map((metric) => <div key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{metric.label}</p><strong className="mt-2 block text-xl font-black text-slate-900">{metric.value}</strong></div>)}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => { setActiveTab('catalog'); if (!(currentShop.subscription?.status === 'trialing' && products.length >= 6)) handleOpenAddModal(); }} disabled={currentShop.subscription?.status === 'trialing' && products.length >= 6} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#0f4d3d] px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />Ajouter un article</button>
-              <button type="button" onClick={() => setActiveTab('orders')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800"><ShoppingBag className="h-4 w-4" />Consulter les commandes</button>
+              <button type="button" onClick={() => { setActiveTab('catalog'); if (!(currentShop.subscription?.status === 'trialing' && products.length >= 6)) handleOpenAddModal(); }} disabled={currentShop.subscription?.status === 'trialing' && products.length >= 6} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />Ajouter un article</button>
+              <button type="button" onClick={() => setActiveTab('orders')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><ShoppingBag className="h-4 w-4" />Consulter les commandes</button>
             </div>
           </section>
         )}
 
         {activeTab === 'catalog' && <CatalogTab state={merchantState} filteredProducts={filteredProducts} />}
         {activeTab === 'orders' && <OrdersTab state={merchantState} filteredOrders={filteredOrders} totalRevenue={totalRevenue} avgBasket={avgBasket} />}
-        {activeTab === 'settings' && <SettingsTab state={merchantState} />}
+          {activeTab === 'settings' && <SettingsTab state={merchantState} />}
+          </div>
+        </div>
       </div>
 
       {isSettingsDrawerOpen && (

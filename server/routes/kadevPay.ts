@@ -91,7 +91,9 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
         metadata?: { subscription_payment_id?: string };
       };
     };
-    if (event.event !== 'payment.success' || event.data?.status !== 'paid') {
+    const isSuccessfulPayment = event.event === 'payment.success' && event.data?.status === 'paid';
+    const isFailedPayment = event.event === 'payment.failed' && event.data?.status === 'failed';
+    if (!isSuccessfulPayment && !isFailedPayment) {
       return res.status(200).json({ received: true });
     }
 
@@ -103,6 +105,25 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
     }
     if (event.data.currency && event.data.currency !== 'XOF') {
       return res.status(400).json({ error: 'Devise de paiement inattendue.' });
+    }
+
+    if (isFailedPayment) {
+      const result = await dbTransaction(async (transaction) => {
+        const payment = await transaction.get<{ status: string; amount: number }>(
+          'SELECT status, amount FROM subscription_payment_intents WHERE id = ?',
+          [paymentId],
+        );
+        if (!payment) return 'not_found' as const;
+        if (payment.status === 'failed') return 'duplicate' as const;
+        if (payment.status !== 'pending' || Number(payment.amount) !== amount) return 'mismatch' as const;
+        const failed = await transaction.run(`UPDATE subscription_payment_intents
+          SET status = 'failed', provider_reference = ?
+          WHERE id = ? AND status = 'pending'`, [providerReference, paymentId]);
+        return failed.changes === 1 ? 'failed' as const : 'duplicate' as const;
+      });
+      if (result === 'not_found') return res.status(404).json({ error: 'Intention de paiement introuvable.' });
+      if (result === 'mismatch') return res.status(409).json({ error: 'Le paiement échoué ne correspond pas à une intention en attente.' });
+      return res.json({ received: true, duplicate: result === 'duplicate' });
     }
 
     const now = new Date();
@@ -127,7 +148,7 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
         WHERE id = ? AND status = 'pending'`, [providerReference, paidAt, payment.id]);
       if (paid.changes !== 1) return { status: 'duplicate' as const };
       const updatedShop = await transaction.run(`UPDATE shops
-        SET subscription_status = 'active', selected_subscription_tier = ?, subscription_tier = ?, subscription_expires_at = ?
+        SET subscription_status = 'active', selected_subscription_tier = ?, subscription_tier = ?, subscription_expires_at = ?, last_notification_sent_at = NULL
         WHERE id = ?`, [payment.tier, payment.tier, expiresAt, payment.shop_id]);
       if (updatedShop.changes !== 1) throw new Error('Shop disappeared while applying a KadevPay payment.');
       return { status: 'paid' as const, shopId: payment.shop_id, tier: payment.tier, expiresAt };
@@ -141,6 +162,7 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
         shop.subscription_status = 'active';
         shop.selected_subscription_tier = result.tier;
         shop.subscription_expires_at = result.expiresAt;
+        shop.last_notification_sent_at = null;
       }
     }
     res.json({ received: true, duplicate: result.status === 'duplicate' });

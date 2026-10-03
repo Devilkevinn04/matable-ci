@@ -7,6 +7,7 @@ import { ProAnalyticsPanel } from './ProAnalyticsPanel';
 import { cleanPhoneForWhatsApp, formatFCFA } from '../../utils/format';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 import { isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
+import { WhatsAppSubscriptionReminderConsent } from './WhatsAppSubscriptionReminderConsent';
 
 interface SettingsTabProps {
   state: MerchantState;
@@ -160,6 +161,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                   <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">{currentShop.subscription?.status === 'active' ? 'Échéance' : 'Fin de l’essai'}</span><strong className="mt-1 block text-slate-900">{(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd) ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd || '')) : 'Non démarré'}</strong></div>
                 </div>
                 <p className="text-xs leading-5 text-slate-600">L’essai est gratuit. Après son échéance, le renouvellement sécurisé est disponible via KadevPay; le règlement d’une commande client reste directement convenu avec la boutique.</p>
+                <WhatsAppSubscriptionReminderConsent shop={currentShop} />
                 <div className="border-t border-slate-200 pt-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
