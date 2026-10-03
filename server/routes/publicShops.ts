@@ -1,5 +1,6 @@
 import { Router, type Request } from 'express';
 import { getSubscriptionState, isShopPubliclyVisible } from '../services/businessRules.ts';
+import { rankShopsByVisibility } from '../services/visibility.ts';
 import type { ProductRecord, ShopRecord } from '../types.ts';
 
 interface MerchantSession {
@@ -28,10 +29,21 @@ export function createPublicShopsRouter({
   const router = Router();
 
   router.get('/', (_req, res) => {
-    const publicShops = shops
-      .filter((shop) => isShopPubliclyVisible(shop))
-      .map((shop) => {
-        const availableProducts = products.filter((product) => product.shop_id === shop.id && product.is_available && product.stock > 0);
+    const availableProductsByShop = new Map<number, ProductRecord[]>();
+    for (const product of products) {
+      if (!product.is_available || product.stock <= 0) continue;
+      const shopProducts = availableProductsByShop.get(product.shop_id) || [];
+      shopProducts.push(product);
+      availableProductsByShop.set(product.shop_id, shopProducts);
+    }
+    const publicShopRecords = shops.filter((shop) => isShopPubliclyVisible(shop));
+    const productCounts = new Map<number, number>();
+    for (const shop of publicShopRecords) {
+      productCounts.set(shop.id, availableProductsByShop.get(shop.id)?.length || 0);
+    }
+    const rankedShops = rankShopsByVisibility(publicShopRecords, productCounts, computeIsShopOpen);
+    res.json(rankedShops.map(({ shop, is_open, is_featured }) => {
+        const availableProducts = availableProductsByShop.get(shop.id) || [];
         return {
           products_preview: availableProducts.slice(0, 3).map((product) => ({
             id: product.id,
@@ -45,7 +57,8 @@ export function createPublicShopsRouter({
           slug: shop.slug,
           theme_color: shop.theme_color,
           welcome_message: shop.welcome_message,
-          is_open: computeIsShopOpen(shop),
+          is_open,
+          is_featured,
           is_active: shop.is_active,
           publication_status: shop.publication_status,
           category: shop.category,
@@ -53,9 +66,7 @@ export function createPublicShopsRouter({
           theme_config: shop.theme_config,
           opening_hours: shop.opening_hours,
         };
-      })
-      .sort((left, right) => Number(right.is_open) - Number(left.is_open) || String(left.name).localeCompare(String(right.name)));
-    res.json(publicShops);
+      }));
   });
 
   router.get('/:slug', (req, res) => {

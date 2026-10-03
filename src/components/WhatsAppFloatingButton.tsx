@@ -1,12 +1,12 @@
 import React from 'react';
 import { MessageCircle } from 'lucide-react';
-import { cleanPhoneForWhatsApp } from '../utils/format';
+import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
 
-const SUPPORT_WHATSAPP_NUMBER = '0102749775';
 const SUPPORT_MESSAGE = "Bonjour, j'ai une question concernant MaTable.ci.";
 
 export const WhatsAppFloatingButton: React.FC = () => {
-  const href = `https://wa.me/${cleanPhoneForWhatsApp(SUPPORT_WHATSAPP_NUMBER)}?text=${encodeURIComponent(SUPPORT_MESSAGE)}`;
+  const href = getSupportWhatsAppUrl(SUPPORT_MESSAGE);
+  if (!href) return null;
 
   return (
     <a

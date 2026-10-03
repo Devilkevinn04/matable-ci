@@ -44,6 +44,7 @@ import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../.
 import { ThemeCustomizer } from '../ThemeCustomizer';
 import { useToast } from '../Toast';
 import { CATEGORY_DEFAULTS, getCategoryDefaults, SHOP_CATEGORIES } from '../../utils/categoryDefaults';
+import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 
 interface MerchantDashboardProps {
   currentShopSlug?: string;
@@ -277,12 +278,13 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     return <MerchantTrialOnboarding shop={merchantState.currentShop} isStarting={false} onStart={handleStartTrial} mode="expired" />;
   }
   if (!merchantIdentityVerified) {
+    const verificationSupportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour la vérification de ${merchantState.currentShop.name}.`);
     return (
       <main className="merchant-pre-dashboard min-h-screen bg-[#f4f6f1] px-4 py-6 sm:px-6 sm:py-10">
         <div className="mx-auto max-w-4xl">
           <div className="mb-4 flex justify-end gap-2">
             <button type="button" onClick={onBackToDirectory} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Annuaire</button>
-            <a href={`https://wa.me/2250102749775?text=${encodeURIComponent(`Bonjour, j’ai besoin d’aide pour la vérification de ${merchantState.currentShop.name}.`)}`} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-900"><MessageCircle className="h-3.5 w-3.5" />Aide</a>
+            {verificationSupportUrl && <a href={verificationSupportUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-900"><MessageCircle className="h-3.5 w-3.5" />Aide</a>}
             <button type="button" onClick={handleLogout} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Déconnexion</button>
           </div>
           <p className="mb-4 text-sm font-bold text-slate-600">Essai gratuit · {merchantState.currentShop.subscription?.trialDaysRemaining ?? 0} jours restants</p>
@@ -297,6 +299,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   // 2. AUTHENTICATED -> MERCHANT DASHBOARD
   const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
+  const dashboardSupportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour la boutique ${currentShop.name}.`);
   const avgBasket = orders.length > 0 ? Math.round(totalRevenue / orders.length) : 0;
   const lowStockCount = products.filter(p => p.stock > 0 && p.stock <= 3).length;
   const outOfStockCount = products.filter(p => p.stock === 0).length;
@@ -595,7 +598,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 {!isShopPublished && <p className="px-3 text-[11px] leading-5 text-slate-500">Le lien public sera disponible après publication.</p>}
               </div>
             </nav>
-            <a href={`https://wa.me/2250102749775?text=${encodeURIComponent(`Bonjour, j’ai besoin d’aide pour la boutique ${currentShop.name}.`)}`} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"><MessageCircle className="h-4 w-4" />Aide et assistance</a>
+            {dashboardSupportUrl && <a href={dashboardSupportUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"><MessageCircle className="h-4 w-4" />Aide et assistance</a>}
             <button type="button" onClick={handleLogout} className="mt-auto flex min-h-11 items-center gap-3 border-t border-[#ded8ce] pt-4 text-sm font-bold text-rose-800"><X className="h-4 w-4" />Déconnexion</button>
           </aside>
         </div>

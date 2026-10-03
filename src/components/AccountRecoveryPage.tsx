@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowRight, MessageCircle, ShieldAlert, UserRound } from 'lucide-react';
 import { AuthExperienceLayout } from './AuthExperienceLayout';
+import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
 
 type AccountType = 'customer' | 'merchant';
 
@@ -15,7 +16,7 @@ export const AccountRecoveryPage: React.FC<AccountRecoveryPageProps> = ({ initia
   const accountLabel = accountType === 'merchant' ? 'commerçant' : 'client';
   const contactLabel = accountType === 'merchant' ? 'E-mail ou numéro WhatsApp de la boutique' : 'Adresse e-mail du compte';
   const message = `Bonjour, j’ai besoin d’aide pour récupérer l’accès à mon compte ${accountLabel}.${contact.trim() ? ` Mon contact de compte : ${contact.trim()}.` : ''} Je ne communiquerai pas mon mot de passe ni mon code PIN.`;
-  const whatsappUrl = `https://wa.me/2250102749775?text=${encodeURIComponent(message)}`;
+  const whatsappUrl = getSupportWhatsAppUrl(message);
 
   return (
     <AuthExperienceLayout
@@ -36,7 +37,7 @@ export const AccountRecoveryPage: React.FC<AccountRecoveryPageProps> = ({ initia
         </div>
         <label className="mt-5 block text-sm font-semibold text-[#34463d]">{contactLabel}<input type="text" value={contact} onChange={(event) => setContact(event.target.value)} autoComplete={accountType === 'merchant' ? 'tel' : 'email'} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder={accountType === 'merchant' ? '+225 07 00 11 22 33' : 'vous@exemple.ci'} /></label>
   <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><p>La récupération est traitée par l’assistance. Ne transmettez jamais votre mot de passe ni votre code PIN.</p></div>
-  <a href={whatsappUrl} target="_blank" rel="noreferrer" className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55]"><MessageCircle className="h-4 w-4" />Contacter l’assistance<ArrowRight className="h-4 w-4" /></a>
+  {whatsappUrl ? <a href={whatsappUrl} target="_blank" rel="noreferrer" className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55]"><MessageCircle className="h-4 w-4" />Contacter l’assistance<ArrowRight className="h-4 w-4" /></a> : <p className="mt-5 text-sm text-slate-600">Le contact WhatsApp de l’assistance n’est pas encore configuré.</p>}
   <a href={accountType === 'merchant' ? '/app' : '/connexion'} className="mt-4 block py-2 text-center text-sm font-bold text-[#0f4d3d] hover:text-[#e6572b]">Retour à la connexion</a>
       </div>
     </AuthExperienceLayout>

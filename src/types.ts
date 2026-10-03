@@ -63,6 +63,7 @@ export interface Shop {
   is_open: boolean;
   is_active: boolean;
   publication_status?: 'draft' | 'active' | 'suspended';
+  featured_until?: string | null;
   merchant_verification_status?: 'not_required' | 'pending' | 'submitted' | 'under_review' | 'verified' | 'rejected';
   last_notification_sent_at: string | null;
   created_at: string;

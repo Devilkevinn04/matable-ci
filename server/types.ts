@@ -40,6 +40,7 @@ export interface ShopRecord {
   is_open: boolean;
   is_active: boolean;
   publication_status?: PublicationStatus;
+  featured_until?: string | null;
   merchant_verification_status?: MerchantVerificationStatus;
   selected_subscription_tier?: SubscriptionTier;
   subscription_status?: SubscriptionStatus;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check, LoaderCircle, MessageCircle, ShieldCheck } from 'lucide-react';
 import type { Shop, SubscriptionTier } from '../../types';
+import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 
 interface MerchantTrialOnboardingProps {
   shop: Shop;
@@ -18,6 +19,8 @@ const plans: { tier: SubscriptionTier; price: number; description: string }[] = 
 export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'start' }: MerchantTrialOnboardingProps) {
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier>('standard');
   const selectedPlan = plans.find((plan) => plan.tier === selectedTier) || plans[0];
+  const supportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour l’espace commerçant de ${shop.name}.`);
+  const renewalUrl = getSupportWhatsAppUrl(`Bonjour, je souhaite renouveler la boutique ${shop.name} avec la formule ${selectedPlan.tier} à ${selectedPlan.price} FCFA/mois.`);
 
   return (
     <main className="merchant-pre-dashboard min-h-screen bg-[#f4f6f1] px-4 py-8 text-slate-900 sm:px-6 sm:py-12">
@@ -26,7 +29,7 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
           <p className="text-xs font-extrabold uppercase text-[#176b55]">MaTable.ci · Espace commerçant</p>
           <h1 className="mt-2 text-2xl font-black sm:text-3xl">{mode === 'expired' ? 'Votre période d’essai est terminée' : `Bienvenue, ${shop.name}`}</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? 'Choisissez la formule à conserver. Le paiement en ligne n’est pas encore activé ; contactez l’équipe pour convenir de la suite.' : 'Votre essai gratuit de 30 jours commence lorsque vous le démarrez. Configurez votre boutique et testez les fonctionnalités sans paiement aujourd’hui.'}</p>
-          <a href={`https://wa.me/2250102749775?text=${encodeURIComponent(`Bonjour, j’ai besoin d’aide pour l’espace commerçant de ${shop.name}.`)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-emerald-800 underline underline-offset-2"><MessageCircle className="h-4 w-4" />Contacter l’équipe</a>
+          {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-emerald-800 underline underline-offset-2"><MessageCircle className="h-4 w-4" />Contacter l’équipe</a>}
         </header>
 
         <section className="mt-7" aria-labelledby="plan-heading">
@@ -65,7 +68,7 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
 
         <div className="mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
           {mode === 'expired' ? (
-            <a href={`https://wa.me/2250102749775?text=${encodeURIComponent(`Bonjour, je souhaite renouveler la boutique ${shop.name} avec la formule ${selectedPlan.tier} à ${selectedPlan.price} FCFA/mois.`)}`} target="_blank" rel="noreferrer" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55]">Contacter l’équipe pour renouveler</a>
+            renewalUrl ? <a href={renewalUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55]">Contacter l’équipe pour renouveler</a> : <p className="text-sm text-slate-600">Le contact WhatsApp de l’assistance n’est pas configuré.</p>
           ) : (
             <button type="button" onClick={() => onStart(selectedTier)} disabled={isStarting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
               {isStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}

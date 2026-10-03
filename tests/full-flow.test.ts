@@ -1,12 +1,15 @@
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import Database from 'better-sqlite3';
 
 const TEST_PORT = 43123;
-const TEST_DB_PATH = path.join(process.cwd(), 'data', `matable-test-${Date.now()}.db`);
+const TEST_DB_PATH = path.join(tmpdir(), `matable-test-${Date.now()}.db`);
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 let serverProcess: ReturnType<typeof spawn> | null = null;
 let cookieJar = '';
@@ -137,10 +140,12 @@ before(async () => {
 });
 
 after(async () => {
-  if (serverProcess && !serverProcess.killed) {
+  if (serverProcess && serverProcess.exitCode === null && serverProcess.signalCode === null) {
+    const serverExit = once(serverProcess, 'exit');
     serverProcess.kill('SIGTERM');
-    await delay(500);
+    await serverExit;
   }
+  await Promise.all(['', '-wal', '-shm'].map((suffix) => rm(`${TEST_DB_PATH}${suffix}`, { force: true })));
 });
 
 test('customer registration and login are supported with email, phone, and password', async () => {
@@ -989,13 +994,16 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   const rejectedShop = listAfterReject.payload.find((item: any) => item.id === shopId);
   assert.ok(rejectedShop);
   assert.equal(rejectedShop.is_active, true);
+  const publicationStatusBeforeToggle = rejectedShop.publication_status;
 
   const disableShop = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, { method: 'PATCH' });
   assert.equal(disableShop.response.status, 200, JSON.stringify(disableShop.payload));
   assert.equal(disableShop.payload.is_active, false);
+  assert.equal(disableShop.payload.shop.publication_status, publicationStatusBeforeToggle);
   const enableShop = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, { method: 'PATCH' });
   assert.equal(enableShop.response.status, 200, JSON.stringify(enableShop.payload));
   assert.equal(enableShop.payload.is_active, true);
+  assert.equal(enableShop.payload.shop.publication_status, publicationStatusBeforeToggle);
 
   const changedFingerprint = await apiFetch('/api/auth/session', {
     headers: { 'Accept-Language': 'en-US' },

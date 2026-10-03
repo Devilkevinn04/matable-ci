@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDisplay, isShopCategory, normalizeCustomBannerImage } from '../utils/categoryDefaults';
-import { ArrowRight, CheckCircle2, Clock3, MapPin, Search, Store, Sparkles, X } from 'lucide-react';
+import { getCategoryDefaults, getProductImageForDisplay, isShopCategory, normalizeCustomBannerImage } from '../utils/categoryDefaults';
+import { ArrowRight, CheckCircle2, Clock3, MapPin, RotateCcw, Search, Store, Sparkles, X } from 'lucide-react';
 import { shopMatchesDirectorySearch } from '../utils/directorySearch';
+import { FeaturedCarousel } from './FeaturedCarousel';
 
 interface DirectoryShop {
   id?: number;
@@ -10,6 +11,7 @@ interface DirectoryShop {
   category?: string;
   city?: string;
   is_open?: boolean;
+  is_featured?: boolean;
   is_active?: boolean;
   products_count?: number;
   welcome_message?: string | null;
@@ -21,11 +23,14 @@ interface DirectoryShop {
 
 interface PublicDirectoryProps {
   shops: DirectoryShop[];
+  isLoading: boolean;
+  loadError: boolean;
+  onRetry: () => void;
   onOpenShop: (slug: string) => void;
   onCreateShop: () => void;
 }
 
-export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenShop, onCreateShop }) => {
+export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoading, loadError, onRetry, onOpenShop, onCreateShop }) => {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
   const categories = Array.from(new Set(shops.map(shop => shop.category).filter(Boolean))) as string[];
@@ -38,7 +43,6 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenS
     shopMatchesDirectorySearch(shop, query, categoryLabel(shop.category))
       && (category === 'all' || shop.category === category)
   ), [shops, query, category]);
-  const featuredShop = shops.find(shop => shop.is_open && (shop.products_count || 0) > 0) || shops[0];
   const popularSearches = ['Attiéké', 'Wax', 'Cocody', 'Lingerie', 'Grillades'];
   const getShopImage = (shop: DirectoryShop) => normalizeCustomBannerImage(shop.theme_config?.custom_banner_url, shop.category)
     || (shop.products_preview?.[0]
@@ -70,32 +74,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenS
             </div>
         </div>
 
-        {featuredShop && !query.trim() && category === 'all' && (
-          <button onClick={() => onOpenShop(featuredShop.slug)} className="featured-shop-card relative mt-8 min-h-[230px] w-full overflow-hidden rounded-xl bg-[#0f4d3d] text-left text-white group">
-            {getShopImage(featuredShop) && <img
-              src={getShopImage(featuredShop)}
-              alt={`Illustration de ${featuredShop.name}`}
-              className="absolute inset-0 h-full w-full object-cover opacity-55 transition-transform duration-500 group-hover:scale-[1.02]"
-              onError={(event) => {
-                const element = event.currentTarget;
-                const fallback = getCategoryDefaults(featuredShop.category).bannerPlaceholderImageUrl;
-                if (element.dataset.placeholderAttempted !== 'true' && element.src !== fallback) {
-                  element.dataset.placeholderAttempted = 'true';
-                  element.src = fallback;
-                } else {
-                  element.hidden = true;
-                }
-              }}
-            />}
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,77,61,0.92),rgba(15,77,61,0.72),rgba(15,77,61,0.22))]" />
-            <div className="relative max-w-2xl p-6 sm:p-8">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#f2c38d]">À découvrir · {categoryLabel(featuredShop.category)}</span>
-              <h2 className="mt-3 max-w-xl text-2xl font-bold text-white sm:text-3xl">{featuredShop.name}</h2>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-white/85">{featuredShop.welcome_message || 'Une adresse locale à découvrir maintenant.'}</p>
-              <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-white group-hover:gap-3 transition-all">Découvrir la boutique <ArrowRight className="h-4 w-4" /></span>
-            </div>
-          </button>
-        )}
+        {!query.trim() && category === 'all' && <FeaturedCarousel shops={shops} onOpenShop={onOpenShop} />}
 
         <div className="relative mt-5 flex flex-col lg:flex-row gap-3">
           <label className="relative flex-1">
@@ -122,7 +101,19 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenS
           <div><p className="text-xs font-bold uppercase tracking-[0.1em] text-[#e6572b]">{query.trim() || category !== 'all' ? 'Résultats' : 'À découvrir'}</p><h2 aria-live="polite" className="mt-1 text-xl font-semibold text-[#25231f]">{query.trim() || category !== 'all' ? 'Boutiques correspondantes' : 'Boutiques à découvrir'}</h2></div>
         </div>
 
-        {filteredShops.length === 0 ? (
+        {isLoading ? (
+          <div role="status" className="mt-6 rounded-lg border border-[#ded8ce] bg-[#fffdf9] p-8 text-center text-sm text-[#6f6a61]">
+            Chargement des boutiques…
+          </div>
+        ) : loadError ? (
+          <div role="alert" className="mt-6 rounded-lg border border-[#e8b8a4] bg-[#fff8f4] p-8 text-center">
+            <h3 className="text-lg font-semibold text-[#25231f]">Impossible de charger les boutiques</h3>
+            <p className="mt-2 text-sm text-[#6f6a61]">Vérifiez votre connexion, puis réessayez.</p>
+            <button type="button" onClick={onRetry} className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#0f4d3d] px-4 py-2 text-sm font-bold text-white hover:bg-[#176b55]">
+              <RotateCcw className="h-4 w-4" aria-hidden="true" /> Réessayer
+            </button>
+          </div>
+        ) : filteredShops.length === 0 ? (
           <div className="mt-6 rounded-xl border border-dashed border-[#cfc8bc] bg-[#fffdf9] p-8 text-center">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#f9f0e6] text-[#93602e]">
               <Store className="h-8 w-8" />
@@ -155,6 +146,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, onOpenS
                   {shop.theme_config?.logo_url ? (
                     <img src={shop.theme_config.logo_url} alt={shop.name} className="absolute left-4 bottom-3 w-9 h-9 rounded-xl object-cover border-2 border-white bg-white shadow-sm" />
                   ) : null}
+                  {shop.is_featured && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-md bg-[#f2c38d] px-2 py-1 text-[10px] font-extrabold text-[#352518]"><Sparkles className="h-3 w-3" aria-hidden="true" /> À la une</span>}
                   <span className="absolute bottom-3 left-4 text-[10px] font-semibold uppercase tracking-wider text-white">{categoryLabel(shop.category)}</span>
                   <span aria-label={shop.is_open ? 'Boutique ouverte maintenant' : 'Boutique fermée actuellement'} className={`absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full border-2 border-white px-3 py-1.5 text-[11px] font-black shadow-md ${shop.is_open ? 'bg-[#0f4d3d] text-white' : 'bg-[#fff4e5] text-[#7a3e00]'}`}>
                     {shop.is_open ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : <Clock3 className="h-4 w-4" aria-hidden="true" />}

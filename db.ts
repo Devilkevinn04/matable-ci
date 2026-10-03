@@ -29,7 +29,7 @@ const sqliteSchema = `
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE,
     whatsapp_number TEXT NOT NULL, pin_code_hash TEXT NOT NULL, theme_color TEXT,
     welcome_message TEXT, is_open INTEGER NOT NULL DEFAULT 1, is_active INTEGER NOT NULL DEFAULT 1,
-    publication_status TEXT NOT NULL DEFAULT 'draft',
+    publication_status TEXT NOT NULL DEFAULT 'draft', featured_until TEXT,
     payment_status TEXT NOT NULL DEFAULT 'approved', payment_deadline_at TEXT,
     merchant_verification_status TEXT NOT NULL DEFAULT 'not_required',
     selected_subscription_tier TEXT, subscription_expires_at TEXT,
@@ -112,6 +112,7 @@ function migrateSqlite(connection: Database.Database) {
 
   const hadPublicationStatus = columns('shops').some((column) => column.name === 'publication_status');
   addColumn('shops', 'publication_status', "TEXT NOT NULL DEFAULT 'draft'");
+  addColumn('shops', 'featured_until', 'TEXT');
   addColumn('shops', 'opening_hours', 'TEXT');
   addColumn('shops', 'owner_email', 'TEXT');
   addColumn('shops', 'owner_access_token_hash', 'TEXT');
@@ -155,7 +156,7 @@ const postgresMigrations = [
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE,
     whatsapp_number TEXT NOT NULL, pin_code_hash TEXT NOT NULL, theme_color TEXT,
     welcome_message TEXT, is_open INTEGER NOT NULL DEFAULT 1, is_active INTEGER NOT NULL DEFAULT 1,
-    publication_status TEXT NOT NULL DEFAULT 'draft',
+    publication_status TEXT NOT NULL DEFAULT 'draft', featured_until TEXT,
     payment_status TEXT NOT NULL DEFAULT 'approved', payment_deadline_at TEXT,
     merchant_verification_status TEXT NOT NULL DEFAULT 'not_required',
     selected_subscription_tier TEXT, subscription_expires_at TEXT,
@@ -236,6 +237,7 @@ const postgresMigrations = [
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE shops ADD COLUMN IF NOT EXISTS merchant_verification_status TEXT NOT NULL DEFAULT 'not_required'",
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS publication_status TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS featured_until TEXT',
   `UPDATE shops SET publication_status = CASE
     WHEN is_active = 0 THEN 'suspended'
     WHEN merchant_verification_status IN ('pending', 'submitted', 'under_review', 'rejected') THEN 'draft'

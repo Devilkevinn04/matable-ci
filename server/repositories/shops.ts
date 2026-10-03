@@ -14,6 +14,7 @@ export async function loadShopsFromDatabase(): Promise<ShopRecord[]> {
     is_open: Boolean(row.is_open),
     is_active: Boolean(row.is_active),
     publication_status: String(row.publication_status || (row.is_active ? 'active' : 'suspended')) as ShopRecord['publication_status'],
+    featured_until: row.featured_until == null ? null : String(row.featured_until),
     subscription_status: row.subscription_status ? String(row.subscription_status) as SubscriptionStatus : undefined,
     trial_start: row.trial_start == null ? null : String(row.trial_start),
     trial_end: row.trial_end == null ? null : String(row.trial_end),
@@ -32,11 +33,11 @@ export async function loadShopsFromDatabase(): Promise<ShopRecord[]> {
 
 export async function persistShop(shop: ShopRecord): Promise<void> {
   await dbRun(`
-    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, publication_status, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, subscription_status, trial_start, trial_end, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash, owner_email)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, publication_status, featured_until, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, subscription_status, trial_start, trial_end, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash, owner_email)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET name=excluded.name, slug=excluded.slug, whatsapp_number=excluded.whatsapp_number,
       pin_code_hash=excluded.pin_code_hash, theme_color=excluded.theme_color, welcome_message=excluded.welcome_message,
-      is_open=excluded.is_open, is_active=excluded.is_active, publication_status=excluded.publication_status, payment_status=excluded.payment_status,
+      is_open=excluded.is_open, is_active=excluded.is_active, publication_status=excluded.publication_status, featured_until=excluded.featured_until, payment_status=excluded.payment_status,
       merchant_verification_status=excluded.merchant_verification_status,
       payment_deadline_at=excluded.payment_deadline_at, selected_subscription_tier=excluded.selected_subscription_tier,
       subscription_expires_at=excluded.subscription_expires_at, last_notification_sent_at=excluded.last_notification_sent_at,
@@ -46,7 +47,7 @@ export async function persistShop(shop: ShopRecord): Promise<void> {
       owner_email=excluded.owner_email
   `, [
     shop.id, shop.name, shop.slug, shop.whatsapp_number, shop.pin_code_hash, shop.theme_color, shop.welcome_message,
-    shop.is_open ? 1 : 0, shop.is_active ? 1 : 0, shop.publication_status || (shop.is_active ? 'active' : 'suspended'),
+    shop.is_open ? 1 : 0, shop.is_active ? 1 : 0, shop.publication_status || (shop.is_active ? 'active' : 'suspended'), shop.featured_until ?? null,
     shop.merchant_verification_status || 'not_required', 'approved', null,
     shop.selected_subscription_tier || 'standard', shop.trial_end ?? null, shop.subscription_status || 'active', shop.trial_start ?? null, shop.trial_end ?? null, shop.last_notification_sent_at,
     shop.created_at, shop.category, shop.city ?? null, shop.selected_subscription_tier || 'standard', JSON.stringify(shop.theme_config),

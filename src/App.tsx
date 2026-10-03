@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Navigation } from './components/Navigation';
 import { CustomerStorefront } from './components/CustomerStorefront';
@@ -154,7 +153,6 @@ function ProductModalDevPreview() {
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [isBooting, setIsBooting] = useState(true);
   const path = location.pathname;
   const normalizedPath = path.replace(/^\//, '').replace(/\/$/, '');
   const legalPage = legalPageMap[normalizedPath] || null;
@@ -173,29 +171,36 @@ export default function App() {
         ? 'account'
         : 'none';
   const [availableShops, setAvailableShops] = useState<{ slug: string; name: string; category?: string }[]>([]);
+  const [isLoadingShops, setIsLoadingShops] = useState(true);
+  const [shopsLoadError, setShopsLoadError] = useState(false);
+  const [shopsRetryKey, setShopsRetryKey] = useState(0);
   const [customerUser, setCustomerUser] = useState<CustomerUser | null>(null);
   const [openMerchantRegistration, setOpenMerchantRegistration] = useState(false);
   const isProductModalPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/article-form';
   const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isRecoveryPage || isProductModalPreview;
   const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !legalPage && !isFaqPage && customerView === 'none';
 
-  const loadingSteps = ['Découvrir', 'Boutiques', 'Catalogue', 'Commander'];
-
   useEffect(() => {
-    const bootTimer = window.setTimeout(() => setIsBooting(false), 1800);
-    return () => window.clearTimeout(bootTimer);
-  }, []);
-
-  useEffect(() => {
+    let isCurrentRequest = true;
+    setIsLoadingShops(true);
+    setShopsLoadError(false);
     fetch('/api/shops')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) {
-          setAvailableShops(data);
-        }
+      .then(res => {
+        if (!res.ok) throw new Error(`Shop directory request failed: ${res.status}`);
+        return res.json();
       })
-      .catch(err => console.error(err));
-  }, []);
+      .then(data => {
+        if (!Array.isArray(data)) throw new Error('Shop directory response is invalid.');
+        if (isCurrentRequest) setAvailableShops(data);
+      })
+      .catch(() => {
+        if (isCurrentRequest) setShopsLoadError(true);
+      })
+      .finally(() => {
+        if (isCurrentRequest) setIsLoadingShops(false);
+      });
+    return () => { isCurrentRequest = false; };
+  }, [shopsRetryKey]);
 
   useEffect(() => {
     fetch('/api/auth/customer-session', { credentials: 'include' })
@@ -260,91 +265,7 @@ export default function App() {
   return (
     <ToastProvider>
       <a href="#main-content" className="skip-link">Aller au contenu</a>
-      <AnimatePresence mode="wait">
-        {isBooting ? (
-          <motion.div
-            key="boot"
-            className="loading-screen"
-            initial={{ opacity: 1 }}
-            exit={{ opacity: 0, transition: { duration: 0.5 } }}
-            animate={{ opacity: 1 }}
-          >
-            <motion.div
-              className="loading-shell"
-              initial={{ opacity: 0, scale: 0.94, y: 24 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ duration: 0.7, ease: 'easeOut' }}
-            >
-              <motion.div
-                className="pulse-orb pulse-orb-primary"
-                animate={{ x: [0, 18, -10, 0], y: [0, -22, 10, 0], scale: [1, 1.08, 0.96, 1] }}
-                transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
-              />
-              <motion.div
-                className="pulse-orb pulse-orb-secondary"
-                animate={{ x: [0, -18, 12, 0], y: [0, 18, -8, 0], scale: [1, 0.94, 1.08, 1] }}
-                transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-              />
-              <motion.div
-                className="brand-mark brand-mark-hero"
-                initial={{ rotate: -6, scale: 0.8 }}
-                animate={{ rotate: [0, 4, -4, 0], scale: [1, 1.08, 1] }}
-                transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                M
-              </motion.div>
-              <div className="loading-copy">
-                <motion.span
-                  className="eyebrow"
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.15 }}
-                >
-                  MaTable.ci
-                </motion.span>
-                <motion.h2
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.25 }}
-                >
-                  On prépare votre quartier.
-                </motion.h2>
-                <div className="loading-progress">
-                  <motion.div
-                    className="loading-progress-bar"
-                    initial={{ width: '0%' }}
-                    animate={{ width: '100%' }}
-                    transition={{ duration: 1.4, ease: 'easeInOut' }}
-                  />
-                </div>
-                <div className="loading-dots">
-                  <span />
-                  <span />
-                  <span />
-                </div>
-                <div className="loading-steps">
-                  {loadingSteps.map((step, index) => (
-                    <motion.span
-                      key={step}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.35 + index * 0.12 }}
-                    >
-                      {step}
-                    </motion.span>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="app"
-            className="min-h-screen flex flex-col bg-transparent font-sans"
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.38, ease: 'easeOut' }}
-          >
+      <div className="min-h-screen flex flex-col bg-transparent font-sans">
             <div className="page-shell">
               <div className="surface-shell">
                 {!hasStandaloneAccountFlow && currentRole !== 'admin' && !isCustomerStorefront && <Navigation
@@ -362,7 +283,7 @@ export default function App() {
                 <div id="main-content" className="flex-1 app-shell" tabIndex={-1}>
                   <Routes>
                     <Route path="/__preview/article-form" element={isProductModalPreview ? <ProductModalDevPreview /> : <NotFoundPage />} />
-                    <Route path="/" element={<PublicDirectory shops={availableShops} onOpenShop={(slug) => navigate(`/${slug}`)} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app'); }} />} />
+                    <Route path="/" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app'); }} />} />
                     <Route path="/faq" element={<FaqPage />} />
                     <Route path="/recuperation-acces" element={<AccountRecoveryPage initialAccountType={new URLSearchParams(location.search).get('type') === 'merchant' ? 'merchant' : 'customer'} onBack={() => navigate(new URLSearchParams(location.search).get('type') === 'merchant' ? '/app' : '/connexion')} />} />
                     <Route path="/mentions-legales" element={<LegalPages page="mentions-legales" />} />
@@ -386,9 +307,7 @@ export default function App() {
             </div>
             <CookieBanner />
             {currentRole !== 'admin' && !hasStandaloneAccountFlow && <WhatsAppFloatingButton />}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      </div>
     </ToastProvider>
   );
 }

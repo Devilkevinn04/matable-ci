@@ -1,13 +1,16 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import Database from 'better-sqlite3';
 import { CATEGORY_DEFAULTS } from '../src/utils/categoryDefaults';
 
 const TEST_PORT = 43124;
-const TEST_DB_PATH = path.join(process.cwd(), 'data', `matable-public-audit-${Date.now()}.db`);
+const TEST_DB_PATH = path.join(tmpdir(), `matable-public-audit-${Date.now()}.db`);
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 let serverProcess: ReturnType<typeof spawn> | null = null;
 
@@ -43,10 +46,12 @@ before(async () => {
 });
 
 after(async () => {
-  if (serverProcess && !serverProcess.killed) {
+  if (serverProcess && serverProcess.exitCode === null && serverProcess.signalCode === null) {
+    const serverExit = once(serverProcess, 'exit');
     serverProcess.kill('SIGTERM');
-    await delay(500);
+    await serverExit;
   }
+  await Promise.all(['', '-wal', '-shm'].map((suffix) => rm(`${TEST_DB_PATH}${suffix}`, { force: true })));
 });
 
 function uniquePhone() {
@@ -684,4 +689,99 @@ test('free onboarding keeps the shop active without subscription controls', asyn
   assert.equal(adminShops.status, 200);
   const adminShop = (await adminShops.json()).find((shop: any) => shop.id === reminderShop.shop.id);
   assert.equal(adminShop.is_active, true);
+});
+
+test('admin featuring validates duration and publishes only the public flag', async () => {
+  const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'super-admin-demo-key' }),
+  });
+  assert.equal(adminLogin.status, 200);
+  const adminCookie = adminLogin.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(adminCookie);
+
+  const publicBefore = await fetch(`${BASE_URL}/api/shops`);
+  const shopsBefore = await publicBefore.json();
+  assert.ok(shopsBefore.length > 0);
+  const featuredShop = shopsBefore[0];
+  assert.equal(Object.hasOwn(featuredShop, 'visibility_score'), false);
+
+  const unauthenticated = await fetch(`${BASE_URL}/api/admin/shops/${featuredShop.id}/featured`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ days: 7 }),
+  });
+  assert.equal(unauthenticated.status, 401);
+
+  const invalidDuration = await fetch(`${BASE_URL}/api/admin/shops/${featuredShop.id}/featured`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: JSON.stringify({ days: 91 }),
+  });
+  assert.equal(invalidDuration.status, 400);
+
+  const featureResponse = await fetch(`${BASE_URL}/api/admin/shops/${featuredShop.id}/featured`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: JSON.stringify({ days: 7 }),
+  });
+  assert.equal(featureResponse.status, 200);
+  const featureData = await featureResponse.json();
+  assert.ok(Date.parse(featureData.featured_until) > Date.now());
+
+  const publicAfter = await fetch(`${BASE_URL}/api/shops`);
+  const featuredPublicShop = (await publicAfter.json()).find((shop: any) => shop.id === featuredShop.id);
+  assert.equal(featuredPublicShop.is_featured, true);
+  assert.equal(Object.hasOwn(featuredPublicShop, 'visibility_score'), false);
+
+  const clearResponse = await fetch(`${BASE_URL}/api/admin/shops/${featuredShop.id}/featured`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: JSON.stringify({ days: 0 }),
+  });
+  assert.equal(clearResponse.status, 200);
+  assert.equal((await clearResponse.json()).featured_until, null);
+});
+
+test('admin analytics excludes cancelled and expired orders from revenue and daily totals', async () => {
+  const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'super-admin-demo-key' }),
+  });
+  assert.equal(adminLogin.status, 200);
+  const adminCookie = adminLogin.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(adminCookie);
+
+  const publicShops = await fetch(`${BASE_URL}/api/shops`).then((response) => response.json());
+  const shopId = publicShops[0].id as number;
+  const baseline = await fetch(`${BASE_URL}/api/admin/analytics?days=7`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
+  const baselineShop = baseline.by_shop.find((shop: any) => shop.shop_id === shopId);
+  const baselineDailyOrders = baseline.order_daily.reduce((sum: number, day: any) => sum + day.orders, 0);
+  const baselineDailySales = baseline.order_daily.reduce((sum: number, day: any) => sum + day.sales, 0);
+
+  const now = new Date().toISOString();
+  const testDb = new Database(TEST_DB_PATH);
+  try {
+    const insertOrder = testDb.prepare(`
+      INSERT INTO orders (id, shop_id, customer_name, customer_phone, delivery_location, payment_method_preference, total_amount, created_at, status, items)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const idBase = Date.now() * 10;
+    insertOrder.run(idBase, shopId, 'Test valide', '+2250700000001', 'Abidjan', 'cash', 100, now, 'pending', '[]');
+    insertOrder.run(idBase + 1, shopId, 'Test annulé', '+2250700000002', 'Abidjan', 'cash', 200, now, 'cancelled', '[]');
+    insertOrder.run(idBase + 2, shopId, 'Test expiré', '+2250700000003', 'Abidjan', 'cash', 300, now, 'expired', '[]');
+  } finally {
+    testDb.close();
+  }
+
+  const analytics = await fetch(`${BASE_URL}/api/admin/analytics?days=7`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
+  const shopAnalytics = analytics.by_shop.find((shop: any) => shop.shop_id === shopId);
+  const dailyOrders = analytics.order_daily.reduce((sum: number, day: any) => sum + day.orders, 0);
+  const dailySales = analytics.order_daily.reduce((sum: number, day: any) => sum + day.sales, 0);
+  assert.equal(shopAnalytics.orders - (baselineShop?.orders || 0), 1);
+  assert.equal(shopAnalytics.sales - (baselineShop?.sales || 0), 100);
+  assert.equal(dailyOrders - baselineDailyOrders, 1);
+  assert.equal(dailySales - baselineDailySales, 100);
 });

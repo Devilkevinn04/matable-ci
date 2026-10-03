@@ -47,7 +47,7 @@ APPLE_TEAM_ID=""
 APPLE_KEY_ID=""
 APPLE_PRIVATE_KEY=""
 
-WHATSAPP_ADMIN_PHONE="+2250700000000"
+VITE_WHATSAPP_ADMIN_PHONE=""
 # Les paiements intégrés et les notifications automatiques WhatsApp ne sont pas utilisés dans la V1.
 ```
 

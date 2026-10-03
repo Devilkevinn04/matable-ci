@@ -31,9 +31,9 @@ export function createAdminRouter(options: AdminRouterOptions) {
     `, [since]);
     const orderDaily = await dbAll<{ date: string; orders: number; sales: number }>(`
       SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
-      FROM orders WHERE created_at >= ? GROUP BY date ORDER BY date ASC
+      FROM orders WHERE created_at >= ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+      GROUP BY date ORDER BY date ASC
     `, [since]);
-    const validOrderStatuses = new Set(['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'expired']);
     const byShop = (await Promise.all(shops.map(async (shop) => {
       const traffic = await dbGet<{ page_views: number; unique_visitors: number }>(`
         SELECT COUNT(*) AS page_views, COUNT(DISTINCT session_id) AS unique_visitors
@@ -41,9 +41,11 @@ export function createAdminRouter(options: AdminRouterOptions) {
       `, [shop.id, since]);
       const pageViews = Number(traffic?.page_views || 0);
       const uniqueVisitors = Number(traffic?.unique_visitors || 0);
-      const shopOrders = orders.filter((order) => order.shop_id === shop.id && order.created_at >= since);
-      const sales = shopOrders.filter((order) => validOrderStatuses.has(order.status ?? 'pending') && order.status !== 'cancelled')
-        .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+      const shopOrders = orders.filter((order) => order.shop_id === shop.id
+        && order.created_at >= since
+        && order.status !== 'cancelled'
+        && order.status !== 'expired');
+      const sales = shopOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
       return {
         shop_id: shop.id, shop_name: shop.name, slug: shop.slug, page_views: pageViews,
         unique_visitors: uniqueVisitors, orders: shopOrders.length, sales,
@@ -77,6 +79,18 @@ export function createAdminRouter(options: AdminRouterOptions) {
         last_order_at: actionableOrders.sort((left, right) => right.created_at.localeCompare(left.created_at))[0]?.created_at ?? null,
       };
     }));
+  });
+
+  router.patch('/shops/:id/featured', async (req, res) => {
+    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    const days = req.body?.days;
+    if (typeof days !== 'number' || !Number.isInteger(days) || days < 0 || days > 90) {
+      return res.status(400).json({ error: 'La durée doit être un nombre entier de 0 à 90 jours.' });
+    }
+    shop.featured_until = days === 0 ? null : new Date(Date.now() + days * 86400000).toISOString();
+    await persistShop(shop);
+    res.json({ success: true, featured_until: shop.featured_until });
   });
 
   router.get('/health', async (_req, res) => {
@@ -118,8 +132,13 @@ export function createAdminRouter(options: AdminRouterOptions) {
   router.patch('/shops/:id/toggle-active', async (req, res) => {
     const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-    shop.is_active = !shop.is_active;
-    shop.publication_status = shop.is_active ? 'draft' : 'suspended';
+    if (shop.is_active) {
+      shop.is_active = false;
+      shop.publication_status ||= 'active';
+    } else {
+      shop.is_active = true;
+      if (shop.publication_status === 'suspended') shop.publication_status = 'draft';
+    }
     await persistShop(shop);
     res.json({ success: true, is_active: shop.is_active, shop: toSafeShop(shop) });
   });

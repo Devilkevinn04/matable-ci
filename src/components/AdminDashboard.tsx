@@ -23,6 +23,7 @@ import {
   Activity,
   ShoppingBag,
   LogOut,
+  Star,
 } from 'lucide-react';
 import { Shop } from '../types';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
@@ -95,6 +96,7 @@ export const AdminDashboard: React.FC = () => {
   const [notificationTemplate, setNotificationTemplate] = useState<typeof ownerNotificationTemplates[number]['id']>('welcome');
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [selectedVerificationShopId, setSelectedVerificationShopId] = useState<number | null>(null);
+  const [featuredActionShopId, setFeaturedActionShopId] = useState<number | null>(null);
 
   const fetchAdminShops = async () => {
     try {
@@ -257,17 +259,41 @@ export const AdminDashboard: React.FC = () => {
       const res = await fetch(`/api/admin/shops/${shopId}/toggle-active`, {
         method: 'PATCH',
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setShops(prev =>
-          prev.map(s => (s.id === shopId ? { ...s, is_active: !s.is_active } : s))
+          prev.map(s => (s.id === shopId ? { ...s, ...data.shop } : s))
         );
         showNotice('Statut boutique mis à jour.');
       } else {
-        const data = await res.json().catch(() => ({}));
         showNotice(data.error || 'Impossible de mettre à jour le statut.');
       }
     } catch {
       showNotice('Impossible de contacter le serveur.');
+    }
+  };
+
+  const handleSetFeatured = async (shopId: number, days: number) => {
+    setFeaturedActionShopId(shopId);
+    try {
+      const res = await fetch(`/api/admin/shops/${shopId}/featured`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showNotice(data.error || 'Impossible de modifier la mise à la une.');
+        return;
+      }
+      setShops(previous => previous.map(shop => shop.id === shopId
+        ? { ...shop, featured_until: data.featured_until }
+        : shop));
+      showNotice(days === 0 ? 'Mise à la une retirée.' : `Boutique mise à la une pour ${days} jours.`);
+    } catch {
+      showNotice('Impossible de contacter le serveur.');
+    } finally {
+      setFeaturedActionShopId(null);
     }
   };
 
@@ -715,6 +741,7 @@ export const AdminDashboard: React.FC = () => {
           <div className="divide-y divide-slate-200">
             {filteredShops.length === 0 && <p className="p-5 text-sm text-slate-500">Aucune boutique ne correspond à ces critères.</p>}
             {filteredShops.map((shop) => {
+              const isFeatured = Boolean(shop.featured_until && Date.parse(shop.featured_until) > Date.now());
               return (
                 <motion.div
                   key={shop.id}
@@ -725,6 +752,7 @@ export const AdminDashboard: React.FC = () => {
                   <div className="min-w-0 flex-1 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-black text-slate-900 text-base">{shop.name}</h3>
+                      {isFeatured && <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-[10px] font-extrabold text-amber-900"><Star className="h-3 w-3 fill-current" aria-hidden="true" /> À la une</span>}
                       <span className="text-[10px] text-slate-400 font-mono">/{shop.slug}</span>
                       <span
                         className="text-[10px] font-extrabold px-2 py-0.5 rounded-md"
@@ -754,6 +782,25 @@ export const AdminDashboard: React.FC = () => {
 
                   <div className="flex flex-wrap items-center gap-3 shrink-0">
                     <button onClick={() => handleOpenMerchantSpace(shop.id)} disabled={!shop.is_active} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Ouvrir l’espace</button>
+                    <select
+                      aria-label={`Mettre ${shop.name} à la une`}
+                      value={isFeatured ? 'featured' : ''}
+                      disabled={featuredActionShopId === shop.id}
+                      onChange={(event) => {
+                        const days = Number(event.target.value);
+                        if (Number.isInteger(days)) void handleSetFeatured(shop.id, days);
+                      }}
+                      className="max-w-48 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
+                    >
+                      <option value="" disabled>☆ Mettre à la une…</option>
+                      {isFeatured && <option value="featured">★ À la une</option>}
+                      {isFeatured && <option value="0">Retirer de la une</option>}
+                      <option value="7">7 jours</option>
+                      <option value="14">14 jours</option>
+                      <option value="30">30 jours</option>
+                      <option value="60">60 jours</option>
+                      <option value="90">90 jours</option>
+                    </select>
                     <button onClick={() => handleToggleActive(shop.id)} className={`rounded-xl border px-3 py-2 text-xs font-extrabold ${shop.is_active ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
                       {shop.is_active ? '● ON' : '○ OFF'}
                     </button>

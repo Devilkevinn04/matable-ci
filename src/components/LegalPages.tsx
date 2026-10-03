@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowLeft, FileText, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { hasAnalyticsConsent, saveCookiePreferences } from './CookieBanner';
+import { getSupportWhatsAppUrl, supportWhatsAppDisplayNumber } from '../utils/supportWhatsApp';
 
 export type LegalPageKey = 'mentions-legales' | 'confidentialite' | 'cgu' | 'cookies';
 
@@ -56,6 +57,10 @@ const pageContent: Record<LegalPageKey, { title: string; intro: string; icon: Re
 
 export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
   const content = pageContent[page];
+  const supportUrl = getSupportWhatsAppUrl('Bonjour, je souhaite contacter l’assistance MaTable.ci.');
+  const supportContact = supportUrl
+    ? <a href={supportUrl} target="_blank" rel="noreferrer">{supportWhatsAppDisplayNumber} sur WhatsApp</a>
+    : <strong>Le contact WhatsApp de l’assistance doit être configuré avant publication.</strong>;
 
   return (
     <main className="legal-page">
@@ -78,7 +83,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             </section>
             <section>
               <h2>Contact</h2>
-              <p>Pour contacter l’assistance MaTable.ci, écrivez au <a href="https://wa.me/2250102749775" target="_blank" rel="noreferrer">+225 01 02 74 97 75 sur WhatsApp</a>. Ce contact d’assistance ne remplace pas les coordonnées juridiques complètes de l’exploitant, qui restent à publier.</p>
+              <p>Pour contacter l’assistance MaTable.ci, écrivez au {supportContact}. Ce contact d’assistance ne remplace pas les coordonnées juridiques complètes de l’exploitant, qui restent à publier.</p>
             </section>
             <section>
               <h2>Hébergement</h2>
@@ -99,7 +104,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
           <div className="legal-content">
             <section>
               <h2>Responsable et contact</h2>
-              <p>Le responsable des traitements est l’exploitant de MaTable.ci. Son identité juridique complète et son adresse administrative ne sont pas encore publiées sur cette version du site; elles doivent être ajoutées avant l’exploitation publique. Pour une question ou une demande relative à vos données, contactez l’assistance au <a href="https://wa.me/2250102749775" target="_blank" rel="noreferrer">+225 01 02 74 97 75 sur WhatsApp</a>. Une vérification raisonnable de votre identité peut être demandée avant toute communication ou suppression.</p>
+              <p>Le responsable des traitements est l’exploitant de MaTable.ci. Son identité juridique complète et son adresse administrative ne sont pas encore publiées sur cette version du site; elles doivent être ajoutées avant l’exploitation publique. Pour une question ou une demande relative à vos données, contactez l’assistance au {supportContact}. Une vérification raisonnable de votre identité peut être demandée avant toute communication ou suppression.</p>
             </section>
             <section>
               <h2>Données traitées</h2>

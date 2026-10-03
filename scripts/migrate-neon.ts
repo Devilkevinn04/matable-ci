@@ -16,6 +16,7 @@ const migrationVersions = [
   '011_merchant_identity_decision_method',
   '012_merchant_identity_document_back',
   '013_customer_oauth_identities',
+  '014_shop_featured_until',
 ];
 const connectionString = process.env.DATABASE_URL;
 
