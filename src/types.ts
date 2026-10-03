@@ -74,6 +74,7 @@ export interface Shop {
     status: SubscriptionStatus;
     trialStart: string | null;
     trialEnd: string | null;
+    expiresAt: string | null;
     trialDaysRemaining: number;
     isActive: boolean;
   };

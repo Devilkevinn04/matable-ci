@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ShopRecord } from '../server/types';
 import { getShopVisibilityScore, rankShopsByVisibility } from '../server/services/visibility';
+import { canUseSubscriptionFeature } from '../server/services/businessRules';
+import { isSubscriptionFeatureIncluded } from '../src/utils/subscriptionFeatures';
 
 function makeShop(id: number, overrides: Partial<ShopRecord> = {}): ShopRecord {
   return {
@@ -78,4 +80,38 @@ test('open shops lead and equal visibility rotates every three hours', () => {
   const rotated = rankShopsByVisibility(shops, new Map(), isOpen, now + interval);
   assert.deepEqual(initial.map(({ shop }) => shop.id), [1, 2, 3]);
   assert.deepEqual(rotated.map(({ shop }) => shop.id), [2, 1, 3]);
+});
+
+test('subscription features follow the selected tier and are disabled after expiry', () => {
+  const now = Date.parse('2026-10-03T00:00:00.000Z');
+  const standard = makeShop(1, { selected_subscription_tier: 'standard', subscription_status: 'active' });
+  const premiumTrial = makeShop(2, {
+    selected_subscription_tier: 'premium',
+    subscription_status: 'trialing',
+    trial_start: new Date(now - 86400000).toISOString(),
+    trial_end: new Date(now + 86400000).toISOString(),
+  });
+  const pro = makeShop(3, { selected_subscription_tier: 'pro', subscription_status: 'active' });
+  const expiredPro = makeShop(4, {
+    selected_subscription_tier: 'pro',
+    subscription_status: 'active',
+    subscription_expires_at: new Date(now - 1000).toISOString(),
+  });
+
+  assert.equal(canUseSubscriptionFeature(standard, 'custom_branding', new Date(now)), false);
+  assert.equal(canUseSubscriptionFeature(premiumTrial, 'custom_branding', new Date(now)), true);
+  assert.equal(canUseSubscriptionFeature(premiumTrial, 'advanced_analytics', new Date(now)), false);
+  assert.equal(canUseSubscriptionFeature(pro, 'advanced_analytics', new Date(now)), true);
+  assert.equal(canUseSubscriptionFeature(expiredPro, 'custom_branding', new Date(now)), false);
+});
+
+test('shared marketing tier matrix matches server feature thresholds', () => {
+  for (const feature of ['custom_branding', 'event_mode', 'social_links'] as const) {
+    assert.equal(isSubscriptionFeatureIncluded('standard', feature), false);
+    assert.equal(isSubscriptionFeatureIncluded('premium', feature), true);
+    assert.equal(isSubscriptionFeatureIncluded('pro', feature), true);
+  }
+  assert.equal(isSubscriptionFeatureIncluded('standard', 'advanced_analytics'), false);
+  assert.equal(isSubscriptionFeatureIncluded('premium', 'advanced_analytics'), false);
+  assert.equal(isSubscriptionFeatureIncluded('pro', 'advanced_analytics'), true);
 });

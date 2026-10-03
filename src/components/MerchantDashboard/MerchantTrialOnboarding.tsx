@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, LoaderCircle, MessageCircle, ShieldCheck } from 'lucide-react';
 import type { Shop, SubscriptionTier } from '../../types';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
+import { SUBSCRIPTION_PLANS } from '../../utils/subscriptionFeatures';
 
 interface KadevPayCheckoutOptions {
   public_key: string;
@@ -29,11 +30,7 @@ interface MerchantTrialOnboardingProps {
   mode?: 'start' | 'expired';
 }
 
-const plans: { tier: SubscriptionTier; price: number; description: string }[] = [
-  { tier: 'standard', price: 3000, description: 'Formule Standard pour votre boutique.' },
-  { tier: 'premium', price: 4000, description: 'Formule Premium ; avantages détaillés avant son activation.' },
-  { tier: 'pro', price: 5000, description: 'Formule Pro ; avantages détaillés avant son activation.' },
-];
+const plans = Object.values(SUBSCRIPTION_PLANS);
 
 export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'start' }: MerchantTrialOnboardingProps) {
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier>('standard');
@@ -133,7 +130,7 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
         <header className="border-b border-[#dce4dc] pb-6">
           <p className="text-xs font-extrabold uppercase text-[#176b55]">MaTable.ci · Espace commerçant</p>
           <h1 className="mt-2 text-2xl font-black sm:text-3xl">{mode === 'expired' ? 'Votre période d’essai est terminée' : `Bienvenue, ${shop.name}`}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? 'Choisissez la formule à conserver. Le paiement en ligne n’est pas encore activé ; contactez l’équipe pour convenir de la suite.' : 'Votre essai gratuit de 30 jours commence lorsque vous le démarrez. Configurez votre boutique et testez les fonctionnalités sans paiement aujourd’hui.'}</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? 'Choisissez une formule mensuelle et réglez-la avec KadevPay. Votre accès sera renouvelé après confirmation sécurisée du paiement.' : 'Votre essai gratuit de 30 jours commence lorsque vous le démarrez. Configurez votre boutique et testez les fonctionnalités sans paiement aujourd’hui.'}</p>
           {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-emerald-800 underline underline-offset-2"><MessageCircle className="h-4 w-4" />Contacter l’équipe</a>}
         </header>
 
@@ -152,14 +149,18 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
                   role="radio"
                   aria-checked={selected}
                   onClick={() => setSelectedTier(plan.tier)}
-                  className={`flex min-h-40 flex-col items-start rounded-xl border p-4 text-left transition ${selected ? 'border-[#176b55] bg-white ring-2 ring-[#176b55]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[#176b55]'}`}
+                  className={`flex min-h-56 flex-col items-start rounded-xl border p-4 text-left transition ${selected ? 'border-[#176b55] bg-white ring-2 ring-[#176b55]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[#176b55]'}`}
                 >
                   <span className="flex w-full items-center justify-between gap-2">
-                    <span className="font-extrabold capitalize">{plan.tier}</span>
+                    <span className="font-extrabold">{plan.label}</span>
                     {selected && <Check className="h-4 w-4 text-emerald-700" />}
                   </span>
-                  <strong className="mt-3 text-xl">{new Intl.NumberFormat('fr-FR').format(plan.price)} <span className="text-sm font-semibold">FCFA/mois</span></strong>
+                  <h3 className="mt-3 text-sm font-extrabold text-slate-900">{plan.headline}</h3>
+                  <strong className="mt-2 text-xl">{new Intl.NumberFormat('fr-FR').format(plan.price)} <span className="text-sm font-semibold">FCFA/mois</span></strong>
                   <span className="mt-2 text-xs leading-5 text-slate-600">{plan.description}</span>
+                  <ul className="mt-3 space-y-1.5 text-left text-xs leading-5 text-slate-700">
+                    {plan.benefits.map((benefit) => <li key={benefit} className="flex items-start gap-2"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" /><span>{benefit}</span></li>)}
+                  </ul>
                 </button>
               );
             })}
@@ -183,7 +184,7 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
               {isStarting ? 'Démarrage de l’essai…' : 'Commencer mon essai gratuit'}
             </button>
           )}
-          <span className="text-xs text-slate-500">{selectedPlan.tier} · {new Intl.NumberFormat('fr-FR').format(selectedPlan.price)} FCFA/mois après l’essai</span>
+          <span className="text-xs text-slate-500">{selectedPlan.label} · {new Intl.NumberFormat('fr-FR').format(selectedPlan.price)} FCFA/mois après l’essai</span>
         </div>
         {mode === 'expired' && paymentMessage && <p role="status" aria-live="polite" className="mt-3 text-sm text-slate-700">{paymentMessage}</p>}
       </div>

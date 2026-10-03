@@ -3,7 +3,10 @@ import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Sparkles, Phone, Lock
 import { MerchantState } from './useMerchant';
 import { ThemeCustomizer } from '../ThemeCustomizer';
 import { MerchantIdentityVerification } from './MerchantIdentityVerification';
+import { ProAnalyticsPanel } from './ProAnalyticsPanel';
 import { cleanPhoneForWhatsApp, formatFCFA } from '../../utils/format';
+import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
+import { isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
 
 interface SettingsTabProps {
   state: MerchantState;
@@ -32,6 +35,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const totalRevenue = orders.reduce((total, order) => total + order.total_amount, 0);
   const lowStockCount = products.filter((product) => product.stock > 0 && product.stock <= 3).length;
   const outOfStockCount = products.filter((product) => product.stock === 0).length;
+  const featuredUntil = currentShop?.featured_until || null;
+  const isFeatured = Boolean(featuredUntil && Date.parse(featuredUntil) > Date.now());
+  const canUseSocialLinks = Boolean(currentShop?.subscription?.isActive
+    && isSubscriptionFeatureIncluded(currentShop.subscription.plan, 'social_links'));
+  const promotionRequestUrl = currentShop
+    ? getSupportWhatsAppUrl(`Bonjour, je souhaite demander une mise en avant pour la boutique ${currentShop.name}. Merci de m’indiquer les conditions et tarifs avant confirmation.`)
+    : null;
 
   return (
     <>
@@ -39,7 +49,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
 
           <div className="space-y-6">
             {/* Settings Sub-Tab Navigation */}
-            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 sm:grid-cols-3 xl:grid-cols-7">
               <button
                 type="button"
                 onClick={() => setSettingsSubTab('themes')}
@@ -104,6 +114,24 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 <ShieldCheck className="w-4 h-4" />
                 <span className="truncate">Vérification</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingsSubTab('subscription')}
+                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${settingsSubTab === 'subscription' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
+              >
+                <DollarSign className="w-4 h-4" />
+                <span className="truncate">Mon forfait</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingsSubTab('analytics')}
+                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${settingsSubTab === 'analytics' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
+              >
+                <TrendingUp className="w-4 h-4" />
+                <span className="truncate">Statistiques Pro</span>
+              </button>
             </div>
 
             {/* Sub-Tab 1: THEME CUSTOMIZER */}
@@ -129,11 +157,25 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">Formule</span><strong className="mt-1 block capitalize text-slate-900">{currentShop.subscription?.plan || 'Standard'}</strong></div>
                   <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">État</span><strong className="mt-1 block text-slate-900">{currentShop.subscription?.status === 'trialing' ? 'Essai gratuit' : currentShop.subscription?.status === 'active' ? 'Actif' : 'À régulariser'}</strong></div>
-                  <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">Fin de l’essai</span><strong className="mt-1 block text-slate-900">{currentShop.subscription?.trialEnd ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(currentShop.subscription.trialEnd)) : 'Non démarré'}</strong></div>
+                  <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">{currentShop.subscription?.status === 'active' ? 'Échéance' : 'Fin de l’essai'}</span><strong className="mt-1 block text-slate-900">{(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd) ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd || '')) : 'Non démarré'}</strong></div>
                 </div>
-                <p className="text-xs leading-5 text-slate-600">Aucun paiement n’est actuellement déclenché depuis MaTable.ci. Les formules et renouvellements seront activés après l’intégration d’un prestataire de paiement.</p>
+                <p className="text-xs leading-5 text-slate-600">L’essai est gratuit. Après son échéance, le renouvellement sécurisé est disponible via KadevPay; le règlement d’une commande client reste directement convenu avec la boutique.</p>
+                <div className="border-t border-slate-200 pt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase text-slate-500">Visibilité de la vitrine</p>
+                      <h4 className="mt-1 text-sm font-extrabold text-slate-900">Mise à la une</h4>
+                      <p className="mt-1 text-xs text-slate-600">{isFeatured && featuredUntil ? `Votre boutique est mise à la une jusqu’au ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(featuredUntil))}.` : 'Votre boutique n’est pas actuellement mise à la une.'}</p>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${isFeatured ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-100 text-slate-700'}`}>{isFeatured ? 'Active' : 'Inactive'}</span>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-slate-500">La mise à la une est gérée par l’équipe MaTable.ci. Les conditions et le tarif seront communiqués avant toute confirmation.</p>
+                  {promotionRequestUrl && <a href={promotionRequestUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-emerald-800 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-50"><Sparkles className="h-4 w-4" />Demander une mise à la une</a>}
+                </div>
               </section>
             )}
+
+            {settingsSubTab === 'analytics' && currentShop && <ProAnalyticsPanel shop={currentShop} />}
 
             {/* Sub-Tab 2: GENERAL SETTINGS */}
             {settingsSubTab === 'general' && (
@@ -209,41 +251,22 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 </div>
 
                 {/* Social links */}
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Réseaux sociaux publics
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input
-                      type="url"
-                      value={settingsSocialLinks.instagram || ''}
-                      onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, instagram: e.target.value }))}
-                      placeholder="Instagram URL"
-                      className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white"
-                    />
-                    <input
-                      type="url"
-                      value={settingsSocialLinks.facebook || ''}
-                      onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, facebook: e.target.value }))}
-                      placeholder="Facebook URL"
-                      className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white"
-                    />
-                    <input
-                      type="url"
-                      value={settingsSocialLinks.website || ''}
-                      onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, website: e.target.value }))}
-                      placeholder="Site web URL"
-                      className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white"
-                    />
-                    <input
-                      type="url"
-                      value={settingsSocialLinks.whatsapp || ''}
-                      onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, whatsapp: e.target.value }))}
-                      placeholder="WhatsApp URL"
-                      className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white"
-                    />
+                {canUseSocialLinks ? (
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                    <label className="block text-xs font-bold text-slate-700">Réseaux sociaux publics · Premium/Pro</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <input type="url" value={settingsSocialLinks.instagram || ''} onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, instagram: e.target.value }))} placeholder="Instagram URL" className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white" />
+                      <input type="url" value={settingsSocialLinks.facebook || ''} onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, facebook: e.target.value }))} placeholder="Facebook URL" className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white" />
+                      <input type="url" value={settingsSocialLinks.website || ''} onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, website: e.target.value }))} placeholder="Site web URL" className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white" />
+                      <input type="url" value={settingsSocialLinks.whatsapp || ''} onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, whatsapp: e.target.value }))} placeholder="WhatsApp URL" className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white" />
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="p-4 rounded-xl border border-amber-200 bg-amber-50">
+                    <p className="text-xs font-bold text-amber-950">Réseaux sociaux publics · Premium/Pro</p>
+                    <p className="mt-1 text-xs leading-5 text-amber-900">Ajoutez les liens de vos réseaux sociaux avec une formule Premium ou Pro.</p>
+                  </div>
+                )}
 
                 {/* Delivery zones */}
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">

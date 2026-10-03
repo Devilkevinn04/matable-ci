@@ -8,6 +8,7 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import Database from 'better-sqlite3';
 import { getRenewedSubscriptionExpiry, isValidKadevPaySignature } from '../server/services/kadevPay';
 import { getSubscriptionState } from '../server/services/businessRules';
 
@@ -189,7 +190,87 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   assert.equal(paidPayload.subscription.status, 'active');
   assert.ok(Date.parse(paidPayload.subscription.expiresAt) > Date.now());
 
+  const unauthenticatedPayments = await fetch(`${BASE_URL}/api/admin/payments`);
+  assert.equal(unauthenticatedPayments.status, 401);
+  const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'kadevpay-test-admin-key' }),
+  });
+  assert.equal(adminLogin.status, 200);
+  const adminCookie = adminLogin.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(adminCookie);
+  const finance = await fetch(`${BASE_URL}/api/admin/payments?days=30`, { headers: { Cookie: adminCookie } });
+  assert.equal(finance.status, 200);
+  const financeData = await finance.json();
+  assert.equal(financeData.summary.confirmed_count, 1);
+  assert.equal(financeData.summary.collected_amount, 4000);
+  assert.equal(financeData.summary.pending_count, 0);
+  assert.equal(financeData.summary.promotions.amount, 0);
+  assert.equal(financeData.payments[0].shop_id, createdPayload.shop.id);
+  assert.equal(financeData.payments[0].payment_type, 'subscription');
+
+  const testDb = new Database(TEST_DB_PATH);
+  try {
+    const insertPromotion = testDb.prepare(`
+      INSERT INTO subscription_payment_intents (id, shop_id, payment_type, tier, amount, currency, status, provider_reference, created_at, paid_at)
+      VALUES (?, ?, 'promotion', 'standard', 100, 'XOF', 'paid', ?, ?, ?)
+    `);
+    for (let index = 0; index < 205; index += 1) {
+      const paidAt = new Date(Date.now() - index * 1000).toISOString();
+      insertPromotion.run(`test-promotion-${index}`, createdPayload.shop.id, `test-ref-${index}`, paidAt, paidAt);
+    }
+  } finally {
+    testDb.close();
+  }
+  const financeAfterMorePayments = await fetch(`${BASE_URL}/api/admin/payments?days=30`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
+  assert.equal(financeAfterMorePayments.payments.length, 200);
+  assert.equal(financeAfterMorePayments.summary.confirmed_count, 206);
+  assert.equal(financeAfterMorePayments.summary.collected_amount, 24500);
+  assert.equal(financeAfterMorePayments.summary.promotions.count, 205);
+  assert.equal(financeAfterMorePayments.summary.promotions.amount, 20500);
+
   const duplicateWebhook = await sendWebhook();
   assert.equal(duplicateWebhook.status, 200);
   assert.equal((await duplicateWebhook.json()).duplicate, true);
+});
+
+test('Pro merchants can read detailed analytics during an active Pro trial', async () => {
+  const created = await fetch(`${BASE_URL}/api/shops`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Boutique Statistiques Pro',
+      whatsapp_number: `+22507${String(Date.now() + 1).slice(-8)}`,
+      email: `pro-analytics-${Date.now()}@example.com`,
+      pin_code: '684219',
+      category: 'fashion',
+      city: 'Abidjan',
+    }),
+  });
+  const createdPayload = await created.json();
+  assert.equal(created.status, 200, JSON.stringify(createdPayload));
+  const login = await fetch(`${BASE_URL}/api/auth/merchant-access-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: createdPayload.owner_access_token }),
+  });
+  assert.equal(login.status, 200);
+  const merchantCookie = login.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(merchantCookie);
+  const trial = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/start-trial`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier: 'pro' }),
+  });
+  assert.equal(trial.status, 200, await trial.text());
+  const analytics = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/analytics?days=30`, {
+    headers: { Cookie: merchantCookie },
+  });
+  const payload = await analytics.json();
+  assert.equal(analytics.status, 200, JSON.stringify(payload));
+  assert.equal(payload.traffic_basis, 'consented_page_views');
+  assert.equal(payload.summary.page_views, 0);
+  assert.equal(payload.summary.orders, 0);
+  assert.ok(Array.isArray(payload.daily));
 });

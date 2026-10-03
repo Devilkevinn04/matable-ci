@@ -13,6 +13,7 @@ interface KadevPayRouterOptions {
 interface SubscriptionPaymentIntent {
   id: string;
   shop_id: number;
+  payment_type: 'subscription' | 'promotion';
   tier: SubscriptionTier;
   amount: number;
   currency: string;
@@ -44,8 +45,8 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
     const plan = getSubscriptionPlanConfig(tier);
     const paymentId = randomUUID();
     const createdAt = new Date().toISOString();
-    await dbRun(`INSERT INTO subscription_payment_intents (id, shop_id, tier, amount, currency, status, created_at)
-      VALUES (?, ?, ?, ?, 'XOF', 'pending', ?)`, [paymentId, shop.id, tier, plan.amount, createdAt]);
+    await dbRun(`INSERT INTO subscription_payment_intents (id, shop_id, payment_type, tier, amount, currency, status, created_at)
+      VALUES (?, ?, 'subscription', ?, ?, 'XOF', 'pending', ?)`, [paymentId, shop.id, tier, plan.amount, createdAt]);
 
     res.status(201).json({
       payment_id: paymentId,

@@ -10,6 +10,7 @@ import {
   Phone,
   Send,
   DollarSign,
+  CreditCard,
   Search,
   Check,
   BarChart3,
@@ -44,6 +45,33 @@ interface AdminAnalytics {
   totals: { page_views: number; unique_visitors: number; orders: number; sales: number; conversion_rate: number };
 }
 
+interface AdminFinance {
+  days: number;
+  since: string;
+  summary: {
+    confirmed_count: number;
+    collected_amount: number;
+    pending_count: number;
+    pending_amount: number;
+    subscriptions: { count: number; amount: number };
+    promotions: { count: number; amount: number };
+  };
+  by_tier: { tier: string; count: number; amount: number }[];
+  payments: {
+    id: string;
+    shop_id: number;
+    shop_name: string;
+    payment_type: 'subscription' | 'promotion';
+    tier: string;
+    amount: number;
+    currency: string;
+    status: string;
+    provider_reference: string | null;
+    created_at: string;
+    paid_at: string | null;
+  }[];
+}
+
 interface AdminOrder {
   id: number;
   shop_id: number;
@@ -75,7 +103,7 @@ const ownerNotificationTemplates = [
 ] as const;
 
 export const AdminDashboard: React.FC = () => {
-  const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'identity' | 'audience' | 'operations'>('overview');
+  const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'identity' | 'audience' | 'finance' | 'operations'>('overview');
   const [shops, setShops] = useState<AdminShopItem[]>([]);
   const [adminKey, setAdminKey] = useState('');
   const [showAdminKey, setShowAdminKey] = useState(false);
@@ -89,6 +117,8 @@ export const AdminDashboard: React.FC = () => {
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
   const [analyticsDays, setAnalyticsDays] = useState(30);
+  const [finance, setFinance] = useState<AdminFinance | null>(null);
+  const [financeDays, setFinanceDays] = useState(90);
   const [adminOrders, setAdminOrders] = useState<AdminOrder[]>([]);
   const [adminHealth, setAdminHealth] = useState<AdminHealth | null>(null);
   const [operationsLoading, setOperationsLoading] = useState(false);
@@ -121,6 +151,7 @@ export const AdminDashboard: React.FC = () => {
         setShops(data);
         setIsAuthenticated(true);
         await fetchAnalytics(analyticsDays);
+        await fetchFinance(financeDays);
         await fetchOperations();
       } else if (res.status === 401) {
         setIsAuthenticated(false);
@@ -161,6 +192,16 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const fetchFinance = async (days: number) => {
+    try {
+      const response = await fetch(`/api/admin/payments?days=${days}`);
+      if (!response.ok) throw new Error('Impossible de charger le journal financier.');
+      setFinance(await response.json());
+    } catch {
+      showNotice('Le journal financier est momentanément indisponible.');
+    }
+  };
+
   useEffect(() => {
     fetchAdminShops();
   }, []);
@@ -197,6 +238,7 @@ export const AdminDashboard: React.FC = () => {
     setAdminHealth(null);
     setAdminOrders([]);
     setAnalytics(null);
+    setFinance(null);
   };
 
   const maxDailyViews = Math.max(1, ...(analytics?.daily.map(day => day.page_views) || [0]));
@@ -494,13 +536,14 @@ export const AdminDashboard: React.FC = () => {
           </motion.div>
         )}
 
-        <nav aria-label="Navigation super-admin" className="sticky top-0 z-20 grid grid-cols-2 gap-2 border-b-2 border-[#211712] bg-[#f6f3ed]/95 py-3 backdrop-blur sm:grid-cols-3 lg:grid-cols-6">
+        <nav aria-label="Navigation super-admin" className="sticky top-0 z-20 grid grid-cols-2 gap-2 border-b-2 border-[#211712] bg-[#f6f3ed]/95 py-3 backdrop-blur sm:grid-cols-3 lg:grid-cols-7">
           {[
             { id: 'overview' as const, label: 'Accueil', icon: Activity },
             { id: 'shops' as const, label: `Boutiques (${shops.length})`, icon: Store },
             { id: 'orders' as const, label: 'Commandes', icon: ShoppingBag },
             { id: 'identity' as const, label: `Identité (${pendingVerificationShops.length})`, icon: ShieldCheck },
             { id: 'audience' as const, label: 'Audience', icon: BarChart3 },
+            { id: 'finance' as const, label: 'Finances', icon: CreditCard },
             { id: 'operations' as const, label: 'Opérations', icon: Activity },
           ].map(({ id, label, icon: Icon }) => (
             <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border-2 px-2 py-2 text-center text-xs font-bold transition sm:text-sm ${adminView === id ? 'border-[#211712] bg-[#1b3a63] text-white shadow-[3px_3px_0_rgba(33,23,18,0.95)]' : 'border-[#211712] bg-[#fffaf2] text-[#211712] hover:bg-white'}`}>
@@ -648,6 +691,48 @@ export const AdminDashboard: React.FC = () => {
             <p className="mt-4 text-xs text-slate-500">Chargement des données d’audience…</p>
           )}
         </motion.section>
+        )}
+
+        {adminView === 'finance' && (
+          <section aria-labelledby="admin-finance-title" className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div><p className="text-xs font-bold uppercase text-emerald-800">Recettes MaTable.ci</p><h2 id="admin-finance-title" className="mt-1 text-xl font-black text-slate-900">Abonnements et promotions</h2><p className="mt-1 text-xs text-slate-500">Seuls les paiements confirmés par webhook sont comptés comme encaissés.</p></div>
+              <div className="flex flex-wrap items-center gap-2">
+                <select aria-label="Période du journal financier" value={financeDays} onChange={(event) => { const days = Number(event.target.value); setFinanceDays(days); void fetchFinance(days); }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                  <option value={30}>30 derniers jours</option>
+                  <option value={90}>90 derniers jours</option>
+                  <option value={180}>180 derniers jours</option>
+                  <option value={365}>365 derniers jours</option>
+                </select>
+                <button type="button" disabled={!finance} onClick={() => finance && exportOperationsCsv(`matable-paiements-${new Date().toISOString().slice(0, 10)}.csv`, ['Date', 'Boutique', 'Type', 'Formule', 'Montant', 'Devise', 'Statut', 'Référence'], finance.payments.map((payment) => [payment.paid_at || payment.created_at, payment.shop_name, payment.payment_type === 'promotion' ? 'Promotion' : 'Abonnement', payment.tier, payment.amount, payment.currency, payment.status, payment.provider_reference || '']))} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"><Download className="h-4 w-4" />Exporter CSV</button>
+              </div>
+            </div>
+            {!finance ? <p role="status" className="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500">Chargement du journal financier…</p> : <>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <article className="rounded-lg border border-emerald-200 bg-emerald-50 p-4"><p className="text-xs font-semibold text-emerald-900">Fonds confirmés</p><p className="mt-1 text-2xl font-black text-emerald-950">{new Intl.NumberFormat('fr-FR').format(finance.summary.collected_amount)} FCFA</p><p className="mt-1 text-xs text-emerald-800">{finance.summary.confirmed_count} paiement(s) confirmé(s)</p></article>
+                <article className="rounded-lg border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-semibold text-amber-900">En attente</p><p className="mt-1 text-2xl font-black text-amber-950">{new Intl.NumberFormat('fr-FR').format(finance.summary.pending_amount)} FCFA</p><p className="mt-1 text-xs text-amber-800">{finance.summary.pending_count} paiement(s) en attente</p></article>
+                <article className="rounded-lg border border-slate-200 bg-white p-4"><p className="text-xs font-semibold text-slate-600">Abonnements</p><p className="mt-1 text-2xl font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(finance.summary.subscriptions.amount)} FCFA</p><p className="mt-1 text-xs text-slate-500">{finance.summary.subscriptions.count} renouvellement(s) confirmé(s)</p></article>
+                <article className="rounded-lg border border-slate-200 bg-white p-4"><p className="text-xs font-semibold text-slate-600">Promotions</p><p className="mt-1 text-2xl font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(finance.summary.promotions.amount)} FCFA</p><p className="mt-1 text-xs text-slate-500">{finance.summary.promotions.count} paiement(s) confirmé(s)</p></article>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(240px,1fr)]">
+                <section className="rounded-lg border border-slate-200 bg-white p-4" aria-labelledby="admin-payments-list-title">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3"><div><h3 id="admin-payments-list-title" className="text-sm font-black text-slate-900">Journal des paiements</h3><p className="mt-1 text-xs text-slate-500">Les 200 événements les plus récents sur {finance.days} jours.</p></div><button type="button" onClick={() => void fetchFinance(financeDays)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700">Actualiser</button></div>
+                  {finance.payments.length === 0 ? <p className="py-8 text-center text-sm text-slate-500">Aucun paiement d’abonnement sur cette période.</p> : <div className="mt-2 divide-y divide-slate-200">
+                    {finance.payments.map((payment) => <article key={payment.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0"><h4 className="truncate text-sm font-bold text-slate-900">{payment.shop_name} · {payment.payment_type === 'promotion' ? 'Promotion' : `Abonnement ${payment.tier}`}</h4><p className="mt-1 truncate text-xs text-slate-500">{payment.provider_reference || payment.id}</p><p className="mt-1 text-xs text-slate-500">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(payment.paid_at || payment.created_at))}</p></div>
+                      <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${payment.status === 'paid' ? 'bg-emerald-100 text-emerald-900' : payment.status === 'pending' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700'}`}>{payment.status === 'paid' ? 'Confirmé' : payment.status === 'pending' ? 'En attente' : 'Échec'}</span><strong className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(payment.amount)} {payment.currency}</strong></div>
+                    </article>)}
+                  </div>}
+                </section>
+                <aside className="rounded-lg border border-slate-200 bg-white p-4" aria-labelledby="admin-plans-title">
+                  <h3 id="admin-plans-title" className="text-sm font-black text-slate-900">Classement par formule</h3>
+                  {finance.by_tier.length === 0 ? <p className="mt-4 text-sm text-slate-500">Aucun abonnement confirmé.</p> : <div className="mt-3 divide-y divide-slate-200">{finance.by_tier.map((tier) => <div key={tier.tier} className="flex items-center justify-between gap-3 py-3"><div><p className="text-sm font-bold capitalize text-slate-900">{tier.tier}</p><p className="text-xs text-slate-500">{tier.count} paiement(s)</p></div><strong className="text-sm text-slate-900">{new Intl.NumberFormat('fr-FR').format(tier.amount)} F</strong></div>)}</div>}
+                  <p className="mt-4 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">Les promotions ne sont pas encore vendues en ligne. Le montant restera nul jusqu’à la définition d’un tarif et l’activation de leur parcours de paiement.</p>
+                </aside>
+              </div>
+            </>}
+          </section>
         )}
 
         {adminView === 'operations' && (

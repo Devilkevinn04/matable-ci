@@ -1260,6 +1260,9 @@ async function startServer() {
   }));
   app.use('/api/shops', createShopManagementRouter({
     shops,
+    orders,
+    dbAll,
+    refreshRuntimeDataFromDatabase,
     requireMerchantAccess,
     requireMerchantOwnShop,
     addDays,

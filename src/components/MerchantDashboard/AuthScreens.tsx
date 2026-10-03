@@ -302,11 +302,11 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
 
                 <section className="space-y-3 rounded-2xl bg-[#edf7f2] p-4 sm:p-5">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.14em] text-[#1d6b57]">Accès complet inclus</p>
-                    <p className="mt-1 text-xs leading-5 text-[#6b5548]">Toutes les fonctionnalités sont incluses gratuitement pour chaque boutique.</p>
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-[#1d6b57]">Votre vitrine Standard</p>
+                    <p className="mt-1 text-xs leading-5 text-[#6b5548]">Catalogue, horaires, zones de service et commandes WhatsApp sont inclus. Premium et Pro ajoutent personnalisation, réseaux sociaux, événements, visibilité et statistiques.</p>
                   </div>
                   <div className="rounded-xl bg-white p-3 text-xs leading-5 text-[#155c3d]">
-                    Après la création, vous recevez votre lien privé et votre lien vitrine. Catalogue, personnalisation et commandes sont immédiatement disponibles.
+                    Après la création, vous recevez vos liens privé et vitrine. L’essai gratuit vous permet de tester la formule choisie avant tout renouvellement payant.
                   </div>
                 </section>
 

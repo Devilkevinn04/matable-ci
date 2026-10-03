@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Pause, Play, Star } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Star } from 'lucide-react';
 import { getCategoryDefaults, getProductImageForDisplay, normalizeCustomBannerImage } from '../utils/categoryDefaults';
 
 interface FeaturedShop {
@@ -28,7 +28,6 @@ export const FeaturedCarousel: React.FC<FeaturedCarouselProps> = ({ shops, onOpe
     return (prioritizedShops.length ? prioritizedShops : shops).slice(0, 6);
   }, [shops]);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [isDocumentVisible, setIsDocumentVisible] = useState(() => document.visibilityState === 'visible');
@@ -54,12 +53,12 @@ export const FeaturedCarousel: React.FC<FeaturedCarouselProps> = ({ shops, onOpe
   }, []);
 
   useEffect(() => {
-    if (carouselShops.length < 2 || isPaused || isInteracting || prefersReducedMotion || !isDocumentVisible) return;
+    if (carouselShops.length < 2 || isInteracting || prefersReducedMotion || !isDocumentVisible) return;
     const timer = window.setInterval(() => {
       setActiveIndex((index) => (index + 1) % carouselShops.length);
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [carouselShops.length, isDocumentVisible, isInteracting, isPaused, prefersReducedMotion]);
+  }, [carouselShops.length, isDocumentVisible, isInteracting, prefersReducedMotion]);
 
   if (!activeShop) return null;
 
@@ -73,7 +72,7 @@ export const FeaturedCarousel: React.FC<FeaturedCarouselProps> = ({ shops, onOpe
 
   return (
     <section
-      className="featured-carousel relative mt-8 overflow-hidden rounded-xl bg-[#0f4d3d] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e6572b]"
+      className="featured-carousel relative mt-8 overflow-hidden rounded-xl bg-[#25302b] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e6572b]"
       aria-label="Boutiques à la une"
       aria-roledescription="carrousel"
       tabIndex={0}
@@ -104,10 +103,10 @@ export const FeaturedCarousel: React.FC<FeaturedCarouselProps> = ({ shops, onOpe
         {shopImage && <img
           src={shopImage}
           alt={`Vitrine de ${activeShop.name}`}
-          className="absolute inset-0 h-full w-full object-cover opacity-55 transition-transform duration-500 group-hover:scale-[1.02] motion-reduce:transition-none"
+          className="absolute inset-0 h-full w-full object-cover opacity-80 transition-transform duration-500 group-hover:scale-[1.02] motion-reduce:transition-none"
           onError={(event) => { event.currentTarget.hidden = true; }}
         />}
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,77,61,0.94),rgba(15,77,61,0.72),rgba(15,77,61,0.2))]" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,24,21,0.68),rgba(18,24,21,0.32),rgba(18,24,21,0.04))]" />
         <div className="relative max-w-2xl p-6 pb-24 sm:p-9">
           <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-[#f2c38d]">
             {activeShop.is_featured && <><Star className="h-3.5 w-3.5 fill-current" aria-hidden="true" /> À la une · </>}
@@ -124,13 +123,10 @@ export const FeaturedCarousel: React.FC<FeaturedCarouselProps> = ({ shops, onOpe
       </button>
 
       {carouselShops.length > 1 && <div className="absolute bottom-3 right-3 flex items-center gap-2 sm:bottom-5 sm:right-6">
-        <button type="button" onClick={() => setIsPaused((paused) => !paused)} aria-label={isPaused ? 'Reprendre le défilement' : 'Mettre le défilement en pause'} title={isPaused ? 'Reprendre le défilement' : 'Mettre le défilement en pause'} className="flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-[#0f4d3d]/80 text-white hover:bg-[#0f4d3d]">
-          {isPaused ? <Play className="h-4 w-4" aria-hidden="true" /> : <Pause className="h-4 w-4" aria-hidden="true" />}
-        </button>
-        <button type="button" onClick={() => move(-1)} aria-label="Boutique précédente" title="Boutique précédente" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-[#0f4d3d]/80 text-white hover:bg-[#0f4d3d]">
+        <button type="button" onClick={() => move(-1)} aria-label="Boutique précédente" title="Boutique précédente" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-black/45 text-white hover:bg-black/75">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button type="button" onClick={() => move(1)} aria-label="Boutique suivante" title="Boutique suivante" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-[#0f4d3d]/80 text-white hover:bg-[#0f4d3d]">
+        <button type="button" onClick={() => move(1)} aria-label="Boutique suivante" title="Boutique suivante" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-black/45 text-white hover:bg-black/75">
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </button>
         <span className="min-w-10 text-center text-xs font-bold tabular-nums" aria-live="off">{activeIndex + 1}/{carouselShops.length}</span>

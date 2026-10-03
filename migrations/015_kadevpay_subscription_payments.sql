@@ -3,6 +3,7 @@ ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_expires_at TEXT;
 CREATE TABLE IF NOT EXISTS subscription_payment_intents (
   id TEXT PRIMARY KEY,
   shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+  payment_type TEXT NOT NULL DEFAULT 'subscription',
   tier TEXT NOT NULL,
   amount INTEGER NOT NULL,
   currency TEXT NOT NULL DEFAULT 'XOF',

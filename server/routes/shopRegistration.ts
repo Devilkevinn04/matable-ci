@@ -108,30 +108,28 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       .replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || `boutique-${Date.now()}`;
     const uniqueSlug = shops.some((shop) => shop.slug === slug) ? `${slug}-${Date.now().toString().slice(-5)}` : slug;
     const mergedThemeConfig = {
-      primary_color: requestedThemeConfig.primary_color || categoryDefaults.primaryColor,
-      secondary_color: requestedThemeConfig.secondary_color || categoryDefaults.secondaryColor,
-      font_family: requestedThemeConfig.font_family || 'Plus Jakarta Sans',
-      layout_style: requestedThemeConfig.layout_style || categoryDefaults.layoutStyle,
-      theme_preset_id: requestedThemeConfig.theme_preset_id || categoryDefaults.themePresetId,
-      brand_direction: ['luxe', 'moderne', 'authentique'].includes(requestedThemeConfig.brand_direction)
-        ? requestedThemeConfig.brand_direction as ShopRecord['theme_config']['brand_direction']
-        : categoryDefaults.brandDirection,
-      custom_banner_url: normalizeCustomBannerImage(requestedThemeConfig.custom_banner_url, shopCategory),
-      logo_url: requestedThemeConfig.logo_url || '',
-      event_mode_enabled: Boolean(requestedThemeConfig.event_mode_enabled),
-      event_banner_text: requestedThemeConfig.event_banner_text || '🎉 Commande rapide • Livraison et retrait disponibles',
+      primary_color: categoryDefaults.primaryColor,
+      secondary_color: categoryDefaults.secondaryColor,
+      font_family: 'Plus Jakarta Sans' as const,
+      layout_style: categoryDefaults.layoutStyle,
+      theme_preset_id: categoryDefaults.themePresetId,
+      brand_direction: categoryDefaults.brandDirection,
+      custom_banner_url: '',
+      logo_url: '',
+      event_mode_enabled: false,
+      event_banner_text: '🎉 Commande rapide • Livraison et retrait disponibles',
       social_links: {
-        instagram: typeof requestedThemeConfig.social_links?.instagram === 'string' ? String(requestedThemeConfig.social_links.instagram).trim() : '',
-        facebook: typeof requestedThemeConfig.social_links?.facebook === 'string' ? String(requestedThemeConfig.social_links.facebook).trim() : '',
-        tiktok: typeof requestedThemeConfig.social_links?.tiktok === 'string' ? String(requestedThemeConfig.social_links.tiktok).trim() : '',
-        website: typeof requestedThemeConfig.social_links?.website === 'string' ? String(requestedThemeConfig.social_links.website).trim() : '',
-        whatsapp: typeof requestedThemeConfig.social_links?.whatsapp === 'string' ? String(requestedThemeConfig.social_links.whatsapp).trim() : '',
+        instagram: '',
+        facebook: '',
+        tiktok: '',
+        website: '',
+        whatsapp: '',
       },
       delivery_zones: deliveryZones,
       advanced_css: {
-        borderRadius: requestedThemeConfig.advanced_css?.borderRadius || 'rounded-xl',
-        shadowIntensity: requestedThemeConfig.advanced_css?.shadowIntensity || 'subtle',
-        accentGlow: Boolean(requestedThemeConfig.advanced_css?.accentGlow),
+        borderRadius: 'rounded-xl' as const,
+        shadowIntensity: 'subtle' as const,
+        accentGlow: false,
       },
     };
     const now = new Date();

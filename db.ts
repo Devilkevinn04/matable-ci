@@ -56,7 +56,7 @@ const sqliteSchema = `
   );
   CREATE TABLE IF NOT EXISTS subscription_payment_intents (
     id TEXT PRIMARY KEY, shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
-    tier TEXT NOT NULL, amount INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'XOF',
+    payment_type TEXT NOT NULL DEFAULT 'subscription', tier TEXT NOT NULL, amount INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'XOF',
     status TEXT NOT NULL DEFAULT 'pending', provider_reference TEXT UNIQUE,
     created_at TEXT NOT NULL, paid_at TEXT
   );
@@ -130,6 +130,7 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'trial_start', 'TEXT');
   addColumn('shops', 'trial_end', 'TEXT');
   addColumn('shops', 'subscription_expires_at', 'TEXT');
+  addColumn('subscription_payment_intents', 'payment_type', "TEXT NOT NULL DEFAULT 'subscription'");
   if (!hadPublicationStatus) {
     connection.exec(`UPDATE shops SET publication_status = CASE
       WHEN is_active = 0 THEN 'suspended'
@@ -192,10 +193,11 @@ const postgresMigrations = [
   )`,
   `CREATE TABLE IF NOT EXISTS subscription_payment_intents (
     id TEXT PRIMARY KEY, shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
-    tier TEXT NOT NULL, amount INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'XOF',
+    payment_type TEXT NOT NULL DEFAULT 'subscription', tier TEXT NOT NULL, amount INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'XOF',
     status TEXT NOT NULL DEFAULT 'pending', provider_reference TEXT UNIQUE,
     created_at TEXT NOT NULL, paid_at TEXT
   )`,
+  "ALTER TABLE subscription_payment_intents ADD COLUMN IF NOT EXISTS payment_type TEXT NOT NULL DEFAULT 'subscription'",
   `CREATE TABLE IF NOT EXISTS analytics_events (
     id BIGSERIAL PRIMARY KEY, shop_id INTEGER, event_type TEXT NOT NULL,
     session_id TEXT NOT NULL, path TEXT, created_at TEXT NOT NULL

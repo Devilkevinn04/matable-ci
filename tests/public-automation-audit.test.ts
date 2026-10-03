@@ -64,11 +64,11 @@ function uniqueEmail() {
   return `merchant-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
 }
 
-async function submitAndApproveShop(shopId: number, merchantCookie: string) {
+async function submitAndApproveShop(shopId: number, merchantCookie: string, tier: 'standard' | 'premium' | 'pro' = 'standard') {
   const trialStart = await fetch(`${BASE_URL}/api/shops/${shopId}/start-trial`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
-    body: JSON.stringify({ tier: 'standard' }),
+    body: JSON.stringify({ tier }),
   });
   assert.equal(trialStart.status, 200, await trialStart.text());
   const testPng = `data:image/png;base64,${Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from([0])]).toString('base64')}`;
@@ -100,7 +100,7 @@ async function submitAndApproveShop(shopId: number, merchantCookie: string) {
   assert.equal(publication.status, 200, await publication.text());
 }
 
-async function loginAndApproveShop(shop: { id: number; owner_access_token: string }): Promise<string> {
+async function loginAndApproveShop(shop: { id: number; owner_access_token: string }, tier: 'standard' | 'premium' | 'pro' = 'standard'): Promise<string> {
   const login = await fetch(`${BASE_URL}/api/auth/merchant-access-login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -109,7 +109,7 @@ async function loginAndApproveShop(shop: { id: number; owner_access_token: strin
   assert.equal(login.status, 200);
   const cookie = login.headers.get('set-cookie')?.split(';')[0];
   assert.ok(cookie);
-  await submitAndApproveShop(shop.id, cookie);
+  await submitAndApproveShop(shop.id, cookie, tier);
   return cookie;
 }
 
@@ -388,7 +388,7 @@ test('registration flow is coherent without external payment or WhatsApp API', a
   assert.equal(merchantLogin.status, 200);
 });
 
-test('shop metadata keeps social links and delivery zones for the storefront checklist', async () => {
+test('standard registration keeps delivery zones but does not grant premium social links', async () => {
   const newPhone = uniquePhone();
   const created = await fetch(`${BASE_URL}/api/shops`, {
     method: 'POST',
@@ -416,14 +416,35 @@ test('shop metadata keeps social links and delivery zones for the storefront che
 
   assert.equal(created.status, 200, 'Shop creation should succeed');
   const createdPayload = await created.json();
-  assert.ok(createdPayload.shop.theme_config?.social_links?.instagram);
+  assert.equal(createdPayload.shop.theme_config?.social_links?.instagram, '');
   assert.deepEqual(createdPayload.shop.theme_config?.delivery_zones?.[0]?.label, 'Cocody');
-  await loginAndApproveShop({ id: createdPayload.shop.id, owner_access_token: createdPayload.owner_access_token });
+  const merchantCookie = await loginAndApproveShop({ id: createdPayload.shop.id, owner_access_token: createdPayload.owner_access_token });
+
+  const deniedUpdate = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ theme_config: { social_links: { instagram: 'https://instagram.com/standard-shop' } } }),
+  });
+  assert.equal(deniedUpdate.status, 403);
+  const deniedBranding = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/theme`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ theme_config: { primary_color: '#123456' } }),
+  });
+  assert.equal(deniedBranding.status, 403);
+  const deniedEventMode = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ theme_config: { event_mode_enabled: true, event_banner_text: 'Promotion test' } }),
+  });
+  assert.equal(deniedEventMode.status, 403);
+  const deniedAnalytics = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/analytics`, { headers: { Cookie: merchantCookie } });
+  assert.equal(deniedAnalytics.status, 403);
 
   const publicBySlug = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.slug}`);
   assert.equal(publicBySlug.status, 200);
   const publicData = await publicBySlug.json();
-  assert.ok(publicData.shop.theme_config?.social_links?.instagram);
+  assert.equal(publicData.shop.theme_config?.social_links?.instagram, '');
   assert.equal(publicData.shop.theme_config?.delivery_zones?.[0]?.mode, 'livraison');
 });
 
@@ -454,7 +475,9 @@ test('merchant can update storefront social links and service zones', async () =
   const merchantCookies = merchantLogin.headers.get('set-cookie');
   const merchantCookieHeader = merchantCookies ? merchantCookies.split(';')[0] : undefined;
   assert.ok(merchantCookieHeader);
-  await submitAndApproveShop(createdPayload.shop.id, merchantCookieHeader);
+  await submitAndApproveShop(createdPayload.shop.id, merchantCookieHeader, 'premium');
+  const premiumAnalytics = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/analytics`, { headers: { Cookie: merchantCookieHeader } });
+  assert.equal(premiumAnalytics.status, 403);
 
   const updateRes = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}`, {
     method: 'PUT',
@@ -538,7 +561,7 @@ test('onboarding preserves explicit opening-hours and keeps the storefront open 
   const createdPayload = await created.json();
   assert.equal(createdPayload.shop.opening_hours.enabled, true);
   assert.equal(createdPayload.shop.opening_hours.open_time, '00:00');
-  await loginAndApproveShop({ id: createdPayload.shop.id, owner_access_token: createdPayload.owner_access_token });
+  await loginAndApproveShop({ id: createdPayload.shop.id, owner_access_token: createdPayload.owner_access_token }, 'premium');
 
   const publicBySlug = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.slug}`);
   assert.equal(publicBySlug.status, 200);

@@ -65,6 +65,82 @@ export function createAdminRouter(options: AdminRouterOptions) {
     });
   });
 
+  router.get('/payments', async (req, res) => {
+    const requestedDays = Number(req.query.days);
+    const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 365) : 30;
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+    const summary = await dbGet<{
+      confirmed_count: number;
+      collected_amount: number;
+      pending_count: number;
+      pending_amount: number;
+      subscription_count: number;
+      subscription_amount: number;
+      promotion_count: number;
+      promotion_amount: number;
+    }>(`
+      SELECT
+        COUNT(CASE WHEN status = 'paid' THEN 1 END) AS confirmed_count,
+        COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) AS collected_amount,
+        COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending_count,
+        COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) AS pending_amount,
+        COUNT(CASE WHEN status = 'paid' AND payment_type = 'subscription' THEN 1 END) AS subscription_count,
+        COALESCE(SUM(CASE WHEN status = 'paid' AND payment_type = 'subscription' THEN amount ELSE 0 END), 0) AS subscription_amount,
+        COUNT(CASE WHEN status = 'paid' AND payment_type = 'promotion' THEN 1 END) AS promotion_count,
+        COALESCE(SUM(CASE WHEN status = 'paid' AND payment_type = 'promotion' THEN amount ELSE 0 END), 0) AS promotion_amount
+      FROM subscription_payment_intents
+      WHERE (status = 'paid' AND paid_at >= ?) OR (status = 'pending' AND created_at >= ?)
+    `, [since, since]);
+    const payments = await dbAll<{
+      id: string;
+      shop_id: number;
+      shop_name: string;
+      payment_type: 'subscription' | 'promotion';
+      tier: string;
+      amount: number;
+      currency: string;
+      status: string;
+      provider_reference: string | null;
+      created_at: string;
+      paid_at: string | null;
+    }>(`
+      SELECT intent.id, intent.shop_id, shops.name AS shop_name, intent.payment_type, intent.tier, intent.amount,
+        intent.currency, intent.status, intent.provider_reference, intent.created_at, intent.paid_at
+      FROM subscription_payment_intents AS intent
+      JOIN shops ON shops.id = intent.shop_id
+      WHERE (intent.status = 'paid' AND intent.paid_at >= ?)
+        OR (intent.status = 'pending' AND intent.created_at >= ?)
+      ORDER BY COALESCE(intent.paid_at, intent.created_at) DESC
+      LIMIT 200
+    `, [since, since]);
+    const byTier = await dbAll<{ tier: string; count: number; amount: number }>(`
+      SELECT tier, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount
+      FROM subscription_payment_intents
+      WHERE status = 'paid' AND payment_type = 'subscription' AND paid_at >= ?
+      GROUP BY tier ORDER BY amount DESC
+    `, [since]);
+    res.json({
+      days,
+      since,
+      summary: {
+        confirmed_count: Number(summary?.confirmed_count || 0),
+        collected_amount: Number(summary?.collected_amount || 0),
+        pending_count: Number(summary?.pending_count || 0),
+        pending_amount: Number(summary?.pending_amount || 0),
+        subscriptions: {
+          count: Number(summary?.subscription_count || 0),
+          amount: Number(summary?.subscription_amount || 0),
+        },
+        promotions: {
+          count: Number(summary?.promotion_count || 0),
+          amount: Number(summary?.promotion_amount || 0),
+        },
+      },
+      by_tier: byTier.map((item) => ({ ...item, count: Number(item.count), amount: Number(item.amount) })),
+      payments,
+    });
+  });
+
   router.get('/shops', async (_req, res) => {
     await refreshRuntimeDataFromDatabase();
     res.json(shops.map((shop) => {

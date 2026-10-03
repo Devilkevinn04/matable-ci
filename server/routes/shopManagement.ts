@@ -1,10 +1,13 @@
 import { Router, type RequestHandler } from 'express';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
-import { getShopPublicationBlockReason, getSubscriptionPlanConfig, normalizeSubscriptionTier } from '../services/businessRules.ts';
-import type { ShopRecord } from '../types.ts';
+import { canUseSubscriptionFeature, getShopPublicationBlockReason, getSubscriptionPlanConfig, normalizeSubscriptionTier } from '../services/businessRules.ts';
+import type { OrderRecord, ShopRecord } from '../types.ts';
 
 interface ShopManagementOptions {
   shops: ShopRecord[];
+  orders: OrderRecord[];
+  dbAll: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
+  refreshRuntimeDataFromDatabase: () => Promise<void>;
   requireMerchantAccess: RequestHandler;
   requireMerchantOwnShop: RequestHandler;
   addDays: (date: Date, days: number) => string;
@@ -23,6 +26,9 @@ interface ShopManagementOptions {
 export function createShopManagementRouter(options: ShopManagementOptions) {
   const {
     shops,
+    orders,
+    dbAll,
+    refreshRuntimeDataFromDatabase,
     requireMerchantAccess,
     requireMerchantOwnShop,
     addDays,
@@ -38,6 +44,10 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     sanitizeTextField,
   } = options;
   const router = Router({ mergeParams: true });
+  const hasChangedFields = (current: Record<string, unknown>, requested: Record<string, unknown>, fields: string[]) => fields.some((field) =>
+    Object.prototype.hasOwnProperty.call(requested, field)
+      && JSON.stringify(requested[field]) !== JSON.stringify(current[field])
+  );
 
   router.post('/:id/start-trial', requireMerchantOwnShop, async (req, res) => {
     const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
@@ -55,6 +65,64 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     shop.trial_end = addDays(startedAt, trialDurationDays);
     await persistShop(shop);
     res.json({ success: true, shop: toSafeShop(shop), trial_days: trialDurationDays, plan: getSubscriptionPlanConfig(tier) });
+  });
+
+  router.get('/:id/analytics', requireMerchantOwnShop, async (req, res) => {
+    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (!canUseSubscriptionFeature(shop, 'advanced_analytics')) {
+      return res.status(403).json({ error: 'Les statistiques détaillées sont réservées à la formule Pro.' });
+    }
+
+    await refreshRuntimeDataFromDatabase();
+    const requestedDays = Number(req.query.days);
+    const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 90) : 30;
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+    const totals = await dbAll<{ page_views: number; unique_visitors: number }>(`
+      SELECT COUNT(*) AS page_views, COUNT(DISTINCT session_id) AS unique_visitors
+      FROM analytics_events
+      WHERE shop_id = ? AND event_type = 'page_view' AND created_at >= ?
+    `, [shop.id, since]);
+    const trafficByDay = await dbAll<{ date: string; page_views: number; unique_visitors: number }>(`
+      SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS page_views,
+        COUNT(DISTINCT session_id) AS unique_visitors
+      FROM analytics_events
+      WHERE shop_id = ? AND event_type = 'page_view' AND created_at >= ?
+      GROUP BY date ORDER BY date ASC
+    `, [shop.id, since]);
+    const actionableOrders = orders.filter((order) => order.shop_id === shop.id
+      && order.created_at >= since
+      && order.status !== 'cancelled'
+      && order.status !== 'expired');
+    const byDay = new Map<string, { date: string; page_views: number; unique_visitors: number; orders: number; order_value: number }>();
+    for (const row of trafficByDay) {
+      byDay.set(row.date, {
+        date: row.date,
+        page_views: Number(row.page_views || 0),
+        unique_visitors: Number(row.unique_visitors || 0),
+        orders: 0,
+        order_value: 0,
+      });
+    }
+    for (const order of actionableOrders) {
+      const date = order.created_at.slice(0, 10);
+      const current = byDay.get(date) || { date, page_views: 0, unique_visitors: 0, orders: 0, order_value: 0 };
+      current.orders += 1;
+      current.order_value += Number(order.total_amount || 0);
+      byDay.set(date, current);
+    }
+    res.json({
+      days,
+      since,
+      traffic_basis: 'consented_page_views',
+      summary: {
+        page_views: Number(totals[0]?.page_views || 0),
+        unique_visitors: Number(totals[0]?.unique_visitors || 0),
+        orders: actionableOrders.length,
+        order_value: actionableOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0),
+      },
+      daily: Array.from(byDay.values()).sort((left, right) => left.date.localeCompare(right.date)),
+    });
   });
 
   router.post('/:id/access-link', requireMerchantAccess, async (req, res) => {
@@ -103,12 +171,21 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     });
   });
 
-  router.put('/:id/theme', requireMerchantAccess, async (req, res) => {
+  router.put('/:id/theme', requireMerchantOwnShop, async (req, res) => {
     const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable' });
     const { theme_config } = req.body;
     if (theme_config) {
       const requestedThemeConfig = { ...theme_config };
+      const themeConfig = shop.theme_config as unknown as Record<string, unknown>;
+      if (hasChangedFields(themeConfig, requestedThemeConfig, ['primary_color', 'secondary_color', 'font_family', 'layout_style', 'theme_preset_id', 'brand_direction', 'custom_banner_url', 'logo_url', 'advanced_css'])
+        && !canUseSubscriptionFeature(shop, 'custom_branding')) {
+        return res.status(403).json({ error: 'La personnalisation avancée de la vitrine est réservée aux formules Premium et Pro.' });
+      }
+      if (hasChangedFields(themeConfig, requestedThemeConfig, ['event_mode_enabled', 'event_banner_text'])
+        && !canUseSubscriptionFeature(shop, 'event_mode')) {
+        return res.status(403).json({ error: 'Le mode événement est réservé aux formules Premium et Pro.' });
+      }
       const requestedBrandDirection = ['luxe', 'moderne', 'authentique'].includes(requestedThemeConfig.brand_direction)
         ? requestedThemeConfig.brand_direction as ShopRecord['theme_config']['brand_direction']
         : shop.theme_config.brand_direction;
@@ -126,10 +203,28 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     res.json({ success: true, shop: toSafeShop(shop), theme_config: shop.theme_config });
   });
 
-  router.put('/:id', requireMerchantAccess, async (req, res) => {
+  router.put('/:id', requireMerchantOwnShop, async (req, res) => {
     const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable' });
     const { theme_color, welcome_message, is_open, whatsapp_number, name, category, theme_config, city, pin_code, opening_hours } = req.body;
+
+    const requestedThemeConfig = theme_config && typeof theme_config === 'object'
+      ? theme_config as Record<string, unknown>
+      : {};
+    const currentThemeConfig = shop.theme_config as unknown as Record<string, unknown>;
+    if ((hasChangedFields(currentThemeConfig, requestedThemeConfig, ['primary_color', 'secondary_color', 'font_family', 'layout_style', 'theme_preset_id', 'brand_direction', 'custom_banner_url', 'logo_url', 'advanced_css'])
+      || theme_color !== undefined && theme_color !== shop.theme_color)
+      && !canUseSubscriptionFeature(shop, 'custom_branding')) {
+      return res.status(403).json({ error: 'La personnalisation avancée de la vitrine est réservée aux formules Premium et Pro.' });
+    }
+    if (hasChangedFields(currentThemeConfig, requestedThemeConfig, ['event_mode_enabled', 'event_banner_text'])
+      && !canUseSubscriptionFeature(shop, 'event_mode')) {
+      return res.status(403).json({ error: 'Le mode événement est réservé aux formules Premium et Pro.' });
+    }
+    if (hasChangedFields(currentThemeConfig, requestedThemeConfig, ['social_links'])
+      && !canUseSubscriptionFeature(shop, 'social_links')) {
+      return res.status(403).json({ error: 'Les liens de réseaux sociaux sont réservés aux formules Premium et Pro.' });
+    }
 
     if (theme_color !== undefined) {
       shop.theme_color = theme_color;
@@ -155,7 +250,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     if (isShopCategory(category)) shop.category = category;
 
     if (theme_config) {
-      const requestedThemeConfig = { ...theme_config };
+      const requestedThemeConfig = { ...req.body.theme_config };
       const requestedBrandDirection = ['luxe', 'moderne', 'authentique'].includes(requestedThemeConfig.brand_direction)
         ? requestedThemeConfig.brand_direction as ShopRecord['theme_config']['brand_direction']
         : shop.theme_config.brand_direction;

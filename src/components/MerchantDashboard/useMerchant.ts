@@ -49,7 +49,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
   // Active view tab
   const [activeTab, setActiveTab] = useState<'overview' | 'catalog' | 'orders' | 'settings'>('overview');
-  const [settingsSubTab, setSettingsSubTab] = useState<'themes' | 'general' | 'hours' | 'bilan' | 'verification' | 'subscription'>('themes');
+  const [settingsSubTab, setSettingsSubTab] = useState<'themes' | 'general' | 'hours' | 'bilan' | 'verification' | 'subscription' | 'analytics'>('themes');
 
   // Products & Orders data
   const [products, setProducts] = useState<Product[]>([]);

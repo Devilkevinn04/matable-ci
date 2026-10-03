@@ -471,7 +471,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
       {currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining <= 10 && (
         <div className={`flex flex-col gap-2 border-t px-4 py-2 text-xs font-semibold sm:flex-row sm:items-center sm:justify-between ${currentShop.subscription.trialDaysRemaining <= 1 ? 'border-rose-200 bg-rose-50 text-rose-950' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
-          <span>{currentShop.subscription.trialDaysRemaining <= 1 ? 'Votre essai se termine demain.' : `Votre essai se termine dans ${currentShop.subscription.trialDaysRemaining} jours.`} Les paiements ne sont pas encore activés.</span>
+          <span>{currentShop.subscription.trialDaysRemaining <= 1 ? 'Votre essai se termine demain.' : `Votre essai se termine dans ${currentShop.subscription.trialDaysRemaining} jours.`} Le renouvellement KadevPay sera disponible à la fin de l’essai.</span>
           <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="self-start font-extrabold underline underline-offset-2 sm:self-auto">Voir mon forfait</button>
         </div>
       )}

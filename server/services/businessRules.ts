@@ -1,4 +1,5 @@
 import type { OrderRecord, ProductRecord, ShopRecord, SubscriptionPlanConfig, SubscriptionState, SubscriptionStatus, SubscriptionTier } from '../types.ts';
+import { isSubscriptionFeatureIncluded, SUBSCRIPTION_PLANS, type SubscriptionFeature } from '../../src/utils/subscriptionFeatures.ts';
 
 export function computeIsShopOpen(shop: ShopRecord): boolean {
   if (shop.opening_hours && shop.opening_hours.enabled && !shop.opening_hours.manual_override) {
@@ -123,16 +124,22 @@ export function isWeakShopPin(pin: unknown): boolean {
 }
 
 export function getSubscriptionPlanConfig(tier: SubscriptionTier | string): SubscriptionPlanConfig {
-  const plans: Record<SubscriptionTier, SubscriptionPlanConfig> = {
-    standard: { tier: 'standard', amount: 3000, label: 'Standard', description: 'Les outils essentiels pour démarrer.' },
-    premium: { tier: 'premium', amount: 4000, label: 'Premium', description: 'Plus de visibilité et de suivi pour développer votre activité.' },
-    pro: { tier: 'pro', amount: 5000, label: 'Pro', description: 'L’expérience complète pour votre boutique.' },
-  };
-  return plans[normalizeSubscriptionTier(tier)];
+  const plan = SUBSCRIPTION_PLANS[normalizeSubscriptionTier(tier)];
+  return { tier: plan.tier, amount: plan.price, label: plan.label, description: plan.description };
 }
 
 export function normalizeSubscriptionTier(tier?: SubscriptionTier | string): SubscriptionTier {
   return tier === 'premium' || tier === 'pro' ? tier : 'standard';
+}
+
+export function canUseSubscriptionFeature(
+  shop: Pick<ShopRecord, 'subscription_status' | 'trial_start' | 'trial_end' | 'subscription_expires_at' | 'selected_subscription_tier'>,
+  feature: SubscriptionFeature,
+  currentDate = new Date(),
+): boolean {
+  const subscription = getSubscriptionState(shop, currentDate);
+  return subscription.isActive
+    && isSubscriptionFeatureIncluded(subscription.plan, feature);
 }
 
 export function getSubscriptionState(

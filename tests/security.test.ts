@@ -230,7 +230,7 @@ test('exposes the documented monthly subscription plan catalog', () => {
     tier: 'standard',
     amount: 3000,
     label: 'Standard',
-    description: 'Les outils essentiels pour démarrer.',
+    description: 'Les essentiels pour présenter vos produits et recevoir des demandes.',
   });
   assert.equal(getSubscriptionPlanConfig('premium').amount, 4000);
   assert.equal(getSubscriptionPlanConfig('pro').amount, 5000);

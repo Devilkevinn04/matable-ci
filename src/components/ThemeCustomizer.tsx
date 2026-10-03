@@ -15,6 +15,7 @@ import { SAFE_THEME_COLORS, estimateDominantColorFromPixels, getContrastTextColo
 import { getCategoryDefaults } from '../utils/categoryDefaults';
 import { getAllPresetsForCategory, ThemePreset } from '../utils/themePresets';
 import { compressImageClientSide } from '../utils/format';
+import { isSubscriptionFeatureIncluded } from '../utils/subscriptionFeatures';
 
 interface ThemeCustomizerProps {
   shop: Shop;
@@ -22,7 +23,9 @@ interface ThemeCustomizerProps {
 }
 
 export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdateShop }) => {
-  const currentTier = 'free';
+  const currentTier = shop.subscription?.plan || 'standard';
+  const canCustomize = shop.subscription?.isActive === true
+    && isSubscriptionFeatureIncluded(currentTier, 'custom_branding');
   const categoryDefaults = getCategoryDefaults(shop.category);
   const [themeConfig, setThemeConfig] = useState<ThemeConfig>({
     primary_color: normalizeHex(shop.theme_config?.primary_color || shop.theme_color || categoryDefaults.primaryColor),
@@ -280,6 +283,20 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
     }
   };
 
+  if (!canCustomize) {
+    return (
+      <section className="max-w-3xl space-y-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+        <div className="flex items-center gap-2">
+          <Palette className="h-5 w-5 text-emerald-700" />
+          <h3 className="text-base font-extrabold text-slate-900">Personnalisation de la vitrine</h3>
+          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase text-amber-900">Premium · Pro</span>
+        </div>
+        <p className="text-sm leading-6 text-slate-600">Les couleurs, polices, logo, bannière, réseaux sociaux et bandeau événementiel sont inclus dans Premium et Pro.</p>
+        <p className="text-xs leading-5 text-slate-500">Votre vitrine actuelle reste en ligne. Vous pourrez modifier son identité visuelle en choisissant Premium ou Pro à votre prochaine période d’essai ou échéance d’abonnement.</p>
+      </section>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
@@ -291,19 +308,19 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                 Fonctionnalités de la Boutique
               </h3>
               <span className="text-xs font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                GRATUIT
+                {currentTier}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
               {categoryDefaults.icon} {categoryDefaults.label} · Choisissez un style, regardez l’aperçu, puis enregistrez.
             </p>
-            <p className="mt-2 text-[11px] text-slate-500">Tout est gratuit. Rien ne change sur votre boutique avant l’enregistrement.</p>
+            <p className="mt-2 text-[11px] text-slate-500">Personnalisez votre vitrine Premium/Pro. Rien ne change sur votre boutique avant l’enregistrement.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-100 p-1">
             <span className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500">Mode</span>
             <span className="rounded-lg px-3 py-1.5 text-xs font-black shadow-xs bg-emerald-600 text-white">
-              Gratuit
+              {currentTier === 'pro' ? 'Pro' : 'Premium'}
             </span>
           </div>
         </div>
@@ -671,7 +688,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
               <Sparkles className="w-4 h-4 text-purple-600" />
               <span>Studio CSS Avancé & Ambiance Visuelle</span>
             </h4>
-            <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">✓ Inclus gratuitement</span>
+            <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">Premium · Pro</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
