@@ -136,17 +136,20 @@ export function normalizeSubscriptionTier(tier?: SubscriptionTier | string): Sub
 }
 
 export function getSubscriptionState(
-  shop: Pick<ShopRecord, 'subscription_status' | 'trial_start' | 'trial_end' | 'selected_subscription_tier'>,
+  shop: Pick<ShopRecord, 'subscription_status' | 'trial_start' | 'trial_end' | 'subscription_expires_at' | 'selected_subscription_tier'>,
   currentDate = new Date(),
 ): SubscriptionState {
   const trialStart = shop.trial_start || null;
   const trialEnd = shop.trial_end || null;
+  const expiresAt = shop.subscription_expires_at || null;
   const trialEndTime = trialEnd ? Date.parse(trialEnd) : NaN;
+  const expiresAtTime = expiresAt ? Date.parse(expiresAt) : NaN;
   const trialDaysRemaining = Number.isFinite(trialEndTime)
     ? Math.max(0, Math.ceil((trialEndTime - currentDate.getTime()) / 86400000))
     : 0;
   const configuredStatus = shop.subscription_status || (trialDaysRemaining > 0 ? 'trialing' : 'active');
-  const status: SubscriptionStatus = configuredStatus === 'trialing' && trialEnd && trialDaysRemaining === 0
+  const status: SubscriptionStatus = (configuredStatus === 'trialing' && trialEnd && trialDaysRemaining === 0)
+    || (configuredStatus === 'active' && Number.isFinite(expiresAtTime) && expiresAtTime <= currentDate.getTime())
     ? 'expired'
     : configuredStatus;
   return {
@@ -154,6 +157,7 @@ export function getSubscriptionState(
     status,
     trialStart,
     trialEnd,
+    expiresAt,
     trialDaysRemaining,
     isActive: status === 'trialing' || status === 'active',
   };

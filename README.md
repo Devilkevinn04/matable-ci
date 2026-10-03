@@ -48,7 +48,8 @@ APPLE_KEY_ID=""
 APPLE_PRIVATE_KEY=""
 
 VITE_WHATSAPP_ADMIN_PHONE=""
-# Les paiements intégrés et les notifications automatiques WhatsApp ne sont pas utilisés dans la V1.
+KADEVPAY_PUBLIC_KEY=""
+KADEVPAY_WEBHOOK_SECRET=""
 ```
 
 ### Production / Neon PostgreSQL
@@ -73,9 +74,13 @@ KYC_ENCRYPTION_KEY="<secret-persistant-d-au-moins-32-caracteres>"
 
 Créer le projet Neon puis configurer `DATABASE_URL` dans Render. Le service Render Free n’a pas besoin d’un disque local persistant pour les données métier lorsque Neon est utilisé.
 
+### Renouvellements KadevPay
+
+KadevPay sert uniquement au renouvellement mensuel des abonnements marchands après l’essai gratuit. Les commandes des clients restent payées directement aux boutiques. Configurer `KADEVPAY_PUBLIC_KEY` et le secret HMAC `KADEVPAY_WEBHOOK_SECRET` dans Render, puis déclarer l’endpoint `https://<domaine-public>/api/webhooks/kadevpay` dans le tableau de bord KadevPay. Le serveur n’active l’abonnement qu’après un webhook signé correspondant à l’intention et au montant attendus. Commencer avec les clés de test; les paiements réels nécessitent un compte KadevPay vérifié et un compte de versement configuré.
+
 ## Règles métier
 
-Les prix Standard/Premium/Pro sont affichés et le choix est conservé au démarrage de l’essai. Les paiements réels, les renouvellements et la différenciation des fonctionnalités par forfait ne sont pas encore activés.
+L’essai marchand reste gratuit pendant 30 jours. Standard, Premium et Pro ont des tarifs mensuels; les renouvellements peuvent être encaissés par KadevPay après configuration des clés et du webhook signé. Les commandes des clients restent réglées directement avec les commerçants.
 
 Les valeurs initiales de catégorie (message, présentation, exemples de produits, palette et illustrations) sont centralisées dans `src/utils/categoryDefaults.ts`. Les illustrations produit sont des placeholders d’affichage : `image_url` reste vide tant qu’aucune photo réelle n’est fournie. Les anciennes valeurs génériques connues sont remplacées à l’affichage, sans migration automatique des boutiques ou produits existants.
 

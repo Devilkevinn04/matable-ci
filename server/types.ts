@@ -25,6 +25,7 @@ export interface SubscriptionState {
   status: SubscriptionStatus;
   trialStart: string | null;
   trialEnd: string | null;
+  expiresAt: string | null;
   trialDaysRemaining: number;
   isActive: boolean;
 }
@@ -46,6 +47,7 @@ export interface ShopRecord {
   subscription_status?: SubscriptionStatus;
   trial_start?: string | null;
   trial_end?: string | null;
+  subscription_expires_at?: string | null;
   last_notification_sent_at: string | null;
   created_at: string;
   category: ShopCategory;

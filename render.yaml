@@ -34,3 +34,7 @@ services:
         sync: false
       - key: VITE_WHATSAPP_ADMIN_PHONE
         sync: false
+      - key: KADEVPAY_PUBLIC_KEY
+        sync: false
+      - key: KADEVPAY_WEBHOOK_SECRET
+        sync: false

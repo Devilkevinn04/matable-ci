@@ -18,6 +18,7 @@ export async function loadShopsFromDatabase(): Promise<ShopRecord[]> {
     subscription_status: row.subscription_status ? String(row.subscription_status) as SubscriptionStatus : undefined,
     trial_start: row.trial_start == null ? null : String(row.trial_start),
     trial_end: row.trial_end == null ? null : String(row.trial_end),
+    subscription_expires_at: row.subscription_expires_at == null ? null : String(row.subscription_expires_at),
     last_notification_sent_at: row.last_notification_sent_at == null ? null : String(row.last_notification_sent_at),
     created_at: String(row.created_at),
     category: String(row.category) as ShopRecord['category'],
@@ -49,7 +50,7 @@ export async function persistShop(shop: ShopRecord): Promise<void> {
     shop.id, shop.name, shop.slug, shop.whatsapp_number, shop.pin_code_hash, shop.theme_color, shop.welcome_message,
     shop.is_open ? 1 : 0, shop.is_active ? 1 : 0, shop.publication_status || (shop.is_active ? 'active' : 'suspended'), shop.featured_until ?? null,
     shop.merchant_verification_status || 'not_required', 'approved', null,
-    shop.selected_subscription_tier || 'standard', shop.trial_end ?? null, shop.subscription_status || 'active', shop.trial_start ?? null, shop.trial_end ?? null, shop.last_notification_sent_at,
+    shop.selected_subscription_tier || 'standard', shop.subscription_expires_at ?? null, shop.subscription_status || 'active', shop.trial_start ?? null, shop.trial_end ?? null, shop.last_notification_sent_at,
     shop.created_at, shop.category, shop.city ?? null, shop.selected_subscription_tier || 'standard', JSON.stringify(shop.theme_config),
     shop.opening_hours ? JSON.stringify(shop.opening_hours) : null, shop.owner_access_token_hash ?? null, shop.owner_email ?? null,
   ]);

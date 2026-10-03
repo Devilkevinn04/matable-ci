@@ -54,6 +54,12 @@ const sqliteSchema = `
     order_id INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
     token_hash TEXT NOT NULL UNIQUE, clicked_at TEXT
   );
+  CREATE TABLE IF NOT EXISTS subscription_payment_intents (
+    id TEXT PRIMARY KEY, shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    tier TEXT NOT NULL, amount INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'XOF',
+    status TEXT NOT NULL DEFAULT 'pending', provider_reference TEXT UNIQUE,
+    created_at TEXT NOT NULL, paid_at TEXT
+  );
   CREATE TABLE IF NOT EXISTS analytics_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, event_type TEXT NOT NULL,
     session_id TEXT NOT NULL, path TEXT, created_at TEXT NOT NULL
@@ -123,6 +129,7 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'subscription_status', "TEXT NOT NULL DEFAULT 'active'");
   addColumn('shops', 'trial_start', 'TEXT');
   addColumn('shops', 'trial_end', 'TEXT');
+  addColumn('shops', 'subscription_expires_at', 'TEXT');
   if (!hadPublicationStatus) {
     connection.exec(`UPDATE shops SET publication_status = CASE
       WHEN is_active = 0 THEN 'suspended'
@@ -134,6 +141,7 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('orders', 'status', "TEXT DEFAULT 'pending'");
   addColumn('orders', 'customer_user_id', 'INTEGER');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)');
+  connection.exec('CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_shop_created ON subscription_payment_intents(shop_id, created_at DESC)');
   addColumn('products', 'category', 'TEXT');
   addColumn('products', 'attributes', 'TEXT');
   addColumn('products', 'gallery_images', 'TEXT');
@@ -182,6 +190,12 @@ const postgresMigrations = [
     order_id INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
     token_hash TEXT NOT NULL UNIQUE, clicked_at TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS subscription_payment_intents (
+    id TEXT PRIMARY KEY, shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    tier TEXT NOT NULL, amount INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'XOF',
+    status TEXT NOT NULL DEFAULT 'pending', provider_reference TEXT UNIQUE,
+    created_at TEXT NOT NULL, paid_at TEXT
+  )`,
   `CREATE TABLE IF NOT EXISTS analytics_events (
     id BIGSERIAL PRIMARY KEY, shop_id INTEGER, event_type TEXT NOT NULL,
     session_id TEXT NOT NULL, path TEXT, created_at TEXT NOT NULL
@@ -209,6 +223,8 @@ const postgresMigrations = [
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT \'active\'',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS trial_start TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS trial_end TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_expires_at TEXT',
+  'CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_shop_created ON subscription_payment_intents(shop_id, created_at DESC)',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS opening_hours JSONB',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_access_token_hash TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_email TEXT',

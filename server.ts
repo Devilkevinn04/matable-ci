@@ -17,6 +17,7 @@ import { createShopManagementRouter } from './server/routes/shopManagement.ts';
 import { createShopRegistrationRouter } from './server/routes/shopRegistration.ts';
 import { createMerchantVerificationRouter } from './server/routes/merchantVerification.ts';
 import { createTelemetryRouter } from './server/routes/telemetry.ts';
+import { createKadevPayRouter } from './server/routes/kadevPay.ts';
 import { toCustomerProfile } from './server/services/customerProfile.ts';
 import { applySecurityHeaders } from './server/middleware/securityHeaders.ts';
 import type { OrderRecord, ProductRecord, ShopOpeningHours, ShopRecord, SubscriptionPlanConfig, SubscriptionState, SubscriptionStatus, SubscriptionTier } from './server/types.ts';
@@ -1202,7 +1203,14 @@ async function startServer() {
     next();
   });
 
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({
+    limit: '2mb',
+    verify: (req, _res, buffer) => {
+      if (req.url?.split('?')[0] === '/api/webhooks/kadevpay') {
+        (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+      }
+    },
+  }));
   app.use(express.urlencoded({ extended: false, limit: '16kb' }));
   app.use('/api/admin', requireAdminAccess);
   app.use('/api/admin', createAdminRouter({
@@ -1237,6 +1245,7 @@ async function startServer() {
   // --- API ROUTES ---
 
   app.use('/api', createTelemetryRouter({ shops, rateLimitPublicRequest, dbGet, dbRun }));
+  app.use('/api', createKadevPayRouter({ shops, requireMerchantOwnShop }));
 
   // Health check
 

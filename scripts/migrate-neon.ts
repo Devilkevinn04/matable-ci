@@ -17,6 +17,7 @@ const migrationVersions = [
   '012_merchant_identity_document_back',
   '013_customer_oauth_identities',
   '014_shop_featured_until',
+  '015_kadevpay_subscription_payments',
 ];
 const connectionString = process.env.DATABASE_URL;
 
