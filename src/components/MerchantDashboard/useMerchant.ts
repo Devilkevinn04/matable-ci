@@ -4,6 +4,7 @@ import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDelive
 import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../../utils/format';
 import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
 import { buildProductSavePayload, createProductDraft, productToDraft } from './productForm';
+import type { ProductModifierGroupDraft } from './productForm';
 
 export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, openRegistration: boolean = false) => {
   const toast = useToast();
@@ -80,8 +81,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [prodSizes, setProdSizes] = useState('');
   const [prodColors, setProdColors] = useState('');
   const [prodPrepTime, setProdPrepTime] = useState<number | ''>('');
-  const [prodModifiers, setProdModifiers] = useState('');
-  const [prodModifierMaxSelections, setProdModifierMaxSelections] = useState<number | ''>(2);
+  const [prodModifierGroups, setProdModifierGroups] = useState<ProductModifierGroupDraft[]>([]);
   const [prodAttributes, setProdAttributes] = useState<Record<string, string>>({});
   const [prodIsAvailable, setProdIsAvailable] = useState(true);
   const [imageCompressing, setImageCompressing] = useState(false);
@@ -668,8 +668,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setProdSizes(draft.sizes);
     setProdColors(draft.colors);
     setProdPrepTime(draft.prep_time);
-    setProdModifiers(draft.modifiers);
-    setProdModifierMaxSelections(draft.modifier_max_selections);
+    setProdModifierGroups(draft.modifier_groups);
     setProdAttributes(draft.attributes);
     setProdIsAvailable(draft.is_available);
     setCompressedSizeKB(null);
@@ -692,8 +691,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setProdSizes(draft.sizes);
     setProdColors(draft.colors);
     setProdPrepTime(draft.prep_time);
-    setProdModifiers(draft.modifiers);
-    setProdModifierMaxSelections(draft.modifier_max_selections);
+    setProdModifierGroups(draft.modifier_groups);
     setProdAttributes(draft.attributes);
     setProdIsAvailable(draft.is_available);
     setCompressedSizeKB(null);
@@ -835,8 +833,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       sizes: prodSizes,
       colors: prodColors,
       prep_time: prodPrepTime,
-      modifiers: prodModifiers,
-      modifier_max_selections: prodModifierMaxSelections,
+      modifier_groups: prodModifierGroups,
       attributes: prodAttributes,
       is_available: prodIsAvailable,
     }, currentShop.category);
@@ -1028,8 +1025,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     prodSizes,
     prodColors,
     prodPrepTime,
-    prodModifiers,
-    prodModifierMaxSelections,
+    prodModifierGroups,
     prodAttributes,
     prodIsAvailable,
     imageCompressing,
@@ -1100,8 +1096,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setProdSizes,
     setProdColors,
     setProdPrepTime,
-    setProdModifiers,
-    setProdModifierMaxSelections,
+    setProdModifierGroups,
     setProdAttributes,
     setProdIsAvailable,
     setImageCompressing,

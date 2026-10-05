@@ -22,7 +22,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, tot
     isProductModalOpen, setIsProductModalOpen, editingProduct, prodTitle, setProdTitle, prodCategory, setProdCategory,
     prodDescription, setProdDescription, prodPrice, setProdPrice, prodStock, setProdStock, prodImage, setProdImage,
     prodLookbookImage, setProdLookbookImage, prodSizes, setProdSizes, prodColors, setProdColors, prodPrepTime, setProdPrepTime,
-    prodModifiers, setProdModifiers, prodModifierMaxSelections, setProdModifierMaxSelections, prodIsAvailable, setProdIsAvailable,
+    prodIsAvailable, setProdIsAvailable,
     imageCompressing, compressedSizeKB, originalImageSizeKB, flashBilan,
     handleSaveOpeningHours, handleResetManualOverride, handleTriggerCronBilan, handleQuickStockChange, handleQuickToggleVisibility,
     handleOpenAddModal, handleOpenEditModal, handleUpdateOrderStatus, handleImageUpload, handleSaveProduct, handleDeleteProduct,

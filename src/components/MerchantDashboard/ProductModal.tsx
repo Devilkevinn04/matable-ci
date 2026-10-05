@@ -2,7 +2,6 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Sparkles, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes } from 'lucide-react';
 import { MerchantState } from './useMerchant';
-import { parseProductModifierGroups, serializeProductModifierGroups } from './productForm';
 import type { ProductModifierGroupDraft } from './productForm';
 import { ThemeCustomizer } from '../ThemeCustomizer';
 import { formatFCFA } from '../../utils/format';
@@ -27,7 +26,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
     isProductModalOpen, setIsProductModalOpen, editingProduct, prodTitle, setProdTitle, prodCategory, setProdCategory,
     prodDescription, setProdDescription, prodPrice, setProdPrice, prodStock, setProdStock, prodImage, setProdImage,
     prodLookbookImage, setProdLookbookImage, prodSizes, setProdSizes, prodColors, setProdColors, prodPrepTime, setProdPrepTime,
-    prodModifiers, setProdModifiers, prodModifierMaxSelections, setProdModifierMaxSelections, prodAttributes, setProdAttributes, prodIsAvailable, setProdIsAvailable,
+    prodModifierGroups, setProdModifierGroups, prodAttributes, setProdAttributes, prodIsAvailable, setProdIsAvailable,
     imageCompressing, compressedSizeKB, originalImageSizeKB, flashBilan,
     handleSaveOpeningHours, handleResetManualOverride, handleTriggerCronBilan, handleQuickStockChange, handleQuickToggleVisibility,
     handleOpenAddModal, handleOpenEditModal, handleUpdateOrderStatus, handleImageUpload, handleLookbookImageUpload,
@@ -38,9 +37,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
 
   if (!isProductModalOpen) return null;
   const categoryDefaults = getCategoryDefaults(currentShop.category);
-  const modifierGroups = parseProductModifierGroups(prodModifiers);
+  const modifierGroups = prodModifierGroups;
   const updateModifierGroups = (update: (groups: ProductModifierGroupDraft[]) => ProductModifierGroupDraft[]) => {
-    setProdModifiers(serializeProductModifierGroups(update(parseProductModifierGroups(prodModifiers))));
+    setProdModifierGroups((groups) => update(groups));
   };
   const addModifierOption = (groupIndex: number) => {
     const option = modifierOptionDrafts[groupIndex]?.trim();
@@ -245,6 +244,39 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                               <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
+                          <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                            <label className="flex min-h-10 items-center gap-2 text-xs font-semibold text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={group.required}
+                                onChange={(event) => updateModifierGroups((groups) => groups.map((item, index) => (
+                                  index === groupIndex ? { ...item, required: event.target.checked } : item
+                                )))}
+                                className="h-4 w-4 rounded border-slate-300 text-emerald-800 focus:ring-emerald-700"
+                              />
+                              Choix obligatoire
+                            </label>
+                            <fieldset className="min-w-0">
+                              <legend className="mb-1.5 text-[11px] font-bold text-slate-600">Maximum pour ce groupe</legend>
+                              <div className="grid grid-cols-5 gap-1" role="radiogroup" aria-label={`Maximum de choix pour ${group.name || `Groupe ${groupIndex + 1}`}`}>
+                                {[1, 2, 3, 4, 5].map((selectionCount) => (
+                                  <label key={selectionCount} className={`flex min-h-9 cursor-pointer items-center justify-center rounded-lg border px-2 text-xs font-bold transition ${Number(group.max_selections) === selectionCount ? 'border-emerald-800 bg-emerald-800 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-700 hover:bg-emerald-50'}`}>
+                                    <input
+                                      type="radio"
+                                      name={`modifier-group-${groupIndex}-max-selections`}
+                                      value={selectionCount}
+                                      checked={Number(group.max_selections) === selectionCount}
+                                      onChange={() => updateModifierGroups((groups) => groups.map((item, index) => (
+                                        index === groupIndex ? { ...item, max_selections: selectionCount } : item
+                                      )))}
+                                      className="sr-only"
+                                    />
+                                    {selectionCount}
+                                  </label>
+                                ))}
+                              </div>
+                            </fieldset>
+                          </div>
                           {group.options.length > 0 && (
                             <div className="flex flex-wrap gap-2" aria-label={`Choix du groupe ${group.name}`}>
                               {group.options.map((option, optionIndex) => (
@@ -290,38 +322,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                       ))}
                       <button
                         type="button"
-                        onClick={() => updateModifierGroups((groups) => [...groups, { name: `Groupe ${groups.length + 1}`, options: [] }])}
+                        onClick={() => updateModifierGroups((groups) => [...groups, { name: `Groupe ${groups.length + 1}`, required: false, max_selections: 2, options: [] }])}
                         className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-dashed border-emerald-300 px-3 text-xs font-bold text-emerald-900 transition hover:bg-emerald-50"
                       >
                         <Plus className="h-4 w-4" /> Ajouter un groupe
                       </button>
                     </div>
-                    <fieldset>
-                      <legend className="mb-1.5 text-xs font-bold text-slate-700">Nombre maximum de choix par groupe</legend>
-                      <div className="grid grid-cols-5 gap-2" role="radiogroup" aria-label="Nombre maximum de choix par groupe">
-                        {[1, 2, 3, 4, 5].map((selectionCount) => (
-                          <label
-                            key={selectionCount}
-                            className={`flex min-h-10 cursor-pointer items-center justify-center rounded-lg border px-2 text-xs font-bold transition ${
-                              Number(prodModifierMaxSelections) === selectionCount
-                                ? 'border-emerald-800 bg-emerald-800 text-white'
-                                : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-700 hover:bg-emerald-50'
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name="prod-modifier-max-selections"
-                              value={selectionCount}
-                              checked={Number(prodModifierMaxSelections) === selectionCount}
-                              onChange={() => setProdModifierMaxSelections(selectionCount)}
-                              className="sr-only"
-                            />
-                            {selectionCount} choix
-                          </label>
-                        ))}
-                      </div>
-                      <p className="mt-1 text-[11px] leading-4 text-slate-500">Ex. : Sauce : Doux, Pimenté | Accompagnement : Alloco (+500 F), Attiéké.</p>
-                    </fieldset>
                   </div>
                 ) : null}
                     </section>

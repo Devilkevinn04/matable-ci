@@ -13,8 +13,7 @@ export interface ProductDraft {
   sizes: string;
   colors: string;
   prep_time: number | '';
-  modifiers: string;
-  modifier_max_selections: number | '';
+  modifier_groups: ProductModifierGroupDraft[];
   attributes: Record<string, string>;
   is_available: boolean;
 }
@@ -53,6 +52,8 @@ export interface ProductSavePayload {
 
 export interface ProductModifierGroupDraft {
   name: string;
+  required: boolean;
+  max_selections: number;
   options: string[];
 }
 
@@ -66,6 +67,8 @@ export function parseProductModifierGroups(value: string): ProductModifierGroupD
 
     return {
       name,
+      required: false,
+      max_selections: 2,
       options: optionText.split(',').map((option) => option.trim()).filter(Boolean),
     };
   });
@@ -93,25 +96,29 @@ export function createProductDraft(category: unknown): ProductDraft {
     sizes: defaults.defaultProductSizes,
     colors: defaults.defaultProductColors,
     prep_time: defaults.defaultProductPrepTime ?? '',
-    modifiers: defaults.defaultProductModifiers,
-    modifier_max_selections: 2,
+    modifier_groups: parseProductModifierGroups(defaults.defaultProductModifiers),
     attributes: {},
     is_available: true,
   };
 }
 
 export function productToDraft(product: Product): ProductDraft {
-  const modifiers = Array.isArray(product.modifier_groups)
+  const modifierGroups = Array.isArray(product.modifier_groups)
     ? product.modifier_groups.map((group) => {
         const optionLabels = group.options.map((option) => {
           if (typeof option === 'string' || !option.price_delta || /\(\+\s*[\d\s.,]+\s*(?:F(?:CFA)?)?\)$/i.test(option.label)) {
             return typeof option === 'string' ? option : option.label;
           }
           return `${option.label} (+${option.price_delta} F)`;
-        }).join(', ');
-        return `${group.name}: ${optionLabels}`;
-      }).join(' | ')
-    : '';
+        });
+        return {
+          name: group.name,
+          required: Boolean(group.required),
+          max_selections: Math.min(5, Math.max(1, Number(group.max_selections) || 2)),
+          options: optionLabels,
+        };
+      })
+    : [];
 
   return {
     title: product.title,
@@ -127,8 +134,7 @@ export function productToDraft(product: Product): ProductDraft {
       ? product.colors.map((color) => typeof color === 'string' ? color : color.name).join(', ')
       : '',
     prep_time: product.prep_time || '',
-    modifiers,
-    modifier_max_selections: product.modifier_groups?.[0]?.max_selections || 2,
+    modifier_groups: modifierGroups,
     attributes: product.attributes || {},
     is_available: product.is_available !== false,
   };
@@ -146,33 +152,27 @@ export function buildProductSavePayload(draft: ProductDraft, category: ShopCateg
       .map(([key, value]) => [key, value.trim()])
       .filter(([, value]) => value),
   );
-  let modifierGroups: ProductModifierDraftGroup[] | undefined;
-
-  if (defaults.productFormType === 'food' && draft.modifiers.trim()) {
-    const maxSelections = Math.min(5, Math.max(1, Number(draft.modifier_max_selections) || 1));
-    modifierGroups = draft.modifiers.split('|').map((groupText, groupIndex) => {
-      const parts = groupText.split(':');
-      const name = parts.length > 1 ? parts[0].trim() : `Options ${groupIndex + 1}`;
-      const labels = (parts.length > 1 ? parts[1] : parts[0]).split(',').map((label) => label.trim()).filter(Boolean);
-
+  const modifierGroups: ProductModifierDraftGroup[] | undefined = defaults.productFormType === 'food' && draft.modifier_groups.length > 0
+    ? draft.modifier_groups.map((group, groupIndex) => {
+      const labels = group.options.map((label) => label.trim()).filter(Boolean);
       return {
         id: `mod-${groupIndex}`,
-        name,
-        required: false,
-        max_selections: maxSelections,
+        name: group.name.trim() || `Options ${groupIndex + 1}`,
+        required: group.required,
+        max_selections: Math.min(5, Math.max(1, Number(group.max_selections) || 1)),
         options: labels.map((label) => {
           const surcharge = label.match(/\(\+\s*([\d\s.,]+)\s*(?:F(?:CFA)?)?\)$/i)?.[1];
           const priceDelta = surcharge ? Number(surcharge.replace(/\D/g, '')) : 0;
           return {
-          id: `opt-${label.toLowerCase().replace(/\s+/g, '-')}`,
-          name: label,
-          label,
-          price_delta: Number.isSafeInteger(priceDelta) ? priceDelta : 0,
-        };
+            id: `opt-${label.toLowerCase().replace(/\s+/g, '-')}`,
+            name: label,
+            label,
+            price_delta: Number.isSafeInteger(priceDelta) ? priceDelta : 0,
+          };
         }),
       };
-    }).filter((group) => group.options.length > 0);
-  }
+    }).filter((group) => group.options.length > 0)
+    : undefined;
 
   return {
     title: draft.title.trim(),
