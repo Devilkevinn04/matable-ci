@@ -50,7 +50,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
           <input type="text" value={regName} onChange={(event) => setRegName(event.target.value)} required autoComplete="organization" placeholder="Ex. : Atelier Awa" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" />
         </label>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 min-[390px]:grid-cols-2 sm:gap-4">
           <label className="block text-sm font-semibold text-[#34463d]">
             Activité
             <select value={regCategory} onChange={(event) => setRegCategory(event.target.value as ShopCategory)} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 py-3 text-sm font-normal text-[#25231f] outline-none focus:border-[#176b55]">
@@ -72,7 +72,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
           <input type="tel" inputMode="tel" value={regPhone} onChange={(event) => setRegPhone(event.target.value)} required autoComplete="tel" placeholder="+225 07 00 00 00 00" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none focus:border-[#176b55]" />
         </label>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 min-[390px]:grid-cols-2 sm:gap-4">
           <label className="block text-sm font-semibold text-[#34463d]">
             Code PIN (6 chiffres)
             <div className="relative">

@@ -779,6 +779,25 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   const productAfterCancellation = stockAfterCancellation.payload.find((item: any) => item.id === createdProduct.id);
   assert.equal(productAfterCancellation.stock, 5);
 
+  const reactivatedPending = await apiFetch(`/api/shops/1/orders/${orderId}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'pending' }),
+  });
+  assert.equal(reactivatedPending.response.status, 200, JSON.stringify(reactivatedPending.payload));
+  assert.equal(reactivatedPending.payload.order.status, 'pending');
+  const stockAfterReactivation = await apiFetch('/api/shops/1/products');
+  assert.equal(stockAfterReactivation.payload.find((item: any) => item.id === createdProduct.id).stock, 5);
+
+  const cancelledAgain = await apiFetch(`/api/shops/1/orders/${orderId}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'cancelled' }),
+  });
+  assert.equal(cancelledAgain.response.status, 200, JSON.stringify(cancelledAgain.payload));
+  const stockAfterRepeatedCancellation = await apiFetch('/api/shops/1/products');
+  assert.equal(stockAfterRepeatedCancellation.payload.find((item: any) => item.id === createdProduct.id).stock, 5);
+
   const competingOrder = await apiFetch('/api/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

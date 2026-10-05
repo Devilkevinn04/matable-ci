@@ -462,6 +462,17 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               </button>
             )}
 
+            <button
+              type="button"
+              aria-label="Ouvrir le menu commerçant"
+              aria-expanded={isSettingsDrawerOpen}
+              aria-controls="merchant-menu-drawer"
+              onClick={() => setIsSettingsDrawerOpen(true)}
+              className="inline-flex min-h-11 min-w-0 w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-2 text-center text-[11px] font-bold text-slate-700 hover:bg-slate-50 lg:hidden"
+            >
+              <Menu className="h-4 w-4 shrink-0" />Menu
+            </button>
+
             {/* Logout button */}
             <button
               onClick={handleLogout}
@@ -560,7 +571,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       {/* Main Container */}
       <div className="mx-auto max-w-6xl px-4 py-6">
         <div className="grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start">
-          <nav aria-label="Navigation principale commerçant" className="flex min-w-0 gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 lg:sticky lg:top-28 lg:flex-col lg:overflow-visible">
+          <nav aria-label="Navigation principale commerçant" className="hidden min-w-0 rounded-xl border border-slate-200 bg-white p-1.5 lg:sticky lg:top-28 lg:flex lg:flex-col lg:overflow-visible">
             {[
               { id: 'overview' as const, label: 'Accueil', icon: LayoutDashboard },
               { id: 'catalog' as const, label: `Catalogue (${products.length})`, icon: Package },
@@ -607,12 +618,19 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       {isSettingsDrawerOpen && (
         <div className="fixed inset-0 z-[70]">
           <button type="button" aria-label="Fermer le menu" onClick={() => setIsSettingsDrawerOpen(false)} className="absolute inset-0 bg-[#211712]/55" />
-          <aside role="dialog" aria-modal="true" aria-labelledby="merchant-menu-title" className="absolute inset-y-0 right-0 flex h-dvh w-full flex-col overflow-y-auto border-l-[3px] border-[#211712] bg-[#fffaf2] p-5 shadow-2xl sm:w-1/2">
+          <aside id="merchant-menu-drawer" role="dialog" aria-modal="true" aria-labelledby="merchant-menu-title" className="absolute inset-y-0 right-0 flex h-dvh w-full flex-col overflow-y-auto border-l-[3px] border-[#211712] bg-[#fffaf2] p-5 shadow-2xl sm:w-1/2">
             <header className="flex items-start justify-between gap-3 border-b border-[#ded8ce] pb-4">
               <div><p className="text-[10px] font-black uppercase text-[#e6572b]">MaTable.ci</p><h2 id="merchant-menu-title" className="mt-1 text-xl font-black text-[#211712]">Ma boutique</h2></div>
               <button type="button" onClick={() => setIsSettingsDrawerOpen(false)} aria-label="Fermer le menu" className="rounded-lg border border-slate-300 bg-white p-2 text-slate-700"><X className="h-4 w-4" /></button>
             </header>
-            <nav className="mt-5 space-y-5" aria-label="Réglages et services">
+            <nav className="mt-5 space-y-5" aria-label="Navigation et réglages commerçant">
+              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Espace commerçant</p><div className="space-y-1">
+                {[
+                  { id: 'overview' as const, label: 'Accueil', icon: LayoutDashboard },
+                  { id: 'catalog' as const, label: `Catalogue (${products.length})`, icon: Package },
+                  { id: 'orders' as const, label: `Commandes (${orders.length})`, icon: ShoppingBag },
+                ].map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => { setActiveTab(id); setIsSettingsDrawerOpen(false); }} className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold ${activeTab === id ? 'bg-emerald-50 text-emerald-900' : 'text-slate-800 hover:bg-emerald-50'}`}><Icon className="h-4 w-4 text-emerald-800" />{label}</button>)}
+              </div></div>
               <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Boutique</p><div className="space-y-1">
                 {[
                   ['themes', 'Apparence', Palette],
@@ -632,6 +650,18 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             {dashboardSupportUrl && <a href={dashboardSupportUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"><MessageCircle className="h-4 w-4" />Aide et assistance</a>}
             <button type="button" onClick={handleLogout} className="mt-auto flex min-h-11 items-center gap-3 border-t border-[#ded8ce] pt-4 text-sm font-bold text-rose-800"><X className="h-4 w-4" />Déconnexion</button>
           </aside>
+        </div>
+      )}
+      {confirmModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4">
+          <section role="alertdialog" aria-modal="true" aria-labelledby="merchant-confirm-title" className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <h2 id="merchant-confirm-title" className="text-base font-black text-slate-900">Confirmer l’action</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{confirmModal.message}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setConfirmModal(null)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Garder la commande</button>
+              <button type="button" onClick={() => { const confirmAction = confirmModal.onConfirm; setConfirmModal(null); confirmAction(); }} className="min-h-10 rounded-lg bg-rose-700 px-4 py-2 text-sm font-bold text-white hover:bg-rose-800">Confirmer l’annulation</button>
+            </div>
+          </section>
         </div>
       )}
       <ProductModal state={merchantState} />

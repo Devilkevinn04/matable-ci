@@ -1,4 +1,4 @@
-import { CartItem, Product, Shop } from '../types';
+import { CartItem, Order, Product, Shop } from '../types';
 import { getCategoryDefaults } from './categoryDefaults';
 
 export function getProductUnitPrice(product: Product, selectedModifiers?: string[]): number {
@@ -41,14 +41,7 @@ export function isValidWhatsAppPhone(phone: string): boolean {
 
 export function generateWhatsAppOrderReceipt(
   shop: Shop,
-  customerName: string,
-  customerPhone: string,
-  deliveryLocation: string,
-  deliveryNote: string,
-  paymentMethod: 'wave' | 'mobile_money' | 'cash' | 'to_confirm',
-  cart: CartItem[],
-  totalAmount: number,
-  deliverySlot?: string
+  order: Pick<Order, 'customer_name' | 'customer_phone' | 'delivery_location' | 'delivery_note' | 'payment_method_preference' | 'items' | 'total_amount' | 'delivery_slot'>
 ): { text: string; url: string } {
   const paymentLabels: Record<string, string> = {
     wave: 'Wave souhaité',
@@ -61,30 +54,30 @@ export function generateWhatsAppOrderReceipt(
     `🛒 *COMMANDE MATABLE.CI*`,
     `🏪 *Boutique :* ${shop.name} (${getCategoryDefaults(shop.category).label})`,
     `----------------------------------------`,
-    `👤 *Client :* ${customerName.trim()}`,
-    `📞 *Téléphone :* ${customerPhone.trim()}`,
-    `📍 *Lieu de livraison :* ${deliveryLocation.trim()}`,
+    `👤 *Client :* ${order.customer_name.trim()}`,
+    `📞 *Téléphone :* ${order.customer_phone.trim()}`,
+    `📍 *Lieu de livraison :* ${order.delivery_location.trim()}`,
   ];
 
-  if (deliverySlot) {
-    lines.push(`⏰ *Créneau souhaité :* ${deliverySlot}`);
+  if (order.delivery_slot) {
+    lines.push(`⏰ *Créneau souhaité :* ${order.delivery_slot}`);
   }
 
-  if (deliveryNote && deliveryNote.trim().length > 0) {
-    lines.push(`ℹ️ *Précision repère :* ${deliveryNote.trim()}`);
+  if (order.delivery_note && order.delivery_note.trim().length > 0) {
+    lines.push(`ℹ️ *Précision repère :* ${order.delivery_note.trim()}`);
   }
 
   lines.push(`💳 *Paiement :* à convenir directement avec le vendeur`);
-  if (paymentMethod) {
-    lines.push(`📲 *Mode souhaité :* ${paymentLabels[paymentMethod] || paymentMethod}`);
+  if (order.payment_method_preference) {
+    lines.push(`📲 *Mode souhaité :* ${paymentLabels[order.payment_method_preference] || order.payment_method_preference}`);
   }
   lines.push(`----------------------------------------`);
   lines.push(`📦 *ARTICLES COMMANDÉS :*`);
 
-  cart.forEach((item, index) => {
-    const unitPrice = getProductUnitPrice(item.product, item.selected_modifiers);
-    const subtotal = item.quantity * unitPrice;
-    let itemLine = `${index + 1}. *${item.product.title}*`;
+  (order.items || []).forEach((item, index) => {
+    const unitPrice = Number(item.unit_price);
+    const subtotal = Number(item.quantity) * unitPrice;
+    let itemLine = `${index + 1}. *${item.product_title || `Article #${item.product_id}`}*`;
     if (item.selected_size) {
       itemLine += ` [Taille: ${item.selected_size}]`;
     }
@@ -95,17 +88,12 @@ export function generateWhatsAppOrderReceipt(
 
     if (item.selected_modifiers && item.selected_modifiers.length > 0) {
       lines.push(`   _(Options/Sauces : ${item.selected_modifiers.join(', ')})_`);
-    } else if (item.product.description) {
-      const shortDesc = item.product.description.length > 50 
-        ? item.product.description.substring(0, 47) + '...' 
-        : item.product.description;
-      lines.push(`   _(Détail : ${shortDesc})_`);
     }
     lines.push(`   Quantité : ${item.quantity} x ${formatFCFA(unitPrice)} = *${formatFCFA(subtotal)}*`);
   });
 
   lines.push(`----------------------------------------`);
-  lines.push(`💰 *TOTAL INDICATIF : ${formatFCFA(totalAmount)}*`);
+  lines.push(`💰 *TOTAL INDICATIF : ${formatFCFA(order.total_amount)}*`);
   lines.push(`📌 *Prix final à confirmer avec le vendeur selon disponibilité, livraison et mode de paiement.*`);
   lines.push(`----------------------------------------`);
   lines.push(`Merci de me confirmer la disponibilité, le montant final et le mode de paiement. ✨`);

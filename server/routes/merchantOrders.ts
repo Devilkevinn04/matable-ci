@@ -55,7 +55,7 @@ export function createMerchantOrdersRouter({
       preparing: ['ready', 'cancelled'],
       ready: ['delivered', 'cancelled'],
       delivered: [],
-      cancelled: ['confirmed'],
+      cancelled: ['pending', 'confirmed'],
       expired: [],
     };
     if (!allowedTransitions[previousStatus]?.includes(status)) {

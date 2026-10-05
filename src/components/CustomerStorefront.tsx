@@ -22,7 +22,7 @@ import {
 import { Shop, Product, CartItem } from '../types';
 import { formatFCFA, generateWhatsAppOrderReceipt, getProductUnitPrice } from '../utils/format';
 import { getContrastTextColor, normalizeHex } from '../utils/color';
-import { requiresShopSwitchConfirmation } from '../utils/cart';
+import { getDefaultSelectedModifiers, requiresShopSwitchConfirmation } from '../utils/cart';
 import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDisplay, getWelcomeMessageForDisplay } from '../utils/categoryDefaults';
 import { CategoryProductImage } from './CategoryProductImage';
 import { CustomerProductCard } from './CustomerProductCard';
@@ -208,11 +208,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           const firstCol = p.colors[0];
           initColors[p.id] = typeof firstCol === 'string' ? firstCol : firstCol.name;
         }
-        if (p.modifier_groups && p.modifier_groups.length > 0 && p.modifier_groups[0].options.length > 0) {
-          const firstOpt = p.modifier_groups[0].options[0];
-          const optLabel = typeof firstOpt === 'string' ? firstOpt : firstOpt.label;
-          initModifiers[p.id] = [optLabel];
-        }
+        const requiredModifierSelections = getDefaultSelectedModifiers(p.modifier_groups || []);
+        if (requiredModifierSelections.length > 0) initModifiers[p.id] = requiredModifierSelections;
       });
 
       setSelectedSizes(initSizes);
@@ -449,34 +446,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         throw new Error(data.error || 'Erreur de validation de commande');
       }
 
-      const confirmedCart = (data.order.items || []).map((item: any) => {
-        const localProduct = products.find((product) => product.id === item.product_id);
-        if (!localProduct) return null;
-        return {
-          product: {
-            ...localProduct,
-            title: item.product_title || localProduct.title,
-            price: Number(item.unit_price),
-            modifier_groups: [],
-          },
-          quantity: Number(item.quantity),
-          selected_size: item.selected_size,
-          selected_color: item.selected_color,
-          selected_modifiers: Array.isArray(item.selected_modifiers) ? item.selected_modifiers : [],
-        };
-      }).filter(Boolean);
-
-      // 2. Prepare WhatsApp from the server-confirmed order.
+      // 2. Prepare WhatsApp from the exact server-confirmed order.
       const { text, url } = generateWhatsAppOrderReceipt(
         shop,
-        customerName,
-        customerPhone,
-        finalLocation,
-        deliveryNote,
-        paymentMethod,
-        confirmedCart,
-        Number(data.order.total_amount),
-        shop.category === 'food' ? deliverySlot : undefined
+        data.order,
       );
 
       setOrderSuccess({

@@ -155,6 +155,7 @@ export default function App() {
   const navigate = useNavigate();
   const path = location.pathname;
   const normalizedPath = path.replace(/^\//, '').replace(/\/$/, '');
+  const hasMerchantAccessToken = new URLSearchParams(location.search).has('access');
   const legalPage = legalPageMap[normalizedPath] || null;
   const isFaqPage = normalizedPath === 'faq';
   const isRecoveryPage = normalizedPath === 'recuperation-acces';
@@ -251,8 +252,8 @@ export default function App() {
       onModeChange={(mode) => navigate(mode === 'register' ? '/inscription' : '/connexion')}
       onAuthenticated={(user) => { setCustomerUser(user); navigate('/compte'); }}
       onBack={() => navigate('/')}
-      onMerchantLogin={() => { setOpenMerchantRegistration(false); navigate('/app'); }}
-      onMerchantRegister={() => { setOpenMerchantRegistration(true); navigate('/app'); }}
+      onMerchantLogin={() => { setOpenMerchantRegistration(false); navigate('/app/connexion'); }}
+      onMerchantRegister={() => { setOpenMerchantRegistration(true); navigate('/app/creer-boutique'); }}
     />
   );
 
@@ -296,7 +297,10 @@ export default function App() {
                       ? <CustomerAccount user={customerUser} onLogout={logoutCustomer} onBack={() => navigate('/')} />
                       : renderCustomerAuth('login')
                     } />
-                    <Route path="/app/*" element={<MerchantDashboard openRegistration={openMerchantRegistration} onBackToDirectory={() => { setOpenMerchantRegistration(false); navigate('/'); }} onOpenStorefront={(slug) => navigate(`/${slug}`)} />} />
+                    <Route path="/app/*" element={normalizedPath === 'app' && !hasMerchantAccessToken
+                      ? renderCustomerAuth('register')
+                      : <MerchantDashboard openRegistration={openMerchantRegistration} onBackToDirectory={() => { setOpenMerchantRegistration(false); navigate('/'); }} onOpenStorefront={(slug) => navigate(`/${slug}`)} />
+                    } />
                     <Route path="/admin/*" element={<AdminDashboard />} />
                     <Route path="/:slug" element={<StorefrontRoute customerUser={customerUser} onCustomerAuthenticated={setCustomerUser} />} />
                     <Route path="*" element={<NotFoundPage />} />
