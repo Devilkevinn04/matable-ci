@@ -59,46 +59,48 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
   };
 
   return (
-    <main className="public-directory min-h-screen text-[#25231f]">
+    <main className="public-directory min-h-screen bg-[#f7f3ee] text-[#25231f]">
       <section className="mx-auto w-full max-w-7xl px-5 pb-12 pt-8 sm:pb-16 sm:pt-12">
-        <div className="max-w-4xl animate-in fade-in slide-in-from-bottom-3 duration-500">
-            <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[#0f4d3d]">
-            <Sparkles className="h-4 w-4 text-[#e6572b]" /> Découvrez près de vous
+        <div className="rounded-[28px] border border-[#e8dfd3] bg-[linear-gradient(135deg,#fffdf9_0%,#f5efe8_100%)] p-5 shadow-[0_18px_45px_rgba(33,23,18,0.06)] sm:p-8">
+          <div className="max-w-4xl animate-in fade-in slide-in-from-bottom-3 duration-500">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#e8dacc] bg-white/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#0f4d3d]">
+              <Sparkles className="h-3.5 w-3.5 text-[#e6572b]" /> Découvrez près de vous
             </div>
-            <h1 className="hero-title mt-4 max-w-[780px] font-serif text-[34px] font-medium leading-[1.12] text-[#25231f] sm:text-[46px]">Trouvez les belles adresses <span className="hero-accent">locales</span> près de vous.</h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-[#6f6a61]">Mode, restauration, artisanat et essentiels du quartier : explorez les vitrines et commandez directement auprès des commerçants.</p>
-            <div className="hero-signals mt-5" aria-label="Les essentiels de MaTable">
-              <span><span className="hero-signal-dot hero-signal-dot-orange" /> Adresses du quartier</span>
-              <span><span className="hero-signal-dot hero-signal-dot-green" /> Catalogue en ligne</span>
-              <span><span className="hero-signal-dot hero-signal-dot-gold" /> Commande WhatsApp</span>
+            <h1 className="mt-4 max-w-[780px] text-[34px] font-black leading-[1.06] text-[#201b18] sm:text-[46px]">Trouvez les belles adresses <span className="text-[#0f4d3d]">locales</span> près de vous.</h1>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-[#625b54]">Mode, restauration, artisanat et essentiels du quartier : explorez les vitrines et commandez directement auprès des commerçants.</p>
+            <div className="mt-5 flex flex-wrap items-center gap-2 text-[11px] font-medium text-[#544d47]" aria-label="Les essentiels de MaTable">
+              <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 border border-[#eadcc9]"><span className="h-2 w-2 rounded-full bg-[#e6572b]" /> Adresses du quartier</span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 border border-[#eadcc9]"><span className="h-2 w-2 rounded-full bg-[#0f4d3d]" /> Catalogue en ligne</span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 border border-[#eadcc9]"><span className="h-2 w-2 rounded-full bg-[#d8a154]" /> Commande WhatsApp</span>
             </div>
+          </div>
+
+          {!query.trim() && category === 'all' && <div className="mt-7"><FeaturedCarousel shops={shops} onOpenShop={onOpenShop} /></div>}
+
+          <div className="relative mt-6 flex flex-col gap-3 lg:flex-row">
+            <label className="relative flex-1">
+              <Search className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
+              <input aria-label="Rechercher une boutique, un produit ou une ville" value={query} onChange={event => setQuery(event.target.value)} placeholder="Rechercher une boutique, un produit, une ville..." className="w-full rounded-2xl border border-[#e5d9ca] bg-white py-3.5 pl-12 pr-12 text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/15" />
+              {query && <button type="button" onClick={() => setQuery('')} aria-label="Effacer la recherche" title="Effacer la recherche" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"><X className="h-4 w-4" /></button>}
+            </label>
+            <button onClick={onCreateShop} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0f4d3d] px-5 py-3.5 font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.18)] transition hover:bg-[#176b55]">
+              <Store className="h-4 w-4" /> Créer ma boutique
+            </button>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-[#4a3a30]">
+            <span className="font-black text-[#211712]">Essayez :</span>
+            {popularSearches.map(term => <button key={term} onClick={() => setQuery(term)} className="rounded-full border border-[#e5d9ca] bg-white px-2.5 py-1.5 font-medium text-[#6f6a61] transition hover:border-[#176b55] hover:text-[#0f4d3d]">{term}</button>)}
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button onClick={() => setCategory('all')} className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${category === 'all' ? 'border-[#0f4d3d] bg-[#0f4d3d] text-white' : 'border-[#ded8ce] bg-white text-[#6f6a61] hover:border-[#176b55]'}`}>Toutes les boutiques</button>
+            {categories.map(item => <button key={item} onClick={() => setCategory(item)} className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${category === item ? 'border-[#e6572b] bg-[#e6572b] text-white' : 'border-[#ded8ce] bg-white text-[#6f6a61] hover:border-[#e6572b]'}`}>{categoryLabel(item)}</button>)}
+          </div>
         </div>
 
-        {!query.trim() && category === 'all' && <FeaturedCarousel shops={shops} onOpenShop={onOpenShop} />}
-
-        <div className="relative mt-5 flex flex-col lg:flex-row gap-3">
-          <label className="relative flex-1">
-            <Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
-            <input aria-label="Rechercher une boutique, un produit ou une ville" value={query} onChange={event => setQuery(event.target.value)} placeholder="Rechercher une boutique, un produit, une ville..." className="w-full rounded-lg border border-[#ded8ce] bg-[#fffdf9] py-3.5 pl-12 pr-12 text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/15" />
-            {query && <button type="button" onClick={() => setQuery('')} aria-label="Effacer la recherche" title="Effacer la recherche" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"><X className="h-4 w-4" /></button>}
-          </label>
-          <button onClick={onCreateShop} className="warm-cta rounded-lg px-5 py-3.5 font-semibold text-white flex items-center justify-center gap-2 transition-colors duration-200">
-            <Store className="h-5 w-5" /> Créer ma boutique
-          </button>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-[#4a3a30]">
-          <span className="font-black text-[#211712]">Essayez :</span>
-          {popularSearches.map(term => <button key={term} onClick={() => setQuery(term)} className="rounded-md border border-[#ded8ce] bg-[#fffdf9] px-2.5 py-1.5 font-medium text-[#6f6a61] transition-colors hover:border-[#176b55] hover:text-[#0f4d3d]">{term}</button>)}
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          <button onClick={() => setCategory('all')} className={`rounded-md border px-3 py-2 text-xs font-semibold transition-colors ${category === 'all' ? 'border-[#0f4d3d] bg-[#0f4d3d] text-white' : 'border-[#ded8ce] bg-[#fffdf9] text-[#6f6a61] hover:border-[#176b55]'}`}>Toutes les boutiques</button>
-          {categories.map(item => <button key={item} onClick={() => setCategory(item)} className={`rounded-md border px-3 py-2 text-xs font-semibold transition-colors ${category === item ? 'border-[#e6572b] bg-[#e6572b] text-white' : 'border-[#ded8ce] bg-[#fffdf9] text-[#6f6a61] hover:border-[#e6572b]'}`}>{categoryLabel(item)}</button>)}
-        </div>
-
-        <div className="mt-10 flex items-end justify-between gap-3">
-          <div><p className="text-xs font-bold uppercase tracking-[0.1em] text-[#e6572b]">{query.trim() || category !== 'all' ? 'Résultats' : 'À découvrir'}</p><h2 aria-live="polite" className="mt-1 text-xl font-semibold text-[#25231f]">{query.trim() || category !== 'all' ? 'Boutiques correspondantes' : 'Boutiques à découvrir'}</h2></div>
+        <div className="mt-8 flex items-end justify-between gap-3">
+          <div><p className="text-xs font-bold uppercase tracking-[0.1em] text-[#e6572b]">{query.trim() || category !== 'all' ? 'Résultats' : 'À découvrir'}</p><h2 aria-live="polite" className="mt-1 text-xl font-black text-[#25231f]">{query.trim() || category !== 'all' ? 'Boutiques correspondantes' : 'Boutiques à découvrir'}</h2></div>
         </div>
 
         {isLoading ? (
@@ -123,14 +125,14 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             {(query.trim() || category !== 'all') && <button type="button" onClick={() => { setQuery(''); setCategory('all'); }} className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[#0f4d3d] px-4 py-2 text-sm font-bold text-white hover:bg-[#176b55]">Effacer la recherche et les filtres <X className="h-4 w-4" /></button>}
           </div>
         ) : (
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {filteredShops.map(shop => (
-              <button key={shop.slug} onClick={() => onOpenShop(shop.slug)} style={{ '--shop-color': getShopColor(shop) } as React.CSSProperties} className="shop-card group relative overflow-hidden rounded-lg border border-[#ded8ce] bg-[#fffdf9] text-left transition-colors hover:border-[#176b55] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
-                <div className="relative h-40 overflow-hidden bg-[#e9e4da]">
+              <button key={shop.slug} onClick={() => onOpenShop(shop.slug)} style={{ '--shop-color': getShopColor(shop) } as React.CSSProperties} className="group relative overflow-hidden rounded-[22px] border border-[#e7ddd0] bg-white text-left shadow-[0_12px_30px_rgba(36,28,22,0.04)] transition hover:-translate-y-1 hover:border-[#176b55] hover:shadow-[0_18px_40px_rgba(36,28,22,0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
+                <div className="relative h-44 overflow-hidden bg-[#e9e4da]">
                   {getShopImage(shop) ? <img
                     src={getShopImage(shop)}
                     alt={`Illustration de ${shop.name}`}
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                     onError={(event) => {
                       const element = event.currentTarget;
                       const fallback = getCategoryDefaults(shop.category).bannerPlaceholderImageUrl;
@@ -141,33 +143,42 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                         element.hidden = true;
                       }
                     }}
-                  /> : <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: `${getShopColor(shop)}20`, color: getShopColor(shop) }}>{getCategoryDefaults(shop.category).icon}</div>}
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0f4d3d]/70 to-transparent" />
+                  /> : <div className="flex h-full w-full items-center justify-center text-4xl" style={{ backgroundColor: `${getShopColor(shop)}20`, color: getShopColor(shop) }}>{getCategoryDefaults(shop.category).icon}</div>}
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#17211f]/75 via-[#17211f]/15 to-transparent" />
                   {shop.theme_config?.logo_url ? (
-                    <img src={shop.theme_config.logo_url} alt={shop.name} className="absolute left-4 bottom-3 w-9 h-9 rounded-xl object-cover border-2 border-white bg-white shadow-sm" />
+                    <img src={shop.theme_config.logo_url} alt={shop.name} className="absolute left-4 bottom-4 h-11 w-11 rounded-2xl border-2 border-white bg-white object-cover shadow-sm" />
                   ) : null}
-                  {shop.is_featured && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-md bg-[#f2c38d] px-2 py-1 text-[10px] font-extrabold text-[#352518]"><Sparkles className="h-3 w-3" aria-hidden="true" /> À la une</span>}
-                  <span className="absolute bottom-3 left-4 text-[10px] font-semibold uppercase tracking-wider text-white">{categoryLabel(shop.category)}</span>
-                  <span aria-label={shop.is_open ? 'Boutique ouverte maintenant' : 'Boutique fermée actuellement'} className={`absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full border-2 border-white px-3 py-1.5 text-[11px] font-black shadow-md ${shop.is_open ? 'bg-[#0f4d3d] text-white' : 'bg-[#fff4e5] text-[#7a3e00]'}`}>
-                    {shop.is_open ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : <Clock3 className="h-4 w-4" aria-hidden="true" />}
+                  {shop.is_featured && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[#f3d7aa] px-2 py-1 text-[10px] font-black text-[#352518]"><Sparkles className="h-3 w-3" aria-hidden="true" /> À la une</span>}
+                  <span className="absolute bottom-4 left-4 text-[10px] font-bold uppercase tracking-[0.12em] text-white/90">{categoryLabel(shop.category)}</span>
+                  <span aria-label={shop.is_open ? 'Boutique ouverte maintenant' : 'Boutique fermée actuellement'} className={`absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-white/70 px-2.5 py-1 text-[10px] font-black shadow-sm ${shop.is_open ? 'bg-[#0f4d3d] text-white' : 'bg-[#fff5e7] text-[#7a3e00]'}`}>
+                    {shop.is_open ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> : <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />}
                     {shop.is_open ? 'OUVERTE' : 'FERMÉE'}
                   </span>
                 </div>
+
                 <div className="p-4">
-                  <h3 className="text-base font-semibold text-[#25231f]">{shop.name}</h3>
-                  <p className="mt-1 flex items-center gap-1 text-xs text-[#6f6a61]"><MapPin className="h-3.5 w-3.5" /> {shop.city || 'Côte d’Ivoire'}</p>
-                  <p className="mt-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[#6f6a61]"><Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{getHoursSummary(shop)}</p>
-                  <p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-[#6f6a61]">{shop.welcome_message || 'Découvrez le catalogue et commandez directement.'}</p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    <span className="rounded-sm bg-[#f9f0e6] px-2 py-1 text-[10px] font-semibold text-[#93602e]">Livraison</span>
-                    <span className="rounded-sm bg-[#e8eceb] px-2 py-1 text-[10px] font-semibold text-[#52635b]">Sur place</span>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-black text-[#25231f]">{shop.name}</h3>
+                      <p className="mt-1 flex items-center gap-1 text-xs text-[#6f6a61]"><MapPin className="h-3.5 w-3.5" /> {shop.city || 'Côte d’Ivoire'}</p>
+                    </div>
+                    <span className="rounded-full bg-[#edf3f0] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#0f4d3d]">{shop.products_count ? 'live' : 'nouveau'}</span>
                   </div>
-                  <div className="mt-4 flex gap-1.5 h-10">
+
+                  <p className="mt-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[#6f6a61]"><Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{getHoursSummary(shop)}</p>
+                  <p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-[#5f5a55]">{shop.welcome_message || 'Découvrez le catalogue et commandez directement.'}</p>
+
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <span className="rounded-full bg-[#f9f0e6] px-2 py-1 text-[10px] font-semibold text-[#93602e]">Livraison</span>
+                    <span className="rounded-full bg-[#ebf4f1] px-2 py-1 text-[10px] font-semibold text-[#325d56]">Sur place</span>
+                  </div>
+
+                  <div className="mt-4 flex items-center gap-1.5">
                     {(shop.products_preview || []).slice(0, 3).map(product => <img
                       key={product.id}
                       src={getProductImageForDisplay(product.image_url, shop.category)}
                       alt={`Aperçu : ${product.title}`}
-                      className="h-10 w-10 rounded-md border border-[#ded8ce] object-cover"
+                      className="h-10 w-10 rounded-lg border border-[#e7ddd0] object-cover bg-[#f8f5f1]"
                       onError={(event) => {
                         const element = event.currentTarget;
                         const fallback = getCategoryDefaults(shop.category).productPlaceholderImageUrl;
@@ -181,9 +192,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                     />)}
                     {!shop.products_preview?.length && <span className="self-center text-[11px] font-medium text-[#93602e]">Collection en préparation</span>}
                   </div>
-                  <div className="mt-4 flex items-center justify-between gap-2 border-t border-[#eee9df] pt-3">
-                    <span className="text-[11px] font-medium text-[#6f6a61]">{shop.products_count ? 'Catalogue en ligne' : 'Catalogue en préparation'}</span>
-                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0f4d3d]">Découvrir <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></span>
+
+                  <div className="mt-4 flex items-center justify-between gap-2 border-t border-[#f0eae4] pt-3">
+                    <span className="text-[11px] font-semibold text-[#6f6a61]">{shop.products_count ? 'Catalogue en ligne' : 'Catalogue en préparation'}</span>
+                    <span className="inline-flex items-center gap-1.5 text-sm font-bold text-[#0f4d3d]">Découvrir <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></span>
                   </div>
                 </div>
               </button>

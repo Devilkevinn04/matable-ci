@@ -26,16 +26,16 @@ export const Navigation: React.FC<NavigationProps> = ({
   onLogoutCustomer,
 }) => {
   return (
-    <header className="sticky top-0 z-50 border-b border-[#ded8ce] bg-[#fffdf9]/95 backdrop-blur-xl">
-      <div className="app-nav-inner max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="app-nav-brand flex items-center gap-3">
-          <div className="brand-mark brand-mark-header">M</div>
+    <header className="sticky top-0 z-50 border-b border-[#e5d9ca] bg-[#fffdf9]/95 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0f4d3d] text-base font-black text-white shadow-sm">M</div>
           <div className="flex items-center gap-2">
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-black text-base tracking-tight text-[#211712]">MaTable<span className="text-[#1D6B57]">.ci</span></span>
+                <span className="text-base font-black tracking-tight text-[#211712]">MaTable<span className="text-[#1D6B57]">.ci</span></span>
               </div>
-              <div className="text-[10px] text-[#4a3a30] flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 text-[10px] text-[#4a3a30]">
                 <span>🇨🇮</span>
                 <span>Côte d’Ivoire</span>
               </div>
@@ -43,35 +43,40 @@ export const Navigation: React.FC<NavigationProps> = ({
           </div>
         </div>
 
-        <nav className="app-nav-actions flex items-center gap-2 flex-wrap">
+        <nav className="flex flex-wrap items-center gap-2">
           {currentRole === 'storefront' && !isDirectory && (
-            <button onClick={onOpenDirectory} className="nav-pill nav-pill-muted">
-              <ArrowLeft className="w-3.5 h-3.5" /> Annuaire
+            <button onClick={onOpenDirectory} className="inline-flex items-center gap-1.5 rounded-full border border-[#e4d9ca] bg-white px-3 py-2 text-[11px] font-bold text-[#332d2a] transition hover:border-[#1d6b57] hover:text-[#0f4d3d]">
+              <ArrowLeft className="h-3.5 w-3.5" /> Annuaire
             </button>
           )}
           {currentRole === 'merchant' && (
-            <button onClick={onOpenDirectory} className="nav-pill nav-pill-muted">
-              <ShoppingBag className="w-3.5 h-3.5" /> Boutiques
+            <button onClick={onOpenDirectory} className="inline-flex items-center gap-1.5 rounded-full border border-[#e4d9ca] bg-white px-3 py-2 text-[11px] font-bold text-[#332d2a] transition hover:border-[#1d6b57] hover:text-[#0f4d3d]">
+              <ShoppingBag className="h-3.5 w-3.5" /> Boutiques
             </button>
           )}
           {currentRole === 'admin' && (
-            <span className="nav-pill nav-pill-strong">
-              <ShieldCheck className="w-3.5 h-3.5" /> Super-admin
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d5e5df] bg-[#edf8f4] px-3 py-2 text-[11px] font-bold text-[#0f4d3d]">
+              <ShieldCheck className="h-3.5 w-3.5" /> Super-admin
             </span>
           )}
           {currentRole !== 'admin' && (
             <>
               {customerUser ? (
                 <>
-                  <button onClick={onOpenCustomerAccount} className="nav-pill nav-pill-strong"><ShoppingBag className="w-3.5 h-3.5" /> Mon compte</button>
-                  <button onClick={onLogoutCustomer} className="nav-pill nav-pill-muted">Déconnexion</button>
+                  <button onClick={onOpenCustomerAccount} className="inline-flex items-center gap-1.5 rounded-full bg-[#0f4d3d] px-3 py-2 text-[11px] font-bold text-white shadow-sm transition hover:bg-[#176b55]">
+                    <ShoppingBag className="h-3.5 w-3.5" /> Mon compte
+                  </button>
+                  <button onClick={onLogoutCustomer} className="inline-flex items-center gap-1.5 rounded-full border border-[#e4d9ca] bg-white px-3 py-2 text-[11px] font-bold text-[#332d2a] transition hover:border-[#1d6b57] hover:text-[#0f4d3d]">
+                    Déconnexion
+                  </button>
                 </>
               ) : null}
-              <button onClick={() => onChangeRole('merchant')} className="nav-pill nav-pill-muted"><Store className="w-3.5 h-3.5" /> Espace propriétaire</button>
+              <button onClick={() => onChangeRole('merchant')} className="inline-flex items-center gap-1.5 rounded-full border border-[#e4d9ca] bg-white px-3 py-2 text-[11px] font-bold text-[#332d2a] transition hover:border-[#1d6b57] hover:text-[#0f4d3d]">
+                <Store className="h-3.5 w-3.5" /> Espace propriétaire
+              </button>
             </>
           )}
         </nav>
-
       </div>
     </header>
   );

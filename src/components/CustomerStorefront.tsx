@@ -240,11 +240,17 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     const sessionId = sessionStorage.getItem('matable_analytics_session') || crypto.randomUUID();
     sessionStorage.setItem('matable_analytics_session', sessionId);
     sessionStorage.setItem(storageKey, '1');
+    let referrerHost = '';
+    try {
+      referrerHost = document.referrer ? new URL(document.referrer).hostname : '';
+    } catch {
+      referrerHost = '';
+    }
     fetch('/api/analytics/page-view', {
       method: 'POST',
       keepalive: true,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shop_id: shop.id, session_id: sessionId, path: window.location.pathname }),
+      body: JSON.stringify({ shop_id: shop.id, session_id: sessionId, path: window.location.pathname, referrer_host: referrerHost }),
     }).catch(() => undefined);
   }, [shop?.id]);
 
@@ -396,12 +402,29 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
   const authenticatedCustomer = customerUser || checkoutAuthUser;
 
+  const normalizeCustomerPhoneValue = (value: string): string => {
+    const digits = value.replace(/\D/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('225')) return `+${digits}`;
+    if (digits.startsWith('0')) return `+225${digits}`;
+    return `+225${digits}`;
+  };
+
   // Handle WhatsApp Checkout
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!shop || cart.length === 0) return;
-    if (!customerName.trim() || !customerPhone.trim()) {
-      toast.error('Veuillez renseigner votre nom et votre numéro de téléphone.');
+
+    const trimmedName = customerName.trim();
+    const normalizedPhone = normalizeCustomerPhoneValue(customerPhone);
+    const digitsOnlyPhone = normalizedPhone.replace(/\D/g, '');
+
+    if (!trimmedName || trimmedName.length < 2) {
+      toast.error('Veuillez renseigner un nom complet pour la commande.');
+      return;
+    }
+    if (!normalizedPhone || digitsOnlyPhone.length < 10) {
+      toast.error('Veuillez renseigner un numéro de téléphone WhatsApp valide.');
       return;
     }
     if (!authenticatedCustomer) {
@@ -422,8 +445,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           shop_id: shop.id,
-          customer_name: customerName,
-          customer_phone: customerPhone,
+          customer_name: trimmedName,
+          customer_phone: normalizedPhone,
           delivery_location: finalLocation,
           delivery_note: deliveryNote,
           delivery_slot: shop.category === 'food' ? deliverySlot : undefined,
@@ -1074,8 +1097,29 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     ))}
                   </div>
 
+                  {authenticatedCustomer && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Compte vérifié</p>
+                          <p className="mt-1 text-sm font-black text-slate-900">{authenticatedCustomer.name}</p>
+                          <p className="text-[11px] text-slate-600">{authenticatedCustomer.email}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowCheckoutAuth(true)}
+                          className="rounded-full border border-emerald-300 bg-white px-2.5 py-1 text-[10px] font-bold text-emerald-700"
+                        >
+                          Changer
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {showCheckoutAuth && !authenticatedCustomer && (
                     <CustomerCheckoutAuth
+                      prefillName={customerName}
+                      prefillPhone={customerPhone}
                       onAuthenticated={(user) => {
                         setCheckoutAuthUser(user);
                         setCustomerName(user.name);
