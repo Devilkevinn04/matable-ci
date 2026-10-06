@@ -222,6 +222,52 @@ button, input, select, textarea {
   }
 }
 
+.product-marquee-track {
+  display: inline-flex;
+  width: max-content;
+  will-change: transform;
+}
+
+.product-marquee-group {
+  display: flex;
+  flex: none;
+  gap: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+.product-marquee-left {
+  animation: product-marquee-left linear infinite;
+}
+
+.product-marquee-right {
+  animation: product-marquee-right linear infinite;
+}
+
+@keyframes product-marquee-left {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes product-marquee-right {
+  from { transform: translateX(-50%); }
+  to { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-marquee-track {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .product-marquee-duplicate {
+    display: none;
+  }
+
+  .product-marquee-fill-copy {
+    display: none;
+  }
+}
+
 #root {
   min-height: 100vh;
 }

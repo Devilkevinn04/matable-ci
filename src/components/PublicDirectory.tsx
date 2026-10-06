@@ -3,7 +3,6 @@ import { ArrowRight, CheckCircle2, Clock3, MapPin, RotateCcw, Search, Store, X }
 import { getCategoryDefaults, getProductImageForDisplay, isShopCategory, normalizeCustomBannerImage, SHOP_CATEGORIES } from '../utils/categoryDefaults';
 import { shopMatchesDirectorySearch } from '../utils/directorySearch';
 import { getPublicDiscoveryPages, toDiscoveryCitySlug, type DiscoveryPage } from '../utils/discoverySeo';
-import { FeaturedCarousel, isShopPromotion } from './FeaturedCarousel';
 import { ProductNewsFeed } from './ProductNewsFeed';
 
 interface DirectoryShop {
@@ -12,6 +11,7 @@ interface DirectoryShop {
   name: string;
   category?: string;
   city?: string;
+  created_at?: string;
   is_open?: boolean;
   is_featured?: boolean;
   is_sponsored?: boolean;
@@ -70,6 +70,11 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       && (category === 'all' || shop.category === category)
       && (!discoveryPage?.citySlug || toDiscoveryCitySlug(shop.city || '') === discoveryPage.citySlug)
   ), [shops, query, category, discoveryPage?.citySlug]);
+  const getShopImage = (shop: DirectoryShop) => normalizeCustomBannerImage(shop.theme_config?.custom_banner_url, shop.category)
+    || (shop.products_preview?.[0]
+      ? getProductImageForDisplay(shop.products_preview[0].image_url, shop.category)
+      : getCategoryDefaults(shop.category).bannerPlaceholderImageUrl);
+  const getShopColor = (shop: DirectoryShop) => shop.theme_color || shop.theme_config?.primary_color || '#176b55';
   const popularSearches = ['Mode', 'Restauration', 'Beauté', 'Maison', 'Abidjan'];
   const heroCategories = ['fashion', 'food', 'crafts'] as const;
   const suggestions = <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-[#4a3a30] sm:text-sm" aria-label="Suggestions de recherche">
@@ -98,12 +103,6 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       <span className="hidden sm:inline">{isShopDirectoryPage ? 'Rechercher' : 'Voir les boutiques'}</span>
     </button>
   </form>;
-  const getShopImage = (shop: DirectoryShop) => normalizeCustomBannerImage(shop.theme_config?.custom_banner_url, shop.category)
-    || (shop.products_preview?.[0]
-      ? getProductImageForDisplay(shop.products_preview[0].image_url, shop.category)
-      : getCategoryDefaults(shop.category).bannerPlaceholderImageUrl);
-  const getShopColor = (shop: DirectoryShop) => shop.theme_color || shop.theme_config?.primary_color || '#176b55';
-
   return (
     <main className="public-directory min-h-screen bg-[#f7f3ee] text-[#25231f]">
       {discoveryPage ? (
@@ -193,17 +192,17 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         </div>
 
         <div className="relative mx-auto h-[200px] w-full max-w-[420px] sm:h-[340px] sm:max-w-[480px] lg:ml-auto">
-          {heroCategories.map((category, index) => {
+          {heroCategories.map((heroCategory, index) => {
             const layout = [
               'left-[3%] top-[12%] z-10 h-[78%] w-[57%] -rotate-[5deg]',
               'right-[3%] top-[2%] z-20 h-[76%] w-[55%] rotate-[4deg]',
               'bottom-[0%] left-[30%] z-30 h-[52%] w-[53%] -rotate-[2deg]',
             ][index];
             return (
-              <div key={category} aria-hidden="true" className={`absolute overflow-hidden rounded-[22px] border-[5px] border-[#fffaf3] bg-[#e4f1ec] shadow-[0_18px_34px_rgba(37,35,31,.16)] ${layout}`}>
-                <img src={getCategoryDefaults(category).bannerPlaceholderImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <div key={heroCategory} aria-hidden="true" className={`absolute overflow-hidden rounded-[22px] border-[5px] border-[#fffaf3] bg-[#e4f1ec] shadow-[0_18px_34px_rgba(37,35,31,.16)] ${layout}`}>
+                <img src={getCategoryDefaults(heroCategory).bannerPlaceholderImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
                 <span className="absolute inset-0 bg-gradient-to-t from-[#17211f]/75 via-transparent to-transparent" />
-                <span className="absolute bottom-3 left-3 right-3 text-xs font-bold text-white drop-shadow sm:bottom-4 sm:left-4 sm:text-sm">{categoryLabel(category)}</span>
+                <span className="absolute bottom-3 left-3 right-3 text-xs font-bold text-white drop-shadow sm:bottom-4 sm:left-4 sm:text-sm">{categoryLabel(heroCategory)}</span>
               </div>
             );
           })}
@@ -241,21 +240,6 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         </div>}
       </section>}
 
-      {!discoveryPage && !isShopDirectoryPage && isLoading && !loadError && <section className="mx-auto w-full max-w-[1184px] px-5 py-5 sm:px-8" aria-label="Chargement des boutiques à la une">
-        <div className="h-[250px] animate-pulse rounded-[26px] bg-[#e5ded3] sm:h-[300px]" />
-      </section>}
-
-      {!discoveryPage && !isShopDirectoryPage && shops.some(isShopPromotion) && (
-        <section className="mx-auto w-full max-w-[1184px] px-5 py-7 sm:px-8 sm:py-10" aria-labelledby="featured-shops-title">
-          <div className="mb-4">
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#b9441f]">Sélection sponsorisée</p>
-            <h2 id="featured-shops-title" className="mt-1 font-display text-2xl font-bold tracking-tight sm:text-3xl">À la une dans le fil du jour</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#6f6a61]">Offres et boutiques mises en avant par les commerçants.</p>
-          </div>
-          <FeaturedCarousel shops={shops.filter(isShopPromotion)} onOpenShop={onOpenShop} />
-        </section>
-      )}
-
       {!discoveryPage && !isShopDirectoryPage && <ProductNewsFeed onOpenShop={onOpenShop} />}
 
       {(discoveryPage || isShopDirectoryPage) && <section id="boutiques" className={`mx-auto w-full scroll-mt-24 px-5 pb-12 pt-5 sm:px-8 sm:pb-16 ${isShopDirectoryPage ? 'max-w-[1280px] lg:px-12' : 'max-w-[1184px]'}`}>
@@ -277,14 +261,13 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         )}
 
         {isLoading ? (
-          <div role="status" aria-label="Chargement des boutiques" className="space-y-4">
-            {[0, 1, 2].map((item) => <div key={item} className="grid overflow-hidden rounded-[24px] border border-[#e7ddd0] bg-white sm:grid-cols-[240px_1fr]" aria-hidden="true">
-              <div className="h-44 animate-pulse bg-[#e5ded3] sm:h-52" />
-              <div className="space-y-4 p-5 sm:p-7">
-                <div className="h-3 w-28 animate-pulse rounded bg-[#d8e7df]" />
-                <div className="h-7 w-3/4 animate-pulse rounded bg-[#e9e4da]" />
-                <div className="h-4 w-1/3 animate-pulse rounded bg-[#eee9df]" />
-                <div className="h-12 animate-pulse rounded bg-[#f3efe9]" />
+          <div role="status" aria-label="Chargement des boutiques" className="grid grid-cols-2 gap-3 sm:gap-4 max-[360px]:grid-cols-1">
+            {[0, 1, 2, 3].map((item) => <div key={item} className="overflow-hidden rounded-[20px] border border-[#e7ddd0] bg-white sm:rounded-[24px]" aria-hidden="true">
+              <div className="aspect-[1.35] animate-pulse bg-[#e5ded3]" />
+              <div className="space-y-3 p-3 sm:p-5">
+                <div className="h-3 w-20 animate-pulse rounded bg-[#d8e7df]" />
+                <div className="h-6 w-3/4 animate-pulse rounded bg-[#e9e4da]" />
+                <div className="h-4 w-1/2 animate-pulse rounded bg-[#eee9df]" />
               </div>
             </div>)}
           </div>
@@ -302,38 +285,35 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             {(query.trim() || category !== 'all') && <button type="button" onClick={() => { setQuery(''); setCategory('all'); }} className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#0f4d3d] px-4 py-2 text-sm font-bold text-white">Effacer les filtres <X className="h-4 w-4" /></button>}
           </div>
         ) : (
-          <div className="space-y-4">
-            {filteredShops.map((shop, index) => (
-              <a key={shop.slug} href={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { event.preventDefault(); onOpenShop(shop.slug); }} className="group grid overflow-hidden rounded-[24px] border border-[#e3d9cc] bg-[#fffdf9] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2 sm:min-h-[240px] sm:grid-cols-[minmax(210px,30%)_1fr] lg:grid-cols-[minmax(260px,32%)_1fr]">
-                <div className="relative min-h-48 overflow-hidden sm:min-h-full" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
+          <div className="grid grid-cols-2 items-stretch gap-3 sm:gap-4 lg:gap-5 max-[360px]:grid-cols-1">
+            {filteredShops.map((shop) => (
+              <a key={shop.slug} href={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { event.preventDefault(); onOpenShop(shop.slug); }} className="group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[#fffdf9] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2 sm:rounded-[24px]">
+                <div className="relative aspect-[1.35] shrink-0 overflow-hidden sm:aspect-[1.65]" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
                   <img src={getShopImage(shop)} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
                   <span className="absolute inset-0 bg-gradient-to-t from-[#17211f]/75 via-transparent to-[#17211f]/5" />
-                  <span className="absolute left-5 top-5 flex h-10 min-w-10 items-center justify-center rounded-full border border-white/60 bg-[#fffdf9]/90 px-3 font-display text-sm font-extrabold text-[#123b31]">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <span className="absolute bottom-4 left-5 rounded-full bg-[#fffdf9]/90 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.08em] text-[#123b31]">{categoryLabel(shop.category)}</span>
+                  <span className="absolute bottom-3 left-3 rounded-full bg-[#fffdf9]/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#123b31] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
                 </div>
-                <div className="flex min-w-0 flex-col justify-center p-5 sm:p-7 lg:p-9">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <span className="text-xs font-bold uppercase tracking-[0.13em] text-[#b9441f]">Une adresse à découvrir</span>
-                    <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${shop.is_open ? 'bg-[#e2eee6] text-[#0f4d3d]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>
-                      {shop.is_open ? <><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />Ouverte</> : <><Clock3 className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />Fermée</>}
+                <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-5 lg:p-6">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[10px] font-bold uppercase tracking-[0.1em] text-[#b9441f] sm:text-xs sm:tracking-[0.13em]"><span className="sm:hidden">Adresse</span><span className="hidden sm:inline">Une adresse à découvrir</span></span>
+                    <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-1 text-[10px] font-bold sm:px-3 sm:py-1.5 sm:text-xs ${shop.is_open ? 'bg-[#e2eee6] text-[#0f4d3d]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>
+                      {shop.is_open ? <><CheckCircle2 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />Ouverte</> : <><Clock3 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />Fermée</>}
                     </span>
                   </div>
-                  <div className="mt-4 flex items-center gap-3">
-                    {shop.theme_config?.logo_url && <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#e9e1d7] bg-white">
+                  <div className="mt-2 flex min-w-0 items-center gap-2 sm:mt-4 sm:gap-3">
+                    {shop.theme_config?.logo_url && <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e9e1d7] bg-white sm:h-12 sm:w-12 sm:rounded-2xl">
                       <img src={shop.theme_config.logo_url} alt="" className="h-full w-full object-cover" />
                     </span>}
-                    <h3 className="font-display text-2xl font-extrabold leading-tight tracking-tight text-[#25231f] sm:text-3xl">{shop.name}</h3>
+                    <h3 className="line-clamp-2 min-w-0 font-display text-base font-extrabold leading-tight tracking-tight text-[#25231f] sm:text-xl lg:text-2xl">{shop.name}</h3>
                   </div>
-                  <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-[#31584c]"><MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />{shop.city || 'Côte d’Ivoire'}</p>
-                  <p className="mt-3 line-clamp-2 max-w-2xl text-sm leading-6 text-[#6f6a61]">{shop.welcome_message || 'Une vitrine locale à découvrir et un commerçant à rencontrer.'}</p>
-                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[#eee6dd] pt-4">
-                    <span className="text-xs font-semibold text-[#6f6a61]">
+                  <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs font-semibold text-[#31584c] sm:mt-3 sm:gap-2 sm:text-sm"><MapPin className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden="true" /><span className="truncate">{shop.city || 'Côte d’Ivoire'}</span></p>
+                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#6f6a61] sm:mt-3 sm:text-sm sm:leading-6">{shop.welcome_message || 'Une vitrine locale à découvrir et un commerçant à rencontrer.'}</p>
+                  <div className="mt-auto flex flex-col items-start gap-2 border-t border-[#eee6dd] pt-3 sm:mt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:pt-4">
+                    <span className="text-[10px] font-semibold leading-4 text-[#6f6a61] sm:text-xs">
                       {shop.opening_hours?.enabled && `${shop.opening_hours.open_time || '08:00'}–${shop.opening_hours.close_time || '22:00'} · `}
                       {shop.products_count ? `${shop.products_count} article${shop.products_count === 1 ? '' : 's'} en vitrine` : 'Vitrine à découvrir'}
                     </span>
-                    <span className="inline-flex items-center gap-2 text-sm font-bold text-[#0f4d3d]">Entrer dans la boutique <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden="true" /></span>
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-[#0f4d3d] sm:gap-2 sm:text-sm">Découvrir <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1 sm:h-4 sm:w-4" aria-hidden="true" /></span>
                   </div>
                 </div>
               </a>

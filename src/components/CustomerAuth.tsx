@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MapPin, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, UserRound } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { ArrowRight, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MapPin, Menu, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, UserRound, X } from 'lucide-react';
 import { AuthExperienceLayout } from './AuthExperienceLayout';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
 import { CustomerMerchantRegistrationForm } from './CustomerMerchantRegistrationForm';
@@ -200,6 +201,8 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
   const [savedError, setSavedError] = useState<string | null>(null);
   const [savedRefresh, setSavedRefresh] = useState(0);
   const [activeSection, setActiveSection] = useState<CustomerAccountSection>('overview');
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
   const [firstName, setFirstName] = useState(user.first_name);
   const [lastName, setLastName] = useState(user.last_name);
   const [phone, setPhone] = useState(user.phone);
@@ -424,6 +427,27 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
     { id: 'profile', label: 'Mes informations', description: 'Coordonnées du compte', icon: UserRound },
     { id: 'security', label: 'Sécurité', description: 'Mot de passe et accès', icon: KeyRound },
   ];
+  const currentAccountSection = accountSections.find(({ id }) => id === activeSection) || accountSections[0];
+  const accountMenuVariants = {
+    closed: {
+      opacity: 0,
+      y: -12,
+      scale: 0.98,
+      height: 0,
+      transition: prefersReducedMotion ? { duration: 0 } : { duration: 0.14, ease: 'easeIn' as const },
+    },
+    open: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      height: 'auto',
+      transition: prefersReducedMotion ? { duration: 0 } : { type: 'spring' as const, stiffness: 360, damping: 30, staggerChildren: 0.055, delayChildren: 0.06 },
+    },
+  };
+  const accountMenuItemVariants = {
+    closed: { opacity: 0, y: -8 },
+    open: { opacity: 1, y: 0, transition: prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: 'easeOut' as const } },
+  };
   const activeOrdersCount = orders.filter((order) => ['pending', 'confirmed', 'preparing', 'ready'].includes(order.status)).length;
   const completedOrdersCount = orders.filter((order) => order.status === 'delivered').length;
 
@@ -469,9 +493,81 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
       </section>
 
       <div className="mx-auto grid max-w-[1184px] gap-6 px-5 py-7 sm:px-8 sm:py-10 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <nav aria-label="Menu du compte client" className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
+        <div className="lg:hidden">
+          <motion.button
+            type="button"
+            aria-label={accountMenuOpen ? 'Fermer le menu du compte' : 'Ouvrir le menu du compte'}
+            aria-expanded={accountMenuOpen}
+            aria-controls="mobile-customer-account-menu"
+            onClick={() => setAccountMenuOpen((open) => !open)}
+            whileTap={prefersReducedMotion ? undefined : { scale: 0.98 }}
+            className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl border border-[#d9e7de] bg-[#fffdf9] px-4 text-left shadow-[0_8px_24px_rgba(36,28,22,.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2"
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#e4f1ec] text-[#0f4d3d]"><currentAccountSection.icon className="h-5 w-5" aria-hidden="true" /></span>
+              <span className="min-w-0">
+                <span className="block text-[10px] font-bold uppercase tracking-[0.13em] text-[#b9441f]">Votre espace client</span>
+                <span className="mt-0.5 block truncate font-display text-base font-extrabold text-[#25231f]">{currentAccountSection.label}</span>
+              </span>
+            </span>
+            <span className="flex h-10 shrink-0 items-center gap-2 rounded-full bg-[#f0f7f2] px-3 text-sm font-extrabold text-[#0f4d3d]">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={accountMenuOpen ? 'close' : 'open'}
+                  initial={prefersReducedMotion ? false : { opacity: 0, rotate: -70, scale: 0.7 }}
+                  animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                  exit={prefersReducedMotion ? undefined : { opacity: 0, rotate: 70, scale: 0.7 }}
+                  transition={{ duration: prefersReducedMotion ? 0 : 0.18 }}
+                  className="flex"
+                >
+                  {accountMenuOpen ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-4 w-4" aria-hidden="true" />}
+                </motion.span>
+              </AnimatePresence>
+              {accountMenuOpen ? 'Fermer' : 'Menu'}
+            </span>
+          </motion.button>
+
+          <AnimatePresence initial={false}>
+            {accountMenuOpen && (
+              <motion.nav
+                id="mobile-customer-account-menu"
+                aria-label="Rubriques du compte"
+                variants={accountMenuVariants}
+                initial="closed"
+                animate="open"
+                exit="closed"
+                transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.16, ease: 'easeOut' }}
+                className="mt-3 origin-top overflow-hidden rounded-[22px] border border-[#e3d9cc] bg-[#fffdf9] p-2 shadow-[0_18px_48px_rgba(36,28,22,.12)]"
+              >
+                <div className="grid gap-1.5">
+                  {accountSections.map(({ id, label, description, icon: Icon }) => (
+                    <motion.button
+                      key={id}
+                      type="button"
+                      aria-current={activeSection === id ? 'page' : undefined}
+                      variants={accountMenuItemVariants}
+                      whileHover={prefersReducedMotion ? undefined : { x: 3 }}
+                      whileTap={prefersReducedMotion ? undefined : { scale: 0.99 }}
+                      onClick={() => { setActiveSection(id); setAccountMenuOpen(false); }}
+                      className={`flex min-h-14 items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition ${activeSection === id ? 'bg-[#e4f1ec] text-[#0f4d3d]' : 'text-[#514b43] hover:bg-[#f7f3ee]'}`}
+                    >
+                      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${activeSection === id ? 'bg-white text-[#0f4d3d]' : 'bg-[#f1eee7] text-[#6f6a61]'}`}><Icon className="h-4 w-4" aria-hidden="true" /></span>
+                      <span className="min-w-0 flex-1">
+                        <strong className="block text-sm">{label}</strong>
+                        <span className="mt-0.5 block text-xs text-[#81796f]">{description}</span>
+                      </span>
+                      {activeSection === id && <CheckCircle2 className="h-4 w-4 shrink-0 text-[#176b55]" aria-hidden="true" />}
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.nav>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <nav aria-label="Menu du compte client" className="hidden gap-2 pb-1 lg:flex lg:flex-col">
           {accountSections.map(({ id, label, description, icon: Icon }) => (
-            <button key={id} type="button" aria-current={activeSection === id ? 'page' : undefined} onClick={() => setActiveSection(id)} className={`flex min-h-14 min-w-max items-center gap-3 rounded-2xl border px-4 py-3 text-left transition lg:min-w-0 ${activeSection === id ? 'border-[#c8dbd0] bg-[#e4f1ec] text-[#0f4d3d]' : 'border-transparent bg-[#fffdf9] text-[#6f6a61] hover:border-[#e3d9cc]'}`}>
+            <button key={id} type="button" aria-current={activeSection === id ? 'page' : undefined} onClick={() => setActiveSection(id)} className={`flex min-h-14 min-w-0 items-center gap-2 rounded-2xl border px-3 py-3 text-left transition sm:gap-3 sm:px-4 lg:min-w-0 ${activeSection === id ? 'border-[#c8dbd0] bg-[#e4f1ec] text-[#0f4d3d]' : 'border-transparent bg-[#fffdf9] text-[#6f6a61] hover:border-[#e3d9cc]'}`}>
               <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${activeSection === id ? 'bg-white text-[#0f4d3d]' : 'bg-[#f1eee7] text-[#6f6a61]'}`}><Icon className="h-4 w-4" /></span>
               <span><strong className="block text-sm">{label}</strong><span className="hidden text-xs opacity-75 lg:block">{description}</span></span>
               <ChevronRight className="ml-auto hidden h-4 w-4 lg:block" />

@@ -171,6 +171,7 @@ export function createPublicShopsRouter({
           id: shop.id,
           name: shop.name,
           slug: shop.slug,
+          created_at: shop.created_at,
           theme_color: shop.theme_color,
           welcome_message: shop.welcome_message,
           is_open,

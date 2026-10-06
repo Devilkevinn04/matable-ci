@@ -350,6 +350,7 @@ test('customer favorites and product likes are private, persistent, and toggleab
   assert.equal(directory.response.status, 200);
   const shopListing = directory.payload.find((shop: any) => shop.products_count > 0);
   assert.ok(shopListing, 'A public demo shop with products should be available');
+  assert.ok(Number.isFinite(Date.parse(shopListing.created_at)), 'Public storefronts should expose their creation date');
   const storefront = await apiFetch(`/api/v1/catalog/storefronts/${encodeURIComponent(shopListing.slug)}`);
   assert.equal(storefront.response.status, 200, JSON.stringify(storefront.payload));
   const product = storefront.payload.products[0];

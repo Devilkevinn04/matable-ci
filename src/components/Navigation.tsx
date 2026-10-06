@@ -66,7 +66,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           aria-controls="mobile-navigation-menu"
           onClick={() => setMobileMenuOpen((open) => !open)}
           whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}
-          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-[#d9e7de] bg-[#f0f7f2] px-3 text-sm font-extrabold text-[#0f4d3d] shadow-sm transition hover:border-[#9bc5b0] hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] lg:hidden"
+          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-[#d9e7de] bg-[#f0f7f2] px-3 text-sm font-extrabold text-[#0f4d3d] shadow-sm transition hover:border-[#9bc5b0] hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] xl:hidden"
         >
           <AnimatePresence mode="wait" initial={false}>
             <motion.span
@@ -83,16 +83,16 @@ export const Navigation: React.FC<NavigationProps> = ({
           <span>{mobileMenuOpen ? 'Fermer' : 'Menu'}</span>
         </motion.button>
 
-        <nav className="hidden min-w-0 flex-1 items-center justify-end gap-3 lg:flex" aria-label="Navigation principale">
+        <nav className="hidden min-w-0 flex-1 items-center justify-end gap-3 xl:flex" aria-label="Navigation principale">
           {isDirectory && (
-            <div className="mr-auto flex items-center gap-1 rounded-full border border-[#e9e1d7] bg-[#f8f5ef] p-1">
-              <a href="/#actualites" className="inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
+            <div className="mr-auto flex shrink-0 items-center gap-1 rounded-full border border-[#e9e1d7] bg-[#f8f5ef] p-1">
+              <a href="/#actualites" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
                 <Newspaper className="h-4 w-4" aria-hidden="true" />Le fil du jour
               </a>
-              <a href="/boutiques" className="inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
+              <a href="/boutiques" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
                 <Compass className="h-4 w-4" aria-hidden="true" />Boutiques
               </a>
-              <a href="/comment-ca-marche" className="inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
+              <a href="/comment-ca-marche" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
                 <CircleHelp className="h-4 w-4" aria-hidden="true" />Comment ça marche
               </a>
             </div>
@@ -116,10 +116,10 @@ export const Navigation: React.FC<NavigationProps> = ({
             <>
               {customerUser ? (
                 <>
-                  <button onClick={onOpenCustomerAccount} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#0f4d3d] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#176b55]">
+                  <button onClick={onOpenCustomerAccount} className="inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-[#0f4d3d] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#176b55]">
                     <ShoppingBag className="h-3.5 w-3.5" /> Mon compte
                   </button>
-                  <button onClick={onLogoutCustomer} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-[#e4d9ca] bg-white px-3.5 py-2 text-sm font-semibold text-[#332d2a] transition hover:border-[#1d6b57] hover:text-[#0f4d3d]">
+                  <button onClick={onLogoutCustomer} className="inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-[#e4d9ca] bg-white px-3.5 py-2 text-sm font-semibold text-[#332d2a] transition hover:border-[#1d6b57] hover:text-[#0f4d3d]">
                     Déconnexion
                   </button>
                 </>
@@ -141,7 +141,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             animate="open"
             exit="closed"
             transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.16, ease: 'easeOut' }}
-            className="basis-full origin-top overflow-hidden rounded-b-[1.5rem] border-x border-b border-[#e7ddcf] bg-[#fffdf9] px-3 pb-4 pt-3 shadow-[0_22px_45px_-22px_rgba(15,77,61,0.45)] sm:px-5 lg:hidden"
+            className="basis-full origin-top overflow-hidden rounded-b-[1.5rem] border-x border-b border-[#e7ddcf] bg-[#fffdf9] px-3 pb-4 pt-3 shadow-[0_22px_45px_-22px_rgba(15,77,61,0.45)] sm:px-5 xl:hidden"
           >
             <motion.div variants={menuVariants} className="mx-auto grid max-w-[1440px] gap-3">
               {isDirectory && (
