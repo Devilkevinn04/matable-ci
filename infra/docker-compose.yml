@@ -1,0 +1,35 @@
+services:
+  legacy:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: npm run dev
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DISABLE_HMR: "true"
+      MATABLE_DB_PATH: /app/data/matable.db
+      ADMIN_ACCESS_KEY: ${ADMIN_ACCESS_KEY:-}
+      KYC_ENCRYPTION_KEY: ${KYC_ENCRYPTION_KEY:-}
+    volumes:
+      - matable_data:/app/data
+    expose:
+      - "3000"
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: services/api-gateway/Dockerfile
+    environment:
+      PORT: 4000
+      LEGACY_BASE_URL: http://legacy:3000
+      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-120000}
+    depends_on:
+      - legacy
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-4000}:4000"
+    restart: unless-stopped
+
+volumes:
+  matable_data:

@@ -25,6 +25,7 @@ import {
   ShoppingBag,
   LogOut,
   Star,
+  Flag,
 } from 'lucide-react';
 import { Shop } from '../types';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
@@ -40,9 +41,11 @@ interface AdminShopItem extends Shop {
 
 interface AdminAnalytics {
   days: number;
-  daily: { date: string; page_views: number; unique_visitors: number }[];
+  daily: { date: string; page_views: number; unique_visitors: number; orders: number; sales: number }[];
   by_shop: { shop_id: number; shop_name: string; page_views: number; unique_visitors: number; orders: number; sales: number; conversion_rate: number }[];
+  sources: { source: 'direct' | 'search' | 'social' | 'referral' | 'internal' | 'unknown'; visits: number; visitors: number }[];
   totals: { page_views: number; unique_visitors: number; orders: number; sales: number; conversion_rate: number };
+  previous: { page_views: number; unique_visitors: number; orders: number; sales: number; conversion_rate: number };
 }
 
 interface AdminFinance {
@@ -76,6 +79,7 @@ interface AdminFinance {
     shop_name: string;
     payment_type: 'subscription' | 'promotion';
     tier: string;
+    subscription_term: 'monthly' | 'annual';
     amount: number;
     currency: string;
     status: string;
@@ -149,6 +153,38 @@ interface AdminHealth {
   integrations: { whatsapp_click_to_chat: string };
 }
 
+interface AdminMaintenance {
+  enabled: boolean;
+  message: string;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+interface AdminContentModeration {
+  reviews: {
+    id: number;
+    target_type: 'shop' | 'product';
+    rating: number;
+    comment: string;
+    status: string;
+    created_at: string;
+    shop_name: string | null;
+    product_title: string | null;
+    customer_name: string | null;
+  }[];
+  reports: {
+    id: number;
+    target_type: 'shop' | 'product';
+    reason: string;
+    details: string;
+    status: string;
+    created_at: string;
+    shop_name: string | null;
+    product_title: string | null;
+    customer_name: string | null;
+  }[];
+}
+
 const ownerNotificationTemplates = [
   { id: 'welcome', label: 'Bienvenue et démarrage' },
   { id: 'catalog', label: 'Rappel catalogue à jour' },
@@ -167,8 +203,28 @@ const subscriptionStatusLabels: Record<string, string> = {
   not_started: 'Non démarré',
 };
 
+const audienceSourceLabels: Record<AdminAnalytics['sources'][number]['source'], string> = {
+  direct: 'Accès direct',
+  search: 'Moteurs de recherche',
+  social: 'Réseaux sociaux',
+  referral: 'Sites référents',
+  internal: 'Navigation interne',
+  unknown: 'Origine non attribuée',
+};
+
+const formatAudienceChange = (current: number, previous: number, percentagePoints = false) => {
+  if (percentagePoints) {
+    const change = current - previous;
+    if (change === 0) return 'Stable';
+    return `${change > 0 ? '+' : ''}${change.toFixed(1)} pt`;
+  }
+  if (previous === 0) return current === 0 ? 'Stable' : 'Nouveau';
+  const change = Math.round(((current - previous) / previous) * 100);
+  return `${change > 0 ? '+' : ''}${change}%`;
+};
+
 export const AdminDashboard: React.FC = () => {
-  const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'identity' | 'audience' | 'finance' | 'subscriptions' | 'operations'>('overview');
+  const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'identity' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'moderation'>('overview');
   const [shops, setShops] = useState<AdminShopItem[]>([]);
   const [adminKey, setAdminKey] = useState('');
   const [showAdminKey, setShowAdminKey] = useState(false);
@@ -194,14 +250,20 @@ export const AdminDashboard: React.FC = () => {
   const [subscriptionActionShopId, setSubscriptionActionShopId] = useState<number | null>(null);
   const [adminOrders, setAdminOrders] = useState<AdminOrder[]>([]);
   const [adminHealth, setAdminHealth] = useState<AdminHealth | null>(null);
+  const [maintenanceMode, setMaintenanceMode] = useState<AdminMaintenance | null>(null);
+  const [maintenanceEnabledDraft, setMaintenanceEnabledDraft] = useState(false);
+  const [maintenanceMessageDraft, setMaintenanceMessageDraft] = useState('Le service revient bientôt. Merci de votre patience.');
+  const [maintenanceSaving, setMaintenanceSaving] = useState(false);
   const [operationsLoading, setOperationsLoading] = useState(false);
   const [notificationShopId, setNotificationShopId] = useState('');
   const [notificationTemplate, setNotificationTemplate] = useState<typeof ownerNotificationTemplates[number]['id']>('welcome');
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [selectedVerificationShopId, setSelectedVerificationShopId] = useState<number | null>(null);
   const [featuredActionShopId, setFeaturedActionShopId] = useState<number | null>(null);
+  const [contentModeration, setContentModeration] = useState<AdminContentModeration>({ reviews: [], reports: [] });
+  const [contentModerationError, setContentModerationError] = useState('');
 
-  const fetchAdminShops = async () => {
+  const fetchAdminShops = async (refreshOperations = true) => {
     try {
       setLoading(true);
       const sessionRes = await fetch('/api/auth/session', { method: 'GET' });
@@ -226,7 +288,7 @@ export const AdminDashboard: React.FC = () => {
         await fetchAnalytics(analyticsDays);
         await fetchFinance(financeDays);
         await fetchSubscriptions();
-        await fetchOperations();
+        if (refreshOperations) await fetchOperations();
       } else if (res.status === 401) {
         setIsAuthenticated(false);
       }
@@ -240,18 +302,52 @@ export const AdminDashboard: React.FC = () => {
   const fetchOperations = async () => {
     try {
       setOperationsLoading(true);
-      const [healthRes, ordersRes] = await Promise.all([
+      const [healthRes, ordersRes, maintenanceRes] = await Promise.all([
         fetch('/api/admin/health'),
         fetch('/api/admin/orders?limit=50'),
+        fetch('/api/admin/maintenance'),
       ]);
-      if (!healthRes.ok || !ordersRes.ok) throw new Error('Impossible de charger les outils opérationnels.');
-      const [health, orderData] = await Promise.all([healthRes.json(), ordersRes.json()]);
+      if (!healthRes.ok || !ordersRes.ok || !maintenanceRes.ok) throw new Error('Impossible de charger les outils opérationnels.');
+      const [health, orderData, maintenance] = await Promise.all([healthRes.json(), ordersRes.json(), maintenanceRes.json()]);
       setAdminHealth(health);
       setAdminOrders(orderData.orders || []);
+      setMaintenanceMode(maintenance);
+      setMaintenanceEnabledDraft(maintenance.enabled);
+      setMaintenanceMessageDraft(maintenance.message);
     } catch {
       showNotice('Les outils opérationnels sont momentanément indisponibles.');
     } finally {
       setOperationsLoading(false);
+    }
+  };
+
+  const fetchContentModeration = async () => {
+    try {
+      const response = await fetch('/api/admin/content-moderation');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de charger la modération.');
+      setContentModeration({ reviews: data.reviews || [], reports: data.reports || [] });
+      setContentModerationError('');
+    } catch (error) {
+      setContentModerationError(error instanceof Error ? error.message : 'Impossible de charger la modération.');
+    }
+  };
+
+  const moderateContent = async (kind: 'reviews' | 'reports', id: number, status: string) => {
+    try {
+      const response = await fetch(`/api/admin/content-moderation/${kind}/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible d’enregistrer cette décision.');
+      showNotice(kind === 'reviews'
+        ? status === 'approved' ? 'Avis publié.' : 'Avis masqué.'
+        : status === 'resolved' ? 'Signalement traité.' : status === 'dismissed' ? 'Signalement classé sans suite.' : 'Signalement pris en charge.');
+      await fetchContentModeration();
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Impossible d’enregistrer cette décision.');
     }
   };
 
@@ -286,6 +382,33 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const saveMaintenanceMode = async () => {
+    if (!maintenanceMode) return;
+    const stateChanged = maintenanceEnabledDraft !== maintenanceMode.enabled;
+    if (stateChanged && !window.confirm(maintenanceEnabledDraft
+      ? 'Activer la maintenance va rendre le site marchand et ses API indisponibles. L’administration restera accessible. Continuer ?'
+      : 'Rétablir l’accès au site marchand ?')) return;
+
+    setMaintenanceSaving(true);
+    try {
+      const response = await fetch('/api/admin/maintenance', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: maintenanceEnabledDraft, message: maintenanceMessageDraft }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de modifier le mode maintenance.');
+      setMaintenanceMode(data);
+      setMaintenanceEnabledDraft(data.enabled);
+      setMaintenanceMessageDraft(data.message);
+      showNotice(data.enabled ? 'Mode maintenance activé.' : 'Site marchand de nouveau accessible.');
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Impossible de modifier le mode maintenance.');
+    } finally {
+      setMaintenanceSaving(false);
+    }
+  };
+
   useEffect(() => {
     fetchAdminShops();
   }, []);
@@ -293,10 +416,14 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     if (!isAuthenticated) return;
     const refreshTimer = window.setInterval(() => {
-      fetchAdminShops();
+      fetchAdminShops(false);
     }, 30000);
     return () => window.clearInterval(refreshTimer);
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated && adminView === 'moderation') void fetchContentModeration();
+  }, [isAuthenticated, adminView]);
 
   const handleAdminLogin = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -374,7 +501,7 @@ export const AdminDashboard: React.FC = () => {
   const maxDailyViews = Math.max(1, ...(analytics?.daily.map(day => day.page_views) || [0]));
   const chartPoints = analytics?.daily.length
     ? analytics.daily.map((day, index) => {
-        const x = 18 + (index * (420 / Math.max(analytics.daily.length - 1, 1)));
+        const x = 18 + (index * (384 / Math.max(analytics.daily.length - 1, 1)));
         const y = 140 - (day.page_views / maxDailyViews) * 96;
         return `${x},${y}`;
       }).join(' ')
@@ -610,8 +737,8 @@ export const AdminDashboard: React.FC = () => {
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="font-black text-xl tracking-tight text-[#211712]">Super-Admin MaTable.ci</h1>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="min-w-0 break-words text-lg font-black tracking-tight text-[#211712] sm:text-xl">Super-Admin MaTable.ci</h1>
                   <span className="dashboard-chip dashboard-chip-soft">Tour de contrôle</span>
                 </div>
                 <p className="text-[11px] text-[#4a3a30] mt-0.5 leading-4 max-w-xl">
@@ -623,7 +750,7 @@ export const AdminDashboard: React.FC = () => {
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={fetchAdminShops}
+                onClick={() => fetchAdminShops()}
                 disabled={loading}
                 aria-label="Actualiser les boutiques"
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-xs font-black text-[#211712] shadow-[4px_4px_0_rgba(33,23,18,0.96)] border-[2px] border-[#211712] transition hover:translate-y-[-1px] disabled:opacity-60"
@@ -640,7 +767,7 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
+      <main className="mx-auto w-full max-w-6xl space-y-4 px-3 pt-4 sm:space-y-6 sm:px-4 sm:pt-6">
         {actionNotice && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
@@ -669,20 +796,21 @@ export const AdminDashboard: React.FC = () => {
           </motion.div>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
-        <nav aria-label="Navigation super-admin" className="sticky top-2 z-20 flex min-w-0 gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white/90 p-1.5 backdrop-blur-sm lg:top-6 lg:flex-col lg:overflow-visible">
+        <div className="grid min-w-0 gap-3 sm:gap-4 lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start xl:grid-cols-[220px_minmax(0,1fr)]">
+        <nav aria-label="Navigation super-admin" className="grid min-w-0 grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white/90 p-1.5 backdrop-blur-sm sm:grid-cols-4 sm:gap-2 lg:sticky lg:top-6 lg:grid-cols-1 lg:gap-2 lg:p-2">
           {[
             { id: 'overview' as const, label: 'Accueil', icon: Activity },
             { id: 'shops' as const, label: `Boutiques (${shops.length})`, icon: Store },
             { id: 'orders' as const, label: 'Commandes', icon: ShoppingBag },
+            { id: 'moderation' as const, label: 'Avis & signalements', icon: Flag },
             { id: 'identity' as const, label: `Identité (${pendingVerificationShops.length})`, icon: ShieldCheck },
             { id: 'audience' as const, label: 'Audience', icon: BarChart3 },
             { id: 'finance' as const, label: 'Finances', icon: CreditCard },
             { id: 'subscriptions' as const, label: 'Abonnements', icon: RefreshCw },
             { id: 'operations' as const, label: 'Opérations', icon: Activity },
           ].map(({ id, label, icon: Icon }) => (
-            <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-11 min-w-max items-center justify-start gap-2 rounded-lg border px-3 py-2 text-left text-xs font-bold transition sm:text-sm lg:w-full ${adminView === id ? 'border-slate-900 bg-slate-900 text-white shadow-sm' : 'border-transparent bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
-              <Icon className="h-4 w-4 shrink-0" /><span>{label}</span>
+            <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-10 min-w-0 items-center justify-start gap-2 rounded-lg border px-2 py-2 text-left text-[11px] font-bold transition sm:min-h-11 sm:px-3 sm:text-sm ${adminView === id ? 'border-slate-900 bg-slate-900 text-white shadow-sm' : 'border-transparent bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
+              <Icon className="h-4 w-4 shrink-0" /><span className="min-w-0 break-words">{label}</span>
             </button>
           ))}
         </nav>
@@ -750,59 +878,72 @@ export const AdminDashboard: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           className="chart-panel p-4 md:p-5"
         >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+          <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="col-span-2 flex min-w-0 items-center gap-2 sm:col-span-1">
               <Activity className="w-5 h-5 text-rose-600" />
               <div>
                 <h2 className="font-black text-slate-900 text-sm">Audience & flux</h2>
-                <p className="text-[11px] text-slate-500 leading-4">Visites uniques, vues, commandes et conversion.</p>
+                <p className="text-[11px] text-slate-500 leading-4">Visites consenties, sessions, commandes et conversion.</p>
               </div>
             </div>
             <select
               value={analyticsDays}
               onChange={event => { const days = Number(event.target.value); setAnalyticsDays(days); fetchAnalytics(days); }}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-bold text-slate-700 outline-none"
+              aria-label="Période d’audience"
+              className="min-w-0 w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-bold text-slate-700 outline-none sm:w-auto"
             >
               <option value={7}>7 derniers jours</option>
               <option value={30}>30 derniers jours</option>
               <option value={90}>90 derniers jours</option>
             </select>
+            <button type="button" onClick={() => exportOperationsCsv(`matable-audience-${new Date().toISOString().slice(0, 10)}.csv`, ['Boutique', 'Visites consenties', 'Sessions uniques', 'Commandes', 'Chiffre d’affaires FCFA', 'Ratio commandes'], analytics?.by_shop.map(shop => [shop.shop_name, shop.page_views, shop.unique_visitors, shop.orders, shop.sales, shop.conversion_rate]) || [])} disabled={!analytics?.by_shop.length} className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-50 sm:w-auto sm:px-3">
+              <Download className="h-4 w-4" />Exporter
+            </button>
           </div>
 
           {analytics ? (
             <>
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
                 {[
-                  { label: 'Pages vues', value: analytics.totals.page_views, icon: Eye, tone: 'text-slate-700' },
-                  { label: 'Visiteurs uniques', value: analytics.totals.unique_visitors, icon: Users, tone: 'text-sky-700' },
-                  { label: 'Commandes', value: analytics.totals.orders, icon: ShoppingBag, tone: 'text-emerald-700' },
-                  { label: 'CA période', value: `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F`, icon: DollarSign, tone: 'text-amber-700' },
-                  { label: 'Taux conversion', value: `${analytics.totals.conversion_rate}%`, icon: TrendingUp, tone: 'text-rose-700' },
-                ].map(({ label, value, icon: Icon, tone }) => (
+                  { label: 'Visites consenties', value: analytics.totals.page_views, current: analytics.totals.page_views, previous: analytics.previous.page_views, icon: Eye, tone: 'text-slate-700' },
+                  { label: 'Sessions uniques', value: analytics.totals.unique_visitors, current: analytics.totals.unique_visitors, previous: analytics.previous.unique_visitors, icon: Users, tone: 'text-sky-700' },
+                  { label: 'Commandes', value: analytics.totals.orders, current: analytics.totals.orders, previous: analytics.previous.orders, icon: ShoppingBag, tone: 'text-emerald-700' },
+                  { label: 'Chiffre d’affaires', value: `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F`, current: analytics.totals.sales, previous: analytics.previous.sales, icon: DollarSign, tone: 'text-amber-700' },
+                  { label: 'Ratio commandes', value: `${analytics.totals.conversion_rate}%`, current: analytics.totals.conversion_rate, previous: analytics.previous.conversion_rate, percentagePoints: true, icon: TrendingUp, tone: 'text-rose-700' },
+                ].map(({ label, value, current, previous, percentagePoints, icon: Icon, tone }) => (
                   <div key={label} className="metric-card p-3">
                     <Icon className={`w-4 h-4 ${tone} mb-3`} />
                     <span className="block text-[11px] text-slate-500">{label}</span>
                     <strong className="mt-1 block text-lg text-slate-900">{value}</strong>
+                    <span className="mt-1 block text-[10px] font-bold text-slate-500">{formatAudienceChange(current, previous, percentagePoints)} vs période précédente</span>
                   </div>
                 ))}
               </div>
 
+              <p className="mt-2 text-[11px] text-slate-500">Comparaison avec les {analytics.days} jours précédents. Mesure limitée aux sessions ayant accepté les statistiques; une visite est comptée une fois par navigateur et par boutique.</p>
+
               <div className="mt-5 grid lg:grid-cols-[1.2fr_1fr] gap-4">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
                   <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-xs font-black text-slate-800">Trafic quotidien</h3>
-                    <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-bold text-violet-700">{analyticsDays} jours</span>
+                    <h3 className="text-xs font-black text-slate-800">Visites consenties par jour</h3>
+                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-800">{analyticsDays} jours</span>
                   </div>
                   <div className="chart-grid relative h-44 rounded-2xl border border-slate-200 bg-white p-3">
                     <svg viewBox="0 0 420 160" className="h-full w-full">
+                      <path d="M18 35H402 M18 82H402 M18 140H402" stroke="#e2e8e5" strokeWidth="1" />
                       <polyline
                         fill="none"
-                        stroke="#f43f5e"
-                        strokeWidth="4"
+                        stroke="#176b55"
+                        strokeWidth="3"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         points={chartPoints}
                       />
+                      {analytics.daily.map((day, index) => {
+                        const x = 18 + (index * (384 / Math.max(analytics.daily.length - 1, 1)));
+                        const y = 140 - (day.page_views / maxDailyViews) * 96;
+                        return <circle key={day.date} cx={x} cy={y} r="2.5" fill="#d58b42" />;
+                      })}
                     </svg>
                     <div className="absolute inset-x-3 bottom-3 flex justify-between text-[9px] text-slate-400">
                       {analytics.daily.map((day, index) => (
@@ -813,28 +954,26 @@ export const AdminDashboard: React.FC = () => {
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
-                  <h3 className="text-xs font-black text-slate-800">Performance par boutique</h3>
-                  <p className="mt-1 text-[10px] text-slate-400">Indicateurs cumulés sur la période sélectionnée.</p>
+                  <h3 className="text-xs font-black text-slate-800">Origine des visites</h3>
+                  <p className="mt-1 text-[10px] text-slate-500">Catégories calculées sans conserver les URL référentes.</p>
                   <div className="mt-3 space-y-3">
-                    {analytics.by_shop.map((shop) => (
-                      <div key={shop.shop_id} className="mini-row">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-700">
-                            <span className="truncate pr-2">{shop.shop_name}</span>
-                            <span>{shop.page_views} vues</span>
-                          </div>
-                          <div className="mt-1 h-1.5 rounded-full bg-slate-200 overflow-hidden">
-                            <div className="h-full rounded-full bg-gradient-to-r from-rose-500 to-violet-500" style={{ width: `${Math.min(100, (shop.page_views / Math.max(1, analytics.by_shop[0]?.page_views || 1)) * 100)}%` }} />
-                          </div>
-                          <div className="mt-1 flex justify-between text-[10px] text-slate-500">
-                            <span>{shop.unique_visitors} uniques</span>
-                            <span>{shop.conversion_rate}%</span>
-                          </div>
-                        </div>
+                    {analytics.sources.length === 0 ? <p className="py-3 text-xs text-slate-500">Aucune visite consentie sur cette période.</p> : analytics.sources.map((source) => (
+                      <div key={source.source}>
+                        <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-700"><span>{audienceSourceLabels[source.source]}</span><span>{source.visits} visites</span></div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-700" style={{ width: `${Math.min(100, (source.visits / Math.max(1, analytics.sources[0].visits)) * 100)}%` }} /></div>
+                        <div className="mt-1 text-[10px] text-slate-500">{source.visitors} sessions uniques</div>
                       </div>
                     ))}
                   </div>
                 </div>
+              </div>
+
+              <div className="mt-5 overflow-x-auto">
+                <div className="mb-2"><h3 className="text-xs font-black text-slate-800">Performance par boutique</h3><p className="mt-1 text-[10px] text-slate-500">Les ratios rapprochent commandes et visiteurs sur la période; ils ne représentent pas une attribution individuelle.</p></div>
+                <table className="w-full min-w-[680px] border-collapse text-left text-xs">
+                  <thead><tr className="border-y border-slate-200 text-[10px] uppercase text-slate-500"><th className="py-2 pr-3">Boutique</th><th className="px-3 py-2 text-right">Visites</th><th className="px-3 py-2 text-right">Sessions</th><th className="px-3 py-2 text-right">Commandes</th><th className="px-3 py-2 text-right">CA</th><th className="py-2 pl-3 text-right">Ratio</th></tr></thead>
+                  <tbody>{analytics.by_shop.slice(0, 10).map((shop) => <tr key={shop.shop_id} className="border-b border-slate-100 text-slate-700"><th className="py-2.5 pr-3 font-bold">{shop.shop_name}</th><td className="px-3 py-2.5 text-right tabular-nums">{shop.page_views}</td><td className="px-3 py-2.5 text-right tabular-nums">{shop.unique_visitors}</td><td className="px-3 py-2.5 text-right tabular-nums">{shop.orders}</td><td className="px-3 py-2.5 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.sales)} F</td><td className="py-2.5 pl-3 text-right font-bold tabular-nums">{shop.conversion_rate}%</td></tr>)}</tbody>
+                </table>
               </div>
             </>
           ) : (
@@ -880,7 +1019,7 @@ export const AdminDashboard: React.FC = () => {
               <section aria-labelledby="admin-payments-list-title" className="space-y-3">
                 <div className="flex flex-wrap items-end justify-between gap-3">
                   <div><h3 id="admin-payments-list-title" className="text-sm font-black text-slate-900">Journal des paiements</h3><p className="mt-1 text-xs text-slate-500">Jusqu’aux 200 derniers paiements et intentions sur {finance.days} jours.</p></div>
-                  <button type="button" disabled={filteredFinancePayments.length === 0} onClick={() => exportOperationsCsv(`matable-paiements-${new Date().toISOString().slice(0, 10)}.csv`, ['Date', 'Boutique', 'Type', 'Formule', 'Montant', 'Devise', 'Statut', 'Référence'], filteredFinancePayments.map((payment) => [payment.paid_at || payment.created_at, payment.shop_name, payment.payment_type === 'promotion' ? 'Promotion' : 'Abonnement', payment.tier, payment.amount, payment.currency, payment.status, payment.provider_reference || payment.id]))} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"><Download className="h-4 w-4" />Exporter la sélection</button>
+                  <button type="button" disabled={filteredFinancePayments.length === 0} onClick={() => exportOperationsCsv(`matable-paiements-${new Date().toISOString().slice(0, 10)}.csv`, ['Date', 'Boutique', 'Type', 'Formule', 'Durée', 'Montant', 'Devise', 'Statut', 'Référence'], filteredFinancePayments.map((payment) => [payment.paid_at || payment.created_at, payment.shop_name, payment.payment_type === 'promotion' ? 'Promotion' : 'Abonnement', payment.tier, payment.subscription_term, payment.amount, payment.currency, payment.status, payment.provider_reference || payment.id]))} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"><Download className="h-4 w-4" />Exporter la sélection</button>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-[minmax(180px,1fr)_180px_180px]">
                   <input type="search" value={paymentSearch} onChange={(event) => setPaymentSearch(event.target.value)} placeholder="Rechercher boutique ou référence" aria-label="Rechercher un paiement" className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-700" />
@@ -893,7 +1032,7 @@ export const AdminDashboard: React.FC = () => {
                     const isPending = payment.status === 'pending';
                     const statusLabel = isPaid ? 'Confirmé' : isPending ? 'En attente' : payment.status === 'refunded' ? 'Remboursé' : payment.status === 'cancelled' ? 'Annulé' : 'Échec';
                     return <article key={payment.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0"><h4 className="truncate text-sm font-bold text-slate-900">{payment.shop_name} · {payment.payment_type === 'promotion' ? 'Promotion' : `Abonnement ${payment.tier}`}</h4><p className="mt-1 truncate text-xs text-slate-500">{payment.provider_reference || payment.id}</p><p className="mt-1 text-xs text-slate-500">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(payment.paid_at || payment.created_at))}</p></div>
+                      <div className="min-w-0"><h4 className="truncate text-sm font-bold text-slate-900">{payment.shop_name} · {payment.payment_type === 'promotion' ? 'Promotion' : `Abonnement ${payment.tier} ${payment.subscription_term === 'annual' ? 'annuel' : 'mensuel'}`}</h4><p className="mt-1 truncate text-xs text-slate-500">{payment.provider_reference || payment.id}</p><p className="mt-1 text-xs text-slate-500">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(payment.paid_at || payment.created_at))}</p></div>
                       <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${isPaid ? 'bg-emerald-100 text-emerald-900' : isPending ? 'bg-amber-100 text-amber-900' : 'bg-rose-100 text-rose-900'}`}>{statusLabel}</span><strong className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(payment.amount)} {payment.currency}</strong></div>
                     </article>;
                   })}
@@ -1012,6 +1151,28 @@ export const AdminDashboard: React.FC = () => {
             </div>
           )}
 
+          <div className="mt-5 border-t border-slate-200 pt-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="max-w-xl">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className={`h-4 w-4 ${maintenanceMode?.enabled ? 'text-amber-700' : 'text-slate-500'}`} />
+                  <h3 className="text-sm font-black text-slate-900">Mode maintenance</h3>
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${maintenanceMode?.enabled ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'}`}>
+                    {maintenanceMode?.enabled ? 'Activé' : 'Désactivé'}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-slate-600">Le site marchand et ses API seront suspendus. L’administration, les contrôles de santé et les webhooks de paiement resteront accessibles.</p>
+              </div>
+              <button type="button" onClick={saveMaintenanceMode} disabled={maintenanceSaving || !maintenanceMode} className={`inline-flex min-h-10 w-full min-w-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-50 sm:w-auto ${maintenanceEnabledDraft ? 'bg-amber-800 hover:bg-amber-900' : 'bg-emerald-800 hover:bg-emerald-900'}`}>
+                {maintenanceSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {maintenanceEnabledDraft ? 'Enregistrer la maintenance' : 'Enregistrer les réglages'}
+              </button>
+            </div>
+            <label className="mt-3 block text-xs font-bold text-slate-700" htmlFor="admin-maintenance-message">Message affiché aux visiteurs</label>
+            <textarea id="admin-maintenance-message" value={maintenanceMessageDraft} maxLength={240} onChange={(event) => setMaintenanceMessageDraft(event.target.value)} rows={2} className="mt-1 min-h-20 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-emerald-700" />
+            <div className="mt-1 flex justify-between text-[10px] text-slate-500"><span>Ce message sera aussi renvoyé aux API publiques.</span><span>{maintenanceMessageDraft.length}/240</span></div>
+          </div>
+
           <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
             <div className="flex items-center gap-2">
               <Send className="w-4 h-4 text-emerald-700" />
@@ -1020,21 +1181,56 @@ export const AdminDashboard: React.FC = () => {
                 <p className="text-[11px] text-emerald-800">Choisissez un message prédéfini. WhatsApp s’ouvre avec le texte personnalisé prêt à envoyer.</p>
               </div>
             </div>
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
-              <select value={notificationShopId} onChange={(event) => setNotificationShopId(event.target.value)} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+            <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+              <select value={notificationShopId} onChange={(event) => setNotificationShopId(event.target.value)} className="min-w-0 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
                 <option value="">Choisir une boutique</option>
                 {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
               </select>
-              <select value={notificationTemplate} onChange={(event) => setNotificationTemplate(event.target.value as typeof notificationTemplate)} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+              <select value={notificationTemplate} onChange={(event) => setNotificationTemplate(event.target.value as typeof notificationTemplate)} className="min-w-0 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
                 {ownerNotificationTemplates.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}
               </select>
-              <button type="button" onClick={prepareOwnerNotification} disabled={notificationLoading || !notificationShopId} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50">
+              <button type="button" onClick={prepareOwnerNotification} disabled={notificationLoading || !notificationShopId} className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50">
                 <Send className="w-3.5 h-3.5" /> {notificationLoading ? 'Préparation...' : 'Ouvrir WhatsApp'}
               </button>
             </div>
           </div>
 
         </section>
+        )}
+
+        {adminView === 'moderation' && (
+          <section aria-labelledby="admin-moderation-title" className="space-y-5">
+            <div><h2 id="admin-moderation-title" className="text-xl font-black text-slate-900">Avis & signalements</h2><p className="mt-1 text-sm text-slate-600">Les avis restent invisibles au public jusqu’à leur validation.</p></div>
+            {contentModerationError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{contentModerationError}</p>}
+            <section className="chart-panel p-4 md:p-5">
+              <h3 className="text-sm font-black text-slate-900">Avis à modérer ({contentModeration.reviews.length})</h3>
+              <div className="mt-3 divide-y divide-slate-200">
+                {contentModeration.reviews.length === 0 ? <p className="py-4 text-sm text-slate-500">Aucun avis en attente.</p> : contentModeration.reviews.map((review) => (
+                  <article key={review.id} className="py-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div><p className="text-sm font-bold text-slate-900">{review.target_type === 'shop' ? review.shop_name : review.product_title || review.shop_name} · {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</p><p className="mt-1 text-xs text-slate-500">{review.customer_name || 'Client'} · {new Date(review.created_at).toLocaleString('fr-FR')}</p></div>
+                      <div className="flex gap-2"><button type="button" onClick={() => void moderateContent('reviews', review.id, 'approved')} className="min-h-9 rounded-lg bg-emerald-700 px-3 text-xs font-bold text-white">Publier</button><button type="button" onClick={() => void moderateContent('reviews', review.id, 'hidden')} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700">Masquer</button></div>
+                    </div>
+                    {review.comment && <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{review.comment}</p>}
+                  </article>
+                ))}
+              </div>
+            </section>
+            <section className="chart-panel p-4 md:p-5">
+              <h3 className="text-sm font-black text-slate-900">Signalements ouverts ({contentModeration.reports.length})</h3>
+              <div className="mt-3 divide-y divide-slate-200">
+                {contentModeration.reports.length === 0 ? <p className="py-4 text-sm text-slate-500">Aucun signalement ouvert.</p> : contentModeration.reports.map((report) => (
+                  <article key={report.id} className="py-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div><p className="text-sm font-bold text-slate-900">{report.target_type === 'shop' ? report.shop_name : report.product_title || report.shop_name} · {report.reason}</p><p className="mt-1 text-xs text-slate-500">{report.customer_name || 'Client'} · {new Date(report.created_at).toLocaleString('fr-FR')} · {report.status === 'in_review' ? 'En cours' : 'Nouveau'}</p></div>
+                      <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void moderateContent('reports', report.id, 'in_review')} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700">Prendre en charge</button><button type="button" onClick={() => void moderateContent('reports', report.id, 'resolved')} className="min-h-9 rounded-lg bg-emerald-700 px-3 text-xs font-bold text-white">Traité</button><button type="button" onClick={() => void moderateContent('reports', report.id, 'dismissed')} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700">Sans suite</button></div>
+                    </div>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{report.details || 'Aucun détail supplémentaire.'}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </section>
         )}
 
         {adminView === 'identity' && (
@@ -1157,5 +1353,3 @@ export const AdminDashboard: React.FC = () => {
     </div>
   );
 };
-
-

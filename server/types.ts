@@ -44,7 +44,7 @@ export interface ShopRecord {
   featured_until?: string | null;
   merchant_verification_status?: MerchantVerificationStatus;
   selected_subscription_tier?: SubscriptionTier;
-  subscription_status?: SubscriptionStatus;
+  subscription_status?: SubscriptionStatus | string;
   trial_start?: string | null;
   trial_end?: string | null;
   subscription_expires_at?: string | null;
@@ -92,6 +92,7 @@ export interface ShopRecord {
 export interface ProductRecord {
   id: number;
   shop_id: number;
+  created_at?: string | null;
   title: string;
   description: string | null;
   price: number;

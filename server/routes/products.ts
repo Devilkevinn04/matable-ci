@@ -20,6 +20,7 @@ interface ProductRouterOptions {
   normalizeProductImage: (value: unknown) => string;
   sanitizeGalleryImages: (value: unknown) => string[];
   sanitizeProductAttributes: (value: unknown, category: ShopCategory) => Record<string, string> | undefined;
+  trialProductLimit: number;
 }
 
 export function createProductRouter({
@@ -33,6 +34,7 @@ export function createProductRouter({
   normalizeProductImage,
   sanitizeGalleryImages,
   sanitizeProductAttributes,
+  trialProductLimit,
 }: ProductRouterOptions) {
   const router = Router({ mergeParams: true });
 
@@ -49,8 +51,8 @@ export function createProductRouter({
     const trialCatalogLimitReached = shop.subscription_status === 'trialing'
       && Number.isFinite(trialEndTime)
       && trialEndTime > Date.now()
-      && products.filter((product) => product.shop_id === shopId).length >= 6;
-    if (trialCatalogLimitReached) return res.status(409).json({ error: 'La période d’essai permet jusqu’à 6 articles au catalogue.' });
+      && products.filter((product) => product.shop_id === shopId).length >= trialProductLimit;
+    if (trialCatalogLimitReached) return res.status(409).json({ error: `La période d’essai permet jusqu’à ${trialProductLimit} articles au catalogue.` });
 
     const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
     const safeTitle = sanitizeTextField(title, 120);
@@ -63,6 +65,7 @@ export function createProductRouter({
     const newProduct: ProductRecord = {
       id: await allocateProductId(),
       shop_id: shopId,
+      created_at: new Date().toISOString(),
       title: safeTitle,
       description: description ? sanitizeTextField(description, 500) : null,
       price: numericPrice,

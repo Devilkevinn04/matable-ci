@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowRight } from 'lucide-react';
 import { ShopCategory } from '../../types';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../../utils/categoryDefaults';
+import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from '../../utils/subscriptionFeatures';
 import { AuthExperienceLayout } from '../AuthExperienceLayout';
 import { MerchantState } from './useMerchant';
 
@@ -41,7 +42,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
       <div className="mb-5">
         <p className="text-sm font-bold text-[#e6572b]">Espace commerçant</p>
         <h2 className="mt-1 text-[30px] font-extrabold leading-tight text-[#25231f]">Créer ma boutique</h2>
-        <p className="mt-2 text-sm leading-6 text-[#68756c]">Créez votre espace, choisissez une formule et profitez de 30 jours d’essai gratuit avant tout paiement.</p>
+        <p className="mt-2 text-sm leading-6 text-[#68756c]">Créez votre espace et profitez de {TRIAL_DURATION_DAYS} jours d’essai Standard gratuit, avec jusqu’à {TRIAL_CATALOG_LIMIT} produits. Vous pouvez aussi payer directement une formule.</p>
       </div>
 
       <form onSubmit={handleRegisterShop} className="space-y-4">

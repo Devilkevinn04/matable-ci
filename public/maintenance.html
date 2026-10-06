@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#176b55">
+    <title>Maintenance | MaTable.ci</title>
+    <style>
+      :root { color-scheme: light; font-family: Georgia, "Times New Roman", serif; background: #f4f6f1; color: #18362e; }
+      * { box-sizing: border-box; }
+      body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 1.5rem; background: repeating-linear-gradient(135deg, #f4f6f1, #f4f6f1 18px, #eef2eb 18px, #eef2eb 19px); }
+      main { width: min(38rem, 100%); padding: clamp(1.5rem, 5vw, 3rem); border-top: 5px solid #176b55; background: #fff; box-shadow: 0 24px 60px #17382d18; }
+      .brand { color: #176b55; font: 700 .75rem/1.2 system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+      h1 { margin: 2.5rem 0 1rem; max-width: 12ch; font-size: clamp(2.25rem, 8vw, 3.5rem); line-height: 1.02; }
+      p { margin: 0; color: #50635b; font: 1rem/1.65 system-ui, sans-serif; }
+      .rule { width: 3rem; height: 3px; margin: 2rem 0; background: #d58b42; }
+      a { color: #176b55; font: 700 .875rem/1.4 system-ui, sans-serif; text-underline-offset: .2em; }
+      @media (prefers-reduced-motion: no-preference) { main { animation: arrive .45s ease-out both; } @keyframes arrive { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">MaTable.ci · Côte d’Ivoire</div>
+      <h1>On revient très vite.</h1>
+      <div class="rule"></div>
+      <p>__MAINTENANCE_MESSAGE__</p>
+      <p style="margin-top: 2rem"><a href="/">Réessayer la page</a></p>
+    </main>
+  </body>
+</html>

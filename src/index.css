@@ -47,9 +47,16 @@ button, input, select, textarea {
 }
 
 :focus-visible {
-  outline: 3px solid rgba(23, 107, 85, 0.9);
+  outline: 3px solid var(--primary-deep);
   outline-offset: 3px;
-  box-shadow: 0 0 0 5px rgba(23, 107, 85, 0.16);
+  box-shadow: 0 0 0 5px rgba(23, 107, 85, 0.2);
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+    box-shadow: none;
+  }
 }
 
 .skip-link {
@@ -73,9 +80,9 @@ button, input, select, textarea {
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: 'Avenir Next', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-family: 'DM Sans', 'Avenir Next', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   color: var(--ink);
-  background: linear-gradient(180deg, #faf8f3 0%, var(--bg) 55%, #eee9df 100%);
+  background: #f6f3ed;
 }
 
 button, a {
@@ -164,9 +171,9 @@ body::before {
 .cookie-banner {
   position: fixed;
   z-index: 60;
-  right: 1rem;
+  left: 50%;
   bottom: 1rem;
-  width: min(34rem, calc(100vw - 2rem));
+  width: min(58rem, calc(100vw - 2rem));
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -175,20 +182,22 @@ body::before {
   border-radius: 14px;
   background: rgba(255, 253, 249, 0.98);
   box-shadow: var(--shadow-strong);
+  transform: translateX(-50%);
 }
 
 .cookie-banner-copy { display: flex; align-items: flex-start; gap: 0.65rem; min-width: 0; }
 .cookie-banner-copy p { margin: 0; color: var(--ink-soft); font-size: 0.78rem; line-height: 1.45; }
 .cookie-banner-copy a { color: var(--primary-deep); font-weight: 700; }
-.cookie-banner-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
-.cookie-button { border: 0; border-radius: 9px; padding: 0.65rem 0.8rem; font-size: 0.75rem; font-weight: 800; cursor: pointer; }
+.cookie-banner-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 0.5rem; }
+.cookie-button { border: 0; border-radius: 9px; padding: 0.65rem 0.8rem; font-size: 0.75rem; font-weight: 800; cursor: pointer; white-space: nowrap; }
 .cookie-button-primary { color: white; background: var(--primary); }
 .cookie-button-secondary { color: var(--ink); background: var(--surface); }
 .not-found-page { max-width: 32rem; margin: 5rem auto; padding: 2.5rem 1.5rem; text-align: center; }
 
 @media (max-width: 640px) {
-  .cookie-banner { right: 0.75rem; bottom: 0.75rem; width: calc(100vw - 1.5rem); flex-direction: column; align-items: stretch; }
-  .cookie-banner-actions { justify-content: flex-end; }
+  .cookie-banner { bottom: 0.75rem; width: calc(100vw - 1.5rem); flex-direction: column; align-items: stretch; }
+  .cookie-banner-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cookie-button { padding-right: 0.45rem; padding-left: 0.45rem; }
 }
 
 button, input, select, textarea {
@@ -218,25 +227,24 @@ button, input, select, textarea {
 }
 
 h1, h2, h3, h4, .display-font {
-  font-family: 'Avenir Next', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-family: 'Bricolage Grotesque', 'Avenir Next', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   letter-spacing: -0.025em;
 }
 
+.font-display {
+  font-family: 'Bricolage Grotesque', 'Avenir Next', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
 .page-shell {
-  width: min(1500px, calc(100% - 20px));
+  width: 100%;
   margin: 0 auto;
-  padding: 12px 0 28px;
+  padding: 0;
 }
 
 .surface-shell {
   position: relative;
   min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  background: rgba(255, 253, 249, 0.9);
-  backdrop-filter: blur(10px);
-  box-shadow: var(--shadow);
-  border-radius: 16px;
+  background: transparent;
 }
 
 .brand-mark {
@@ -891,6 +899,37 @@ button:hover {
   box-shadow: 0 4px 16px rgba(37, 35, 31, 0.06) !important;
 }
 
+.merchant-dashboard [class~="bg-white"],
+.admin-dashboard [class~="bg-white"] {
+  background-color: var(--paper) !important;
+}
+
+.merchant-dashboard [class~="bg-slate-50"],
+.merchant-dashboard [class~="bg-slate-100"],
+.admin-dashboard [class~="bg-slate-50"],
+.admin-dashboard [class~="bg-slate-100"] {
+  background-color: var(--bg-soft) !important;
+}
+
+.merchant-dashboard [class~="text-slate-900"],
+.admin-dashboard [class~="text-slate-900"] {
+  color: var(--ink) !important;
+}
+
+.merchant-dashboard [class~="text-slate-700"],
+.merchant-dashboard [class~="text-slate-600"],
+.admin-dashboard [class~="text-slate-700"],
+.admin-dashboard [class~="text-slate-600"] {
+  color: var(--ink-soft) !important;
+}
+
+.merchant-dashboard [class~="border-slate-200"],
+.merchant-dashboard [class~="border-slate-300"],
+.admin-dashboard [class~="border-slate-200"],
+.admin-dashboard [class~="border-slate-300"] {
+  border-color: var(--line) !important;
+}
+
 .merchant-dashboard [class*="border-[3px]"],
 .merchant-dashboard [class*="border-[2px]"] {
   border-color: var(--line) !important;
@@ -1071,34 +1110,6 @@ button:hover {
 }
 
 .site-footer-compact { margin-top: auto; }
-
-.whatsapp-float-btn {
-  position: fixed;
-  right: 1.1rem;
-  bottom: 1.1rem;
-  z-index: 60;
-  width: 3.4rem;
-  height: 3.4rem;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: #25d366;
-  color: #fff;
-  box-shadow: 0 10px 24px rgba(37, 211, 102, 0.4);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.whatsapp-float-btn:hover {
-  transform: translateY(-2px) scale(1.04);
-  box-shadow: 0 14px 28px rgba(37, 211, 102, 0.48);
-}
-
-body:has(.merchant-dashboard) .whatsapp-float-btn,
-body:has(.merchant-pre-dashboard) .whatsapp-float-btn { display: none; }
-
-@media (max-width: 720px) {
-  .whatsapp-float-btn { right: 0.85rem; bottom: 0.85rem; width: 3.1rem; height: 3.1rem; }
-}
 
 .legal-page {
   min-height: 70vh;

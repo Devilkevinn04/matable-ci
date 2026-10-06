@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, LoaderCircle, MessageCircle, ShieldCheck } from 'lucide-react';
+import { ArrowRight, BarChart3, Check, CircleCheck, LoaderCircle, LockKeyhole, MessageCircle, Palette, ShieldCheck, Sparkles, Store } from 'lucide-react';
 import type { Shop, SubscriptionTier } from '../../types';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
-import { SUBSCRIPTION_PLANS } from '../../utils/subscriptionFeatures';
+import {
+  getSubscriptionDailyPrice,
+  getSubscriptionPrice,
+  SUBSCRIPTION_PLANS,
+  TRIAL_DURATION_DAYS,
+  type SubscriptionTerm,
+} from '../../utils/subscriptionFeatures';
 import { WhatsAppSubscriptionReminderConsent } from './WhatsAppSubscriptionReminderConsent';
 
 interface KadevPayCheckoutOptions {
@@ -27,19 +33,24 @@ declare global {
 interface MerchantTrialOnboardingProps {
   shop: Shop;
   isStarting: boolean;
-  onStart: (tier: SubscriptionTier) => void;
-  mode?: 'start' | 'expired';
+  onStart?: (tier: SubscriptionTier) => void;
+  mode?: 'start' | 'expired' | 'plans';
+  previewOnly?: boolean;
+  onBack?: () => void;
 }
 
 const plans = Object.values(SUBSCRIPTION_PLANS);
 
-export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'start' }: MerchantTrialOnboardingProps) {
+export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'start', previewOnly = false, onBack }: MerchantTrialOnboardingProps) {
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(shop.subscription?.plan || 'standard');
+  const [term, setTerm] = useState<SubscriptionTerm>('monthly');
+  const [purchaseNow, setPurchaseNow] = useState(mode !== 'start');
   const [isKadevPayReady, setIsKadevPayReady] = useState(false);
   const [isPaymentStarting, setIsPaymentStarting] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState('');
   const didReceivePaymentSuccess = useRef(false);
   const selectedPlan = plans.find((plan) => plan.tier === selectedTier) || plans[0];
+  const paymentFlowActive = previewOnly || mode !== 'start' || purchaseNow;
   const supportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour l’espace commerçant de ${shop.name}.`);
   const isTrialExpired = mode === 'expired' && Boolean(shop.subscription?.trialEnd) && !shop.subscription?.expiresAt;
   const expiredTitle = isTrialExpired
@@ -52,13 +63,13 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
           ? 'Votre abonnement est résilié'
           : 'Votre abonnement est arrivé à échéance';
   const expiredDescription = isTrialExpired
-    ? 'Choisissez une formule mensuelle et réglez-la avec KadevPay. Votre vitrine redeviendra accessible après confirmation sécurisée du paiement.'
+    ? 'Choisissez une formule mensuelle ou annuelle et réglez-la avec KadevPay. Votre vitrine redeviendra accessible après confirmation sécurisée du paiement.'
     : shop.subscription?.status === 'past_due'
-      ? 'Le dernier paiement n’a pas été confirmé. Choisissez une formule et réglez-la avec KadevPay pour réactiver votre vitrine.'
-      : 'Choisissez une formule mensuelle et réglez-la avec KadevPay. Votre accès sera réactivé après confirmation sécurisée du paiement.';
+      ? 'Le dernier paiement n’a pas été confirmé. Choisissez une formule mensuelle ou annuelle et réglez-la avec KadevPay pour réactiver votre vitrine.'
+      : 'Choisissez une formule et sa durée, puis réglez-la avec KadevPay. Votre accès sera réactivé après confirmation sécurisée du paiement.';
 
   useEffect(() => {
-    if (mode !== 'expired') return;
+    if (!paymentFlowActive || previewOnly) return;
     if (window.KadevPay) {
       setIsKadevPayReady(true);
       return;
@@ -79,7 +90,7 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
       script.removeEventListener('load', onLoad);
       script.removeEventListener('error', onError);
     };
-  }, [mode]);
+  }, [paymentFlowActive, previewOnly]);
 
   const verifyPayment = async (paymentId: string) => {
     for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -91,6 +102,11 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
         if (data.status === 'paid') {
           setPaymentMessage('Paiement confirmé. Actualisation de votre espace…');
           window.location.reload();
+          return;
+        }
+        if (data.status === 'failed') {
+          setPaymentMessage('Le paiement a été refusé. Aucun abonnement n’a été activé. Vous pouvez réessayer.');
+          setIsPaymentStarting(false);
           return;
         }
       } catch {
@@ -110,7 +126,7 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ tier: selectedTier }),
+        body: JSON.stringify({ tier: selectedTier, term }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de préparer le paiement KadevPay.');
@@ -141,70 +157,168 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
   };
 
   return (
-    <main className="merchant-pre-dashboard min-h-screen bg-[#f4f6f1] px-4 py-8 text-slate-900 sm:px-6 sm:py-12">
-      <div className="mx-auto max-w-4xl">
-        <header className="border-b border-[#dce4dc] pb-6">
-          <p className="text-xs font-extrabold uppercase text-[#176b55]">MaTable.ci · Espace commerçant</p>
-          <h1 className="mt-2 text-2xl font-black sm:text-3xl">{mode === 'expired' ? expiredTitle : `Bienvenue, ${shop.name}`}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? expiredDescription : 'Votre essai gratuit de 30 jours commence lorsque vous le démarrez. Configurez votre boutique et testez les fonctionnalités sans paiement aujourd’hui.'}</p>
-          {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-emerald-800 underline underline-offset-2"><MessageCircle className="h-4 w-4" />Contacter l’équipe</a>}
-        </header>
-
-        <section className="mt-7" aria-labelledby="plan-heading">
-          <div className="flex items-center gap-2">
-            <h2 id="plan-heading" className="text-lg font-extrabold">{mode === 'expired' ? 'Choisissez votre formule de renouvellement' : 'Choisissez la formule à essayer'}</h2>
-            <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-900">{mode === 'expired' ? 'Formules mensuelles' : '30 jours gratuits'}</span>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3" role="radiogroup" aria-label="Formule après la période d’essai">
-            {plans.map((plan) => {
-              const selected = selectedTier === plan.tier;
-              return (
-                <button
-                  key={plan.tier}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => setSelectedTier(plan.tier)}
-                  className={`flex min-h-56 flex-col items-start rounded-xl border p-4 text-left transition ${selected ? 'border-[#176b55] bg-white ring-2 ring-[#176b55]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[#176b55]'}`}
-                >
-                  <span className="flex w-full items-center justify-between gap-2">
-                    <span className="font-extrabold">{plan.label}</span>
-                    {selected && <Check className="h-4 w-4 text-emerald-700" />}
-                  </span>
-                  <h3 className="mt-3 text-sm font-extrabold text-slate-900">{plan.headline}</h3>
-                  <strong className="mt-2 text-xl">{new Intl.NumberFormat('fr-FR').format(plan.price)} <span className="text-sm font-semibold">FCFA/mois</span></strong>
-                  <span className="mt-2 text-xs leading-5 text-slate-600">{plan.description}</span>
-                  <ul className="mt-3 space-y-1.5 text-left text-xs leading-5 text-slate-700">
-                    {plan.benefits.map((benefit) => <li key={benefit} className="flex items-start gap-2"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" /><span>{benefit}</span></li>)}
-                  </ul>
+    <main className={`merchant-pre-dashboard ${mode === 'plans' ? 'min-h-screen px-0 py-0' : 'min-h-screen px-4 py-8 sm:px-6 sm:py-12'} bg-[#f4f6f1] text-slate-900`}>
+      <div className={`mx-auto ${mode === 'plans' ? 'max-w-[1240px] px-4 pb-12 sm:px-6 lg:px-8' : 'max-w-4xl'}`}>
+        {mode === 'plans' ? (
+          <>
+            {onBack && (
+              <div className="py-4 sm:py-6">
+                <button type="button" onClick={onBack} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#ded8ce] bg-[#fffdf9] px-4 text-sm font-bold text-[#31584c] transition hover:bg-[#e4f1ec]">
+                  <span aria-hidden="true">←</span> {previewOnly ? 'Retour à l’annuaire' : 'Retour à mon forfait'}
                 </button>
-              );
-            })}
-          </div>
-        </section>
+              </div>
+            )}
+            <header className="relative isolate overflow-hidden rounded-[2rem] bg-[#103f34] px-6 py-8 text-white shadow-[0_24px_60px_-28px_rgba(15,77,61,0.65)] sm:px-10 sm:py-11 lg:px-14 lg:py-14">
+              <div aria-hidden="true" className="absolute -right-16 -top-28 -z-10 h-80 w-80 rounded-full border-[42px] border-white/[0.06]" />
+              <div aria-hidden="true" className="absolute -bottom-32 right-[23%] -z-10 h-64 w-64 rounded-full bg-[#dba956]/10 blur-3xl" />
+              <div className="grid items-center gap-9 lg:grid-cols-[1.2fr_0.8fr] lg:gap-14">
+                <div>
+                  <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.08] px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-[#f1d59f]">
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Grandir, à votre façon
+                  </p>
+                  <h1 className="mt-5 max-w-2xl text-3xl font-black leading-[1.08] tracking-tight sm:text-4xl lg:text-[3.4rem]">
+                    Votre savoir-faire mérite <span className="text-[#efc779]">une vitrine à sa hauteur.</span>
+                  </h1>
+                  <p className="mt-4 max-w-xl text-sm leading-7 text-white/75 sm:text-base">
+                    Présentez vos produits, faites-vous découvrir et échangez directement avec vos clients. Choisissez le coup de pouce qui correspond à votre prochaine étape.
+                  </p>
+                  <div className="mt-6 flex flex-wrap gap-x-5 gap-y-3 text-xs font-bold text-white/85 sm:text-sm">
+                    <span className="inline-flex items-center gap-2"><CircleCheck className="h-4 w-4 text-[#efc779]" />Une vitrine qui vous ressemble</span>
+                    <span className="inline-flex items-center gap-2"><CircleCheck className="h-4 w-4 text-[#efc779]" />Contact direct sur WhatsApp</span>
+                  </div>
+                </div>
+                <div className="relative mx-auto hidden w-full max-w-[390px] rounded-[1.6rem] border border-white/15 bg-white/[0.08] p-4 shadow-2xl backdrop-blur-sm sm:p-5 lg:block">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                    <span className="text-xs font-bold text-white/65">Votre espace commerçant</span>
+                    <span className="rounded-full bg-[#d9efdf]/15 px-2.5 py-1 text-[10px] font-extrabold text-[#c8efcf]">MATABLE.CI · ESPACE PRO</span>
+                  </div>
+                  <div className="mt-4 flex items-center gap-3 rounded-2xl bg-[#fffdf9] p-4 text-[#163d32]">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#e5f0e8]"><Store className="h-6 w-6" aria-hidden="true" /></span>
+                    <span><strong className="block text-sm font-black">{shop.name}</strong><span className="mt-0.5 block text-xs text-[#6d786f]">Votre activité, à votre image</span></span>
+                    <span className="ml-auto h-2.5 w-2.5 rounded-full bg-[#54a876] ring-4 ring-[#54a876]/15" aria-hidden="true" />
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-[#efc779] p-4 text-[#3f301b]">
+                      <Palette className="h-5 w-5" aria-hidden="true" />
+                      <strong className="mt-3 block text-xs font-black">Votre identité</strong>
+                      <span className="mt-1 block text-[11px] leading-4 text-[#654e2d]">Couleurs, logo et univers</span>
+                    </div>
+                    <div className="rounded-2xl bg-white/[0.1] p-4 text-white">
+                      <BarChart3 className="h-5 w-5 text-[#efc779]" aria-hidden="true" />
+                      <strong className="mt-3 block text-xs font-black">Vos progrès</strong>
+                      <span className="mt-1 block text-[11px] leading-4 text-white/65">Des repères pour avancer</span>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-center text-[10px] font-semibold tracking-wide text-white/50">Un même espace. La formule qui vous ressemble.</p>
+                </div>
+                <div className="flex flex-wrap gap-2 lg:hidden">
+                  {[
+                    { icon: Store, label: 'Votre vitrine' },
+                    { icon: MessageCircle, label: 'WhatsApp direct' },
+                    { icon: BarChart3, label: 'Outils pour grandir' },
+                  ].map(({ icon: Icon, label }) => <span key={label} className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.08] px-3 py-2 text-[11px] font-bold text-white/85"><Icon className="h-3.5 w-3.5 text-[#efc779]" aria-hidden="true" />{label}</span>)}
+                </div>
+              </div>
+            </header>
+          </>
+        ) : (
+          <header className="border-b border-[#dce4dc] pb-6">
+            <p className="text-xs font-extrabold uppercase text-[#176b55]">MaTable.ci · Espace commerçant</p>
+            <h1 className="mt-2 text-2xl font-black sm:text-3xl">{mode === 'expired' ? expiredTitle : `Bienvenue, ${shop.name}`}</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? expiredDescription : `Votre essai gratuit de ${TRIAL_DURATION_DAYS} jours commence lorsque vous le démarrez. Il inclut les fonctions Standard et permet d’ajouter jusqu’à 2 produits.`}</p>
+            {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-emerald-800 underline underline-offset-2"><MessageCircle className="h-4 w-4" />Contacter l’équipe</a>}
+          </header>
+        )}
 
-        <aside className="mt-5 flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
-          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-sky-800" />
-          <p>{mode === 'expired' ? 'Le paiement est demandé par KadevPay et l’abonnement ne sera réactivé qu’après confirmation du webhook signé.' : 'La formule choisie est enregistrée pour la suite. Aucun débit ni paiement n’est effectué pendant cette étape.'}</p>
+        {paymentFlowActive ? (
+          <section className="mt-7" aria-labelledby="plan-heading">
+            <div className={`flex flex-wrap items-end justify-between gap-4 ${mode === 'plans' ? 'mb-5 mt-9 sm:mt-12' : ''}`}>
+              <div>
+                {mode === 'plans' && <p className="mb-1 text-xs font-black uppercase tracking-[0.16em] text-[#b16f35]">Trouvez votre élan</p>}
+                <h2 id="plan-heading" className={`${mode === 'plans' ? 'text-2xl font-black tracking-tight text-[#183b31] sm:text-3xl' : 'text-lg font-extrabold'}`}>{mode === 'expired' ? 'Choisissez votre formule de renouvellement' : mode === 'plans' ? 'Trois formules. Une boutique qui avance.' : 'Choisissez votre formule'}</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'plans' ? `Choisissez votre formule pour ${shop.name}. Vous pourrez la faire évoluer au rythme de votre activité.` : 'Abonnement annuel : 10 mois payés pour 12 mois de service. Le changement est appliqué après confirmation du paiement.'}</p>
+              </div>
+              <div className="inline-flex rounded-full border border-[#d9dfd7] bg-white p-1 shadow-sm" role="group" aria-label="Durée de l’abonnement">
+                <button type="button" onClick={() => setTerm('monthly')} aria-pressed={term === 'monthly'} className={`rounded-full px-4 py-2.5 text-xs font-extrabold transition ${term === 'monthly' ? 'bg-[#174f40] text-white shadow-sm' : 'text-slate-600 hover:text-[#174f40]'}`}>Mensuel</button>
+                <button type="button" onClick={() => setTerm('annual')} aria-pressed={term === 'annual'} className={`rounded-full px-4 py-2.5 text-xs font-extrabold transition ${term === 'annual' ? 'bg-[#174f40] text-white shadow-sm' : 'text-slate-600 hover:text-[#174f40]'}`}>Annuel <span className="ml-1 text-[#c47c36]">−2 mois</span></button>
+              </div>
+            </div>
+            <div className={`grid gap-4 md:grid-cols-3 ${mode === 'plans' ? 'items-stretch' : 'mt-4'}`} role="radiogroup" aria-label="Formule d’abonnement">
+              {plans.map((plan) => {
+                const selected = selectedTier === plan.tier;
+                const featured = mode === 'plans' && plan.tier === 'premium';
+                const planColors = plan.tier === 'pro'
+                  ? { card: selected ? 'border-[#164d3d] bg-[#164d3d] text-white ring-4 ring-[#164d3d]/15' : 'border-[#cad9d0] bg-[#f1f6f1] text-[#183b31] hover:border-[#164d3d]', subdued: selected ? 'text-white/70' : 'text-slate-600', check: selected ? 'text-[#f1ca7a]' : 'text-[#176b55]' }
+                  : { card: selected ? 'border-[#176b55] bg-white ring-4 ring-[#176b55]/10 shadow-[0_18px_42px_-24px_rgba(15,77,61,0.45)]' : 'border-[#e0e4db] bg-white hover:border-[#9fb7a8]', subdued: 'text-slate-600', check: 'text-[#176b55]' };
+                return (
+                  <button
+                    key={plan.tier}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setSelectedTier(plan.tier)}
+                    className={`relative flex min-h-[360px] flex-col items-start rounded-[1.5rem] border p-5 text-left transition duration-200 hover:-translate-y-1 sm:p-6 ${mode === 'plans' ? planColors.card : `min-h-56 rounded-xl p-4 ${selected ? 'border-[#176b55] bg-white ring-2 ring-[#176b55]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[#176b55]'}`}`}
+                  >
+                    {featured && <span className="absolute -top-3 left-5 rounded-full bg-[#e8b85f] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#3f301b] shadow-sm">Le meilleur équilibre</span>}
+                    <span className="flex w-full items-center justify-between gap-2">
+                      <span className={`text-sm font-black uppercase tracking-[0.11em] ${mode === 'plans' && plan.tier === 'pro' && selected ? 'text-[#f1ca7a]' : mode === 'plans' ? 'text-[#176b55]' : ''}`}>{plan.label}</span>
+                      {selected && <Check className={`h-5 w-5 ${mode === 'plans' ? planColors.check : 'text-emerald-700'}`} />}
+                    </span>
+                    <h3 className={`mt-4 text-xl font-black leading-tight ${mode === 'plans' && plan.tier === 'pro' && selected ? 'text-white' : 'text-[#202d28]'}`}>{plan.headline}</h3>
+                    <p className={`mt-2 min-h-10 text-xs leading-5 ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{plan.description}</p>
+                    <div className={`mt-5 border-b pb-5 ${mode === 'plans' ? selected && plan.tier === 'pro' ? 'border-white/15' : 'border-[#e8ebe5]' : 'border-[#e8ebe5]'}`}>
+                      <strong className="text-3xl font-black tracking-tight">{new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(plan.tier, term))}<span className="ml-1 text-sm font-bold">FCFA</span></strong>
+                      <span className={`ml-1 text-xs font-semibold ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>/{term === 'annual' ? 'an' : 'mois'}</span>
+                      <span className={`mt-1.5 block text-xs ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{term === 'annual' ? `${new Intl.NumberFormat('fr-FR').format(plan.price)} FCFA/mois · 2 mois offerts` : `${new Intl.NumberFormat('fr-FR').format(getSubscriptionDailyPrice(plan.tier))} FCFA par jour`}</span>
+                    </div>
+                    <ul className={`mt-5 flex-1 space-y-3 text-left text-xs leading-5 ${mode === 'plans' ? planColors.subdued : 'text-slate-700'}`}>
+                      {plan.benefits.map((benefit) => <li key={benefit} className="flex items-start gap-2.5"><Check className={`mt-0.5 h-4 w-4 shrink-0 ${mode === 'plans' ? planColors.check : 'text-emerald-700'}`} /><span>{benefit}</span></li>)}
+                    </ul>
+                    {mode === 'plans' && <span className={`mt-6 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 text-xs font-extrabold transition ${selected ? plan.tier === 'pro' ? 'bg-[#f1ca7a] text-[#3f301b]' : 'bg-[#174f40] text-white' : plan.tier === 'pro' && selected ? 'bg-white/10 text-white' : 'bg-[#eef3ed] text-[#31584c]'}`}>
+                      {selected ? 'Formule sélectionnée' : `Choisir ${plan.label}`} <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    </span>}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ) : (
+          <section className="mt-7 rounded-xl border border-emerald-200 bg-white p-5">
+            <h2 className="text-lg font-extrabold">Essai gratuit · Standard</h2>
+            <ul className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+              {SUBSCRIPTION_PLANS.standard.benefits.map((benefit) => <li key={benefit} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />{benefit}</li>)}
+            </ul>
+          </section>
+        )}
+
+        <aside className={`mt-5 flex items-start gap-3 rounded-2xl border p-4 text-sm ${mode === 'plans' ? 'border-[#dbe8dc] bg-white text-[#345448] sm:mt-7 sm:px-5' : 'border-sky-200 bg-sky-50 text-sky-950'}`}>
+          {mode === 'plans' ? <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-[#176b55]" /> : <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-sky-800" />}
+          <p>{previewOnly ? 'Aperçu de démonstration : comparez les formules librement. Aucun paiement ne sera lancé.' : paymentFlowActive ? 'Vous gardez la main : le paiement est lancé uniquement après votre validation et votre formule est activée après confirmation sécurisée de KadevPay.' : 'Aucun paiement n’est demandé pour commencer l’essai. Vous pourrez choisir et payer une formule à tout moment.'}</p>
         </aside>
 
         {mode === 'expired' && <div className="mt-5 rounded-xl border border-slate-200 bg-white px-4"><WhatsAppSubscriptionReminderConsent shop={shop} /></div>}
 
-        <div className="mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-          {mode === 'expired' ? (
-            <button type="button" onClick={() => void startSubscriptionPayment()} disabled={!isKadevPayReady || isPaymentStarting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
-              {isPaymentStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-              {isPaymentStarting ? 'Vérification du paiement…' : isKadevPayReady ? 'Renouveler avec KadevPay' : 'Chargement de KadevPay…'}
-            </button>
+        <div className={`mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center ${mode === 'plans' ? 'rounded-[1.5rem] bg-[#e9efe8] p-4 sm:mt-4 sm:p-5' : ''}`}>
+          {paymentFlowActive ? (
+            previewOnly ? (
+              <button type="button" disabled className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-300 px-5 py-3 text-sm font-bold text-slate-600">Aperçu · paiement désactivé</button>
+            ) : (
+              <button type="button" onClick={() => void startSubscriptionPayment()} disabled={!isKadevPayReady || isPaymentStarting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
+                {isPaymentStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                {isPaymentStarting ? 'Vérification du paiement…' : isKadevPayReady ? `Continuer avec ${selectedPlan.label}` : 'Chargement de KadevPay…'}
+              </button>
+            )
           ) : (
-            <button type="button" onClick={() => onStart(selectedTier)} disabled={isStarting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
+            <button type="button" onClick={() => onStart?.('standard')} disabled={isStarting || !onStart} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
               {isStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-              {isStarting ? 'Démarrage de l’essai…' : 'Commencer mon essai gratuit'}
+              {isStarting ? 'Démarrage de l’essai…' : `Commencer mon essai de ${TRIAL_DURATION_DAYS} jours`}
             </button>
           )}
-          <span className="text-xs text-slate-500">{selectedPlan.label} · {new Intl.NumberFormat('fr-FR').format(selectedPlan.price)} FCFA/mois après l’essai</span>
+          {!paymentFlowActive && <button type="button" onClick={() => setPurchaseNow(true)} className="min-h-11 rounded-lg px-3 text-sm font-bold text-[#176b55] underline underline-offset-2">Je préfère souscrire maintenant</button>}
+          {paymentFlowActive && <span className="text-xs text-slate-600">{selectedPlan.label} · {new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(selectedTier, term))} FCFA/{term === 'annual' ? 'an' : 'mois'}</span>}
+          {mode === 'start' && paymentFlowActive && <button type="button" onClick={() => setPurchaseNow(false)} className="min-h-11 rounded-lg px-3 text-sm font-bold text-[#176b55] underline underline-offset-2">Revenir à l’essai gratuit</button>}
         </div>
-        {mode === 'expired' && paymentMessage && <p role="status" aria-live="polite" className="mt-3 text-sm text-slate-700">{paymentMessage}</p>}
+        {paymentFlowActive && paymentMessage && <p role="status" aria-live="polite" className="mt-3 text-sm text-slate-700">{paymentMessage}</p>}
       </div>
     </main>
   );

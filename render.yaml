@@ -33,7 +33,7 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: VITE_WHATSAPP_ADMIN_PHONE
-        sync: false
+        value: 0102749775
       - key: WHATSAPP_CLOUD_API_TOKEN
         sync: false
       - key: WHATSAPP_PHONE_NUMBER_ID

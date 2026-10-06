@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from 'express';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
-import { canUseSubscriptionFeature, getShopPublicationBlockReason, getSubscriptionPlanConfig, normalizeSubscriptionTier } from '../services/businessRules.ts';
+import { canUseSubscriptionFeature, getShopPublicationBlockReason, getSubscriptionPlanConfig } from '../services/businessRules.ts';
 import type { OrderRecord, ShopRecord } from '../types.ts';
 
 interface ShopManagementOptions {
@@ -56,10 +56,9 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       return res.json({ success: true, shop: toSafeShop(shop), trial_days: trialDurationDays, already_started: true });
     }
     if (shop.subscription_status !== 'not_started') return res.status(409).json({ error: 'Cet essai ne peut pas être démarré.' });
-    const tier = String(req.body?.tier || '');
-    if (!['standard', 'premium', 'pro'].includes(tier)) return res.status(400).json({ error: 'Choisissez une formule valide.' });
+    const tier = 'standard';
     const startedAt = new Date();
-    shop.selected_subscription_tier = normalizeSubscriptionTier(tier);
+    shop.selected_subscription_tier = tier;
     shop.subscription_status = 'trialing';
     shop.trial_start = startedAt.toISOString();
     shop.trial_end = addDays(startedAt, trialDurationDays);
@@ -104,6 +103,17 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       WHERE shop_id = ? AND event_type = 'page_view' AND created_at >= ?
       GROUP BY date ORDER BY date ASC
     `, [shop.id, since]);
+    const productActivity = await dbAll<{ product_id: number; title: string; views: number; clicks: number }>(`
+      SELECT p.id AS product_id, p.title,
+        COUNT(CASE WHEN e.event_type = 'product_view' THEN 1 END) AS views,
+        COUNT(CASE WHEN e.event_type = 'product_click' THEN 1 END) AS clicks
+      FROM analytics_events e
+      JOIN products p ON p.id = CAST(substr(e.path, 10) AS INTEGER)
+      WHERE e.shop_id = ? AND e.event_type IN ('product_view', 'product_click') AND e.created_at >= ?
+      GROUP BY p.id, p.title
+      ORDER BY views DESC, clicks DESC, p.id ASC
+      LIMIT 10
+    `, [shop.id, since]);
     const actionableOrders = orders.filter((order) => order.shop_id === shop.id
       && order.created_at >= since
       && order.status !== 'cancelled'
@@ -134,8 +144,16 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
         unique_visitors: Number(totals[0]?.unique_visitors || 0),
         orders: actionableOrders.length,
         order_value: actionableOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0),
+        product_views: productActivity.reduce((sum, item) => sum + Number(item.views || 0), 0),
+        product_clicks: productActivity.reduce((sum, item) => sum + Number(item.clicks || 0), 0),
       },
       daily: Array.from(byDay.values()).sort((left, right) => left.date.localeCompare(right.date)),
+      top_products: productActivity.map((item) => ({
+        product_id: Number(item.product_id),
+        title: item.title,
+        views: Number(item.views || 0),
+        clicks: Number(item.clicks || 0),
+      })),
     });
   });
 

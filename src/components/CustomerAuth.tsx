@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, CheckCircle2, Mail, ShieldCheck, Store, UserRound } from 'lucide-react';
+import { ArrowRight, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MapPin, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, UserRound } from 'lucide-react';
 import { AuthExperienceLayout } from './AuthExperienceLayout';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
+import { CustomerMerchantRegistrationForm } from './CustomerMerchantRegistrationForm';
+import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
+import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
 
 export interface CustomerUser {
   id: number;
@@ -108,19 +111,23 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
 
   return (
     <AuthExperienceLayout
-      eyebrow="Du local, tout simplement"
-      title={mode === 'login' ? 'Bienvenue sur MaTable.ci' : 'Rejoignez la communauté MaTable.ci'}
-      description={mode === 'login' ? 'Connectez-vous pour retrouver les boutiques que vous aimez et commander en toute simplicité.' : 'Créez votre compte et commencez à découvrir, soutenir et suivre les commerces de votre quartier.'}
+      eyebrow={mode === 'register' && accountType === 'merchant' ? 'Votre commerce, en ligne' : 'Du local, tout simplement'}
+      title={mode === 'register' && accountType === 'merchant' ? 'Faites découvrir votre boutique.' : mode === 'login' ? 'Bienvenue sur MaTable.ci' : 'Rejoignez la communauté MaTable.ci'}
+      description={mode === 'register' && accountType === 'merchant'
+        ? 'Créez votre vitrine locale et recevez les commandes de vos clients directement sur WhatsApp.'
+        : mode === 'login'
+          ? 'Connectez-vous pour retrouver les boutiques que vous aimez et commander en toute simplicité.'
+          : 'Créez votre compte et commencez à découvrir, soutenir et suivre les commerces de votre quartier.'}
       imageAlt="Portrait chaleureux pour illustrer la communauté MaTable.ci"
       onBack={onBack}
-      topPrompt={mode === 'login' ? 'Pas encore de compte ?' : 'Déjà un compte ?'}
-      topActionLabel={mode === 'login' ? 'Créer un compte' : 'Se connecter'}
-      onTopAction={() => switchMode(mode === 'login' ? 'register' : 'login')}
+      topPrompt={mode === 'register' && accountType === 'merchant' ? 'Déjà commerçant ?' : mode === 'login' ? 'Pas encore de compte ?' : 'Déjà un compte ?'}
+      topActionLabel={mode === 'register' && accountType === 'merchant' ? 'Se connecter' : mode === 'login' ? 'Créer un compte' : 'Se connecter'}
+      onTopAction={mode === 'register' && accountType === 'merchant' ? onMerchantLogin : () => switchMode(mode === 'login' ? 'register' : 'login')}
     >
       <div className="mb-6">
         <p className="text-sm font-bold text-[#e6572b]">{pendingOAuthProfile ? 'Presque terminé' : mode === 'login' ? 'Votre espace personnel' : 'Inscription gratuite'}</p>
-        <h2 className="mt-1 text-[30px] font-extrabold leading-tight text-[#25231f]">{pendingOAuthProfile ? 'Finaliser le compte' : mode === 'login' ? 'Connexion' : 'Créer un compte'}</h2>
-        <p className="mt-2 text-sm leading-6 text-[#667168]">{pendingOAuthProfile ? `Compte associé à ${pendingOAuthProfile.email}. Ajoutez votre téléphone pour commander.` : mode === 'login' ? 'Accédez à votre compte MaTable.ci.' : 'Rejoignez MaTable.ci en quelques secondes.'}</p>
+        <h2 className="mt-1 text-[30px] font-extrabold leading-tight text-[#25231f]">{pendingOAuthProfile ? 'Finaliser le compte' : mode === 'login' ? 'Connexion' : accountType === 'merchant' ? 'Créer ma boutique' : 'Créer un compte'}</h2>
+        <p className="mt-2 text-sm leading-6 text-[#667168]">{pendingOAuthProfile ? `Compte associé à ${pendingOAuthProfile.email}. Ajoutez votre téléphone pour commander.` : mode === 'login' ? 'Accédez à votre compte MaTable.ci.' : accountType === 'merchant' ? 'Renseignez les informations de votre boutique pour démarrer.' : 'Rejoignez MaTable.ci en quelques secondes.'}</p>
       </div>
 
       {mode === 'register' && !pendingOAuthProfile && (
@@ -135,13 +142,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
       )}
 
       {mode === 'register' && accountType === 'merchant' ? (
-        <div className="rounded-2xl bg-[#f6f3ed] p-5">
-          <p className="text-sm leading-6 text-[#52635b]">Ouvrez votre vitrine, ajoutez votre catalogue et recevez les commandes directement sur WhatsApp.</p>
-          <button type="button" onClick={onMerchantRegister} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55]">
-            Créer ma boutique <ArrowRight className="h-4 w-4" />
-          </button>
-          <button type="button" onClick={onMerchantLogin} className="mt-3 w-full py-2 text-sm font-bold text-[#0f4d3d] hover:text-[#e6572b]">Déjà commerçant ? Se connecter</button>
-        </div>
+        <CustomerMerchantRegistrationForm onCreated={onMerchantRegister} onLogin={onMerchantLogin} />
       ) : (
         <form onSubmit={submit} className="space-y-4">
           {!pendingOAuthProfile && <CustomerOAuthButtons returnTo="/compte" />}
@@ -160,28 +161,74 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
   );
 };
 
-function normalizeCustomerPhone(value: string) {
-  const digits = value.replace(/\D/g, '');
-  if (digits.startsWith('225')) return `+${digits}`;
-  if (digits.startsWith('0')) return `+225${digits}`;
-  return `+225${digits}`;
-}
-
 interface CustomerAccountProps {
   user: CustomerUser;
   onLogout: () => void;
   onBack: () => void;
+  onUserUpdated: (user: CustomerUser) => void;
 }
 
-export const CustomerAccount: React.FC<CustomerAccountProps> = ({ user, onLogout, onBack }) => (
-  <CustomerAccountContent user={user} onLogout={onLogout} onBack={onBack} />
+export const CustomerAccount: React.FC<CustomerAccountProps> = ({ user, onLogout, onBack, onUserUpdated }) => (
+  <CustomerAccountContent user={user} onLogout={onLogout} onBack={onBack} onUserUpdated={onUserUpdated} />
 );
 
-const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout, onBack }) => {
-  const [orders, setOrders] = useState<{ id: number; total_amount: number; status: string; created_at: string; shop_id: number }[]>([]);
+interface CustomerOrder {
+  id: number;
+  total_amount: number;
+  status: string;
+  created_at: string;
+  shop_id: number;
+  shop_name?: string;
+  delivery_location?: string;
+  items?: { id: number; product_title?: string; quantity: number; unit_price: number; selected_size?: string; selected_color?: string; selected_modifiers?: string[] }[];
+}
+
+type CustomerAccountSection = 'overview' | 'orders' | 'favorites' | 'profile' | 'security';
+
+interface CustomerSavedState {
+  shops: { id: number; name: string; slug: string; category: string; city?: string }[];
+  products: { id: number; shop_id: number; title: string; price: number; image_url?: string | null; slug: string; shop_name: string }[];
+}
+
+const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout, onBack, onUserUpdated }) => {
+  const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState<string | null>(null);
   const [ordersRefresh, setOrdersRefresh] = useState(0);
+  const [savedState, setSavedState] = useState<CustomerSavedState>({ shops: [], products: [] });
+  const [savedLoading, setSavedLoading] = useState(true);
+  const [savedError, setSavedError] = useState<string | null>(null);
+  const [savedRefresh, setSavedRefresh] = useState(0);
+  const [activeSection, setActiveSection] = useState<CustomerAccountSection>('overview');
+  const [firstName, setFirstName] = useState(user.first_name);
+  const [lastName, setLastName] = useState(user.last_name);
+  const [phone, setPhone] = useState(user.phone);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMessage, setProfileMessage] = useState('');
+  const [profileError, setProfileError] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [customerSessions, setCustomerSessions] = useState<{ created_at: string; expires_at: number; is_current: boolean }[]>([]);
+  const [sessionsError, setSessionsError] = useState('');
+  const [sessionsMessage, setSessionsMessage] = useState('');
+  const [sessionsSaving, setSessionsSaving] = useState(false);
+  const [dataExporting, setDataExporting] = useState(false);
+  const [dataExportError, setDataExportError] = useState('');
+  const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState('');
+  const [accountDeletePassword, setAccountDeletePassword] = useState('');
+  const [accountDeleteError, setAccountDeleteError] = useState('');
+  const [accountDeleting, setAccountDeleting] = useState(false);
+  const supportUrl = getSupportWhatsAppUrl('Bonjour, j’ai besoin d’aide pour mon compte client MaTable.ci.');
+
+  useEffect(() => {
+    setFirstName(user.first_name);
+    setLastName(user.last_name);
+    setPhone(user.phone);
+  }, [user.first_name, user.last_name, user.phone]);
 
   useEffect(() => {
     let isActive = true;
@@ -204,60 +251,520 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
     return () => { isActive = false; };
   }, [ordersRefresh]);
 
-  return (
-    <AuthExperienceLayout
-      eyebrow="Votre espace client"
-      title={`Bonjour ${user.name}.`}
-      description="Retrouvez vos informations et suivez vos commandes auprès des commerces locaux."
-      onBack={onBack}
-      topPrompt=""
-      topActionLabel=""
-    >
-      <div>
-        <p className="text-sm font-bold text-[#e6572b]">Mon compte MaTable.ci</p>
-        <h2 className="mt-1 text-[30px] font-extrabold leading-tight text-[#25231f]">Votre espace</h2>
-        <p className="mt-2 text-sm leading-6 text-[#68756c]">Ce compte sert à retrouver les commandes passées en étant connecté. Une commande passée en invité n’apparaît pas dans cet historique.</p>
-        <div className="mt-6">
-          <h3 className="mb-2 text-sm font-extrabold text-[#25231f]">Mes informations</h3>
-          <div className="divide-y divide-[#e6e4dc] border-y border-[#e6e4dc]">
-          <div className="flex flex-col gap-1 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm font-semibold text-[#68756c]">Nom</span>
-            <span className="text-sm font-bold text-[#25231f]">{user.name}</span>
-          </div>
-          <div className="flex flex-col gap-1 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm font-semibold text-[#68756c]">Adresse e-mail</span>
-            <span className="break-all text-sm font-bold text-[#25231f]">{user.email}</span>
-          </div>
-          <div className="flex flex-col gap-1 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm font-semibold text-[#68756c]">Téléphone</span>
-            <span className="text-sm font-bold text-[#25231f]">{user.phone}</span>
-          </div>
-          </div>
-        </div>
+  useEffect(() => {
+    let isActive = true;
+    setSavedLoading(true);
+    setSavedError(null);
+    fetch('/api/customer-engagement/state', { credentials: 'include' })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Impossible de charger vos favoris.');
+        if (isActive) setSavedState({ shops: data.shops || [], products: data.products || [] });
+      })
+      .catch((error: unknown) => {
+        if (isActive) setSavedError(error instanceof Error ? error.message : 'Impossible de charger vos favoris.');
+      })
+      .finally(() => { if (isActive) setSavedLoading(false); });
+    return () => { isActive = false; };
+  }, [savedRefresh]);
 
-        <div className="mt-7">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-extrabold text-[#25231f]">Mes commandes</h3>
-              <p className="mt-0.5 text-xs text-[#68756c]">Demandes envoyées depuis ce compte</p>
-            </div>
-            {ordersLoading && <span className="text-xs font-semibold text-[#176b55]">Chargement...</span>}
+  useEffect(() => {
+    let isActive = true;
+    fetch('/api/auth/customer-sessions', { credentials: 'include', cache: 'no-store' })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Impossible de consulter les sessions.');
+        if (isActive) setCustomerSessions(Array.isArray(data.sessions) ? data.sessions : []);
+      })
+      .catch((error: unknown) => {
+        if (isActive) setSessionsError(error instanceof Error ? error.message : 'Impossible de consulter les sessions.');
+      });
+    return () => { isActive = false; };
+  }, []);
+
+  const saveProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setProfileSaving(true);
+    setProfileMessage('');
+    setProfileError('');
+    try {
+      const response = await fetch('/api/auth/customer-profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ first_name: firstName, last_name: lastName, phone: normalizeCustomerPhone(phone) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible d’enregistrer vos informations.');
+      onUserUpdated(data.user as CustomerUser);
+      setProfileMessage('Vos informations ont été mises à jour.');
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : 'Impossible d’enregistrer vos informations.');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const changePassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPasswordMessage('');
+    setPasswordError('');
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Les deux nouveaux mots de passe ne correspondent pas.');
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      const response = await fetch('/api/auth/customer-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de mettre à jour le mot de passe.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordMessage('Mot de passe modifié. Les autres sessions ont été déconnectées.');
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : 'Impossible de mettre à jour le mot de passe.');
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
+  const exportCustomerData = async () => {
+    setDataExporting(true);
+    setDataExportError('');
+    try {
+      const response = await fetch('/api/auth/customer-data-export', { credentials: 'include', cache: 'no-store' });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Impossible de télécharger vos données.');
+      }
+      const downloadUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = 'matable-donnees-client.json';
+      link.click();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      setDataExportError(error instanceof Error ? error.message : 'Impossible de télécharger vos données.');
+    } finally {
+      setDataExporting(false);
+    }
+  };
+
+  const revokeOtherSessions = async () => {
+    setSessionsSaving(true);
+    setSessionsError('');
+    setSessionsMessage('');
+    try {
+      const response = await fetch('/api/auth/customer-sessions/revoke-others', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de fermer les autres sessions.');
+      setCustomerSessions((previous) => previous.filter((session) => session.is_current));
+      setSessionsMessage('Toutes les autres sessions ont été déconnectées.');
+    } catch (error) {
+      setSessionsError(error instanceof Error ? error.message : 'Impossible de fermer les autres sessions.');
+    } finally {
+      setSessionsSaving(false);
+    }
+  };
+
+  const deleteCustomerAccount = async () => {
+    setAccountDeleteError('');
+    setAccountDeleting(true);
+    try {
+      const response = await fetch('/api/auth/customer-account', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          confirmation: accountDeleteConfirmation,
+          current_password: accountDeletePassword,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de supprimer le compte.');
+      onLogout();
+    } catch (error) {
+      setAccountDeleteError(error instanceof Error ? error.message : 'Impossible de supprimer le compte.');
+    } finally {
+      setAccountDeleting(false);
+    }
+  };
+
+  const removeFavorite = async (targetType: 'shop' | 'product', targetId: number) => {
+    try {
+      const response = await fetch('/api/customer-engagement/favorites', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_type: targetType, target_id: targetId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de mettre à jour vos favoris.');
+      setSavedState((previous) => targetType === 'shop'
+        ? { ...previous, shops: previous.shops.filter((shop) => shop.id !== targetId) }
+        : { ...previous, products: previous.products.filter((product) => product.id !== targetId) });
+    } catch (error) {
+      setSavedError(error instanceof Error ? error.message : 'Impossible de mettre à jour vos favoris.');
+    }
+  };
+
+  const accountSections: { id: CustomerAccountSection; label: string; description: string; icon: typeof ShoppingBag }[] = [
+    { id: 'overview', label: 'Vue d’ensemble', description: 'Résumé de votre compte', icon: LayoutDashboard },
+    { id: 'orders', label: 'Mes commandes', description: 'Historique et détails', icon: ShoppingBag },
+    { id: 'favorites', label: 'Mes favoris', description: 'Boutiques et produits gardés', icon: Heart },
+    { id: 'profile', label: 'Mes informations', description: 'Coordonnées du compte', icon: UserRound },
+    { id: 'security', label: 'Sécurité', description: 'Mot de passe et accès', icon: KeyRound },
+  ];
+  const activeOrdersCount = orders.filter((order) => ['pending', 'confirmed', 'preparing', 'ready'].includes(order.status)).length;
+  const completedOrdersCount = orders.filter((order) => order.status === 'delivered').length;
+
+  return (
+    <main className="min-h-screen bg-[#f7f3ee] text-[#25231f]">
+      <header className="border-b border-[#e3d9cc] bg-[#fffdf9]">
+        <div className="mx-auto flex max-w-[1184px] flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-8">
+          <a href="/" className="inline-flex items-center gap-3 font-display text-lg font-extrabold tracking-tight text-[#25231f]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#123b31] text-white">M</span>
+            <span>MaTable<span className="text-[#176b55]">.ci</span></span>
+          </a>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onBack} className="inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-bold text-[#31584c] transition hover:bg-[#e4f1ec]"><ShoppingBag className="h-4 w-4" />Découvrir</button>
+            <button type="button" onClick={onLogout} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#ded8ce] px-4 text-sm font-bold text-[#6f6a61] transition hover:bg-[#f7f3ee]"><LogOut className="h-4 w-4" />Déconnexion</button>
           </div>
-          {ordersError && (
-            <div role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              <p>{ordersError}</p>
-              <button type="button" onClick={() => setOrdersRefresh((value) => value + 1)} className="mt-2 font-bold underline underline-offset-2">Réessayer</button>
+        </div>
+      </header>
+
+      <section className="relative isolate overflow-hidden bg-[#123b31] text-white">
+        <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-36 -z-10 h-96 w-96 rounded-full border border-white/10 sm:right-8 sm:top-[-17rem] sm:h-[34rem] sm:w-[34rem]" />
+        <div className="mx-auto flex max-w-[1184px] flex-col justify-between gap-7 px-5 py-8 sm:px-8 sm:py-11 md:flex-row md:items-end">
+          <div className="flex items-start gap-4">
+            <span aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 font-display text-xl font-extrabold text-[#f0ba80] sm:h-16 sm:w-16 sm:text-2xl">
+              {(user.first_name || user.name).trim().charAt(0).toLocaleUpperCase()}
+            </span>
+            <div className="max-w-2xl">
+              <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#f0ba80]">Votre espace client</p>
+              <h1 className="mt-2 font-display text-3xl font-extrabold leading-tight tracking-[-0.04em] sm:text-5xl">Bonjour {user.first_name || user.name}.</h1>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-white/75 sm:text-base">Vos commandes et les informations de votre compte, réunies au même endroit.</p>
             </div>
-          )}
-          {!ordersLoading && !ordersError && orders.length === 0 && <p className="mt-3 text-sm leading-6 text-[#68756c]">Aucune commande liée à ce compte pour le moment. Connectez-vous pendant le checkout pour qu’une prochaine commande figure ici.</p>}
-          {!ordersLoading && !ordersError && orders.length > 0 && <div className="mt-3 divide-y divide-[#e6e4dc] border-y border-[#e6e4dc]">{orders.map((order) => <div key={order.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><div><span className="block font-bold text-[#25231f]">Commande #{order.id}</span><time className="mt-0.5 block text-xs text-[#68756c]" dateTime={order.created_at}>{new Date(order.created_at).toLocaleDateString('fr-CI', { day: 'numeric', month: 'short', year: 'numeric' })}</time></div><span className="rounded-full bg-[#f0eee7] px-2.5 py-1 text-xs font-semibold text-[#52635b]">{customerOrderStatusLabel(order.status)}</span><span className="font-bold text-[#0f4d3d]">{order.total_amount.toLocaleString('fr-FR')} FCFA</span></div>)}</div>}
+          </div>
+          <div className="flex flex-wrap gap-3 pl-[4.5rem] md:pl-0">
+            <div className="min-w-32 rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3">
+              <span className="block text-2xl font-extrabold tabular-nums">{ordersLoading ? '…' : orders.length}</span>
+              <span className="text-xs text-white/70">commande{orders.length === 1 ? '' : 's'}</span>
+            </div>
+            <div className="min-w-40 rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-bold"><CalendarDays className="h-4 w-4 text-[#f0ba80]" />Membre depuis</span>
+              <span className="mt-1 block text-xs capitalize text-white/70">{user.created_at ? new Date(user.created_at).toLocaleDateString('fr-CI', { month: 'long', year: 'numeric' }) : 'MaTable.ci'}</span>
+            </div>
+          </div>
         </div>
-        <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-          <button type="button" onClick={onBack} className="flex min-h-12 flex-1 items-center justify-center rounded-full bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55]">Découvrir les boutiques</button>
-          <button type="button" onClick={onLogout} className="min-h-12 rounded-full border border-[#d9ded7] px-5 py-3 text-sm font-bold text-[#52635b] transition hover:bg-[#f6f3ed]">Se déconnecter</button>
-        </div>
+      </section>
+
+      <div className="mx-auto grid max-w-[1184px] gap-6 px-5 py-7 sm:px-8 sm:py-10 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <nav aria-label="Menu du compte client" className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
+          {accountSections.map(({ id, label, description, icon: Icon }) => (
+            <button key={id} type="button" aria-current={activeSection === id ? 'page' : undefined} onClick={() => setActiveSection(id)} className={`flex min-h-14 min-w-max items-center gap-3 rounded-2xl border px-4 py-3 text-left transition lg:min-w-0 ${activeSection === id ? 'border-[#c8dbd0] bg-[#e4f1ec] text-[#0f4d3d]' : 'border-transparent bg-[#fffdf9] text-[#6f6a61] hover:border-[#e3d9cc]'}`}>
+              <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${activeSection === id ? 'bg-white text-[#0f4d3d]' : 'bg-[#f1eee7] text-[#6f6a61]'}`}><Icon className="h-4 w-4" /></span>
+              <span><strong className="block text-sm">{label}</strong><span className="hidden text-xs opacity-75 lg:block">{description}</span></span>
+              <ChevronRight className="ml-auto hidden h-4 w-4 lg:block" />
+            </button>
+          ))}
+          <div className="mt-2 hidden rounded-2xl border border-[#e3d9cc] bg-[#fffdf9] p-4 lg:block">
+            <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#b9441f]">Une question ?</p>
+            <p className="mt-2 text-sm leading-5 text-[#6f6a61]">Notre équipe peut vous aider pour l’accès ou l’utilisation de votre compte.</p>
+            {supportUrl
+              ? <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-[#0f4d3d]"><MessageCircle className="h-4 w-4" />Contacter l’assistance</a>
+              : <p className="mt-3 text-xs text-[#81796f]">Assistance WhatsApp momentanément indisponible.</p>}
+            <button type="button" onClick={onBack} className="mt-2 flex min-h-10 items-center gap-2 text-sm font-bold text-[#0f4d3d]">Explorer les boutiques <ChevronRight className="h-4 w-4" /></button>
+          </div>
+        </nav>
+
+        <section className="min-w-0 rounded-[24px] border border-[#e3d9cc] bg-[#fffdf9] p-5 shadow-[0_10px_30px_rgba(37,35,31,.05)] sm:p-7" aria-live="polite">
+          {activeSection === 'overview' && <>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#b9441f]">Votre espace MaTable</p>
+                <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Votre compte, en un coup d’œil</h2>
+                <p className="mt-2 text-sm leading-6 text-[#6f6a61]">Suivez vos achats et retrouvez rapidement vos informations utiles.</p>
+              </div>
+              <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#0f4d3d] px-5 text-sm font-bold text-white transition hover:bg-[#176b55]">
+                Découvrir les boutiques <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-[#e8e0d6] bg-white p-4">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#e4f1ec] text-[#0f4d3d]"><ShoppingBag className="h-5 w-5" /></span>
+                <span className="mt-4 block text-2xl font-extrabold tabular-nums text-[#25231f]">{ordersLoading ? '…' : orders.length}</span>
+                <span className="mt-1 block text-sm text-[#6f6a61]">Commande{orders.length === 1 ? '' : 's'} au total</span>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#eadfce] bg-[#fff8ec] p-4">
+                <div className="flex items-start gap-3">
+                  <Heart className="mt-0.5 h-5 w-5 shrink-0 text-[#b9441f]" />
+                  <div><p className="font-bold text-[#3d3933]">Vos adresses et produits préférés</p><p className="mt-1 text-sm text-[#6f6a61]">{savedState.shops.length + savedState.products.length} élément{savedState.shops.length + savedState.products.length === 1 ? '' : 's'} enregistré{savedState.shops.length + savedState.products.length === 1 ? '' : 's'}.</p></div>
+                </div>
+                <button type="button" onClick={() => setActiveSection('favorites')} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#e8c7a4] bg-white px-4 text-sm font-bold text-[#87411f] hover:bg-[#fff2df]">Voir mes favoris <ArrowRight className="h-4 w-4" /></button>
+              </div>
+              <div className="rounded-2xl border border-[#e8e0d6] bg-white p-4">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fff2df] text-[#9b5a13]"><Clock3 className="h-5 w-5" /></span>
+                <span className="mt-4 block text-2xl font-extrabold tabular-nums text-[#25231f]">{ordersLoading ? '…' : activeOrdersCount}</span>
+                <span className="mt-1 block text-sm text-[#6f6a61]">En cours</span>
+              </div>
+              <div className="rounded-2xl border border-[#e8e0d6] bg-white p-4">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f1eee7] text-[#52635b]"><CheckCircle2 className="h-5 w-5" /></span>
+                <span className="mt-4 block text-2xl font-extrabold tabular-nums text-[#25231f]">{ordersLoading ? '…' : completedOrdersCount}</span>
+                <span className="mt-1 block text-sm text-[#6f6a61]">Terminée{completedOrdersCount === 1 ? '' : 's'}</span>
+              </div>
+            </div>
+
+            <div className="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(260px,.8fr)]">
+              <div className="min-w-0">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#81796f]">À retrouver</p>
+                    <h3 className="mt-1 font-display text-xl font-extrabold">Activité récente</h3>
+                  </div>
+                  <button type="button" onClick={() => setActiveSection('orders')} className="inline-flex min-h-10 items-center gap-1 rounded-full px-3 text-sm font-bold text-[#0f4d3d] hover:bg-[#e4f1ec]">
+                    Tout voir <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+                {ordersLoading && <div role="status" className="mt-4 space-y-3"><span className="sr-only">Chargement de votre activité…</span>{[0, 1].map((item) => <div key={item} className="h-20 animate-pulse rounded-2xl bg-[#f1eee7]" />)}</div>}
+                {ordersError && <div role="alert" className="mt-4 rounded-2xl border border-[#e8c69a] bg-[#fff8ec] p-4 text-sm text-[#704d16]"><p>{ordersError}</p><button type="button" onClick={() => setOrdersRefresh((value) => value + 1)} className="mt-2 font-bold underline underline-offset-2">Réessayer</button></div>}
+                {!ordersLoading && !ordersError && orders.length === 0 && <div className="mt-4 rounded-2xl border border-dashed border-[#d9cfc2] bg-[#f9f6f0] p-5 sm:p-6">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e4f1ec] text-[#0f4d3d]"><Package className="h-5 w-5" /></span>
+                  <h4 className="mt-3 font-display text-lg font-bold">Votre prochaine découverte commence ici.</h4>
+                  <p className="mt-1 max-w-lg text-sm leading-6 text-[#6f6a61]">Quand vous commanderez en étant connecté, votre historique apparaîtra dans cet espace.</p>
+                  <button type="button" onClick={onBack} className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[#0f4d3d] transition hover:bg-[#e4f1ec]">
+                    Parcourir les adresses locales <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>}
+                {!ordersLoading && !ordersError && orders.length > 0 && <div className="mt-4 space-y-2">
+                  {orders.slice(0, 3).map((order) => <article key={order.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e8e0d6] bg-white p-4">
+                    <div className="min-w-0">
+                      <h4 className="truncate font-bold text-[#25231f]">{order.shop_name || 'Boutique locale'}</h4>
+                      <p className="mt-1 text-xs text-[#81796f]">Commande #{order.id} · {new Date(order.created_at).toLocaleDateString('fr-CI', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="rounded-full bg-[#f1eee7] px-3 py-1.5 text-xs font-bold text-[#52635b]">{customerOrderStatusLabel(order.status)}</span>
+                      <strong className="whitespace-nowrap text-sm font-extrabold text-[#0f4d3d]">{order.total_amount.toLocaleString('fr-FR')} F</strong>
+                    </div>
+                  </article>)}
+                </div>}
+              </div>
+
+              <aside className="rounded-2xl bg-[#f5f2eb] p-5">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#81796f]">Vos informations</p>
+                <div className="mt-4 flex items-center gap-3">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#123b31] font-display font-extrabold text-[#f0ba80]">
+                    {(user.first_name || user.name).trim().charAt(0).toLocaleUpperCase()}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-[#25231f]">{user.first_name} {user.last_name}</p>
+                    <p className="truncate text-xs text-[#6f6a61]">Compte client MaTable.ci</p>
+                  </div>
+                </div>
+                <dl className="mt-5 space-y-3 border-t border-[#e2dbd0] pt-4 text-sm">
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[#176b55]" />
+                    <div className="min-w-0"><dt className="text-xs text-[#81796f]">E-mail</dt><dd className="truncate font-semibold text-[#3d3933]">{user.email}</dd></div>
+                  </div>
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-[#176b55]" />
+                    <div className="min-w-0"><dt className="text-xs text-[#81796f]">Téléphone</dt><dd className="font-semibold text-[#3d3933]">{user.phone || 'Non renseigné'}</dd></div>
+                  </div>
+                </dl>
+                <button type="button" onClick={() => setActiveSection('profile')} className="mt-5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[#0f4d3d] transition hover:bg-[#e4f1ec]">
+                  Gérer mes informations <ArrowRight className="h-4 w-4" />
+                </button>
+                <div className="mt-3 flex items-start gap-2 rounded-xl bg-white/70 p-3 text-xs leading-5 text-[#6f6a61]">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#176b55]" />
+                  Vos coordonnées servent à faciliter le suivi de vos commandes.
+                </div>
+                {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[#0f4d3d] transition hover:bg-[#e4f1ec]"><MessageCircle className="h-4 w-4" />Besoin d’aide ? Écrire au service client</a>}
+              </aside>
+            </div>
+          </>}
+
+          {activeSection === 'favorites' && <>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#b9441f]">À garder près de vous</p>
+                <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Mes favoris</h2>
+                <p className="mt-2 text-sm leading-6 text-[#6f6a61]">Les boutiques et produits que vous avez enregistrés pour les retrouver facilement.</p>
+              </div>
+              <span className="rounded-full bg-[#fff2df] px-3 py-1.5 text-xs font-bold text-[#87411f]">{savedState.shops.length + savedState.products.length} enregistré{savedState.shops.length + savedState.products.length === 1 ? '' : 's'}</span>
+            </div>
+            {savedLoading && <div role="status" className="mt-6 space-y-3"><span className="sr-only">Chargement de vos favoris…</span>{[0, 1].map((item) => <div key={item} className="h-24 animate-pulse rounded-2xl bg-[#f1eee7]" />)}</div>}
+            {savedError && <div role="alert" className="mt-6 rounded-2xl border border-[#e8c69a] bg-[#fff8ec] p-4 text-sm text-[#704d16]"><p>{savedError}</p><button type="button" onClick={() => setSavedRefresh((value) => value + 1)} className="mt-2 font-bold underline underline-offset-2">Réessayer</button></div>}
+            {!savedLoading && !savedError && savedState.shops.length + savedState.products.length === 0 && <div className="mt-6 rounded-2xl border border-dashed border-[#d9cfc2] bg-[#f9f6f0] p-7 text-center">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#fff2df] text-[#b9441f]"><Heart className="h-6 w-6" /></span>
+              <h3 className="mt-3 font-display text-lg font-bold">Votre sélection personnelle vous attend.</h3>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#6f6a61]">Enregistrez une boutique ou un produit avec l’icône marque-page pour les retrouver ici.</p>
+              <button type="button" onClick={onBack} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#0f4d3d] px-5 text-sm font-bold text-white">Explorer les boutiques <ArrowRight className="h-4 w-4" /></button>
+            </div>}
+            {!savedLoading && !savedError && (savedState.shops.length > 0 || savedState.products.length > 0) && <div className="mt-6 space-y-7">
+              {savedState.shops.length > 0 && <div>
+                <h3 className="font-display text-lg font-extrabold">Boutiques enregistrées</h3>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {savedState.shops.map((shop) => <article key={`shop-${shop.id}`} className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-[#e8e0d6] bg-white p-4">
+                    <a href={`/${encodeURIComponent(shop.slug)}`} className="min-w-0 flex-1">
+                      <p className="truncate font-bold text-[#25231f]">{shop.name}</p>
+                      <p className="mt-1 truncate text-xs text-[#6f6a61]">{[shop.category, shop.city].filter(Boolean).join(' · ') || 'Boutique locale'}</p>
+                    </a>
+                    <button type="button" onClick={() => void removeFavorite('shop', shop.id)} aria-label={`Retirer ${shop.name} des favoris`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#b9441f] hover:bg-[#fff2df]"><Heart className="h-5 w-5 fill-current" /></button>
+                  </article>)}
+                </div>
+              </div>}
+              {savedState.products.length > 0 && <div>
+                <h3 className="font-display text-lg font-extrabold">Produits enregistrés</h3>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {savedState.products.map((product) => <article key={`product-${product.id}`} className="flex min-w-0 items-center gap-3 rounded-2xl border border-[#e8e0d6] bg-white p-3">
+                    <a href={`/${encodeURIComponent(product.slug)}`} className="flex min-w-0 flex-1 items-center gap-3">
+                      {product.image_url
+                        ? <img src={product.image_url} alt="" loading="lazy" className="h-14 w-14 shrink-0 rounded-xl bg-[#f1eee7] object-cover" />
+                        : <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#e4f1ec] text-[#0f4d3d]"><Store className="h-5 w-5" /></span>}
+                      <span className="min-w-0"><span className="block truncate font-bold text-[#25231f]">{product.title}</span><span className="mt-1 block truncate text-xs text-[#6f6a61]">{product.shop_name} · {product.price.toLocaleString('fr-FR')} FCFA</span></span>
+                    </a>
+                    <button type="button" onClick={() => void removeFavorite('product', product.id)} aria-label={`Retirer ${product.title} des favoris`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#b9441f] hover:bg-[#fff2df]"><Heart className="h-5 w-5 fill-current" /></button>
+                  </article>)}
+                </div>
+              </div>}
+            </div>}
+          </>}
+
+          {activeSection === 'orders' && <>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#b9441f]">Votre activité</p>
+                <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Mes commandes</h2>
+                <p className="mt-2 text-sm leading-6 text-[#6f6a61]">Les demandes envoyées depuis ce compte. Les commandes invitées n’apparaissent pas ici.</p>
+              </div>
+              {!ordersLoading && <span className="rounded-full bg-[#e4f1ec] px-3 py-1.5 text-xs font-bold text-[#0f4d3d]">{orders.length} au total</span>}
+            </div>
+            {ordersLoading && <div role="status" className="mt-6 space-y-3"><span className="sr-only">Chargement de vos commandes…</span>{[0, 1].map((item) => <div key={item} className="h-28 animate-pulse rounded-2xl bg-[#f1eee7]" />)}</div>}
+            {ordersError && <div role="alert" className="mt-6 rounded-2xl border border-[#e8c69a] bg-[#fff8ec] p-4 text-sm text-[#704d16]"><p>{ordersError}</p><button type="button" onClick={() => setOrdersRefresh((value) => value + 1)} className="mt-2 font-bold underline underline-offset-2">Réessayer</button></div>}
+            {!ordersLoading && !ordersError && orders.length === 0 && <div className="mt-6 rounded-2xl border border-dashed border-[#d9cfc2] bg-[#f9f6f0] p-7 text-center">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e4f1ec] text-[#0f4d3d]"><Package className="h-6 w-6" /></span>
+              <h3 className="mt-3 font-display text-lg font-bold">Votre carnet de commandes est vide</h3>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#6f6a61]">Connectez-vous au moment d’envoyer une commande pour la retrouver facilement ici.</p>
+              <button type="button" onClick={onBack} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#0f4d3d] px-5 text-sm font-bold text-white">Découvrir les boutiques <ChevronRight className="h-4 w-4" /></button>
+            </div>}
+            {!ordersLoading && !ordersError && orders.length > 0 && <div className="mt-6 space-y-3">
+              {orders.map((order) => <article key={order.id} className="rounded-2xl border border-[#e8e0d6] bg-white p-4 sm:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#b9441f]">Commande #{order.id}</p>
+                    <h3 className="mt-1 font-display text-lg font-bold">{order.shop_name || `Boutique locale`}</h3>
+                    <time className="mt-1 block text-xs text-[#81796f]" dateTime={order.created_at}>{new Date(order.created_at).toLocaleDateString('fr-CI', { day: 'numeric', month: 'long', year: 'numeric' })}</time>
+                  </div>
+                  <div className="flex flex-col items-start gap-2 sm:items-end">
+                    <span className="rounded-full bg-[#f1eee7] px-3 py-1.5 text-xs font-bold text-[#52635b]">{customerOrderStatusLabel(order.status)}</span>
+                    <strong className="text-sm font-extrabold text-[#0f4d3d]">{order.total_amount.toLocaleString('fr-FR')} FCFA</strong>
+                  </div>
+                </div>
+                {order.items?.length ? <ul className="mt-4 space-y-2 border-t border-[#eee6dd] pt-3">
+                  {order.items.map((item) => <li key={item.id} className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                    <span className="text-[#4a3a30]">{item.quantity} × {item.product_title || 'Article'}{[item.selected_size, item.selected_color, ...(item.selected_modifiers || [])].filter(Boolean).length > 0 && <span className="ml-1 text-xs text-[#81796f]">· {[item.selected_size, item.selected_color, ...(item.selected_modifiers || [])].filter(Boolean).join(' · ')}</span>}</span>
+                    <span className="font-semibold text-[#6f6a61]">{(item.unit_price * item.quantity).toLocaleString('fr-FR')} FCFA</span>
+                  </li>)}
+                </ul> : null}
+                {order.delivery_location && <p className="mt-3 flex items-center gap-2 border-t border-[#eee6dd] pt-3 text-xs text-[#6f6a61]"><MapPin className="h-3.5 w-3.5 shrink-0 text-[#176b55]" />{order.delivery_location}</p>}
+              </article>)}
+            </div>}
+          </>}
+
+          {activeSection === 'profile' && <div className="max-w-2xl">
+            <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#b9441f]">Votre profil</p>
+            <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Mes informations</h2>
+            <p className="mt-2 text-sm leading-6 text-[#6f6a61]">Mettez à jour les coordonnées associées à vos commandes.</p>
+            <form onSubmit={saveProfile} className="mt-6 space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm font-bold text-[#4a3a30]">Prénom
+                  <input required maxLength={60} value={firstName} onChange={(event) => setFirstName(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#176b55]" />
+                </label>
+                <label className="block text-sm font-bold text-[#4a3a30]">Nom
+                  <input required maxLength={60} value={lastName} onChange={(event) => setLastName(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#176b55]" />
+                </label>
+              </div>
+              <label className="block text-sm font-bold text-[#4a3a30]">Téléphone
+                <input required type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#176b55]" />
+              </label>
+              <label className="block text-sm font-bold text-[#4a3a30]">Adresse e-mail
+                <input type="email" value={user.email} readOnly className="mt-1.5 min-h-12 w-full rounded-xl border border-[#e8e0d6] bg-[#f7f3ee] px-3 text-sm font-medium text-[#6f6a61]" />
+                <span className="mt-1 block text-xs font-normal text-[#81796f]">La modification de l’e-mail sera disponible avec la vérification de la nouvelle adresse.</span>
+              </label>
+              {profileError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">{profileError}</p>}
+              {profileMessage && <p role="status" className="flex items-center gap-2 rounded-xl border border-[#c8dbd0] bg-[#e4f1ec] px-3 py-2.5 text-sm font-semibold text-[#0f4d3d]"><Check className="h-4 w-4" />{profileMessage}</p>}
+              <button type="submit" disabled={profileSaving} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[#0f4d3d] px-5 text-sm font-bold text-white transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">{profileSaving ? 'Enregistrement…' : <><PencilLine className="h-4 w-4" />Enregistrer les modifications</>}</button>
+            </form>
+          </div>}
+
+          {activeSection === 'security' && <div className="max-w-2xl">
+            <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#b9441f]">Protection du compte</p>
+            <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Sécurité</h2>
+            <p className="mt-2 text-sm leading-6 text-[#6f6a61]">Choisissez un mot de passe unique d’au moins 8 caractères. Les autres sessions seront déconnectées après la modification.</p>
+            <form onSubmit={changePassword} className="mt-6 space-y-4">
+              <label className="block text-sm font-bold text-[#4a3a30]">Mot de passe actuel
+                <input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#176b55]" />
+                <span className="mt-1 block text-xs font-normal text-[#81796f]">Laissez ce champ vide si vous vous connectez avec Google ou Apple et que vous définissez un mot de passe pour la première fois.</span>
+              </label>
+              <label className="block text-sm font-bold text-[#4a3a30]">Nouveau mot de passe
+                <input required minLength={8} maxLength={128} type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#176b55]" />
+              </label>
+              <label className="block text-sm font-bold text-[#4a3a30]">Confirmer le nouveau mot de passe
+                <input required minLength={8} maxLength={128} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#176b55]" />
+              </label>
+              {passwordError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">{passwordError}</p>}
+              {passwordMessage && <p role="status" className="flex items-center gap-2 rounded-xl border border-[#c8dbd0] bg-[#e4f1ec] px-3 py-2.5 text-sm font-semibold text-[#0f4d3d]"><Check className="h-4 w-4" />{passwordMessage}</p>}
+              <button type="submit" disabled={passwordSaving} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[#0f4d3d] px-5 text-sm font-bold text-white transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">{passwordSaving ? 'Mise à jour…' : <><KeyRound className="h-4 w-4" />Mettre à jour le mot de passe</>}</button>
+            </form>
+            <div className="mt-10 border-t border-[#e3d9cc] pt-6">
+              <h3 className="text-lg font-extrabold">Sessions actives</h3>
+              <p className="mt-1 text-sm leading-6 text-[#6f6a61]">Les détails techniques des appareils ne sont pas enregistrés. Fermez les autres sessions si vous ne reconnaissez pas une connexion.</p>
+              {sessionsError && <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">{sessionsError}</p>}
+              {sessionsMessage && <p role="status" className="mt-3 rounded-xl border border-[#c8dbd0] bg-[#e4f1ec] px-3 py-2.5 text-sm font-semibold text-[#0f4d3d]">{sessionsMessage}</p>}
+              <ul className="mt-3 space-y-2">
+                {customerSessions.map((session, index) => (
+                  <li key={`${session.created_at}-${index}`} className="flex items-center justify-between rounded-xl border border-[#e3d9cc] bg-white px-3 py-2.5 text-sm">
+                    <span>{session.is_current ? 'Session actuelle' : 'Autre session'} · ouverte le {new Date(session.created_at).toLocaleString('fr-FR')}</span>
+                    <span className="text-xs text-[#6f6a61]">expire le {new Date(session.expires_at).toLocaleDateString('fr-FR')}</span>
+                  </li>
+                ))}
+                {customerSessions.length === 0 && !sessionsError && <li className="text-sm text-[#6f6a61]">Aucune session active trouvée.</li>}
+              </ul>
+              <button type="button" onClick={revokeOtherSessions} disabled={sessionsSaving || !customerSessions.some((session) => !session.is_current)} className="mt-3 min-h-11 rounded-full border border-[#d9cfc2] px-4 text-sm font-bold text-[#4a3a30] disabled:opacity-50">{sessionsSaving ? 'Déconnexion…' : 'Déconnecter les autres sessions'}</button>
+            </div>
+            <div className="mt-8 rounded-2xl border border-[#e3d9cc] bg-[#fffdf9] p-5">
+              <h3 className="text-lg font-extrabold">Vos données</h3>
+              <p className="mt-1 text-sm leading-6 text-[#6f6a61]">Téléchargez une copie de votre profil, de vos commandes, de vos favoris, likes, avis et signalements.</p>
+              {dataExportError && <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">{dataExportError}</p>}
+              <button type="button" onClick={exportCustomerData} disabled={dataExporting} className="mt-3 min-h-11 rounded-full border border-[#d9cfc2] px-4 text-sm font-bold text-[#4a3a30] disabled:opacity-50">{dataExporting ? 'Préparation…' : 'Télécharger mes données'}</button>
+            </div>
+            <div className="mt-8 rounded-2xl border border-rose-200 bg-rose-50/60 p-5">
+              <h3 className="text-lg font-extrabold text-rose-900">Supprimer mon compte</h3>
+              <p className="mt-1 text-sm leading-6 text-rose-900/80">Votre profil, vos favoris, vos likes, avis, signalements et sessions seront supprimés. Les commandes seront conservées pour le commerçant, mais votre nom, téléphone et indications de lieu seront anonymisés. Cette action est irréversible.</p>
+              <label className="mt-4 block text-sm font-bold text-rose-950">Tapez SUPPRIMER pour confirmer
+                <input value={accountDeleteConfirmation} onChange={(event) => setAccountDeleteConfirmation(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-rose-200 bg-white px-3 text-sm font-medium" />
+              </label>
+              <label className="mt-3 block text-sm font-bold text-rose-950">Mot de passe (si votre compte n’utilise pas Google ou Apple)
+                <input type="password" autoComplete="current-password" value={accountDeletePassword} onChange={(event) => setAccountDeletePassword(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-xl border border-rose-200 bg-white px-3 text-sm font-medium" />
+              </label>
+              {accountDeleteError && <p role="alert" className="mt-3 rounded-xl border border-rose-300 bg-white px-3 py-2.5 text-sm text-rose-900">{accountDeleteError}</p>}
+              <button type="button" onClick={deleteCustomerAccount} disabled={accountDeleting || accountDeleteConfirmation !== 'SUPPRIMER'} className="mt-4 min-h-11 rounded-full bg-rose-700 px-4 text-sm font-bold text-white disabled:opacity-50">{accountDeleting ? 'Suppression…' : 'Supprimer définitivement mon compte'}</button>
+            </div>
+          </div>}
+        </section>
       </div>
-    </AuthExperienceLayout>
+    </main>
   );
 };
 

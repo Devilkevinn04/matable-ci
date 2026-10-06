@@ -1,13 +1,14 @@
-import React from 'react';
-import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Sparkles, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes, ShieldCheck } from 'lucide-react';
+import React, { useState } from 'react';
+import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes, ShieldCheck } from 'lucide-react';
 import { MerchantState } from './useMerchant';
 import { ThemeCustomizer } from '../ThemeCustomizer';
-import { MerchantIdentityVerification } from './MerchantIdentityVerification';
+import { MerchantIdentityVerification } from './lazyMerchantIdentityVerification';
 import { ProAnalyticsPanel } from './ProAnalyticsPanel';
 import { cleanPhoneForWhatsApp, formatFCFA } from '../../utils/format';
-import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 import { isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
 import { WhatsAppSubscriptionReminderConsent } from './WhatsAppSubscriptionReminderConsent';
+import { MerchantBoostPurchase } from './MerchantBoostPurchase';
+import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
 
 interface SettingsTabProps {
   state: MerchantState;
@@ -15,6 +16,7 @@ interface SettingsTabProps {
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
+  const [showPlanChooser, setShowPlanChooser] = useState(false);
   const {
     currentShop, products, orders, activeTab, showSettingsPin, setShowSettingsPin, setCurrentShop, settingsSubTab, setSettingsSubTab,
     catalogSearch, setCatalogSearch, catalogFilter, setCatalogFilter,
@@ -40,9 +42,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const isFeatured = Boolean(featuredUntil && Date.parse(featuredUntil) > Date.now());
   const canUseSocialLinks = Boolean(currentShop?.subscription?.isActive
     && isSubscriptionFeatureIncluded(currentShop.subscription.plan, 'social_links'));
-  const promotionRequestUrl = currentShop
-    ? getSupportWhatsAppUrl(`Bonjour, je souhaite demander une mise en avant pour la boutique ${currentShop.name}. Merci de m’indiquer les conditions et tarifs avant confirmation.`)
-    : null;
 
   return (
     <>
@@ -146,10 +145,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
             )}
 
             {settingsSubTab === 'verification' && currentShop && (
-              <MerchantIdentityVerification shopId={currentShop.id} />
+              <React.Suspense fallback={<p role="status" className="text-sm text-slate-600">Chargement de la vérification…</p>}>
+                <MerchantIdentityVerification shopId={currentShop.id} />
+              </React.Suspense>
             )}
 
-            {settingsSubTab === 'subscription' && currentShop && (
+            {settingsSubTab === 'subscription' && currentShop && (showPlanChooser ? (
+              <MerchantTrialOnboarding
+                shop={currentShop}
+                isStarting={false}
+                mode="plans"
+                onBack={() => setShowPlanChooser(false)}
+              />
+            ) : (
               <section className="max-w-3xl space-y-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
                 <div>
                   <p className="text-xs font-bold uppercase text-emerald-800">Abonnement</p>
@@ -162,6 +170,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 </div>
                 <p className="text-xs leading-5 text-slate-600">L’essai est gratuit. Après son échéance, le renouvellement sécurisé est disponible via KadevPay; le règlement d’une commande client reste directement convenu avec la boutique.</p>
                 <WhatsAppSubscriptionReminderConsent shop={currentShop} />
+                <div className="flex flex-col gap-3 rounded-xl border border-[#e3d9cc] bg-[#f7f3ee] p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-extrabold text-slate-900">Besoin d’autres fonctionnalités ?</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">Comparez Standard, Premium et Pro, puis choisissez un paiement mensuel ou annuel.</p>
+                  </div>
+                  <button type="button" onClick={() => setShowPlanChooser(true)} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-full bg-[#0f4d3d] px-4 text-xs font-bold text-white transition hover:bg-[#176b55]">Voir les formules</button>
+                </div>
                 <div className="border-t border-slate-200 pt-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -171,11 +186,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                     </div>
                     <span className={`rounded-full px-3 py-1 text-xs font-bold ${isFeatured ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-100 text-slate-700'}`}>{isFeatured ? 'Active' : 'Inactive'}</span>
                   </div>
-                  <p className="mt-3 text-xs leading-5 text-slate-500">La mise à la une est gérée par l’équipe MaTable.ci. Les conditions et le tarif seront communiqués avant toute confirmation.</p>
-                  {promotionRequestUrl && <a href={promotionRequestUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-emerald-800 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-50"><Sparkles className="h-4 w-4" />Demander une mise à la une</a>}
+                  <MerchantBoostPurchase shop={currentShop} productCount={products.filter((product) => product.shop_id === currentShop.id).length} />
                 </div>
               </section>
-            )}
+            ))}
 
             {settingsSubTab === 'analytics' && currentShop && <ProAnalyticsPanel shop={currentShop} />}
 

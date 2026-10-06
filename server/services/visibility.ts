@@ -1,14 +1,15 @@
 import type { ShopRecord } from '../types.ts';
+import { getSubscriptionState } from './businessRules.ts';
 
 const ROTATION_INTERVAL_MS = 3 * 60 * 60 * 1000;
 
-export function getShopVisibilityScore(shop: ShopRecord, productCount: number, now = Date.now()): number {
+export function getShopVisibilityScore(shop: ShopRecord, productCount: number, now = Date.now(), isSponsored = false): number {
   let score = 0;
-  if (shop.featured_until && Date.parse(shop.featured_until) > now) score += 1000;
+  if (isSponsored || (shop.featured_until && Date.parse(shop.featured_until) > now)) score += 1000;
 
-  if (shop.subscription_status === 'active') {
-    if (shop.selected_subscription_tier === 'pro') score += 300;
-    else if (shop.selected_subscription_tier === 'premium') score += 150;
+  if (getSubscriptionState(shop, new Date(now)).status === 'active') {
+    if (shop.selected_subscription_tier === 'pro') score += 60;
+    else if (shop.selected_subscription_tier === 'premium') score += 30;
   }
 
   if (productCount > 0) score += 50 + Math.min(productCount, 20) * 2;
@@ -28,12 +29,14 @@ export function rankShopsByVisibility(
   productCounts: Map<number, number>,
   computeIsShopOpen: (shop: ShopRecord) => boolean,
   now = Date.now(),
+  sponsoredShopIds = new Set<number>(),
 ) {
   const ranked = shops.map((shop) => ({
     shop,
     is_open: computeIsShopOpen(shop),
-    is_featured: Boolean(shop.featured_until && Date.parse(shop.featured_until) > now),
-    score: getShopVisibilityScore(shop, productCounts.get(shop.id) || 0, now),
+    is_sponsored: sponsoredShopIds.has(shop.id),
+    is_featured: Boolean(shop.featured_until && Date.parse(shop.featured_until) > now) || sponsoredShopIds.has(shop.id),
+    score: getShopVisibilityScore(shop, productCounts.get(shop.id) || 0, now, sponsoredShopIds.has(shop.id)),
   }));
 
   ranked.sort((left, right) => Number(right.is_open) - Number(left.is_open)
@@ -54,5 +57,5 @@ export function rankShopsByVisibility(
     start = end;
   }
 
-  return ranked.map(({ shop, is_open, is_featured }) => ({ shop, is_open, is_featured }));
+  return ranked.map(({ shop, is_open, is_featured, is_sponsored }) => ({ shop, is_open, is_featured, is_sponsored }));
 }

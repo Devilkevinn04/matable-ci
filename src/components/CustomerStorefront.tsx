@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   ShoppingBag, 
+  Bookmark,
+  Heart,
   Phone, 
   MapPin, 
   CheckCircle2, 
@@ -13,7 +15,6 @@ import {
   ArrowRight, 
   Info,
   Clock,
-  Sparkles,
   ChevronDown,
   ChevronUp,
   Tag,
@@ -30,6 +31,8 @@ import { useToast } from './Toast';
 import { hasAnalyticsConsent } from './CookieBanner';
 import { CustomerUser } from './CustomerAuth';
 import { CustomerCheckoutAuth } from './CustomerCheckoutAuth';
+import { CustomerTrustPanel } from './CustomerTrustPanel';
+import { getCanonicalOrigin } from '../utils/seoCanonical';
 
 interface CustomerStorefrontProps {
   shopSlug: string;
@@ -40,6 +43,14 @@ interface CustomerStorefrontProps {
 
 const ACTIVE_CART_STORAGE_KEY = 'matable_active_cart';
 type CartState = { shopSlug: string; items: CartItem[] };
+
+function getAnalyticsReferrerHost(): string {
+  try {
+    return document.referrer ? new URL(document.referrer).hostname : '';
+  } catch {
+    return '';
+  }
+}
 
 function validCartItems(value: unknown): CartItem[] {
   if (!Array.isArray(value)) return [];
@@ -70,6 +81,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const toast = useToast();
   const [shop, setShop] = useState<Shop | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [favoriteProductIds, setFavoriteProductIds] = useState<Set<number>>(new Set());
+  const [likedProductIds, setLikedProductIds] = useState<Set<number>>(new Set());
+  const [isFavoriteShop, setIsFavoriteShop] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,6 +125,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [paymentMethod, setPaymentMethod] = useState<'wave' | 'mobile_money' | 'cash' | 'to_confirm'>('to_confirm');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCheckoutAuth, setShowCheckoutAuth] = useState(false);
+  const [trustTarget, setTrustTarget] = useState<{ type: 'shop' | 'product'; id: number; name: string } | null>(null);
   const [checkoutAuthUser, setCheckoutAuthUser] = useState<CustomerUser | null>(null);
   const [orderSuccess, setOrderSuccess] = useState<{ orderId: number; whatsappUrl: string; whatsappText: string; whatsappTrackingToken: string } | null>(null);
   const [messageCopied, setMessageCopied] = useState(false);
@@ -187,7 +202,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`/api/shops/${shopSlug}`);
+      const res = await fetch(`/api/v1/catalog/storefronts/${encodeURIComponent(shopSlug)}`);
       if (!res.ok) {
         throw new Error('Boutique introuvable');
       }
@@ -234,6 +249,85 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   }, [customerUser]);
 
   useEffect(() => {
+    if (!customerUser) {
+      setFavoriteProductIds(new Set());
+      setLikedProductIds(new Set());
+      setIsFavoriteShop(false);
+      return;
+    }
+    let active = true;
+    fetch('/api/customer-engagement/state', { credentials: 'include' })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Impossible de charger vos favoris.');
+        if (!active) return;
+        setFavoriteProductIds(new Set(data.favorite_product_ids || []));
+        setLikedProductIds(new Set(data.liked_product_ids || []));
+        setIsFavoriteShop((data.favorite_shop_ids || []).includes(shop?.id));
+      })
+      .catch((engagementError: unknown) => {
+        if (active) {
+          console.error('Unable to load customer favorites and likes.', engagementError);
+          toast.error(engagementError instanceof Error ? engagementError.message : 'Impossible de charger vos favoris.');
+        }
+      });
+    return () => { active = false; };
+  }, [customerUser?.id, shop?.id]);
+
+  const toggleCustomerFavorite = async (targetType: 'shop' | 'product', targetId: number) => {
+    if (!customerUser) {
+      toast.info('Connectez-vous pour enregistrer vos favoris.');
+      window.location.assign('/connexion');
+      return;
+    }
+    try {
+      const response = await fetch('/api/customer-engagement/favorites', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_type: targetType, target_id: targetId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de mettre à jour vos favoris.');
+      if (targetType === 'shop') setIsFavoriteShop(Boolean(data.is_favorite));
+      else setFavoriteProductIds((previous) => {
+        const next = new Set(previous);
+        if (data.is_favorite) next.add(targetId);
+        else next.delete(targetId);
+        return next;
+      });
+      toast.success(data.is_favorite ? 'Ajouté à vos favoris.' : 'Retiré de vos favoris.');
+    } catch (engagementError) {
+      toast.error(engagementError instanceof Error ? engagementError.message : 'Impossible de mettre à jour vos favoris.');
+    }
+  };
+
+  const toggleProductLike = async (productId: number) => {
+    if (!customerUser) {
+      toast.info('Connectez-vous pour aimer un produit.');
+      window.location.assign('/connexion');
+      return;
+    }
+    try {
+      const response = await fetch(`/api/customer-engagement/products/${productId}/like`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de mettre à jour votre mention J’aime.');
+      setLikedProductIds((previous) => {
+        const next = new Set(previous);
+        if (data.is_liked) next.add(productId);
+        else next.delete(productId);
+        return next;
+      });
+      setProducts((previous) => previous.map((product) => product.id === productId ? { ...product, like_count: data.like_count } : product));
+    } catch (engagementError) {
+      toast.error(engagementError instanceof Error ? engagementError.message : 'Impossible de mettre à jour votre mention J’aime.');
+    }
+  };
+
+  useEffect(() => {
     if (!shop?.id || !hasAnalyticsConsent()) return;
     const storageKey = `matable_page_view_${shop.id}`;
     if (sessionStorage.getItem(storageKey)) return;
@@ -255,9 +349,61 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   }, [shop?.id]);
 
   useEffect(() => {
+    if (!shop?.id || !hasAnalyticsConsent() || typeof IntersectionObserver === 'undefined') return;
+    const sessionId = sessionStorage.getItem('matable_analytics_session') || crypto.randomUUID();
+    sessionStorage.setItem('matable_analytics_session', sessionId);
+    const reportView = (productId: number) => {
+      if (!hasAnalyticsConsent()) return;
+      const viewKey = `matable_product_view_${shop.id}_${productId}`;
+      if (sessionStorage.getItem(viewKey)) return;
+      sessionStorage.setItem(viewKey, '1');
+      fetch('/api/analytics/product-event', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop_id: shop.id,
+          product_id: productId,
+          event_type: 'product_view',
+          session_id: sessionId,
+          referrer_host: getAnalyticsReferrerHost(),
+        }),
+      }).catch((error: unknown) => console.error('Unable to record product view analytics.', error));
+    };
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const productId = Number((entry.target as HTMLElement).dataset.analyticsProductId);
+        if (Number.isInteger(productId)) reportView(productId);
+        observer.unobserve(entry.target);
+      }
+    }, { threshold: 0.5 });
+    document.querySelectorAll<HTMLElement>('[data-analytics-product-id]').forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, [filteredProducts, shop?.id]);
+
+  const reportProductClick = (productId: number) => {
+    if (!shop?.id || !hasAnalyticsConsent()) return;
+    const sessionId = sessionStorage.getItem('matable_analytics_session') || crypto.randomUUID();
+    sessionStorage.setItem('matable_analytics_session', sessionId);
+    fetch('/api/analytics/product-event', {
+      method: 'POST',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shop_id: shop.id,
+        product_id: productId,
+        event_type: 'product_click',
+        session_id: sessionId,
+        referrer_host: getAnalyticsReferrerHost(),
+      }),
+    }).catch((error: unknown) => console.error('Unable to record product click analytics.', error));
+  };
+
+  useEffect(() => {
     if (!shop) return;
 
-    const origin = window.location.origin;
+    const origin = getCanonicalOrigin(window.location.origin);
     const canonicalUrl = `${origin}/${shop.slug}`;
     const description = getWelcomeMessageForDisplay(shop.welcome_message, shop.category).slice(0, 160);
     const image = getBannerImageForDisplay(shop.theme_config?.custom_banner_url, shop.category);
@@ -324,8 +470,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     });
 
     return () => {
-      document.title = 'MaTable.ci — Boutiques locales en Côte d’Ivoire';
-      const defaultDescription = 'Découvrez des boutiques locales en Côte d’Ivoire, consultez leurs catalogues et commandez directement sur WhatsApp avec MaTable.ci.';
+      document.title = 'Produits locaux à découvrir en Côte d’Ivoire | MaTable.ci';
+      const defaultDescription = 'Découvrez les produits des commerces locaux en Côte d’Ivoire, explorez les boutiques par ville et commandez directement sur WhatsApp avec MaTable.ci.';
       const descriptionMeta = document.head.querySelector<HTMLMetaElement>('meta[name="description"]');
       if (descriptionMeta) descriptionMeta.content = defaultDescription;
       const defaultCanonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
@@ -427,11 +573,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       toast.error('Veuillez renseigner un numéro de téléphone WhatsApp valide.');
       return;
     }
-    if (!authenticatedCustomer) {
-      setShowCheckoutAuth(true);
-      return;
-    }
-
     const finalLocation = deliveryLocation === 'Autre' 
       ? (customLocation.trim() || 'Abidjan') 
       : deliveryLocation;
@@ -591,16 +732,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     ? `${shop.opening_hours.open_time || '08:00'}–${shop.opening_hours.close_time || '22:00'} · ${shop.opening_hours.days && shop.opening_hours.days.length > 0 && shop.opening_hours.days.length < 7 ? `${shop.opening_hours.days.length} jours / semaine` : '7 jours / semaine'}`
     : 'Horaires flexibles selon le commerçant';
 
-  const serviceHighlights = [
-    shop.is_open ? 'Boutique ouverte' : 'Commande à la reprise',
-    shop.theme_config?.delivery_zones?.length ? `${shop.theme_config.delivery_zones.length} zones de service` : 'Service local',
-    shop.theme_config?.social_links && Object.values(shop.theme_config.social_links).some(Boolean) ? 'Réseaux publics vérifiés' : 'Contact direct WhatsApp',
-    shop.city ? `Service à ${shop.city}` : 'Abidjan & environs',
-  ];
-
   return (
     <div 
-      className="storefront-page min-h-screen pb-32 transition-colors"
+      className={`storefront-page min-h-screen transition-colors ${totalCartCount > 0 && !isCartOpen ? 'pb-28 sm:pb-32' : 'pb-8'}`}
       style={{ 
         background: 'linear-gradient(180deg, #faf8f3 0%, #f1eee7 100%)',
         fontFamily: `"${fontFamily}", system-ui, sans-serif`
@@ -608,62 +742,60 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     >
       {/* 1. Header & Shop Identity */}
       <header className="bg-[#fffdf9]/95 backdrop-blur-md border-b border-[#ded8ce] sticky top-0 z-30 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <a href="/" aria-label="Retour à l’annuaire" title="Retour à l’annuaire" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"><ArrowLeft className="h-4 w-4" /></a>
+        <div className="max-w-6xl mx-auto px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between gap-2 sm:gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+            <a href="/" aria-label="Retour à l’annuaire" title="Retour à l’annuaire" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 sm:h-10 sm:w-10"><ArrowLeft className="h-4 w-4" /></a>
             {logoUrl ? (
               <img
                 src={logoUrl}
                 alt={shop.name}
-                className="w-11 h-11 rounded-xl object-cover shrink-0 border border-slate-200 bg-white shadow-sm"
+                className="h-10 w-10 rounded-xl object-cover shrink-0 border border-slate-200 bg-white sm:h-11 sm:w-11"
               />
             ) : (
               <div 
-                className="w-11 h-11 rounded-xl flex items-center justify-center font-black text-lg shrink-0 shadow-sm transition-transform hover:scale-105"
+                className="h-10 w-10 rounded-xl flex items-center justify-center font-black text-lg shrink-0 sm:h-11 sm:w-11"
                 style={{ backgroundColor: primaryColor, color: primaryTextColor }}
               >
                 <span aria-hidden="true">{categoryDefaults.icon}</span>
               </div>
             )}
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="font-black text-[#211712] text-base sm:text-lg truncate">{shop.name}</h1>
-                {shop.is_open ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#154F41] bg-[#E9F3EF] px-2 py-0.5 rounded-full shrink-0 border border-[#1D6B57]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#1D6B57] animate-pulse" /> Ouvert
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-black text-[#8A5A12] bg-[#F7E7C7] px-2 py-0.5 rounded-full shrink-0 border border-[#C48A18]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#EFAE24]" /> Fermé
-                  </span>
-                )}
+              <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                <h1 className="max-w-full truncate text-sm font-black text-[#211712] sm:text-lg">{shop.name}</h1>
+                <span className={`shrink-0 text-[11px] font-semibold sm:text-xs ${shop.is_open ? 'text-[#176b55]' : 'text-[#8a5a12]'}`}>
+                  {shop.is_open ? 'Ouverte' : 'Fermée'}
+                </span>
               </div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500 truncate">
+              <div className="hidden min-w-0 items-center gap-2 truncate text-[11px] text-slate-500 sm:flex">
                 <span>matable.ci/{shop.slug}</span>
                 {shop.city ? <span className="text-slate-300">•</span> : null}
-                {shop.city ? <span>{shop.city}</span> : null}
+                {shop.city ? <span className="truncate">{shop.city}</span> : null}
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <div
-              className="hidden sm:flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider"
-              style={{ color: primaryColor }}
+            <button
+              type="button"
+              onClick={() => toggleCustomerFavorite('shop', shop.id)}
+              aria-pressed={isFavoriteShop}
+              aria-label={isFavoriteShop ? 'Retirer cette boutique de vos favoris' : 'Ajouter cette boutique à vos favoris'}
+              className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition ${isFavoriteShop ? 'border-[#c8dbd0] bg-[#e4f1ec] text-[#0f4d3d]' : 'border-[#ded8ce] bg-white text-[#4a3a30] hover:border-[#176b55]'}`}
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Commande rapide</span>
-            </div>
+              <Bookmark className={`h-4 w-4 ${isFavoriteShop ? 'fill-current' : ''}`} />
+              <span className="hidden sm:inline">{isFavoriteShop ? 'Enregistrée' : 'Enregistrer'}</span>
+            </button>
             <button
               id="cart-header-btn"
               onClick={() => totalCartCount > 0 ? setIsCartOpen(true) : document.getElementById('store-catalogue')?.scrollIntoView({ behavior: 'smooth' })}
-              className="relative p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 transition-all flex items-center gap-1.5"
+              className="relative inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#0f4d3d] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#176b55]"
               aria-label={totalCartCount > 0 ? 'Voir le panier' : 'Découvrir le catalogue'}
             >
-              <ShoppingBag className="w-5 h-5 text-slate-800" />
+              <ShoppingBag className="h-4 w-4" />
+              <span className="hidden sm:inline">{totalCartCount > 0 ? 'Mon panier' : 'Catalogue'}</span>
               {totalCartCount > 0 && (
                 <span 
-                  className="absolute -top-1.5 -right-1.5 font-black text-xs w-5 h-5 rounded-full flex items-center justify-center shadow-md animate-scale"
+                  className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white px-1 text-[10px] font-black"
                   style={{ backgroundColor: primaryColor, color: primaryTextColor }}
                 >
                   {totalCartCount}
@@ -691,8 +823,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       )}
 
       {bannerUrl && (
-        <div className="max-w-6xl mx-auto px-4 pt-4">
-          <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-2xs">
+        <div className="max-w-6xl mx-auto px-3 pt-3 sm:px-4 sm:pt-4">
+          <div className="group relative overflow-hidden rounded-[1.35rem] border border-white/70 bg-slate-900 shadow-[0_18px_45px_rgba(33,23,18,0.12)]">
             <div aria-hidden="true" className="absolute inset-0 z-0 flex flex-col items-center justify-center gap-2" style={{ backgroundColor: secondaryColor, color: primaryColor }}>
               <span className="text-7xl">{categoryDefaults.icon}</span>
               <span className="text-xs font-black uppercase">{categoryDefaults.label}</span>
@@ -700,7 +832,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             <img
               src={bannerUrl}
               alt={`Illustration de la boutique ${shop.name}`}
-              className="relative z-10 h-48 w-full object-cover sm:h-72"
+              className="relative z-10 h-44 w-full object-cover transition-transform duration-700 group-hover:scale-[1.02] sm:h-60 lg:h-64"
               onError={(event) => {
                 const element = event.currentTarget;
                 if (element.dataset.placeholderAttempted !== 'true' && element.src !== categoryDefaults.bannerPlaceholderImageUrl) {
@@ -711,22 +843,28 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 }
               }}
             />
-            <div className="absolute inset-0 z-20 bg-gradient-to-t from-slate-950/80 via-slate-950/10 to-transparent" />
-            <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:justify-between sm:p-6">
-              <div className="max-w-2xl text-white drop-shadow">
-                <p className="text-[10px] font-black uppercase text-white/80">{categoryDefaults.label} · {shop.city || 'Côte d’Ivoire'}</p>
-                <p className="mt-1 line-clamp-2 text-sm font-semibold sm:text-base">{getWelcomeMessageForDisplay(shop.welcome_message, shop.category)}</p>
+            <div className="absolute inset-0 z-20 bg-gradient-to-r from-slate-950/65 via-slate-950/20 to-transparent sm:bg-gradient-to-t sm:from-slate-950/75 sm:via-slate-950/10" />
+            <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-end sm:justify-between sm:p-6">
+              <div className="max-w-2xl text-white drop-shadow-sm">
+                <p className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white/90 backdrop-blur-sm">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                  {categoryDefaults.label} <span className="text-white/45">/</span> {shop.city || 'Côte d’Ivoire'}
+                </p>
+                <p className="mt-2 line-clamp-2 max-w-xl text-sm font-medium leading-6 text-white sm:text-base">{getWelcomeMessageForDisplay(shop.welcome_message, shop.category)}</p>
               </div>
-              <a href="#store-catalogue" className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-white/70 bg-white px-4 py-2 text-sm font-bold text-slate-900 transition hover:bg-slate-100">Voir le catalogue<ArrowRight className="h-4 w-4" /></a>
+              <a href="#store-catalogue" className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-white/70 bg-[#fffdf9] px-4 py-2 text-xs font-extrabold text-[#0f4d3d] transition hover:-translate-y-0.5 hover:bg-white sm:min-h-11 sm:text-sm">Découvrir la sélection<ArrowRight className="h-4 w-4" /></a>
             </div>
           </div>
         </div>
       )}
 
       {isEventMode && eventBannerText && (
-        <div className="max-w-6xl mx-auto px-4 pt-3">
-          <div className="rounded-xl px-3 py-2 text-center text-xs font-black" style={{ backgroundColor: primaryColor, color: primaryTextColor }}>
-            {eventBannerText}
+        <div className="max-w-6xl mx-auto px-3 pt-3 sm:px-4">
+          <div className="flex justify-center sm:justify-start">
+            <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-[#e7d5bd] bg-[#fffaf1] px-4 py-2 text-center text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#70451f] shadow-[0_4px_14px_rgba(33,23,18,0.05)] sm:text-xs">
+              <span className="shrink-0 text-sm" aria-hidden="true">✦</span>
+              <span>{eventBannerText}</span>
+            </div>
           </div>
         </div>
       )}
@@ -749,23 +887,24 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         )}
 
         {/* Catalog Section Header */}
-        <div id="store-catalogue" className="scroll-mt-24 flex items-center justify-between mb-4">
-          <div>
-            <h2 className="font-black text-slate-900 text-lg sm:text-xl">
-              Catalogue ({products.length})
-            </h2>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
-              {categoryDefaults.catalogDescription}
-            </p>
+        <div id="store-catalogue" className="scroll-mt-24 mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-[#ded8ce] pb-4">
+          <div className="relative pl-4">
+            <span aria-hidden="true" className="absolute bottom-1 left-0 top-1 w-[3px] rounded-full bg-[#b9441f]" />
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-[#8c5a36]">{categoryDefaults.label} <span className="px-1 text-[#c5b6a3]">/</span> La sélection</p>
+            <h2 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-[#211712] sm:text-3xl">À découvrir</h2>
           </div>
-          <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700">
-            FCFA nets
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-[#eee9df] px-3 py-1.5 text-[11px] font-bold text-[#6f6a61]">{products.length} pièce{products.length === 1 ? '' : 's'}</span>
+            <button type="button" onClick={() => setTrustTarget({ type: 'shop', id: shop.id, name: shop.name })} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-[#c8dbd0] bg-white px-3 text-[11px] font-bold text-[#0f4d3d] transition hover:bg-[#e4f1ec]">
+              <span aria-hidden="true">★</span>Avis boutique
+            </button>
+          </div>
         </div>
 
         {/* Search Bar & Category Filter */}
-        <div className="mb-6 space-y-3">
-          <div className="relative">
+        {(products.length > 4 || categories.length > 1) && (
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {products.length > 4 && <div className="relative w-full sm:max-w-sm">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
             <input
               type="text"
@@ -773,7 +912,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label={`Rechercher dans le catalogue de ${shop.name}`}
               placeholder="Rechercher dans le catalogue..."
-              className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-white border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-2xs placeholder:text-slate-400"
+              className="w-full rounded-full border border-[#ded8ce] bg-[#fffdf9] py-2.5 pl-10 pr-9 text-xs font-medium shadow-[0_4px_14px_rgba(33,23,18,0.04)] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#176b55]"
             />
             {searchQuery && (
               <button
@@ -784,17 +923,17 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 ✕
               </button>
             )}
-          </div>
+          </div>}
 
-          {categories.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {categories.length > 1 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
               <button
                 type="button"
                 onClick={() => setSelectedCategory('all')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                className={`shrink-0 rounded-full px-3 py-2 text-xs font-bold whitespace-nowrap transition-all ${
                   selectedCategory === 'all'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                    ? 'bg-[#0f4d3d] text-white'
+                    : 'bg-white text-slate-600 hover:bg-[#e4f1ec] hover:text-[#0f4d3d]'
                 }`}
               >
                 Tous les articles ({products.length})
@@ -806,10 +945,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     key={cat}
                     type="button"
                     onClick={() => setSelectedCategory(cat)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                    className={`shrink-0 rounded-full px-3 py-2 text-xs font-bold whitespace-nowrap transition-all ${
                       selectedCategory === cat
-                        ? 'bg-slate-900 text-white shadow-xs'
-                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                      ? 'bg-[#0f4d3d] text-white'
+                      : 'bg-white text-slate-600 hover:bg-[#e4f1ec] hover:text-[#0f4d3d]'
                     }`}
                   >
                     {cat} ({count})
@@ -819,6 +958,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             </div>
           )}
         </div>
+        )}
 
         {/* 3. DYNAMIC PRODUCT GRID
             Applies:
@@ -846,50 +986,55 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             </button>
           </div>
         ) : (
-          <div className={
-            layoutStyle === 'grid_portrait'
-              ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4'
-              : 'grid grid-cols-1 sm:grid-cols-2 gap-4'
+          <div className={products.length === 1
+            ? 'mx-auto grid w-full max-w-md grid-cols-1 gap-3 sm:gap-4'
+            : 'grid grid-cols-1 min-[560px]:grid-cols-2 gap-3 sm:gap-4'
           }>
             {filteredProducts.map((product) => {
               const activeModifiers = selectedModifiers[product.id] || [];
               const cartIndex = cart.findIndex((item) => item.product.id === product.id);
               return (
-                <CustomerProductCard
-                  key={product.id}
-                  product={product}
-                  category={shop.category}
-                  categoryDefaults={categoryDefaults}
-                  isShopOpen={shop.is_open}
-                  layoutStyle={layoutStyle}
-                  cardRadius={cardRadius}
-                  shadowClass={shadowClass}
-                  primaryColor={primaryColor}
-                  primaryTextColor={primaryTextColor}
-                  glowStyle={glowStyle}
-                  quantityInCart={getProductQuantityInCart(product.id)}
-                  isDescriptionExpanded={Boolean(expandedDescriptions[product.id])}
-                  activeSize={selectedSizes[product.id]}
-                  activeColor={selectedColors[product.id]}
-                  activeModifiers={activeModifiers}
-                  selectedUnitPrice={getProductUnitPrice(product, activeModifiers)}
-                  onToggleDescription={() => toggleDescription(product.id)}
-                  onSelectSize={(size) => setSelectedSizes((previous) => ({ ...previous, [product.id]: size }))}
-                  onSelectColor={(color) => setSelectedColors((previous) => ({ ...previous, [product.id]: color }))}
-                  onToggleModifier={(groupName, optionLabel, maxSelections) => {
-                    const group = product.modifier_groups?.find((candidate) => candidate.name === groupName);
-                    if (!group) return;
-                    setSelectedModifiers((previous) => {
-                      const current = previous[product.id] || [];
-                      const currentForGroup = current.filter((value) => group.options.some((option) => (typeof option === 'string' ? option : option.label) === value));
-                      const isSelected = current.includes(optionLabel);
-                      if (!isSelected && currentForGroup.length >= maxSelections) return previous;
-                      return { ...previous, [product.id]: isSelected ? current.filter((value) => value !== optionLabel) : [...current, optionLabel] };
-                    });
-                  }}
-                  onAddToCart={() => addToCart(product)}
-                  onDecreaseQuantity={() => { if (cartIndex > -1) updateQuantity(cartIndex, -1); }}
-                />
+                <div key={product.id} data-analytics-product-id={product.id}>
+                  <CustomerProductCard
+                    product={product}
+                    category={shop.category}
+                    categoryDefaults={categoryDefaults}
+                    isShopOpen={shop.is_open}
+                    layoutStyle={layoutStyle}
+                    cardRadius={cardRadius}
+                    shadowClass={shadowClass}
+                    primaryColor={primaryColor}
+                    primaryTextColor={primaryTextColor}
+                    glowStyle={glowStyle}
+                    quantityInCart={getProductQuantityInCart(product.id)}
+                    isDescriptionExpanded={Boolean(expandedDescriptions[product.id])}
+                    activeSize={selectedSizes[product.id]}
+                    activeColor={selectedColors[product.id]}
+                    activeModifiers={activeModifiers}
+                    selectedUnitPrice={getProductUnitPrice(product, activeModifiers)}
+                    isFavorite={favoriteProductIds.has(product.id)}
+                    isLiked={likedProductIds.has(product.id)}
+                    onToggleFavorite={() => toggleCustomerFavorite('product', product.id)}
+                    onToggleLike={() => toggleProductLike(product.id)}
+                    onOpenTrust={() => setTrustTarget({ type: 'product', id: product.id, name: product.title })}
+                    onToggleDescription={() => toggleDescription(product.id)}
+                    onSelectSize={(size) => setSelectedSizes((previous) => ({ ...previous, [product.id]: size }))}
+                    onSelectColor={(color) => setSelectedColors((previous) => ({ ...previous, [product.id]: color }))}
+                    onToggleModifier={(groupName, optionLabel, maxSelections) => {
+                      const group = product.modifier_groups?.find((candidate) => candidate.name === groupName);
+                      if (!group) return;
+                      setSelectedModifiers((previous) => {
+                        const current = previous[product.id] || [];
+                        const currentForGroup = current.filter((value) => group.options.some((option) => (typeof option === 'string' ? option : option.label) === value));
+                        const isSelected = current.includes(optionLabel);
+                        if (!isSelected && currentForGroup.length >= maxSelections) return previous;
+                        return { ...previous, [product.id]: isSelected ? current.filter((value) => value !== optionLabel) : [...current, optionLabel] };
+                      });
+                    }}
+                    onAddToCart={() => { reportProductClick(product.id); addToCart(product); }}
+                    onDecreaseQuantity={() => { if (cartIndex > -1) updateQuantity(cartIndex, -1); }}
+                  />
+                </div>
               );
             })}
           </div>
@@ -898,11 +1043,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         <details className="mt-8 rounded-xl border border-[#ded8ce] bg-[#fffdf9] px-4 py-3 shadow-sm">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
             <div><p className="text-[10px] font-black uppercase text-slate-500">Informations pratiques</p><h3 className="mt-1 text-sm font-black text-slate-900">Horaires, livraison & contact</h3></div>
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#edf7f2] px-2 py-1 text-[10px] font-black text-[#155c3d]"><MapPin className="h-3 w-3" />{shop.city || 'Abidjan'}</span>
+            <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#52645c]"><MapPin className="h-3.5 w-3.5" />{shop.city || 'Abidjan'}</span>
           </summary>
           <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="flex items-center gap-2 text-[11px] font-bold text-slate-700"><Clock className="h-3.5 w-3.5 text-[#1D6B57]" />Horaires</span><span className="text-right text-[11px] font-black text-slate-800">{hoursSummary}</span></div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">{serviceHighlights.map((item) => <div key={item} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-[11px] font-bold text-slate-700"><CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#1D6B57]" /><span>{item}</span></div>)}</div>
-          {shop.theme_config?.social_links && Object.values(shop.theme_config.social_links).some(Boolean) && <div className="mt-3 flex flex-wrap gap-2">{shop.theme_config.social_links.instagram && <a href={shop.theme_config.social_links.instagram} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Instagram</a>}{shop.theme_config.social_links.facebook && <a href={shop.theme_config.social_links.facebook} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Facebook</a>}{shop.theme_config.social_links.website && <a href={shop.theme_config.social_links.website} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Site web</a>}{shop.theme_config.social_links.whatsapp && <a href={shop.theme_config.social_links.whatsapp} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">WhatsApp</a>}</div>}
+          {shop.theme_config?.social_links && Object.values(shop.theme_config.social_links).some(Boolean) &&           <div className="mt-3 flex gap-5 overflow-x-auto border-b border-[#e5d9ca]">{shop.theme_config.social_links.instagram && <a href={shop.theme_config.social_links.instagram} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Instagram</a>}{shop.theme_config.social_links.facebook && <a href={shop.theme_config.social_links.facebook} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Facebook</a>}{shop.theme_config.social_links.website && <a href={shop.theme_config.social_links.website} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Site web</a>}{shop.theme_config.social_links.whatsapp && <a href={shop.theme_config.social_links.whatsapp} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">WhatsApp</a>}</div>}
           {shop.theme_config?.delivery_zones && shop.theme_config.delivery_zones.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{shop.theme_config.delivery_zones.map((zone, index) => <div key={`${zone.label}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5"><div className="flex items-center justify-between gap-2"><span className="text-xs font-black text-slate-800">{zone.label}</span><span className="text-[10px] font-bold uppercase text-slate-500">{zone.mode}</span></div><div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-600"><span>{zone.description || 'Service disponible'}</span><span className="font-black text-[#1D6B57]">{zone.fee ? `${zone.fee.toLocaleString('fr-FR')} FCFA` : 'Gratuit'}</span></div></div>)}</div>}
         </details>
       </div>
@@ -1071,6 +1215,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                             {item.selected_modifiers && item.selected_modifiers.length > 0 && (
                               <span className="text-amber-700">+{item.selected_modifiers.join(', ')}</span>
                             )}
+                            {trustTarget && <CustomerTrustPanel targetType={trustTarget.type} targetId={trustTarget.id} targetName={trustTarget.name} onClose={() => setTrustTarget(null)} />}
                           </div>
                           <span className="text-xs font-semibold text-slate-600 block mt-0.5">
                             {formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers))} x {item.quantity} = {formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers) * item.quantity)}
@@ -1116,6 +1261,21 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     </div>
                   )}
 
+                  {!authenticatedCustomer && !showCheckoutAuth && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-xs text-slate-600">
+                        Vous pouvez commander sans compte. Connectez-vous si vous souhaitez retrouver cette commande dans votre historique.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowCheckoutAuth(true)}
+                        className="mt-2 text-xs font-bold text-[#176b55] underline underline-offset-2"
+                      >
+                        Se connecter (facultatif)
+                      </button>
+                    </div>
+                  )}
+
                   {showCheckoutAuth && !authenticatedCustomer && (
                     <CustomerCheckoutAuth
                       prefillName={customerName}
@@ -1138,7 +1298,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       <input id="website" name="website" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
                     </div>
                     <span className="text-[10px] font-black uppercase tracking-[0.16em] text-[#6B6355] block">
-                      Informations de livraison
+                      Vos coordonnées pour la commande
                     </span>
 
                     {/* Customer Name */}
@@ -1179,7 +1339,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     {/* Delivery Location / Commune */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Quartier / Commune de livraison *
+                        Quartier / Commune *
                       </label>
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         {[
@@ -1222,7 +1382,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 flex items-start gap-2">
                         <Info className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                         <span>
-                          <strong>Frais de livraison :</strong> Les frais de course (selon votre commune à Abidjan) ne sont pas inclus dans le total panier et sont réglés directement au coursier lors de la livraison.
+                          MaTable transmet ces indications au commerçant. MaTable ne gère ni la livraison ni les frais associés : convenez-en directement avec la boutique.
                         </span>
                       </div>
                     </div>

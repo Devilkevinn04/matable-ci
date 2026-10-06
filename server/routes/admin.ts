@@ -20,10 +20,112 @@ interface AdminRouterOptions {
 export function createAdminRouter(options: AdminRouterOptions) {
   const { shops, products, orders, databaseMode, dbAll, dbGet, dbRun, refreshRuntimeDataFromDatabase, persistShop, toSafeShop, rotateMerchantAccessTokenForShop } = options;
   const router = Router();
-  const logAdminAction = (action: string, shopId: number, details: Record<string, unknown>) => dbRun(
+  const logAdminAction = (action: string, shopId: number | null, details: Record<string, unknown>) => dbRun(
     'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
     ['super_admin', action, shopId, JSON.stringify(details), new Date().toISOString()],
   );
+
+  router.get('/content-moderation', async (_req, res) => {
+    const [reviews, reports] = await Promise.all([
+      dbAll<Record<string, unknown>>(
+        `SELECT reviews.id, reviews.shop_id, reviews.target_type, reviews.target_id, reviews.rating,
+          reviews.comment, reviews.status, reviews.created_at, shops.name AS shop_name,
+          products.title AS product_title, users.first_name AS customer_name
+         FROM customer_reviews AS reviews
+         LEFT JOIN shops ON shops.id = reviews.shop_id
+         LEFT JOIN products ON reviews.target_type = 'product' AND products.id = reviews.target_id
+         LEFT JOIN users ON users.id = reviews.user_id
+         WHERE reviews.status = 'pending' ORDER BY reviews.created_at ASC LIMIT 200`,
+      ),
+      dbAll<Record<string, unknown>>(
+        `SELECT reports.id, reports.target_type, reports.target_id, reports.reason, reports.details,
+          reports.status, reports.created_at, shops.name AS shop_name, products.title AS product_title,
+          users.first_name AS customer_name
+         FROM customer_reports AS reports
+         LEFT JOIN shops ON reports.target_type = 'shop' AND shops.id = reports.target_id
+         LEFT JOIN products ON reports.target_type = 'product' AND products.id = reports.target_id
+         LEFT JOIN users ON users.id = reports.user_id
+         WHERE reports.status IN ('pending', 'in_review') ORDER BY reports.created_at ASC LIMIT 200`,
+      ),
+    ]);
+    return res.json({ reviews, reports });
+  });
+
+  router.patch('/content-moderation/reviews/:id', async (req, res) => {
+    const reviewId = Number(req.params.id);
+    const status = String(req.body?.status || '');
+    if (!Number.isSafeInteger(reviewId) || reviewId <= 0 || !['approved', 'hidden'].includes(status)) {
+      return res.status(400).json({ error: 'Décision de modération invalide.' });
+    }
+    const review = await dbGet<{ shop_id: number; status: string }>(
+      'SELECT shop_id, status FROM customer_reviews WHERE id = ?',
+      [reviewId],
+    );
+    if (!review) return res.status(404).json({ error: 'Avis introuvable.' });
+    await dbRun('UPDATE customer_reviews SET status = ?, reviewed_at = ? WHERE id = ?', [status, new Date().toISOString(), reviewId]);
+    await logAdminAction('customer_review_moderated', Number(review.shop_id), { review_id: reviewId, status });
+    return res.json({ success: true, status });
+  });
+
+  router.patch('/content-moderation/reports/:id', async (req, res) => {
+    const reportId = Number(req.params.id);
+    const status = String(req.body?.status || '');
+    if (!Number.isSafeInteger(reportId) || reportId <= 0 || !['in_review', 'resolved', 'dismissed'].includes(status)) {
+      return res.status(400).json({ error: 'Décision de traitement invalide.' });
+    }
+    const report = await dbGet<{ target_type: string; target_id: number; status: string }>(
+      'SELECT target_type, target_id, status FROM customer_reports WHERE id = ?',
+      [reportId],
+    );
+    if (!report) return res.status(404).json({ error: 'Signalement introuvable.' });
+    await dbRun('UPDATE customer_reports SET status = ?, reviewed_at = ? WHERE id = ?', [status, new Date().toISOString(), reportId]);
+    const shopId = report.target_type === 'shop'
+      ? Number(report.target_id)
+      : Number((await dbGet<{ shop_id: number }>('SELECT shop_id FROM products WHERE id = ?', [report.target_id]))?.shop_id) || null;
+    await logAdminAction('customer_report_processed', shopId, { report_id: reportId, status });
+    return res.json({ success: true, status });
+  });
+
+  router.get('/maintenance', async (_req, res) => {
+    const settings = await dbGet<{
+      maintenance_enabled: number | boolean;
+      maintenance_message: string;
+      updated_at: string;
+      updated_by: string;
+    }>('SELECT maintenance_enabled, maintenance_message, updated_at, updated_by FROM platform_settings WHERE id = 1');
+    res.json({
+      enabled: Boolean(settings?.maintenance_enabled),
+      message: settings?.maintenance_message || 'Le service revient bientôt. Merci de votre patience.',
+      updated_at: settings?.updated_at || null,
+      updated_by: settings?.updated_by || null,
+    });
+  });
+
+  router.patch('/maintenance', async (req, res) => {
+    if (typeof req.body?.enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Le statut du mode maintenance est invalide.' });
+    }
+    const message = String(req.body?.message || 'Le service revient bientôt. Merci de votre patience.')
+      .replace(/<[^>]*>/g, '')
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .trim()
+      .slice(0, 240) || 'Le service revient bientôt. Merci de votre patience.';
+    const previous = await dbGet<{ maintenance_enabled: number | boolean; maintenance_message: string }>(
+      'SELECT maintenance_enabled, maintenance_message FROM platform_settings WHERE id = 1',
+    );
+    const updatedAt = new Date().toISOString();
+    await dbRun(`INSERT INTO platform_settings (id, maintenance_enabled, maintenance_message, updated_at, updated_by)
+      VALUES (1, ?, ?, ?, 'super_admin')
+      ON CONFLICT (id) DO UPDATE SET maintenance_enabled = excluded.maintenance_enabled,
+        maintenance_message = excluded.maintenance_message, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+    [req.body.enabled ? 1 : 0, message, updatedAt]);
+    await logAdminAction('maintenance_updated', null, {
+      enabled: req.body.enabled,
+      previous_enabled: Boolean(previous?.maintenance_enabled),
+      message,
+    });
+    res.json({ enabled: req.body.enabled, message, updated_at: updatedAt, updated_by: 'super_admin' });
+  });
 
   const getSubscriptionMetrics = async () => {
     const now = new Date();
@@ -66,44 +168,104 @@ export function createAdminRouter(options: AdminRouterOptions) {
     const requestedDays = Number(req.query.days);
     const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 90) : 30;
     const since = new Date(Date.now() - days * 86400000).toISOString();
-    const daily = await dbAll<{ date: string; page_views: number; unique_visitors: number }>(`
-      SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS page_views,
-        COUNT(DISTINCT session_id) AS unique_visitors
-      FROM analytics_events WHERE event_type = 'page_view' AND created_at >= ?
-      GROUP BY date ORDER BY date ASC
-    `, [since]);
-    const orderDaily = await dbAll<{ date: string; orders: number; sales: number }>(`
-      SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
-      FROM orders WHERE created_at >= ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
-      GROUP BY date ORDER BY date ASC
-    `, [since]);
-    const byShop = (await Promise.all(shops.map(async (shop) => {
-      const traffic = await dbGet<{ page_views: number; unique_visitors: number }>(`
+    const previousSince = new Date(Date.parse(since) - days * 86400000).toISOString();
+    const [dailyTraffic, dailyOrders, currentTraffic, previousTraffic, currentOrders, previousOrders, sourceRows, trafficByShop, ordersByShop] = await Promise.all([
+      dbAll<{ date: string; page_views: number; unique_visitors: number }>(`
+        SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS page_views,
+          COUNT(DISTINCT session_id) AS unique_visitors
+        FROM analytics_events WHERE event_type = 'page_view' AND created_at >= ?
+        GROUP BY date ORDER BY date ASC
+      `, [since]),
+      dbAll<{ date: string; orders: number; sales: number }>(`
+        SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
+        FROM orders WHERE created_at >= ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+        GROUP BY date ORDER BY date ASC
+      `, [since]),
+      dbGet<{ page_views: number; unique_visitors: number }>(`
         SELECT COUNT(*) AS page_views, COUNT(DISTINCT session_id) AS unique_visitors
-        FROM analytics_events WHERE event_type = 'page_view' AND shop_id = ? AND created_at >= ?
-      `, [shop.id, since]);
+        FROM analytics_events WHERE event_type = 'page_view' AND created_at >= ?
+      `, [since]),
+      dbGet<{ page_views: number; unique_visitors: number }>(`
+        SELECT COUNT(*) AS page_views, COUNT(DISTINCT session_id) AS unique_visitors
+        FROM analytics_events WHERE event_type = 'page_view' AND created_at >= ? AND created_at < ?
+      `, [previousSince, since]),
+      dbGet<{ orders: number; sales: number }>(`
+        SELECT COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
+        FROM orders WHERE created_at >= ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+      `, [since]),
+      dbGet<{ orders: number; sales: number }>(`
+        SELECT COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
+        FROM orders WHERE created_at >= ? AND created_at < ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+      `, [previousSince, since]),
+      dbAll<{ source: string; visits: number; visitors: number }>(`
+        SELECT COALESCE(source, 'unknown') AS source, COUNT(*) AS visits, COUNT(DISTINCT session_id) AS visitors
+        FROM analytics_events WHERE event_type = 'page_view' AND created_at >= ?
+        GROUP BY source ORDER BY visits DESC
+      `, [since]),
+      dbAll<{ shop_id: number; page_views: number; unique_visitors: number }>(`
+        SELECT shop_id, COUNT(*) AS page_views, COUNT(DISTINCT session_id) AS unique_visitors
+        FROM analytics_events WHERE event_type = 'page_view' AND shop_id IS NOT NULL AND created_at >= ?
+        GROUP BY shop_id
+      `, [since]),
+      dbAll<{ shop_id: number; orders: number; sales: number }>(`
+        SELECT shop_id, COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
+        FROM orders WHERE created_at >= ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+        GROUP BY shop_id
+      `, [since]),
+    ]);
+    const trafficByShopId = new Map(trafficByShop.map((row) => [Number(row.shop_id), row]));
+    const ordersByShopId = new Map(ordersByShop.map((row) => [Number(row.shop_id), row]));
+    const byShop = shops.map((shop) => {
+      const traffic = trafficByShopId.get(shop.id);
+      const commerce = ordersByShopId.get(shop.id);
       const pageViews = Number(traffic?.page_views || 0);
       const uniqueVisitors = Number(traffic?.unique_visitors || 0);
-      const shopOrders = orders.filter((order) => order.shop_id === shop.id
-        && order.created_at >= since
-        && order.status !== 'cancelled'
-        && order.status !== 'expired');
-      const sales = shopOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+      const shopOrders = Number(commerce?.orders || 0);
       return {
         shop_id: shop.id, shop_name: shop.name, slug: shop.slug, page_views: pageViews,
-        unique_visitors: uniqueVisitors, orders: shopOrders.length, sales,
-        conversion_rate: uniqueVisitors ? Number(((shopOrders.length / uniqueVisitors) * 100).toFixed(1)) : 0,
+        unique_visitors: uniqueVisitors, orders: shopOrders, sales: Number(commerce?.sales || 0),
+        conversion_rate: uniqueVisitors ? Number(((shopOrders / uniqueVisitors) * 100).toFixed(1)) : 0,
       };
-    }))).sort((left, right) => right.page_views - left.page_views);
-    const totalViews = byShop.reduce((sum, shop) => sum + shop.page_views, 0);
-    const totalVisitors = byShop.reduce((sum, shop) => sum + shop.unique_visitors, 0);
-    const totalOrders = byShop.reduce((sum, shop) => sum + shop.orders, 0);
+    }).sort((left, right) => right.page_views - left.page_views);
+    const dailyTrafficByDate = new Map(dailyTraffic.map((row) => [row.date, row]));
+    const dailyOrdersByDate = new Map(dailyOrders.map((row) => [row.date, row]));
+    const daily = Array.from({ length: days }, (_, index) => {
+      const date = new Date(Date.now() - (days - index - 1) * 86400000).toISOString().slice(0, 10);
+      const traffic = dailyTrafficByDate.get(date);
+      const commerce = dailyOrdersByDate.get(date);
+      return {
+        date,
+        page_views: Number(traffic?.page_views || 0),
+        unique_visitors: Number(traffic?.unique_visitors || 0),
+        orders: Number(commerce?.orders || 0),
+        sales: Number(commerce?.sales || 0),
+      };
+    });
+    const totalViews = Number(currentTraffic?.page_views || 0);
+    const totalVisitors = Number(currentTraffic?.unique_visitors || 0);
+    const totalOrders = Number(currentOrders?.orders || 0);
+    const totalSales = Number(currentOrders?.sales || 0);
+    const previousTotalViews = Number(previousTraffic?.page_views || 0);
+    const previousTotalVisitors = Number(previousTraffic?.unique_visitors || 0);
+    const previousTotalOrders = Number(previousOrders?.orders || 0);
+    const previousTotalSales = Number(previousOrders?.sales || 0);
     res.json({
-      days, since, daily, order_daily: orderDaily, by_shop: byShop,
+      days, since, previous_since: previousSince, daily,
+      order_daily: daily.map(({ date, orders: orderCount, sales }) => ({ date, orders: orderCount, sales })),
+      sources: sourceRows.map((row) => ({
+        source: row.source || 'unknown', visits: Number(row.visits || 0), visitors: Number(row.visitors || 0),
+      })), by_shop: byShop,
       totals: {
         page_views: totalViews, unique_visitors: totalVisitors, orders: totalOrders,
-        sales: byShop.reduce((sum, shop) => sum + shop.sales, 0),
+        sales: totalSales,
         conversion_rate: totalVisitors ? Number(((totalOrders / totalVisitors) * 100).toFixed(1)) : 0,
+      },
+      previous: {
+        page_views: previousTotalViews,
+        unique_visitors: previousTotalVisitors,
+        orders: previousTotalOrders,
+        sales: previousTotalSales,
+        conversion_rate: previousTotalVisitors ? Number(((previousTotalOrders / previousTotalVisitors) * 100).toFixed(1)) : 0,
       },
     });
   });
@@ -146,6 +308,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       shop_name: string;
       payment_type: 'subscription' | 'promotion';
       tier: string;
+      subscription_term: 'monthly' | 'annual';
       amount: number;
       currency: string;
       status: string;
@@ -153,7 +316,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       created_at: string;
       paid_at: string | null;
     }>(`
-      SELECT intent.id, intent.shop_id, shops.name AS shop_name, intent.payment_type, intent.tier, intent.amount,
+      SELECT intent.id, intent.shop_id, shops.name AS shop_name, intent.payment_type, intent.tier, intent.subscription_term, intent.amount,
         intent.currency, intent.status, intent.provider_reference, intent.created_at, intent.paid_at
       FROM subscription_payment_intents AS intent
       JOIN shops ON shops.id = intent.shop_id

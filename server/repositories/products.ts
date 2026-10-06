@@ -6,6 +6,7 @@ export async function loadProductsFromDatabase(): Promise<ProductRecord[]> {
   return rows.map((row) => ({
     id: Number(row.id),
     shop_id: Number(row.shop_id),
+    created_at: row.created_at == null ? null : String(row.created_at),
     title: String(row.title),
     description: row.description ? String(row.description) : null,
     price: Number(row.price),
@@ -25,8 +26,8 @@ export async function loadProductsFromDatabase(): Promise<ProductRecord[]> {
 
 export async function persistProduct(product: ProductRecord): Promise<void> {
   await dbRun(`
-    INSERT INTO products (id, shop_id, title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO products (id, shop_id, title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
     ON CONFLICT(id) DO UPDATE SET shop_id=excluded.shop_id, title=excluded.title, description=excluded.description,
       price=excluded.price, stock=excluded.stock, image_url=excluded.image_url, is_available=excluded.is_available,
       category=excluded.category, sizes=excluded.sizes, colors=excluded.colors, lookbook_image=excluded.lookbook_image, gallery_images=excluded.gallery_images, prep_time=excluded.prep_time,
@@ -36,5 +37,6 @@ export async function persistProduct(product: ProductRecord): Promise<void> {
     product.is_available ? 1 : 0, product.category ?? null, product.sizes ? JSON.stringify(product.sizes) : null, product.colors ? JSON.stringify(product.colors) : null,
     product.lookbook_image ?? null, product.gallery_images && product.gallery_images.length > 0 ? JSON.stringify(product.gallery_images) : null, product.prep_time ?? null, product.modifier_groups ? JSON.stringify(product.modifier_groups) : null,
     product.attributes && Object.keys(product.attributes).length > 0 ? JSON.stringify(product.attributes) : null,
+    product.created_at ?? null,
   ]);
 }

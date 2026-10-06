@@ -77,9 +77,6 @@ export function createOrderRouter({
     }
 
     const customerSession = await getCustomerSessionState(req, res);
-    if (!customerSession.authenticated || !customerSession.user?.id) {
-      return res.status(401).json({ error: 'Connectez-vous ou créez un compte MaTable.ci pour passer commande.' });
-    }
     if (!isShopPubliclyVisible(shop)) {
       const blockReason = getShopPublicationBlockReason(shop);
       const error = blockReason === 'verification'
@@ -89,7 +86,7 @@ export function createOrderRouter({
           : 'Cette boutique n’est pas publiée.';
       return res.status(403).json({ error });
     }
-    const customerUserId = customerSession.user.id;
+    const customerUserId = customerSession.authenticated ? customerSession.user?.id : undefined;
     const whatsappTrackingToken = crypto.randomUUID();
     const stockUpdates: { product: ProductRecord; stock: number; isAvailable: boolean }[] = [];
     try {
@@ -236,7 +233,13 @@ export function createOrderRouter({
   router.get('/auth/customer-orders', async (req, res) => {
     const customerSession = await getCustomerSessionState(req, res);
     if (!customerSession.authenticated || !customerSession.user) return res.status(401).json({ error: 'Authentification client requise.' });
-    res.json({ orders: orders.filter((order) => order.customer_user_id === customerSession.user?.id) });
+    const customerOrders = orders
+      .filter((order) => order.customer_user_id === customerSession.user?.id)
+      .map((order) => ({
+        ...order,
+        shop_name: shops.find((shop) => shop.id === order.shop_id)?.name || 'Boutique locale',
+      }));
+    res.json({ orders: customerOrders });
   });
 
   return router;

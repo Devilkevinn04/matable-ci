@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronDown, ChevronUp, Clock, Minus, Plus, ShoppingBag } from 'lucide-react';
+import { Bookmark, ChevronDown, ChevronUp, Clock, Heart, MessageSquareText, Minus, Plus, ShoppingBag } from 'lucide-react';
 import type { Product, ShopCategory } from '../types';
 import type { CategoryDefaults } from '../utils/categoryDefaults';
 import { formatFCFA } from '../utils/format';
@@ -22,6 +22,11 @@ interface CustomerProductCardProps {
   activeColor?: string;
   activeModifiers: string[];
   selectedUnitPrice: number;
+  isFavorite: boolean;
+  isLiked: boolean;
+  onToggleFavorite: () => void;
+  onToggleLike: () => void;
+  onOpenTrust: () => void;
   onToggleDescription: () => void;
   onSelectSize: (size: string) => void;
   onSelectColor: (color: string) => void;
@@ -47,6 +52,11 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   activeColor,
   activeModifiers,
   selectedUnitPrice,
+  isFavorite,
+  isLiked,
+  onToggleFavorite,
+  onToggleLike,
+  onOpenTrust,
   onToggleDescription,
   onSelectSize,
   onSelectColor,
@@ -65,10 +75,20 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
       id={`product-card-${product.id}`}
       className={`bg-[#fffdf9] border border-[#ded8ce] ${cardRadius} ${shadowClass} overflow-hidden flex flex-col transition-all hover:border-[#176b55] hover:-translate-y-0.5`}
     >
-      <div className={`relative bg-slate-100 overflow-hidden ${layoutStyle === 'grid_portrait' && hasProductPhoto ? 'aspect-3/4' : 'aspect-16/9 sm:aspect-4/3'}`}>
+      <div className={`relative bg-slate-100 overflow-hidden ${layoutStyle === 'grid_portrait' && hasProductPhoto ? 'aspect-square sm:aspect-3/4' : 'aspect-16/9 sm:aspect-4/3'}`}>
         <CategoryProductImage imageUrl={product.image_url} category={category} title={product.title} className="absolute inset-0 h-full w-full transition-transform duration-500 hover:scale-105" />
         {product.prep_time && <span className="absolute top-2.5 left-2.5 bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1"><Clock className="w-3 h-3 text-amber-400" /><span>{product.prep_time} min</span></span>}
         {outOfStock && <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[2px] flex items-center justify-center"><span className="bg-rose-600 text-white font-black text-xs px-3.5 py-1.5 rounded-full shadow-lg">Rupture de stock</span></div>}
+        <div className="absolute right-2.5 top-2.5 z-10 flex items-center gap-1.5">
+          <button type="button" onClick={onToggleFavorite} aria-pressed={isFavorite} aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'} title={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'} className={`flex h-9 items-center justify-center gap-1.5 rounded-full border border-white/70 px-2.5 shadow-sm backdrop-blur-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${isFavorite ? 'bg-[#fffdf9] text-[#0f4d3d]' : 'bg-[#fffdf9]/90 text-[#4a3a30] hover:bg-white'}`}>
+            <Bookmark className={`h-4 w-4 ${isFavorite ? 'fill-current' : ''}`} aria-hidden="true" />
+            <span className="sr-only">{isFavorite ? 'Enregistré dans vos favoris' : 'Enregistrer ce produit'}</span>
+          </button>
+          <button type="button" onClick={onToggleLike} aria-pressed={isLiked} aria-label={`${isLiked ? 'Retirer votre mention J’aime' : 'Aimer ce produit'}${product.like_count ? `, ${product.like_count} mentions J’aime` : ''}`} title="J’aime" className={`flex h-9 min-w-9 items-center justify-center gap-1 rounded-full border border-white/70 px-2.5 shadow-sm backdrop-blur-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${isLiked ? 'bg-[#fffdf9] text-[#c74445]' : 'bg-[#fffdf9]/90 text-[#4a3a30] hover:bg-white'}`}>
+            <Heart className={`h-4 w-4 ${isLiked ? 'fill-current' : ''}`} aria-hidden="true" />
+            <span className="text-xs font-bold tabular-nums">{product.like_count || 0}</span>
+          </button>
+        </div>
       </div>
 
       {product.lookbook_image && <img src={product.lookbook_image} alt={`Lookbook de ${product.title}`} loading="lazy" referrerPolicy="no-referrer" className="h-24 w-full object-cover border-b border-slate-100" onError={(event) => { event.currentTarget.style.display = 'none'; }} />}
@@ -84,6 +104,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
         </div>}
 
         {product.attributes && Object.entries(product.attributes).some(([, value]) => value.trim()) && <dl className="mb-3 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-slate-100 pt-2">{Object.entries(product.attributes).filter(([, value]) => value.trim()).map(([key, value]) => { const field = categoryDefaults.productAttributes.find((candidate) => candidate.key === key); return field ? <div key={key} className="min-w-0 text-xs"><dt className="text-[10px] font-semibold text-slate-400">{field.label}</dt><dd className="truncate font-bold text-slate-700">{value}</dd></div> : null; })}</dl>}
+        <button type="button" onClick={onOpenTrust} className="mb-3 inline-flex min-h-9 items-center gap-1.5 self-start text-[11px] font-bold text-[#176b55] hover:underline"><MessageSquareText className="h-3.5 w-3.5" />Avis vérifiés · Signaler</button>
 
         {category === 'food' && product.modifier_groups?.length ? <div className="mb-3 pt-2 border-t border-slate-100">{product.modifier_groups.map((group) => <div key={group.name}><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{group.name} {group.max_selections && group.max_selections > 1 ? `(jusqu’à ${group.max_selections})` : '(1 choix)'} :</span><div className="flex flex-wrap gap-1.5">{group.options.map((option) => { const label = typeof option === 'string' ? option : option.label; const selected = activeModifiers.includes(label); return <button key={label} type="button" onClick={() => onToggleModifier(group.name, label, Math.max(1, group.max_selections || 1))} className={`py-1 px-2.5 rounded-lg text-xs font-bold border transition-all ${selected ? 'bg-[#1D6B57] text-white border-[#154F41] shadow-[2px_2px_0_rgba(21,79,65,0.2)]' : 'bg-[#F7F3ED] text-[#211712] border-[#E4D9C8] hover:bg-[#F5EADC]'}`}>{label}</button>; })}</div></div>)}</div> : null}
 

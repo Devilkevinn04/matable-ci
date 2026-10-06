@@ -106,12 +106,14 @@ export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'del
 export interface Product {
   id: number;
   shop_id: number;
+  created_at?: string | null;
   title: string;
   description: string | null;
   price: number; // in FCFA
   stock: number;
   image_url: string;
   is_available: boolean;
+  like_count?: number;
   category?: string;
   attributes?: Record<string, string>;
   // Fashion specific

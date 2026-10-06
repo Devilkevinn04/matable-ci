@@ -3,6 +3,7 @@ import { useToast } from '../Toast';
 import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks, SubscriptionTier } from '../../types';
 import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../../utils/format';
 import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
+import { TRIAL_DURATION_DAYS } from '../../utils/subscriptionFeatures';
 import { buildProductSavePayload, createProductDraft, productToDraft } from './productForm';
 import type { ProductModifierGroupDraft } from './productForm';
 
@@ -434,7 +435,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       if (!response.ok) throw new Error(data.error || 'Impossible de démarrer l’essai.');
       setCurrentShop(data.shop);
       syncShopSettings(data.shop);
-      toast.success('Votre essai gratuit de 30 jours a commencé.');
+      toast.success(`Votre essai Standard gratuit de ${TRIAL_DURATION_DAYS} jours a commencé.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Impossible de contacter le serveur.');
     } finally {

@@ -69,15 +69,19 @@ test('KadevPay webhook signatures are checked against the exact raw body', () =>
   assert.equal(isValidKadevPaySignature(rawBody, 'invalid', secret), false);
 });
 
-test('subscription renewal adds thirty days after the later of now or current expiry', () => {
+test('subscription renewal adds a calendar month or year after the later of now or current expiry', () => {
   const now = new Date('2026-10-03T00:00:00.000Z');
   assert.equal(
     getRenewedSubscriptionExpiry('2026-10-10T00:00:00.000Z', now),
-    '2026-11-09T00:00:00.000Z',
+    '2026-11-10T00:00:00.000Z',
   );
   assert.equal(
     getRenewedSubscriptionExpiry('2026-09-01T00:00:00.000Z', now),
-    '2026-11-02T00:00:00.000Z',
+    '2026-11-03T00:00:00.000Z',
+  );
+  assert.equal(
+    getRenewedSubscriptionExpiry('2026-01-31T00:00:00.000Z', new Date('2026-01-01T00:00:00.000Z'), 'annual'),
+    '2027-01-31T00:00:00.000Z',
   );
 });
 
@@ -139,11 +143,11 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   const intentResponse = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
-    body: JSON.stringify({ tier: 'premium' }),
+    body: JSON.stringify({ tier: 'premium', term: 'annual' }),
   });
   const intent = await intentResponse.json();
   assert.equal(intentResponse.status, 201, JSON.stringify(intent));
-  assert.equal(intent.amount, 4000);
+  assert.equal(intent.amount, 50000);
   assert.equal(intent.currency, 'XOF');
   assert.equal(intent.public_key, 'kdvp_test_public_key');
   assert.equal(intent.is_test, true);
@@ -154,7 +158,7 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
     data: {
       status: 'paid',
       reference: `KDV-${Date.now()}`,
-      amount: 4000,
+      amount: 50000,
       currency: 'XOF',
       metadata: { subscription_payment_id: intent.payment_id },
     },
@@ -188,7 +192,7 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   const paidPayload = await paidStatus.json();
   assert.equal(paidPayload.status, 'paid');
   assert.equal(paidPayload.subscription.status, 'active');
-  assert.ok(Date.parse(paidPayload.subscription.expiresAt) > Date.now());
+  assert.ok(Date.parse(paidPayload.subscription.expiresAt) > Date.now() + 360 * 86400000);
 
   const failedIntentResponse = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
     method: 'POST',
@@ -202,7 +206,7 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
     data: {
       status: 'failed',
       reference: `KDV-FAILED-${Date.now()}`,
-      amount: 4000,
+      amount: 5000,
       currency: 'XOF',
       metadata: { subscription_payment_id: failedIntent.payment_id },
     },
@@ -233,15 +237,16 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   assert.equal(finance.status, 200);
   const financeData = await finance.json();
   assert.equal(financeData.summary.confirmed_count, 1);
-  assert.equal(financeData.summary.collected_amount, 4000);
+  assert.equal(financeData.summary.collected_amount, 50000);
   assert.equal(financeData.summary.pending_count, 0);
   assert.equal(financeData.summary.failed_count, 1);
   assert.ok(financeData.summary.active_subscriptions >= 1);
-  assert.ok(financeData.summary.mrr >= 4000);
-  assert.ok(financeData.summary.mrr_by_tier.find((tier: { tier: string }) => tier.tier === 'premium')?.amount >= 4000);
+  assert.ok(financeData.summary.mrr >= 5000);
+  assert.ok(financeData.summary.mrr_by_tier.find((tier: { tier: string }) => tier.tier === 'premium')?.amount >= 5000);
   assert.equal(financeData.summary.promotions.amount, 0);
   assert.equal(financeData.payments[0].shop_id, createdPayload.shop.id);
   assert.equal(financeData.payments[0].payment_type, 'subscription');
+  assert.equal(financeData.payments.find((payment: { id: string }) => payment.id === intent.payment_id)?.subscription_term, 'annual');
   assert.ok(financeData.payments.some((payment: { status: string }) => payment.status === 'failed'));
 
   const testDb = new Database(TEST_DB_PATH);
@@ -260,7 +265,7 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   const financeAfterMorePayments = await fetch(`${BASE_URL}/api/admin/payments?days=30`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
   assert.equal(financeAfterMorePayments.payments.length, 200);
   assert.equal(financeAfterMorePayments.summary.confirmed_count, 206);
-  assert.equal(financeAfterMorePayments.summary.collected_amount, 24500);
+  assert.equal(financeAfterMorePayments.summary.collected_amount, 70500);
   assert.equal(financeAfterMorePayments.summary.promotions.count, 205);
   assert.equal(financeAfterMorePayments.summary.promotions.amount, 20500);
   assert.equal(financeAfterMorePayments.summary.failed_count, 1);
@@ -293,7 +298,7 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   }
 });
 
-test('Pro merchants can read detailed analytics during an active Pro trial', async () => {
+test('merchant trial is Standard and does not grant Pro analytics', async () => {
   const created = await fetch(`${BASE_URL}/api/shops`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -325,12 +330,7 @@ test('Pro merchants can read detailed analytics during an active Pro trial', asy
   const analytics = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/analytics?days=30`, {
     headers: { Cookie: merchantCookie },
   });
-  const payload = await analytics.json();
-  assert.equal(analytics.status, 200, JSON.stringify(payload));
-  assert.equal(payload.traffic_basis, 'consented_page_views');
-  assert.equal(payload.summary.page_views, 0);
-  assert.equal(payload.summary.orders, 0);
-  assert.ok(Array.isArray(payload.daily));
+  assert.equal(analytics.status, 403);
 });
 
 test('admin can review and extend expiring trials with a durable audit entry', async () => {

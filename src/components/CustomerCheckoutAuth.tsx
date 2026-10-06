@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ArrowRight, CheckCircle2, Eye, EyeOff, Lock, Mail, ShieldCheck, Sparkles } from 'lucide-react';
 import { CustomerUser } from './CustomerAuth';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
+import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
 
 interface CustomerCheckoutAuthProps {
   onAuthenticated: (user: CustomerUser) => void;
@@ -203,10 +204,3 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
     </section>
   );
 };
-
-function normalizeCustomerPhone(value: string) {
-  const digits = value.replace(/\D/g, '');
-  if (digits.startsWith('225')) return `+${digits}`;
-  if (digits.startsWith('0')) return `+225${digits}`;
-  return `+225${digits}`;
-}

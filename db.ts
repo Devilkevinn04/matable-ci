@@ -42,7 +42,7 @@ const sqliteSchema = `
   CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
     price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT,
-    is_available INTEGER NOT NULL DEFAULT 1, sizes TEXT, colors TEXT, lookbook_image TEXT,
+    is_available INTEGER NOT NULL DEFAULT 1, sizes TEXT, colors TEXT, lookbook_image TEXT, created_at TEXT,
     gallery_images TEXT, prep_time INTEGER, modifier_groups TEXT, attributes TEXT
   );
   CREATE TABLE IF NOT EXISTS orders (
@@ -63,8 +63,15 @@ const sqliteSchema = `
   );
   CREATE TABLE IF NOT EXISTS analytics_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, event_type TEXT NOT NULL,
-    session_id TEXT NOT NULL, path TEXT, created_at TEXT NOT NULL
+    session_id TEXT NOT NULL, path TEXT, source TEXT, created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS platform_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1), maintenance_enabled INTEGER NOT NULL DEFAULT 0,
+    maintenance_message TEXT NOT NULL DEFAULT 'Le service revient bientôt. Merci de votre patience.',
+    updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT 'system'
+  );
+  INSERT OR IGNORE INTO platform_settings (id, maintenance_enabled, maintenance_message, updated_at)
+    VALUES (1, 0, 'Le service revient bientôt. Merci de votre patience.', CURRENT_TIMESTAMP);
   CREATE TABLE IF NOT EXISTS merchant_sessions (
     token TEXT PRIMARY KEY, shop_id INTEGER NOT NULL, expires_at INTEGER NOT NULL,
     fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -91,6 +98,39 @@ const sqliteSchema = `
     provider TEXT NOT NULL, provider_user_id TEXT NOT NULL, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     email TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (provider, provider_user_id)
   );
+  CREATE TABLE IF NOT EXISTS customer_favorites (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_type TEXT NOT NULL CHECK (target_type IN ('shop', 'product')),
+    target_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, target_type, target_id)
+  );
+  CREATE TABLE IF NOT EXISTS customer_product_likes (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, product_id)
+  );
+  CREATE TABLE IF NOT EXISTS customer_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    order_id INTEGER NOT NULL, shop_id INTEGER NOT NULL, target_type TEXT NOT NULL CHECK (target_type IN ('shop', 'product')),
+    target_id INTEGER NOT NULL, rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'hidden')),
+    created_at TEXT NOT NULL, reviewed_at TEXT, UNIQUE (order_id, user_id, target_type, target_id)
+  );
+  CREATE TABLE IF NOT EXISTS customer_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_type TEXT NOT NULL CHECK (target_type IN ('shop', 'product')), target_id INTEGER NOT NULL,
+    reason TEXT NOT NULL, details TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_review', 'resolved', 'dismissed')),
+    created_at TEXT NOT NULL, reviewed_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_customer_favorites_user_created ON customer_favorites(user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_customer_product_likes_product ON customer_product_likes(product_id);
+  CREATE INDEX IF NOT EXISTS idx_customer_reviews_public ON customer_reviews(target_type, target_id, status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_customer_reports_moderation ON customer_reports(status, created_at DESC);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_reports_one_open_per_target
+    ON customer_reports(user_id, target_type, target_id) WHERE status IN ('pending', 'in_review');
   CREATE TABLE IF NOT EXISTS merchant_identity_verifications (
     shop_id INTEGER PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
     document_type TEXT NOT NULL, document_number_hash TEXT NOT NULL UNIQUE,
@@ -106,6 +146,7 @@ const sqliteSchema = `
   CREATE INDEX IF NOT EXISTS idx_products_shop_available ON products(shop_id, is_available);
   CREATE INDEX IF NOT EXISTS idx_orders_shop_created_at ON orders(shop_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_analytics_events_shop_created_at ON analytics_events(shop_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_analytics_events_created_at ON analytics_events(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_merchant_sessions_shop_id ON merchant_sessions(shop_id);
   CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created ON admin_audit_logs(created_at DESC);
@@ -140,6 +181,20 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'whatsapp_subscription_reminders_enabled', 'INTEGER NOT NULL DEFAULT 0');
   addColumn('shops', 'whatsapp_subscription_reminders_consent_at', 'TEXT');
   addColumn('subscription_payment_intents', 'payment_type', "TEXT NOT NULL DEFAULT 'subscription'");
+  addColumn('subscription_payment_intents', 'subscription_term', "TEXT NOT NULL DEFAULT 'monthly'");
+  connection.exec(`CREATE TABLE IF NOT EXISTS shop_boosts (
+    id TEXT PRIMARY KEY,
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    payment_intent_id TEXT NOT NULL UNIQUE REFERENCES subscription_payment_intents(id) ON DELETE CASCADE,
+    city TEXT NOT NULL,
+    category TEXT NOT NULL,
+    starts_at TEXT NOT NULL,
+    ends_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending_payment',
+    reservation_expires_at TEXT,
+    created_at TEXT NOT NULL
+  )`);
+  connection.exec('CREATE INDEX IF NOT EXISTS idx_shop_boosts_capacity ON shop_boosts(city, category, status, starts_at, ends_at)');
   if (!hadPublicationStatus) {
     connection.exec(`UPDATE shops SET publication_status = CASE
       WHEN is_active = 0 THEN 'suspended'
@@ -150,9 +205,11 @@ function migrateSqlite(connection: Database.Database) {
   }
   addColumn('orders', 'status', "TEXT DEFAULT 'pending'");
   addColumn('orders', 'customer_user_id', 'INTEGER');
+  addColumn('analytics_events', 'source', 'TEXT');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_shop_created ON subscription_payment_intents(shop_id, created_at DESC)');
   addColumn('products', 'category', 'TEXT');
+  addColumn('products', 'created_at', 'TEXT');
   addColumn('products', 'attributes', 'TEXT');
   addColumn('products', 'gallery_images', 'TEXT');
   addColumn('users', 'phone', 'TEXT');
@@ -187,7 +244,7 @@ const postgresMigrations = [
   `CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
     price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT,
-    is_available INTEGER NOT NULL DEFAULT 1, category TEXT, sizes JSONB, colors JSONB,
+    is_available INTEGER NOT NULL DEFAULT 1, category TEXT, sizes JSONB, colors JSONB, created_at TEXT,
     lookbook_image TEXT, gallery_images JSONB, prep_time INTEGER, modifier_groups JSONB, attributes JSONB
   )`,
   `CREATE TABLE IF NOT EXISTS orders (
@@ -208,10 +265,33 @@ const postgresMigrations = [
     created_at TEXT NOT NULL, paid_at TEXT
   )`,
   "ALTER TABLE subscription_payment_intents ADD COLUMN IF NOT EXISTS payment_type TEXT NOT NULL DEFAULT 'subscription'",
+  "ALTER TABLE subscription_payment_intents ADD COLUMN IF NOT EXISTS subscription_term TEXT NOT NULL DEFAULT 'monthly'",
+  `CREATE TABLE IF NOT EXISTS shop_boosts (
+    id TEXT PRIMARY KEY,
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    payment_intent_id TEXT NOT NULL UNIQUE REFERENCES subscription_payment_intents(id) ON DELETE CASCADE,
+    city TEXT NOT NULL,
+    category TEXT NOT NULL,
+    starts_at TEXT NOT NULL,
+    ends_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending_payment',
+    reservation_expires_at TEXT,
+    created_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_shop_boosts_capacity ON shop_boosts(city, category, status, starts_at, ends_at)',
   `CREATE TABLE IF NOT EXISTS analytics_events (
     id BIGSERIAL PRIMARY KEY, shop_id INTEGER, event_type TEXT NOT NULL,
-    session_id TEXT NOT NULL, path TEXT, created_at TEXT NOT NULL
+    session_id TEXT NOT NULL, path TEXT, source TEXT, created_at TEXT NOT NULL
   )`,
+  'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS source TEXT',
+  `CREATE TABLE IF NOT EXISTS platform_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1), maintenance_enabled INTEGER NOT NULL DEFAULT 0,
+    maintenance_message TEXT NOT NULL DEFAULT 'Le service revient bientôt. Merci de votre patience.',
+    updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT 'system'
+  )`,
+  `INSERT INTO platform_settings (id, maintenance_enabled, maintenance_message, updated_at)
+    VALUES (1, 0, 'Le service revient bientôt. Merci de votre patience.', CURRENT_TIMESTAMP)
+    ON CONFLICT (id) DO NOTHING`,
   `CREATE TABLE IF NOT EXISTS merchant_sessions (
     token TEXT PRIMARY KEY, shop_id INTEGER NOT NULL, expires_at BIGINT NOT NULL,
     fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -252,6 +332,7 @@ const postgresMigrations = [
   'CREATE INDEX IF NOT EXISTS idx_products_shop_available ON products(shop_id, is_available)',
   'CREATE INDEX IF NOT EXISTS idx_orders_shop_created_at ON orders(shop_id, created_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_analytics_events_shop_created_at ON analytics_events(shop_id, created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_analytics_events_created_at ON analytics_events(created_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_merchant_sessions_shop_id ON merchant_sessions(shop_id)',
   `CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL,
@@ -267,6 +348,38 @@ const postgresMigrations = [
     provider TEXT NOT NULL, provider_user_id TEXT NOT NULL, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     email TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (provider, provider_user_id)
   )`,
+  `CREATE TABLE IF NOT EXISTS customer_favorites (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_type TEXT NOT NULL CHECK (target_type IN ('shop', 'product')),
+    target_id BIGINT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, target_type, target_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS customer_product_likes (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_id BIGINT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, product_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS customer_reviews (
+    id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    order_id BIGINT NOT NULL, shop_id BIGINT NOT NULL, target_type TEXT NOT NULL CHECK (target_type IN ('shop', 'product')),
+    target_id BIGINT NOT NULL, rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'hidden')),
+    created_at TEXT NOT NULL, reviewed_at TEXT, UNIQUE (order_id, user_id, target_type, target_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS customer_reports (
+    id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_type TEXT NOT NULL CHECK (target_type IN ('shop', 'product')), target_id BIGINT NOT NULL,
+    reason TEXT NOT NULL, details TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_review', 'resolved', 'dismissed')),
+    created_at TEXT NOT NULL, reviewed_at TEXT
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_customer_favorites_user_created ON customer_favorites(user_id, created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_customer_product_likes_product ON customer_product_likes(product_id)',
+  'CREATE INDEX IF NOT EXISTS idx_customer_reviews_public ON customer_reviews(target_type, target_id, status, created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_customer_reports_moderation ON customer_reports(status, created_at DESC)',
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_reports_one_open_per_target ON customer_reports(user_id, target_type, target_id) WHERE status IN ('pending', 'in_review')",
   'CREATE INDEX IF NOT EXISTS idx_customer_oauth_user_id ON customer_oauth_identities(user_id)',
   'ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_user_id BIGINT',
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT ''",
@@ -283,6 +396,7 @@ const postgresMigrations = [
   "ALTER TABLE shops ALTER COLUMN publication_status SET DEFAULT 'draft'",
   'ALTER TABLE shops ALTER COLUMN publication_status SET NOT NULL',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS attributes JSONB',
+  'ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TEXT',
   'CREATE TABLE IF NOT EXISTS id_allocators (name TEXT PRIMARY KEY, last_id BIGINT NOT NULL)',
   'CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)',
   'CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)',

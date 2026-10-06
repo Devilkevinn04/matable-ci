@@ -4,8 +4,9 @@ import { isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures'
 
 type ProAnalytics = {
   days: number;
-  summary: { page_views: number; unique_visitors: number; orders: number; order_value: number };
+  summary: { page_views: number; unique_visitors: number; orders: number; order_value: number; product_views: number; product_clicks: number };
   daily: { date: string; page_views: number; unique_visitors: number; orders: number; order_value: number }[];
+  top_products: { product_id: number; title: string; views: number; clicks: number }[];
 };
 
 export function ProAnalyticsPanel({ shop }: { shop: Shop }) {
@@ -41,16 +42,18 @@ export function ProAnalyticsPanel({ shop }: { shop: Shop }) {
       <section className="max-w-3xl rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
         <p className="text-xs font-bold uppercase text-emerald-800">Statistiques avancées · Pro</p>
         <h3 className="mt-1 text-lg font-extrabold text-slate-900">Suivez la visibilité de votre boutique</h3>
-        <p className="mt-2 text-sm leading-6 text-slate-600">La formule Pro rassemble les vues consenties, visiteurs, commandes et valeur des commandes sur une période de 7 à 90 jours.</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">La formule Pro rassemble les visites consenties, les vues et clics produits, les commandes et leur valeur sur une période de 7 à 90 jours.</p>
       </section>
     );
   }
 
   const summaryItems = [
-    { label: 'Vues consenties', value: analytics?.summary.page_views ?? 0 },
-    { label: 'Visiteurs uniques', value: analytics?.summary.unique_visitors ?? 0 },
+    { label: 'Visites consenties', value: analytics?.summary.page_views ?? 0 },
+    { label: 'Sessions uniques', value: analytics?.summary.unique_visitors ?? 0 },
     { label: 'Commandes actionnables', value: analytics?.summary.orders ?? 0 },
     { label: 'Valeur des commandes', value: `${new Intl.NumberFormat('fr-FR').format(analytics?.summary.order_value ?? 0)} FCFA` },
+    { label: 'Vues produits consenties', value: analytics?.summary.product_views ?? 0 },
+    { label: 'Clics produits', value: analytics?.summary.product_clicks ?? 0 },
   ];
 
   return (
@@ -59,7 +62,7 @@ export function ProAnalyticsPanel({ shop }: { shop: Shop }) {
         <div>
           <p className="text-xs font-bold uppercase text-emerald-800">Formule Pro</p>
           <h3 id="merchant-pro-analytics-title" className="mt-1 text-lg font-extrabold text-slate-900">Statistiques de la boutique</h3>
-          <p className="mt-1 text-xs text-slate-500">Les vues ne comptent que lorsque le visiteur a accepté les statistiques.</p>
+          <p className="mt-1 text-xs text-slate-500">Une visite n’est comptée que si le navigateur a accepté les statistiques.</p>
         </div>
         <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
           Période
@@ -80,10 +83,20 @@ export function ProAnalyticsPanel({ shop }: { shop: Shop }) {
 
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full min-w-[620px] border-collapse text-left text-xs">
-          <thead className="bg-slate-50 text-slate-600"><tr><th className="px-3 py-2.5 font-bold">Jour</th><th className="px-3 py-2.5 font-bold">Vues</th><th className="px-3 py-2.5 font-bold">Visiteurs</th><th className="px-3 py-2.5 font-bold">Commandes</th><th className="px-3 py-2.5 text-right font-bold">Valeur des commandes</th></tr></thead>
+          <thead className="bg-slate-50 text-slate-600"><tr><th className="px-3 py-2.5 font-bold">Jour</th><th className="px-3 py-2.5 font-bold">Visites</th><th className="px-3 py-2.5 font-bold">Sessions</th><th className="px-3 py-2.5 font-bold">Commandes</th><th className="px-3 py-2.5 text-right font-bold">Valeur des commandes</th></tr></thead>
           <tbody className="divide-y divide-slate-100">
             {!analytics?.daily.length && <tr><td colSpan={5} className="px-3 py-6 text-center text-slate-500">{loading ? 'Chargement…' : 'Aucune activité mesurée sur cette période.'}</td></tr>}
             {analytics?.daily.map((day) => <tr key={day.date}><td className="px-3 py-2.5 font-semibold text-slate-800">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${day.date}T00:00:00`))}</td><td className="px-3 py-2.5 tabular-nums">{new Intl.NumberFormat('fr-FR').format(day.page_views)}</td><td className="px-3 py-2.5 tabular-nums">{new Intl.NumberFormat('fr-FR').format(day.unique_visitors)}</td><td className="px-3 py-2.5 tabular-nums">{new Intl.NumberFormat('fr-FR').format(day.orders)}</td><td className="px-3 py-2.5 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(day.order_value)} FCFA</td></tr>)}
+          </tbody>
+        </table>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 px-3 py-2.5 text-sm font-bold text-slate-800">Produits les plus vus</div>
+        <table className="w-full min-w-[480px] border-collapse text-left text-xs">
+          <thead className="bg-slate-50 text-slate-600"><tr><th className="px-3 py-2.5 font-bold">Produit</th><th className="px-3 py-2.5 text-right font-bold">Vues consenties</th><th className="px-3 py-2.5 text-right font-bold">Clics</th></tr></thead>
+          <tbody className="divide-y divide-slate-100">
+            {!analytics?.top_products.length && <tr><td colSpan={3} className="px-3 py-6 text-center text-slate-500">{loading ? 'Chargement…' : 'Aucune vue produit consentie sur cette période.'}</td></tr>}
+            {analytics?.top_products.map((product) => <tr key={product.product_id}><td className="px-3 py-2.5 font-semibold text-slate-800">{product.title}</td><td className="px-3 py-2.5 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(product.views)}</td><td className="px-3 py-2.5 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(product.clicks)}</td></tr>)}
           </tbody>
         </table>
       </div>

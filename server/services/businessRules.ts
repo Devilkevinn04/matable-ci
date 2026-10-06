@@ -1,5 +1,12 @@
 import type { OrderRecord, ProductRecord, ShopRecord, SubscriptionPlanConfig, SubscriptionState, SubscriptionStatus, SubscriptionTier } from '../types.ts';
-import { getSubscriptionAccessCutoff, isSubscriptionFeatureIncluded, SUBSCRIPTION_PLANS, type SubscriptionFeature } from '../../src/utils/subscriptionFeatures.ts';
+import {
+  getSubscriptionAccessCutoff,
+  getSubscriptionGraceCutoff,
+  isSubscriptionFeatureIncluded,
+  SUBSCRIPTION_PLANS,
+  type SubscriptionFeature,
+} from '../../src/utils/subscriptionFeatures.ts';
+export { escapeHtml } from '../../src/utils/escapeHtml.ts';
 
 export function computeIsShopOpen(shop: ShopRecord): boolean {
   if (shop.opening_hours && shop.opening_hours.enabled && !shop.opening_hours.manual_override) {
@@ -30,8 +37,23 @@ export function getShopPublicationBlockReason(
   const verificationStatus = shop.merchant_verification_status || 'not_required';
   if (verificationStatus !== 'verified' && verificationStatus !== 'not_required') return 'verification';
   const subscription = getSubscriptionState(shop, currentDate);
+  if (subscription.status === 'expired' && isShopInSubscriptionGracePeriod(shop, currentDate)) return null;
   if (subscription.status !== 'trialing' && subscription.status !== 'active') return 'subscription';
   return null;
+}
+
+export function isShopInSubscriptionGracePeriod(
+  shop: Pick<ShopRecord, 'trial_end' | 'subscription_expires_at'>,
+  currentDate = new Date(),
+): boolean {
+  const expiration = shop.subscription_expires_at || shop.trial_end;
+  if (!expiration) return false;
+  const accessCutoff = getSubscriptionAccessCutoff(expiration);
+  const graceCutoff = getSubscriptionGraceCutoff(expiration);
+  return accessCutoff !== null
+    && graceCutoff !== null
+    && currentDate.getTime() >= accessCutoff
+    && currentDate.getTime() < graceCutoff;
 }
 
 export function canPublishShop(shop: ShopRecord, currentDate = new Date()): boolean {
@@ -162,13 +184,16 @@ export function getSubscriptionState(
   const trialDaysRemaining = Number.isFinite(trialCutoff) && trialCutoff > currentDate.getTime()
     ? Math.max(1, rawTrialDaysRemaining)
     : 0;
-  const configuredStatus = shop.subscription_status || (trialDaysRemaining > 0 ? 'trialing' : 'active');
+  const rawConfiguredStatus = shop.subscription_status || (trialDaysRemaining > 0 ? 'trialing' : 'active');
+  const configuredStatus: SubscriptionStatus = ['not_started', 'trialing', 'active', 'past_due', 'cancelled', 'expired', 'suspended'].includes(rawConfiguredStatus)
+    ? (rawConfiguredStatus as SubscriptionStatus)
+    : (trialDaysRemaining > 0 ? 'trialing' : 'active');
   const status: SubscriptionStatus = (configuredStatus === 'trialing' && trialEnd && trialCutoff <= currentDate.getTime())
     || (configuredStatus === 'active' && Number.isFinite(expiresAtCutoff) && expiresAtCutoff <= currentDate.getTime())
     ? 'expired'
     : configuredStatus;
   return {
-    plan: normalizeSubscriptionTier(shop.selected_subscription_tier),
+    plan: status === 'trialing' ? 'standard' : normalizeSubscriptionTier(shop.selected_subscription_tier),
     status,
     trialStart,
     trialEnd,
@@ -238,13 +263,4 @@ export function summarizeOrderMetrics<T extends Pick<OrderRecord, 'shop_id' | 't
     ca_delivered: caDelivered,
     panier_moyen_livre: delivered > 0 ? Math.round(caDelivered / delivered) : 0,
   };
-}
-
-export function escapeHtml(value: string | null | undefined): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }

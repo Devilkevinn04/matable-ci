@@ -22,10 +22,11 @@ import {
   deleteMerchantSessionRecord,
   summarizeOrderMetrics,
 } from '../server.ts';
+import { TRIAL_DURATION_DAYS } from '../src/utils/subscriptionFeatures.ts';
 
 test('calculates the merchant trial state on the server', () => {
   const now = new Date('2026-09-28T12:00:00.000Z');
-  const trialEnd = '2026-10-28T12:00:00.000Z';
+  const trialEnd = '2026-10-05T12:00:00.000Z';
   const state = getSubscriptionState({
     subscription_status: 'trialing',
     trial_start: '2026-09-28T12:00:00.000Z',
@@ -33,9 +34,9 @@ test('calculates the merchant trial state on the server', () => {
   }, now);
 
   assert.equal(state.status, 'trialing');
-  assert.equal(state.trialDaysRemaining, 30);
+  assert.equal(state.trialDaysRemaining, TRIAL_DURATION_DAYS);
   assert.equal(state.isActive, true);
-  const expiredState = getSubscriptionState({ ...state, subscription_status: 'trialing', trial_end: trialEnd }, new Date('2026-10-29T12:00:00.000Z'));
+  const expiredState = getSubscriptionState({ ...state, subscription_status: 'trialing', trial_end: trialEnd }, new Date('2026-10-06T12:00:00.000Z'));
   assert.equal(expiredState.trialDaysRemaining, 0);
   assert.equal(expiredState.status, 'expired');
   assert.equal(expiredState.isActive, false);
@@ -255,8 +256,8 @@ test('exposes the documented monthly subscription plan catalog', () => {
     label: 'Standard',
     description: 'Les essentiels pour présenter vos produits et recevoir des demandes.',
   });
-  assert.equal(getSubscriptionPlanConfig('premium').amount, 4000);
-  assert.equal(getSubscriptionPlanConfig('pro').amount, 5000);
+  assert.equal(getSubscriptionPlanConfig('premium').amount, 5000);
+  assert.equal(getSubscriptionPlanConfig('pro').amount, 8000);
 });
 
 test('normalizes unknown subscription tiers to standard', () => {

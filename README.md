@@ -1,5 +1,10 @@
 # MaTable.ci
 
+Le backend Express existant reste la source de vérité métier. La fondation de
+passerelle multiservice est documentée dans
+[docs/MULTISERVICE_MIGRATION.md](./docs/MULTISERVICE_MIGRATION.md) ; elle ne
+déplace aucune route métier pour l’instant.
+
 Application React + Vite + Express pour la gestion de vitrines locales, de commandes WhatsApp et de tableaux de bord MaTable.ci.
 
 ## État actuel
@@ -7,12 +12,12 @@ Application React + Vite + Express pour la gestion de vitrines locales, de comma
 - Les commandes utilisent le click-to-chat WhatsApp (`wa.me`). Les paiements intégrés et les notifications automatiques ne font pas partie de la V1.
 - Une commande client est enregistrée localement, puis le client ouvre manuellement un reçu prérempli vers le WhatsApp du vendeur.
 - Le prix d’une commande est recalculé côté serveur à partir du catalogue et des options sélectionnées.
-- La publication (`publication_status`) est distincte de l’ouverture (`is_open`). Une boutique n’est publique que si elle est publiée, éligible KYC et couverte par un essai ou un abonnement actif ; `is_open` contrôle uniquement la prise de commandes.
+- La publication (`publication_status`) est distincte de l’ouverture (`is_open`). Une boutique n’est publique que si elle est publiée, éligible KYC et couverte par un essai ou un abonnement actif. Après l’échéance, elle reste visible pendant le délai de grâce de deux jours ; `is_open` contrôle uniquement la prise de commandes.
 - Le stockage local et les tests utilisent SQLite (`better-sqlite3`). En production (`NODE_ENV=production`), le serveur utilise PostgreSQL via `DATABASE_URL` (Neon recommandé). Les écritures de commandes et de stock sont transactionnelles.
 - Les sessions marchand et super-admin sont sécurisées via cookies `HttpOnly` et contrôles de sécurité sur les tentatives.
 - La gestion de stock est protégée contre les oversells concurrentiels.
-- Les nouvelles boutiques démarrent en `not_started`. Le propriétaire choisit Standard (3 000), Premium (4 000) ou Pro (5 000 FCFA/mois), puis déclenche son essai gratuit de 30 jours ; aucun paiement n’est demandé à ce stade.
-- Pendant l’essai, l’identité est vérifiée avant l’accès au dashboard. Le catalogue d’essai est limité à 6 articles. Une boutique vérifiée doit ensuite être publiée explicitement ; son ouverture commerciale reste contrôlée séparément.
+- Les nouvelles boutiques démarrent en `not_started`. Elles peuvent commencer un essai Standard de 7 jours (2 produits maximum), ou payer directement Standard (3 000), Premium (5 000) ou Pro (8 000 FCFA/mois).
+- Pendant l’essai, l’identité est vérifiée avant l’accès au dashboard. Une boutique vérifiée doit ensuite être publiée explicitement ; son ouverture commerciale reste contrôlée séparément.
 
 ## Démarrage local
 
@@ -56,6 +61,8 @@ KADEVPAY_WEBHOOK_SECRET=""
 
 En production, `NODE_ENV=production` sélectionne PostgreSQL et `DATABASE_URL`; le fichier SQLite n’est alors pas ouvert. Au premier démarrage, le serveur crée les tables de base si nécessaire, puis applique de façon idempotente les évolutions de schéma. Le runner versionné peut aussi être exécuté explicitement après la création du schéma de base avec `npm run migrate:neon`. Les migrations sont additives : elles ne copient ni ne réécrivent les données métier existantes.
 
+Le workflow GitHub Actions « PostgreSQL integration » exécute le lint, les tests et un test de migrations/adaptateur sur un PostgreSQL temporaire. Pour valider un environnement Neon séparément, exécutez `DATABASE_URL=<URL-de-la-base-de-test> npm run test:postgres`; n’utilisez jamais l’URL de production pour ce test.
+
 
 Exemple de configuration :
 
@@ -76,13 +83,13 @@ Créer le projet Neon puis configurer `DATABASE_URL` dans Render. Le service Ren
 
 ### Renouvellements KadevPay
 
-KadevPay sert uniquement au renouvellement mensuel des abonnements marchands après l’essai gratuit. Les commandes des clients restent payées directement aux boutiques. Configurer `KADEVPAY_PUBLIC_KEY` et le secret HMAC `KADEVPAY_WEBHOOK_SECRET` dans Render, puis déclarer l’endpoint `https://<domaine-public>/api/webhooks/kadevpay` dans le tableau de bord KadevPay. Le serveur n’active l’abonnement qu’après un webhook signé correspondant à l’intention et au montant attendus. Commencer avec les clés de test; les paiements réels nécessitent un compte KadevPay vérifié et un compte de versement configuré.
+KadevPay encaisse les abonnements mensuels ou annuels des commerçants ainsi que les boosts. L’annuel facture 10 mensualités pour 12 mois de service. Les commandes des clients restent payées directement aux boutiques. Configurer `KADEVPAY_PUBLIC_KEY` et le secret HMAC `KADEVPAY_WEBHOOK_SECRET` dans Render, puis déclarer l’endpoint `https://<domaine-public>/api/webhooks/kadevpay` dans le tableau de bord KadevPay. Le serveur n’active l’abonnement ou le boost qu’après un webhook signé correspondant à l’intention et au montant attendus. Commencer avec les clés de test; les paiements réels nécessitent un compte KadevPay vérifié et un compte de versement configuré.
 
 Les échéances restent actives jusqu’à la fin de leur date civile en Côte d’Ivoire; l’écran de renouvellement apparaît le lendemain. Le serveur vérifie les statuts toutes les 15 minutes et envoie un rappel WhatsApp Business à 48 heures de l’échéance uniquement aux commerçants ayant activé l’opt-in dans « Mon forfait ». Changer le numéro WhatsApp révoque cet accord. Pour l’envoi automatique, configurer dans Render `WHATSAPP_CLOUD_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_SUBSCRIPTION_REMINDER_TEMPLATE` et `WHATSAPP_GRAPH_API_VERSION`. Le modèle Meta doit être approuvé comme modèle utilitaire et contenir deux paramètres de corps : le nom de la boutique et sa date d’échéance. Le code ne déclenche aucun prélèvement automatique : le commerçant doit toujours ouvrir le checkout KadevPay et confirmer le paiement.
 
 ## Règles métier
 
-L’essai marchand reste gratuit pendant 30 jours. Standard, Premium et Pro ont des tarifs mensuels; les renouvellements peuvent être encaissés par KadevPay après configuration des clés et du webhook signé. Les commandes des clients restent réglées directement avec les commerçants.
+L’essai marchand Standard reste gratuit pendant 7 jours et permet deux produits. Les tarifs mensuels sont Standard 3 000 FCFA, Premium 5 000 FCFA et Pro 8 000 FCFA; l’annuel coûte 10 mensualités pour 12 mois de service. Le délai de grâce avant masquage est de deux jours. Un boost de 7, 15 ou 30 jours coûte respectivement 2 000, 2 800 ou 3 000 FCFA; Pro donne 15 % de remise. Une boutique doit être vérifiée, ouverte et présenter au moins cinq produits. Cinq boosts peuvent être actifs simultanément par ville et catégorie; les réservations payées débutent au premier créneau disponible. Les boosts courent pendant leur durée prévue même si la vitrine est masquée. Après activation, les paiements ne sont pas remboursables, sauf impossibilité de MaTable.ci d’activer le service payé, auquel cas le commerçant peut demander un remboursement à l’assistance.
 
 Les valeurs initiales de catégorie (message, présentation, exemples de produits, palette et illustrations) sont centralisées dans `src/utils/categoryDefaults.ts`. Les illustrations produit sont des placeholders d’affichage : `image_url` reste vide tant qu’aucune photo réelle n’est fournie. Les anciennes valeurs génériques connues sont remplacées à l’affichage, sans migration automatique des boutiques ou produits existants.
 
@@ -98,6 +105,8 @@ Les jetons OIDC sont vérifiés côté serveur avec issuer, audience, nonce, PKC
 
 ## Sécurité et vérifications
 
+- `npm run archive:release` crée un ZIP des fichiers suivis ou non ignorés du dépôt. Il exclut les fichiers `.env` (sauf les modèles), les bases et journaux SQLite dans `data/`, ainsi que `node_modules`, `dist`, `build` et les archives précédentes. Contrôlez toujours la liste avant envoi avec `npm run archive:release -- --dry-run`.
+- Si une archive contenant une clé ou une base de données a déjà été partagée, considérez ces secrets et données comme compromis : renouvelez les clés concernées via les paramètres de déploiement et n’envoyez plus cette archive.
 - Les routes marchand exigent une session `HttpOnly`, son empreinte de requête et une boutique active.
 - Les routes admin exigent une session admin séparée.
 - Express ne fait confiance aux en-têtes proxy que si `TRUST_PROXY_HOPS` est explicitement configuré pour l’infrastructure réelle.
@@ -151,3 +160,10 @@ Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votr
 npm run build
 npm start
 ```
+# Fondement multiservice (phase passerelle)
+
+Le serveur actuel reste la source de vérité métier. Une passerelle HTTP
+optionnelle et un environnement Compose local permettent de la conserver
+derrière un point d’entrée stable, sans déplacer prématurément les domaines.
+Consultez [la stratégie de migration multiservice](./docs/MULTISERVICE_MIGRATION.md)
+pour le démarrage local, les contrats actuels et les garde-fous de migration.

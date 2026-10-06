@@ -5,12 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
+    "dev:gateway": "node services/api-gateway/src/server.mjs",
     "build": "vite build && mkdir -p build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=build/server.cjs",
     "start": "node build/server.cjs",
     "clean": "rm -rf dist build server.js",
+    "archive:release": "python3 scripts/create-release-archive.py",
+    "test:postgres": "node scripts/run-postgres-tests.mjs",
     "lint": "tsc --noEmit",
     "migrate:neon": "node --import dotenv/config --import tsx scripts/migrate-neon.ts",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "test": "node --import tsx --test tests/*.test.ts services/api-gateway/test/*.test.mjs",
+    "test:gateway": "node --test services/api-gateway/test/*.test.mjs",
+    "lint:gateway": "node --check services/api-gateway/src/server.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",

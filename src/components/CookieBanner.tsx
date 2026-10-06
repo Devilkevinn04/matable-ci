@@ -66,13 +66,12 @@ export const CookieBanner: React.FC = () => {
       <div className="cookie-banner-copy">
         <ShieldCheck className="h-5 w-5 shrink-0 text-[#176b55]" aria-hidden="true" />
         <p>
-          MaTable.ci utilise des cookies essentiels au bon fonctionnement du site. Les cookies d’analyse anonymisée sont optionnels.
-          Aucun cookie de paiement n’est utilisé. <a href="/cookies">Gérer mes cookies</a>
+          Les cookies essentiels sont toujours actifs. Acceptez-vous l’analyse d’audience facultative ?
+          <a href="/cookies"> Personnaliser</a>
         </p>
       </div>
       <div className="cookie-banner-actions">
         <button type="button" onClick={() => choose(false)} className="cookie-button cookie-button-secondary">Refuser tout</button>
-        <button type="button" onClick={() => window.location.assign('/cookies')} className="cookie-button cookie-button-secondary">Personnaliser</button>
         <button type="button" onClick={() => choose(true)} className="cookie-button cookie-button-primary">Accepter tout</button>
       </div>
     </aside>

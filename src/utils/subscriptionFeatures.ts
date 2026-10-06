@@ -1,5 +1,11 @@
 export type SubscriptionTier = 'standard' | 'premium' | 'pro';
-export type SubscriptionFeature = 'custom_branding' | 'event_mode' | 'social_links' | 'advanced_analytics';
+export type SubscriptionFeature = 'custom_branding' | 'event_mode' | 'social_links' | 'advanced_analytics' | 'boost_discount';
+export type SubscriptionTerm = 'monthly' | 'annual';
+
+export const TRIAL_DURATION_DAYS = 7;
+export const TRIAL_CATALOG_LIMIT = 2;
+export const SUBSCRIPTION_EXPIRY_GRACE_DAYS = 2;
+export const PRO_BOOST_DISCOUNT_PERCENT = 15;
 
 export const SUBSCRIPTION_PLANS = {
   standard: {
@@ -11,33 +17,32 @@ export const SUBSCRIPTION_PLANS = {
     benefits: [
       'Vitrine publique et catalogue avec photos, prix et stock',
       'Commandes directes sur WhatsApp',
-      'Horaires et zones de livraison',
       'Présence dans l’annuaire MaTable.ci',
     ],
   },
   premium: {
     tier: 'premium',
     label: 'Premium',
-    price: 4000,
+    price: 5000,
     headline: 'Faites-vous remarquer',
-    description: 'Une vitrine de marque et une meilleure place dans l’annuaire.',
+    description: 'Personnalisez votre vitrine et mettez en valeur votre marque.',
     benefits: [
       'Tout Standard',
       'Couleurs, polices, logo et bannière personnalisés',
       'Réseaux sociaux et bandeau événementiel',
-      'Visibilité renforcée après activation de l’abonnement',
     ],
   },
   pro: {
     tier: 'pro',
     label: 'Pro',
-    price: 5000,
+    price: 8000,
     headline: 'Pilotez votre croissance',
     description: 'Visibilité maximale et statistiques détaillées de la vitrine.',
     benefits: [
       'Tout Premium',
-      'Priorité maximale dans l’annuaire après activation',
-      'Vues consenties, visiteurs, commandes et ventes sur 90 jours',
+      'Statistiques détaillées sur 90 jours',
+      'Meilleure visibilité naturelle dans l’annuaire',
+      `Réduction de ${PRO_BOOST_DISCOUNT_PERCENT}% sur les boosts payants`,
     ],
   },
 } as const;
@@ -53,7 +58,17 @@ const featureMinimumTier: Record<SubscriptionFeature, SubscriptionTier> = {
   event_mode: 'premium',
   social_links: 'premium',
   advanced_analytics: 'pro',
+  boost_discount: 'pro',
 };
+
+export function getSubscriptionPrice(tier: SubscriptionTier, term: SubscriptionTerm = 'monthly'): number {
+  const monthlyPrice = SUBSCRIPTION_PLANS[tier].price;
+  return term === 'annual' ? monthlyPrice * 10 : monthlyPrice;
+}
+
+export function getSubscriptionDailyPrice(tier: SubscriptionTier): number {
+  return Math.ceil(SUBSCRIPTION_PLANS[tier].price / 30);
+}
 
 export function getSubscriptionAccessCutoff(value: string | Date): number | null {
   const date = value instanceof Date ? value : new Date(value);
@@ -66,6 +81,13 @@ export function getSubscriptionAccessCutoff(value: string | Date): number | null
   }).format(date);
   const dayStart = Date.parse(`${businessDate}T00:00:00.000Z`);
   return Number.isFinite(dayStart) ? dayStart + 86400000 : null;
+}
+
+export function getSubscriptionGraceCutoff(value: string | Date): number | null {
+  const accessCutoff = getSubscriptionAccessCutoff(value);
+  return accessCutoff === null
+    ? null
+    : accessCutoff + SUBSCRIPTION_EXPIRY_GRACE_DAYS * 86400000;
 }
 
 export function isSubscriptionFeatureIncluded(

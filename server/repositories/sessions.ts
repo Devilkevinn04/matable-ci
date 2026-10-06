@@ -68,6 +68,24 @@ export async function deleteCustomerSessionRecord(token: string) {
   await dbRun('DELETE FROM user_sessions WHERE token = ?', [hashSessionToken(token)]);
 }
 
+export async function listCustomerSessionRecords(userId: number, currentToken: string) {
+  const currentTokenHash = hashSessionToken(currentToken);
+  const records = await dbAll<{ token: string; created_at: string; expires_at: number }>(
+    'SELECT token, created_at, expires_at FROM user_sessions WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC',
+    [userId, Date.now()],
+  );
+  return records.map((record) => ({
+    id: record.token,
+    created_at: record.created_at,
+    expires_at: Number(record.expires_at),
+    is_current: record.token === currentTokenHash,
+  }));
+}
+
+export async function revokeOtherCustomerSessionRecords(userId: number, currentToken: string) {
+  return dbRun('DELETE FROM user_sessions WHERE user_id = ? AND token <> ?', [userId, hashSessionToken(currentToken)]);
+}
+
 export async function migrateExistingSessionTokens() {
   const tables = ['merchant_sessions', 'admin_sessions', 'user_sessions'] as const;
   for (const table of tables) {

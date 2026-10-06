@@ -44,7 +44,7 @@ import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../.
 import { ThemeCustomizer } from '../ThemeCustomizer';
 import { useToast } from '../Toast';
 import { CATEGORY_DEFAULTS, getCategoryDefaults, SHOP_CATEGORIES } from '../../utils/categoryDefaults';
-import { getSubscriptionAccessCutoff } from '../../utils/subscriptionFeatures';
+import { getSubscriptionAccessCutoff, TRIAL_CATALOG_LIMIT } from '../../utils/subscriptionFeatures';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 
 interface MerchantDashboardProps {
@@ -72,7 +72,7 @@ import { CatalogTab } from './CatalogTab';
 import { OrdersTab } from './OrdersTab';
 import { SettingsTab } from './SettingsTab';
 import { ProductModal } from './ProductModal';
-import { MerchantIdentityVerification } from './MerchantIdentityVerification';
+import { MerchantIdentityVerification } from './lazyMerchantIdentityVerification';
 import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
 
 export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStorefront, onBackToDirectory, openRegistration = false }) => {
@@ -311,10 +311,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             <button type="button" onClick={handleLogout} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Déconnexion</button>
           </div>
           <p className="mb-4 text-sm font-bold text-slate-600">Essai gratuit · {merchantState.currentShop.subscription?.trialDaysRemaining ?? 0} jours restants</p>
-          <MerchantIdentityVerification
-            shopId={merchantState.currentShop.id}
-            onStatusChange={(status) => setCurrentShop((shop) => shop ? { ...shop, merchant_verification_status: status.status as Shop['merchant_verification_status'] } : null)}
-          />
+          <React.Suspense fallback={<p role="status" className="text-sm text-slate-600">Chargement de la vérification…</p>}>
+            <MerchantIdentityVerification
+              shopId={merchantState.currentShop.id}
+              onStatusChange={(status) => setCurrentShop((shop) => shop ? { ...shop, merchant_verification_status: status.status as Shop['merchant_verification_status'] } : null)}
+            />
+          </React.Suspense>
         </div>
       </main>
     );
@@ -332,6 +334,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     ? currentShop.publication_status === 'active'
     : currentShop.is_active && isShopVerified);
   const isShopLaunchReady = isShopPublished;
+  const productChecklistTarget = currentShop.subscription?.status === 'trialing' ? TRIAL_CATALOG_LIMIT : 3;
 
   // Filter products for catalog tab
   const filteredProducts = products.filter(p => {
@@ -521,7 +524,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               </div>
               <div className="flex items-center gap-3 self-start sm:self-auto">
                 <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
-                  {[Boolean(currentShop.name), Boolean(currentShop.theme_config?.logo_url), products.length > 0, products.length >= 3, isShopLaunchReady, isShopPublished].filter(Boolean).length}/6 étapes
+                  {[Boolean(currentShop.name), Boolean(currentShop.theme_config?.logo_url), products.length > 0, products.length >= productChecklistTarget, isShopLaunchReady, isShopPublished].filter(Boolean).length}/6 étapes
                 </span>
                 <span className="text-xs font-bold text-slate-600 group-open:hidden">Voir les étapes</span>
                 <span className="hidden text-xs font-bold text-slate-600 group-open:inline">Masquer</span>
@@ -533,7 +536,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 { label: 'Ajouter le nom de ma boutique', done: Boolean(currentShop.name), action: () => { setActiveTab('settings'); setSettingsSubTab('general'); } },
                 { label: 'Ajouter une photo ou un logo', done: Boolean(currentShop.theme_config?.logo_url), action: () => { setActiveTab('settings'); setSettingsSubTab('themes'); } },
                 { label: 'Ajouter mon premier produit', done: products.length > 0, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
-                { label: 'Ajouter au moins 3 produits', done: products.length >= 3, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
+                { label: `Ajouter au moins ${productChecklistTarget} produits`, done: products.length >= productChecklistTarget, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
                 {
                   label: !isShopVerified
                     ? 'Vérifier mon identité'
@@ -592,13 +595,13 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 { label: 'Commandes', value: orders.length },
-                { label: 'Articles au catalogue', value: `${products.length}${currentShop.subscription?.status === 'trialing' ? '/6' : ''}` },
+                { label: 'Articles au catalogue', value: `${products.length}${currentShop.subscription?.status === 'trialing' ? `/${TRIAL_CATALOG_LIMIT}` : ''}` },
                 { label: 'Essai restant', value: currentShop.subscription?.status === 'trialing' ? `${currentShop.subscription.trialDaysRemaining} jours` : '—' },
                 { label: 'Ouverture commerciale', value: currentShop.is_open ? 'Ouverte' : 'Fermée' },
               ].map((metric) => <div key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{metric.label}</p><strong className="mt-2 block text-xl font-black text-slate-900">{metric.value}</strong></div>)}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => { setActiveTab('catalog'); if (!(currentShop.subscription?.status === 'trialing' && products.length >= 6)) handleOpenAddModal(); }} disabled={currentShop.subscription?.status === 'trialing' && products.length >= 6} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />Ajouter un article</button>
+              <button type="button" onClick={() => { setActiveTab('catalog'); if (!(currentShop.subscription?.status === 'trialing' && products.length >= TRIAL_CATALOG_LIMIT)) handleOpenAddModal(); }} disabled={currentShop.subscription?.status === 'trialing' && products.length >= TRIAL_CATALOG_LIMIT} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />Ajouter un article</button>
               <button type="button" onClick={() => setActiveTab('orders')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><ShoppingBag className="h-4 w-4" />Consulter les commandes</button>
             </div>
           </section>

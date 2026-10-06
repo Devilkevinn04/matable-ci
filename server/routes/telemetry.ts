@@ -1,4 +1,5 @@
 import { Router, type RequestHandler } from 'express';
+import { isShopPubliclyVisible } from '../services/businessRules.ts';
 import type { ShopRecord } from '../types.ts';
 
 interface TelemetryRouterOptions {
@@ -6,6 +7,25 @@ interface TelemetryRouterOptions {
   rateLimitPublicRequest: (limit?: number) => RequestHandler;
   dbGet: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T | undefined>;
   dbRun: (sql: string, params?: unknown[]) => Promise<{ changes: number; lastInsertRowid?: number }>;
+}
+
+export type AnalyticsSource = 'direct' | 'search' | 'social' | 'referral' | 'internal';
+
+export function classifyAnalyticsSource(referrer: string, siteHost: string): AnalyticsSource {
+  if (!referrer) return 'direct';
+  try {
+    const referrerUrl = referrer.includes('://') ? referrer : `https://${referrer}`;
+    const hostname = new URL(referrerUrl).hostname.toLowerCase().replace(/^www\./, '');
+    const currentHost = siteHost.toLowerCase().split(':')[0].replace(/^www\./, '');
+    const matchesDomain = (domain: string) => hostname === domain || hostname.endsWith(`.${domain}`);
+    if (hostname === currentHost) return 'internal';
+    if (/^google\.[a-z]{2,3}(?:\.[a-z]{2})?$/.test(hostname)
+      || ['bing.com', 'search.yahoo.com', 'duckduckgo.com', 'ecosia.org'].some(matchesDomain)) return 'search';
+    if (['facebook.com', 'instagram.com', 'tiktok.com', 'wa.me', 'whatsapp.com', 'youtube.com', 'youtu.be', 'x.com', 't.co', 'linkedin.com'].some(matchesDomain)) return 'social';
+    return 'referral';
+  } catch {
+    return 'direct';
+  }
 }
 
 export function createTelemetryRouter({ shops, rateLimitPublicRequest, dbGet, dbRun }: TelemetryRouterOptions) {
@@ -25,6 +45,8 @@ export function createTelemetryRouter({ shops, rateLimitPublicRequest, dbGet, db
       return res.status(404).json({ error: 'Boutique introuvable.' });
     }
     const today = new Date().toISOString().slice(0, 10);
+    const referrer = typeof req.body?.referrer_host === 'string' ? req.body.referrer_host : String(req.get('referer') || '');
+    const source = classifyAnalyticsSource(referrer, String(req.get('host') || ''));
     const shopCondition = shopId === null ? 'shop_id IS NULL' : 'shop_id = ?';
     const analyticsParams = shopId === null ? [sessionId, `${today}%`] : [shopId, sessionId, `${today}%`];
     const alreadyTracked = await dbGet(`
@@ -33,14 +55,50 @@ export function createTelemetryRouter({ shops, rateLimitPublicRequest, dbGet, db
       LIMIT 1
     `, analyticsParams);
     if (!alreadyTracked) {
-      await dbRun('INSERT INTO analytics_events (shop_id, event_type, session_id, path, created_at) VALUES (?, ?, ?, ?, ?)', [
+      await dbRun('INSERT INTO analytics_events (shop_id, event_type, session_id, path, source, created_at) VALUES (?, ?, ?, ?, ?, ?)', [
         shopId,
         'page_view',
         sessionId,
         String(req.body?.path || '').slice(0, 300),
+        source,
         new Date().toISOString(),
       ]);
     }
+    res.status(204).end();
+  });
+
+  router.post('/analytics/product-event', rateLimitPublicRequest(120), async (req, res) => {
+    const shopId = Number(req.body?.shop_id);
+    const productId = Number(req.body?.product_id);
+    const eventType = req.body?.event_type;
+    const sessionId = String(req.body?.session_id || '').trim();
+    if (!Number.isInteger(shopId) || !Number.isInteger(productId)
+      || !['product_view', 'product_click'].includes(eventType)
+      || !sessionId || sessionId.length > 100) {
+      return res.status(400).json({ error: 'Événement produit invalide.' });
+    }
+    const shop = shops.find((candidate) => candidate.id === shopId);
+    if (!shop || !isShopPubliclyVisible(shop)) return res.status(404).json({ error: 'Boutique introuvable.' });
+    const product = await dbGet<{ id: number }>(
+      'SELECT id FROM products WHERE id = ? AND shop_id = ?',
+      [productId, shopId],
+    );
+    if (!product) return res.status(404).json({ error: 'Produit introuvable.' });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const eventPath = `/product/${productId}`;
+    if (eventType === 'product_view') {
+      const alreadyTracked = await dbGet(`
+        SELECT 1 FROM analytics_events
+        WHERE shop_id = ? AND event_type = 'product_view' AND session_id = ? AND path = ? AND created_at LIKE ?
+        LIMIT 1
+      `, [shopId, sessionId, eventPath, `${today}%`]);
+      if (alreadyTracked) return res.status(204).end();
+    }
+    const referrer = typeof req.body?.referrer_host === 'string' ? req.body.referrer_host : String(req.get('referer') || '');
+    const source = classifyAnalyticsSource(referrer, String(req.get('host') || ''));
+    await dbRun(`INSERT INTO analytics_events (shop_id, event_type, session_id, path, source, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)`, [shopId, eventType, sessionId, eventPath, source, new Date().toISOString()]);
     res.status(204).end();
   });
 

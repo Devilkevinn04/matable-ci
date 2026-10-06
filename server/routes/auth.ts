@@ -2,8 +2,10 @@ import { createHash, randomUUID, timingSafeEqual as cryptoTimingSafeEqual } from
 import bcrypt from 'bcryptjs';
 import { createRemoteJWKSet, importPKCS8, jwtVerify, SignJWT } from 'jose';
 import { Router, type Request, type RequestHandler, type Response } from 'express';
-import type { ShopRecord } from '../types.ts';
+import type { OrderRecord, ShopRecord } from '../types.ts';
 import { toCustomerProfile, type CustomerProfileRow } from '../services/customerProfile.ts';
+import { dbAll, dbTransaction } from '../../db.ts';
+import { listCustomerSessionRecords, revokeOtherCustomerSessionRecords } from '../repositories/sessions.ts';
 
 interface LoginAttempt {
   count: number;
@@ -65,6 +67,7 @@ interface CustomerState {
 
 interface AuthRouterOptions {
   shops: ShopRecord[];
+  orders: OrderRecord[];
   sessionDurationMs: number;
   adminSessionDurationMs: number;
   dummyCustomerPasswordHash: string;
@@ -111,6 +114,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
   const router = Router();
   const {
     shops,
+    orders,
     sessionDurationMs,
     adminSessionDurationMs,
     dummyCustomerPasswordHash,
@@ -578,6 +582,182 @@ export function createAuthRouter(options: AuthRouterOptions) {
   router.get('/customer-session', async (req, res) => {
     const state = await getCustomerSessionState(req, res);
     res.json({ ...state, authenticated: !!state.authenticated });
+  });
+
+  router.patch('/customer-profile', rateLimitPublicRequest(20), async (req, res) => {
+    const session = await getCustomerSessionState(req, res);
+    if (!session.authenticated || !session.user) return res.status(401).json({ error: 'Authentification client requise.' });
+
+    const firstName = sanitizeTextField(String(req.body?.first_name || ''), 60).trim();
+    const lastName = sanitizeTextField(String(req.body?.last_name || ''), 60).trim();
+    const phone = String(req.body?.phone || '').trim();
+    if (!firstName || !lastName) return res.status(400).json({ error: 'Le prénom et le nom sont requis.' });
+    if (!/^\+?225\d{8,12}$/.test(phone)) return res.status(400).json({ error: 'Le téléphone est requis au format ivoirien.' });
+
+    const existingPhone = await dbGet<{ id: number }>('SELECT id FROM users WHERE phone = ? AND id <> ?', [phone, session.user.id]);
+    if (existingPhone) return res.status(409).json({ error: 'Ce numéro de téléphone est déjà associé à un compte.' });
+
+    const name = `${firstName} ${lastName}`;
+    await dbRun('UPDATE users SET name = ?, first_name = ?, last_name = ?, phone = ? WHERE id = ?', [name, firstName, lastName, phone, session.user.id]);
+    const updatedUser = await dbGet<CustomerProfileRow>(
+      'SELECT id, name, first_name, last_name, phone, email, created_at FROM users WHERE id = ?',
+      [session.user.id],
+    );
+    if (!updatedUser) return res.status(404).json({ error: 'Compte client introuvable.' });
+    res.json({ success: true, user: toCustomerProfile(updatedUser) });
+  });
+
+  router.post('/customer-password', rateLimitPublicRequest(10), async (req, res) => {
+    const session = await getCustomerSessionState(req, res);
+    if (!session.authenticated || !session.user) return res.status(401).json({ error: 'Authentification client requise.' });
+
+    const currentPassword = String(req.body?.current_password || '');
+    const newPassword = String(req.body?.new_password || '');
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      return res.status(400).json({ error: 'Le nouveau mot de passe doit contenir entre 8 et 128 caractères.' });
+    }
+
+    const user = await dbGet<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = ?', [session.user.id]);
+    if (!user) return res.status(404).json({ error: 'Compte client introuvable.' });
+    const hasSocialIdentity = Boolean(await dbGet<{ user_id: number }>(
+      'SELECT user_id FROM customer_oauth_identities WHERE user_id = ? LIMIT 1',
+      [session.user.id],
+    ));
+    if (!hasSocialIdentity && !currentPassword) {
+      return res.status(400).json({ error: 'Saisissez votre mot de passe actuel.' });
+    }
+    if (currentPassword && !bcrypt.compareSync(currentPassword, user.password_hash)) {
+      return res.status(401).json({ error: 'Le mot de passe actuel est incorrect.' });
+    }
+
+    const currentToken = getCookie(req, 'matable_customer_session');
+    if (!currentToken) return res.status(401).json({ error: 'Votre session client a expiré. Reconnectez-vous.' });
+    await dbRun('UPDATE users SET password_hash = ? WHERE id = ?', [bcrypt.hashSync(newPassword, 10), session.user.id]);
+    await revokeOtherCustomerSessionRecords(session.user.id, currentToken);
+    for (const [token, customerSession] of customerSessions) {
+      if (customerSession.userId === session.user.id && token !== currentToken) customerSessions.delete(token);
+    }
+
+    res.json({ success: true });
+  });
+
+  router.get('/customer-sessions', async (req, res) => {
+    const session = await getCustomerSessionState(req, res);
+    if (!session.authenticated || !session.user) return res.status(401).json({ error: 'Authentification client requise.' });
+    const currentToken = getCookie(req, 'matable_customer_session');
+    if (!currentToken) return res.status(401).json({ error: 'Votre session client a expiré. Reconnectez-vous.' });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ sessions: await listCustomerSessionRecords(session.user.id, currentToken) });
+  });
+
+  router.post('/customer-sessions/revoke-others', rateLimitPublicRequest(10), async (req, res) => {
+    const session = await getCustomerSessionState(req, res);
+    if (!session.authenticated || !session.user) return res.status(401).json({ error: 'Authentification client requise.' });
+    const currentToken = getCookie(req, 'matable_customer_session');
+    if (!currentToken) return res.status(401).json({ error: 'Votre session client a expiré. Reconnectez-vous.' });
+    await revokeOtherCustomerSessionRecords(session.user.id, currentToken);
+    for (const [token, customerSession] of customerSessions) {
+      if (customerSession.userId === session.user.id && token !== currentToken) customerSessions.delete(token);
+    }
+    res.json({ success: true });
+  });
+
+  router.get('/customer-data-export', rateLimitPublicRequest(5), async (req, res) => {
+    const session = await getCustomerSessionState(req, res);
+    if (!session.authenticated || !session.user) return res.status(401).json({ error: 'Authentification client requise.' });
+    const userId = session.user.id;
+    const [profile, orders, favorites, likes, reviews, reports] = await Promise.all([
+      dbGet<CustomerProfileRow>(
+        'SELECT id, name, first_name, last_name, phone, email, created_at FROM users WHERE id = ?',
+        [userId],
+      ),
+      dbAll<Record<string, unknown>>(
+        `SELECT id, shop_id, customer_name, customer_phone, delivery_location, delivery_note, delivery_slot,
+          payment_method_preference, total_amount, created_at, status, items
+         FROM orders WHERE customer_user_id = ? ORDER BY created_at DESC`,
+        [userId],
+      ),
+      dbAll<{ target_type: string; target_id: number; created_at: string }>(
+        'SELECT target_type, target_id, created_at FROM customer_favorites WHERE user_id = ? ORDER BY created_at DESC',
+        [userId],
+      ),
+      dbAll<{ product_id: number; created_at: string }>(
+        'SELECT product_id, created_at FROM customer_product_likes WHERE user_id = ? ORDER BY created_at DESC',
+        [userId],
+      ),
+      dbAll<Record<string, unknown>>(
+        'SELECT order_id, shop_id, target_type, target_id, rating, comment, status, created_at FROM customer_reviews WHERE user_id = ? ORDER BY created_at DESC',
+        [userId],
+      ),
+      dbAll<Record<string, unknown>>(
+        'SELECT target_type, target_id, reason, details, status, created_at FROM customer_reports WHERE user_id = ? ORDER BY created_at DESC',
+        [userId],
+      ),
+    ]);
+    if (!profile) return res.status(404).json({ error: 'Compte client introuvable.' });
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Disposition', `attachment; filename="matable-donnees-client-${userId}.json"`);
+    res.json({
+      exported_at: new Date().toISOString(),
+      profile: toCustomerProfile(profile),
+      orders: orders.map((order) => ({
+        ...order,
+        items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items,
+      })),
+      favorites,
+      likes,
+      reviews,
+      reports,
+    });
+  });
+
+  router.delete('/customer-account', rateLimitPublicRequest(5), async (req, res) => {
+    const session = await getCustomerSessionState(req, res);
+    if (!session.authenticated || !session.user) return res.status(401).json({ error: 'Authentification client requise.' });
+    if (String(req.body?.confirmation || '') !== 'SUPPRIMER') {
+      return res.status(400).json({ error: 'Saisissez SUPPRIMER pour confirmer la suppression du compte.' });
+    }
+    const currentToken = getCookie(req, 'matable_customer_session');
+    if (!currentToken) return res.status(401).json({ error: 'Votre session client a expiré. Reconnectez-vous.' });
+    const account = await dbGet<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = ?', [session.user.id]);
+    if (!account) return res.status(404).json({ error: 'Compte client introuvable.' });
+    const hasSocialIdentity = Boolean(await dbGet<{ user_id: number }>(
+      'SELECT user_id FROM customer_oauth_identities WHERE user_id = ? LIMIT 1',
+      [session.user.id],
+    ));
+    const currentPassword = String(req.body?.current_password || '');
+    if (!hasSocialIdentity && !currentPassword) return res.status(400).json({ error: 'Saisissez votre mot de passe pour confirmer la suppression.' });
+    if (currentPassword && !bcrypt.compareSync(currentPassword, account.password_hash)) {
+      return res.status(401).json({ error: 'Le mot de passe est incorrect.' });
+    }
+
+    await dbTransaction(async (transaction) => {
+      await transaction.run(
+        `UPDATE orders SET customer_user_id = NULL, customer_name = 'Compte supprimé',
+          customer_phone = '', delivery_location = '', delivery_note = NULL
+         WHERE customer_user_id = ?`,
+        [session.user!.id],
+      );
+      await transaction.run('DELETE FROM user_sessions WHERE user_id = ?', [session.user!.id]);
+      await transaction.run('DELETE FROM customer_oauth_identities WHERE user_id = ?', [session.user!.id]);
+      await transaction.run('DELETE FROM customer_favorites WHERE user_id = ?', [session.user!.id]);
+      await transaction.run('DELETE FROM customer_product_likes WHERE user_id = ?', [session.user!.id]);
+      const deleted = await transaction.run('DELETE FROM users WHERE id = ?', [session.user!.id]);
+      if (deleted.changes !== 1) throw new Error('La suppression du compte client a échoué.');
+    });
+    for (const order of orders) {
+      if (order.customer_user_id !== session.user.id) continue;
+      order.customer_user_id = undefined;
+      order.customer_name = 'Compte supprimé';
+      order.customer_phone = '';
+      order.delivery_location = '';
+      order.delivery_note = '';
+    }
+    for (const [token, customerSession] of customerSessions) {
+      if (customerSession.userId === session.user.id) customerSessions.delete(token);
+    }
+    clearCustomerSessionCookie(res);
+    res.json({ success: true, orders_anonymized: true });
   });
 
   router.post('/customer-logout', async (req, res) => {

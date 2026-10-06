@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ShopRecord } from '../server/types';
 import { getShopVisibilityScore, rankShopsByVisibility } from '../server/services/visibility';
-import { canUseSubscriptionFeature } from '../server/services/businessRules';
-import { isSubscriptionFeatureIncluded } from '../src/utils/subscriptionFeatures';
+import { canReceiveShopOrders, canUseSubscriptionFeature, isShopPubliclyVisible } from '../server/services/businessRules';
+import { getSubscriptionPrice, isSubscriptionFeatureIncluded, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from '../src/utils/subscriptionFeatures';
 
 function makeShop(id: number, overrides: Partial<ShopRecord> = {}): ShopRecord {
   return {
@@ -36,8 +36,8 @@ test('visibility score rewards only active paid tiers and useful shop content', 
   const paidPro = makeShop(3, { selected_subscription_tier: 'pro', subscription_status: 'active' });
 
   assert.equal(getShopVisibilityScore(trialPro, 0, now), 0);
-  assert.equal(getShopVisibilityScore(paidPremium, 0, now), 150);
-  assert.equal(getShopVisibilityScore(paidPro, 0, now), 300);
+  assert.equal(getShopVisibilityScore(paidPremium, 0, now), 30);
+  assert.equal(getShopVisibilityScore(paidPro, 0, now), 60);
   assert.equal(getShopVisibilityScore(makeShop(4), 1, now), 52);
   assert.equal(getShopVisibilityScore(makeShop(5), 100, now), 90);
 });
@@ -61,7 +61,7 @@ test('visibility adds free improvements and active featuring without exposing th
     },
   });
 
-  assert.equal(getShopVisibilityScore(shop, 100, now), 1480);
+  assert.equal(getShopVisibilityScore(shop, 100, now), 1240);
   const ranked = rankShopsByVisibility([shop], new Map([[shop.id, 100]]), () => true, now);
   assert.equal(ranked[0].is_featured, true);
   assert.equal('score' in ranked[0], false);
@@ -99,7 +99,7 @@ test('subscription features follow the selected tier and are disabled after expi
   });
 
   assert.equal(canUseSubscriptionFeature(standard, 'custom_branding', new Date(now)), false);
-  assert.equal(canUseSubscriptionFeature(premiumTrial, 'custom_branding', new Date(now)), true);
+  assert.equal(canUseSubscriptionFeature(premiumTrial, 'custom_branding', new Date(now)), false);
   assert.equal(canUseSubscriptionFeature(premiumTrial, 'advanced_analytics', new Date(now)), false);
   assert.equal(canUseSubscriptionFeature(pro, 'advanced_analytics', new Date(now)), true);
   assert.equal(canUseSubscriptionFeature(expiredPro, 'custom_branding', new Date(now)), false);
@@ -114,4 +114,29 @@ test('shared marketing tier matrix matches server feature thresholds', () => {
   assert.equal(isSubscriptionFeatureIncluded('standard', 'advanced_analytics'), false);
   assert.equal(isSubscriptionFeatureIncluded('premium', 'advanced_analytics'), false);
   assert.equal(isSubscriptionFeatureIncluded('pro', 'advanced_analytics'), true);
+  assert.equal(isSubscriptionFeatureIncluded('standard', 'boost_discount'), false);
+  assert.equal(isSubscriptionFeatureIncluded('pro', 'boost_discount'), true);
+});
+
+test('trial limits and annual subscription prices match the published offer', () => {
+  assert.equal(TRIAL_DURATION_DAYS, 7);
+  assert.equal(TRIAL_CATALOG_LIMIT, 2);
+  assert.equal(getSubscriptionPrice('standard'), 3000);
+  assert.equal(getSubscriptionPrice('premium'), 5000);
+  assert.equal(getSubscriptionPrice('pro'), 8000);
+  assert.equal(getSubscriptionPrice('standard', 'annual'), 30000);
+  assert.equal(getSubscriptionPrice('premium', 'annual'), 50000);
+  assert.equal(getSubscriptionPrice('pro', 'annual'), 80000);
+});
+
+test('expired subscriptions remain publicly available during the two-day grace period only', () => {
+  const shop = makeShop(1, {
+    publication_status: 'active',
+    merchant_verification_status: 'verified',
+    subscription_status: 'active',
+    subscription_expires_at: '2026-10-03T12:00:00.000Z',
+  });
+  assert.equal(isShopPubliclyVisible(shop, new Date('2026-10-04T12:00:00.000Z')), true);
+  assert.equal(canReceiveShopOrders(shop, new Date('2026-10-04T12:00:00.000Z')), true);
+  assert.equal(isShopPubliclyVisible(shop, new Date('2026-10-06T00:00:00.000Z')), false);
 });

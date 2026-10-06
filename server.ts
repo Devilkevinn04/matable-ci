@@ -9,6 +9,7 @@ import { dbAll, dbGet, dbRun, dbTransaction, databaseMode, initializeDatabase } 
 import { createSeoRouter } from './server/routes/seo.ts';
 import { createProductRouter } from './server/routes/products.ts';
 import { createAuthRouter } from './server/routes/auth.ts';
+import { createCustomerEngagementRouter } from './server/routes/customerEngagement.ts';
 import { createMerchantOrdersRouter } from './server/routes/merchantOrders.ts';
 import { createOrderRouter } from './server/routes/orders.ts';
 import { createAdminRouter } from './server/routes/admin.ts';
@@ -20,7 +21,9 @@ import { createTelemetryRouter } from './server/routes/telemetry.ts';
 import { createKadevPayRouter } from './server/routes/kadevPay.ts';
 import { toCustomerProfile } from './server/services/customerProfile.ts';
 import { getWhatsAppSubscriptionReminderConfig, sendWhatsAppSubscriptionReminder } from './server/services/whatsappNotifications.ts';
+import { seedDemoDatabaseIfEmpty } from './server/services/demoSeed.ts';
 import { applySecurityHeaders } from './server/middleware/securityHeaders.ts';
+import { createMaintenanceModeMiddleware } from './server/middleware/maintenanceMode.ts';
 import type { OrderRecord, ProductRecord, ShopOpeningHours, ShopRecord, SubscriptionPlanConfig, SubscriptionState, SubscriptionStatus, SubscriptionTier } from './server/types.ts';
 import { loadProductsFromDatabase, persistProduct } from './server/repositories/products.ts';
 import { loadShopsFromDatabase, persistShop } from './server/repositories/shops.ts';
@@ -59,7 +62,10 @@ export {
   saveMerchantSessionRecord,
 } from './server/repositories/sessions.ts';
 import { getCategoryDefaults, isShopCategory, normalizeCustomBannerImage, normalizeProductImage, normalizeWelcomeMessage, sanitizeGalleryImages } from './src/utils/categoryDefaults.ts';
+import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from './src/utils/subscriptionFeatures.ts';
 import type { ShopCategory } from './src/utils/categoryDefaults.ts';
+import { findPublicDiscoveryPage, toDiscoveryCitySlug } from './src/utils/discoverySeo.ts';
+import { FAQ_SECTIONS } from './src/utils/faqContent.ts';
 
 declare global {
   namespace Express {
@@ -78,8 +84,6 @@ export function shouldSeedDemoData(): boolean {
 
   return String(process.env.DEMO_MODE || '').trim().toLowerCase() === 'true';
 }
-
-const TRIAL_DURATION_DAYS = 30;
 
 // Set realistic future dates for subscriptions
 const now = new Date();
@@ -1120,99 +1124,6 @@ const findShopByPhone = (phone: string) => {
   });
 };
 
-async function seedDatabaseIfEmpty() {
-  if (databaseMode === 'postgresql') return;
-  if (process.env.NODE_ENV === 'production' && !shouldSeedDemoData()) {
-    return;
-  }
-
-  const shopRow = await dbGet<{ count: number }>('SELECT COUNT(*) as count FROM shops');
-  if (Number(shopRow?.count || 0) > 0) {
-    return;
-  }
-
-  const insertShop = `
-    INSERT INTO shops (
-      id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active,
-      publication_status, subscription_expires_at, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-
-  const insertProduct = `
-    INSERT INTO products (
-      id, shop_id, title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, prep_time, modifier_groups
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-
-  for (const shop of shops) {
-    await dbRun(insertShop, [
-      shop.id,
-      shop.name,
-      shop.slug,
-      shop.whatsapp_number,
-      hashPin(shop.pin_code_hash),
-      shop.theme_color,
-      shop.welcome_message,
-      shop.is_open ? 1 : 0,
-      shop.is_active ? 1 : 0,
-      shop.publication_status || (shop.is_active ? 'active' : 'suspended'),
-      shop.trial_end ?? null,
-      shop.last_notification_sent_at,
-      shop.created_at,
-      shop.category,
-      shop.city ?? null,
-      'standard',
-      JSON.stringify(shop.theme_config)
-    ]);
-
-    for (const product of products.filter((p) => p.shop_id === shop.id)) {
-      await dbRun(insertProduct, [
-        product.id,
-        product.shop_id,
-        product.title,
-        product.description ?? null,
-        product.price,
-        product.stock,
-        product.image_url,
-        product.is_available ? 1 : 0,
-        product.category ?? null,
-        product.sizes ? JSON.stringify(product.sizes) : null,
-        product.colors ? JSON.stringify(product.colors) : null,
-        product.lookbook_image ?? null,
-        product.prep_time ?? null,
-        product.modifier_groups ? JSON.stringify(product.modifier_groups) : null
-      ]);
-    }
-  }
-
-  const orderCount = await dbGet<{ count: number }>('SELECT COUNT(*) as count FROM orders');
-  if (Number(orderCount?.count || 0) === 0) {
-    const insertOrder = `
-      INSERT INTO orders (
-        id, shop_id, customer_name, customer_phone, delivery_location, delivery_note,
-        delivery_slot, payment_method_preference, total_amount, created_at, status, items
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    for (const order of orders) {
-      await dbRun(insertOrder, [
-        order.id,
-        order.shop_id,
-        order.customer_name,
-        order.customer_phone,
-        order.delivery_location,
-        order.delivery_note ?? null,
-        order.delivery_slot ?? null,
-        order.payment_method_preference,
-        order.total_amount,
-        order.created_at,
-        order.status || 'pending',
-        JSON.stringify(order.items ?? [])
-      ]);
-    }
-  }
-}
-
 function sanitizeProductAttributes(attributes: unknown, category: ShopCategory): Record<string, string> | undefined {
   if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) return undefined;
   const allowedFields = new Set(getCategoryDefaults(category).productAttributes.map((field) => field.key));
@@ -1275,9 +1186,20 @@ async function startServer() {
     rotateMerchantAccessTokenForShop,
   }));
   app.use('/api/admin/identity-verifications', verificationRouters.adminRouter);
+  const maintenanceHtmlPath = path.join(process.cwd(), process.env.NODE_ENV === 'production' ? 'dist' : 'public', 'maintenance.html');
+  const maintenanceHtml = fs.readFileSync(maintenanceHtmlPath, 'utf-8');
+  app.use(createMaintenanceModeMiddleware(async () => {
+    const settings = await dbGet<{ maintenance_enabled: number | boolean; maintenance_message: string }>(
+      'SELECT maintenance_enabled, maintenance_message FROM platform_settings WHERE id = 1',
+    );
+    return {
+      enabled: Boolean(settings?.maintenance_enabled),
+      message: settings?.maintenance_message || 'Le service revient bientôt. Merci de votre patience.',
+    };
+  }, maintenanceHtml));
   await initializeDatabase();
   await migrateExistingSessionTokens();
-  await seedDatabaseIfEmpty();
+  await seedDemoDatabaseIfEmpty({ shops, products, orders, shouldSeedDemoData, hashPin });
 
   shops.forEach((shop) => {
     if (!shop.pin_code_hash.startsWith('$2')) {
@@ -1299,14 +1221,16 @@ async function startServer() {
   // Health check
 
   // 1. SHOPS
-  app.use('/api/shops', createPublicShopsRouter({
+  const publicShopsRouter = createPublicShopsRouter({
     shops,
     products,
     merchantSessions,
     getCookie,
     isRequestFingerprintMatch,
     computeIsShopOpen,
-  }));
+  });
+  app.use('/api/v1/catalog/storefronts', publicShopsRouter);
+  app.use('/api/shops', publicShopsRouter);
   app.use('/api/shops', createShopManagementRouter({
     shops,
     orders,
@@ -1352,6 +1276,7 @@ async function startServer() {
 
   app.use('/api/auth', createAuthRouter({
     shops,
+    orders,
     sessionDurationMs: SESSION_DURATION_MS,
     adminSessionDurationMs: ADMIN_SESSION_DURATION_MS,
     dummyCustomerPasswordHash: DUMMY_CUSTOMER_PASSWORD_HASH,
@@ -1387,6 +1312,12 @@ async function startServer() {
     setCustomerSessionCookie,
     buildSessionFingerprint,
   }));
+  app.use('/api/customer-engagement', createCustomerEngagementRouter({
+    shops,
+    products,
+    getCustomerSessionState,
+    rateLimitPublicRequest,
+  }));
 
   // 3. PRODUCTS MANAGEMENT (Merchant /app)
   app.use('/api/shops/:id/products', createProductRouter({
@@ -1402,6 +1333,7 @@ async function startServer() {
     normalizeProductImage,
     sanitizeGalleryImages,
     sanitizeProductAttributes,
+    trialProductLimit: TRIAL_CATALOG_LIMIT,
   }));
 
   app.use('/api/shops', createMerchantOrdersRouter({
@@ -1428,6 +1360,118 @@ async function startServer() {
   }));
 
   const getPublicOrigin = (req: Request) => String(process.env.APP_URL || `${req.protocol || 'https'}://${req.get('host') || 'matable.ci'}`).replace(/\/$/, '');
+
+  const injectNoIndexSeo = (html: string, title: string) => html
+    .replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)}</title>`)
+    .replace(/<meta name="robots" content=".*?" \/>/, '<meta name="robots" content="noindex, nofollow" />')
+    .replace(/<link rel="canonical" href=".*?" \/>/, '');
+
+  const injectFaqSeo = (html: string, req: Request) => {
+    const origin = getPublicOrigin(req);
+    const canonical = `${origin}/faq`;
+    const questions = FAQ_SECTIONS.flatMap((section) => section.questions);
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      name: 'Questions fréquentes | MaTable.ci',
+      url: canonical,
+      inLanguage: 'fr-CI',
+      mainEntity: questions.map(({ question, answer }) => ({
+        '@type': 'Question',
+        name: question,
+        acceptedAnswer: { '@type': 'Answer', text: answer },
+      })),
+    };
+    const jsonLd = JSON.stringify(structuredData).replace(/</g, '\\u003c');
+    const description = 'Réponses aux questions fréquentes sur les commandes, les comptes clients et les boutiques MaTable.ci.';
+    const tags = [
+      '<title>Questions fréquentes | MaTable.ci</title>',
+      `<meta name="description" content="${escapeHtml(description)}" />`,
+      '<meta name="robots" content="index, follow, max-image-preview:large" />',
+      `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
+      '<meta property="og:title" content="Questions fréquentes | MaTable.ci" />',
+      `<meta property="og:description" content="${escapeHtml(description)}" />`,
+      '<meta property="og:type" content="website" />',
+      `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
+      `<meta property="og:image" content="${origin}/icon-512.png" />`,
+      '<meta property="og:image:alt" content="MaTable.ci, boutiques locales en Côte d’Ivoire" />',
+      '<meta property="og:locale" content="fr_CI" />',
+      '<meta name="twitter:card" content="summary_large_image" />',
+      '<meta name="twitter:title" content="Questions fréquentes | MaTable.ci" />',
+      `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
+      `<meta name="twitter:image" content="${origin}/icon-512.png" />`,
+      `<script type="application/ld+json">${jsonLd}</script>`,
+    ].join('\n  ');
+    const faqSectionsHtml = FAQ_SECTIONS.map((section) => {
+      const questionsHtml = section.questions
+        .map(({ question, answer }) => `<dt>${escapeHtml(question)}</dt><dd>${escapeHtml(answer)}</dd>`)
+        .join('');
+      return `<section><h2>${escapeHtml(section.title)}</h2><dl>${questionsHtml}</dl></section>`;
+    }).join('');
+    const crawlableFaq = `<noscript><main><h1>Questions fréquentes</h1>${faqSectionsHtml}</main></noscript>`;
+    return html
+      .replace(/<title>.*?<\/title>/, '')
+      .replace(/<meta name="description" content=".*?" \/>/, '')
+      .replace(/<meta name="robots" content=".*?" \/>/, '')
+      .replace(/<link rel="canonical" href=".*?" \/>/, '')
+      .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
+      .replace('</head>', `  ${tags}\n  </head>`)
+      .replace('</body>', `${crawlableFaq}\n  </body>`);
+  };
+
+  const injectHowItWorksSeo = (html: string, req: Request) => {
+    const origin = getPublicOrigin(req);
+    const canonical = `${origin}/comment-ca-marche`;
+    const title = 'Comment ça marche ? | MaTable.ci';
+    const description = 'Le guide pour découvrir une boutique locale, consulter sa vitrine, commander directement auprès du commerçant et convenir du retrait ou de la livraison.';
+    const steps = [
+      { name: 'Trouvez une boutique ou un produit', text: 'Parcourez les boutiques, explorez les catégories ou recherchez un produit, un quartier ou une ville.' },
+      { name: 'Découvrez la vitrine', text: 'Consultez les produits, les prix, les horaires et les informations partagées par le commerçant.' },
+      { name: 'Échangez directement avec le commerçant', text: 'Envoyez votre demande au vendeur sur WhatsApp et posez vos questions avant de confirmer.' },
+      { name: 'Convenez du retrait ou de la livraison', text: 'Mettez-vous d’accord avec le commerçant sur la disponibilité, le paiement et la remise de votre commande.' },
+    ];
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'HowTo',
+      name: 'Comment commander auprès d’une boutique MaTable.ci',
+      description,
+      inLanguage: 'fr-CI',
+      step: steps.map((step, index) => ({
+        '@type': 'HowToStep',
+        position: index + 1,
+        name: step.name,
+        text: step.text,
+        url: `${canonical}#etape-${index + 1}`,
+      })),
+    };
+    const jsonLd = JSON.stringify(structuredData).replace(/</g, '\\u003c');
+    const tags = [
+      `<title>${escapeHtml(title)}</title>`,
+      `<meta name="description" content="${escapeHtml(description)}" />`,
+      '<meta name="robots" content="index, follow, max-image-preview:large" />',
+      `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
+      `<meta property="og:title" content="${escapeHtml(title)}" />`,
+      `<meta property="og:description" content="${escapeHtml(description)}" />`,
+      '<meta property="og:type" content="article" />',
+      `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
+      `<meta property="og:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      '<meta property="og:locale" content="fr_CI" />',
+      '<meta name="twitter:card" content="summary_large_image" />',
+      `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
+      `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
+      `<meta name="twitter:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      `<script type="application/ld+json">${jsonLd}</script>`,
+    ].join('\n  ');
+    const crawlableGuide = `<noscript><main><h1>Comment ça marche sur MaTable.ci ?</h1><p>${escapeHtml(description)}</p><ol>${steps.map((step) => `<li><h2>${escapeHtml(step.name)}</h2><p>${escapeHtml(step.text)}</p></li>`).join('')}</ol></main></noscript>`;
+    return html
+      .replace(/<title>.*?<\/title>/, '')
+      .replace(/<meta name="description" content=".*?" \/>/, '')
+      .replace(/<meta name="robots" content=".*?" \/>/, '')
+      .replace(/<link rel="canonical" href=".*?" \/>/, '')
+      .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
+      .replace('</head>', `  ${tags}\n  </head>`)
+      .replace('</body>', `${crawlableGuide}\n  </body>`);
+  };
 
   const injectShopOpenGraph = (html: string, targetShop: ShopRecord, req: Request) => {
     const origin = getPublicOrigin(req);
@@ -1496,6 +1540,7 @@ async function startServer() {
       .replace(/<meta name="description" content=".*?" \/>/, '')
       .replace(/<meta name="robots" content=".*?" \/>/, '')
       .replace(/<link rel="canonical" href=".*?" \/>/, '')
+      .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
       .replace('</head>', `  ${meta}\n  </head>`);
   };
 
@@ -1514,17 +1559,136 @@ async function startServer() {
       .replace(/<meta name="description" content=".*?" \/>/, `<meta name="description" content="${escapeHtml(content.description)}" />`)
       .replace(/<link rel="canonical" href=".*?" \/>/, `<link rel="canonical" href="${escapeHtml(canonical)}" />`)
       .replace(/<meta property="og:title" content=".*?" \/>/, `<meta property="og:title" content="${escapeHtml(content.title)}" />`)
-      .replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${escapeHtml(content.description)}" />`);
+      .replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${escapeHtml(content.description)}" />`)
+      .replace(/<meta property="og:url" content=".*?" \/>/, `<meta property="og:url" content="${escapeHtml(canonical)}" />`);
+  };
+
+  const injectDiscoverySeo = (html: string, page: ReturnType<typeof findPublicDiscoveryPage>, req: Request) => {
+    if (!page) return html;
+    const origin = getPublicOrigin(req);
+    const canonical = `${origin}${page.path}`;
+    const pageShops = shops.filter((shop) => {
+      if (!isShopPubliclyVisible(shop)) return false;
+      if (page.category && shop.category !== page.category) return false;
+      if (page.citySlug && toDiscoveryCitySlug(shop.city || '') !== page.citySlug) return false;
+      return true;
+    });
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: page.heading,
+      description: page.description,
+      url: canonical,
+      inLanguage: 'fr-CI',
+      mainEntity: {
+        '@type': 'ItemList',
+        numberOfItems: pageShops.length,
+        itemListElement: pageShops.map((shop, index) => ({
+          '@type': 'ListItem',
+          position: index + 1,
+          url: `${origin}/${encodeURIComponent(shop.slug)}`,
+          name: shop.name,
+        })),
+      },
+    };
+    const jsonLd = JSON.stringify(structuredData).replace(/</g, '\\u003c');
+    const shareImage = page.category
+      ? getCategoryDefaults(page.category).bannerPlaceholderImageUrl
+      : `${origin}/icon-512.png`;
+    const tags = [
+      `<title>${escapeHtml(page.title)}</title>`,
+      `<meta name="description" content="${escapeHtml(page.description)}" />`,
+      '<meta name="robots" content="index, follow, max-image-preview:large" />',
+      `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
+      `<meta property="og:title" content="${escapeHtml(page.title)}" />`,
+      `<meta property="og:description" content="${escapeHtml(page.description)}" />`,
+      '<meta property="og:type" content="website" />',
+      `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
+      `<meta property="og:image" content="${escapeHtml(shareImage)}" />`,
+      `<meta property="og:image:alt" content="${escapeHtml(page.heading)}" />`,
+      '<meta property="og:locale" content="fr_CI" />',
+      '<meta name="twitter:card" content="summary_large_image" />',
+      `<meta name="twitter:title" content="${escapeHtml(page.title)}" />`,
+      `<meta name="twitter:description" content="${escapeHtml(page.description)}" />`,
+      `<meta name="twitter:image" content="${escapeHtml(shareImage)}" />`,
+      `<script type="application/ld+json">${jsonLd}</script>`,
+    ].join('\n  ');
+    const crawlableFallback = `<noscript><main><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.description)}</p><ul>${pageShops.map((shop) => `<li><a href="${escapeHtml(`${origin}/${encodeURIComponent(shop.slug)}`)}">${escapeHtml(shop.name)}</a></li>`).join('')}</ul></main></noscript>`;
+    return html
+      .replace(/<title>.*?<\/title>/, '')
+      .replace(/<meta name="description" content=".*?" \/>/, '')
+      .replace(/<meta name="robots" content=".*?" \/>/, '')
+      .replace(/<link rel="canonical" href=".*?" \/>/, '')
+      .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
+      .replace('</head>', `  ${tags}\n  </head>`)
+      .replace('</body>', `${crawlableFallback}\n  </body>`);
+  };
+
+  const injectShopDirectorySeo = (html: string, req: Request) => {
+    const origin = getPublicOrigin(req);
+    const canonical = `${origin}/boutiques`;
+    const directoryShops = shops.filter((shop) => isShopPubliclyVisible(shop));
+    const title = 'Boutiques locales en Côte d’Ivoire | MaTable.ci';
+    const description = 'Découvrez les boutiques locales en Côte d’Ivoire, explorez les commerces par catégorie ou par ville et contactez directement les commerçants.';
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: 'Découvrez les boutiques locales',
+      description,
+      url: canonical,
+      inLanguage: 'fr-CI',
+      mainEntity: {
+        '@type': 'ItemList',
+        numberOfItems: directoryShops.length,
+        itemListElement: directoryShops.map((shop, index) => ({
+          '@type': 'ListItem',
+          position: index + 1,
+          url: `${origin}/${encodeURIComponent(shop.slug)}`,
+          name: shop.name,
+        })),
+      },
+    };
+    const jsonLd = JSON.stringify(structuredData).replace(/</g, '\\u003c');
+    const tags = [
+      `<title>${escapeHtml(title)}</title>`,
+      `<meta name="description" content="${escapeHtml(description)}" />`,
+      '<meta name="robots" content="index, follow, max-image-preview:large" />',
+      `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
+      `<meta property="og:title" content="${escapeHtml(title)}" />`,
+      `<meta property="og:description" content="${escapeHtml(description)}" />`,
+      '<meta property="og:type" content="website" />',
+      `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
+      `<meta property="og:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      '<meta property="og:locale" content="fr_CI" />',
+      '<meta name="twitter:card" content="summary_large_image" />',
+      `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
+      `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
+      `<meta name="twitter:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      `<script type="application/ld+json">${jsonLd}</script>`,
+    ].join('\n  ');
+    const crawlableFallback = `<noscript><main><h1>Découvrez les boutiques locales</h1><p>${escapeHtml(description)}</p><ul>${directoryShops.map((shop) => `<li><a href="${escapeHtml(`${origin}/${encodeURIComponent(shop.slug)}`)}">${escapeHtml(shop.name)}</a></li>`).join('')}</ul></main></noscript>`;
+    return html
+      .replace(/<title>.*?<\/title>/, '')
+      .replace(/<meta name="description" content=".*?" \/>/, '')
+      .replace(/<meta name="robots" content=".*?" \/>/, '')
+      .replace(/<link rel="canonical" href=".*?" \/>/, '')
+      .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
+      .replace('</head>', `  ${tags}\n  </head>`)
+      .replace('</body>', `${crawlableFallback}\n  </body>`);
   };
 
   const shouldServePublicHtml = (req: Request) => {
     const accept = String(req.headers.accept || '');
-    const ua = String(req.headers['user-agent'] || '').toLowerCase();
     const isGet = req.method === 'GET';
     const isLikelyHtml = accept.includes('text/html') || accept.includes('*/*') || accept === '' || (!accept.includes('application/json') && !accept.includes('application/javascript'));
-    const isSocialCrawler = ua.includes('whatsapp') || ua.includes('facebookexternalhit') || ua.includes('twitterbot') || ua.includes('linkedin');
-    return isGet && isLikelyHtml && !isSocialCrawler;
+    return isGet && isLikelyHtml;
   };
+  const isPrivateSeoPath = (pathname: string) => {
+    const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+    return ['/app', '/admin', '/compte', '/connexion', '/inscription', '/recuperation-acces']
+      .some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`));
+  };
+  const isFrontendPagePath = (pathname: string) => pathname !== '/' && !pathname.startsWith('/api/') && !pathname.startsWith('/@') && !path.extname(pathname);
 
   app.use(createSeoRouter({ shops, getPublicOrigin, escapeHtml }));
 
@@ -1548,21 +1712,64 @@ async function startServer() {
             'Content-Type': 'text/html',
             'Cache-Control': 'no-store',
             'Referrer-Policy': 'no-referrer',
-          }).end(transformed);
+          }).end(injectNoIndexSeo(transformed, 'Espace commerçant | MaTable.ci'));
+        } catch (error) {
+          return next(error);
+        }
+      }
+
+      if (req.path === '/__preview/merchant-plans' && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Aperçu des formules commerçants | MaTable.ci'));
         } catch (error) {
           return next(error);
         }
       }
 
       const url = req.originalUrl.split('?')[0];
-      const matchSlug = url.length > 1 && !url.startsWith('/api') && !url.startsWith('/@') && !url.includes('.')
-        ? url.substring(1).split('/')[0]
+      const pathSegments = url.split('/').filter(Boolean);
+      const matchSlug = pathSegments.length === 1 && !url.startsWith('/api') && !url.startsWith('/@') && !url.includes('.')
+        ? pathSegments[0]
         : null;
       const targetShop = matchSlug && !['app', 'admin'].includes(matchSlug)
         ? shops.find((shop) => shop.slug === matchSlug && isShopPubliclyVisible(shop))
         : null;
       const legalPage = matchSlug && ['mentions-legales', 'confidentialite', 'cgu', 'cookies'].includes(matchSlug) ? matchSlug : null;
+      const discoveryPage = findPublicDiscoveryPage(url, shops.filter((shop) => isShopPubliclyVisible(shop)));
 
+      if (req.path.replace(/\/+$/, '') === '/comment-ca-marche' && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectHowItWorksSeo(transformed, req));
+        } catch (error) {
+          return next(error);
+        }
+      }
+      if (req.path.replace(/\/+$/, '') === '/boutiques' && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectShopDirectorySeo(transformed, req));
+        } catch (error) {
+          return next(error);
+        }
+      }
+      if (req.path.replace(/\/+$/, '') === '/faq' && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectFaqSeo(transformed, req));
+        } catch (error) {
+          return next(error);
+        }
+      }
       if (targetShop && shouldServePublicHtml(req)) {
         try {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
@@ -1584,6 +1791,36 @@ async function startServer() {
           return next(e);
         }
       }
+      if (discoveryPage && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectDiscoverySeo(transformed, discoveryPage, req));
+        } catch (e) {
+          return next(e);
+        }
+      }
+      if (isPrivateSeoPath(req.path) && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Espace MaTable.ci'));
+        } catch (error) {
+          return next(error);
+        }
+      }
+      if (isFrontendPagePath(req.path) && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(404).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Page introuvable | MaTable.ci'));
+        } catch (error) {
+          return next(error);
+        }
+      }
       vite.middlewares(req, res, next);
     });
   } else {
@@ -1602,21 +1839,31 @@ async function startServer() {
 
     app.get('/{*splat}', (req: Request, res: Response) => {
       if (req.path === '/app' && typeof req.query.access === 'string') {
-        return res.sendFile(indexHtmlPath, {
-          headers: {
+        return res.status(200).set({
+            'Content-Type': 'text/html',
             'Cache-Control': 'no-store',
             'Referrer-Policy': 'no-referrer',
-          },
-        });
+          }).send(injectNoIndexSeo(baseHtml, 'Espace commerçant | MaTable.ci'));
       }
 
       const url = req.originalUrl.split('?')[0];
-      const matchSlug = url.length > 1 && !url.startsWith('/api') && !url.includes('.') ? url.substring(1).split('/')[0] : null;
+      const pathSegments = url.split('/').filter(Boolean);
+      const matchSlug = pathSegments.length === 1 && !url.startsWith('/api') && !url.includes('.') ? pathSegments[0] : null;
       const targetShop = matchSlug && !['app', 'admin'].includes(matchSlug)
         ? shops.find((shop) => shop.slug === matchSlug && isShopPubliclyVisible(shop))
         : null;
       const legalPage = matchSlug && ['mentions-legales', 'confidentialite', 'cgu', 'cookies'].includes(matchSlug) ? matchSlug : null;
+      const discoveryPage = findPublicDiscoveryPage(req.path, shops.filter((shop) => isShopPubliclyVisible(shop)));
 
+      if (req.path.replace(/\/+$/, '') === '/comment-ca-marche' && baseHtml && shouldServePublicHtml(req)) {
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectHowItWorksSeo(baseHtml, req));
+      }
+      if (req.path.replace(/\/+$/, '') === '/boutiques' && baseHtml && shouldServePublicHtml(req)) {
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectShopDirectorySeo(baseHtml, req));
+      }
+      if (req.path.replace(/\/+$/, '') === '/faq' && baseHtml && shouldServePublicHtml(req)) {
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectFaqSeo(baseHtml, req));
+      }
       if (targetShop && baseHtml && shouldServePublicHtml(req)) {
         const customHtml = injectShopOpenGraph(baseHtml, targetShop, req);
         return res.status(200).set({ 'Content-Type': 'text/html' }).send(customHtml);
@@ -1626,7 +1873,17 @@ async function startServer() {
         return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectLegalSeo(baseHtml, legalPage, req));
       }
 
-      res.sendFile(indexHtmlPath);
+      if (discoveryPage && baseHtml && shouldServePublicHtml(req)) {
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectDiscoverySeo(baseHtml, discoveryPage, req));
+      }
+
+      if (isPrivateSeoPath(req.path) && baseHtml && shouldServePublicHtml(req)) {
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectNoIndexSeo(baseHtml, 'Espace MaTable.ci'));
+      }
+      if (isFrontendPagePath(req.path) && shouldServePublicHtml(req)) {
+        return res.status(404).set({ 'Content-Type': 'text/html' }).send(injectNoIndexSeo(baseHtml, 'Page introuvable | MaTable.ci'));
+      }
+      return res.sendFile(indexHtmlPath);
     });
   }
 

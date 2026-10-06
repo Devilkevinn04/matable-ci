@@ -20,6 +20,11 @@ const migrationVersions = [
   '015_kadevpay_subscription_payments',
   '016_subscription_payment_type',
   '017_admin_subscription_actions',
+  '018_platform_maintenance_and_analytics_sources',
+  '019_subscription_terms_and_shop_boosts',
+  '020_product_creation_timestamps',
+  '021_customer_favorites_and_likes',
+  '022_customer_reviews_and_reports',
 ];
 const connectionString = process.env.DATABASE_URL;
 

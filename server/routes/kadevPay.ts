@@ -1,9 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { Router, type Request, type RequestHandler } from 'express';
-import { dbGet, dbRun, dbTransaction } from '../../db.ts';
-import { getSubscriptionPlanConfig, getSubscriptionState, normalizeSubscriptionTier } from '../services/businessRules.ts';
+import { databaseMode, dbAll, dbGet, dbRun, dbTransaction } from '../../db.ts';
+import { computeIsShopOpen, getSubscriptionPlanConfig, getSubscriptionState, normalizeSubscriptionTier } from '../services/businessRules.ts';
 import { getRenewedSubscriptionExpiry, isValidKadevPaySignature } from '../services/kadevPay.ts';
 import type { ShopRecord, SubscriptionTier } from '../types.ts';
+import { getSubscriptionPrice, type SubscriptionTerm } from '../../src/utils/subscriptionFeatures.ts';
+import {
+  BOOST_DURATIONS_DAYS,
+  findEarliestBoostStart,
+  MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY,
+} from '../services/boosts.ts';
+import { getBoostPrice } from '../../src/utils/boostPricing.ts';
 
 interface KadevPayRouterOptions {
   shops: ShopRecord[];
@@ -15,6 +22,7 @@ interface SubscriptionPaymentIntent {
   shop_id: number;
   payment_type: 'subscription' | 'promotion';
   tier: SubscriptionTier;
+  subscription_term: SubscriptionTerm;
   amount: number;
   currency: string;
   status: 'pending' | 'paid' | 'failed';
@@ -43,21 +51,134 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
     }
     const tier = normalizeSubscriptionTier(requestedTier);
     const plan = getSubscriptionPlanConfig(tier);
+    const requestedTerm = req.body?.term;
+    if (requestedTerm !== undefined && requestedTerm !== 'monthly' && requestedTerm !== 'annual') {
+      return res.status(400).json({ error: 'Choisissez une durée valide.' });
+    }
+    const term: SubscriptionTerm = requestedTerm === 'annual' ? 'annual' : 'monthly';
+    const amount = getSubscriptionPrice(tier, term);
     const paymentId = randomUUID();
     const createdAt = new Date().toISOString();
-    await dbRun(`INSERT INTO subscription_payment_intents (id, shop_id, payment_type, tier, amount, currency, status, created_at)
-      VALUES (?, ?, 'subscription', ?, ?, 'XOF', 'pending', ?)`, [paymentId, shop.id, tier, plan.amount, createdAt]);
+    await dbRun(`INSERT INTO subscription_payment_intents (id, shop_id, payment_type, tier, subscription_term, amount, currency, status, created_at)
+      VALUES (?, ?, 'subscription', ?, ?, ?, 'XOF', 'pending', ?)`, [paymentId, shop.id, tier, term, amount, createdAt]);
 
     res.status(201).json({
       payment_id: paymentId,
       public_key: publicKey,
-      amount: plan.amount,
+      amount,
       currency: 'XOF',
       is_test: publicKey.startsWith('kdvp_test_'),
       email: shop.owner_email,
       name: shop.name,
       phone: shop.whatsapp_number,
       plan_label: plan.label,
+      term,
+    });
+  });
+
+  router.post('/shops/:id/boost-payments', requireMerchantOwnShop, async (req, res) => {
+    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    const publicKey = String(process.env.KADEVPAY_PUBLIC_KEY || '').trim();
+    const webhookSecret = String(process.env.KADEVPAY_WEBHOOK_SECRET || '').trim();
+    if (!publicKey || !webhookSecret) {
+      return res.status(503).json({ error: 'Le paiement KadevPay n’est pas encore configuré.' });
+    }
+    if (!shop.owner_email) return res.status(409).json({ error: 'Ajoutez un e-mail à la boutique avant de payer un boost.' });
+
+    const durationDays = Number(req.body?.duration_days);
+    if (!BOOST_DURATIONS_DAYS.some((duration) => duration === durationDays)) {
+      return res.status(400).json({ error: 'Choisissez une durée de boost valide.' });
+    }
+
+    const paymentId = randomUUID();
+    const boostId = randomUUID();
+    const now = new Date();
+    const createdAt = now.toISOString();
+    const reserveUntil = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
+    const reservation = await dbTransaction(async (transaction) => {
+      const shopRow = await transaction.get<{
+        city: string | null;
+        category: string;
+        is_open: number | boolean;
+        is_active: number | boolean;
+        merchant_verification_status: string;
+        subscription_status: string;
+        selected_subscription_tier: string | null;
+        trial_start: string | null;
+        trial_end: string | null;
+        subscription_expires_at: string | null;
+      }>(`SELECT city, category, is_open, is_active, merchant_verification_status, subscription_status,
+          selected_subscription_tier, trial_start, trial_end, subscription_expires_at
+        FROM shops WHERE id = ?`, [shop.id]);
+      if (!shopRow) return { error: 'Boutique introuvable.' } as const;
+      if (Number(shopRow.is_active) !== 1 || Number(shopRow.is_open) !== 1 || !computeIsShopOpen(shop)) {
+        return { error: 'La boutique doit être active et ouverte pour acheter un boost.' } as const;
+      }
+      if (shopRow.merchant_verification_status !== 'verified') {
+        return { error: 'La vérification du commerçant doit être validée avant d’acheter un boost.' } as const;
+      }
+      const city = String(shopRow.city || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+      if (!city) return { error: 'Renseignez la ville de la boutique avant d’acheter un boost.' } as const;
+      const category = String(shopRow.category).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+      if (databaseMode === 'postgresql') {
+        await transaction.get('SELECT pg_advisory_xact_lock(hashtextextended(?, 0))', [`boost:${city}:${category}`]);
+      }
+      const productCount = await transaction.get<{ product_count: number | string }>(
+        'SELECT COUNT(*) AS product_count FROM products WHERE shop_id = ?',
+        [shop.id],
+      );
+      if (Number(productCount?.product_count || 0) < 5) {
+        return { error: 'Ajoutez au moins 5 produits au catalogue avant d’acheter un boost.' } as const;
+      }
+
+      const currentSubscription = getSubscriptionState({
+        subscription_status: shopRow.subscription_status,
+        selected_subscription_tier: shopRow.selected_subscription_tier as SubscriptionTier | undefined,
+        trial_start: shopRow.trial_start,
+        trial_end: shopRow.trial_end,
+        subscription_expires_at: shopRow.subscription_expires_at,
+      }, now);
+      const price = getBoostPrice(durationDays, currentSubscription.isActive && currentSubscription.plan === 'pro');
+      if (price === null) return { error: 'Choisissez une durée de boost valide.' } as const;
+      const intervals = await transaction.all<{ starts_at: string; ends_at: string }>(
+        `SELECT starts_at, ends_at FROM shop_boosts
+          WHERE city = ? AND category = ?
+            AND (status IN ('scheduled', 'active')
+              OR (status = 'pending_payment' AND reservation_expires_at > ?))`,
+        [city, category, createdAt],
+      );
+      const startsAt = findEarliestBoostStart(intervals, durationDays, now, MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY);
+      const endsAt = new Date(startsAt.getTime() + durationDays * 86400000);
+      await transaction.run(`INSERT INTO subscription_payment_intents
+        (id, shop_id, payment_type, tier, subscription_term, amount, currency, status, created_at)
+        VALUES (?, ?, 'promotion', 'standard', 'monthly', ?, 'XOF', 'pending', ?)`,
+      [paymentId, shop.id, price, createdAt]);
+      await transaction.run(`INSERT INTO shop_boosts
+        (id, shop_id, payment_intent_id, city, category, starts_at, ends_at, status, reservation_expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?)`,
+      [boostId, shop.id, paymentId, city, category, startsAt.toISOString(), endsAt.toISOString(), reserveUntil, createdAt]);
+      return { price, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() } as const;
+    });
+    if ('error' in reservation) {
+      const status = reservation.error === 'Boutique introuvable.' ? 404 : 409;
+      return res.status(status).json({ error: reservation.error });
+    }
+    res.status(201).json({
+      payment_id: paymentId,
+      public_key: publicKey,
+      amount: reservation.price,
+      currency: 'XOF',
+      is_test: publicKey.startsWith('kdvp_test_'),
+      email: shop.owner_email,
+      name: shop.name,
+      phone: shop.whatsapp_number,
+      boost_id: boostId,
+      duration_days: durationDays,
+      starts_at: reservation.startsAt,
+      ends_at: reservation.endsAt,
+      scheduled: Date.parse(reservation.startsAt) > now.getTime(),
+      max_simultaneous: MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY,
     });
   });
 
@@ -69,7 +190,27 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
       [String(req.params.paymentId), shop.id],
     );
     if (!payment) return res.status(404).json({ error: 'Paiement introuvable.' });
-    res.json({ status: payment.status, subscription: getSubscriptionState(shop) });
+    const boost = payment.payment_type === 'promotion'
+      ? await dbGet('SELECT starts_at, ends_at, status FROM shop_boosts WHERE payment_intent_id = ?', [payment.id])
+      : undefined;
+    res.json({ status: payment.status, subscription: getSubscriptionState(shop), boost });
+  });
+
+  router.get('/shops/:id/boosts', requireMerchantOwnShop, async (req, res) => {
+    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    const boosts = await dbAll<{
+      id: string;
+      starts_at: string;
+      ends_at: string;
+      status: string;
+      amount: number;
+    }[]>(`SELECT b.id, b.starts_at, b.ends_at, b.status, p.amount
+      FROM shop_boosts b
+      JOIN subscription_payment_intents p ON p.id = b.payment_intent_id
+      WHERE b.shop_id = ? AND b.status IN ('scheduled', 'active') AND b.ends_at > ?
+      ORDER BY b.starts_at DESC`, [shop.id, new Date().toISOString()]);
+    res.json({ boosts });
   });
 
   router.post('/webhooks/kadevpay', async (req: Request, res) => {
@@ -109,8 +250,8 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
 
     if (isFailedPayment) {
       const result = await dbTransaction(async (transaction) => {
-        const payment = await transaction.get<{ status: string; amount: number }>(
-          'SELECT status, amount FROM subscription_payment_intents WHERE id = ?',
+        const payment = await transaction.get<{ status: string; amount: number; payment_type: string }>(
+          'SELECT status, amount, payment_type FROM subscription_payment_intents WHERE id = ?',
           [paymentId],
         );
         if (!payment) return 'not_found' as const;
@@ -119,6 +260,10 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
         const failed = await transaction.run(`UPDATE subscription_payment_intents
           SET status = 'failed', provider_reference = ?
           WHERE id = ? AND status = 'pending'`, [providerReference, paymentId]);
+        if (failed.changes === 1 && payment.payment_type === 'promotion') {
+          await transaction.run(`UPDATE shop_boosts SET status = 'cancelled', reservation_expires_at = NULL
+            WHERE payment_intent_id = ? AND status = 'pending_payment'`, [paymentId]);
+        }
         return failed.changes === 1 ? 'failed' as const : 'duplicate' as const;
       });
       if (result === 'not_found') return res.status(404).json({ error: 'Intention de paiement introuvable.' });
@@ -136,12 +281,55 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
       if (payment.status === 'paid') return { status: 'duplicate' as const };
       if (payment.status !== 'pending' || Number(payment.amount) !== amount) return { status: 'mismatch' as const };
 
+      if (payment.payment_type === 'promotion') {
+        const boost = await transaction.get<{
+          id: string;
+          city: string;
+          category: string;
+          starts_at: string;
+          ends_at: string;
+          status: string;
+          reservation_expires_at: string | null;
+        }>('SELECT * FROM shop_boosts WHERE payment_intent_id = ?', [payment.id]);
+        if (!boost) return { status: 'not_found' as const };
+        if (databaseMode === 'postgresql') {
+          await transaction.get('SELECT pg_advisory_xact_lock(hashtextextended(?, 0))', [`boost:${boost.city}:${boost.category}`]);
+        }
+        let startsAt = Date.parse(boost.starts_at);
+        let endsAt = Date.parse(boost.ends_at);
+        const reservationExpired = !boost.reservation_expires_at
+          || Date.parse(boost.reservation_expires_at) <= now.getTime();
+        if (reservationExpired) {
+          const intervals = await transaction.all<{ starts_at: string; ends_at: string }>(
+            `SELECT starts_at, ends_at FROM shop_boosts
+              WHERE city = ? AND category = ? AND id <> ?
+                AND (status IN ('scheduled', 'active')
+                  OR (status = 'pending_payment' AND reservation_expires_at > ?))`,
+            [boost.city, boost.category, boost.id, now.toISOString()],
+          );
+          const days = (endsAt - startsAt) / 86400000;
+          startsAt = findEarliestBoostStart(intervals, days, now, MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY).getTime();
+          endsAt = startsAt + days * 86400000;
+        }
+        const paidAt = now.toISOString();
+        const paid = await transaction.run(`UPDATE subscription_payment_intents
+          SET status = 'paid', provider_reference = ?, paid_at = ?
+          WHERE id = ? AND status = 'pending'`, [providerReference, paidAt, payment.id]);
+        if (paid.changes !== 1) return { status: 'duplicate' as const };
+        const activated = await transaction.run(`UPDATE shop_boosts
+          SET starts_at = ?, ends_at = ?, status = ?, reservation_expires_at = NULL
+          WHERE id = ? AND status = 'pending_payment'`,
+        [new Date(startsAt).toISOString(), new Date(endsAt).toISOString(), startsAt <= now.getTime() ? 'active' : 'scheduled', boost.id]);
+        if (activated.changes !== 1) throw new Error('Boost reservation disappeared while applying a KadevPay payment.');
+        return { status: 'boost_paid' as const };
+      }
+
       const shopRecord = await transaction.get<{ subscription_expires_at: string | null }>(
         'SELECT subscription_expires_at FROM shops WHERE id = ?',
         [payment.shop_id],
       );
       if (!shopRecord) return { status: 'not_found' as const };
-      const expiresAt = getRenewedSubscriptionExpiry(shopRecord.subscription_expires_at, now);
+      const expiresAt = getRenewedSubscriptionExpiry(shopRecord.subscription_expires_at, now, payment.subscription_term);
       const paidAt = now.toISOString();
       const paid = await transaction.run(`UPDATE subscription_payment_intents
         SET status = 'paid', provider_reference = ?, paid_at = ?

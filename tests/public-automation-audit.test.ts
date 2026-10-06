@@ -9,6 +9,7 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import Database from 'better-sqlite3';
 import { CATEGORY_DEFAULTS } from '../src/utils/categoryDefaults';
+import { toDiscoveryCitySlug } from '../src/utils/discoverySeo';
 
 const TEST_PORT = 43124;
 const TEST_DB_PATH = path.join(tmpdir(), `matable-public-audit-${Date.now()}.db`);
@@ -37,6 +38,8 @@ before(async () => {
       NODE_ENV: 'test',
       PORT: String(TEST_PORT),
       MATABLE_DB_PATH: TEST_DB_PATH,
+      KADEVPAY_PUBLIC_KEY: 'kdvp_test_public_key',
+      KADEVPAY_WEBHOOK_SECRET: 'public-audit-test-secret',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -113,6 +116,34 @@ async function loginAndApproveShop(shop: { id: number; owner_access_token: strin
   return cookie;
 }
 
+async function payForSubscription(shopId: number, merchantCookie: string, tier: 'premium' | 'pro') {
+  const amount = tier === 'premium' ? 5000 : 8000;
+  const intentResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/subscription-payments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier }),
+  });
+  const intent = await intentResponse.json();
+  assert.equal(intentResponse.status, 201, JSON.stringify(intent));
+  const payload = JSON.stringify({
+    event: 'payment.success',
+    data: {
+      status: 'paid',
+      reference: `KDV-${Date.now()}`,
+      amount,
+      currency: 'XOF',
+      metadata: { subscription_payment_id: intent.payment_id },
+    },
+  });
+  const signature = createHmac('sha512', 'public-audit-test-secret').update(payload).digest('hex');
+  const payment = await fetch(`${BASE_URL}/api/webhooks/kadevpay`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-kadevpay-signature': signature },
+    body: payload,
+  });
+  assert.equal(payment.status, 200, await payment.text());
+}
+
 test('public directory shows active shops from the local onboarding flow', async () => {
   const publicShops = await fetch(`${BASE_URL}/api/shops`);
   assert.equal(publicShops.status, 200);
@@ -159,6 +190,26 @@ test('public directory shows active shops from the local onboarding flow', async
   assert.equal((await sitemap.text()).includes(createdShop.shop.slug), false, 'Pending shops must not appear in the public sitemap');
 });
 
+test('V1 public catalog reads preserve the legacy directory and storefront responses', async () => {
+  const [legacyDirectory, catalogDirectory] = await Promise.all([
+    fetch(`${BASE_URL}/api/shops`),
+    fetch(`${BASE_URL}/api/v1/catalog/storefronts`),
+  ]);
+  assert.equal(catalogDirectory.status, legacyDirectory.status);
+  const legacyDirectoryPayload = await legacyDirectory.json();
+  const catalogDirectoryPayload = await catalogDirectory.json();
+  assert.deepEqual(catalogDirectoryPayload, legacyDirectoryPayload);
+
+  const shopSlug = legacyDirectoryPayload[0]?.slug;
+  assert.ok(shopSlug, 'The test database should include a publicly visible shop');
+  const [legacyStorefront, catalogStorefront] = await Promise.all([
+    fetch(`${BASE_URL}/api/shops/${encodeURIComponent(shopSlug)}`),
+    fetch(`${BASE_URL}/api/v1/catalog/storefronts/${encodeURIComponent(shopSlug)}`),
+  ]);
+  assert.equal(catalogStorefront.status, legacyStorefront.status);
+  assert.deepEqual(await catalogStorefront.json(), await legacyStorefront.json());
+});
+
 test('global security headers are present and API responses are not cached', async () => {
   const response = await fetch(`${BASE_URL}/api/health`);
   assert.equal(response.status, 200);
@@ -174,12 +225,128 @@ test('global security headers are present and API responses are not cached', asy
 test('robots and sitemap routes are served by the SEO router', async () => {
   const robots = await fetch(`${BASE_URL}/robots.txt`);
   assert.equal(robots.status, 200);
-  assert.match(await robots.text(), /Sitemap: .*\/sitemap\.xml/);
+  const robotsText = await robots.text();
+  assert.match(robotsText, /Sitemap: .*\/sitemap\.xml/);
+  assert.doesNotMatch(robotsText, /Disallow: \/(app|admin)/, 'crawlers need to read noindex directives on private pages');
 
   const sitemap = await fetch(`${BASE_URL}/sitemap.xml`);
   assert.equal(sitemap.status, 200);
   assert.match(sitemap.headers.get('content-type') || '', /application\/xml/);
-  assert.match(await sitemap.text(), /<urlset/);
+  const sitemapXml = await sitemap.text();
+  assert.match(sitemapXml, /<urlset/);
+  assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/faq<\/loc>/);
+  assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/boutiques<\/loc>/);
+  assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/comment-ca-marche<\/loc>/);
+  assert.match(sitemapXml, /\/boutiques\/categorie\/fashion/);
+  assert.match(sitemapXml, /\/boutiques\/ville\/abidjan/);
+});
+
+test('shop directory page exposes indexable SEO metadata in the initial HTML response', async () => {
+  const response = await fetch(`${BASE_URL}/boutiques`, {
+    headers: { 'User-Agent': 'Googlebot', Accept: 'text/html' },
+  });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<title>Boutiques locales en Côte d’Ivoire \| MaTable\.ci<\/title>/);
+  assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:43124\/boutiques" \/>/);
+  assert.match(html, /<meta name="robots" content="index, follow, max-image-preview:large" \/>/);
+  assert.match(html, /"@type":"CollectionPage"/);
+  assert.match(html, /<noscript><main><h1>Découvrez les boutiques locales<\/h1>/);
+  assert.equal((html.match(/property="og:title"/g) || []).length, 1);
+});
+
+test('how-it-works guide exposes indexable metadata and crawlable tutorial steps', async () => {
+  const response = await fetch(`${BASE_URL}/comment-ca-marche`, {
+    headers: { 'User-Agent': 'Googlebot', Accept: 'text/html' },
+  });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<title>Comment ça marche \? \| MaTable\.ci<\/title>/);
+  assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:43124\/comment-ca-marche" \/>/);
+  assert.match(html, /"@type":"HowTo"/);
+  assert.match(html, /"@type":"HowToStep"/);
+  assert.match(html, /<noscript><main><h1>Comment ça marche sur MaTable\.ci \?<\/h1>/);
+  assert.match(html, /Trouvez une boutique ou un produit/);
+  assert.equal((html.match(/property="og:title"/g) || []).length, 1);
+});
+
+test('FAQ and private routes expose indexability metadata in the initial HTML response', async () => {
+  const faq = await fetch(`${BASE_URL}/faq`, { headers: { 'User-Agent': 'Googlebot', Accept: 'text/html' } });
+  assert.equal(faq.status, 200);
+  const faqHtml = await faq.text();
+  assert.match(faqHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:43124\/faq" \/>/);
+  assert.match(faqHtml, /"@type":"FAQPage"/);
+  assert.match(faqHtml, /Comment passer une commande/);
+
+  const registration = await fetch(`${BASE_URL}/inscription`, { headers: { 'User-Agent': 'Googlebot', Accept: 'text/html' } });
+  assert.equal(registration.status, 200);
+  assert.match(await registration.text(), /<meta name="robots" content="noindex, nofollow" \/>/);
+
+  const merchantAccess = await fetch(`${BASE_URL}/app?access=one-time-token`, { headers: { 'User-Agent': 'Googlebot', Accept: 'text/html' } });
+  assert.equal(merchantAccess.status, 200);
+  const merchantAccessHtml = await merchantAccess.text();
+  assert.match(merchantAccessHtml, /<meta name="robots" content="noindex, nofollow" \/>/);
+  assert.doesNotMatch(merchantAccessHtml, /<link rel="canonical"/);
+
+  const missing = await fetch(`${BASE_URL}/page-seo-inexistante`, { headers: { 'User-Agent': 'Googlebot', Accept: 'text/html' } });
+  assert.equal(missing.status, 404);
+  const missingHtml = await missing.text();
+  assert.match(missingHtml, /<title>Page introuvable \| MaTable\.ci<\/title>/);
+  assert.match(missingHtml, /<meta name="robots" content="noindex, nofollow" \/>/);
+});
+
+test('category landing pages expose server-rendered SEO metadata to social crawlers', async () => {
+  const response = await fetch(`${BASE_URL}/boutiques/categorie/fashion`, {
+    headers: { 'User-Agent': 'WhatsApp/2.0', Accept: 'text/html' },
+  });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<title>Boutiques de mode en Côte d’Ivoire \| MaTable\.ci<\/title>/);
+  assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:43124\/boutiques\/categorie\/fashion" \/>/);
+  assert.match(html, /<script type="application\/ld\+json">\{"@context":"https:\/\/schema\.org","@type":"CollectionPage"/);
+  assert.equal((html.match(/property="og:title"/g) || []).length, 1);
+});
+
+test('public product feed filters by category and city and ranks consented interactions in aggregate', async () => {
+  const directoryResponse = await fetch(`${BASE_URL}/api/v1/catalog/storefronts`);
+  assert.equal(directoryResponse.status, 200);
+  const directory = await directoryResponse.json() as Array<{
+    id: number;
+    category: string;
+    city?: string;
+    products_preview?: Array<{ id: number }>;
+  }>;
+  const shop = directory.find((candidate) => candidate.products_preview?.length && candidate.city);
+  assert.ok(shop?.products_preview?.[0], 'A public shop with a preview product is required.');
+  const product = shop.products_preview[0];
+  const event = () => fetch(`${BASE_URL}/api/analytics/product-event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shop.id,
+      product_id: product.id,
+      event_type: 'product_click',
+      session_id: `public-feed-${Date.now()}-${Math.random()}`,
+    }),
+  });
+  assert.equal((await event()).status, 204);
+  assert.equal((await event()).status, 204);
+
+  const query = new URLSearchParams({ sort: 'popular', category: shop.category, city: toDiscoveryCitySlug(shop.city!) });
+  const response = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/feed?${query}`);
+  assert.equal(response.status, 200);
+  const feed = await response.json() as {
+    ranking_fallback: boolean;
+    products: Array<{ id: number; popularity: { clicks: number }; shop: { category: string; city?: string } }>;
+  };
+  assert.equal(feed.ranking_fallback, false);
+  assert.ok(feed.products.length > 0);
+  assert.ok(feed.products.every((item) => item.shop.category === shop.category));
+  assert.ok(feed.products.every((item) => toDiscoveryCitySlug(item.shop.city || '') === toDiscoveryCitySlug(shop.city!)));
+  assert.ok(feed.products.find((item) => item.id === product.id)?.popularity.clicks >= 2);
+
+  const invalidCategory = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/feed?category=not-a-category`);
+  assert.equal(invalidCategory.status, 400);
 });
 
 test('merchant access-link pages are not cached and do not leak their URL as referrer', async () => {
@@ -478,6 +645,7 @@ test('merchant can update storefront social links and service zones', async () =
   await submitAndApproveShop(createdPayload.shop.id, merchantCookieHeader, 'premium');
   const premiumAnalytics = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/analytics`, { headers: { Cookie: merchantCookieHeader } });
   assert.equal(premiumAnalytics.status, 403);
+  await payForSubscription(createdPayload.shop.id, merchantCookieHeader, 'premium');
 
   const updateRes = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}`, {
     method: 'PUT',
