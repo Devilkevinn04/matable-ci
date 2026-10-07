@@ -4,6 +4,7 @@ import type { Shop, SubscriptionTier } from '../../types';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 import {
   BOOST_DURATIONS_DAYS,
+  BOOST_MINIMUM_PRODUCT_COUNT,
   BOOST_PRICES,
   MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY,
   getBoostPrice,
@@ -315,7 +316,7 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
                   ))}
                 </div>
                 <ul className="mt-4 grid gap-2 text-xs leading-5 text-slate-600 sm:grid-cols-2">
-                  <li>• Achat possible pour une boutique vérifiée, ouverte, avec une ville renseignée et au moins 5 produits.</li>
+                  <li>• Achat possible pour une boutique vérifiée, ouverte, avec une ville renseignée et au moins {BOOST_MINIMUM_PRODUCT_COUNT} produits.</li>
                   <li>• Maximum {MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY} boosts actifs simultanément par ville et catégorie. Si les créneaux sont complets, le boost payé est réservé au prochain créneau disponible.</li>
                   <li>• La durée commence à la date prévue, même si la boutique est temporairement masquée.</li>
                   <li>• Pas de remboursement après activation. Si MaTable.ci ne peut pas activer le boost payé, contactez l’assistance pour demander un remboursement.</li>

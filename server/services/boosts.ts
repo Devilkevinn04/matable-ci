@@ -1,6 +1,14 @@
-import { BOOST_DURATIONS_DAYS, MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY } from '../../src/utils/boostPricing.ts';
+import {
+  BOOST_DURATIONS_DAYS,
+  BOOST_MINIMUM_PRODUCT_COUNT,
+  MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY,
+} from '../../src/utils/boostPricing.ts';
 
-export { BOOST_DURATIONS_DAYS, MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY } from '../../src/utils/boostPricing.ts';
+export {
+  BOOST_DURATIONS_DAYS,
+  BOOST_MINIMUM_PRODUCT_COUNT,
+  MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY,
+} from '../../src/utils/boostPricing.ts';
 
 export interface BoostInterval {
   starts_at: string;

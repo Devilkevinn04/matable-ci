@@ -8,6 +8,7 @@ import { getSubscriptionPrice, type SubscriptionTerm } from '../../src/utils/sub
 import { getShopFromDatabase, mapShopRow } from '../repositories/shops.ts';
 import {
   BOOST_DURATIONS_DAYS,
+  BOOST_MINIMUM_PRODUCT_COUNT,
   findEarliestBoostStart,
   MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY,
 } from '../services/boosts.ts';
@@ -136,8 +137,8 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
         'SELECT COUNT(*) AS product_count FROM products WHERE shop_id = ?',
         [shop.id],
       );
-      if (Number(productCount?.product_count || 0) < 5) {
-        return { error: 'Ajoutez au moins 5 produits au catalogue avant d’acheter un boost.' } as const;
+      if (Number(productCount?.product_count || 0) < BOOST_MINIMUM_PRODUCT_COUNT) {
+        return { error: `Ajoutez au moins ${BOOST_MINIMUM_PRODUCT_COUNT} produits au catalogue avant d’acheter un boost.` } as const;
       }
 
       const currentSubscription = getSubscriptionState(transactionShop, now);

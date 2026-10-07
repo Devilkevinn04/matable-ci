@@ -130,6 +130,21 @@ test('Pro subscription exposes consented product stats and activates discounted 
   });
   assert.equal(emptyCatalogBoost.status, 409);
 
+  const firstProductResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ title: 'Produit 1', price: 1500, stock: 5 }),
+  });
+  const firstProductPayload = await firstProductResponse.json();
+  assert.equal(firstProductResponse.status, 200, JSON.stringify(firstProductPayload));
+  const singleProductBoost = await fetch(`${BASE_URL}/api/shops/${shopId}/boost-payments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ duration_days: 7 }),
+  });
+  assert.equal(singleProductBoost.status, 409);
+  assert.match((await singleProductBoost.json()).error, /au moins 2 produits/i);
+
   const testDb = new Database(TEST_DB_PATH);
   try {
     const expiredAt = new Date(Date.now() - 3 * 86400000).toISOString();
@@ -162,8 +177,8 @@ test('Pro subscription exposes consented product stats and activates discounted 
   assert.equal(paidSession.subscription.plan, 'pro');
   assert.ok(Date.parse(paidSession.subscription.expiresAt) > Date.now() + 360 * 86400000);
 
-  const products: { id: number; title: string }[] = [];
-  for (let index = 0; index < 5; index += 1) {
+  const products: { id: number; title: string }[] = [firstProductPayload.product];
+  for (let index = 1; index < 2; index += 1) {
     const productResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/products`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },

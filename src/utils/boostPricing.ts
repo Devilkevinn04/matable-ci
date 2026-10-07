@@ -1,5 +1,6 @@
 export const BOOST_DURATIONS_DAYS = [7, 15, 30] as const;
 export const MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY = 5;
+export const BOOST_MINIMUM_PRODUCT_COUNT = 2;
 export const BOOST_PRICES: Record<(typeof BOOST_DURATIONS_DAYS)[number], number> = {
   7: 2000,
   15: 2800,

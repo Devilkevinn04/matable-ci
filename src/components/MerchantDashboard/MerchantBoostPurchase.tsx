@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { LoaderCircle, Sparkles } from 'lucide-react';
 import type { Shop } from '../../types';
-import { BOOST_DURATIONS_DAYS, BOOST_PRICES, getBoostPrice } from '../../utils/boostPricing';
+import {
+  BOOST_DURATIONS_DAYS,
+  BOOST_MINIMUM_PRODUCT_COUNT,
+  BOOST_PRICES,
+  getBoostPrice,
+} from '../../utils/boostPricing';
 import { isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
 
 interface MerchantBoostPurchaseProps {
@@ -27,7 +32,7 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
     && shop.is_open
     && shop.city?.trim()
     && shop.merchant_verification_status === 'verified'
-    && productCount >= 5;
+    && productCount >= BOOST_MINIMUM_PRODUCT_COUNT;
   const isPro = shop.subscription?.isActive === true
     && isSubscriptionFeatureIncluded(shop.subscription.plan, 'boost_discount');
   const amount = getBoostPrice(duration, isPro) ?? BOOST_PRICES[duration];
@@ -175,7 +180,7 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
           </div>
         </>
       ) : (
-        <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-950">Pour acheter un boost, la boutique doit être vérifiée, ouverte, renseignée dans une ville et présenter au moins 5 produits.</p>
+        <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-950">Pour acheter un boost, la boutique doit être vérifiée, ouverte, renseignée dans une ville et présenter au moins {BOOST_MINIMUM_PRODUCT_COUNT} produits.</p>
       )}
       {boosts.length > 0 && <ul className="mt-4 space-y-2" aria-label="Boosts réservés ou actifs">
         {boosts.map((boost) => {
