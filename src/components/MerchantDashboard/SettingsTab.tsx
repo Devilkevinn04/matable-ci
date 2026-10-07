@@ -161,6 +161,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
             {settingsSubTab === 'subscription' && currentShop && (showPlanChooser ? (
               <MerchantTrialOnboarding
                 shop={currentShop}
+                productCount={products.filter((product) => product.shop_id === currentShop.id).length}
                 isStarting={false}
                 mode="plans"
                 onBack={() => setShowPlanChooser(false)}

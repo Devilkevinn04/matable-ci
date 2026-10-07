@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, BarChart3, Check, CircleCheck, LoaderCircle, LockKeyhole, MessageCircle, Palette, ShieldCheck, Sparkles, Store } from 'lucide-react';
 import type { Shop, SubscriptionTier } from '../../types';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
+import { MerchantBoostPurchase } from './MerchantBoostPurchase';
 import {
   BOOST_DURATIONS_DAYS,
   BOOST_MINIMUM_PRODUCT_COUNT,
@@ -40,6 +41,7 @@ declare global {
 
 interface MerchantTrialOnboardingProps {
   shop: Shop;
+  productCount?: number;
   isStarting: boolean;
   onStart?: (tier: SubscriptionTier) => void;
   mode?: 'start' | 'expired' | 'plans';
@@ -49,7 +51,7 @@ interface MerchantTrialOnboardingProps {
 
 const plans = Object.values(SUBSCRIPTION_PLANS);
 
-export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'start', previewOnly = false, onBack }: MerchantTrialOnboardingProps) {
+export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, onStart, mode = 'start', previewOnly = false, onBack }: MerchantTrialOnboardingProps) {
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(shop.subscription?.plan || 'standard');
   const [term, setTerm] = useState<SubscriptionTerm>('monthly');
   const [purchaseNow, setPurchaseNow] = useState(mode !== 'start');
@@ -321,6 +323,7 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
                   <li>• La durée commence à la date prévue, même si la boutique est temporairement masquée.</li>
                   <li>• Pas de remboursement après activation. Si MaTable.ci ne peut pas activer le boost payé, contactez l’assistance pour demander un remboursement.</li>
                 </ul>
+                {!previewOnly && <MerchantBoostPurchase shop={shop} productCount={productCount} />}
               </section>
             )}
           </section>
