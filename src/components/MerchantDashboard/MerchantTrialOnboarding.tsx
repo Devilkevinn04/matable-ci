@@ -3,8 +3,15 @@ import { ArrowRight, BarChart3, Check, CircleCheck, LoaderCircle, LockKeyhole, M
 import type { Shop, SubscriptionTier } from '../../types';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 import {
+  BOOST_DURATIONS_DAYS,
+  BOOST_PRICES,
+  MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY,
+  getBoostPrice,
+} from '../../utils/boostPricing';
+import {
   getSubscriptionDailyPrice,
   getSubscriptionPrice,
+  PRO_BOOST_DISCOUNT_PERCENT,
   SUBSCRIPTION_PLANS,
   TRIAL_DURATION_DAYS,
   type SubscriptionTerm,
@@ -286,6 +293,35 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
                 );
               })}
             </div>
+            {mode === 'plans' && (
+              <section className="mt-6 rounded-[1.5rem] border border-[#e4d9c7] bg-[#fffdf8] p-5 sm:mt-8 sm:p-6" aria-labelledby="boost-plan-heading">
+                <div className="flex items-start gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800"><Sparkles className="h-5 w-5" /></span>
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-[#a2642e]">En complément de votre abonnement</p>
+                    <h3 id="boost-plan-heading" className="mt-1 text-lg font-black text-[#183b31]">Boost sponsorisé · tarifs par durée</h3>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">Le Boost est une mise en avant ponctuelle dans l’annuaire, achetée séparément de votre forfait. Il est identifié comme sponsorisé et ne remplace pas les critères de pertinence du classement.</p>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3" aria-label="Tarifs des boosts">
+                  {BOOST_DURATIONS_DAYS.map((days) => (
+                    <div key={days} className="rounded-xl border border-[#eee6da] bg-white p-4">
+                      <p className="text-xs font-bold text-slate-500">Durée</p>
+                      <p className="mt-1 text-sm font-extrabold text-slate-900">{days} jours</p>
+                      <p className="mt-3 text-xs font-bold text-slate-500">Tarif standard</p>
+                      <p className="mt-1 text-lg font-black text-[#183b31]">{new Intl.NumberFormat('fr-FR').format(BOOST_PRICES[days])} FCFA</p>
+                      <p className="mt-2 text-xs font-bold text-emerald-800">Pro : {new Intl.NumberFormat('fr-FR').format(getBoostPrice(days, true))} FCFA (−{PRO_BOOST_DISCOUNT_PERCENT} %)</p>
+                    </div>
+                  ))}
+                </div>
+                <ul className="mt-4 grid gap-2 text-xs leading-5 text-slate-600 sm:grid-cols-2">
+                  <li>• Achat possible pour une boutique vérifiée, ouverte, avec une ville renseignée et au moins 5 produits.</li>
+                  <li>• Maximum {MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY} boosts actifs simultanément par ville et catégorie. Si les créneaux sont complets, le boost payé est réservé au prochain créneau disponible.</li>
+                  <li>• La durée commence à la date prévue, même si la boutique est temporairement masquée.</li>
+                  <li>• Pas de remboursement après activation. Si MaTable.ci ne peut pas activer le boost payé, contactez l’assistance pour demander un remboursement.</li>
+                </ul>
+              </section>
+            )}
           </section>
         ) : (
           <section className="mt-7 rounded-xl border border-emerald-200 bg-white p-5">
