@@ -99,6 +99,7 @@ export interface ProductRecord {
   stock: number;
   image_url: string;
   is_available: boolean;
+  is_visible?: boolean;
   category?: string;
   sizes?: string[];
   colors?: { name: string; hex: string }[];

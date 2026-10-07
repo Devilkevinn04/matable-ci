@@ -1,9 +1,8 @@
-import { dbAll, dbRun } from '../../db.ts';
+import { dbAll, dbGet, dbRun } from '../../db.ts';
 import type { ShopRecord, SubscriptionStatus } from '../types.ts';
 
-export async function loadShopsFromDatabase(): Promise<ShopRecord[]> {
-  const rows = await dbAll<Record<string, unknown>>('SELECT shops.* FROM shops ORDER BY shops.id');
-  return rows.map((row) => ({
+export function mapShopRow(row: Record<string, unknown>): ShopRecord {
+  return {
     id: Number(row.id),
     name: String(row.name),
     slug: String(row.slug),
@@ -31,7 +30,17 @@ export async function loadShopsFromDatabase(): Promise<ShopRecord[]> {
     theme_config: row.theme_config ? (typeof row.theme_config === 'string' ? JSON.parse(row.theme_config) : row.theme_config) : {},
     opening_hours: row.opening_hours ? (typeof row.opening_hours === 'string' ? JSON.parse(row.opening_hours) : row.opening_hours) : undefined,
     owner_access_token_hash: row.owner_access_token_hash ? String(row.owner_access_token_hash) : null,
-  }));
+  };
+}
+
+export async function loadShopsFromDatabase(): Promise<ShopRecord[]> {
+  const rows = await dbAll<Record<string, unknown>>('SELECT shops.* FROM shops ORDER BY shops.id');
+  return rows.map(mapShopRow);
+}
+
+export async function getShopFromDatabase(shopId: number): Promise<ShopRecord | undefined> {
+  const row = await dbGet<Record<string, unknown>>('SELECT shops.* FROM shops WHERE id = ?', [shopId]);
+  return row ? mapShopRow(row) : undefined;
 }
 
 export async function persistShop(shop: ShopRecord): Promise<void> {

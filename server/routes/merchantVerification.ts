@@ -1,6 +1,5 @@
 import { Router, type RequestHandler } from 'express';
 import { decryptKycValue, encryptKycValue, hashDocumentNumber, isKycEncryptionConfigured } from '../services/identityCrypto.ts';
-import { evaluateLocalIdentityVerification } from '../services/businessRules.ts';
 import type { ShopRecord } from '../types.ts';
 
 type DbRun = (sql: string, params?: unknown[]) => Promise<{ changes: number }>;
@@ -105,18 +104,10 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       ocr_text: ocrText,
       ocr_confidence: ocrConfidence,
     };
-    const localDecision = evaluateLocalIdentityVerification({
-      faceDistance,
-      ocrConfidence,
-      ocrText,
-      documentNumber,
-      firstName: identityFields.first_name,
-      lastName: identityFields.last_name,
-    });
-    const status = localDecision.automaticApproval ? 'verified' : 'under_review';
-    const decisionMethod = localDecision.automaticApproval ? 'local_auto' : 'manual_review';
+    const status = 'under_review';
+    const decisionMethod = 'manual_review';
     const now = new Date().toISOString();
-    const reviewedAt = localDecision.automaticApproval ? now : null;
+    const reviewedAt = null;
     try {
       await dbRun(`INSERT INTO merchant_identity_verifications (
         shop_id, document_type, document_number_hash, document_number_last4, identity_data_ciphertext,
@@ -135,7 +126,7 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
           shopId, documentType, documentHash, documentNumber.replace(/\s/g, '').slice(-4), encryptKycValue(JSON.stringify(identityFields)),
         documentImage.mimeType, encryptKycValue(documentImage.base64), documentBackImage.mimeType,
         encryptKycValue(documentBackImage.base64), selfieImage.mimeType,
-        encryptKycValue(selfieImage.base64), faceDistance, status, decisionMethod, now, reviewedAt,
+        encryptKycValue(selfieImage.base64), null, status, decisionMethod, now, reviewedAt,
       ]);
       await dbRun('UPDATE shops SET merchant_verification_status = ? WHERE id = ?', [status, shopId]);
       const shop = shops.find((candidate) => candidate.id === shopId);

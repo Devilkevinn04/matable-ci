@@ -297,31 +297,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       </>
     );
   }
-  if (!merchantState.currentShop.admin_mode && ['expired', 'past_due', 'suspended', 'cancelled'].includes(merchantState.currentShop.subscription?.status || '')) {
+  if (!merchantState.currentShop.admin_mode && merchantIdentityVerified && ['expired', 'past_due', 'suspended', 'cancelled'].includes(merchantState.currentShop.subscription?.status || '')) {
     return <MerchantTrialOnboarding shop={merchantState.currentShop} isStarting={false} onStart={handleStartTrial} mode="expired" />;
   }
-  if (!merchantState.currentShop.admin_mode && !merchantIdentityVerified) {
-    const verificationSupportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour la vérification de ${merchantState.currentShop.name}.`);
-    return (
-      <main className="merchant-pre-dashboard min-h-screen bg-[#f4f6f1] px-4 py-6 sm:px-6 sm:py-10">
-        <div className="mx-auto max-w-4xl">
-          <div className="mb-4 flex justify-end gap-2">
-            <button type="button" onClick={onBackToDirectory} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Annuaire</button>
-            {verificationSupportUrl && <a href={verificationSupportUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-900"><MessageCircle className="h-3.5 w-3.5" />Aide</a>}
-            <button type="button" onClick={handleLogout} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Déconnexion</button>
-          </div>
-          <p className="mb-4 text-sm font-bold text-slate-600">Essai gratuit · {merchantState.currentShop.subscription?.trialDaysRemaining ?? 0} jours restants</p>
-          <React.Suspense fallback={<p role="status" className="text-sm text-slate-600">Chargement de la vérification…</p>}>
-            <MerchantIdentityVerification
-              shopId={merchantState.currentShop.id}
-              onStatusChange={(status) => setCurrentShop((shop) => shop ? { ...shop, merchant_verification_status: status.status as Shop['merchant_verification_status'] } : null)}
-            />
-          </React.Suspense>
-        </div>
-      </main>
-    );
-  }
-
   // 2. AUTHENTICATED -> MERCHANT DASHBOARD
   const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
   const dashboardSupportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour la boutique ${currentShop.name}.`);
@@ -511,6 +489,18 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           </div>
         )}
       </div>
+
+      {!isShopVerified && (
+        <div role="status" className="flex flex-col gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+          <p className="flex items-start gap-2">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>Votre espace marchand est prêt. Vérifiez votre identité pour publier la boutique, recevoir des commandes et payer une formule après l’essai ; vous pouvez déjà configurer votre catalogue.</span>
+          </p>
+          <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('verification'); }} className="min-h-10 shrink-0 self-start rounded-lg border border-amber-300 bg-white px-3 text-xs font-bold text-amber-950 hover:bg-amber-100 sm:self-auto">
+            Vérifier mon identité
+          </button>
+        </div>
+      )}
 
       {activeTab === 'overview' && currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining <= 10 && (
         <div className={`flex flex-col gap-2 border-t px-4 py-2 text-xs font-semibold sm:flex-row sm:items-center sm:justify-between ${currentShop.subscription.trialDaysRemaining <= 1 ? 'border-rose-200 bg-rose-50 text-rose-950' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>

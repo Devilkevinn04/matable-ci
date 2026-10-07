@@ -6,11 +6,7 @@ import type { OrderRecord, ShopRecord } from '../types.ts';
 import { toCustomerProfile, type CustomerProfileRow } from '../services/customerProfile.ts';
 import { dbAll, dbTransaction } from '../../db.ts';
 import { listCustomerSessionRecords, revokeOtherCustomerSessionRecords } from '../repositories/sessions.ts';
-
-interface LoginAttempt {
-  count: number;
-  resetAt: number;
-}
+import { clearLoginAttempts, getCustomerLoginLockSeconds, isLoginRateLimited, recordCustomerLoginFailure } from '../services/rateLimits.ts';
 
 interface MerchantSession {
   shopId: number;
@@ -74,11 +70,7 @@ interface AuthRouterOptions {
   merchantSessions: Map<string, MerchantSession>;
   customerSessions: Map<string, CustomerSession>;
   adminSessions: Map<string, AdminSession>;
-  loginAttempts: Map<string, LoginAttempt>;
   rateLimitPublicRequest: (limit?: number) => RequestHandler;
-  isLoginRateLimited: (key: string) => boolean;
-  getCustomerLoginLockSeconds: (key: string) => number;
-  recordCustomerLoginFailure: (key: string) => number;
   getRateLimitClientAddress: (req: Pick<Request, 'ip' | 'socket'>) => string;
   verifyPin: (inputPin: string, storedHash: string) => boolean;
   toSafeShop: (shop: ShopRecord) => object;
@@ -121,11 +113,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     merchantSessions,
     customerSessions,
     adminSessions,
-    loginAttempts,
     rateLimitPublicRequest,
-    isLoginRateLimited,
-    getCustomerLoginLockSeconds,
-    recordCustomerLoginFailure,
     getRateLimitClientAddress,
     verifyPin,
     toSafeShop,
@@ -199,7 +187,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     if (!phone || !pin) return res.status(400).json({ error: 'Numéro de téléphone et code PIN requis.' });
 
     const attemptKey = `${req.ip}:${String(phone).replace(/\D/g, '')}`;
-    if (isLoginRateLimited(attemptKey)) return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
+    if (await isLoginRateLimited(attemptKey)) return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
 
     const cleanInputPhone = phone.replace(/[^0-9]/g, '');
     const shop = shops.find((candidate) => {
@@ -216,7 +204,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     }
 
     await createMerchantSession(res, shop.id, req);
-    loginAttempts.delete(attemptKey);
+    await clearLoginAttempts(attemptKey);
     res.json({
       success: true,
       shop: {
@@ -290,10 +278,10 @@ export function createAuthRouter(options: AuthRouterOptions) {
     if (!configuredKey) return res.status(503).json({ error: 'ADMIN_ACCESS_KEY doit être configurée côté serveur.' });
 
     const adminAttemptKey = `${req.ip}:admin`;
-    if (isLoginRateLimited(adminAttemptKey)) return res.status(429).json({ error: 'Trop de tentatives de connexion admin. Réessayez plus tard.' });
+    if (await isLoginRateLimited(adminAttemptKey)) return res.status(429).json({ error: 'Trop de tentatives de connexion admin. Réessayez plus tard.' });
     if (!timingSafeEqual(String(req.body?.key || ''), configuredKey)) return res.status(401).json({ error: 'Clé super-admin incorrecte.' });
 
-    loginAttempts.delete(adminAttemptKey);
+    await clearLoginAttempts(adminAttemptKey);
     const token = randomUUID();
     const adminSession = { expiresAt: Date.now() + adminSessionDurationMs, fingerprint: buildSessionFingerprint(req) };
     adminSessions.set(token, adminSession);
@@ -569,7 +557,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     if (!safeEmail || !safePassword) return res.status(400).json({ error: 'Email et mot de passe requis.' });
 
     const attemptKey = `customer:${getRateLimitClientAddress(req)}:${safeEmail}`;
-    const lockSeconds = getCustomerLoginLockSeconds(attemptKey);
+    const lockSeconds = await getCustomerLoginLockSeconds(attemptKey);
     if (lockSeconds > 0) {
       res.setHeader('Retry-After', String(lockSeconds));
       return res.status(429).json({ error: 'Identifiants invalides. Réessayez plus tard.' });
@@ -578,12 +566,12 @@ export function createAuthRouter(options: AuthRouterOptions) {
     const user = await dbGet<{ id: number; name: string; first_name: string | null; last_name: string | null; phone: string; email: string; password_hash: string; created_at: string; is_active: number }>('SELECT * FROM users WHERE email = ?', [safeEmail]);
     const passwordMatches = bcrypt.compareSync(safePassword, user?.password_hash || dummyCustomerPasswordHash);
     if (!user || !passwordMatches || !user.is_active) {
-      const failureCount = recordCustomerLoginFailure(attemptKey);
+      const failureCount = await recordCustomerLoginFailure(attemptKey);
       await new Promise((resolve) => setTimeout(resolve, Math.min(2000, 100 * 2 ** (failureCount - 1))));
       return res.status(401).json({ error: 'Identifiants invalides.' });
     }
 
-    loginAttempts.delete(attemptKey);
+    await clearLoginAttempts(attemptKey, 'customer-login');
     const token = randomUUID();
     const session = { userId: user.id, expiresAt: Date.now() + sessionDurationMs, fingerprint: buildSessionFingerprint(req) };
     customerSessions.set(token, session);

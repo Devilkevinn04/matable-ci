@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   ShoppingBag, 
@@ -20,10 +20,10 @@ import {
   Tag,
   Search
 } from 'lucide-react';
-import { Shop, Product, CartItem } from '../types';
+import { Shop, Product } from '../types';
 import { formatFCFA, generateWhatsAppOrderReceipt, getProductUnitPrice } from '../utils/format';
 import { getContrastTextColor, normalizeHex } from '../utils/color';
-import { getDefaultSelectedModifiers, requiresShopSwitchConfirmation } from '../utils/cart';
+import { getDefaultSelectedModifiers } from '../utils/cart';
 import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDisplay, getWelcomeMessageForDisplay } from '../utils/categoryDefaults';
 import { CategoryProductImage } from './CategoryProductImage';
 import { CustomerProductCard } from './CustomerProductCard';
@@ -33,6 +33,7 @@ import { CustomerUser } from './CustomerAuth';
 import { CustomerCheckoutAuth } from './CustomerCheckoutAuth';
 import { CustomerTrustPanel } from './CustomerTrustPanel';
 import { getCanonicalOrigin } from '../utils/seoCanonical';
+import { useCustomerCart } from './useCustomerCart';
 
 interface CustomerStorefrontProps {
   shopSlug: string;
@@ -41,39 +42,11 @@ interface CustomerStorefrontProps {
   onCustomerAuthenticated?: (user: CustomerUser) => void;
 }
 
-const ACTIVE_CART_STORAGE_KEY = 'matable_active_cart';
-type CartState = { shopSlug: string; items: CartItem[] };
-
 function getAnalyticsReferrerHost(): string {
   try {
     return document.referrer ? new URL(document.referrer).hostname : '';
   } catch {
     return '';
-  }
-}
-
-function validCartItems(value: unknown): CartItem[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is CartItem =>
-    Boolean(item && typeof item === 'object' && item.product && typeof item.product.id === 'number' && Number.isInteger(item.quantity) && item.quantity > 0)
-  );
-}
-
-function readStoredCart(shopSlug: string): CartState {
-  try {
-    const activeCart = sessionStorage.getItem(ACTIVE_CART_STORAGE_KEY);
-    if (activeCart) {
-      const parsed: unknown = JSON.parse(activeCart);
-      if (parsed && typeof parsed === 'object' && 'shopSlug' in parsed && 'items' in parsed) {
-        const saved = parsed as { shopSlug: unknown; items: unknown };
-        if (typeof saved.shopSlug === 'string') return { shopSlug: saved.shopSlug, items: validCartItems(saved.items) };
-      }
-    }
-
-    const legacyCart = sessionStorage.getItem(`matable_cart_${shopSlug}`);
-    return { shopSlug, items: legacyCart ? validCartItems(JSON.parse(legacyCart)) : [] };
-  } catch {
-    return { shopSlug, items: [] };
   }
 }
 
@@ -91,22 +64,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // Keep an in-progress cart when a customer opens another page and returns.
-  const [cartState, setCartState] = useState<CartState>(() => readStoredCart(shopSlug));
-  const cart = cartState.shopSlug === shopSlug ? cartState.items : [];
-  const setCart: React.Dispatch<React.SetStateAction<CartItem[]>> = (update) => {
-    setCartState((previous) => {
-      const currentItems = previous.shopSlug === shopSlug ? previous.items : [];
-      return {
-        shopSlug,
-        items: typeof update === 'function' ? update(currentItems) : update,
-      };
-    });
-  };
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const cartHistoryEntry = useRef(false);
-  const [pendingShopSwitchProduct, setPendingShopSwitchProduct] = useState<Product | null>(null);
-
   // Truncation toggle map for product descriptions
   const [expandedDescriptions, setExpandedDescriptions] = useState<Record<number, boolean>>({});
 
@@ -114,6 +71,21 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [selectedSizes, setSelectedSizes] = useState<Record<number, string>>({});
   const [selectedColors, setSelectedColors] = useState<Record<number, string>>({});
   const [selectedModifiers, setSelectedModifiers] = useState<Record<number, string[]>>({});
+  const {
+    cart,
+    cartShopSlug,
+    requiresShopSwitch,
+    setCart,
+    isCartOpen,
+    setIsCartOpen,
+    pendingShopSwitchProduct,
+    setPendingShopSwitchProduct,
+    addToCart,
+    updateQuantity,
+    getProductQuantityInCart,
+    totalCartCount,
+    totalCartAmount,
+  } = useCustomerCart(shopSlug, selectedSizes, selectedColors, selectedModifiers);
 
   // Checkout form fields
   const [customerName, setCustomerName] = useState('');
@@ -131,55 +103,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [messageCopied, setMessageCopied] = useState(false);
   const [formStartedAt] = useState(() => Date.now());
   const [website, setWebsite] = useState('');
-
-  useEffect(() => {
-    if (!isCartOpen) return;
-    const previousBodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsCartOpen(false);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = previousBodyOverflow;
-    };
-  }, [isCartOpen]);
-
-  useEffect(() => {
-    const restoreCartDrawer = () => {
-      const drawerIsInHistory = Boolean(window.history.state?.matableCartDrawer);
-      cartHistoryEntry.current = drawerIsInHistory;
-      setIsCartOpen(drawerIsInHistory);
-    };
-    window.addEventListener('popstate', restoreCartDrawer);
-    return () => window.removeEventListener('popstate', restoreCartDrawer);
-  }, []);
-
-  useEffect(() => {
-    if (isCartOpen) {
-      if (!window.history.state?.matableCartDrawer) {
-        window.history.pushState({ ...(window.history.state || {}), matableCartDrawer: true }, '', window.location.href);
-      }
-      cartHistoryEntry.current = true;
-      return;
-    }
-
-    if (cartHistoryEntry.current && window.history.state?.matableCartDrawer) {
-      cartHistoryEntry.current = false;
-      window.history.back();
-    }
-  }, [isCartOpen]);
-
-  useEffect(() => {
-    if (cartState.shopSlug !== shopSlug) return;
-    try {
-      if (cartState.items.length > 0) sessionStorage.setItem(ACTIVE_CART_STORAGE_KEY, JSON.stringify(cartState));
-      else sessionStorage.removeItem(ACTIVE_CART_STORAGE_KEY);
-    } catch {
-      // The in-memory cart remains available when browser storage is disabled.
-    }
-  }, [cartState, shopSlug]);
 
   // Ces deux useMemo doivent être déclarés avant les "return" conditionnels
   // ci-dessous (loading / error / boutique inactive), sinon React appelle un
@@ -490,68 +413,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     setExpandedDescriptions(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Cart actions with variant support
-  const addToCart = (product: Product, replaceOtherShop = false) => {
-    if (product.stock <= 0) return;
-    const currentSize = selectedSizes[product.id];
-    const currentColor = selectedColors[product.id];
-    const currentMods = selectedModifiers[product.id] || [];
-    const addProduct = (items: CartItem[]) => {
-      const existingIndex = items.findIndex((item) =>
-        item.product.id === product.id
-        && item.selected_size === currentSize
-        && item.selected_color === currentColor
-        && JSON.stringify(item.selected_modifiers || []) === JSON.stringify(currentMods)
-      );
-      if (existingIndex > -1) {
-        const existing = items[existingIndex];
-        if (existing.quantity >= product.stock) return items;
-        const updated = [...items];
-        updated[existingIndex] = { ...existing, quantity: existing.quantity + 1 };
-        return updated;
-      }
-      return [...items, { product, quantity: 1, selected_size: currentSize, selected_color: currentColor, selected_modifiers: currentMods }];
-    };
-
-    if (requiresShopSwitchConfirmation(cartState.shopSlug, shopSlug, cartState.items.length)) {
-      if (!replaceOtherShop) {
-        setPendingShopSwitchProduct(product);
-        return;
-      }
-      setCartState({ shopSlug, items: addProduct([]) });
-      return;
-    }
-
-    setCart(addProduct);
-  };
-
-  const updateQuantity = (index: number, delta: number) => {
-    setCart(prev => {
-      const item = prev[index];
-      if (!item) return prev;
-      const newQty = item.quantity + delta;
-      if (newQty <= 0) {
-        return prev.filter((_, i) => i !== index);
-      }
-      if (newQty > item.product.stock) return prev;
-      const copy = [...prev];
-      copy[index] = { ...item, quantity: newQty };
-      return copy;
-    });
-  };
-
-  const getProductQuantityInCart = (productId: number): number => {
-    return cart
-      .filter(i => i.product.id === productId)
-      .reduce((sum, i) => sum + i.quantity, 0);
-  };
-
-  const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const totalCartAmount = cart.reduce((sum, item) => {
-    const unitPrice = getProductUnitPrice(item.product, item.selected_modifiers);
-    return sum + item.quantity * unitPrice;
-  }, 0);
-
   const authenticatedCustomer = customerUser || checkoutAuthUser;
 
   const normalizeCustomerPhoneValue = (value: string): string => {
@@ -815,12 +676,12 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         </div>
       </header>
 
-      {pendingShopSwitchProduct && requiresShopSwitchConfirmation(cartState.shopSlug, shopSlug, cartState.items.length) && (
+      {pendingShopSwitchProduct && requiresShopSwitch && (
         createPortal(
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingShopSwitchProduct(null); }}>
             <section role="dialog" aria-modal="true" aria-labelledby="shop-switch-title" className="w-full max-w-md rounded-2xl border-2 border-[#211712] bg-[#fffaf2] p-5 shadow-2xl">
               <h2 id="shop-switch-title" className="text-lg font-black text-[#211712]">Votre panier appartient à une autre boutique</h2>
-              <p className="mt-2 text-sm leading-6 text-[#4a3a30]">Pour commander chez {shop?.name}, il faut remplacer le panier de « {cartState.shopSlug} ». Votre commande restera liée à une seule boutique.</p>
+              <p className="mt-2 text-sm leading-6 text-[#4a3a30]">Pour commander chez {shop?.name}, il faut remplacer le panier de « {cartShopSlug} ». Votre commande restera liée à une seule boutique.</p>
               <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button type="button" onClick={() => setPendingShopSwitchProduct(null)} className="min-h-11 rounded-xl border-2 border-[#ded8ce] bg-white px-4 text-sm font-bold text-[#211712]">Garder ce panier</button>
                 <button type="button" onClick={() => { const product = pendingShopSwitchProduct; setPendingShopSwitchProduct(null); addToCart(product, true); }} className="min-h-11 rounded-xl border-2 border-[#211712] bg-[#1d6b57] px-4 text-sm font-bold text-white">Vider et continuer</button>

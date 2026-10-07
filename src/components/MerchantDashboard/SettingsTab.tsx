@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes, ShieldCheck } from 'lucide-react';
+import type { Shop } from '../../types';
 import { MerchantState } from './useMerchant';
 import { ThemeCustomizer } from '../ThemeCustomizer';
 import { MerchantIdentityVerification } from './lazyMerchantIdentityVerification';
@@ -148,7 +149,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
 
             {settingsSubTab === 'verification' && currentShop && (
               <React.Suspense fallback={<p role="status" className="text-sm text-slate-600">Chargement de la vérification…</p>}>
-                <MerchantIdentityVerification shopId={currentShop.id} />
+                <MerchantIdentityVerification
+                  shopId={currentShop.id}
+                  onStatusChange={(status) => setCurrentShop((shop) => shop
+                    ? { ...shop, merchant_verification_status: status.status as Shop['merchant_verification_status'] }
+                    : null)}
+                />
               </React.Suspense>
             )}
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, Camera, CheckCircle2, FileCheck2, LoaderCircle, ShieldCheck, X } from 'lucide-react';
 
 export interface VerificationStatus {
@@ -49,9 +50,7 @@ export function MerchantIdentityVerification({ shopId, onStatusChange }: Merchan
   const [faceDistance, setFaceDistance] = useState<number | null>(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-  const statusDetails = status?.status === 'verified' && status.decision_method === 'local_auto'
-    ? { label: 'Identité vérifiée automatiquement', description: 'Les contrôles locaux sont passés. Ce prototype ne vérifie pas le liveness.', tone: 'border-emerald-200 bg-emerald-50 text-emerald-950' }
-    : verificationStatus[status?.status || 'pending'] || verificationStatus.pending;
+  const statusDetails = verificationStatus[status?.status || 'pending'] || verificationStatus.pending;
 
   useEffect(() => {
     let cancelled = false;
@@ -76,6 +75,13 @@ export function MerchantIdentityVerification({ shopId, onStatusChange }: Merchan
     if (!cameraTarget || !videoRef.current || !cameraStreamRef.current) return;
     videoRef.current.srcObject = cameraStreamRef.current;
     void videoRef.current.play().catch(() => setError('Impossible de démarrer la caméra. Vérifiez son autorisation.'));
+  }, [cameraTarget]);
+
+  useEffect(() => {
+    if (!cameraTarget) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
   }, [cameraTarget]);
 
   useEffect(() => () => cameraStreamRef.current?.getTracks().forEach((track) => track.stop()), []);
@@ -222,7 +228,7 @@ export function MerchantIdentityVerification({ shopId, onStatusChange }: Merchan
         <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
         <div>
           <h3 className="font-extrabold text-slate-900">Vérification du commerçant</h3>
-          <p className="mt-1 text-sm leading-5 text-slate-600">Prototype KYC : l’OCR et la comparaison sont exécutés dans ce navigateur. Les cas nets sont validés automatiquement ; les cas incertains sont transmis en revue manuelle. Aucun contrôle de liveness n’est effectué.</p>
+          <p className="mt-1 text-sm leading-5 text-slate-600">L’OCR et la comparaison faciale sont des aides exécutées dans votre navigateur ; leurs résultats peuvent être inexacts ou modifiés et ne vérifient pas votre identité. Chaque dossier est examiné par l’équipe. Aucun contrôle de présence réelle (liveness) n’est effectué : ce parcours n’est pas une vérification d’identité certifiée.</p>
         </div>
       </header>
 
@@ -278,16 +284,16 @@ export function MerchantIdentityVerification({ shopId, onStatusChange }: Merchan
         </>
       )}
     </section>
-    {cameraTarget && <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-black/75 p-4" role="dialog" aria-modal="true" aria-label="Capture caméra">
-      <section className="w-full max-w-xl space-y-4 rounded-2xl bg-white p-4 shadow-2xl sm:p-6">
+    {cameraTarget && createPortal(<div className="fixed inset-x-0 top-0 z-[80] flex h-[100vh] h-[100dvh] items-start justify-center overflow-y-auto overscroll-contain bg-black/75 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Capture caméra">
+      <section className="my-auto w-full max-w-xl space-y-4 overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-6">
         <header className="flex items-center justify-between gap-3">
           <div><p className="text-xs font-bold uppercase text-emerald-800">Capture sécurisée</p><h3 className="font-extrabold text-slate-900">{cameraTarget === 'document_front' ? 'Photographiez le recto' : cameraTarget === 'document_back' ? 'Photographiez le verso' : 'Prenez votre selfie'}</h3></div>
           <button type="button" onClick={stopCamera} aria-label="Fermer la caméra" className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"><X className="h-4 w-4" /></button>
         </header>
-        <video ref={videoRef} autoPlay playsInline muted className="aspect-[4/3] w-full rounded-xl bg-black object-cover" />
+        <video ref={videoRef} autoPlay playsInline muted className="aspect-[4/3] max-h-[55dvh] w-full rounded-xl bg-black object-contain" />
         <button type="button" onClick={captureCameraFrame} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700"><Camera className="h-4 w-4" />Prendre la photo</button>
       </section>
-    </div>}
+    </div>, document.body)}
     </>
   );
 }

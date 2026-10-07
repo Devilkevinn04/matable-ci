@@ -1,5 +1,7 @@
 import { Router, type RequestHandler } from 'express';
-import { databaseMode, dbTransaction } from '../../db.ts';
+import { databaseMode, dbAll, dbGet, dbTransaction } from '../../db.ts';
+import { mapProductRow } from '../repositories/products.ts';
+import { getShopFromDatabase } from '../repositories/shops.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
 
 interface MerchantOrdersOptions {
@@ -20,6 +22,30 @@ interface MerchantOrdersOptions {
   };
 }
 
+function mapOrderRow(row: Record<string, unknown>): OrderRecord {
+  const rawItems = row.items;
+  const items = rawItems
+    ? typeof rawItems === 'string' ? JSON.parse(rawItems) : rawItems
+    : [];
+  return {
+    id: Number(row.id),
+    shop_id: Number(row.shop_id),
+    customer_user_id: row.customer_user_id == null ? undefined : Number(row.customer_user_id),
+    customer_name: String(row.customer_name || ''),
+    customer_phone: String(row.customer_phone || ''),
+    delivery_location: String(row.delivery_location || ''),
+    delivery_note: row.delivery_note == null ? undefined : String(row.delivery_note),
+    delivery_slot: row.delivery_slot == null ? undefined : String(row.delivery_slot),
+    payment_method_preference: String(row.payment_method_preference || 'to_confirm') as OrderRecord['payment_method_preference'],
+    total_amount: Number(row.total_amount),
+    created_at: String(row.created_at),
+    status: String(row.status || 'pending') as OrderRecord['status'],
+    whatsapp_tracking_available: Boolean(row.whatsapp_tracking_available),
+    whatsapp_clicked_at: row.whatsapp_clicked_at == null ? null : String(row.whatsapp_clicked_at),
+    items: Array.isArray(items) ? items : [],
+  };
+}
+
 export function createMerchantOrdersRouter({
   shops,
   products,
@@ -30,9 +56,13 @@ export function createMerchantOrdersRouter({
 }: MerchantOrdersOptions) {
   const router = Router({ mergeParams: true });
 
-  router.get('/:id/orders', requireMerchantAccess, (req, res) => {
+  router.get('/:id/orders', requireMerchantAccess, async (req, res) => {
     const shopId = Number(req.params.id);
-    res.json(orders.filter((order) => order.shop_id === shopId));
+    const rows = await dbAll<Record<string, unknown>>(`SELECT orders.*, order_whatsapp_tracking.order_id IS NOT NULL AS whatsapp_tracking_available,
+      order_whatsapp_tracking.clicked_at AS whatsapp_clicked_at
+      FROM orders LEFT JOIN order_whatsapp_tracking ON order_whatsapp_tracking.order_id = orders.id
+      WHERE orders.shop_id = ? ORDER BY orders.created_at DESC, orders.id DESC`, [shopId]);
+    res.json(rows.map(mapOrderRow));
   });
 
   router.patch('/:id/orders/:orderId/status', requireMerchantAccess, async (req, res) => {
@@ -44,11 +74,6 @@ export function createMerchantOrdersRouter({
       return res.status(400).json({ error: 'Statut invalide. Valeurs possibles : pending, confirmed, preparing, ready, delivered, cancelled, expired.' });
     }
 
-    const order = orders.find((candidate) => candidate.id === orderId && candidate.shop_id === shopId);
-    if (!order) return res.status(404).json({ error: 'Commande introuvable.' });
-    const previousStatus = order.status || 'pending';
-    if (previousStatus === status) return res.json({ success: true, order });
-
     const allowedTransitions: Record<string, string[]> = {
       pending: ['confirmed', 'cancelled'],
       confirmed: ['preparing', 'delivered', 'cancelled'],
@@ -58,16 +83,27 @@ export function createMerchantOrdersRouter({
       cancelled: ['pending', 'confirmed'],
       expired: [],
     };
-    if (!allowedTransitions[previousStatus]?.includes(status) && !req.adminShopAccess) {
-      return res.status(409).json({ error: `Transition impossible : ${previousStatus} → ${status}.` });
-    }
-
-    const stockUpdates: { product: ProductRecord; stock: number; isAvailable: boolean }[] = [];
+    const stockUpdates: { productId: number; stock: number; isAvailable: boolean }[] = [];
     try {
-      await dbTransaction(async (transaction) => {
+      const result = await dbTransaction(async (transaction) => {
+        const row = await transaction.get<Record<string, unknown>>(
+          `SELECT * FROM orders WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+          [orderId, shopId],
+        );
+        if (!row) return null;
+        const order = mapOrderRow(row);
+        const previousStatus = order.status || 'pending';
+        if (previousStatus === status) return { order, previousStatus, unchanged: true };
+        if (!allowedTransitions[previousStatus]?.includes(status) && !req.adminShopAccess) {
+          throw Object.assign(new Error(`Transition impossible : ${previousStatus} → ${status}.`), { statusCode: 409 });
+        }
+
         const quantities = new Map<number, number>();
         for (const item of order.items || []) {
-          quantities.set(item.product_id, (quantities.get(item.product_id) || 0) + Number(item.quantity || 1));
+          if (!Number.isSafeInteger(item.product_id) || !Number.isSafeInteger(item.quantity) || item.quantity < 1) {
+            throw Object.assign(new Error('Les articles de cette commande sont incohérents.'), { statusCode: 409 });
+          }
+          quantities.set(item.product_id, (quantities.get(item.product_id) || 0) + item.quantity);
         }
         const stockReservedStatuses = new Set(['confirmed', 'preparing', 'ready', 'delivered']);
         const wasStockReserved = stockReservedStatuses.has(previousStatus);
@@ -75,75 +111,84 @@ export function createMerchantOrdersRouter({
 
         if (wasStockReserved && !willReserveStock) {
           for (const [productId, quantity] of quantities) {
-            const product = products.find((candidate) => candidate.id === productId && candidate.shop_id === shopId);
-            if (!product) continue;
-            const stockRow = await transaction.get<{ stock: number }>(
-              `SELECT stock FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
-              [product.id, shopId],
+            const stockRow = await transaction.get<{ id: number; stock: number; is_visible: number | boolean }>(
+              `SELECT id, stock, is_visible FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+              [productId, shopId],
             );
             if (!stockRow) continue;
             const stock = Number(stockRow.stock) + quantity;
-            const isAvailable = stock > 0;
-            await transaction.run('UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ?', [stock, isAvailable ? 1 : 0, product.id, shopId]);
-            stockUpdates.push({ product, stock, isAvailable });
+            const isAvailable = stock > 0 && Boolean(stockRow.is_visible);
+            await transaction.run('UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ?', [stock, isAvailable ? 1 : 0, productId, shopId]);
+            stockUpdates.push({ productId, stock, isAvailable });
           }
         }
 
         if (willReserveStock && !wasStockReserved) {
           for (const [productId, quantity] of quantities) {
-            const product = products.find((candidate) => candidate.id === productId && candidate.shop_id === shopId);
-            if (!product) throw Object.assign(new Error('Un article de cette commande n’existe plus dans le catalogue.'), { statusCode: 409 });
-            const stockRow = await transaction.get<{ stock: number }>(
-              `SELECT stock FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+            const product = await transaction.get<{ id: number; stock: number; title: string; is_visible: number | boolean }>(
+              `SELECT id, stock, title, is_visible FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
               [productId, shopId],
             );
-            const currentStock = Number(stockRow?.stock || 0);
-            if (!stockRow || currentStock < quantity) {
-              throw Object.assign(new Error(`Stock insuffisant pour réactiver « ${product.title} ».`), { statusCode: 409, product_id: productId, stock: currentStock });
+            const currentStock = Number(product?.stock || 0);
+            if (!product || currentStock < quantity) {
+              throw Object.assign(new Error(`Stock insuffisant pour réactiver « ${product?.title || `article #${productId}`} ».`), { statusCode: 409, product_id: productId, stock: currentStock });
             }
             const stock = currentStock - quantity;
-            const isAvailable = stock > 0;
+            const isAvailable = stock > 0 && Boolean(product.is_visible);
             const update = await transaction.run('UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ? AND stock >= ?', [stock, isAvailable ? 1 : 0, productId, shopId, quantity]);
             if (update.changes !== 1) {
               throw Object.assign(new Error(`Stock insuffisant pour réactiver « ${product.title} ».`), { statusCode: 409, product_id: productId, stock: currentStock });
             }
-            stockUpdates.push({ product, stock, isAvailable });
+            stockUpdates.push({ productId, stock, isAvailable });
           }
         }
 
         await transaction.run('UPDATE orders SET status = ? WHERE id = ? AND shop_id = ?', [status, order.id, shopId]);
+        order.status = status as OrderRecord['status'];
+        return { order, previousStatus, unchanged: false };
       });
+      if (!result) return res.status(404).json({ error: 'Commande introuvable.' });
       for (const update of stockUpdates) {
-        update.product.stock = update.stock;
-        update.product.is_available = update.isAvailable;
+        const product = products.find((candidate) => candidate.id === update.productId && candidate.shop_id === shopId);
+        if (product) {
+          product.stock = update.stock;
+          product.is_available = update.isAvailable;
+        }
       }
-      order.status = status as OrderRecord['status'];
+      const cachedOrder = orders.find((candidate) => candidate.id === orderId && candidate.shop_id === shopId);
+      if (cachedOrder) cachedOrder.status = result.order.status;
+      if (result.unchanged) return res.json({ success: true, order: result.order });
+      res.json({
+        success: true,
+        order: result.order,
+        message: status === 'confirmed' && result.previousStatus === 'pending'
+          ? 'Commande confirmée et stock réservé.'
+          : status === 'cancelled'
+            ? 'Demande annulée.'
+            : `Statut mis à jour (${status}).`,
+      });
     } catch (error: unknown) {
-      const err = error as { message?: string; statusCode?: number; product_id?: number; stock?: number };
-      const payload: Record<string, unknown> = { error: err.message || 'Transition de commande impossible.' };
+      if (!error || typeof error !== 'object' || !('statusCode' in error)) throw error;
+      const err = error as { message: string; statusCode: number; product_id?: number; stock?: number };
+      const payload: Record<string, unknown> = { error: err.message };
       if (err.product_id !== undefined) payload.product_id = err.product_id;
       if (err.stock !== undefined) payload.stock = err.stock;
-      return res.status(Number(err.statusCode) || 409).json(payload);
+      return res.status(err.statusCode).json(payload);
     }
-
-    res.json({
-      success: true,
-      order,
-      message: status === 'confirmed' && previousStatus === 'pending'
-        ? 'Commande confirmée et stock réservé.'
-        : status === 'cancelled'
-          ? 'Demande annulée.'
-          : `Statut mis à jour (${status}).`,
-    });
   });
 
-  router.get('/:id/flash-bilan', requireMerchantAccess, (req, res) => {
+  router.get('/:id/flash-bilan', requireMerchantAccess, async (req, res) => {
     const shopId = Number(req.params.id);
-    const shop = shops.find((candidate) => candidate.id === shopId);
+    const shop = await getShopFromDatabase(shopId);
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
 
-    const shopOrders = orders.filter((order) => order.shop_id === shopId && isSameBusinessDay(order.created_at));
-    const metrics = summarizeOrderMetrics(orders, shopId);
+    const [orderRows, productRows] = await Promise.all([
+      dbAll<Record<string, unknown>>('SELECT * FROM orders ORDER BY created_at DESC, id DESC'),
+      dbAll<Record<string, unknown>>('SELECT * FROM products WHERE shop_id = ?', [shopId]),
+    ]);
+    const currentOrders = orderRows.map(mapOrderRow);
+    const shopOrders = currentOrders.filter((order) => order.shop_id === shopId && isSameBusinessDay(order.created_at));
+    const metrics = summarizeOrderMetrics(currentOrders, shopId);
     const productSalesMap: Record<number, { title: string; quantity: number; revenue: number }> = {};
     shopOrders.forEach((order) => {
       (order.items || []).forEach((item) => {
@@ -158,7 +203,7 @@ export function createMerchantOrdersRouter({
       .sort((left, right) => right.quantity - left.quantity)
       .slice(0, 5)
       .map((product) => ({ title: product.title, quantity_sold: product.quantity, revenue: product.revenue }));
-    const shopProducts = products.filter((product) => product.shop_id === shopId);
+    const shopProducts = productRows.map(mapProductRow);
     const lowStock = shopProducts.filter((product) => product.stock > 0 && product.stock <= 3);
     const outOfStock = shopProducts.filter((product) => product.stock === 0);
     const todayStr = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });

@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useToast } from '../Toast';
 import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks, SubscriptionTier } from '../../types';
-import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../../utils/format';
+import { formatFCFA, cleanPhoneForWhatsApp } from '../../utils/format';
 import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
 import { TRIAL_DURATION_DAYS } from '../../utils/subscriptionFeatures';
-import { buildProductSavePayload, createProductDraft, productToDraft } from './productForm';
-import type { ProductModifierGroupDraft } from './productForm';
+import { useMerchantProductEditor } from './useMerchantProductEditor';
 
 export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, openRegistration: boolean = false) => {
   const toast = useToast();
@@ -69,26 +68,11 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [orderPaymentFilter, setOrderPaymentFilter] = useState<'all' | 'wave' | 'mobile_money' | 'cash' | 'to_confirm'>('all');
   const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | OrderStatus>('all');
 
-  // Product Add/Edit Modal
-  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [prodTitle, setProdTitle] = useState('');
-  const [prodCategory, setProdCategory] = useState('');
-  const [prodDescription, setProdDescription] = useState('');
-  const [prodPrice, setProdPrice] = useState<number | ''>('');
-  const [prodStock, setProdStock] = useState<number | ''>(10);
-  const [prodImage, setProdImage] = useState('');
-  const [prodLookbookImage, setProdLookbookImage] = useState('');
-  const [prodGalleryImages, setProdGalleryImages] = useState<string[]>([]);
-  const [prodSizes, setProdSizes] = useState('');
-  const [prodColors, setProdColors] = useState('');
-  const [prodPrepTime, setProdPrepTime] = useState<number | ''>('');
-  const [prodModifierGroups, setProdModifierGroups] = useState<ProductModifierGroupDraft[]>([]);
-  const [prodAttributes, setProdAttributes] = useState<Record<string, string>>({});
-  const [prodIsAvailable, setProdIsAvailable] = useState(true);
-  const [imageCompressing, setImageCompressing] = useState(false);
-  const [compressedSizeKB, setCompressedSizeKB] = useState<number | null>(null);
-  const [originalImageSizeKB, setOriginalImageSizeKB] = useState<number | null>(null);
+  const productEditor = useMerchantProductEditor(currentShop, setProducts);
+  const {
+    isProductModalOpen,
+    setIsProductModalOpen,
+  } = productEditor;
 
   useEffect(() => {
     if (!isRegisterModalOpen && !isProductModalOpen) return;
@@ -396,7 +380,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       setIsRegisterModalOpen(false);
       const publicUrl = `${window.location.origin}/${data.shop.slug}`;
       const privateUrl = `${window.location.origin}/app?access=${encodeURIComponent(data.owner_access_token)}`;
-      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable.ci et en attente de vérification. Vitrine publique après vérification et publication : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
+      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable.ci. Votre essai Standard gratuit de ${TRIAL_DURATION_DAYS} jours a commencé et votre espace marchand est accessible immédiatement. Vérifiez votre identité pour publier la boutique, recevoir des commandes et payer une formule après l’essai. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
       setRegistrationLinks({
         publicUrl,
         privateUrl,
@@ -673,52 +657,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     }
   };
 
-  // Open modal for new product
-  const handleOpenAddModal = () => {
-    const draft = createProductDraft(currentShop?.category);
-    setEditingProduct(null);
-    setProdTitle(draft.title);
-    setProdCategory(draft.category);
-    setProdDescription(draft.description);
-    setProdPrice(draft.price);
-    setProdStock(draft.stock);
-    setProdLookbookImage(draft.lookbook_image);
-    setProdImage(draft.image_url);
-    setProdGalleryImages(draft.gallery_images);
-    setProdSizes(draft.sizes);
-    setProdColors(draft.colors);
-    setProdPrepTime(draft.prep_time);
-    setProdModifierGroups(draft.modifier_groups);
-    setProdAttributes(draft.attributes);
-    setProdIsAvailable(draft.is_available);
-    setCompressedSizeKB(null);
-    setOriginalImageSizeKB(null);
-    setIsProductModalOpen(true);
-  };
-
-  // Open modal for editing product
-  const handleOpenEditModal = (prod: Product) => {
-    const draft = productToDraft(prod);
-    setEditingProduct(prod);
-    setProdTitle(draft.title);
-    setProdCategory(draft.category);
-    setProdDescription(draft.description);
-    setProdPrice(draft.price);
-    setProdStock(draft.stock);
-    setProdImage(draft.image_url);
-    setProdLookbookImage(draft.lookbook_image);
-    setProdGalleryImages(draft.gallery_images);
-    setProdSizes(draft.sizes);
-    setProdColors(draft.colors);
-    setProdPrepTime(draft.prep_time);
-    setProdModifierGroups(draft.modifier_groups);
-    setProdAttributes(draft.attributes);
-    setProdIsAvailable(draft.is_available);
-    setCompressedSizeKB(null);
-    setOriginalImageSizeKB(null);
-    setIsProductModalOpen(true);
-  };
-
   // Internal function — executes the actual status PATCH (called directly or via confirm modal)
   const executeUpdateOrderStatus = async (orderId: number, newStatus: OrderStatus) => {
     if (!currentShop) return;
@@ -759,163 +697,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       return;
     }
     executeUpdateOrderStatus(orderId, newStatus);
-  };
-
-  // Handle client-side image compression (< 100 KB)
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) {
-      toast.error('Choisissez une image de 8 Mo maximum.');
-      e.target.value = '';
-      return;
-    }
-
-    try {
-      setImageCompressing(true);
-      setOriginalImageSizeKB(Math.round(file.size / 1024));
-      const { dataUrl, sizeKB } = await compressImageClientSide(file, 900, 100);
-      setProdImage(dataUrl);
-      setCompressedSizeKB(sizeKB);
-    } catch {
-      toast.error("Erreur lors de la compression de l'image.");
-    } finally {
-      setImageCompressing(false);
-      e.target.value = '';
-    }
-  };
-
-  const handleLookbookImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) {
-      toast.error('Choisissez une image de 8 Mo maximum.');
-      e.target.value = '';
-      return;
-    }
-
-    try {
-      const { dataUrl } = await compressImageClientSide(file, 900, 100);
-      setProdLookbookImage(dataUrl);
-    } catch {
-      toast.error("Erreur lors de la compression de l'image.");
-    }
-    e.target.value = '';
-  };
-
-  const MAX_GALLERY_IMAGES = 6;
-
-  const handleGalleryImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    if (prodGalleryImages.length >= MAX_GALLERY_IMAGES) {
-      toast.error(`Vous pouvez ajouter jusqu'à ${MAX_GALLERY_IMAGES} photos supplémentaires.`);
-      e.target.value = '';
-      return;
-    }
-
-    const remainingSlots = MAX_GALLERY_IMAGES - prodGalleryImages.length;
-    const filesToProcess = files.slice(0, remainingSlots);
-    const oversized = filesToProcess.some((file) => !file.type.startsWith('image/') || file.size > 8 * 1024 * 1024);
-    if (oversized) {
-      toast.error('Choisissez des images de 8 Mo maximum.');
-      e.target.value = '';
-      return;
-    }
-
-    try {
-      const compressed = await Promise.all(filesToProcess.map((file) => compressImageClientSide(file, 900, 100)));
-      setProdGalleryImages((prev) => [...prev, ...compressed.map((result) => result.dataUrl)]);
-    } catch {
-      toast.error("Erreur lors de la compression d'une photo.");
-    }
-    e.target.value = '';
-  };
-
-  const handleRemoveGalleryImage = (index: number) => {
-    setProdGalleryImages((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  // Save Product (Add or Edit)
-  const handleSaveProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentShop || !prodTitle.trim() || prodPrice === '') return;
-
-    const payload = buildProductSavePayload({
-      title: prodTitle.trim(),
-      category: prodCategory,
-      description: prodDescription,
-      price: prodPrice,
-      stock: prodStock,
-      image_url: prodImage,
-      lookbook_image: prodLookbookImage,
-      gallery_images: prodGalleryImages,
-      sizes: prodSizes,
-      colors: prodColors,
-      prep_time: prodPrepTime,
-      modifier_groups: prodModifierGroups,
-      attributes: prodAttributes,
-      is_available: prodIsAvailable,
-    }, currentShop.category);
-
-    try {
-      if (editingProduct) {
-        // Edit existing
-        const res = await fetch(`/api/shops/${currentShop.id}/products/${editingProduct.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setProducts(prev => prev.map(p => (p.id === editingProduct.id ? data.product : p)));
-          setIsProductModalOpen(false);
-          toast.success('Article modifié avec succès !');
-        } else {
-          const data = await res.json().catch(() => ({}));
-          toast.error(data.error || "Impossible de modifier l'article.");
-        }
-      } else {
-        // Add new
-        const res = await fetch(`/api/shops/${currentShop.id}/products`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setProducts(prev => [data.product, ...prev]);
-          setIsProductModalOpen(false);
-          toast.success('Article ajouté au catalogue !');
-        } else {
-          const data = await res.json().catch(() => ({}));
-          toast.error(data.error || "Impossible d'ajouter l'article.");
-        }
-      }
-    } catch {
-      toast.error("Erreur lors de l'enregistrement de l'article");
-    }
-  };
-
-  // Delete Product
-  const handleDeleteProduct = async (productId: number) => {
-    if (!currentShop) return;
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cet article du catalogue ?')) return;
-
-    try {
-      const res = await fetch(`/api/shops/${currentShop.id}/products/${productId}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        setProducts(prev => prev.filter(p => p.id !== productId));
-        toast.success('Article supprimé du catalogue.');
-      } else {
-        const data = await res.json().catch(() => ({}));
-        toast.error(data.error || "Impossible de supprimer l'article.");
-      }
-    } catch {
-      toast.error("Erreur lors de la suppression de l'article");
-    }
   };
 
   const addDeliveryZone = () => {
@@ -1033,25 +814,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     orderSearch,
     orderPaymentFilter,
     orderStatusFilter,
-    isProductModalOpen,
-    editingProduct,
-    prodTitle,
-    prodCategory,
-    prodDescription,
-    prodPrice,
-    prodStock,
-    prodImage,
-    prodLookbookImage,
-    prodGalleryImages,
-    prodSizes,
-    prodColors,
-    prodPrepTime,
-    prodModifierGroups,
-    prodAttributes,
-    prodIsAvailable,
-    imageCompressing,
-    compressedSizeKB,
-    originalImageSizeKB,
+    ...productEditor,
     settingsName,
     settingsWelcome,
     settingsOpen,
@@ -1104,25 +867,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setOrderSearch,
     setOrderPaymentFilter,
     setOrderStatusFilter,
-    setIsProductModalOpen,
-    setEditingProduct,
-    setProdTitle,
-    setProdCategory,
-    setProdDescription,
-    setProdPrice,
-    setProdStock,
-    setProdImage,
-    setProdLookbookImage,
-    setProdGalleryImages,
-    setProdSizes,
-    setProdColors,
-    setProdPrepTime,
-    setProdModifierGroups,
-    setProdAttributes,
-    setProdIsAvailable,
-    setImageCompressing,
-    setCompressedSizeKB,
-    setOriginalImageSizeKB,
     setSettingsName,
     setSettingsWelcome,
     setSettingsOpen,
@@ -1154,15 +898,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     handleTriggerCronBilan,
     handleQuickStockChange,
     handleQuickToggleVisibility,
-    handleOpenAddModal,
-    handleOpenEditModal,
     handleUpdateOrderStatus,
-    handleImageUpload,
-    handleLookbookImageUpload,
-    handleGalleryImageUpload,
-    handleRemoveGalleryImage,
-    handleSaveProduct,
-    handleDeleteProduct,
     handleSaveGeneralSettings,
     toast,
     addDeliveryZone,

@@ -69,46 +69,6 @@ export function canReceiveShopOrders(shop: ShopRecord, currentDate = new Date())
   return isShopPubliclyVisible(shop, currentDate) && computeIsShopOpen(shop);
 }
 
-export const LOCAL_FACE_MATCH_MAX_DISTANCE = 0.62;
-export const LOCAL_OCR_MIN_CONFIDENCE = 45;
-
-function normalizeIdentityText(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
-}
-
-export function evaluateLocalIdentityVerification(input: {
-  faceDistance: number;
-  ocrConfidence: number;
-  ocrText: string;
-  documentNumber: string;
-  firstName: string;
-  lastName: string;
-}) {
-  if (!Number.isFinite(input.faceDistance) || input.faceDistance < 0 || input.faceDistance > LOCAL_FACE_MATCH_MAX_DISTANCE) {
-    return { automaticApproval: false, reason: 'face_match_uncertain' as const };
-  }
-  if (!Number.isFinite(input.ocrConfidence) || input.ocrConfidence < LOCAL_OCR_MIN_CONFIDENCE) {
-    return { automaticApproval: false, reason: 'ocr_confidence_low' as const };
-  }
-
-  const normalizedOcr = normalizeIdentityText(input.ocrText);
-  const normalizedNumber = normalizeIdentityText(input.documentNumber).replace(/ /g, '');
-  const hasDocumentMarker = /CARTE NATIONALE|PASSEPORT|IDENTITE|IDENTITY CARD|REPUBLIC OF COTE D IVOIRE/.test(normalizedOcr);
-  const containsValue = (value: string) => {
-    const normalizedValue = normalizeIdentityText(value);
-    return normalizedValue.length >= 2 && normalizedOcr.includes(normalizedValue);
-  };
-
-  if (normalizedOcr.length < 30 || !hasDocumentMarker || normalizedNumber.length < 6 || !normalizedOcr.replace(/ /g, '').includes(normalizedNumber)) {
-    return { automaticApproval: false, reason: 'document_text_uncertain' as const };
-  }
-  if (!containsValue(input.firstName) || !containsValue(input.lastName)) {
-    return { automaticApproval: false, reason: 'identity_fields_uncertain' as const };
-  }
-
-  return { automaticApproval: true, reason: 'local_checks_passed' as const };
-}
-
 export function getProductUnitPriceWithModifiers(product: ProductRecord, selectedModifiers: string[] = []): number {
   const selected = new Set(selectedModifiers.map((value) => value.trim()).filter(Boolean));
   if (!product.modifier_groups?.length) return product.price;

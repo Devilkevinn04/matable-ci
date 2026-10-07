@@ -42,7 +42,7 @@ const sqliteSchema = `
   CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
     price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT,
-    is_available INTEGER NOT NULL DEFAULT 1, sizes TEXT, colors TEXT, lookbook_image TEXT, created_at TEXT,
+    is_available INTEGER NOT NULL DEFAULT 1, is_visible INTEGER NOT NULL DEFAULT 1, sizes TEXT, colors TEXT, lookbook_image TEXT, created_at TEXT,
     gallery_images TEXT, prep_time INTEGER, modifier_groups TEXT, attributes TEXT
   );
   CREATE TABLE IF NOT EXISTS orders (
@@ -80,6 +80,10 @@ const sqliteSchema = `
     token TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, fingerprint TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS request_rate_limits (
+    key_hash TEXT PRIMARY KEY, request_count INTEGER NOT NULL, reset_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_request_rate_limits_reset ON request_rate_limits(reset_at);
   CREATE TABLE IF NOT EXISTS admin_audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT NOT NULL, action TEXT NOT NULL,
     shop_id INTEGER REFERENCES shops(id) ON DELETE SET NULL, details TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL
@@ -210,6 +214,8 @@ function migrateSqlite(connection: Database.Database) {
   connection.exec('CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_shop_created ON subscription_payment_intents(shop_id, created_at DESC)');
   addColumn('products', 'category', 'TEXT');
   addColumn('products', 'created_at', 'TEXT');
+  addColumn('products', 'is_visible', 'INTEGER NOT NULL DEFAULT 1');
+  connection.exec('UPDATE products SET is_visible = is_available WHERE is_visible = 1 AND is_available = 0 AND stock > 0');
   addColumn('products', 'attributes', 'TEXT');
   addColumn('products', 'gallery_images', 'TEXT');
   addColumn('users', 'phone', 'TEXT');
@@ -244,7 +250,7 @@ const postgresMigrations = [
   `CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
     price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT,
-    is_available INTEGER NOT NULL DEFAULT 1, category TEXT, sizes JSONB, colors JSONB, created_at TEXT,
+    is_available INTEGER NOT NULL DEFAULT 1, is_visible INTEGER NOT NULL DEFAULT 1, category TEXT, sizes JSONB, colors JSONB, created_at TEXT,
     lookbook_image TEXT, gallery_images JSONB, prep_time INTEGER, modifier_groups JSONB, attributes JSONB
   )`,
   `CREATE TABLE IF NOT EXISTS orders (
@@ -300,6 +306,10 @@ const postgresMigrations = [
     token TEXT PRIMARY KEY, expires_at BIGINT NOT NULL,
     fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS request_rate_limits (
+    key_hash TEXT PRIMARY KEY, request_count INTEGER NOT NULL, reset_at BIGINT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_request_rate_limits_reset ON request_rate_limits(reset_at)',
   `CREATE TABLE IF NOT EXISTS admin_audit_logs (
     id BIGSERIAL PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL,
     shop_id INTEGER REFERENCES shops(id) ON DELETE SET NULL, details TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL
@@ -399,6 +409,8 @@ const postgresMigrations = [
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TEXT',
   'CREATE TABLE IF NOT EXISTS id_allocators (name TEXT PRIMARY KEY, last_id BIGINT NOT NULL)',
   'CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)',
+  'ALTER TABLE products ADD COLUMN IF NOT EXISTS is_visible INTEGER NOT NULL DEFAULT 1',
+  'UPDATE products SET is_visible = is_available WHERE is_visible = 1 AND is_available = 0 AND stock > 0',
   'CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)',
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_shops_owner_email_unique ON shops (LOWER(owner_email)) WHERE owner_email IS NOT NULL AND owner_email <> ''",
   `CREATE TABLE IF NOT EXISTS merchant_identity_verifications (

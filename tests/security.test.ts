@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { dbGet } from '../db.ts';
-import { canPublishShop, canReceiveShopOrders, evaluateLocalIdentityVerification, getSubscriptionReminderAt, isShopPubliclyVisible, isSubscriptionReminderDue } from '../server/services/businessRules.ts';
+import { canPublishShop, canReceiveShopOrders, getSubscriptionReminderAt, isShopPubliclyVisible, isSubscriptionReminderDue } from '../server/services/businessRules.ts';
 import {
   isBlockedStaticAsset,
   buildSessionFingerprint,
@@ -106,24 +106,6 @@ test('publication requires an active shop, verified identity and eligible subscr
   assert.equal(isShopPubliclyVisible({ ...shop, is_active: false }, currentDate), false);
 });
 
-test('local identity checks automatically approve only clear OCR and face-match results', () => {
-  const documentNumber = 'CI12345678';
-  const ocrText = `REPUBLIQUE DE COTE D IVOIRE CARTE NATIONALE D IDENTITE ${documentNumber} NOM KOUAME PRENOMS AMINA`;
-  const accepted = evaluateLocalIdentityVerification({
-    faceDistance: 0.48,
-    ocrConfidence: 82,
-    ocrText,
-    documentNumber,
-    firstName: 'Amina',
-    lastName: 'Kouame',
-  });
-  assert.equal(accepted.automaticApproval, true);
-
-  const uncertainFace = evaluateLocalIdentityVerification({ faceDistance: 0.9, ocrConfidence: 82, ocrText, documentNumber, firstName: 'Amina', lastName: 'Kouame' });
-  assert.equal(uncertainFace.automaticApproval, false);
-  const uncertainOcr = evaluateLocalIdentityVerification({ faceDistance: 0.48, ocrConfidence: 20, ocrText, documentNumber, firstName: 'Amina', lastName: 'Kouame' });
-  assert.equal(uncertainOcr.automaticApproval, false);
-});
 test('counts only actionable orders in revenue and status totals', () => {
   const orders = [
     { id: 1, shop_id: 8, total_amount: 15000, created_at: '2026-09-19T08:00:00.000Z', status: 'pending' },

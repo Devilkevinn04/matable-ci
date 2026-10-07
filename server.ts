@@ -19,23 +19,22 @@ import { createShopRegistrationRouter } from './server/routes/shopRegistration.t
 import { createMerchantVerificationRouter } from './server/routes/merchantVerification.ts';
 import { createTelemetryRouter } from './server/routes/telemetry.ts';
 import { createKadevPayRouter } from './server/routes/kadevPay.ts';
-import { toCustomerProfile } from './server/services/customerProfile.ts';
+import { createPublicRateLimitMiddleware } from './server/services/rateLimits.ts';
+import { buildSessionFingerprint, createAuthSessionHelpers, isRequestFingerprintMatch } from './server/services/authSessions.ts';
+import { createSeoHtmlHelpers } from './server/services/seoHtml.ts';
 import { getWhatsAppSubscriptionReminderConfig, sendWhatsAppSubscriptionReminder } from './server/services/whatsappNotifications.ts';
 import { seedDemoDatabaseIfEmpty } from './server/services/demoSeed.ts';
 import { applySecurityHeaders } from './server/middleware/securityHeaders.ts';
 import { createMaintenanceModeMiddleware } from './server/middleware/maintenanceMode.ts';
 import type { OrderRecord, ProductRecord, ShopOpeningHours, ShopRecord, SubscriptionPlanConfig, SubscriptionState, SubscriptionStatus, SubscriptionTier } from './server/types.ts';
 import { loadProductsFromDatabase, persistProduct } from './server/repositories/products.ts';
-import { loadShopsFromDatabase, persistShop } from './server/repositories/shops.ts';
+import { getShopFromDatabase, loadShopsFromDatabase, persistShop } from './server/repositories/shops.ts';
 import { loadOrdersFromDatabase, persistOrder } from './server/repositories/orders.ts';
 import { allocateRecordId } from './server/repositories/ids.ts';
 import {
   deleteAdminSessionRecord,
   deleteCustomerSessionRecord,
   deleteMerchantSessionRecord,
-  getAdminSessionRecord,
-  getCustomerSessionRecord,
-  getMerchantSessionRecord,
   migrateExistingSessionTokens,
   saveAdminSessionRecord,
   saveCustomerSessionRecord,
@@ -64,8 +63,9 @@ export {
 import { getCategoryDefaults, isShopCategory, normalizeCustomBannerImage, normalizeProductImage, normalizeWelcomeMessage, sanitizeGalleryImages } from './src/utils/categoryDefaults.ts';
 import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from './src/utils/subscriptionFeatures.ts';
 import type { ShopCategory } from './src/utils/categoryDefaults.ts';
-import { findPublicDiscoveryPage, toDiscoveryCitySlug } from './src/utils/discoverySeo.ts';
-import { FAQ_SECTIONS } from './src/utils/faqContent.ts';
+import { findPublicDiscoveryPage } from './src/utils/discoverySeo.ts';
+
+export { buildSessionFingerprint, isRequestFingerprintMatch };
 
 declare global {
   namespace Express {
@@ -609,24 +609,34 @@ const orders: OrderRecord[] = shouldSeedDemoData()
 
 const hashPin = (pin: string) => bcrypt.hashSync(String(pin).trim(), 10);
 const hashAccessToken = (token: string) => createHash('sha256').update(token).digest('hex');
-const merchantSessions = new Map<string, { shopId: number; expiresAt: number; fingerprint: string }>();
-const adminSessions = new Map<string, { expiresAt: number; fingerprint: string }>();
-const customerSessions = new Map<string, { userId: number; expiresAt: number; fingerprint: string }>();
-
-const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-const publicRequestLimits = new Map<string, { count: number; resetAt: number }>();
-const DUMMY_CUSTOMER_PASSWORD_HASH = bcrypt.hashSync(randomUUID(), 10);
-const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const PUBLIC_REQUEST_WINDOW_MS = 60 * 1000;
-const MAX_PUBLIC_REQUESTS_PER_WINDOW = 60;
-const ADMIN_SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const timingSafeEqual = (left: string, right: string) => {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
   return leftBuffer.length === rightBuffer.length && cryptoTimingSafeEqual(leftBuffer, rightBuffer);
 };
+const {
+  merchantSessions,
+  customerSessions,
+  adminSessions,
+  sessionDurationMs: SESSION_DURATION_MS,
+  adminSessionDurationMs: ADMIN_SESSION_DURATION_MS,
+  dummyCustomerPasswordHash: DUMMY_CUSTOMER_PASSWORD_HASH,
+  getCookie,
+  setCustomerSessionCookie,
+  clearCustomerSessionCookie,
+  createMerchantSession,
+  clearSessionCookie,
+  setAdminSessionCookie,
+  getAdminSession,
+  getSessionStateForResponse,
+  requireCustomerAccess,
+  getCustomerSessionState,
+  requireAdminAccess,
+  requireMerchantOwner,
+  requireMerchantAccess,
+  requireMerchantOwnShop,
+  cleanupExpiredSessions,
+} = createAuthSessionHelpers({ shops, refreshSubscriptionState });
 
 export const isBlockedStaticAsset = (requestPath: string) => {
   const normalized = String(requestPath || '').split('?')[0].split('#')[0].replace(/\\+/g, '/');
@@ -634,38 +644,6 @@ export const isBlockedStaticAsset = (requestPath: string) => {
   const fileName = normalized.split('/').pop()?.toLowerCase() || '';
   return fileName.endsWith('.cjs') || fileName.endsWith('.map') || normalized.includes('server.cjs') || normalized.includes('server.cjs.map');
 };
-
-function getCookie(req: Request, name: string): string | null {
-  const cookies = String(req.headers.cookie || '').split(';');
-  const entry = cookies.find((cookie) => cookie.trim().startsWith(`${name}=`));
-  if (!entry) return null;
-  try {
-    return decodeURIComponent(entry.trim().slice(name.length + 1));
-  } catch {
-    return null;
-  }
-}
-
-function setSessionCookie(res: Response, token: string, fingerprint: string) {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  const maxAgeSeconds = Math.max(1, Math.floor(SESSION_DURATION_MS / 1000));
-  const sessionCookie = `matable_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
-  const fingerprintCookie = `matable_session_fp=${encodeURIComponent(fingerprint)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
-  res.setHeader('Set-Cookie', [sessionCookie, fingerprintCookie]);
-}
-
-function setCustomerSessionCookie(res: Response, token: string, fingerprint: string) {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  const maxAgeSeconds = Math.max(1, Math.floor(SESSION_DURATION_MS / 1000));
-  const sessionCookie = `matable_customer_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
-  const fingerprintCookie = `matable_customer_session_fp=${encodeURIComponent(fingerprint)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
-  res.setHeader('Set-Cookie', [sessionCookie, fingerprintCookie]);
-}
-
-function clearCustomerSessionCookie(res: Response) {
-  const expiredBase = '; Path=/; HttpOnly; SameSite=Lax; Max-Age=0';
-  res.setHeader('Set-Cookie', [`matable_customer_session=;${expiredBase}`, `matable_customer_session_fp=;${expiredBase}`]);
-}
 
 export function validateRuntimeConfig(): void {
   if (process.env.NODE_ENV !== 'production') {
@@ -715,346 +693,11 @@ export function validateRuntimeConfig(): void {
 
 }
 
-export function buildSessionFingerprint(req: Request): string {
-  const userAgent = String(req.headers['user-agent'] || '').trim();
-  const acceptLanguage = String(req.headers['accept-language'] || '').trim();
-  const normalized = `${userAgent}|${acceptLanguage}`;
-  return createHash('sha256').update(normalized).digest('hex');
-}
-
-export function isRequestFingerprintMatch(session: { fingerprint?: string } | null | undefined, req: Request): boolean {
-  if (!session?.fingerprint) return false;
-  const current = buildSessionFingerprint(req);
-  return timingSafeEqual(current, session.fingerprint);
-}
-
-async function createMerchantSession(res: Response, shopId: number, req: Request) {
-  const sessionToken = randomUUID();
-  const session = { shopId, expiresAt: Date.now() + SESSION_DURATION_MS, fingerprint: buildSessionFingerprint(req) };
-  merchantSessions.set(sessionToken, session);
-  await saveMerchantSessionRecord(sessionToken, session);
-  setSessionCookie(res, sessionToken, session.fingerprint);
-}
-
-function clearSessionCookie(res: Response) {
-  const expiredBase = '; Path=/; HttpOnly; SameSite=Lax; Max-Age=0';
-  res.setHeader('Set-Cookie', [`matable_session=;${expiredBase}`, `matable_session_fp=;${expiredBase}`]);
-}
-
-function setAdminSessionCookie(res: Response, token: string) {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  const maxAgeSeconds = Math.max(1, Math.floor(ADMIN_SESSION_DURATION_MS / 1000));
-  res.setHeader('Set-Cookie', `matable_admin_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`);
-}
-
-async function getAdminSession(req: Request): Promise<string | null> {
-  const token = getCookie(req, 'matable_admin_session');
-  let session = token ? adminSessions.get(token) : undefined;
-
-  if (!session && token) {
-    session = (await getAdminSessionRecord(token)) ?? undefined;
-    if (session) adminSessions.set(token, session);
-  }
-
-  if (!token || !session || session.expiresAt <= Date.now()) {
-    if (token) {
-      adminSessions.delete(token);
-      await deleteAdminSessionRecord(token);
-    }
-    return null;
-  }
-
-  if (!isRequestFingerprintMatch(session, req)) {
-    adminSessions.delete(token);
-    await deleteAdminSessionRecord(token);
-    return null;
-  }
-
-  const renewedSession = { ...session, expiresAt: Date.now() + ADMIN_SESSION_DURATION_MS };
-  adminSessions.set(token, renewedSession);
-  await saveAdminSessionRecord(token, renewedSession);
-  return token;
-}
-
-async function getSessionStateForResponse(req: Request, res?: Response) {
-  const adminToken = getCookie(req, 'matable_admin_session');
-  if (adminToken) {
-    const adminSessionToken = await getAdminSession(req);
-    if (adminSessionToken) {
-      if (res) setAdminSessionCookie(res, adminSessionToken);
-      return { authenticated: true, userType: 'admin', shopId: null };
-    }
-  }
-
-  const merchantToken = getCookie(req, 'matable_session');
-  const customerToken = getCookie(req, 'matable_customer_session');
-  if (customerToken && !merchantToken) {
-    let customerSession = customerSessions.get(customerToken) ?? (await getCustomerSessionRecord(customerToken)) ?? undefined;
-    if (!customerSession) {
-      return { authenticated: false, userType: null, shopId: null, user: null };
-    }
-    if (customerSession.expiresAt <= Date.now()) {
-      customerSessions.delete(customerToken);
-      await deleteCustomerSessionRecord(customerToken);
-      return { authenticated: false, userType: null, shopId: null, user: null };
-    }
-    if (!isRequestFingerprintMatch(customerSession, req)) {
-      customerSessions.delete(customerToken);
-      await deleteCustomerSessionRecord(customerToken);
-      if (res) clearCustomerSessionCookie(res);
-      return { authenticated: false, userType: null, shopId: null, user: null };
-    }
-    const user = await dbGet<{ id: number; name: string; first_name: string | null; last_name: string | null; phone: string; email: string; is_active: number }>('SELECT id, name, first_name, last_name, phone, email, is_active FROM users WHERE id = ?', [customerSession.userId]);
-    if (!user || !user.is_active) {
-      customerSessions.delete(customerToken);
-      await deleteCustomerSessionRecord(customerToken);
-      if (res) clearCustomerSessionCookie(res);
-      return { authenticated: false, userType: null, shopId: null, user: null };
-    }
-    const renewedSession = { ...customerSession, expiresAt: Date.now() + SESSION_DURATION_MS };
-    customerSessions.set(customerToken, renewedSession);
-    await saveCustomerSessionRecord(customerToken, renewedSession);
-    if (res) setCustomerSessionCookie(res, customerToken, renewedSession.fingerprint);
-    return { authenticated: true, userType: 'customer', shopId: null, user: toCustomerProfile(user) };
-  }
-
-  if (merchantToken) {
-    let merchantSession = merchantSessions.get(merchantToken) ?? (await getMerchantSessionRecord(merchantToken)) ?? undefined;
-    if (!merchantSession) {
-      return { authenticated: false, userType: null, shopId: null };
-    }
-    if (merchantSession.expiresAt <= Date.now()) {
-      merchantSessions.delete(merchantToken);
-      await deleteMerchantSessionRecord(merchantToken);
-      return { authenticated: false, userType: null, shopId: null };
-    }
-    if (!isRequestFingerprintMatch(merchantSession, req)) {
-      merchantSessions.delete(merchantToken);
-      await deleteMerchantSessionRecord(merchantToken);
-      return { authenticated: false, userType: null, shopId: null };
-    }
-
-    const renewedSession = { ...merchantSession, expiresAt: Date.now() + SESSION_DURATION_MS };
-    merchantSessions.set(merchantToken, renewedSession);
-    await saveMerchantSessionRecord(merchantToken, renewedSession);
-    if (res) setSessionCookie(res, merchantToken, renewedSession.fingerprint);
-    const shop = shops.find((candidate) => candidate.id === renewedSession.shopId);
-    if (shop) await refreshSubscriptionState(shop);
-    return { authenticated: true, userType: 'merchant', shopId: renewedSession.shopId };
-  }
-
-  return { authenticated: false, userType: null, shopId: null };
-}
-
-async function requireCustomerAccess(req: Request, res: Response, next: express.NextFunction) {
-  const token = getCookie(req, 'matable_customer_session');
-  let session = token ? customerSessions.get(token) : undefined;
-
-  if (!session && token) {
-    session = (await getCustomerSessionRecord(token)) ?? undefined;
-    if (session) customerSessions.set(token, session);
-  }
-
-  if (!token || !session || session.expiresAt <= Date.now()) {
-    if (token) {
-      customerSessions.delete(token);
-      await deleteCustomerSessionRecord(token);
-    }
-    return res.status(401).json({ error: 'Authentification client requise.' });
-  }
-
-  if (!isRequestFingerprintMatch(session, req)) {
-    if (token) {
-      customerSessions.delete(token);
-      await deleteCustomerSessionRecord(token);
-    }
-    return res.status(401).json({ error: 'Session client rejetée pour sécurité.' });
-  }
-
-  const user = await dbGet<{ is_active: number }>('SELECT is_active FROM users WHERE id = ?', [session.userId]);
-  if (!user || !user.is_active) {
-    customerSessions.delete(token);
-    await deleteCustomerSessionRecord(token);
-    clearCustomerSessionCookie(res);
-    return res.status(401).json({ error: 'Authentification client requise.' });
-  }
-
-  const renewedSession = { ...session, expiresAt: Date.now() + SESSION_DURATION_MS };
-  customerSessions.set(token, renewedSession);
-  await saveCustomerSessionRecord(token, renewedSession);
-  res.setHeader('Set-Cookie', [
-    `matable_customer_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.max(1, Math.floor(SESSION_DURATION_MS / 1000))}${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`,
-    `matable_customer_session_fp=${encodeURIComponent(renewedSession.fingerprint)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.max(1, Math.floor(SESSION_DURATION_MS / 1000))}${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`,
-  ]);
-  req.user = { id: session.userId } as any;
-  next();
-}
-
-async function getCustomerSessionState(req: Request, res?: Response) {
-  const token = getCookie(req, 'matable_customer_session');
-  if (!token) return { authenticated: false, userType: null, user: null };
-  let session = customerSessions.get(token) ?? (await getCustomerSessionRecord(token)) ?? undefined;
-
-  if (!session) return { authenticated: false, userType: null, user: null };
-  if (session.expiresAt <= Date.now()) {
-    customerSessions.delete(token);
-    await deleteCustomerSessionRecord(token);
-    return { authenticated: false, userType: null, user: null };
-  }
-  if (!isRequestFingerprintMatch(session, req)) {
-    customerSessions.delete(token);
-    await deleteCustomerSessionRecord(token);
-    if (res) clearCustomerSessionCookie(res);
-    return { authenticated: false, userType: null, user: null };
-  }
-
-  const user = await dbGet<{ id: number; name: string; first_name: string | null; last_name: string | null; phone: string; email: string; created_at: string; is_active: number }>('SELECT id, name, first_name, last_name, phone, email, created_at, is_active FROM users WHERE id = ?', [session.userId]);
-  if (!user || !user.is_active) {
-    customerSessions.delete(token);
-    await deleteCustomerSessionRecord(token);
-    if (res) clearCustomerSessionCookie(res);
-    return { authenticated: false, userType: null, user: null };
-  }
-
-  const renewedSession = { ...session, expiresAt: Date.now() + SESSION_DURATION_MS };
-  customerSessions.set(token, renewedSession);
-  await saveCustomerSessionRecord(token, renewedSession);
-  if (res) setCustomerSessionCookie(res, token, renewedSession.fingerprint);
-
-  return { authenticated: true, userType: 'customer', user: toCustomerProfile(user) };
-}
-
-async function requireAdminAccess(req: Request, res: Response, next: express.NextFunction) {
-  if (!await getAdminSession(req)) {
-    return res.status(401).json({ error: 'Authentification super-admin requise.' });
-  }
-  next();
-}
-
 export function getRateLimitClientAddress(req: Pick<Request, 'ip' | 'socket'>) {
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
-function rateLimitPublicRequest(limit: number = MAX_PUBLIC_REQUESTS_PER_WINDOW) {
-  return (req: Request, res: Response, next: express.NextFunction) => {
-    const key = `${req.method}:${req.path}:${getRateLimitClientAddress(req)}`;
-    const now = Date.now();
-    const current = publicRequestLimits.get(key);
-    if (!current || current.resetAt <= now) {
-      publicRequestLimits.set(key, { count: 1, resetAt: now + PUBLIC_REQUEST_WINDOW_MS });
-      return next();
-    }
-    current.count += 1;
-    if (current.count > limit) {
-      res.setHeader('Retry-After', '60');
-      return res.status(429).json({ error: 'Trop de requêtes. Réessayez dans une minute.' });
-    }
-    next();
-  };
-}
-
-async function requireMerchantIdentity(req: Request, res: Response): Promise<ShopRecord | null> {
-  const adminSessionToken = await getAdminSession(req);
-  if (adminSessionToken) {
-    const adminShop = shops.find((candidate) => candidate.id === Number(req.params.id));
-    if (!adminShop) {
-      res.status(404).json({ error: 'Boutique introuvable.' });
-      return null;
-    }
-    req.adminShopAccess = true;
-    return adminShop;
-  }
-
-  const token = getCookie(req, 'matable_session');
-  let session = token ? merchantSessions.get(token) : undefined;
-
-  if (!session && token) {
-    session = (await getMerchantSessionRecord(token)) ?? undefined;
-    if (session) {
-      merchantSessions.set(token, session);
-    }
-  }
-
-  if (!session || session.expiresAt <= Date.now() || session.shopId !== Number(req.params.id)) {
-    if (token) {
-      merchantSessions.delete(token);
-      await deleteMerchantSessionRecord(token);
-    }
-    res.status(401).json({ error: 'Session marchand invalide ou expirée.' });
-    return null;
-  }
-
-  if (!isRequestFingerprintMatch(session, req)) {
-    if (token) {
-      merchantSessions.delete(token);
-      await deleteMerchantSessionRecord(token);
-    }
-    clearSessionCookie(res);
-    res.status(401).json({ error: 'Session rejetée pour sécurité : appareil ou navigateur non reconnu.' });
-    return null;
-  }
-
-  const shop = shops.find((candidate) => candidate.id === session.shopId);
-  if (!shop) {
-    res.status(404).json({ error: 'Boutique introuvable.' });
-    return null;
-  }
-  return shop;
-}
-
-async function requireMerchantOwner(req: Request, res: Response, next: express.NextFunction) {
-  if (!await requireMerchantIdentity(req, res)) return;
-  next();
-}
-
-async function requireMerchantAccess(req: Request, res: Response, next: express.NextFunction) {
-  const shop = await requireMerchantIdentity(req, res);
-  if (!shop) return;
-
-  if (!shop.is_active && !req.adminShopAccess) {
-    return res.status(403).json({ error: 'Boutique inactive : contactez l’administration pour la réactivation.' });
-  }
-
-  next();
-}
-
-async function requireMerchantOwnShop(req: Request, res: Response, next: express.NextFunction) {
-  const shop = await requireMerchantIdentity(req, res);
-  if (!shop) return;
-  if (!shop.is_active && !req.adminShopAccess) return res.status(403).json({ error: 'Boutique inactive : contactez l’administration pour la réactivation.' });
-  if (Number(req.params.id) !== shop.id) return res.status(403).json({ error: 'Accès refusé à cette boutique.' });
-  next();
-}
-
-function isLoginRateLimited(key: string): boolean {
-  const current = loginAttempts.get(key);
-  if (!current || current.resetAt <= Date.now()) {
-    loginAttempts.set(key, { count: 1, resetAt: Date.now() + LOGIN_WINDOW_MS });
-    return false;
-  }
-  current.count += 1;
-  return current.count > MAX_LOGIN_ATTEMPTS;
-}
-
-function getCustomerLoginLockSeconds(key: string): number {
-  const current = loginAttempts.get(key);
-  if (!current) return 0;
-  if (current.resetAt <= Date.now()) {
-    loginAttempts.delete(key);
-    return 0;
-  }
-  return current.count >= MAX_LOGIN_ATTEMPTS ? Math.ceil((current.resetAt - Date.now()) / 1000) : 0;
-}
-
-function recordCustomerLoginFailure(key: string): number {
-  const current = loginAttempts.get(key);
-  if (!current || current.resetAt <= Date.now()) {
-    loginAttempts.set(key, { count: 1, resetAt: Date.now() + LOGIN_WINDOW_MS });
-    return 1;
-  }
-  current.count += 1;
-  return current.count;
-}
+const rateLimitPublicRequest = createPublicRateLimitMiddleware(getRateLimitClientAddress);
 
 export async function rotateMerchantAccessTokenForShop(shopId: number, previousToken?: string): Promise<string> {
   const token = randomUUID();
@@ -1074,27 +717,7 @@ export async function rotateMerchantAccessTokenForShop(shopId: number, previousT
 }
 
 setInterval(async () => {
-  const now = Date.now();
-  for (const [token, session] of merchantSessions) {
-    if (session.expiresAt <= now) {
-      merchantSessions.delete(token);
-      await deleteMerchantSessionRecord(token);
-    }
-  }
-  await dbRun('DELETE FROM merchant_sessions WHERE expires_at <= ?', [now]);
-  for (const [token, session] of adminSessions) {
-    if (session.expiresAt <= now) {
-      adminSessions.delete(token);
-      await deleteAdminSessionRecord(token);
-    }
-  }
-  await dbRun('DELETE FROM admin_sessions WHERE expires_at <= ?', [now]);
-  for (const [key, attempt] of loginAttempts) {
-    if (attempt.resetAt <= now) loginAttempts.delete(key);
-  }
-  for (const [key, limit] of publicRequestLimits) {
-    if (limit.resetAt <= now) publicRequestLimits.delete(key);
-  }
+  await cleanupExpiredSessions();
   try {
     for (const shop of shops) await refreshSubscriptionState(shop);
   } catch (error) {
@@ -1255,8 +878,6 @@ async function startServer() {
 
   // 1. SHOPS
   const publicShopsRouter = createPublicShopsRouter({
-    shops,
-    products,
     merchantSessions,
     getCookie,
     isRequestFingerprintMatch,
@@ -1318,11 +939,7 @@ async function startServer() {
     merchantSessions,
     customerSessions,
     adminSessions,
-    loginAttempts,
     rateLimitPublicRequest,
-    isLoginRateLimited,
-    getCustomerLoginLockSeconds,
-    recordCustomerLoginFailure,
     getRateLimitClientAddress,
     verifyPin,
     toSafeShop,
@@ -1357,13 +974,9 @@ async function startServer() {
   // 3. PRODUCTS MANAGEMENT (Merchant /app)
   app.use('/api/shops/:id/products', createProductRouter({
     products,
-    findShop: (shopId) => shops.find((shop) => shop.id === shopId),
     requireMerchantAccess,
     allocateProductId: () => allocateRecordId('products'),
     persistProduct,
-    deleteProduct: async (productId, shopId) => {
-      await dbRun('DELETE FROM products WHERE id = ? AND shop_id = ?', [productId, shopId]);
-    },
     sanitizeTextField,
     normalizeProductImage,
     sanitizeGalleryImages,
@@ -1394,323 +1007,16 @@ async function startServer() {
     getProductUnitPriceWithModifiers,
   }));
 
-  const getPublicOrigin = (req: Request) => String(process.env.APP_URL || `${req.protocol || 'https'}://${req.get('host') || 'matable.ci'}`).replace(/\/$/, '');
-
-  const injectNoIndexSeo = (html: string, title: string) => html
-    .replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)}</title>`)
-    .replace(/<meta name="robots" content=".*?" \/>/, '<meta name="robots" content="noindex, nofollow" />')
-    .replace(/<link rel="canonical" href=".*?" \/>/, '');
-
-  const injectFaqSeo = (html: string, req: Request) => {
-    const origin = getPublicOrigin(req);
-    const canonical = `${origin}/faq`;
-    const questions = FAQ_SECTIONS.flatMap((section) => section.questions);
-    const structuredData = {
-      '@context': 'https://schema.org',
-      '@type': 'FAQPage',
-      name: 'Questions fréquentes | MaTable.ci',
-      url: canonical,
-      inLanguage: 'fr-CI',
-      mainEntity: questions.map(({ question, answer }) => ({
-        '@type': 'Question',
-        name: question,
-        acceptedAnswer: { '@type': 'Answer', text: answer },
-      })),
-    };
-    const jsonLd = JSON.stringify(structuredData).replace(/</g, '\\u003c');
-    const description = 'Réponses aux questions fréquentes sur les commandes, les comptes clients et les boutiques MaTable.ci.';
-    const tags = [
-      '<title>Questions fréquentes | MaTable.ci</title>',
-      `<meta name="description" content="${escapeHtml(description)}" />`,
-      '<meta name="robots" content="index, follow, max-image-preview:large" />',
-      `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
-      '<meta property="og:title" content="Questions fréquentes | MaTable.ci" />',
-      `<meta property="og:description" content="${escapeHtml(description)}" />`,
-      '<meta property="og:type" content="website" />',
-      `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
-      `<meta property="og:image" content="${origin}/icon-512.png" />`,
-      '<meta property="og:image:alt" content="MaTable.ci, boutiques locales en Côte d’Ivoire" />',
-      '<meta property="og:locale" content="fr_CI" />',
-      '<meta name="twitter:card" content="summary_large_image" />',
-      '<meta name="twitter:title" content="Questions fréquentes | MaTable.ci" />',
-      `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
-      `<meta name="twitter:image" content="${origin}/icon-512.png" />`,
-      `<script type="application/ld+json">${jsonLd}</script>`,
-    ].join('\n  ');
-    const faqSectionsHtml = FAQ_SECTIONS.map((section) => {
-      const questionsHtml = section.questions
-        .map(({ question, answer }) => `<dt>${escapeHtml(question)}</dt><dd>${escapeHtml(answer)}</dd>`)
-        .join('');
-      return `<section><h2>${escapeHtml(section.title)}</h2><dl>${questionsHtml}</dl></section>`;
-    }).join('');
-    const crawlableFaq = `<noscript><main><h1>Questions fréquentes</h1>${faqSectionsHtml}</main></noscript>`;
-    return html
-      .replace(/<title>.*?<\/title>/, '')
-      .replace(/<meta name="description" content=".*?" \/>/, '')
-      .replace(/<meta name="robots" content=".*?" \/>/, '')
-      .replace(/<link rel="canonical" href=".*?" \/>/, '')
-      .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
-      .replace('</head>', `  ${tags}\n  </head>`)
-      .replace('</body>', `${crawlableFaq}\n  </body>`);
-  };
-
-  const injectHowItWorksSeo = (html: string, req: Request) => {
-    const origin = getPublicOrigin(req);
-    const canonical = `${origin}/comment-ca-marche`;
-    const title = 'Comment ça marche ? | MaTable.ci';
-    const description = 'Le guide pour découvrir une boutique locale, consulter sa vitrine, commander directement auprès du commerçant et convenir du retrait ou de la livraison.';
-    const steps = [
-      { name: 'Trouvez une boutique ou un produit', text: 'Parcourez les boutiques, explorez les catégories ou recherchez un produit, un quartier ou une ville.' },
-      { name: 'Découvrez la vitrine', text: 'Consultez les produits, les prix, les horaires et les informations partagées par le commerçant.' },
-      { name: 'Échangez directement avec le commerçant', text: 'Envoyez votre demande au vendeur sur WhatsApp et posez vos questions avant de confirmer.' },
-      { name: 'Convenez du retrait ou de la livraison', text: 'Mettez-vous d’accord avec le commerçant sur la disponibilité, le paiement et la remise de votre commande.' },
-    ];
-    const structuredData = {
-      '@context': 'https://schema.org',
-      '@type': 'HowTo',
-      name: 'Comment commander auprès d’une boutique MaTable.ci',
-      description,
-      inLanguage: 'fr-CI',
-      step: steps.map((step, index) => ({
-        '@type': 'HowToStep',
-        position: index + 1,
-        name: step.name,
-        text: step.text,
-        url: `${canonical}#etape-${index + 1}`,
-      })),
-    };
-    const jsonLd = JSON.stringify(structuredData).replace(/</g, '\\u003c');
-    const tags = [
-      `<title>${escapeHtml(title)}</title>`,
-      `<meta name="description" content="${escapeHtml(description)}" />`,
-      '<meta name="robots" content="index, follow, max-image-preview:large" />',
-      `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
-      `<meta property="og:title" content="${escapeHtml(title)}" />`,
-      `<meta property="og:description" content="${escapeHtml(description)}" />`,
-      '<meta property="og:type" content="article" />',
-      `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
-      `<meta property="og:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
-      '<meta property="og:locale" content="fr_CI" />',
-      '<meta name="twitter:card" content="summary_large_image" />',
-      `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
-      `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
-      `<meta name="twitter:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
-      `<script type="application/ld+json">${jsonLd}</script>`,
-    ].join('\n  ');
-    const crawlableGuide = `<noscript><main><h1>Comment ça marche sur MaTable.ci ?</h1><p>${escapeHtml(description)}</p><ol>${steps.map((step) => `<li><h2>${escapeHtml(step.name)}</h2><p>${escapeHtml(step.text)}</p></li>`).join('')}</ol></main></noscript>`;
-    return html
-      .replace(/<title>.*?<\/title>/, '')
-      .replace(/<meta name="description" content=".*?" \/>/, '')
-      .replace(/<meta name="robots" content=".*?" \/>/, '')
-      .replace(/<link rel="canonical" href=".*?" \/>/, '')
-      .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
-      .replace('</head>', `  ${tags}\n  </head>`)
-      .replace('</body>', `${crawlableGuide}\n  </body>`);
-  };
-
-  const injectShopOpenGraph = (html: string, targetShop: ShopRecord, req: Request) => {
-    const origin = getPublicOrigin(req);
-    const shopUrl = `${origin}/${encodeURIComponent(targetShop.slug)}`;
-    const title = `${sanitizeTextField(targetShop.name, 100)} — Boutique locale en Côte d’Ivoire | MaTable.ci`;
-    const description = sanitizeTextField(targetShop.welcome_message || `Découvrez le catalogue de ${targetShop.name} et commandez directement sur WhatsApp.`, 160);
-    const defaultImage = `${origin}/icon-512.svg`;
-    const customImage = targetShop.theme_config?.custom_banner_url;
-    const image = customImage && /^https?:\/\//i.test(String(customImage)) ? String(customImage) : defaultImage;
-    const shopProducts = products
-      .filter((product) => product.shop_id === targetShop.id && product.is_available && product.stock > 0)
-      .slice(0, 30);
-    const structuredData = {
-      '@context': 'https://schema.org',
-      '@type': 'Store',
-      name: targetShop.name,
-      description,
-      url: shopUrl,
-      image,
-      telephone: targetShop.whatsapp_number,
-      address: {
-        '@type': 'PostalAddress',
-        addressLocality: targetShop.city || 'Abidjan',
-        addressCountry: 'CI',
-      },
-      areaServed: 'Côte d’Ivoire',
-      hasOfferCatalog: {
-        '@type': 'OfferCatalog',
-        name: `Catalogue ${targetShop.name}`,
-        itemListElement: shopProducts.map((product) => ({
-          '@type': 'Offer',
-          priceCurrency: 'XOF',
-          price: product.price,
-          availability: 'https://schema.org/InStock',
-          itemOffered: {
-            '@type': 'Product',
-            name: product.title,
-            description: product.description || undefined,
-            image: product.image_url,
-          },
-        })),
-      },
-    };
-    const jsonLd = JSON.stringify(structuredData).replace(/</g, '\\u003c');
-    const meta = [
-      `<title>${escapeHtml(title)}</title>`,
-      `<meta name="description" content="${escapeHtml(description)}" />`,
-      `<meta name="robots" content="index, follow, max-image-preview:large" />`,
-      `<link rel="canonical" href="${escapeHtml(shopUrl)}" />`,
-      `<meta property="og:title" content="${escapeHtml(title)}" />`,
-      `<meta property="og:description" content="${escapeHtml(description)}" />`,
-      `<meta property="og:type" content="website" />`,
-      `<meta property="og:url" content="${escapeHtml(shopUrl)}" />`,
-      `<meta property="og:image" content="${escapeHtml(image)}" />`,
-      `<meta property="og:image:alt" content="${escapeHtml(targetShop.name)}" />`,
-      `<meta property="og:locale" content="fr_CI" />`,
-      `<meta name="twitter:card" content="summary_large_image" />`,
-      `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
-      `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
-      `<meta name="twitter:image" content="${escapeHtml(image)}" />`,
-      `<script type="application/ld+json">${jsonLd}</script>`,
-    ].join('\n  ');
-
-    return html
-      .replace(/<title>.*?<\/title>/, '')
-      .replace(/<meta name="description" content=".*?" \/>/, '')
-      .replace(/<meta name="robots" content=".*?" \/>/, '')
-      .replace(/<link rel="canonical" href=".*?" \/>/, '')
-      .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
-      .replace('</head>', `  ${meta}\n  </head>`);
-  };
-
-  const injectLegalSeo = (html: string, page: string, req: Request) => {
-    const metadata: Record<string, { title: string; description: string }> = {
-      'mentions-legales': { title: 'Mentions légales | MaTable.ci', description: 'Mentions légales et responsabilités de la plateforme MaTable.ci.' },
-      confidentialite: { title: 'Politique de confidentialité | MaTable.ci', description: 'Politique de confidentialité et traitement des données sur MaTable.ci.' },
-      cgu: { title: 'Conditions générales d’utilisation | MaTable.ci', description: 'Conditions générales d’utilisation des vitrines et services MaTable.ci.' },
-      cookies: { title: 'Politique relative aux cookies | MaTable.ci', description: 'Informations sur les cookies et traceurs utilisés par MaTable.ci.' },
-    };
-    const content = metadata[page];
-    if (!content) return html;
-    const canonical = `${getPublicOrigin(req)}/${page}`;
-    return html
-      .replace(/<title>.*?<\/title>/, `<title>${escapeHtml(content.title)}</title>`)
-      .replace(/<meta name="description" content=".*?" \/>/, `<meta name="description" content="${escapeHtml(content.description)}" />`)
-      .replace(/<link rel="canonical" href=".*?" \/>/, `<link rel="canonical" href="${escapeHtml(canonical)}" />`)
-      .replace(/<meta property="og:title" content=".*?" \/>/, `<meta property="og:title" content="${escapeHtml(content.title)}" />`)
-      .replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${escapeHtml(content.description)}" />`)
-      .replace(/<meta property="og:url" content=".*?" \/>/, `<meta property="og:url" content="${escapeHtml(canonical)}" />`);
-  };
-
-  const injectDiscoverySeo = (html: string, page: ReturnType<typeof findPublicDiscoveryPage>, req: Request) => {
-    if (!page) return html;
-    const origin = getPublicOrigin(req);
-    const canonical = `${origin}${page.path}`;
-    const pageShops = shops.filter((shop) => {
-      if (!isShopPubliclyVisible(shop)) return false;
-      if (page.category && shop.category !== page.category) return false;
-      if (page.citySlug && toDiscoveryCitySlug(shop.city || '') !== page.citySlug) return false;
-      return true;
-    });
-    const structuredData = {
-      '@context': 'https://schema.org',
-      '@type': 'CollectionPage',
-      name: page.heading,
-      description: page.description,
-      url: canonical,
-      inLanguage: 'fr-CI',
-      mainEntity: {
-        '@type': 'ItemList',
-        numberOfItems: pageShops.length,
-        itemListElement: pageShops.map((shop, index) => ({
-          '@type': 'ListItem',
-          position: index + 1,
-          url: `${origin}/${encodeURIComponent(shop.slug)}`,
-          name: shop.name,
-        })),
-      },
-    };
-    const jsonLd = JSON.stringify(structuredData).replace(/</g, '\\u003c');
-    const shareImage = page.category
-      ? getCategoryDefaults(page.category).bannerPlaceholderImageUrl
-      : `${origin}/icon-512.png`;
-    const tags = [
-      `<title>${escapeHtml(page.title)}</title>`,
-      `<meta name="description" content="${escapeHtml(page.description)}" />`,
-      '<meta name="robots" content="index, follow, max-image-preview:large" />',
-      `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
-      `<meta property="og:title" content="${escapeHtml(page.title)}" />`,
-      `<meta property="og:description" content="${escapeHtml(page.description)}" />`,
-      '<meta property="og:type" content="website" />',
-      `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
-      `<meta property="og:image" content="${escapeHtml(shareImage)}" />`,
-      `<meta property="og:image:alt" content="${escapeHtml(page.heading)}" />`,
-      '<meta property="og:locale" content="fr_CI" />',
-      '<meta name="twitter:card" content="summary_large_image" />',
-      `<meta name="twitter:title" content="${escapeHtml(page.title)}" />`,
-      `<meta name="twitter:description" content="${escapeHtml(page.description)}" />`,
-      `<meta name="twitter:image" content="${escapeHtml(shareImage)}" />`,
-      `<script type="application/ld+json">${jsonLd}</script>`,
-    ].join('\n  ');
-    const crawlableFallback = `<noscript><main><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.description)}</p><ul>${pageShops.map((shop) => `<li><a href="${escapeHtml(`${origin}/${encodeURIComponent(shop.slug)}`)}">${escapeHtml(shop.name)}</a></li>`).join('')}</ul></main></noscript>`;
-    return html
-      .replace(/<title>.*?<\/title>/, '')
-      .replace(/<meta name="description" content=".*?" \/>/, '')
-      .replace(/<meta name="robots" content=".*?" \/>/, '')
-      .replace(/<link rel="canonical" href=".*?" \/>/, '')
-      .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
-      .replace('</head>', `  ${tags}\n  </head>`)
-      .replace('</body>', `${crawlableFallback}\n  </body>`);
-  };
-
-  const injectShopDirectorySeo = (html: string, req: Request) => {
-    const origin = getPublicOrigin(req);
-    const canonical = `${origin}/boutiques`;
-    const directoryShops = shops.filter((shop) => isShopPubliclyVisible(shop));
-    const title = 'Boutiques locales en Côte d’Ivoire | MaTable.ci';
-    const description = 'Découvrez les boutiques locales en Côte d’Ivoire, explorez les commerces par catégorie ou par ville et contactez directement les commerçants.';
-    const structuredData = {
-      '@context': 'https://schema.org',
-      '@type': 'CollectionPage',
-      name: 'Découvrez les boutiques locales',
-      description,
-      url: canonical,
-      inLanguage: 'fr-CI',
-      mainEntity: {
-        '@type': 'ItemList',
-        numberOfItems: directoryShops.length,
-        itemListElement: directoryShops.map((shop, index) => ({
-          '@type': 'ListItem',
-          position: index + 1,
-          url: `${origin}/${encodeURIComponent(shop.slug)}`,
-          name: shop.name,
-        })),
-      },
-    };
-    const jsonLd = JSON.stringify(structuredData).replace(/</g, '\\u003c');
-    const tags = [
-      `<title>${escapeHtml(title)}</title>`,
-      `<meta name="description" content="${escapeHtml(description)}" />`,
-      '<meta name="robots" content="index, follow, max-image-preview:large" />',
-      `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
-      `<meta property="og:title" content="${escapeHtml(title)}" />`,
-      `<meta property="og:description" content="${escapeHtml(description)}" />`,
-      '<meta property="og:type" content="website" />',
-      `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
-      `<meta property="og:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
-      '<meta property="og:locale" content="fr_CI" />',
-      '<meta name="twitter:card" content="summary_large_image" />',
-      `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
-      `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
-      `<meta name="twitter:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
-      `<script type="application/ld+json">${jsonLd}</script>`,
-    ].join('\n  ');
-    const crawlableFallback = `<noscript><main><h1>Découvrez les boutiques locales</h1><p>${escapeHtml(description)}</p><ul>${directoryShops.map((shop) => `<li><a href="${escapeHtml(`${origin}/${encodeURIComponent(shop.slug)}`)}">${escapeHtml(shop.name)}</a></li>`).join('')}</ul></main></noscript>`;
-    return html
-      .replace(/<title>.*?<\/title>/, '')
-      .replace(/<meta name="description" content=".*?" \/>/, '')
-      .replace(/<meta name="robots" content=".*?" \/>/, '')
-      .replace(/<link rel="canonical" href=".*?" \/>/, '')
-      .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
-      .replace('</head>', `  ${tags}\n  </head>`)
-      .replace('</body>', `${crawlableFallback}\n  </body>`);
-  };
+  const {
+    getPublicOrigin,
+    injectNoIndexSeo,
+    injectFaqSeo,
+    injectHowItWorksSeo,
+    injectShopOpenGraph,
+    injectLegalSeo,
+    injectDiscoverySeo,
+    injectShopDirectorySeo,
+  } = createSeoHtmlHelpers({ shops, products, sanitizeTextField });
 
   const shouldServePublicHtml = (req: Request) => {
     const accept = String(req.headers.accept || '');

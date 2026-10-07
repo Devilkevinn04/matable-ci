@@ -15,7 +15,6 @@ import {
   Check,
   BarChart3,
   Download,
-  Filter,
   Package,
   TrendingUp,
   Eye,
@@ -24,207 +23,27 @@ import {
   Activity,
   ShoppingBag,
   LogOut,
-  Star,
   Flag,
 } from 'lucide-react';
-import { Shop } from '../types';
-import { getCategoryDefaults } from '../utils/categoryDefaults';
 import { AdminIdentityVerificationPanel } from './AdminIdentityVerificationPanel';
-
-interface AdminShopItem extends Shop {
-  products_count: number;
-  orders_count: number;
-  total_sales: number;
-  average_order_value: number;
-  last_order_at: string | null;
-}
-
-interface AdminAnalytics {
-  days: number;
-  daily: { date: string; page_views: number; unique_visitors: number; orders: number; sales: number }[];
-  by_shop: { shop_id: number; shop_name: string; page_views: number; unique_visitors: number; orders: number; sales: number; conversion_rate: number }[];
-  sources: { source: 'direct' | 'search' | 'social' | 'referral' | 'internal' | 'unknown'; visits: number; visitors: number }[];
-  totals: { page_views: number; unique_visitors: number; orders: number; sales: number; conversion_rate: number };
-  previous: { page_views: number; unique_visitors: number; orders: number; sales: number; conversion_rate: number };
-}
-
-interface AdminFinance {
-  days: number;
-  since: string;
-  summary: {
-    confirmed_count: number;
-    collected_amount: number;
-    pending_count: number;
-    pending_amount: number;
-    failed_count: number;
-    refunded_count: number;
-    mrr: number;
-    active_subscriptions: number;
-    mrr_by_tier: { tier: string; count: number; amount: number }[];
-    active_trials: number;
-    trials_expiring_7d: number;
-    completed_trials: number;
-    converted_trials: number;
-    trial_conversion_rate: number;
-    past_due_subscriptions: number;
-    whatsapp_reminders_enabled: boolean;
-    whatsapp_reminder_opt_ins: number;
-    subscriptions: { count: number; amount: number };
-    promotions: { count: number; amount: number };
-  };
-  by_tier: { tier: string; count: number; amount: number }[];
-  payments: {
-    id: string;
-    shop_id: number;
-    shop_name: string;
-    payment_type: 'subscription' | 'promotion';
-    tier: string;
-    subscription_term: 'monthly' | 'annual';
-    amount: number;
-    currency: string;
-    status: string;
-    provider_reference: string | null;
-    created_at: string;
-    paid_at: string | null;
-  }[];
-}
-
-interface AdminSubscriptionShop {
-  id: number;
-  name: string;
-  slug: string;
-  whatsapp_number: string;
-  owner_email: string | null;
-  whatsapp_reminders_opt_in: boolean;
-  plan: string;
-  status: string;
-  is_active: boolean;
-  publication_status: string | null;
-  merchant_verification_status: string | null;
-  trial_start: string | null;
-  trial_end: string | null;
-  trial_days_remaining: number | null;
-  trial_extension_days_used: number;
-  trial_extension_days_remaining: number;
-  subscription_expires_at: string | null;
-  trial_expiry_mismatch: boolean;
-  next_renewal_at: string | null;
-  created_at: string;
-  products_count: number;
-  orders_count: number;
-  last_order_at: string | null;
-}
-
-interface AdminSubscriptions {
-  summary: {
-    mrr: number;
-    active_subscriptions: number;
-    mrr_by_tier: { tier: string; count: number; amount: number }[];
-    active_trials: number;
-    trials_expiring_7d: number;
-    completed_trials: number;
-    converted_trials: number;
-    trial_conversion_rate: number;
-    past_due_subscriptions: number;
-    whatsapp_reminders_enabled: boolean;
-    whatsapp_reminder_opt_ins: number;
-  };
-  shops: AdminSubscriptionShop[];
-  audit_logs: { id: number; action: string; shop_id: number | null; shop_name: string | null; details: string; created_at: string }[];
-}
-
-interface AdminOrder {
-  id: number;
-  shop_id: number;
-  shop_name: string;
-  customer_name: string;
-  customer_phone: string;
-  delivery_location: string;
-  total_amount: number;
-  status: string;
-  created_at: string;
-  items_count: number;
-}
-
-interface AdminHealth {
-  status: string;
-  checked_at: string;
-  database: string;
-  database_path: string | null;
-  counts: { shops: number; products: number; orders: number };
-  latest_analytics_event_at: string | null;
-  integrations: { whatsapp_click_to_chat: string };
-}
-
-interface AdminMaintenance {
-  enabled: boolean;
-  message: string;
-  updated_at: string | null;
-  updated_by: string | null;
-}
-
-interface AdminContentModeration {
-  reviews: {
-    id: number;
-    target_type: 'shop' | 'product';
-    rating: number;
-    comment: string;
-    status: string;
-    created_at: string;
-    shop_name: string | null;
-    product_title: string | null;
-    customer_name: string | null;
-  }[];
-  reports: {
-    id: number;
-    target_type: 'shop' | 'product';
-    reason: string;
-    details: string;
-    status: string;
-    created_at: string;
-    shop_name: string | null;
-    product_title: string | null;
-    customer_name: string | null;
-  }[];
-}
-
-const ownerNotificationTemplates = [
-  { id: 'welcome', label: 'Bienvenue et démarrage' },
-  { id: 'catalog', label: 'Rappel catalogue à jour' },
-  { id: 'orders', label: 'Rappel nouvelles commandes' },
-  { id: 'support', label: 'Proposition d’assistance' },
-  { id: 'trial_expiring', label: 'Relance essai arrivant à échéance' },
-] as const;
-
-const subscriptionStatusLabels: Record<string, string> = {
-  trialing: 'Essai actif',
-  active: 'Payé',
-  expired: 'Expiré',
-  past_due: 'À régulariser',
-  suspended: 'Suspendu',
-  cancelled: 'Résilié',
-  not_started: 'Non démarré',
-};
-
-const audienceSourceLabels: Record<AdminAnalytics['sources'][number]['source'], string> = {
-  direct: 'Accès direct',
-  search: 'Moteurs de recherche',
-  social: 'Réseaux sociaux',
-  referral: 'Sites référents',
-  internal: 'Navigation interne',
-  unknown: 'Origine non attribuée',
-};
-
-const formatAudienceChange = (current: number, previous: number, percentagePoints = false) => {
-  if (percentagePoints) {
-    const change = current - previous;
-    if (change === 0) return 'Stable';
-    return `${change > 0 ? '+' : ''}${change.toFixed(1)} pt`;
-  }
-  if (previous === 0) return current === 0 ? 'Stable' : 'Nouveau';
-  const change = Math.round(((current - previous) / previous) * 100);
-  return `${change > 0 ? '+' : ''}${change}%`;
-};
+import { AdminShopList } from './AdminShopList';
+import {
+  audienceSourceLabels,
+  formatAudienceChange,
+  ownerNotificationTemplates,
+  subscriptionStatusLabels,
+} from './adminDashboardTypes';
+import type {
+  AdminAnalytics,
+  AdminContentModeration,
+  AdminFinance,
+  AdminHealth,
+  AdminMaintenance,
+  AdminOrder,
+  AdminShopItem,
+  AdminSubscriptionShop,
+  AdminSubscriptions,
+} from './adminDashboardTypes';
 
 export const AdminDashboard: React.FC = () => {
   const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'identity' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'moderation'>('overview');
@@ -867,13 +686,13 @@ export const AdminDashboard: React.FC = () => {
               ))}
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
-              <section aria-labelledby="admin-follow-up-title" className="chart-panel p-4 md:p-5">
-                <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3"><div><h3 id="admin-follow-up-title" className="text-sm font-black text-slate-900">Dossiers à suivre</h3><p className="mt-1 text-xs text-slate-500">Vérifications nécessitant une revue.</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">{pendingVerificationShops.length}</span></div>
+              <section aria-labelledby="admin-follow-up-title" className="min-w-0 chart-panel p-4 md:p-5">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3"><div className="min-w-0"><h3 id="admin-follow-up-title" className="text-sm font-black text-slate-900">Dossiers à suivre</h3><p className="mt-1 text-xs text-slate-500">Vérifications nécessitant une revue.</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">{pendingVerificationShops.length}</span></div>
                 {pendingVerificationShops.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucun dossier en attente.</p> : <div className="divide-y divide-slate-200">{pendingVerificationShops.slice(0, 5).map((shop) => <div key={shop.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-900">{shop.name}</p><p className="mt-1 text-xs text-slate-500">{shop.merchant_verification_status === 'under_review' ? 'Revue en cours' : 'À examiner'} · {shop.whatsapp_number}</p></div><button type="button" onClick={() => focusVerificationShop(shop.id)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700">Ouvrir</button></div>)}</div>}
                 {pendingVerificationShops.length > 5 && <button type="button" onClick={() => setAdminView('identity')} className="mt-2 text-xs font-bold text-sky-800 underline underline-offset-2">Voir les {pendingVerificationShops.length} dossiers</button>}
               </section>
-              <section aria-labelledby="admin-recent-orders-title" className="chart-panel p-4 md:p-5">
-                <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3"><div><h3 id="admin-recent-orders-title" className="text-sm font-black text-slate-900">Commandes récentes</h3><p className="mt-1 text-xs text-slate-500">Dernières demandes enregistrées.</p></div><button type="button" onClick={() => setAdminView('orders')} className="shrink-0 text-xs font-bold text-sky-800 underline underline-offset-2">Toutes les commandes</button></div>
+              <section aria-labelledby="admin-recent-orders-title" className="min-w-0 chart-panel p-4 md:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3"><div className="min-w-0"><h3 id="admin-recent-orders-title" className="text-sm font-black text-slate-900">Commandes récentes</h3><p className="mt-1 text-xs text-slate-500">Dernières demandes enregistrées.</p></div><button type="button" onClick={() => setAdminView('orders')} className="shrink-0 text-xs font-bold text-sky-800 underline underline-offset-2">Toutes les commandes</button></div>
                 {adminOrders.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucune commande enregistrée.</p> : <div className="divide-y divide-slate-200">{adminOrders.slice(0, 5).map((order) => <div key={order.id} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-900">#{order.id} · {order.shop_name}</p><p className="mt-1 truncate text-xs text-slate-500">{order.customer_name} · {new Date(order.created_at).toLocaleDateString('fr-FR')}</p></div><div className="shrink-0 text-right"><strong className="block text-sm text-slate-900">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} F</strong><span className="text-[10px] font-semibold text-slate-500">{order.status}</span></div></div>)}</div>}
               </section>
             </div>
@@ -976,8 +795,8 @@ export const AdminDashboard: React.FC = () => {
                       })}
                     </svg>
                     <div className="absolute inset-x-3 bottom-3 flex justify-between text-[9px] text-slate-400">
-                      {analytics.daily.map((day, index) => (
-                        <span key={day.date} className={index % Math.max(1, Math.ceil(analytics.daily.length / 6)) === 0 || index === analytics.daily.length - 1 ? '' : 'invisible'}>{day.date.slice(5)}</span>
+                      {analytics.daily.filter((_, index) => index % Math.max(1, Math.ceil(analytics.daily.length / 6)) === 0 || index === analytics.daily.length - 1).map((day) => (
+                        <span key={day.date}>{day.date.slice(5)}</span>
                       ))}
                     </div>
                   </div>
@@ -1288,115 +1107,23 @@ export const AdminDashboard: React.FC = () => {
         <AdminIdentityVerificationPanel selectedShopId={selectedVerificationShopId} />
         )}
 
-        {adminView === 'shops' && <>
-        <div className="chart-panel p-3 md:p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Rechercher une boutique..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-xs outline-none transition focus:border-violet-300 focus:bg-white"
-              />
-            </div>
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">{filteredShops.length} boutique(s)</span>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
-            {(['all', 'active', 'inactive'] as const).map(filter => (
-              <button key={filter} onClick={() => setStatusFilter(filter)} className={`rounded-xl px-2.5 py-1.5 text-[11px] font-bold ${statusFilter === filter ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                {filter === 'all' ? 'Toutes' : filter === 'active' ? 'Actives' : 'Inactives'}
-              </button>
-            ))}
-            <select value={sortBy} onChange={event => setSortBy(event.target.value as typeof sortBy)} className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 outline-none">
-              <option value="sales">Trier par valeur des commandes</option>
-              <option value="orders">Trier par commandes</option>
-              <option value="name">Trier par nom</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-[1.7rem] border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.06)]">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 p-4">
-            <h2 className="font-black text-slate-900 text-sm">Liste des commerçants</h2>
-            <button type="button" onClick={exportShopsCsv} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
-          </div>
-
-          <div className="divide-y divide-slate-200">
-            {filteredShops.length === 0 && <p className="p-5 text-sm text-slate-500">Aucune boutique ne correspond à ces critères.</p>}
-            {filteredShops.map((shop) => {
-              const isFeatured = Boolean(shop.featured_until && Date.parse(shop.featured_until) > Date.now());
-              return (
-                <motion.div
-                  key={shop.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors"
-                >
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-black text-slate-900 text-base">{shop.name}</h3>
-                      {isFeatured && <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-[10px] font-extrabold text-amber-900"><Star className="h-3 w-3 fill-current" aria-hidden="true" /> À la une</span>}
-                      <span className="text-[10px] text-slate-400 font-mono">/{shop.slug}</span>
-                      <span
-                        className="text-[10px] font-extrabold px-2 py-0.5 rounded-md"
-                        style={{ color: getCategoryDefaults(shop.category).primaryColor, backgroundColor: `${getCategoryDefaults(shop.category).primaryColor}1A` }}
-                      >
-                        {getCategoryDefaults(shop.category).icon} {getCategoryDefaults(shop.category).label}
-                      </span>
-                      {['submitted', 'under_review'].includes(shop.merchant_verification_status || '') && (
-                        <button type="button" onClick={() => focusVerificationShop(shop.id)} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-extrabold text-amber-900 transition hover:bg-amber-100">
-                          <Eye className="h-3 w-3" /> {shop.merchant_verification_status === 'under_review' ? 'Revue en cours' : 'À examiner'}
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                      <span>📞 {shop.whatsapp_number}</span>
-                      <span>📍 {shop.city || 'Abidjan'}</span>
-                      <span>📦 {shop.products_count} articles</span>
-                      <span>🛒 {shop.orders_count} commandes</span>
-                      <span>💰 {new Intl.NumberFormat('fr-FR').format(shop.total_sales)} FCFA</span>
-                    </div>
-
-                    <div className="text-xs text-slate-600 flex flex-wrap items-center gap-4 pt-1">
-                      <div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-slate-400" /><span>Dernière commande : <strong>{shop.last_order_at ? new Date(shop.last_order_at).toLocaleDateString('fr-FR') : 'Aucune'}</strong></span></div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-3 shrink-0">
-                    <button onClick={() => handleOpenMerchantSpace(shop.id)} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Gérer intégralement</button>
-                    <select
-                      aria-label={`Mettre ${shop.name} à la une`}
-                      value={isFeatured ? 'featured' : ''}
-                      disabled={featuredActionShopId === shop.id}
-                      onChange={(event) => {
-                        const days = Number(event.target.value);
-                        if (Number.isInteger(days)) void handleSetFeatured(shop.id, days);
-                      }}
-                      className="max-w-48 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
-                    >
-                      <option value="" disabled>☆ Mettre à la une…</option>
-                      {isFeatured && <option value="featured">★ À la une</option>}
-                      {isFeatured && <option value="0">Retirer de la une</option>}
-                      <option value="7">7 jours</option>
-                      <option value="14">14 jours</option>
-                      <option value="30">30 jours</option>
-                      <option value="60">60 jours</option>
-                      <option value="90">90 jours</option>
-                    </select>
-                    <button onClick={() => handleToggleActive(shop.id)} className={`rounded-xl border px-3 py-2 text-xs font-extrabold ${shop.is_active ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
-                      {shop.is_active ? '● ON' : '○ OFF'}
-                    </button>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
-        </>}
+        {adminView === 'shops' && (
+          <AdminShopList
+            shops={filteredShops}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            onExport={exportShopsCsv}
+            onFocusVerification={focusVerificationShop}
+            onOpenMerchantSpace={handleOpenMerchantSpace}
+            featuredActionShopId={featuredActionShopId}
+            onSetFeatured={(shopId, days) => void handleSetFeatured(shopId, days)}
+            onToggleActive={(shopId) => void handleToggleActive(shopId)}
+          />
+        )}
         </div>
         </div>
 

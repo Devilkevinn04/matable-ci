@@ -5,6 +5,8 @@ import { rankShopsByVisibility } from '../services/visibility.ts';
 import type { ProductRecord, ShopRecord } from '../types.ts';
 import { isShopCategory } from '../../src/utils/categoryDefaults.ts';
 import { toDiscoveryCitySlug } from '../../src/utils/discoverySeo.ts';
+import { mapProductRow } from '../repositories/products.ts';
+import { mapShopRow } from '../repositories/shops.ts';
 
 interface MerchantSession {
   shopId: number;
@@ -13,8 +15,6 @@ interface MerchantSession {
 }
 
 interface PublicShopsRouterOptions {
-  shops: ShopRecord[];
-  products: ProductRecord[];
   merchantSessions: Map<string, MerchantSession>;
   getCookie: (req: Request, name: string) => string | null;
   isRequestFingerprintMatch: (session: { fingerprint?: string } | null | undefined, req: Request) => boolean;
@@ -23,8 +23,6 @@ interface PublicShopsRouterOptions {
 }
 
 export function createPublicShopsRouter({
-  shops,
-  products,
   merchantSessions,
   getCookie,
   isRequestFingerprintMatch,
@@ -54,11 +52,17 @@ export function createPublicShopsRouter({
     const limit = Number.isInteger(limitValue) ? Math.min(48, Math.max(1, limitValue)) : 24;
     const offset = Number.isInteger(offsetValue) ? Math.max(0, offsetValue) : 0;
 
-    const publicShopRecords = shops.filter((shop) => isShopPubliclyVisible(shop)
+    const [shopRows, productRows] = await Promise.all([
+      dbAll<Record<string, unknown>>('SELECT * FROM shops'),
+      dbAll<Record<string, unknown>>('SELECT * FROM products'),
+    ]);
+    const currentShops = shopRows.map(mapShopRow);
+    const currentProducts = productRows.map(mapProductRow);
+    const publicShopRecords = currentShops.filter((shop) => isShopPubliclyVisible(shop)
       && (!category || shop.category === category)
       && (!citySlug || toDiscoveryCitySlug(shop.city || '') === citySlug));
     const publicShopsById = new Map(publicShopRecords.map((shop) => [shop.id, shop]));
-    let feedProducts = products.filter((product) => {
+    let feedProducts = currentProducts.filter((product) => {
       const shop = publicShopsById.get(product.shop_id);
       return Boolean(shop && product.is_available && product.stock > 0);
     });
@@ -140,14 +144,20 @@ export function createPublicShopsRouter({
   });
 
   router.get('/', async (_req, res) => {
+    const [shopRows, productRows] = await Promise.all([
+      dbAll<Record<string, unknown>>('SELECT * FROM shops'),
+      dbAll<Record<string, unknown>>('SELECT * FROM products'),
+    ]);
+    const currentShops = shopRows.map(mapShopRow);
+    const currentProducts = productRows.map(mapProductRow);
     const availableProductsByShop = new Map<number, ProductRecord[]>();
-    for (const product of products) {
+    for (const product of currentProducts) {
       if (!product.is_available || product.stock <= 0) continue;
       const shopProducts = availableProductsByShop.get(product.shop_id) || [];
       shopProducts.push(product);
       availableProductsByShop.set(product.shop_id, shopProducts);
     }
-    const publicShopRecords = shops.filter((shop) => isShopPubliclyVisible(shop));
+    const publicShopRecords = currentShops.filter((shop) => isShopPubliclyVisible(shop));
     const productCounts = new Map<number, number>();
     for (const shop of publicShopRecords) {
       productCounts.set(shop.id, availableProductsByShop.get(shop.id)?.length || 0);
@@ -192,7 +202,11 @@ export function createPublicShopsRouter({
   router.get('/:slug', async (req, res) => {
     const { slug } = req.params;
     const isIdQuery = !Number.isNaN(Number(slug));
-    const shop = shops.find((candidate) => candidate.slug === slug || candidate.id.toString() === slug);
+    const shopRow = await dbGet<Record<string, unknown>>(
+      'SELECT * FROM shops WHERE slug = ? OR CAST(id AS TEXT) = ? LIMIT 1',
+      [slug, slug],
+    );
+    const shop = shopRow ? mapShopRow(shopRow) : undefined;
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable' });
 
     const token = getCookie(req, 'matable_session');
@@ -221,9 +235,11 @@ export function createPublicShopsRouter({
       });
     }
 
-    const shopProducts = isIdQuery
-      ? products.filter((product) => product.shop_id === shop.id)
-      : products.filter((product) => product.shop_id === shop.id && product.is_available);
+    const productRows = await dbAll<Record<string, unknown>>(
+      `SELECT * FROM products WHERE shop_id = ?${isIdQuery ? '' : ' AND is_available = 1'}`,
+      [shop.id],
+    );
+    const shopProducts = productRows.map(mapProductRow);
     const productLikeCounts = await getProductLikeCounts(shopProducts.map((product) => product.id));
     const activeBoost = await dbGet<{ starts_at: string; ends_at: string }>(
       `SELECT starts_at, ends_at FROM shop_boosts

@@ -86,7 +86,7 @@ export function AdminIdentityVerificationPanel({ selectedShopId }: AdminIdentity
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <ShieldAlert className="h-5 w-5 text-amber-700" />
-          <div><h2 className="text-sm font-black text-slate-900">Vérification d’identité</h2><p className="text-[11px] text-slate-500">Acceptation locale automatique ; revue visuelle des dossiers incertains. Aucun liveness.</p></div>
+          <div><h2 className="text-sm font-black text-slate-900">Revue manuelle des identités</h2><p className="text-[11px] text-slate-500">Les signaux OCR et faciaux proviennent du navigateur et ne sont pas fiables comme preuve. Examinez les documents avant toute décision ; aucun liveness n’est effectué.</p></div>
         </div>
         <button type="button" onClick={() => void refresh()} disabled={loading} aria-label="Actualiser les dossiers" className="rounded-lg border border-slate-300 bg-white p-2 text-slate-700 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
       </div>
@@ -102,7 +102,7 @@ export function AdminIdentityVerificationPanel({ selectedShopId }: AdminIdentity
               <div className="mt-3 grid gap-3 text-xs text-slate-700 sm:grid-cols-3">
                 <p>Nom OCR : <strong>{[item.identity_data?.first_name, item.identity_data?.last_name].filter(Boolean).join(' ') || 'Non extrait'}</strong></p>
                 <p>Naissance OCR : <strong>{item.identity_data?.birth_date || 'Non extraite'}</strong></p>
-                <p>Distance faciale : <strong>{item.client_face_distance?.toFixed(3) ?? 'Indisponible'}</strong> <span className="text-slate-500">(pas une probabilité)</span></p>
+                <p>Comparaison locale : <strong>{item.client_face_distance?.toFixed(3) ?? 'Indisponible'}</strong> <span className="text-slate-500">(valeur déclarée par le navigateur, non vérifiée)</span></p>
               </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <figure><figcaption className="mb-1 text-[11px] font-bold text-slate-600">Pièce d’identité</figcaption><img src={`/api/admin/identity-verifications/${item.shop_id}/media/document`} alt={`Document d’identité de ${item.shop_name}`} loading="lazy" className="max-h-64 w-full rounded-lg border border-slate-200 bg-slate-50 object-contain" /></figure>

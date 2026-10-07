@@ -772,11 +772,11 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   assert.equal(deletedCustomerSession.payload.authenticated, false);
 });
 
-test('clear local KYC checks auto-verify but still require explicit publication', async () => {
+test('client-provided KYC checks never approve automatically and admin review is required before publication', async () => {
   const registration = await apiFetch('/api/shops', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Boutique KYC automatique', whatsapp_number: uniquePhone(), email: uniqueEmail(), pin_code: '684219', category: 'fashion' }),
+    body: JSON.stringify({ name: 'Boutique revue KYC', whatsapp_number: uniquePhone(), email: uniqueEmail(), pin_code: '684219', category: 'fashion' }),
   });
   assert.equal(registration.response.status, 200, JSON.stringify(registration.payload));
   const shopId = registration.payload.shop.id;
@@ -786,7 +786,7 @@ test('clear local KYC checks auto-verify but still require explicit publication'
     body: JSON.stringify({ tier: 'standard' }),
   });
   assert.equal(trialStart.response.status, 200, JSON.stringify(trialStart.payload));
-  const documentNumber = 'CI12345678';
+  const documentNumber = `CI${Date.now()}${Math.floor(Math.random() * 10000)}`;
   const image = `data:image/png;base64,${Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from([0])]).toString('base64')}`;
   const verification = await apiFetch(`/api/shops/${shopId}/identity-verification`, {
     method: 'POST',
@@ -808,11 +808,33 @@ test('clear local KYC checks auto-verify but still require explicit publication'
     }),
   });
   assert.equal(verification.response.status, 201, JSON.stringify(verification.payload));
-  assert.equal(verification.payload.status, 'verified');
-  assert.equal(verification.payload.decision_method, 'local_auto');
+  assert.equal(verification.payload.status, 'under_review');
+  assert.equal(verification.payload.decision_method, 'manual_review');
 
   const hiddenBeforePublication = await fetch(`${BASE_URL}/api/shops/${registration.payload.shop.slug}`);
   assert.equal(hiddenBeforePublication.status, 404);
+  const publicationBeforeReview = await apiFetch(`/api/shops/${shopId}/publication-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ publication_status: 'active' }),
+  });
+  assert.equal(publicationBeforeReview.response.status, 409);
+
+  const adminLogin = await apiFetch('/api/auth/admin-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'super-admin-demo-key' }),
+  });
+  assert.equal(adminLogin.response.status, 200, JSON.stringify(adminLogin.payload));
+  const adminReview = await apiFetch(`/api/admin/identity-verifications/${shopId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'verified', note: 'Pièce examinée manuellement.' }),
+  });
+  assert.equal(adminReview.response.status, 200, JSON.stringify(adminReview.payload));
+  const adminLogout = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
+  assert.equal(adminLogout.response.status, 200, JSON.stringify(adminLogout.payload));
+
   const publication = await apiFetch(`/api/shops/${shopId}/publication-status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -1035,6 +1057,10 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal((await apiFetch('/api/shops/1/products')).payload.some((product: any) => product.id === temporaryProductId), false);
 
   await registerCustomer('Commande', 'Client');
+  const concurrentDatabaseWriter = new Database(TEST_DB_PATH);
+  concurrentDatabaseWriter.prepare('UPDATE products SET title = ?, price = ? WHERE id = ?')
+    .run('Produit actualisé sur une autre instance', 2700, createdProduct.id);
+  concurrentDatabaseWriter.close();
   const order = await apiFetch('/api/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1054,6 +1080,8 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   const orderId = order.payload.order.id;
 
   assert.equal(order.payload.order.status, 'confirmed');
+  assert.equal(order.payload.order.total_amount, 5400);
+  assert.equal(order.payload.order.items[0].product_title, 'Produit actualisé sur une autre instance');
   assert.equal(order.payload.order.whatsapp_tracking_available, true);
   const stockAfterOrderCreation = await apiFetch('/api/shops/1/products');
   const productAfterOrderCreation = stockAfterOrderCreation.payload.find((item: any) => item.id === createdProduct.id);
@@ -1062,6 +1090,10 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   const orderCheck = await apiFetch(`/api/shops/1/orders`);
   assert.equal(orderCheck.response.status, 200);
   assert.ok(orderCheck.payload.some((item: any) => item.id === orderId));
+  const rejectDeletingReservedProduct = await apiFetch(`/api/shops/1/products/${createdProduct.id}`, { method: 'DELETE' });
+  assert.equal(rejectDeletingReservedProduct.response.status, 409);
+  const hideReservedProduct = await apiFetch(`/api/shops/1/products/${createdProduct.id}/toggle-visibility`, { method: 'PATCH' });
+  assert.equal(hideReservedProduct.payload.is_available, false);
 
   const statusUpdate = await apiFetch(`/api/shops/1/orders/${orderId}/status`, {
     method: 'PATCH',
@@ -1075,16 +1107,21 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   const productAfterRepeatedConfirmation = stockAfterRepeatedConfirmation.payload.find((item: any) => item.id === createdProduct.id);
   assert.equal(productAfterRepeatedConfirmation.stock, 3);
 
-  const cancelledUpdate = await apiFetch(`/api/shops/1/orders/${orderId}/status`, {
+  const cancellationRequests = await Promise.all([1, 2].map(() => apiFetch(`/api/shops/1/orders/${orderId}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: 'cancelled' }),
-  });
+  })));
+  const cancelledUpdate = cancellationRequests[0];
+  assert.ok(cancellationRequests.every(({ response }) => response.status === 200));
   assert.equal(cancelledUpdate.response.status, 200);
   assert.equal(cancelledUpdate.payload.order.status, 'cancelled');
   const stockAfterCancellation = await apiFetch('/api/shops/1/products');
   const productAfterCancellation = stockAfterCancellation.payload.find((item: any) => item.id === createdProduct.id);
   assert.equal(productAfterCancellation.stock, 5);
+  assert.equal(productAfterCancellation.is_available, false);
+  const showRestockedReservedProduct = await apiFetch(`/api/shops/1/products/${createdProduct.id}/toggle-visibility`, { method: 'PATCH' });
+  assert.equal(showRestockedReservedProduct.payload.is_available, true);
 
   const reactivatedPending = await apiFetch(`/api/shops/1/orders/${orderId}/status`, {
     method: 'PATCH',
@@ -1566,4 +1603,28 @@ test('merchant A cannot access merchant B products, orders, or settings', async 
   });
   assert.equal(publishOtherShop.status, 401, await publishOtherShop.text());
   assert.notEqual(merchantAShopId, merchantBShopId);
+});
+
+test('database and order snapshots preserve structural integrity', () => {
+  const database = new Database(TEST_DB_PATH, { readonly: true, fileMustExist: true });
+  try {
+    const quickCheck = database.pragma('quick_check') as Record<string, unknown>[];
+    assert.deepEqual(quickCheck.map((row) => Object.values(row)[0]), ['ok']);
+    assert.deepEqual(database.pragma('foreign_key_check'), []);
+    const orphanProducts = database.prepare('SELECT COUNT(*) AS count FROM products p LEFT JOIN shops s ON s.id = p.shop_id WHERE s.id IS NULL').get() as { count: number };
+    const orphanOrders = database.prepare('SELECT COUNT(*) AS count FROM orders o LEFT JOIN shops s ON s.id = o.shop_id WHERE s.id IS NULL').get() as { count: number };
+    assert.equal(orphanProducts.count, 0);
+    assert.equal(orphanOrders.count, 0);
+
+    const orderRows = database.prepare('SELECT total_amount, items FROM orders').all() as { total_amount: number; items: string | null }[];
+    assert.ok(orderRows.length > 0);
+    for (const order of orderRows) {
+      const items = order.items ? JSON.parse(order.items) as { quantity: number; unit_price: number }[] : [];
+      assert.ok(items.every((item) => Number.isSafeInteger(item.quantity) && item.quantity > 0
+        && Number.isSafeInteger(item.unit_price) && item.unit_price >= 0));
+      assert.equal(items.reduce((total, item) => total + item.quantity * item.unit_price, 0), order.total_amount);
+    }
+  } finally {
+    database.close();
+  }
 });

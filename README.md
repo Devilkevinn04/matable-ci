@@ -111,7 +111,7 @@ Les jetons OIDC sont vérifiés côté serveur avec issuer, audience, nonce, PKC
 - Les routes admin exigent une session admin séparée.
 - Express ne fait confiance aux en-têtes proxy que si `TRUST_PROXY_HOPS` est explicitement configuré pour l’infrastructure réelle.
 - Le prototype KYC utilise la caméra du navigateur pour capturer le recto, le verso et le selfie ; OCR et comparaison faciale sont exécutés localement. Les images et les champs extraits sont chiffrés côté serveur ; le numéro de document est indexé par HMAC. Configurez une `KYC_ENCRYPTION_KEY` persistante d’au moins 32 caractères en production et ne la faites jamais tourner sans procédure de rechiffrement.
-- Les dossiers sont automatiquement acceptés uniquement si les contrôles locaux OCR/Face Match passent ; les cas incertains sont envoyés en revue manuelle. Le score facial n’est pas une probabilité et aucun contrôle de liveness ou d’authenticité documentaire n’est effectué. Ce prototype n’est pas une vérification certifiée et ses décisions automatiques sont falsifiables par un client modifié.
+- Les dossiers restent systématiquement en revue manuelle : les contrôles OCR/Face Match sont exécutés dans le navigateur et peuvent être falsifiés par un client modifié. Le score facial n’est pas une probabilité et aucun contrôle de liveness ou d’authenticité documentaire n’est effectué. Ce prototype n’est pas une vérification certifiée.
 
 ## Checklist de production
 

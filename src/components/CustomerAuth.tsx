@@ -492,7 +492,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
         </div>
       </section>
 
-      <div className="mx-auto grid max-w-[1184px] gap-6 px-5 py-7 sm:px-8 sm:py-10 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <div className="mx-auto grid min-w-0 max-w-[1184px] grid-cols-[minmax(0,1fr)] gap-6 px-5 py-7 sm:px-8 sm:py-10 lg:grid-cols-[260px_minmax(0,1fr)]">
         <div className="lg:hidden">
           <motion.button
             type="button"

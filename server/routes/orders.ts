@@ -1,6 +1,8 @@
 import { Router, type RequestHandler } from 'express';
-import { databaseMode, dbGet, dbRun, dbTransaction } from '../../db.ts';
+import { databaseMode, dbAll, dbGet, dbRun, dbTransaction } from '../../db.ts';
 import { getShopPublicationBlockReason, isShopPubliclyVisible } from '../services/businessRules.ts';
+import { mapProductRow } from '../repositories/products.ts';
+import { getShopFromDatabase } from '../repositories/shops.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
 
 interface CustomerSession {
@@ -57,7 +59,7 @@ export function createOrderRouter({
 
     const validatedCustomer = validateCustomerOrderInput({ customer_name, customer_phone, delivery_location, delivery_note });
     if (!validatedCustomer.ok) return res.status(400).json({ error: validatedCustomer.error || 'Données client invalides.' });
-    const shop = shops.find((candidate) => candidate.id === Number(shop_id));
+    const shop = await getShopFromDatabase(Number(shop_id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     if (!shop.is_active) return res.status(403).json({ error: 'Cette boutique est inactive.' });
 
@@ -105,32 +107,33 @@ export function createOrderRouter({
 
         for (const item of items) {
           const productId = Number(item.product_id);
-          const product = products.find((candidate) => candidate.id === productId);
-          if (!product || product.shop_id !== shop.id) {
+          const productRow = await transaction.get<Record<string, unknown>>(
+            `SELECT * FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+            [productId, shop.id],
+          );
+          const product = productRow ? mapProductRow(productRow) : undefined;
+          if (!product) {
             throw Object.assign(new Error(`Article #${productId} introuvable dans le catalogue.`), { statusCode: 400 });
           }
           const stockQuantity = reservedProductIds.has(product.id) ? 0 : (requestedQuantities.get(product.id) || 0);
-          const stockRow = await transaction.get<{ stock: number; is_available: number }>(
-            `SELECT stock, is_available FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
-            [product.id, shop.id],
-          );
-          if (!stockRow) throw Object.assign(new Error(`Article #${productId} introuvable dans le catalogue.`), { statusCode: 400 });
-          if (stockQuantity > 0 && (!stockRow.is_available || stockRow.stock <= 0)) {
+          const currentStock = Number(product.stock);
+          if (stockQuantity > 0 && (!product.is_available || currentStock <= 0)) {
             throw Object.assign(new Error(`L'article "${product.title}" est en rupture de stock.`), { statusCode: 409, product_id: product.id, stock: 0 });
           }
-          if (stockQuantity > 0 && stockRow.stock < stockQuantity) {
-            throw Object.assign(new Error(`Stock insuffisant pour "${product.title}". Seulement ${stockRow.stock} unité(s) disponible(s).`), { statusCode: 409, product_id: product.id, stock: stockRow.stock });
+          if (stockQuantity > 0 && currentStock < stockQuantity) {
+            throw Object.assign(new Error(`Stock insuffisant pour "${product.title}". Seulement ${currentStock} unité(s) disponible(s).`), { statusCode: 409, product_id: product.id, stock: currentStock });
           }
           if (stockQuantity > 0) {
-            const stock = Number(stockRow.stock) - stockQuantity;
+            const stock = currentStock - stockQuantity;
+            const isAvailable = stock > 0 && Boolean(product.is_visible);
             const update = await transaction.run(
               'UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ? AND stock >= ?',
-              [stock, stock > 0 ? 1 : 0, product.id, shop.id, stockQuantity],
+              [stock, isAvailable ? 1 : 0, product.id, shop.id, stockQuantity],
             );
             if (update.changes !== 1) {
-              throw Object.assign(new Error(`Le stock de "${product.title}" vient de changer. Réessayez la commande.`), { statusCode: 409, product_id: product.id, stock: Number(stockRow.stock) });
+              throw Object.assign(new Error(`Le stock de "${product.title}" vient de changer. Réessayez la commande.`), { statusCode: 409, product_id: product.id, stock: currentStock });
             }
-            stockUpdates.push({ product, stock, isAvailable: stock > 0 });
+            stockUpdates.push({ product, stock, isAvailable });
             reservedProductIds.add(product.id);
           }
 
@@ -233,12 +236,36 @@ export function createOrderRouter({
   router.get('/auth/customer-orders', async (req, res) => {
     const customerSession = await getCustomerSessionState(req, res);
     if (!customerSession.authenticated || !customerSession.user) return res.status(401).json({ error: 'Authentification client requise.' });
-    const customerOrders = orders
-      .filter((order) => order.customer_user_id === customerSession.user?.id)
-      .map((order) => ({
-        ...order,
-        shop_name: shops.find((shop) => shop.id === order.shop_id)?.name || 'Boutique locale',
-      }));
+    const rows = await dbAll<Record<string, unknown>>(`SELECT orders.*, shops.name AS shop_name,
+      order_whatsapp_tracking.order_id IS NOT NULL AS whatsapp_tracking_available,
+      order_whatsapp_tracking.clicked_at AS whatsapp_clicked_at
+      FROM orders
+      LEFT JOIN shops ON shops.id = orders.shop_id
+      LEFT JOIN order_whatsapp_tracking ON order_whatsapp_tracking.order_id = orders.id
+      WHERE orders.customer_user_id = ?
+      ORDER BY orders.created_at DESC, orders.id DESC`, [customerSession.user.id]);
+    const customerOrders = rows.map((row) => {
+      const rawItems = row.items;
+      const items = rawItems ? typeof rawItems === 'string' ? JSON.parse(rawItems) : rawItems : [];
+      return {
+        id: Number(row.id),
+        shop_id: Number(row.shop_id),
+        customer_user_id: Number(row.customer_user_id),
+        customer_name: String(row.customer_name),
+        customer_phone: String(row.customer_phone),
+        delivery_location: String(row.delivery_location),
+        delivery_note: row.delivery_note == null ? undefined : String(row.delivery_note),
+        delivery_slot: row.delivery_slot == null ? undefined : String(row.delivery_slot),
+        payment_method_preference: String(row.payment_method_preference || 'to_confirm'),
+        total_amount: Number(row.total_amount),
+        created_at: String(row.created_at),
+        status: String(row.status || 'pending'),
+        whatsapp_tracking_available: Boolean(row.whatsapp_tracking_available),
+        whatsapp_clicked_at: row.whatsapp_clicked_at == null ? null : String(row.whatsapp_clicked_at),
+        items: Array.isArray(items) ? items : [],
+        shop_name: String(row.shop_name || 'Boutique locale'),
+      };
+    });
     res.json({ orders: customerOrders });
   });
 
