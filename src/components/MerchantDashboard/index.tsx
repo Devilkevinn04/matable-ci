@@ -286,7 +286,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   const merchantIdentityVerified = !merchantState.currentShop.merchant_verification_status
     || ['not_required', 'verified'].includes(merchantState.currentShop.merchant_verification_status);
-  if (merchantState.currentShop.subscription?.status === 'not_started') {
+  if (!merchantState.currentShop.admin_mode && merchantState.currentShop.subscription?.status === 'not_started') {
     return (
       <>
         <div className="fixed right-4 top-4 z-10 flex gap-2">
@@ -297,10 +297,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       </>
     );
   }
-  if (['expired', 'past_due', 'suspended', 'cancelled'].includes(merchantState.currentShop.subscription?.status || '')) {
+  if (!merchantState.currentShop.admin_mode && ['expired', 'past_due', 'suspended', 'cancelled'].includes(merchantState.currentShop.subscription?.status || '')) {
     return <MerchantTrialOnboarding shop={merchantState.currentShop} isStarting={false} onStart={handleStartTrial} mode="expired" />;
   }
-  if (!merchantIdentityVerified) {
+  if (!merchantState.currentShop.admin_mode && !merchantIdentityVerified) {
     const verificationSupportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour la vérification de ${merchantState.currentShop.name}.`);
     return (
       <main className="merchant-pre-dashboard min-h-screen bg-[#f4f6f1] px-4 py-6 sm:px-6 sm:py-10">
@@ -388,6 +388,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   return (
     <div className="merchant-dashboard min-h-screen pb-20 bg-[#f6f7f4]">
+      {currentShop.admin_mode && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 px-4 py-2 text-xs font-bold text-white">
+          <span>Mode super-admin · Gestion complète de {currentShop.name}</span>
+          <button type="button" onClick={() => window.location.assign('/admin')} className="rounded-md bg-white/15 px-3 py-1.5 hover:bg-white/25">Retour à l’administration</button>
+        </div>
+      )}
       {/* Top Shop Control Bar */}
       <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur-sm">
         <div className="mx-auto grid max-w-5xl gap-3 px-4 py-3">
@@ -601,7 +607,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               ].map((metric) => <div key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{metric.label}</p><strong className="mt-2 block text-xl font-black text-slate-900">{metric.value}</strong></div>)}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => { setActiveTab('catalog'); if (!(currentShop.subscription?.status === 'trialing' && products.length >= TRIAL_CATALOG_LIMIT)) handleOpenAddModal(); }} disabled={currentShop.subscription?.status === 'trialing' && products.length >= TRIAL_CATALOG_LIMIT} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />Ajouter un article</button>
+              <button type="button" onClick={() => { setActiveTab('catalog'); if (currentShop.admin_mode || !(currentShop.subscription?.status === 'trialing' && products.length >= TRIAL_CATALOG_LIMIT)) handleOpenAddModal(); }} disabled={!currentShop.admin_mode && currentShop.subscription?.status === 'trialing' && products.length >= TRIAL_CATALOG_LIMIT} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />Ajouter un article</button>
               <button type="button" onClick={() => setActiveTab('orders')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><ShoppingBag className="h-4 w-4" />Consulter les commandes</button>
             </div>
           </section>

@@ -245,6 +245,19 @@ export function createAuthRouter(options: AuthRouterOptions) {
   });
 
   router.get('/session', async (req, res) => {
+    const adminShopId = Number(req.query.admin_shop_id);
+    if (Number.isSafeInteger(adminShopId) && adminShopId > 0 && await getAdminSession(req)) {
+      const shop = shops.find((candidate) => candidate.id === adminShopId);
+      if (shop) {
+        return res.json({
+          authenticated: true,
+          userType: 'merchant',
+          shopId: shop.id,
+          subscription: await refreshSubscriptionState(shop),
+          adminShopAccess: true,
+        });
+      }
+    }
     const state = await getSessionStateForResponse(req, res);
     if (state.userType === 'merchant' && state.shopId) {
       const shop = shops.find((candidate) => candidate.id === state.shopId);

@@ -235,7 +235,9 @@ export default function App() {
   const normalizedPath = path.replace(/^\//, '').replace(/\/$/, '');
   const isShopDirectoryRoute = path.replace(/\/+$/, '') === '/boutiques';
   const isHowItWorksRoute = path.replace(/\/+$/, '') === '/comment-ca-marche';
-  const hasMerchantAccessToken = new URLSearchParams(location.search).has('access');
+  const appSearchParams = new URLSearchParams(location.search);
+  const hasMerchantAccessToken = appSearchParams.has('access');
+  const hasAdminShopSession = appSearchParams.has('admin_shop_id');
   const legalPage = legalPageMap[normalizedPath] || null;
   const isFaqPage = normalizedPath === 'faq';
   const isRecoveryPage = normalizedPath === 'recuperation-acces';
@@ -405,7 +407,7 @@ export default function App() {
                         ? <CustomerAccount user={customerUser} onLogout={logoutCustomer} onBack={() => navigate('/')} onUserUpdated={setCustomerUser} />
                         : renderCustomerAuth('login')
                       } />
-                      <Route path="/app/*" element={normalizedPath === 'app' && !hasMerchantAccessToken
+                      <Route path="/app/*" element={normalizedPath === 'app' && !hasMerchantAccessToken && !hasAdminShopSession
                         ? renderCustomerAuth('register')
                         : <MerchantDashboard openRegistration={openMerchantRegistration || normalizedPath === 'app/creer-boutique'} onBackToDirectory={() => { setOpenMerchantRegistration(false); navigate('/'); }} onOpenStorefront={(slug) => navigate(`/${slug}`)} />
                       } />

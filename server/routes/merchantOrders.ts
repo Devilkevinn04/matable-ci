@@ -58,7 +58,7 @@ export function createMerchantOrdersRouter({
       cancelled: ['pending', 'confirmed'],
       expired: [],
     };
-    if (!allowedTransitions[previousStatus]?.includes(status)) {
+    if (!allowedTransitions[previousStatus]?.includes(status) && !req.adminShopAccess) {
       return res.status(409).json({ error: `Transition impossible : ${previousStatus} → ${status}.` });
     }
 
@@ -73,7 +73,7 @@ export function createMerchantOrdersRouter({
         const wasStockReserved = stockReservedStatuses.has(previousStatus);
         const willReserveStock = stockReservedStatuses.has(status);
 
-        if (status === 'cancelled' && wasStockReserved) {
+        if (wasStockReserved && !willReserveStock) {
           for (const [productId, quantity] of quantities) {
             const product = products.find((candidate) => candidate.id === productId && candidate.shop_id === shopId);
             if (!product) continue;
@@ -111,7 +111,6 @@ export function createMerchantOrdersRouter({
           }
         }
 
-        order.status = status as OrderRecord['status'];
         await transaction.run('UPDATE orders SET status = ? WHERE id = ? AND shop_id = ?', [status, order.id, shopId]);
       });
       for (const update of stockUpdates) {

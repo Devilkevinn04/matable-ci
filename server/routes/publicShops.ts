@@ -19,6 +19,7 @@ interface PublicShopsRouterOptions {
   getCookie: (req: Request, name: string) => string | null;
   isRequestFingerprintMatch: (session: { fingerprint?: string } | null | undefined, req: Request) => boolean;
   computeIsShopOpen: (shop: ShopRecord) => boolean;
+  isAdminShopSession: (req: Request, shopId: number) => Promise<boolean>;
 }
 
 export function createPublicShopsRouter({
@@ -28,6 +29,7 @@ export function createPublicShopsRouter({
   getCookie,
   isRequestFingerprintMatch,
   computeIsShopOpen,
+  isAdminShopSession,
 }: PublicShopsRouterOptions) {
   const router = Router();
   const getProductLikeCounts = async (productIds: number[]) => {
@@ -195,8 +197,10 @@ export function createPublicShopsRouter({
 
     const token = getCookie(req, 'matable_session');
     const session = token ? merchantSessions.get(token) : undefined;
-    const isMerchantForShop = Boolean(session && session.shopId === shop.id && session.expiresAt > Date.now());
-    if (isMerchantForShop && !isRequestFingerprintMatch(session, req)) {
+    const isAdminForShop = await isAdminShopSession(req, shop.id);
+    const isMerchantSessionForShop = Boolean(session && session.shopId === shop.id && session.expiresAt > Date.now());
+    const isMerchantForShop = isMerchantSessionForShop || isAdminForShop;
+    if (isMerchantSessionForShop && !isRequestFingerprintMatch(session, req)) {
       return res.status(401).json({ error: 'Session rejetée : le navigateur ne correspond plus à celui utilisé lors de la connexion.' });
     }
     if (isIdQuery && !isMerchantForShop) return res.status(401).json({ error: 'Accès marchand requis pour ce catalogue.' });
@@ -211,6 +215,7 @@ export function createPublicShopsRouter({
           category: shop.category,
           theme_config: shop.theme_config,
           welcome_message: 'Boutique temporairement indisponible.',
+          ...(isAdminForShop ? { admin_mode: true } : {}),
         },
         products: [],
       });
@@ -245,6 +250,7 @@ export function createPublicShopsRouter({
         city: shop.city,
         theme_config: shop.theme_config,
         opening_hours: shop.opening_hours,
+        ...(isAdminForShop ? { admin_mode: true } : {}),
       },
       products: shopProducts.map((product) => ({ ...product, like_count: productLikeCounts.get(product.id) || 0 })),
     });

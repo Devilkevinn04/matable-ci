@@ -24,7 +24,7 @@ interface ThemeCustomizerProps {
 
 export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdateShop }) => {
   const currentTier = shop.subscription?.plan || 'standard';
-  const canCustomize = shop.subscription?.isActive === true
+  const canCustomize = shop.admin_mode || shop.subscription?.isActive === true
     && isSubscriptionFeatureIncluded(currentTier, 'custom_branding');
   const categoryDefaults = getCategoryDefaults(shop.category);
   const [themeConfig, setThemeConfig] = useState<ThemeConfig>({

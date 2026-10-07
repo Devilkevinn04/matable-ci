@@ -83,7 +83,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
   router.get('/:id/analytics', requireMerchantOwnShop, async (req, res) => {
     const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-    if (!canUseSubscriptionFeature(shop, 'advanced_analytics')) {
+    if (!req.adminShopAccess && !canUseSubscriptionFeature(shop, 'advanced_analytics')) {
       return res.status(403).json({ error: 'Les statistiques détaillées sont réservées à la formule Pro.' });
     }
 
@@ -176,7 +176,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     if (requestedStatus !== 'draft' && requestedStatus !== 'active') {
       return res.status(400).json({ error: 'Statut de publication invalide.' });
     }
-    if (requestedStatus === 'active') {
+    if (requestedStatus === 'active' && !req.adminShopAccess) {
       if (shop.publication_status === 'suspended') return res.status(403).json({ error: 'La publication a été suspendue par l’administration.' });
       const blockReason = getShopPublicationBlockReason(shop);
       if (blockReason === 'verification') return res.status(409).json({ error: 'Vérifiez votre identité avant de publier la boutique.', blocked_by: blockReason });
@@ -211,11 +211,11 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       const requestedThemeConfig = { ...theme_config };
       const themeConfig = shop.theme_config as unknown as Record<string, unknown>;
       if (hasChangedFields(themeConfig, requestedThemeConfig, ['primary_color', 'secondary_color', 'font_family', 'layout_style', 'theme_preset_id', 'brand_direction', 'custom_banner_url', 'logo_url', 'advanced_css'])
-        && !canUseSubscriptionFeature(shop, 'custom_branding')) {
+        && !req.adminShopAccess && !canUseSubscriptionFeature(shop, 'custom_branding')) {
         return res.status(403).json({ error: 'La personnalisation avancée de la vitrine est réservée aux formules Premium et Pro.' });
       }
       if (hasChangedFields(themeConfig, requestedThemeConfig, ['event_mode_enabled', 'event_banner_text'])
-        && !canUseSubscriptionFeature(shop, 'event_mode')) {
+        && !req.adminShopAccess && !canUseSubscriptionFeature(shop, 'event_mode')) {
         return res.status(403).json({ error: 'Le mode événement est réservé aux formules Premium et Pro.' });
       }
       const requestedBrandDirection = ['luxe', 'moderne', 'authentique'].includes(requestedThemeConfig.brand_direction)
@@ -246,15 +246,15 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     const currentThemeConfig = shop.theme_config as unknown as Record<string, unknown>;
     if ((hasChangedFields(currentThemeConfig, requestedThemeConfig, ['primary_color', 'secondary_color', 'font_family', 'layout_style', 'theme_preset_id', 'brand_direction', 'custom_banner_url', 'logo_url', 'advanced_css'])
       || theme_color !== undefined && theme_color !== shop.theme_color)
-      && !canUseSubscriptionFeature(shop, 'custom_branding')) {
+      && !req.adminShopAccess && !canUseSubscriptionFeature(shop, 'custom_branding')) {
       return res.status(403).json({ error: 'La personnalisation avancée de la vitrine est réservée aux formules Premium et Pro.' });
     }
     if (hasChangedFields(currentThemeConfig, requestedThemeConfig, ['event_mode_enabled', 'event_banner_text'])
-      && !canUseSubscriptionFeature(shop, 'event_mode')) {
+      && !req.adminShopAccess && !canUseSubscriptionFeature(shop, 'event_mode')) {
       return res.status(403).json({ error: 'Le mode événement est réservé aux formules Premium et Pro.' });
     }
     if (hasChangedFields(currentThemeConfig, requestedThemeConfig, ['social_links'])
-      && !canUseSubscriptionFeature(shop, 'social_links')) {
+      && !req.adminShopAccess && !canUseSubscriptionFeature(shop, 'social_links')) {
       return res.status(403).json({ error: 'Les liens de réseaux sociaux sont réservés aux formules Premium et Pro.' });
     }
 

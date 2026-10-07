@@ -40,7 +40,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const outOfStockCount = products.filter((product) => product.stock === 0).length;
   const featuredUntil = currentShop?.featured_until || null;
   const isFeatured = Boolean(featuredUntil && Date.parse(featuredUntil) > Date.now());
-  const canUseSocialLinks = Boolean(currentShop?.subscription?.isActive
+  const canUseSocialLinks = Boolean(currentShop?.admin_mode || currentShop?.subscription?.isActive
     && isSubscriptionFeatureIncluded(currentShop.subscription.plan, 'social_links'));
 
   return (
@@ -139,7 +139,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
               <ThemeCustomizer
                 shop={currentShop}
                 onUpdateShop={(updated) => {
-                  setCurrentShop(updated);
+                  setCurrentShop((previous) => previous
+                    ? { ...updated, admin_mode: previous.admin_mode }
+                    : updated);
                 }}
               />
             )}

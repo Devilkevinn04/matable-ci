@@ -49,6 +49,7 @@ export function createProductRouter({
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const trialEndTime = shop.trial_end ? Date.parse(shop.trial_end) : NaN;
     const trialCatalogLimitReached = shop.subscription_status === 'trialing'
+      && !req.adminShopAccess
       && Number.isFinite(trialEndTime)
       && trialEndTime > Date.now()
       && products.filter((product) => product.shop_id === shopId).length >= trialProductLimit;

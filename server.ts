@@ -71,6 +71,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: { id: number };
+      adminShopAccess?: boolean;
     }
   }
 }
@@ -953,6 +954,17 @@ function rateLimitPublicRequest(limit: number = MAX_PUBLIC_REQUESTS_PER_WINDOW) 
 }
 
 async function requireMerchantIdentity(req: Request, res: Response): Promise<ShopRecord | null> {
+  const adminSessionToken = await getAdminSession(req);
+  if (adminSessionToken) {
+    const adminShop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    if (!adminShop) {
+      res.status(404).json({ error: 'Boutique introuvable.' });
+      return null;
+    }
+    req.adminShopAccess = true;
+    return adminShop;
+  }
+
   const token = getCookie(req, 'matable_session');
   let session = token ? merchantSessions.get(token) : undefined;
 
@@ -999,7 +1011,7 @@ async function requireMerchantAccess(req: Request, res: Response, next: express.
   const shop = await requireMerchantIdentity(req, res);
   if (!shop) return;
 
-  if (!shop.is_active) {
+  if (!shop.is_active && !req.adminShopAccess) {
     return res.status(403).json({ error: 'Boutique inactive : contactez l’administration pour la réactivation.' });
   }
 
@@ -1009,7 +1021,7 @@ async function requireMerchantAccess(req: Request, res: Response, next: express.
 async function requireMerchantOwnShop(req: Request, res: Response, next: express.NextFunction) {
   const shop = await requireMerchantIdentity(req, res);
   if (!shop) return;
-  if (!shop.is_active) return res.status(403).json({ error: 'Boutique inactive : contactez l’administration pour la réactivation.' });
+  if (!shop.is_active && !req.adminShopAccess) return res.status(403).json({ error: 'Boutique inactive : contactez l’administration pour la réactivation.' });
   if (Number(req.params.id) !== shop.id) return res.status(403).json({ error: 'Accès refusé à cette boutique.' });
   next();
 }
@@ -1162,6 +1174,26 @@ async function startServer() {
     next();
   });
 
+  app.use('/api/shops/:id', async (req: Request, res: Response, next: express.NextFunction) => {
+    const shopId = Number(req.params.id);
+    const mutatingMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+    if (!mutatingMethod || !Number.isSafeInteger(shopId) || shopId <= 0
+      || !shops.some((shop) => shop.id === shopId) || !await getAdminSession(req)) {
+      return next();
+    }
+    res.once('finish', () => {
+      void dbRun(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['super_admin', 'admin_shop_operation', shopId, JSON.stringify({
+          method: req.method,
+          path: req.originalUrl.split('?')[0],
+          status: res.statusCode,
+        }), new Date().toISOString()],
+      ).catch((error: unknown) => console.error('Impossible d’enregistrer l’action super-admin sur la boutique.', error));
+    });
+    next();
+  });
+
   app.use(express.json({
     limit: '2mb',
     verify: (req, _res, buffer) => {
@@ -1229,6 +1261,8 @@ async function startServer() {
     getCookie,
     isRequestFingerprintMatch,
     computeIsShopOpen,
+    isAdminShopSession: async (req, shopId) =>
+      Number(req.params.slug) === shopId && Boolean(await getAdminSession(req)),
   });
   app.use('/api/v1/catalog/storefronts', publicShopsRouter);
   app.use('/api/shops', publicShopsRouter);

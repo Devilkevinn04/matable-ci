@@ -15,7 +15,7 @@ export function ProAnalyticsPanel({ shop }: { shop: Shop }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
-  const canUseAnalytics = shop.subscription?.isActive === true
+  const canUseAnalytics = shop.admin_mode || shop.subscription?.isActive === true
     && isSubscriptionFeatureIncluded(shop.subscription.plan, 'advanced_analytics');
 
   useEffect(() => {

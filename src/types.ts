@@ -82,6 +82,7 @@ export interface Shop {
   };
   theme_config: ThemeConfig;
   opening_hours?: ShopOpeningHours;
+  admin_mode?: boolean;
 }
 
 export interface ProductColor {

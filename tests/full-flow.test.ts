@@ -1128,6 +1128,23 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal(unsafeReactivation.response.status, 409);
   assert.match(String(unsafeReactivation.payload.error), /Stock insuffisant/i);
 
+  const adminLoginForOrderRepair = await apiFetch('/api/auth/admin-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'super-admin-demo-key' }),
+  });
+  assert.equal(adminLoginForOrderRepair.response.status, 200);
+  const adminReopenOrder = await apiFetch(`/api/shops/1/orders/${competingOrder.payload.order.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'pending' }),
+  });
+  assert.equal(adminReopenOrder.response.status, 200, JSON.stringify(adminReopenOrder.payload));
+  const stockAfterAdminReopen = await apiFetch('/api/shops/1/products');
+  assert.equal(stockAfterAdminReopen.payload.find((item: any) => item.id === createdProduct.id).stock, 5);
+  const adminLogoutAfterRepair = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
+  assert.equal(adminLogoutAfterRepair.response.status, 200);
+
   const bilan = await apiFetch('/api/shops/1/flash-bilan');
   assert.equal(bilan.response.status, 200);
   assert.ok(String(bilan.payload.whatsapp_message).includes('FLASH BILAN'));
@@ -1258,6 +1275,11 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
     body: JSON.stringify({ tier: 'standard', amount: 3000, payment_reference: 'ADMIN-FLOW-1', payment_method: 'mobile_money' }),
   });
   assert.equal(insecureConfirmation.response.status, 404);
+  cookieJar = '';
+  const unauthenticatedShopProducts = await apiFetch(`/api/shops/${shopId}/products`);
+  assert.equal(unauthenticatedShopProducts.response.status, 401);
+  const unauthenticatedAdminShopSession = await apiFetch(`/api/auth/session?admin_shop_id=${shopId}`);
+  assert.equal(unauthenticatedAdminShopSession.payload.authenticated, false);
 
   const adminHealthBeforeLogin = await apiFetch('/api/admin/health');
   assert.equal(adminHealthBeforeLogin.response.status, 401);
@@ -1284,6 +1306,12 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   const adminSessionStateAfterRefresh = await apiFetch('/api/auth/session');
   assert.equal(adminSessionStateAfterRefresh.response.status, 200, JSON.stringify(adminSessionStateAfterRefresh.payload));
   assert.equal(adminSessionStateAfterRefresh.payload.authenticated, true);
+
+  const scopedAdminSession = await apiFetch(`/api/auth/session?admin_shop_id=${shopId}`);
+  assert.equal(scopedAdminSession.response.status, 200);
+  assert.equal(scopedAdminSession.payload.userType, 'merchant');
+  assert.equal(scopedAdminSession.payload.shopId, shopId);
+  assert.equal(scopedAdminSession.payload.adminShopAccess, true);
 
   const adminHealth = await apiFetch('/api/admin/health');
   assert.equal(adminHealth.response.status, 200, JSON.stringify(adminHealth.payload));
@@ -1326,6 +1354,47 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   assert.equal(disableShop.response.status, 200, JSON.stringify(disableShop.payload));
   assert.equal(disableShop.payload.is_active, false);
   assert.equal(disableShop.payload.shop.publication_status, publicationStatusBeforeToggle);
+  const inactiveShopForAdmin = await apiFetch(`/api/shops/${shopId}`);
+  assert.equal(inactiveShopForAdmin.response.status, 200, JSON.stringify(inactiveShopForAdmin.payload));
+  assert.equal(inactiveShopForAdmin.payload.shop.admin_mode, true);
+  const adminProduct = await apiFetch(`/api/shops/${shopId}/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Article administré', price: 1200, stock: 2 }),
+  });
+  assert.equal(adminProduct.response.status, 200, JSON.stringify(adminProduct.payload));
+  const deleteAdminProduct = await apiFetch(`/api/shops/${shopId}/products/${adminProduct.payload.product.id}`, { method: 'DELETE' });
+  assert.equal(deleteAdminProduct.response.status, 200, JSON.stringify(deleteAdminProduct.payload));
+  const adminShopUpdate = await apiFetch(`/api/shops/${shopId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ welcome_message: 'Mis à jour par le super-admin.' }),
+  });
+  assert.equal(adminShopUpdate.response.status, 200, JSON.stringify(adminShopUpdate.payload));
+  assert.equal(adminShopUpdate.payload.shop.welcome_message, 'Mis à jour par le super-admin.');
+  const adminThemeUpdate = await apiFetch(`/api/shops/${shopId}/theme`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ theme_config: { primary_color: '#123456', social_links: { instagram: 'https://instagram.com/matable' } } }),
+  });
+  assert.equal(adminThemeUpdate.response.status, 200, JSON.stringify(adminThemeUpdate.payload));
+  const adminProAnalytics = await apiFetch(`/api/shops/${shopId}/analytics?days=7`);
+  assert.equal(adminProAnalytics.response.status, 200, JSON.stringify(adminProAnalytics.payload));
+  const adminPublication = await apiFetch(`/api/shops/${shopId}/publication-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ publication_status: 'active' }),
+  });
+  assert.equal(adminPublication.response.status, 200, JSON.stringify(adminPublication.payload));
+  const adminPublicationReset = await apiFetch(`/api/shops/${shopId}/publication-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ publication_status: 'draft' }),
+  });
+  assert.equal(adminPublicationReset.response.status, 200, JSON.stringify(adminPublicationReset.payload));
+  const adminAudit = await apiFetch('/api/admin/subscriptions');
+  assert.ok(adminAudit.payload.audit_logs.some((entry: { action: string; shop_id: number }) =>
+    entry.action === 'admin_shop_operation' && entry.shop_id === shopId));
   const enableShop = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, { method: 'PATCH' });
   assert.equal(enableShop.response.status, 200, JSON.stringify(enableShop.payload));
   assert.equal(enableShop.payload.is_active, true);

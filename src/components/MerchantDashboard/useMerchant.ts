@@ -135,6 +135,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   // If ?access= is present, the second useEffect handles auth and this one must stay silent
   // to avoid the race condition that causes a blank page (currentShop set too early).
   useEffect(() => {
+    const adminShopId = new URLSearchParams(window.location.search).get('admin_shop_id');
     // If there is an access token in the URL, skip session restore entirely.
     // The access-token useEffect below will handle it.
     const hasAccessToken = Boolean(new URLSearchParams(window.location.search).get('access'));
@@ -143,11 +144,11 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       return;
     }
 
-    fetch('/api/auth/session')
+    fetch(`/api/auth/session${adminShopId ? `?admin_shop_id=${encodeURIComponent(adminShopId)}` : ''}`)
       .then(async (res) => {
         const data = await res.json();
         if (res.ok && data.authenticated && data.userType === 'merchant' && data.shopId) {
-          await loadShopData(Number(data.shopId));
+          await loadShopData(Number(data.shopId), Boolean(data.adminShopAccess));
         }
       })
       .catch(() => undefined)
@@ -219,7 +220,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   };
 
   // Fetch products, orders, and flash bilan
-  const loadShopData = async (shopId: number) => {
+  const loadShopData = async (shopId: number, adminShopAccess = Boolean(new URLSearchParams(window.location.search).get('admin_shop_id'))) => {
     const requestId = ++shopDataRequestId.current;
     const isCurrentRequest = () => requestId === shopDataRequestId.current;
     setDataLoading(true);
@@ -241,8 +242,9 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       if (shopRes.ok) {
         const sData = await shopRes.json();
         if (!isCurrentRequest()) return;
-        setCurrentShop(sData.shop);
-        syncShopSettings(sData.shop);
+        const loadedShop = { ...sData.shop, ...(adminShopAccess ? { admin_mode: true } : {}) };
+        setCurrentShop(loadedShop);
+        syncShopSettings(loadedShop);
         setProducts(sData.products || []);
       }
 
@@ -475,6 +477,10 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
   // Logout handler
   const handleLogout = () => {
+    if (new URLSearchParams(window.location.search).has('admin_shop_id')) {
+      window.location.assign('/admin');
+      return;
+    }
     fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
     setCurrentShop(null);
     setProducts([]);
@@ -974,8 +980,9 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       });
       if (res.ok) {
         const data = await res.json();
-        setCurrentShop(data.shop);
-        syncShopSettings(data.shop);
+        const updatedShop = { ...data.shop, ...(currentShop.admin_mode ? { admin_mode: true } : {}) };
+        setCurrentShop(updatedShop);
+        syncShopSettings(updatedShop);
         setSettingsSaved(true);
         setSettingsNewPin('');
         toast.success('Paramètres enregistrés avec succès !');

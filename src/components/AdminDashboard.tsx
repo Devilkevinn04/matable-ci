@@ -634,31 +634,16 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const handleOpenMerchantSpace = async (shopId: number) => {
-    // ⚠️ Must open the window SYNCHRONOUSLY before any await,
-    // otherwise browsers treat it as a popup and block it.
-    // No noopener here: we need to control the tab (same-origin URL).
+    // Open synchronously so browsers do not block the new tab.
     const newTab = window.open('about:blank', '_blank');
     if (!newTab) {
       showNotice('Impossible d\'ouvrir un nouvel onglet. Vérifiez les paramètres de votre navigateur.');
       return;
     }
-    // Show a loading page while we fetch the real URL
     newTab.document.write('<html><head><title>Chargement…</title></head><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc"><p style="color:#64748b;font-size:14px">⏳ Chargement de l\'espace commerçant…</p></body></html>');
     newTab.document.close();
-    try {
-      const res = await fetch(`/api/admin/shops/${shopId}/access-link`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) {
-        newTab.close();
-        showNotice(data.error || 'Impossible de générer le lien privé.');
-        return;
-      }
-      newTab.location.href = data.access_url;
-      showNotice('Espace propriétaire ouvert dans un nouvel onglet.');
-    } catch {
-      newTab.close();
-      showNotice('Impossible de contacter le serveur.');
-    }
+    newTab.location.href = `/app?admin_shop_id=${shopId}`;
+    showNotice('Espace boutique ouvert en mode super-admin.');
   };
 
   const showNotice = (msg: string) => {
@@ -684,15 +669,6 @@ export const AdminDashboard: React.FC = () => {
       .some((value) => value.toLowerCase().includes(query));
   });
   const filteredFinancePayments = (finance?.payments || []).filter((payment) => {
-  const inconsistentTrialExpiries = (subscriptions?.shops || []).filter((shop) => shop.trial_expiry_mismatch);
-  const trialExtensionOptions = [...new Set([
-    7,
-    14,
-    30,
-    ...(subscriptions?.shops || [])
-      .map((shop) => shop.trial_extension_days_remaining)
-      .filter((days) => days > 0 && days < 30),
-  ])].sort((left, right) => left - right);
     const query = paymentSearch.trim().toLowerCase();
     const matchesQuery = !query || [payment.shop_name, payment.provider_reference || '', payment.id]
       .some((value) => value.toLowerCase().includes(query));
@@ -708,6 +684,15 @@ export const AdminDashboard: React.FC = () => {
   });
   const expiringTrials = (subscriptions?.shops || []).filter((shop) => shop.status === 'trialing'
     && shop.trial_days_remaining !== null && shop.trial_days_remaining <= 7);
+  const inconsistentTrialExpiries = (subscriptions?.shops || []).filter((shop) => shop.trial_expiry_mismatch);
+  const trialExtensionOptions = [...new Set([
+    7,
+    14,
+    30,
+    ...(subscriptions?.shops || [])
+      .map((shop) => shop.trial_extension_days_remaining)
+      .filter((days) => days > 0 && days < 30),
+  ])].sort((left, right) => left - right);
 
   const activeShopsCount = shops.filter(s => s.is_active).length;
   const totalSales = shops.reduce((sum, shop) => sum + shop.total_sales, 0);
@@ -1092,6 +1077,21 @@ export const AdminDashboard: React.FC = () => {
           <section aria-labelledby="admin-subscriptions-title" className="space-y-5">
             <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
+                <p className="text-xs font-bold uppercase text-emerald-800">Revenus récurrents</p>
+                <h2 id="admin-subscriptions-title" className="mt-1 text-xl font-black text-slate-900">Abonnements</h2>
+                <p className="mt-1 text-xs text-slate-500">{subscriptions?.summary.whatsapp_reminders_enabled ? `Rappels automatiques à J−2 · ${subscriptions.summary.whatsapp_reminder_opt_ins} boutique(s) consentante(s).` : 'Configurez WhatsApp Business API pour activer les rappels automatiques ; les relances manuelles restent disponibles.'}</p>
+              </div>
+              <button type="button" onClick={() => void fetchSubscriptions()} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">Actualiser</button>
+            </header>
+
+            {!subscriptions ? <p role="status" className="border-y border-slate-200 py-6 text-sm text-slate-500">Chargement des abonnements…</p> : <>
+              <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                <div className="border-l-2 border-emerald-600 pl-3"><p className="text-xs text-slate-500">MRR actif</p><strong className="text-lg font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(subscriptions.summary.mrr)} F</strong></div>
+                <div className="border-l-2 border-sky-600 pl-3"><p className="text-xs text-slate-500">Abonnements payants</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.active_subscriptions}</strong></div>
+                <div className="border-l-2 border-amber-500 pl-3"><p className="text-xs text-slate-500">Essais actifs · fin sous 7 j</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.active_trials} · {subscriptions.summary.trials_expiring_7d}</strong></div>
+                <div className="border-l-2 border-rose-600 pl-3"><p className="text-xs text-slate-500">Conversion essai → payant</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.converted_trials}/{subscriptions.summary.completed_trials} · {subscriptions.summary.trial_conversion_rate}%</strong></div>
+              </div>
+
               {inconsistentTrialExpiries.length > 0 && <section aria-labelledby="trial-expiry-integrity-title" className="rounded-xl border border-amber-300 bg-amber-50 p-4">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
@@ -1112,21 +1112,6 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
               </section>}
-
-                <p className="text-xs font-bold uppercase text-emerald-800">Revenus récurrents</p>
-                <h2 id="admin-subscriptions-title" className="mt-1 text-xl font-black text-slate-900">Abonnements</h2>
-                <p className="mt-1 text-xs text-slate-500">{subscriptions?.summary.whatsapp_reminders_enabled ? `Rappels automatiques à J−2 · ${subscriptions.summary.whatsapp_reminder_opt_ins} boutique(s) consentante(s).` : 'Configurez WhatsApp Business API pour activer les rappels automatiques ; les relances manuelles restent disponibles.'}</p>
-              </div>
-              <button type="button" onClick={() => void fetchSubscriptions()} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">Actualiser</button>
-            </header>
-
-            {!subscriptions ? <p role="status" className="border-y border-slate-200 py-6 text-sm text-slate-500">Chargement des abonnements…</p> : <>
-              <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                <div className="border-l-2 border-emerald-600 pl-3"><p className="text-xs text-slate-500">MRR actif</p><strong className="text-lg font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(subscriptions.summary.mrr)} F</strong></div>
-                <div className="border-l-2 border-sky-600 pl-3"><p className="text-xs text-slate-500">Abonnements payants</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.active_subscriptions}</strong></div>
-                <div className="border-l-2 border-amber-500 pl-3"><p className="text-xs text-slate-500">Essais actifs · fin sous 7 j</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.active_trials} · {subscriptions.summary.trials_expiring_7d}</strong></div>
-                <div className="border-l-2 border-rose-600 pl-3"><p className="text-xs text-slate-500">Conversion essai → payant</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.converted_trials}/{subscriptions.summary.completed_trials} · {subscriptions.summary.trial_conversion_rate}%</strong></div>
-              </div>
 
               <section aria-labelledby="trials-expiring-title" className="border-y border-amber-200 py-4">
                 <div className="flex flex-wrap items-end justify-between gap-3">
@@ -1382,7 +1367,7 @@ export const AdminDashboard: React.FC = () => {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3 shrink-0">
-                    <button onClick={() => handleOpenMerchantSpace(shop.id)} disabled={!shop.is_active} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Ouvrir l’espace</button>
+                    <button onClick={() => handleOpenMerchantSpace(shop.id)} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Gérer intégralement</button>
                     <select
                       aria-label={`Mettre ${shop.name} à la une`}
                       value={isFeatured ? 'featured' : ''}

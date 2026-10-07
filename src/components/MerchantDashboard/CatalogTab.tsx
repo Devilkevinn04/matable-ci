@@ -33,7 +33,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
   } = state;
   const lowStockCount = products.filter((product) => product.stock > 0 && product.stock <= 3).length;
   const outOfStockCount = products.filter((product) => product.stock === 0).length;
-  const trialCatalogLimited = currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0;
+  const trialCatalogLimited = !currentShop.admin_mode && currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0;
   const trialCatalogFull = trialCatalogLimited && products.length >= TRIAL_CATALOG_LIMIT;
 
   return (
