@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { dbTransaction } from '../../db.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
 import { getSubscriptionPlanConfig, getSubscriptionState } from '../services/businessRules.ts';
 import { getWhatsAppSubscriptionReminderConfig } from '../services/whatsappNotifications.ts';
@@ -11,6 +12,7 @@ interface AdminRouterOptions {
   dbAll: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
   dbGet: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T | undefined>;
   dbRun: (sql: string, params?: unknown[]) => Promise<{ changes: number; lastInsertRowid?: number }>;
+  dbTransaction: typeof dbTransaction;
   refreshRuntimeDataFromDatabase: () => Promise<void>;
   persistShop: (shop: ShopRecord) => Promise<void>;
   toSafeShop: (shop: ShopRecord) => object;
@@ -18,8 +20,17 @@ interface AdminRouterOptions {
 }
 
 export function createAdminRouter(options: AdminRouterOptions) {
-  const { shops, products, orders, databaseMode, dbAll, dbGet, dbRun, refreshRuntimeDataFromDatabase, persistShop, toSafeShop, rotateMerchantAccessTokenForShop } = options;
+  const { shops, products, orders, databaseMode, dbAll, dbGet, dbRun, dbTransaction, refreshRuntimeDataFromDatabase, persistShop, toSafeShop, rotateMerchantAccessTokenForShop } = options;
   const router = Router();
+  const maxTrialExtensionDays = 30;
+  const getTrialExtensionDays = (value: unknown) => {
+    const details: unknown = typeof value === 'string' ? JSON.parse(value) : value;
+    if (!details || typeof details !== 'object' || !('days' in details)
+      || typeof details.days !== 'number' || !Number.isInteger(details.days) || details.days < 1) {
+      throw new Error('Une entrée de prolongation d’essai est invalide dans le journal admin.');
+    }
+    return details.days;
+  };
   const logAdminAction = (action: string, shopId: number | null, details: Record<string, unknown>) => dbRun(
     'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
     ['super_admin', action, shopId, JSON.stringify(details), new Date().toISOString()],
@@ -360,8 +371,25 @@ export function createAdminRouter(options: AdminRouterOptions) {
   router.get('/subscriptions', async (_req, res) => {
     await refreshRuntimeDataFromDatabase();
     const now = new Date();
+    const extensionLogs = await dbAll<{ shop_id: number; details: string; created_at: string }>(
+      `SELECT shop_id, details, created_at FROM admin_audit_logs
+       WHERE action = 'trial_extended' AND shop_id IS NOT NULL ORDER BY created_at`,
+    );
+    const extensionDaysByShopId = new Map<number, number>();
+    for (const entry of extensionLogs) {
+      const shop = shops.find((candidate) => candidate.id === Number(entry.shop_id));
+      if (!shop?.trial_start || Date.parse(entry.created_at) < Date.parse(shop.trial_start)) continue;
+      extensionDaysByShopId.set(
+        shop.id,
+        (extensionDaysByShopId.get(shop.id) || 0) + getTrialExtensionDays(entry.details),
+      );
+    }
     const subscriptionShops = shops.map((shop) => {
       const subscription = getSubscriptionState(shop, now);
+      const trialExpiryMismatch = shop.subscription_status === 'trialing'
+        && subscription.trialEnd !== null
+        && subscription.expiresAt !== null
+        && Date.parse(subscription.trialEnd) !== Date.parse(subscription.expiresAt);
       const shopOrders = orders.filter((order) => order.shop_id === shop.id && !['cancelled', 'expired'].includes(order.status));
       return {
         id: shop.id,
@@ -378,7 +406,10 @@ export function createAdminRouter(options: AdminRouterOptions) {
         trial_start: subscription.trialStart,
         trial_end: subscription.trialEnd,
         trial_days_remaining: subscription.status === 'trialing' ? subscription.trialDaysRemaining : null,
+        trial_extension_days_used: extensionDaysByShopId.get(shop.id) || 0,
+        trial_extension_days_remaining: Math.max(0, maxTrialExtensionDays - (extensionDaysByShopId.get(shop.id) || 0)),
         subscription_expires_at: subscription.expiresAt,
+        trial_expiry_mismatch: trialExpiryMismatch,
         next_renewal_at: subscription.status === 'trialing' ? subscription.trialEnd : subscription.expiresAt,
         created_at: shop.created_at,
         products_count: products.filter((product) => product.shop_id === shop.id).length,
@@ -407,6 +438,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
   });
 
   router.patch('/subscriptions/:id/extend-trial', async (req, res) => {
+    await refreshRuntimeDataFromDatabase();
     const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const days = Number(req.body?.days);
@@ -415,20 +447,101 @@ export function createAdminRouter(options: AdminRouterOptions) {
     }
     const isTrial = shop.subscription_status === 'trialing'
       || shop.subscription_status === 'expired' && Boolean(shop.trial_end) && !shop.subscription_expires_at;
-    if (!isTrial || !shop.trial_start || !shop.trial_end) {
+    const trialStart = shop.trial_start;
+    if (!isTrial || !trialStart || !shop.trial_end) {
       return res.status(409).json({ error: 'Seul un essai en cours ou expiré peut être prolongé.' });
+    }
+    if (req.body?.expected_trial_end && req.body.expected_trial_end !== shop.trial_end) {
+      return res.status(409).json({ error: 'L’échéance a changé. Actualisez la liste avant de réessayer.' });
     }
     const oldTrialEnd = Date.parse(shop.trial_end);
     if (!Number.isFinite(oldTrialEnd)) return res.status(409).json({ error: 'La date de fin d’essai est invalide.' });
     const now = Date.now();
     const nextTrialEnd = new Date(Math.max(oldTrialEnd, now) + days * 86400000).toISOString();
     const previousTrialEnd = shop.trial_end;
+    const previousExpiry = shop.subscription_expires_at ?? null;
+    const actionAt = new Date().toISOString();
+    const result = await dbTransaction(async ({ all, run }) => {
+      const priorExtensions = await all<{ details: string }>(
+        `SELECT details FROM admin_audit_logs
+         WHERE shop_id = ? AND action = 'trial_extended' AND created_at >= ?`,
+        [shop.id, trialStart],
+      );
+      const daysUsed = priorExtensions.reduce((total, entry) => total + getTrialExtensionDays(entry.details), 0);
+      const daysRemaining = Math.max(0, maxTrialExtensionDays - daysUsed);
+      if (days > daysRemaining) return { status: 'limit' as const, daysRemaining };
+
+      const update = await run(
+        `UPDATE shops
+         SET trial_end = ?, subscription_expires_at = ?, last_notification_sent_at = NULL, subscription_status = 'trialing'
+         WHERE id = ? AND trial_end = ? AND subscription_status = ?`,
+        [nextTrialEnd, nextTrialEnd, shop.id, previousTrialEnd, shop.subscription_status],
+      );
+      if (update.changes !== 1) return { status: 'conflict' as const };
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['super_admin', 'trial_extended', shop.id, JSON.stringify({
+          days,
+          previous_trial_end: previousTrialEnd,
+          previous_subscription_expires_at: previousExpiry,
+          trial_end: nextTrialEnd,
+          subscription_expires_at: nextTrialEnd,
+        }), actionAt],
+      );
+      return { status: 'success' as const, daysUsed: daysUsed + days };
+    });
+    if (result.status === 'limit') {
+      return res.status(409).json({
+        error: result.daysRemaining
+          ? `Il ne reste que ${result.daysRemaining} jour(s) de prolongation autorisés pour cet essai.`
+          : 'Le plafond de 30 jours de prolongation pour cet essai est atteint.',
+        days_remaining: result.daysRemaining,
+      });
+    }
+    if (result.status === 'conflict') return res.status(409).json({ error: 'L’essai a été modifié entre-temps. Actualisez la liste avant de réessayer.' });
     shop.trial_end = nextTrialEnd;
-      shop.last_notification_sent_at = null;
+    shop.subscription_expires_at = nextTrialEnd;
+    shop.last_notification_sent_at = null;
     shop.subscription_status = 'trialing';
-    await persistShop(shop);
-    await logAdminAction('trial_extended', shop.id, { days, previous_trial_end: previousTrialEnd, trial_end: nextTrialEnd });
-    res.json({ success: true, shop: toSafeShop(shop), trial_end: nextTrialEnd });
+    res.json({ success: true, shop: toSafeShop(shop), trial_end: nextTrialEnd, trial_extension_days_used: result.daysUsed });
+  });
+
+  router.patch('/subscriptions/:id/reconcile-trial-expiry', async (req, res) => {
+    await refreshRuntimeDataFromDatabase();
+    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (shop.subscription_status !== 'trialing' || !shop.trial_end) {
+      return res.status(409).json({ error: 'Seul un essai actif avec une échéance définie peut être synchronisé.' });
+    }
+    const trialEnd = Date.parse(shop.trial_end);
+    if (!Number.isFinite(trialEnd)) return res.status(409).json({ error: 'La date de fin d’essai est invalide.' });
+    if (shop.subscription_expires_at && Date.parse(shop.subscription_expires_at) === trialEnd) {
+      return res.status(409).json({ error: 'Les échéances sont déjà synchronisées.' });
+    }
+    const previousExpiry = shop.subscription_expires_at ?? null;
+    const actionAt = new Date().toISOString();
+    const result = await dbTransaction(async ({ run }) => {
+      const update = await run(
+        `UPDATE shops
+         SET subscription_expires_at = ?
+         WHERE id = ? AND subscription_status = 'trialing' AND trial_end = ?
+           AND COALESCE(subscription_expires_at, '') <> ?`,
+        [shop.trial_end, shop.id, shop.trial_end, shop.trial_end],
+      );
+      if (update.changes !== 1) return false;
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['super_admin', 'trial_expiry_reconciled', shop.id, JSON.stringify({
+          previous_subscription_expires_at: previousExpiry,
+          trial_end: shop.trial_end,
+          subscription_expires_at: shop.trial_end,
+        }), actionAt],
+      );
+      return true;
+    });
+    if (!result) return res.status(409).json({ error: 'L’échéance a été modifiée entre-temps. Actualisez la liste avant de réessayer.' });
+    shop.subscription_expires_at = shop.trial_end;
+    res.json({ success: true, subscription_expires_at: shop.trial_end });
   });
 
   router.get('/shops', async (_req, res) => {

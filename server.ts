@@ -1180,6 +1180,7 @@ async function startServer() {
     dbAll,
     dbGet,
     dbRun,
+    dbTransaction,
     refreshRuntimeDataFromDatabase,
     persistShop,
     toSafeShop,

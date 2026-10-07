@@ -380,9 +380,10 @@ test('admin can review and extend expiring trials with a durable audit entry', a
   assert.equal(trial.status, 200, await trial.text());
 
   const upcomingTrialEnd = new Date(Date.now() + 4 * 86400000).toISOString();
-  const testDb = new Database(TEST_DB_PATH);
+  let testDb = new Database(TEST_DB_PATH);
   try {
-    testDb.prepare('UPDATE shops SET trial_end = ? WHERE id = ?').run(upcomingTrialEnd, createdPayload.shop.id);
+    testDb.prepare('UPDATE shops SET trial_end = ?, subscription_expires_at = ? WHERE id = ?')
+      .run(upcomingTrialEnd, '2026-10-31', createdPayload.shop.id);
   } finally {
     testDb.close();
   }
@@ -408,18 +409,68 @@ test('admin can review and extend expiring trials with a durable audit entry', a
   assert.equal(trialShop.status, 'trialing');
   assert.equal(trialShop.trial_days_remaining, 4);
   assert.equal(trialShop.whatsapp_reminders_opt_in, true);
+  assert.equal(trialShop.trial_expiry_mismatch, true);
+
+  const reconcileResponse = await fetch(`${BASE_URL}/api/admin/subscriptions/${createdPayload.shop.id}/reconcile-trial-expiry`, {
+    method: 'PATCH',
+    headers: { Cookie: adminCookie },
+  });
+  assert.equal(reconcileResponse.status, 200, await reconcileResponse.text());
+  const reconciledSubscriptions = await fetch(`${BASE_URL}/api/admin/subscriptions`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
+  const reconciledShop = reconciledSubscriptions.shops.find((shop: { id: number }) => shop.id === createdPayload.shop.id);
+  assert.equal(reconciledShop.trial_expiry_mismatch, false);
+  assert.equal(Date.parse(reconciledShop.subscription_expires_at), Date.parse(upcomingTrialEnd));
+
+  testDb = new Database(TEST_DB_PATH);
+  try {
+    testDb.prepare('UPDATE shops SET subscription_expires_at = ? WHERE id = ?')
+      .run('2026-10-31', createdPayload.shop.id);
+  } finally {
+    testDb.close();
+  }
 
   const extensionResponse = await fetch(`${BASE_URL}/api/admin/subscriptions/${createdPayload.shop.id}/extend-trial`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
-    body: JSON.stringify({ days: 7 }),
+    body: JSON.stringify({ days: 7, expected_trial_end: upcomingTrialEnd }),
   });
   const extension = await extensionResponse.json();
   assert.equal(extensionResponse.status, 200, JSON.stringify(extension));
   assert.ok(Date.parse(extension.trial_end) >= Date.parse(upcomingTrialEnd) + 7 * 86400000 - 1000);
+  assert.equal(Date.parse(extension.shop.subscription_expires_at), Date.parse(extension.trial_end));
 
   const refreshedSubscriptions = await fetch(`${BASE_URL}/api/admin/subscriptions`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
   assert.ok(refreshedSubscriptions.audit_logs.some((entry: { action: string; shop_id: number }) => entry.action === 'trial_extended' && entry.shop_id === createdPayload.shop.id));
+  assert.ok(refreshedSubscriptions.audit_logs.some((entry: { action: string; shop_id: number }) => entry.action === 'trial_expiry_reconciled' && entry.shop_id === createdPayload.shop.id));
+  const afterFirstExtension = refreshedSubscriptions.shops.find((shop: { id: number }) => shop.id === createdPayload.shop.id);
+  assert.equal(afterFirstExtension.trial_extension_days_used, 7);
+  assert.equal(afterFirstExtension.trial_extension_days_remaining, 23);
+
+  const overLimitExtension = await fetch(`${BASE_URL}/api/admin/subscriptions/${createdPayload.shop.id}/extend-trial`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: JSON.stringify({ days: 30, expected_trial_end: extension.trial_end }),
+  });
+  assert.equal(overLimitExtension.status, 409);
+  assert.equal((await overLimitExtension.json()).days_remaining, 23);
+
+  const finalAllowedExtension = await fetch(`${BASE_URL}/api/admin/subscriptions/${createdPayload.shop.id}/extend-trial`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: JSON.stringify({ days: 23, expected_trial_end: extension.trial_end }),
+  });
+  assert.equal(finalAllowedExtension.status, 200);
+  const finalExtension = await finalAllowedExtension.json();
+  const cappedSubscriptions = await fetch(`${BASE_URL}/api/admin/subscriptions`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
+  const cappedShop = cappedSubscriptions.shops.find((shop: { id: number }) => shop.id === createdPayload.shop.id);
+  assert.equal(cappedShop.trial_extension_days_used, 30);
+  assert.equal(cappedShop.trial_extension_days_remaining, 0);
+  const extensionAtCap = await fetch(`${BASE_URL}/api/admin/subscriptions/${createdPayload.shop.id}/extend-trial`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: JSON.stringify({ days: 1, expected_trial_end: finalExtension.trial_end }),
+  });
+  assert.equal(extensionAtCap.status, 409);
 
   const consentDisabled = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-reminder-consent`, {
     method: 'PATCH',

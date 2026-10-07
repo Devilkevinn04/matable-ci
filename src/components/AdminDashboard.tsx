@@ -104,7 +104,10 @@ interface AdminSubscriptionShop {
   trial_start: string | null;
   trial_end: string | null;
   trial_days_remaining: number | null;
+  trial_extension_days_used: number;
+  trial_extension_days_remaining: number;
   subscription_expires_at: string | null;
+  trial_expiry_mismatch: boolean;
   next_renewal_at: string | null;
   created_at: string;
   products_count: number;
@@ -453,19 +456,52 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const handleExtendTrial = async (shop: AdminSubscriptionShop) => {
+    if (!shop.trial_end) {
+      showNotice('La date de fin d’essai est manquante ; actualisez les abonnements avant de continuer.');
+      return;
+    }
+    const currentTrialEnd = Date.parse(shop.trial_end);
+    if (!Number.isFinite(currentTrialEnd)) {
+      showNotice('La date de fin d’essai est invalide ; corrigez-la avant de continuer.');
+      return;
+    }
+    if (trialExtensionDays > shop.trial_extension_days_remaining) {
+      showNotice(`Il ne reste que ${shop.trial_extension_days_remaining} jour(s) de prolongation autorisés pour ${shop.name}.`);
+      return;
+    }
+    const nextTrialEnd = new Date(Math.max(currentTrialEnd, Date.now()) + trialExtensionDays * 86400000);
+    const formattedNextEnd = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(nextTrialEnd);
+    if (!window.confirm(`Prolonger l’essai de ${shop.name} de ${trialExtensionDays} jours (${shop.trial_extension_days_used + trialExtensionDays}/30 au total) ? Nouvelle échéance : ${formattedNextEnd}.`)) return;
     setSubscriptionActionShopId(shop.id);
     try {
       const response = await fetch(`/api/admin/subscriptions/${shop.id}/extend-trial`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days: trialExtensionDays }),
+        body: JSON.stringify({ days: trialExtensionDays, expected_trial_end: shop.trial_end }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de prolonger l’essai.');
-      showNotice(`Essai prolongé de ${trialExtensionDays} jours pour ${shop.name}.`);
+      showNotice(`Essai prolongé jusqu’au ${formattedNextEnd} pour ${shop.name}.`);
       await fetchSubscriptions();
     } catch (error) {
       showNotice(error instanceof Error ? error.message : 'Impossible de prolonger l’essai.');
+    } finally {
+      setSubscriptionActionShopId(null);
+    }
+  };
+
+  const handleReconcileTrialExpiry = async (shop: AdminSubscriptionShop) => {
+    setSubscriptionActionShopId(shop.id);
+    try {
+      const response = await fetch(`/api/admin/subscriptions/${shop.id}/reconcile-trial-expiry`, {
+        method: 'PATCH',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de synchroniser les échéances.');
+      showNotice(`Échéance d’essai synchronisée pour ${shop.name}.`);
+      await fetchSubscriptions();
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Impossible de synchroniser les échéances.');
     } finally {
       setSubscriptionActionShopId(null);
     }
@@ -648,6 +684,15 @@ export const AdminDashboard: React.FC = () => {
       .some((value) => value.toLowerCase().includes(query));
   });
   const filteredFinancePayments = (finance?.payments || []).filter((payment) => {
+  const inconsistentTrialExpiries = (subscriptions?.shops || []).filter((shop) => shop.trial_expiry_mismatch);
+  const trialExtensionOptions = [...new Set([
+    7,
+    14,
+    30,
+    ...(subscriptions?.shops || [])
+      .map((shop) => shop.trial_extension_days_remaining)
+      .filter((days) => days > 0 && days < 30),
+  ])].sort((left, right) => left - right);
     const query = paymentSearch.trim().toLowerCase();
     const matchesQuery = !query || [payment.shop_name, payment.provider_reference || '', payment.id]
       .some((value) => value.toLowerCase().includes(query));
@@ -1047,6 +1092,27 @@ export const AdminDashboard: React.FC = () => {
           <section aria-labelledby="admin-subscriptions-title" className="space-y-5">
             <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
+              {inconsistentTrialExpiries.length > 0 && <section aria-labelledby="trial-expiry-integrity-title" className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+                  <div className="min-w-0 flex-1">
+                    <h3 id="trial-expiry-integrity-title" className="text-sm font-black text-amber-950">Échéances d’essai à corriger</h3>
+                    <p className="mt-1 text-xs text-amber-900">La date d’expiration technique diffère de la fin d’essai. Synchronisez-la pour que l’accès et la période de grâce suivent la bonne échéance.</p>
+                    <div className="mt-3 divide-y divide-amber-200">
+                      {inconsistentTrialExpiries.map((shop) => (
+                        <article key={shop.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <h4 className="truncate text-sm font-bold text-amber-950">{shop.name}</h4>
+                            <p className="mt-1 text-xs text-amber-900">Fin d’essai : {shop.trial_end ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.trial_end)) : 'non définie'} · Expiration enregistrée : {shop.subscription_expires_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.subscription_expires_at)) : 'non définie'}</p>
+                          </div>
+                          <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleReconcileTrialExpiry(shop)} className="min-h-9 shrink-0 rounded-lg border border-amber-700 bg-white px-3 py-1.5 text-xs font-bold text-amber-950 hover:bg-amber-100 disabled:opacity-50">Synchroniser l’échéance</button>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>}
+
                 <p className="text-xs font-bold uppercase text-emerald-800">Revenus récurrents</p>
                 <h2 id="admin-subscriptions-title" className="mt-1 text-xl font-black text-slate-900">Abonnements</h2>
                 <p className="mt-1 text-xs text-slate-500">{subscriptions?.summary.whatsapp_reminders_enabled ? `Rappels automatiques à J−2 · ${subscriptions.summary.whatsapp_reminder_opt_ins} boutique(s) consentante(s).` : 'Configurez WhatsApp Business API pour activer les rappels automatiques ; les relances manuelles restent disponibles.'}</p>
@@ -1064,20 +1130,20 @@ export const AdminDashboard: React.FC = () => {
 
               <section aria-labelledby="trials-expiring-title" className="border-y border-amber-200 py-4">
                 <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div><h3 id="trials-expiring-title" className="text-sm font-black text-slate-900">Essais à relancer</h3><p className="mt-1 text-xs text-slate-500">Échéance dans les 7 prochains jours · l’envoi reste à confirmer dans WhatsApp.</p></div>
+                  <div><h3 id="trials-expiring-title" className="text-sm font-black text-slate-900">Essais à relancer</h3><p className="mt-1 text-xs text-slate-500">Échéance dans les 7 prochains jours · l’envoi reste à confirmer dans WhatsApp · prolongation plafonnée à 30 jours par essai.</p></div>
                   <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">Prolonger de
                     <select aria-label="Durée de prolongation d’essai" value={trialExtensionDays} onChange={(event) => setTrialExtensionDays(Number(event.target.value))} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-700">
-                      <option value={7}>7 jours</option><option value={14}>14 jours</option><option value={30}>30 jours</option>
+                      {trialExtensionOptions.map((days) => <option key={days} value={days}>{days} jours</option>)}
                     </select>
                   </label>
                 </div>
                 <div className="mt-3 divide-y divide-amber-100">
                   {expiringTrials.length === 0 ? <p className="py-4 text-sm text-slate-500">Aucun essai n’expire sous 7 jours.</p> : expiringTrials.map((shop) => (
                     <article key={shop.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0"><h4 className="truncate text-sm font-bold text-slate-900">{shop.name}</h4><p className="mt-1 text-xs text-slate-500">{shop.plan} · {shop.trial_days_remaining === 1 ? 'échéance demain' : `${shop.trial_days_remaining} jours restants`} · fin le {shop.trial_end ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.trial_end)) : 'date inconnue'}</p></div>
+                      <div className="min-w-0"><h4 className="truncate text-sm font-bold text-slate-900">{shop.name}</h4><p className="mt-1 text-xs text-slate-500">{shop.plan} · {shop.trial_days_remaining === 1 ? 'échéance demain' : `${shop.trial_days_remaining} jours restants`} · fin le {shop.trial_end ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.trial_end)) : 'date inconnue'} · prolongation : {shop.trial_extension_days_used}/30 jours</p></div>
                       <div className="flex shrink-0 flex-wrap gap-2">
                         {shop.whatsapp_reminders_opt_in ? <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handlePrepareTrialReminder(shop)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-emerald-700 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50"><Send className="h-3.5 w-3.5" />Relancer WhatsApp</button> : <span className="self-center text-xs text-slate-500">Opt-in WhatsApp requis</span>}
-                        <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleExtendTrial(shop)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"><Clock className="h-3.5 w-3.5" />Prolonger</button>
+                        <button type="button" disabled={subscriptionActionShopId === shop.id || shop.trial_extension_days_remaining === 0 || trialExtensionDays > shop.trial_extension_days_remaining} onClick={() => void handleExtendTrial(shop)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"><Clock className="h-3.5 w-3.5" />{shop.trial_extension_days_remaining === 0 ? 'Plafond atteint' : `Prolonger (${shop.trial_extension_days_remaining} j restants)`}</button>
                       </div>
                     </article>
                   ))}
@@ -1106,11 +1172,11 @@ export const AdminDashboard: React.FC = () => {
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-bold text-slate-900">{shop.name}</h4><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-slate-700">{shop.plan}</span><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${statusTone}`}>{subscriptionStatusLabels[shop.status] || shop.status}</span>{!shop.is_active && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-900">Boutique suspendue</span>}</div>
                         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{shop.whatsapp_number}</span><span>{shop.products_count} article(s)</span><span>{shop.orders_count} commande(s)</span><span>{shop.publication_status === 'active' ? 'Publiée' : 'Non publiée'}</span><span>{shop.whatsapp_reminders_opt_in ? 'Rappel WhatsApp activé' : 'Sans opt-in WhatsApp'}</span><span>Inscrite le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.created_at))}</span></div>
-                        <p className="mt-1 text-xs text-slate-500">{shop.status === 'trialing' ? 'Fin d’essai' : 'Prochain renouvellement'} : {shop.next_renewal_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.next_renewal_at)) : 'Non défini'} · Dernière commande : {shop.last_order_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.last_order_at)) : 'aucune'}</p>
+                        <p className="mt-1 text-xs text-slate-500">{shop.status === 'trialing' ? 'Fin d’essai' : 'Prochain renouvellement'} : {shop.next_renewal_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.next_renewal_at)) : 'Non défini'}{shop.trial_start ? ` · Prolongation cumulée : ${shop.trial_extension_days_used}/30 jours` : ''} · Dernière commande : {shop.last_order_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.last_order_at)) : 'aucune'}</p>
                       </div>
                       <div className="flex shrink-0 flex-wrap gap-2">
                         {shop.status === 'trialing' && shop.trial_days_remaining !== null && shop.trial_days_remaining <= 7 && shop.whatsapp_reminders_opt_in && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handlePrepareTrialReminder(shop)} className="min-h-9 rounded-lg border border-emerald-700 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50">WhatsApp</button>}
-                        {canExtendTrial && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleExtendTrial(shop)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Prolonger l’essai</button>}
+                        {canExtendTrial && <button type="button" disabled={subscriptionActionShopId === shop.id || shop.trial_extension_days_remaining === 0 || trialExtensionDays > shop.trial_extension_days_remaining} onClick={() => void handleExtendTrial(shop)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{shop.trial_extension_days_remaining === 0 ? 'Plafond atteint' : `Prolonger (${shop.trial_extension_days_remaining} j restants)`}</button>}
                         <button type="button" onClick={() => void handleToggleActive(shop.id)} className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-bold ${shop.is_active ? 'border-rose-200 text-rose-800 hover:bg-rose-50' : 'border-emerald-200 text-emerald-800 hover:bg-emerald-50'}`}>{shop.is_active ? 'Suspendre' : 'Réactiver'}</button>
                       </div>
                     </article>;
@@ -1120,8 +1186,8 @@ export const AdminDashboard: React.FC = () => {
 
               <section aria-labelledby="subscription-audit-title" className="border-t border-slate-200 pt-4">
                 <h3 id="subscription-audit-title" className="text-sm font-black text-slate-900">Actions admin récentes</h3>
-                {subscriptions.audit_logs.length === 0 ? <p className="mt-2 text-xs text-slate-500">Les prolongations et relances apparaîtront ici.</p> : <div className="mt-2 divide-y divide-slate-200">
-                  {subscriptions.audit_logs.slice(0, 8).map((entry) => <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs"><span className="font-semibold text-slate-800">{entry.action === 'trial_extended' ? 'Essai prolongé' : entry.action === 'trial_reminder_prepared' ? 'Relance WhatsApp préparée' : entry.action === 'shop_suspended' ? 'Boutique suspendue' : entry.action === 'shop_reactivated' ? 'Boutique réactivée' : entry.action} · {entry.shop_name || 'Boutique supprimée'}</span><time className="text-slate-500">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(entry.created_at))}</time></div>)}
+                {subscriptions.audit_logs.length === 0 ? <p className="mt-2 text-xs text-slate-500">Les prolongations, corrections et relances apparaîtront ici.</p> : <div className="mt-2 divide-y divide-slate-200">
+                {subscriptions.audit_logs.slice(0, 8).map((entry) => <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs"><span className="font-semibold text-slate-800">{entry.action === 'trial_extended' ? 'Essai prolongé' : entry.action === 'trial_expiry_reconciled' ? 'Échéance d’essai synchronisée' : entry.action === 'trial_reminder_prepared' ? 'Relance WhatsApp préparée' : entry.action === 'shop_suspended' ? 'Boutique suspendue' : entry.action === 'shop_reactivated' ? 'Boutique réactivée' : entry.action} · {entry.shop_name || 'Boutique supprimée'}</span><time className="text-slate-500">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(entry.created_at))}</time></div>)}
                 </div>}
               </section>
             </>}
