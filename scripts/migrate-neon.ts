@@ -25,6 +25,7 @@ const migrationVersions = [
   '020_product_creation_timestamps',
   '021_customer_favorites_and_likes',
   '022_customer_reviews_and_reports',
+  '023_didit_merchant_verification',
 ];
 const connectionString = process.env.DATABASE_URL;
 

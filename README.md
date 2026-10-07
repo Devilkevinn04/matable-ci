@@ -44,7 +44,9 @@ DATABASE_URL="postgresql://..."
 APP_URL="http://localhost:3000"
 TRUST_PROXY_HOPS="0"
 ADMIN_ACCESS_KEY="CHANGE_ME_ADMIN_KEY"
-KYC_ENCRYPTION_KEY=""
+DIDIT_API_KEY=""
+DIDIT_WORKFLOW_ID=""
+DIDIT_WEBHOOK_SECRET=""
 GOOGLE_OAUTH_CLIENT_ID=""
 GOOGLE_OAUTH_CLIENT_SECRET=""
 APPLE_SERVICE_ID=""
@@ -73,8 +75,12 @@ DATABASE_URL="postgresql://..."
 APP_URL="https://matable.ci"
 TRUST_PROXY_HOPS="1"
 ADMIN_ACCESS_KEY="<cle-tres-longue-et-securisee>"
-KYC_ENCRYPTION_KEY="<secret-persistant-d-au-moins-32-caracteres>"
+DIDIT_API_KEY="<cle-api-didit>"
+DIDIT_WORKFLOW_ID="<uuid-du-workflow-didit>"
+DIDIT_WEBHOOK_SECRET="<secret-webhook-didit>"
 ```
+
+Dans la console Didit, configurez le webhook `https://<domaine-public>/api/webhooks/didit` pour les événements de changement de statut (`status.updated`). L’API key, l’identifiant du workflow et le secret du webhook restent dans les variables serveur Render et ne doivent jamais être exposés au navigateur. Le serveur refuse de démarrer une vérification tant que l’API key et l’identifiant de workflow ne sont pas configurés.
 
 
 ### Base Neon gratuite sur Render
@@ -110,8 +116,7 @@ Les jetons OIDC sont vérifiés côté serveur avec issuer, audience, nonce, PKC
 - Les routes marchand exigent une session `HttpOnly`, son empreinte de requête et une boutique active.
 - Les routes admin exigent une session admin séparée.
 - Express ne fait confiance aux en-têtes proxy que si `TRUST_PROXY_HOPS` est explicitement configuré pour l’infrastructure réelle.
-- Le prototype KYC utilise la caméra du navigateur pour capturer le recto, le verso et le selfie ; OCR et comparaison faciale sont exécutés localement. Les images et les champs extraits sont chiffrés côté serveur ; le numéro de document est indexé par HMAC. Configurez une `KYC_ENCRYPTION_KEY` persistante d’au moins 32 caractères en production et ne la faites jamais tourner sans procédure de rechiffrement.
-- Les dossiers restent systématiquement en revue manuelle : les contrôles OCR/Face Match sont exécutés dans le navigateur et peuvent être falsifiés par un client modifié. Le score facial n’est pas une probabilité et aucun contrôle de liveness ou d’authenticité documentaire n’est effectué. Ce prototype n’est pas une vérification certifiée.
+- La vérification d’identité des commerçants est effectuée sur le parcours hébergé de Didit après consentement explicite. Seuls l’identifiant de session, le statut fourni par Didit et les éléments techniques nécessaires au traitement idempotent des webhooks sont conservés par MaTable.ci. Le serveur authentifie les webhooks et aucune décision d’identité ne peut être saisie manuellement par un administrateur.
 
 ## Checklist de production
 
@@ -127,7 +132,7 @@ Avant un déploiement réel, vérifiez bien les points suivants :
 8. Tester le flux complet : création boutique → commande → ouverture du reçu WhatsApp du vendeur.
 9. Vérifier le comportement de stock avec un test de surcharge sur le dernier article disponible.
 10. Vérifier `npm audit` et corriger les vulnérabilités avant mise en production.
-11. Configurer `KYC_ENCRYPTION_KEY`, puis tester les captures caméra recto/verso/selfie, l’acceptation locale, la revue des cas incertains et l’accès privé aux médias.
+11. Configurer `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID` et `DIDIT_WEBHOOK_SECRET` dans Render, puis déclarer l’URL webhook Didit et tester le parcours hébergé ainsi que les événements signés.
 
 ## Déploiement rapide
 
@@ -152,7 +157,7 @@ Cette version finale est un serveur Node/Express avec Neon PostgreSQL. Déployez
 
 Vercel convient au frontend statique, mais ne doit pas héberger directement ce serveur Express avec une base locale. Une base PostgreSQL externe est nécessaire.
 
-Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `DATABASE_URL`, `ADMIN_ACCESS_KEY` longue et unique (générée automatiquement par Render si elle n’est pas configurée manuellement), `KYC_ENCRYPTION_KEY` persistante et `TRUST_PROXY_HOPS` adapté au reverse proxy.
+Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `DATABASE_URL`, `ADMIN_ACCESS_KEY` longue et unique (générée automatiquement par Render si elle n’est pas configurée manuellement), les trois variables Didit et `TRUST_PROXY_HOPS` adapté au reverse proxy.
 
 ## Build production
 

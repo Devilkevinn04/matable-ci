@@ -114,41 +114,9 @@ test('Pro subscription exposes consented product stats and activates discounted 
   });
   assert.equal(unverifiedBoost.status, 409);
 
-  const image = `data:image/png;base64,${Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from([0])]).toString('base64')}`;
-  const verification = await fetch(`${BASE_URL}/api/shops/${shopId}/identity-verification`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
-    body: JSON.stringify({
-      document_type: 'cni',
-      document_number: `CI${shopId}${Date.now()}`,
-      document_image: image,
-      document_back_image: image,
-      selfie_image: image,
-      face_distance: 0.42,
-      identity_data: {
-        first_name: 'Awa',
-        last_name: 'Test',
-        birth_date: '1994-05-12',
-        ocr_text: 'REPUBLIC OF COTE D IVOIRE CARTE NATIONALE D IDENTITE',
-        ocr_confidence: 82,
-      },
-    }),
-  });
-  assert.equal(verification.status, 201, await verification.text());
-  const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key: 'subscription-commerce-test-admin-key' }),
-  });
-  assert.equal(adminLogin.status, 200);
-  const adminCookie = adminLogin.headers.get('set-cookie')?.split(';')[0];
-  assert.ok(adminCookie);
-  const verificationDecision = await fetch(`${BASE_URL}/api/admin/identity-verifications/${shopId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
-    body: JSON.stringify({ status: 'verified' }),
-  });
-  assert.equal(verificationDecision.status, 200, await verificationDecision.text());
+  const verificationDb = new Database(TEST_DB_PATH);
+  verificationDb.prepare("UPDATE shops SET merchant_verification_status = 'verified' WHERE id = ?").run(shopId);
+  verificationDb.close();
   const publication = await fetch(`${BASE_URL}/api/shops/${shopId}/publication-status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },

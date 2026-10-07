@@ -721,9 +721,10 @@ export async function rotateMerchantAccessTokenForShop(shopId: number, previousT
 setInterval(async () => {
   await cleanupExpiredSessions();
   try {
+    await dbRun('DELETE FROM didit_webhook_events WHERE received_at < ?', [new Date(Date.now() - 30 * 86400000).toISOString()]);
     for (const shop of await loadShopsFromDatabase()) await refreshSubscriptionState(shop);
   } catch (error) {
-    console.error('Unable to synchronize expired subscriptions.', error);
+    console.error('Unable to synchronize expired subscriptions or clean expired Didit events.', error);
   }
   await processSubscriptionAutomation();
 }, 15 * 60 * 1000).unref();
@@ -783,7 +784,7 @@ async function startServer() {
 
   const app = express();
   const PORT = Number(process.env.PORT || 3000);
-  const verificationRouters = createMerchantVerificationRouter({ dbRun, dbGet, dbAll, requireMerchantOwnShop });
+  const verificationRouters = createMerchantVerificationRouter({ dbRun, dbGet, dbAll, dbTransaction, requireMerchantOwnShop });
 
   applySecurityHeaders(app);
 
@@ -798,6 +799,8 @@ async function startServer() {
     }
     next();
   });
+
+  app.use('/api/webhooks/didit', express.raw({ type: 'application/json', limit: '64kb' }), verificationRouters.webhookRouter);
 
   app.use('/api/shops/:id', async (req: Request, res: Response, next: express.NextFunction) => {
     const shopId = Number(req.params.id);
@@ -856,6 +859,7 @@ async function startServer() {
     };
   }, maintenanceHtml));
   await initializeDatabase();
+  await dbRun('DELETE FROM didit_webhook_events WHERE received_at < ?', [new Date(Date.now() - 30 * 86400000).toISOString()]);
   await migrateExistingSessionTokens();
   await seedDemoDatabaseIfEmpty({ shops, products, orders, shouldSeedDemoData, hashPin });
 

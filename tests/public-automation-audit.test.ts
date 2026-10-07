@@ -74,27 +74,9 @@ async function submitAndApproveShop(shopId: number, merchantCookie: string, tier
     body: JSON.stringify({ tier }),
   });
   assert.equal(trialStart.status, 200, await trialStart.text());
-  const testPng = `data:image/png;base64,${Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from([0])]).toString('base64')}`;
-  const submission = await fetch(`${BASE_URL}/api/shops/${shopId}/identity-verification`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
-    body: JSON.stringify({ document_type: 'cni', document_number: `CI${shopId}${Date.now()}`, document_image: testPng, document_back_image: testPng, selfie_image: testPng, face_distance: 0.42, identity_data: { first_name: 'Test', last_name: 'Marchand' } }),
-  });
-  assert.equal(submission.status, 201, await submission.text());
-  const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key: 'super-admin-demo-key' }),
-  });
-  assert.equal(adminLogin.status, 200);
-  const adminCookie = adminLogin.headers.get('set-cookie')?.split(';')[0];
-  assert.ok(adminCookie);
-  const decision = await fetch(`${BASE_URL}/api/admin/identity-verifications/${shopId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
-    body: JSON.stringify({ status: 'verified' }),
-  });
-  assert.equal(decision.status, 200, await decision.text());
+  const database = new Database(TEST_DB_PATH);
+  database.prepare("UPDATE shops SET merchant_verification_status = 'verified' WHERE id = ?").run(shopId);
+  database.close();
   const publication = await fetch(`${BASE_URL}/api/shops/${shopId}/publication-status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },

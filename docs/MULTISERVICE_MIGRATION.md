@@ -17,7 +17,8 @@ docker compose --project-directory . -f infra/docker-compose.yml up --build
 Open `http://127.0.0.1:4000`. The legacy application uses a named Docker volume
 for its SQLite database. The gateway is bound to loopback by default. Set
 `GATEWAY_PORT` to change the local port. `ADMIN_ACCESS_KEY` and
-`KYC_ENCRYPTION_KEY` may be set in the shell for local use; do not commit them.
+`DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID` and `DIDIT_WEBHOOK_SECRET` may be set in
+the shell for local use; do not commit them.
 
 This Compose stack is for local development, not production. It intentionally
 does not start placeholder domain services or unused PostgreSQL/Redis

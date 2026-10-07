@@ -10,7 +10,9 @@ services:
       DISABLE_HMR: "true"
       MATABLE_DB_PATH: /app/data/matable.db
       ADMIN_ACCESS_KEY: ${ADMIN_ACCESS_KEY:-}
-      KYC_ENCRYPTION_KEY: ${KYC_ENCRYPTION_KEY:-}
+      DIDIT_API_KEY: ${DIDIT_API_KEY:-}
+      DIDIT_WORKFLOW_ID: ${DIDIT_WORKFLOW_ID:-}
+      DIDIT_WEBHOOK_SECRET: ${DIDIT_WEBHOOK_SECRET:-}
     volumes:
       - matable_data:/app/data
     expose:

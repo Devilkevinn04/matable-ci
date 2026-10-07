@@ -1,190 +1,278 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
-import { decryptKycValue, encryptKycValue, hashDocumentNumber, isKycEncryptionConfigured } from '../services/identityCrypto.ts';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CONSENT_VERSION = 'didit-v1';
 
 type DbRun = (sql: string, params?: unknown[]) => Promise<{ changes: number }>;
 type DbGet = <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T | undefined>;
 type DbAll = <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
-
-interface VerificationRow {
-  shop_id: number;
-  document_type: string;
-  document_number_last4: string;
-  identity_data_ciphertext: string;
-  document_mime_type: string;
-  document_ciphertext: string;
-  document_back_mime_type?: string | null;
-  document_back_ciphertext?: string | null;
-  selfie_mime_type: string;
-  selfie_ciphertext: string;
-  client_face_distance: number | null;
-  status: string;
-  decision_method: string;
-  submitted_at: string;
-  reviewed_at: string | null;
-  reviewer_note: string | null;
-  has_document_back?: boolean;
-  identity_data?: { first_name: string; last_name: string; birth_date: string };
-  shop_name?: string;
-  shop_slug?: string;
-  owner_email?: string | null;
-}
+type Transaction = {
+  get: DbGet;
+  run: DbRun;
+};
+type DbTransaction = <T>(operation: (transaction: Transaction) => Promise<T>) => Promise<T>;
 
 interface MerchantVerificationOptions {
   dbRun: DbRun;
   dbGet: DbGet;
   dbAll: DbAll;
+  dbTransaction: DbTransaction;
   requireMerchantOwnShop: RequestHandler;
 }
 
-function parseImage(value: unknown) {
-  if (typeof value !== 'string') return null;
-  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+=*)$/.exec(value);
-  if (!match || match[2].length > 1_100_000) return null;
-  const bytes = Buffer.from(match[2], 'base64');
-  const validMagic = match[1] === 'image/jpeg'
-    ? bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
-    : match[1] === 'image/png'
-      ? bytes.length > 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-      : bytes.length > 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP';
-  return validMagic ? { mimeType: match[1], base64: match[2] } : null;
+interface DiditSessionResponse {
+  session_id: string;
+  status: string;
+  url: string;
 }
 
-function publicStatus(row?: VerificationRow) {
-  if (!row) return { status: 'pending', decision_method: 'none', document_type: null, document_number_last4: null, submitted_at: null, reviewed_at: null, reviewer_note: null };
-  return {
-    status: row.status,
-    decision_method: row.decision_method,
-    document_type: row.document_type,
-    document_number_last4: row.document_number_last4,
-    submitted_at: row.submitted_at,
-    reviewed_at: row.reviewed_at,
-    reviewer_note: row.reviewer_note,
-  };
+interface DiditWebhookEvent {
+  event_id: string;
+  session_id: string;
+  status: string;
+  webhook_type: string;
+  timestamp: number;
+}
+
+function sortedJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(sortedJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${sortedJson(item)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function signatureMatches(signature: string | undefined, payload: Buffer, secret: string, canonicalPayload?: string): boolean {
+  if (!signature) return false;
+  const expected = createHmac('sha256', secret)
+    .update(canonicalPayload ?? payload)
+    .digest('hex');
+  const expectedBuffer = Buffer.from(expected, 'hex');
+  const providedBuffer = Buffer.from(signature.trim().toLowerCase(), 'hex');
+  return expectedBuffer.length === providedBuffer.length && timingSafeEqual(expectedBuffer, providedBuffer);
+}
+
+export function mapDiditStatus(status: string): 'verified' | 'rejected' | 'under_review' | 'submitted' | 'pending' {
+  if (status === 'Approved') return 'verified';
+  if (status === 'Declined') return 'rejected';
+  if (status === 'In Review') return 'under_review';
+  if (['Expired', 'Kyc Expired', 'Abandoned'].includes(status)) return 'pending';
+  return 'submitted';
+}
+
+function isDiditSession(value: unknown): value is DiditSessionResponse {
+  if (!value || typeof value !== 'object') return false;
+  const session = value as Partial<DiditSessionResponse>;
+  if (typeof session.session_id !== 'string' || !UUID_PATTERN.test(session.session_id)) return false;
+  if (typeof session.status !== 'string' || typeof session.url !== 'string') return false;
+  try {
+    const url = new URL(session.url);
+    return url.protocol === 'https:' && url.hostname === 'verify.didit.me';
+  } catch {
+    return false;
+  }
 }
 
 export function createMerchantVerificationRouter(options: MerchantVerificationOptions) {
-  const { dbRun, dbGet, dbAll, requireMerchantOwnShop } = options;
+  const { dbRun, dbGet, dbAll, dbTransaction, requireMerchantOwnShop } = options;
   const router = Router();
+  const webhookRouter = Router();
 
   router.get('/:id/identity-verification', requireMerchantOwnShop, async (req, res) => {
-    const row = await dbGet<VerificationRow>('SELECT * FROM merchant_identity_verifications WHERE shop_id = ?', [Number(req.params.id)]);
+    const shopId = Number(req.params.id);
+    const [shop, session] = await Promise.all([
+      dbGet<{ merchant_verification_status: string }>('SELECT merchant_verification_status FROM shops WHERE id = ?', [shopId]),
+      dbGet<{ session_id: string; status: string; created_at: string }>(
+        'SELECT session_id, status, created_at FROM didit_verification_sessions WHERE shop_id = ? ORDER BY created_at DESC LIMIT 1',
+        [shopId],
+      ),
+    ]);
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     res.setHeader('Cache-Control', 'no-store');
-    res.json(publicStatus(row));
+    res.json({
+      status: session ? mapDiditStatus(session.status) : shop.merchant_verification_status,
+      provider_status: session?.status || null,
+      session_id: session?.session_id || null,
+      submitted_at: session?.created_at || null,
+      reviewer_note: null,
+    });
   });
 
-  router.post('/:id/identity-verification', requireMerchantOwnShop, async (req, res) => {
-    if (!isKycEncryptionConfigured()) return res.status(503).json({ error: 'La vérification d’identité est temporairement indisponible.' });
+  router.post('/:id/identity-verification/session', requireMerchantOwnShop, async (req, res) => {
     const shopId = Number(req.params.id);
-    const documentType = ['cni', 'passport'].includes(String(req.body?.document_type)) ? String(req.body.document_type) : '';
-    const documentNumber = String(req.body?.document_number || '').trim();
-    const documentImage = parseImage(req.body?.document_image);
-    const documentBackImage = parseImage(req.body?.document_back_image);
-    const selfieImage = parseImage(req.body?.selfie_image);
-    const faceDistance = Number(req.body?.face_distance);
-    const ocrText = String(req.body?.identity_data?.ocr_text || '').slice(0, 8000);
-    const ocrConfidence = Number(req.body?.identity_data?.ocr_confidence);
-    if (!documentType || !documentImage || !documentBackImage || !selfieImage || !Number.isFinite(faceDistance) || faceDistance < 0 || faceDistance > 2) {
-      return res.status(400).json({ error: 'Pièce, selfie ou comparaison locale invalide.' });
-    }
-    let documentHash: string;
-    try {
-      documentHash = hashDocumentNumber(documentNumber);
-    } catch {
-      return res.status(400).json({ error: 'Le numéro de document est invalide.' });
-    }
-    const existing = await dbGet<{ status: string }>('SELECT status FROM merchant_identity_verifications WHERE shop_id = ?', [shopId]);
-    if (existing?.status === 'verified') return res.status(409).json({ error: 'Cette identité a déjà été vérifiée.' });
+    const shop = await dbGet<{ id: number; merchant_verification_status: string }>(
+      'SELECT id, merchant_verification_status FROM shops WHERE id = ?',
+      [shopId],
+    );
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (shop.merchant_verification_status === 'verified') return res.status(409).json({ error: 'Cette identité a déjà été vérifiée.' });
+    if (req.body?.consent !== true) return res.status(400).json({ error: 'Votre consentement explicite est requis pour continuer.' });
 
-    const identityFields = {
-      first_name: String(req.body?.identity_data?.first_name || '').slice(0, 100),
-      last_name: String(req.body?.identity_data?.last_name || '').slice(0, 100),
-      birth_date: String(req.body?.identity_data?.birth_date || '').slice(0, 20),
-      ocr_text: ocrText,
-      ocr_confidence: ocrConfidence,
-    };
-    const status = 'under_review';
-    const decisionMethod = 'manual_review';
-    const now = new Date().toISOString();
-    const reviewedAt = null;
-    try {
-      await dbRun(`INSERT INTO merchant_identity_verifications (
-        shop_id, document_type, document_number_hash, document_number_last4, identity_data_ciphertext,
-        document_mime_type, document_ciphertext, document_back_mime_type, document_back_ciphertext,
-        selfie_mime_type, selfie_ciphertext,
-        client_face_distance, status, decision_method, submitted_at, reviewed_at, reviewer_note
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-      ON CONFLICT(shop_id) DO UPDATE SET document_type = excluded.document_type,
-        document_number_hash = excluded.document_number_hash, document_number_last4 = excluded.document_number_last4,
-        identity_data_ciphertext = excluded.identity_data_ciphertext, document_mime_type = excluded.document_mime_type,
-        document_ciphertext = excluded.document_ciphertext, document_back_mime_type = excluded.document_back_mime_type,
-        document_back_ciphertext = excluded.document_back_ciphertext, selfie_mime_type = excluded.selfie_mime_type,
-        selfie_ciphertext = excluded.selfie_ciphertext, client_face_distance = excluded.client_face_distance,
-        status = excluded.status, decision_method = excluded.decision_method,
-        submitted_at = excluded.submitted_at, reviewed_at = excluded.reviewed_at, reviewer_note = NULL`, [
-          shopId, documentType, documentHash, documentNumber.replace(/\s/g, '').slice(-4), encryptKycValue(JSON.stringify(identityFields)),
-        documentImage.mimeType, encryptKycValue(documentImage.base64), documentBackImage.mimeType,
-        encryptKycValue(documentBackImage.base64), selfieImage.mimeType,
-        encryptKycValue(selfieImage.base64), null, status, decisionMethod, now, reviewedAt,
-      ]);
-      await dbRun('UPDATE shops SET merchant_verification_status = ? WHERE id = ?', [status, shopId]);
-      res.setHeader('Cache-Control', 'no-store');
-      res.status(201).json({ success: true, ...publicStatus({ status, decision_method: decisionMethod, document_type: documentType, document_number_last4: documentNumber.replace(/\s/g, '').slice(-4), submitted_at: now, reviewed_at: reviewedAt, reviewer_note: null } as VerificationRow) });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '';
-      if (/unique|duplicate/i.test(message)) return res.status(409).json({ error: 'Ce numéro de document est déjà associé à une autre boutique.' });
-      throw error;
+    const apiKey = String(process.env.DIDIT_API_KEY || '').trim();
+    const workflowId = String(process.env.DIDIT_WORKFLOW_ID || '').trim();
+    if (!apiKey || !UUID_PATTERN.test(workflowId)) {
+      return res.status(503).json({ error: 'La vérification Didit n’est pas encore configurée.' });
     }
+    const appUrl = String(process.env.APP_URL || '').trim();
+    let callback: string;
+    try {
+      const origin = new URL(appUrl);
+      if (process.env.NODE_ENV === 'production' && origin.protocol !== 'https:') throw new Error('APP_URL doit utiliser HTTPS.');
+      callback = new URL('/app?verification=complete', origin).toString();
+    } catch {
+      return res.status(503).json({ error: 'L’URL de retour de vérification n’est pas correctement configurée.' });
+    }
+
+    const providerResponse = await fetch('https://verification.didit.me/v3/session/', {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workflow_id: workflowId,
+        vendor_data: `matable-shop-${shop.id}`,
+        callback,
+        callback_method: 'both',
+        language: 'fr',
+        metadata: { shop_id: String(shop.id) },
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const providerPayload: unknown = await providerResponse.json().catch(() => null);
+    if (!providerResponse.ok) {
+      console.error('Didit session creation failed:', providerResponse.status);
+      return res.status(providerResponse.status === 429 ? 503 : 502).json({
+        error: 'Didit n’a pas pu démarrer la vérification. Réessayez ou contactez le support.',
+      });
+    }
+    if (!isDiditSession(providerPayload)) {
+      console.error('Didit returned an invalid session response.');
+      return res.status(502).json({ error: 'La réponse de Didit est invalide. Réessayez plus tard.' });
+    }
+
+    const consentAt = new Date().toISOString();
+    const creationResult = await dbTransaction(async (transaction) => {
+      if (process.env.NODE_ENV === 'production') {
+        await transaction.get('SELECT id FROM shops WHERE id = ? FOR UPDATE', [shop.id]);
+      }
+      const currentShop = await transaction.get<{ merchant_verification_status: string }>(
+        'SELECT merchant_verification_status FROM shops WHERE id = ?',
+        [shop.id],
+      );
+      if (!currentShop) return 'shop_missing';
+      if (currentShop.merchant_verification_status === 'verified') return 'already_verified';
+      const latestSession = await transaction.get<{ created_at: string }>(
+        'SELECT created_at FROM didit_verification_sessions WHERE shop_id = ? ORDER BY created_at DESC LIMIT 1',
+        [shop.id],
+      );
+      const currentTime = Date.now();
+      const latestTime = latestSession ? Date.parse(latestSession.created_at) : 0;
+      const createdAt = new Date(Math.max(currentTime, latestTime + 1)).toISOString();
+      const inserted = await transaction.run(`INSERT INTO didit_verification_sessions
+        (session_id, shop_id, workflow_id, status, consent_at, consent_version, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(session_id) DO NOTHING`,
+      [providerPayload.session_id, shop.id, workflowId, providerPayload.status, consentAt, CONSENT_VERSION, createdAt, createdAt]);
+      if (inserted.changes !== 1) return 'duplicate_session';
+      await transaction.run(`UPDATE shops SET merchant_verification_status = 'submitted',
+        publication_status = CASE WHEN is_active = 0 THEN 'suspended' ELSE 'draft' END WHERE id = ?`, [shop.id]);
+      return 'created';
+    });
+    if (creationResult === 'already_verified') return res.status(409).json({ error: 'Cette identité a déjà été vérifiée.' });
+    if (creationResult === 'shop_missing') return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (creationResult === 'duplicate_session') {
+      console.error('Didit returned a duplicate session ID; refusing to associate it with another shop.');
+      return res.status(502).json({ error: 'Didit a renvoyé une session invalide. Réessayez plus tard.' });
+    }
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(201).json({
+      session_id: providerPayload.session_id,
+      session_url: providerPayload.url,
+      status: mapDiditStatus(providerPayload.status),
+      submitted_at: consentAt,
+    });
   });
 
   const adminRouter = Router();
   adminRouter.get('/', async (_req, res) => {
-    const rows = await dbAll<VerificationRow>(`SELECT v.shop_id, v.document_type, v.document_number_last4, v.identity_data_ciphertext,
-      v.document_back_ciphertext IS NOT NULL AS has_document_back,
-      v.client_face_distance, v.status, v.decision_method, v.submitted_at, v.reviewed_at, v.reviewer_note,
-      s.name AS shop_name, s.slug AS shop_slug, s.owner_email
-      FROM merchant_identity_verifications v JOIN shops s ON s.id = v.shop_id
-      ORDER BY CASE WHEN v.status IN ('submitted', 'under_review') THEN 0 ELSE 1 END, v.submitted_at DESC`);
+    const rows = await dbAll<Record<string, unknown>>(`SELECT
+      s.id AS shop_id, s.name AS shop_name, s.slug AS shop_slug, s.merchant_verification_status AS status,
+      v.session_id, v.status AS provider_status, v.created_at AS submitted_at, v.updated_at
+      FROM shops s
+      LEFT JOIN didit_verification_sessions v ON v.session_id = (
+        SELECT latest.session_id FROM didit_verification_sessions latest
+        WHERE latest.shop_id = s.id ORDER BY latest.created_at DESC LIMIT 1
+      )
+      WHERE s.merchant_verification_status <> 'not_required'
+      ORDER BY CASE WHEN s.merchant_verification_status IN ('pending', 'submitted', 'under_review', 'rejected') THEN 0 ELSE 1 END,
+        v.created_at DESC NULLS LAST`);
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ verifications: rows.map((row) => {
-      try {
-        const identity = JSON.parse(decryptKycValue(row.identity_data_ciphertext)) as VerificationRow['identity_data'] & { ocr_text?: string };
-        return { ...row, identity_data: { first_name: identity?.first_name || '', last_name: identity?.last_name || '', birth_date: identity?.birth_date || '' }, identity_data_ciphertext: undefined };
-      } catch {
-        return { ...row, identity_data: null, identity_data_ciphertext: undefined };
-      }
-    }) });
+    res.json({ verifications: rows });
   });
 
-  adminRouter.get('/:shopId/media/:kind', async (req, res) => {
-    const column = req.params.kind === 'document' ? 'document' : req.params.kind === 'back' ? 'document_back' : req.params.kind === 'selfie' ? 'selfie' : null;
-    if (!column) return res.status(404).json({ error: 'Média introuvable.' });
-    const row = await dbGet<VerificationRow>(`SELECT ${column}_mime_type, ${column}_ciphertext FROM merchant_identity_verifications WHERE shop_id = ?`, [Number(req.params.shopId)]);
-    if (!row) return res.status(404).json({ error: 'Vérification introuvable.' });
-    try {
-      const mimeType = row[`${column}_mime_type` as 'document_mime_type' | 'document_back_mime_type' | 'selfie_mime_type'];
-      const encrypted = row[`${column}_ciphertext` as 'document_ciphertext' | 'document_back_ciphertext' | 'selfie_ciphertext'];
-      if (!mimeType || !encrypted) return res.status(404).json({ error: 'Média introuvable.' });
-      res.setHeader('Cache-Control', 'no-store, private');
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.type(mimeType).send(Buffer.from(decryptKycValue(encrypted), 'base64'));
-    } catch {
-      res.status(500).json({ error: 'Impossible de déchiffrer le média.' });
+  webhookRouter.post('/', async (req, res) => {
+    const secret = String(process.env.DIDIT_WEBHOOK_SECRET || '').trim();
+    if (!secret) return res.status(503).json({ error: 'Le webhook Didit n’est pas configuré.' });
+    if (!Buffer.isBuffer(req.body)) return res.status(400).json({ error: 'Corps webhook invalide.' });
+
+    const timestamp = Number(req.get('x-timestamp'));
+    if (!Number.isFinite(timestamp) || Math.abs(Date.now() / 1000 - timestamp) > 300) {
+      return res.status(401).json({ error: 'Horodatage webhook invalide ou expiré.' });
     }
+    let event: DiditWebhookEvent;
+    try {
+      event = JSON.parse(req.body.toString('utf8')) as DiditWebhookEvent;
+    } catch {
+      return res.status(400).json({ error: 'Corps webhook JSON invalide.' });
+    }
+    if (!Number.isFinite(event.timestamp) || Math.abs(Date.now() / 1000 - event.timestamp) > 300) {
+      return res.status(401).json({ error: 'Horodatage signé du webhook invalide ou expiré.' });
+    }
+    const canonicalPayload = sortedJson(event);
+    const validSignature = signatureMatches(req.get('x-signature-v2'), req.body, secret, canonicalPayload)
+      || signatureMatches(req.get('x-signature'), req.body, secret);
+    if (!validSignature) return res.status(401).json({ error: 'Signature webhook Didit invalide.' });
+    if (event.webhook_type !== 'status.updated' || typeof event.event_id !== 'string' || !UUID_PATTERN.test(event.event_id)
+      || typeof event.session_id !== 'string' || typeof event.status !== 'string') {
+      return res.status(204).end();
+    }
+
+    const receivedAt = new Date(timestamp * 1000).toISOString();
+    const sessionKnown = await dbTransaction(async (transaction) => {
+      const session = await transaction.get<{ session_id: string; shop_id: number; last_webhook_at: string | null }>(
+        `SELECT session_id, shop_id, last_webhook_at FROM didit_verification_sessions WHERE session_id = ?${process.env.NODE_ENV === 'production' ? ' FOR UPDATE' : ''}`,
+        [event.session_id],
+      );
+      if (!session) return false;
+      if (process.env.NODE_ENV === 'production') {
+        await transaction.get('SELECT id FROM shops WHERE id = ? FOR UPDATE', [session.shop_id]);
+      }
+      const latestSession = await transaction.get<{ session_id: string }>(
+        'SELECT session_id FROM didit_verification_sessions WHERE shop_id = ? ORDER BY created_at DESC LIMIT 1',
+        [session.shop_id],
+      );
+      if (latestSession?.session_id !== session.session_id) return true;
+      const inserted = await transaction.run(
+        'INSERT INTO didit_webhook_events (event_id, received_at) VALUES (?, ?) ON CONFLICT(event_id) DO NOTHING',
+        [event.event_id, new Date().toISOString()],
+      );
+      if (inserted.changes !== 1 || (session.last_webhook_at && Date.parse(session.last_webhook_at) > timestamp * 1000)) return true;
+
+      const merchantStatus = mapDiditStatus(event.status);
+      await transaction.run(
+        'UPDATE didit_verification_sessions SET status = ?, updated_at = ?, last_webhook_at = ? WHERE session_id = ?',
+        [event.status, receivedAt, receivedAt, session.session_id],
+      );
+      await transaction.run(`UPDATE shops SET merchant_verification_status = ?,
+        publication_status = CASE WHEN is_active = 0 THEN 'suspended' WHEN ? = 'verified' THEN publication_status ELSE 'draft' END
+        WHERE id = ?`, [merchantStatus, merchantStatus, session.shop_id]);
+      return true;
+    });
+    if (!sessionKnown) return res.status(503).json({ error: 'Session Didit inconnue, réessayez le webhook.' });
+    await dbRun('DELETE FROM didit_webhook_events WHERE received_at < ?', [new Date(Date.now() - 30 * 86400000).toISOString()]);
+    res.status(204).end();
   });
 
-  adminRouter.patch('/:shopId', async (req, res) => {
-    const shopId = Number(req.params.shopId);
-    const status = String(req.body?.status || '');
-    if (!['under_review', 'verified', 'rejected'].includes(status)) return res.status(400).json({ error: 'Décision de vérification invalide.' });
-    const row = await dbGet<{ shop_id: number }>('SELECT shop_id FROM merchant_identity_verifications WHERE shop_id = ?', [shopId]);
-    if (!row) return res.status(404).json({ error: 'Vérification introuvable.' });
-    const note = String(req.body?.reviewer_note || '').replace(/[<>]/g, '').slice(0, 500) || null;
-    const reviewedAt = status === 'under_review' ? null : new Date().toISOString();
-    await dbRun("UPDATE merchant_identity_verifications SET status = ?, decision_method = 'manual', reviewed_at = ?, reviewer_note = ? WHERE shop_id = ?", [status, reviewedAt, note, shopId]);
-    await dbRun('UPDATE shops SET merchant_verification_status = ? WHERE id = ?', [status, shopId]);
-    res.setHeader('Cache-Control', 'no-store');
-    res.json({ success: true, status, reviewed_at: reviewedAt });
-  });
-
-  return { merchantRouter: router, adminRouter };
+  return { merchantRouter: router, adminRouter, webhookRouter };
 }

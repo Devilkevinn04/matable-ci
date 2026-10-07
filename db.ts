@@ -135,16 +135,16 @@ const sqliteSchema = `
   CREATE INDEX IF NOT EXISTS idx_customer_reports_moderation ON customer_reports(status, created_at DESC);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_reports_one_open_per_target
     ON customer_reports(user_id, target_type, target_id) WHERE status IN ('pending', 'in_review');
-  CREATE TABLE IF NOT EXISTS merchant_identity_verifications (
-    shop_id INTEGER PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
-    document_type TEXT NOT NULL, document_number_hash TEXT NOT NULL UNIQUE,
-    document_number_last4 TEXT NOT NULL DEFAULT '', identity_data_ciphertext TEXT NOT NULL,
-    document_mime_type TEXT NOT NULL, document_ciphertext TEXT NOT NULL,
-    document_back_mime_type TEXT, document_back_ciphertext TEXT,
-    selfie_mime_type TEXT NOT NULL, selfie_ciphertext TEXT NOT NULL,
-    client_face_distance REAL, status TEXT NOT NULL DEFAULT 'submitted', decision_method TEXT NOT NULL DEFAULT 'manual',
-    submitted_at TEXT NOT NULL, reviewed_at TEXT, reviewer_note TEXT
+  CREATE TABLE IF NOT EXISTS didit_verification_sessions (
+    session_id TEXT PRIMARY KEY, shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    workflow_id TEXT NOT NULL, status TEXT NOT NULL, consent_at TEXT NOT NULL, consent_version TEXT NOT NULL, last_webhook_at TEXT,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   );
+  CREATE INDEX IF NOT EXISTS idx_didit_sessions_shop_created ON didit_verification_sessions(shop_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS didit_webhook_events (
+    event_id TEXT PRIMARY KEY, received_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS didit_schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS id_allocators (name TEXT PRIMARY KEY, last_id INTEGER NOT NULL);
   CREATE INDEX IF NOT EXISTS idx_products_shop_id ON products(shop_id);
   CREATE INDEX IF NOT EXISTS idx_products_shop_available ON products(shop_id, is_available);
@@ -160,6 +160,7 @@ const sqliteSchema = `
 if (sqliteDb) {
   sqliteDb.exec(sqliteSchema);
   migrateSqlite(sqliteDb);
+  migrateLegacyKyc(sqliteDb);
 }
 
 function migrateSqlite(connection: Database.Database) {
@@ -224,12 +225,23 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('users', 'password_hash', 'TEXT');
   addColumn('users', 'is_active', 'INTEGER DEFAULT 1');
   addColumn('user_sessions', 'fingerprint', 'TEXT');
+  addColumn('didit_verification_sessions', 'consent_at', "TEXT NOT NULL DEFAULT ''");
+  addColumn('didit_verification_sessions', 'consent_version', "TEXT NOT NULL DEFAULT ''");
+  addColumn('didit_verification_sessions', 'last_webhook_at', 'TEXT');
   connection.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_shops_owner_email_unique ON shops (LOWER(owner_email)) WHERE owner_email IS NOT NULL AND owner_email <> ''");
-  addColumn('merchant_identity_verifications', 'document_number_last4', "TEXT NOT NULL DEFAULT ''");
-  addColumn('merchant_identity_verifications', 'identity_data_ciphertext', 'TEXT');
-  addColumn('merchant_identity_verifications', 'decision_method', "TEXT NOT NULL DEFAULT 'manual'");
-  addColumn('merchant_identity_verifications', 'document_back_mime_type', 'TEXT');
-  addColumn('merchant_identity_verifications', 'document_back_ciphertext', 'TEXT');
+}
+
+function migrateLegacyKyc(connection: Database.Database) {
+  connection.exec('CREATE TABLE IF NOT EXISTS didit_schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)');
+  const migrationName = 'replace_legacy_kyc_with_didit';
+  const applied = connection.prepare('SELECT name FROM didit_schema_migrations WHERE name = ?').get(migrationName);
+  if (applied) return;
+  connection.transaction(() => {
+    connection.exec(`UPDATE shops SET merchant_verification_status = 'pending',
+      publication_status = CASE WHEN is_active = 0 THEN 'suspended' ELSE 'draft' END`);
+    connection.exec('DROP TABLE IF EXISTS merchant_identity_verifications');
+    connection.prepare('INSERT INTO didit_schema_migrations (name, applied_at) VALUES (?, ?)').run(migrationName, new Date().toISOString());
+  })();
 }
 
 const postgresMigrations = [
@@ -413,22 +425,17 @@ const postgresMigrations = [
   'UPDATE products SET is_visible = is_available WHERE is_visible = 1 AND is_available = 0 AND stock > 0',
   'CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id)',
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_shops_owner_email_unique ON shops (LOWER(owner_email)) WHERE owner_email IS NOT NULL AND owner_email <> ''",
-  `CREATE TABLE IF NOT EXISTS merchant_identity_verifications (
-    shop_id BIGINT PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
-    document_type TEXT NOT NULL, document_number_hash TEXT NOT NULL UNIQUE,
-    document_number_last4 TEXT NOT NULL DEFAULT '', identity_data_ciphertext TEXT NOT NULL,
-    document_mime_type TEXT NOT NULL,
-    document_ciphertext TEXT NOT NULL, document_back_mime_type TEXT, document_back_ciphertext TEXT,
-    selfie_mime_type TEXT NOT NULL,
-    selfie_ciphertext TEXT NOT NULL, client_face_distance DOUBLE PRECISION,
-    status TEXT NOT NULL DEFAULT 'submitted', decision_method TEXT NOT NULL DEFAULT 'manual', submitted_at TEXT NOT NULL,
-    reviewed_at TEXT, reviewer_note TEXT
+  `CREATE TABLE IF NOT EXISTS didit_verification_sessions (
+    session_id TEXT PRIMARY KEY, shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    workflow_id TEXT NOT NULL, status TEXT NOT NULL, consent_at TEXT NOT NULL, consent_version TEXT NOT NULL, last_webhook_at TEXT,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
-  "ALTER TABLE merchant_identity_verifications ADD COLUMN IF NOT EXISTS document_number_last4 TEXT NOT NULL DEFAULT ''",
-  'ALTER TABLE merchant_identity_verifications ADD COLUMN IF NOT EXISTS identity_data_ciphertext TEXT',
-  "ALTER TABLE merchant_identity_verifications ADD COLUMN IF NOT EXISTS decision_method TEXT NOT NULL DEFAULT 'manual'",
-  'ALTER TABLE merchant_identity_verifications ADD COLUMN IF NOT EXISTS document_back_mime_type TEXT',
-  'ALTER TABLE merchant_identity_verifications ADD COLUMN IF NOT EXISTS document_back_ciphertext TEXT',
+  "ALTER TABLE didit_verification_sessions ADD COLUMN IF NOT EXISTS consent_at TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE didit_verification_sessions ADD COLUMN IF NOT EXISTS consent_version TEXT NOT NULL DEFAULT ''",
+  'ALTER TABLE didit_verification_sessions ADD COLUMN IF NOT EXISTS last_webhook_at TEXT',
+  'CREATE INDEX IF NOT EXISTS idx_didit_sessions_shop_created ON didit_verification_sessions(shop_id, created_at DESC)',
+  'CREATE TABLE IF NOT EXISTS didit_webhook_events (event_id TEXT PRIMARY KEY, received_at TEXT NOT NULL)',
+  'CREATE TABLE IF NOT EXISTS didit_schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)',
 ];
 
 export const db = sqliteDb ?? new Proxy({} as Database.Database, {
@@ -444,6 +451,14 @@ export async function initializeDatabase() {
     try {
       await client.query('BEGIN');
       for (const migration of postgresMigrations) await client.query(migration);
+      const migrationName = 'replace_legacy_kyc_with_didit';
+      const migration = await client.query('SELECT name FROM didit_schema_migrations WHERE name = $1', [migrationName]);
+      if (migration.rowCount === 0) {
+        await client.query(`UPDATE shops SET merchant_verification_status = 'pending',
+          publication_status = CASE WHEN is_active = 0 THEN 'suspended' ELSE 'draft' END`);
+        await client.query('DROP TABLE IF EXISTS merchant_identity_verifications');
+        await client.query('INSERT INTO didit_schema_migrations (name, applied_at) VALUES ($1, $2)', [migrationName, new Date().toISOString()]);
+      }
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');

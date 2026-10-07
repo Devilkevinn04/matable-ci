@@ -1,5 +1,6 @@
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHmac, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { rm } from 'node:fs/promises';
@@ -11,6 +12,7 @@ import Database from 'better-sqlite3';
 const TEST_PORT = 43123;
 const TEST_DB_PATH = path.join(tmpdir(), `matable-test-${Date.now()}.db`);
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
+const DIDIT_WEBHOOK_SECRET = 'full-flow-didit-webhook-test-secret';
 let serverProcess: ReturnType<typeof spawn> | null = null;
 let cookieJar = '';
 
@@ -96,6 +98,15 @@ function uniqueEmail() {
   return `merchant-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
 }
 
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 async function registerCustomer(firstName = 'Client', lastName = 'Test') {
   const registered = await apiFetch('/api/auth/customer-register', {
     method: 'POST',
@@ -119,6 +130,7 @@ before(async () => {
     env: {
       ...process.env,
       ADMIN_ACCESS_KEY: 'super-admin-demo-key',
+      DIDIT_WEBHOOK_SECRET,
       GOOGLE_OAUTH_CLIENT_ID: '',
       GOOGLE_OAUTH_CLIENT_SECRET: '',
       APPLE_SERVICE_ID: '',
@@ -510,23 +522,12 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   });
   assert.equal(pendingOrder.response.status, 403, JSON.stringify(pendingOrder.payload));
 
-  const testPng = `data:image/png;base64,${Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from([0])]).toString('base64')}`;
-  const verificationSubmission = await apiFetch(`/api/shops/${shopId}/identity-verification`, {
+  const legacyKycSubmission = await apiFetch(`/api/shops/${shopId}/identity-verification`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      document_type: 'cni',
-      document_number: `CI${Date.now()}1234`,
-      document_image: testPng,
-      document_back_image: testPng,
-      selfie_image: testPng,
-      face_distance: 0.42,
-      identity_data: { first_name: 'Client', last_name: 'Test', birth_date: '1990-01-01', ocr_text: 'Texte OCR privé de test' },
-    }),
+    body: JSON.stringify({ document_image: 'client-controlled-data' }),
   });
-  assert.equal(verificationSubmission.response.status, 201, JSON.stringify(verificationSubmission.payload));
-  assert.equal(verificationSubmission.payload.status, 'under_review');
-  assert.equal(verificationSubmission.payload.decision_method, 'manual_review');
+  assert.equal(legacyKycSubmission.response.status, 404);
 
   const adminLogin = await apiFetch('/api/auth/admin-login', {
     method: 'POST',
@@ -537,25 +538,19 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   const verificationQueue = await apiFetch('/api/admin/identity-verifications');
   assert.equal(verificationQueue.response.status, 200, JSON.stringify(verificationQueue.payload));
   const verificationRecord = verificationQueue.payload.verifications.find((record: any) => record.shop_id === shopId);
-  assert.equal(verificationRecord.identity_data.first_name, 'Client');
-  assert.equal('document_ciphertext' in verificationRecord, false);
-  assert.equal(verificationRecord.decision_method, 'manual_review');
-  assert.equal(Boolean(verificationRecord.has_document_back), true);
+  assert.equal(verificationRecord.session_id, null);
   const adminShopStates = await apiFetch('/api/admin/shops');
   assert.equal(adminShopStates.response.status, 200, JSON.stringify(adminShopStates.payload));
-  const adminShop = adminShopStates.payload.find((shop: any) => shop.id === shopId);
-  assert.equal(adminShop.merchant_verification_status, 'under_review');
 
-  const secureMedia = await apiFetch(`/api/admin/identity-verifications/${shopId}/media/document`);
-  assert.equal(secureMedia.response.status, 200);
-  const secureBackMedia = await apiFetch(`/api/admin/identity-verifications/${shopId}/media/back`);
-  assert.equal(secureBackMedia.response.status, 200);
-  const reviewDecision = await apiFetch(`/api/admin/identity-verifications/${shopId}`, {
+  const rejectedManualApproval = await apiFetch(`/api/admin/identity-verifications/${shopId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'verified', reviewer_note: 'Contrôle manuel effectué.' }),
+    body: JSON.stringify({ status: 'verified' }),
   });
-  assert.equal(reviewDecision.response.status, 200, JSON.stringify(reviewDecision.payload));
+  assert.equal(rejectedManualApproval.response.status, 404);
+  const testDb = new Database(TEST_DB_PATH);
+  testDb.prepare("UPDATE shops SET merchant_verification_status = 'verified' WHERE id = ?").run(shopId);
+  testDb.close();
   const adminLogout = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
   assert.equal(adminLogout.response.status, 200, JSON.stringify(adminLogout.payload));
 
@@ -772,11 +767,11 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   assert.equal(deletedCustomerSession.payload.authenticated, false);
 });
 
-test('client-provided KYC checks never approve automatically and admin review is required before publication', async () => {
+test('Didit alone controls merchant verification; signed webhooks are fresh and idempotent', async () => {
   const registration = await apiFetch('/api/shops', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Boutique revue KYC', whatsapp_number: uniquePhone(), email: uniqueEmail(), pin_code: '684219', category: 'fashion' }),
+    body: JSON.stringify({ name: 'Boutique vérification Didit', whatsapp_number: uniquePhone(), email: uniqueEmail(), pin_code: '684219', category: 'fashion' }),
   });
   assert.equal(registration.response.status, 200, JSON.stringify(registration.payload));
   const shopId = registration.payload.shop.id;
@@ -786,30 +781,24 @@ test('client-provided KYC checks never approve automatically and admin review is
     body: JSON.stringify({ tier: 'standard' }),
   });
   assert.equal(trialStart.response.status, 200, JSON.stringify(trialStart.payload));
-  const documentNumber = `CI${Date.now()}${Math.floor(Math.random() * 10000)}`;
-  const image = `data:image/png;base64,${Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from([0])]).toString('base64')}`;
-  const verification = await apiFetch(`/api/shops/${shopId}/identity-verification`, {
+  const legacySubmission = await apiFetch(`/api/shops/${shopId}/identity-verification`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      document_type: 'cni',
-      document_number: documentNumber,
-      document_image: image,
-      document_back_image: image,
-      selfie_image: image,
-      face_distance: 0.48,
-      identity_data: {
-        first_name: 'Amina',
-        last_name: 'Kouame',
-        birth_date: '1994-05-12',
-        ocr_text: `REPUBLIC OF COTE D IVOIRE CARTE NATIONALE D IDENTITE ${documentNumber} NOM KOUAME PRENOMS AMINA`,
-        ocr_confidence: 82,
-      },
-    }),
+    body: JSON.stringify({ document_image: 'untrusted' }),
   });
-  assert.equal(verification.response.status, 201, JSON.stringify(verification.payload));
-  assert.equal(verification.payload.status, 'under_review');
-  assert.equal(verification.payload.decision_method, 'manual_review');
+  assert.equal(legacySubmission.response.status, 404);
+  const missingConsent = await apiFetch(`/api/shops/${shopId}/identity-verification/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  assert.equal(missingConsent.response.status, 400);
+  const unconfiguredSession = await apiFetch(`/api/shops/${shopId}/identity-verification/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ consent: true }),
+  });
+  assert.equal(unconfiguredSession.response.status, 503);
 
   const hiddenBeforePublication = await fetch(`${BASE_URL}/api/shops/${registration.payload.shop.slug}`);
   assert.equal(hiddenBeforePublication.status, 404);
@@ -826,12 +815,85 @@ test('client-provided KYC checks never approve automatically and admin review is
     body: JSON.stringify({ key: 'super-admin-demo-key' }),
   });
   assert.equal(adminLogin.response.status, 200, JSON.stringify(adminLogin.payload));
-  const adminReview = await apiFetch(`/api/admin/identity-verifications/${shopId}`, {
+  const manualApproval = await apiFetch(`/api/admin/identity-verifications/${shopId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'verified', note: 'Pièce examinée manuellement.' }),
+    body: JSON.stringify({ status: 'verified' }),
   });
-  assert.equal(adminReview.response.status, 200, JSON.stringify(adminReview.payload));
+  assert.equal(manualApproval.response.status, 404);
+
+  const sessionId = randomUUID();
+  const previousSessionId = randomUUID();
+  const oldTimestamp = new Date(Date.now() - 60_000).toISOString();
+  const testDb = new Database(TEST_DB_PATH);
+  testDb.prepare(`INSERT INTO didit_verification_sessions
+    (session_id, shop_id, workflow_id, status, consent_at, consent_version, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(previousSessionId, shopId, randomUUID(), 'In Progress', oldTimestamp, 'didit-v1', new Date(Date.now() - 120_000).toISOString(), oldTimestamp);
+  testDb.prepare(`INSERT INTO didit_verification_sessions
+    (session_id, shop_id, workflow_id, status, consent_at, consent_version, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(sessionId, shopId, randomUUID(), 'In Progress', oldTimestamp, 'didit-v1', oldTimestamp, oldTimestamp);
+  testDb.close();
+
+  const eventId = randomUUID();
+  const timestamp = Math.floor(Date.now() / 1000);
+  const event = { event_id: eventId, session_id: sessionId, status: 'Approved', webhook_type: 'status.updated', timestamp };
+  const payload = JSON.stringify(event);
+  const signature = createHmac('sha256', DIDIT_WEBHOOK_SECRET).update(canonicalJson(event)).digest('hex');
+  const webhookUrl = `${BASE_URL}/api/webhooks/didit`;
+  const invalidSignature = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Timestamp': String(timestamp), 'X-Signature-V2': '00' },
+    body: payload,
+  });
+  assert.equal(invalidSignature.status, 401);
+  const expiredWebhook = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Timestamp': String(timestamp - 3600), 'X-Signature-V2': signature },
+    body: payload,
+  });
+  assert.equal(expiredWebhook.status, 401);
+  const expiredBodyEvent = { ...event, event_id: randomUUID(), timestamp: timestamp - 3600 };
+  const expiredBodyPayload = JSON.stringify(expiredBodyEvent);
+  const expiredBodySignature = createHmac('sha256', DIDIT_WEBHOOK_SECRET).update(canonicalJson(expiredBodyEvent)).digest('hex');
+  const expiredSignedBody = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Timestamp': String(timestamp), 'X-Signature-V2': expiredBodySignature },
+    body: expiredBodyPayload,
+  });
+  assert.equal(expiredSignedBody.status, 401);
+  const approvedWebhook = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Timestamp': String(timestamp), 'X-Signature-V2': signature },
+    body: payload,
+  });
+  assert.equal(approvedWebhook.status, 204);
+
+  const duplicateWithDifferentDecision = { ...event, status: 'Declined' };
+  const duplicatePayload = JSON.stringify(duplicateWithDifferentDecision);
+  const duplicateSignature = createHmac('sha256', DIDIT_WEBHOOK_SECRET).update(canonicalJson(duplicateWithDifferentDecision)).digest('hex');
+  const duplicateWebhook = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Timestamp': String(timestamp), 'X-Signature-V2': duplicateSignature },
+    body: duplicatePayload,
+  });
+  assert.equal(duplicateWebhook.status, 204);
+  const staleSessionEvent = { event_id: randomUUID(), session_id: previousSessionId, status: 'Declined', webhook_type: 'status.updated', timestamp };
+  const staleSessionPayload = JSON.stringify(staleSessionEvent);
+  const staleSessionSignature = createHmac('sha256', DIDIT_WEBHOOK_SECRET).update(canonicalJson(staleSessionEvent)).digest('hex');
+  const ignoredPreviousSession = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Timestamp': String(timestamp), 'X-Signature-V2': staleSessionSignature },
+    body: staleSessionPayload,
+  });
+  assert.equal(ignoredPreviousSession.status, 204);
+  const verificationQueue = await apiFetch('/api/admin/identity-verifications');
+  const verifiedRecord = verificationQueue.payload.verifications.find((record: any) => record.shop_id === shopId);
+  assert.equal(verifiedRecord.status, 'verified');
+  assert.equal(verifiedRecord.provider_status, 'Approved');
+  assert.equal(verifiedRecord.session_id, sessionId);
+
   const adminLogout = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
   assert.equal(adminLogout.response.status, 200, JSON.stringify(adminLogout.payload));
 
