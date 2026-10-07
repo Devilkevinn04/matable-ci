@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -130,7 +130,7 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         workflow_id: workflowId,
-        vendor_data: `matable-shop-${shop.id}`,
+        vendor_data: `matable-shop-${shop.id}-${randomUUID()}`,
         callback,
         callback_method: 'both',
         language: 'fr',
@@ -173,7 +173,15 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(session_id) DO NOTHING`,
       [providerPayload.session_id, shop.id, workflowId, providerPayload.status, consentAt, CONSENT_VERSION, createdAt, createdAt]);
-      if (inserted.changes !== 1) return 'duplicate_session';
+      if (inserted.changes !== 1) {
+        const existingSession = await transaction.get<{ shop_id: number; workflow_id: string }>(
+          'SELECT shop_id, workflow_id FROM didit_verification_sessions WHERE session_id = ?',
+          [providerPayload.session_id],
+        );
+        if (!existingSession || existingSession.shop_id !== shop.id || existingSession.workflow_id !== workflowId) {
+          return 'duplicate_session';
+        }
+      }
       await transaction.run(`UPDATE shops SET merchant_verification_status = 'submitted',
         publication_status = CASE WHEN is_active = 0 THEN 'suspended' ELSE 'draft' END WHERE id = ?`, [shop.id]);
       return 'created';

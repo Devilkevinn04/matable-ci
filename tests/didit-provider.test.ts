@@ -16,6 +16,9 @@ test('merchant session creation records consent and returns only Didit hosted ve
   const apiKey = 'server-only-test-api-key';
   const webhookStatus: string[] = [];
   let storedParameters: unknown[] = [];
+  let insertChanges = 1;
+  let existingSession: { shop_id: number; workflow_id: string } | undefined;
+  const vendorDataValues: string[] = [];
   const originalFetch = globalThis.fetch;
 
   process.env.DIDIT_API_KEY = apiKey;
@@ -28,7 +31,8 @@ test('merchant session creation records consent and returns only Didit hosted ve
     assert.equal(headers.get('x-api-key'), apiKey);
     const request = JSON.parse(String(init?.body));
     assert.equal(request.workflow_id, workflowId);
-    assert.equal(request.vendor_data, 'matable-shop-41');
+    assert.match(request.vendor_data, /^matable-shop-41-[0-9a-f-]{36}$/i);
+    vendorDataValues.push(request.vendor_data);
     assert.equal(request.callback, 'https://matable.example/app?verification=complete');
     assert.deepEqual(request.metadata, { shop_id: '41' });
     assert.equal('contact_details' in request, false);
@@ -52,12 +56,14 @@ test('merchant session creation records consent and returns only Didit hosted ve
     }) => Promise<T>) => operation({
       get: async <Row>(sql: string) => sql.includes('merchant_verification_status')
         ? { merchant_verification_status: 'pending' } as Row
+        : sql.includes('WHERE session_id = ?')
+          ? existingSession as Row | undefined
         : undefined,
       run: async (sql, params = []) => {
         webhookStatus.push(sql);
         if (sql.startsWith('INSERT INTO didit_verification_sessions')) {
           storedParameters = params;
-          return { changes: 1 };
+          return { changes: insertChanges };
         }
         return { changes: 1 };
       },
@@ -100,6 +106,25 @@ test('merchant session creation records consent and returns only Didit hosted ve
     assert.equal(storedParameters[6], storedParameters[7]);
     assert.equal(webhookStatus.length, 2);
     assert.equal(JSON.stringify(payload).includes(apiKey), false);
+
+    insertChanges = 0;
+    existingSession = { shop_id: 41, workflow_id: workflowId };
+    const retryResponse = await fetch(`http://127.0.0.1:${address.port}/api/shops/41/identity-verification/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ consent: true }),
+    });
+    assert.equal(retryResponse.status, 201);
+    assert.equal((await retryResponse.json()).session_url, `https://verify.didit.me/session/${sessionId}`);
+    assert.notEqual(vendorDataValues[0], vendorDataValues[1]);
+
+    existingSession = { shop_id: 42, workflow_id: workflowId };
+    const collisionResponse = await fetch(`http://127.0.0.1:${address.port}/api/shops/41/identity-verification/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ consent: true }),
+    });
+    assert.equal(collisionResponse.status, 502);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     globalThis.fetch = originalFetch;
