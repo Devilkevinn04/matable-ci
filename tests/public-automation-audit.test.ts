@@ -186,6 +186,8 @@ test('V1 public catalog reads preserve the legacy directory and storefront respo
     fetch(`${BASE_URL}/api/v1/catalog/storefronts`),
   ]);
   assert.equal(catalogDirectory.status, legacyDirectory.status);
+  assert.match(catalogDirectory.headers.get('cache-control') || '', /public, max-age=30/);
+  assert.match(legacyDirectory.headers.get('cache-control') || '', /public, max-age=30/);
   const legacyDirectoryPayload = await legacyDirectory.json();
   const catalogDirectoryPayload = await catalogDirectory.json();
   assert.deepEqual(catalogDirectoryPayload, legacyDirectoryPayload);
@@ -200,7 +202,7 @@ test('V1 public catalog reads preserve the legacy directory and storefront respo
   assert.deepEqual(await catalogStorefront.json(), await legacyStorefront.json());
 });
 
-test('global security headers are present and API responses are not cached', async () => {
+test('global security headers are present and non-public API responses are not cached', async () => {
   const response = await fetch(`${BASE_URL}/api/health`);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
@@ -325,6 +327,7 @@ test('public product feed filters by category and city and ranks consented inter
   const query = new URLSearchParams({ sort: 'popular', category: shop.category, city: toDiscoveryCitySlug(shop.city!) });
   const response = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/feed?${query}`);
   assert.equal(response.status, 200);
+  assert.match(response.headers.get('cache-control') || '', /public, max-age=30/);
   const feed = await response.json() as {
     ranking_fallback: boolean;
     products: Array<{ id: number; popularity: { clicks: number }; shop: { category: string; city?: string } }>;
@@ -543,6 +546,21 @@ test('registration flow is coherent without external payment or WhatsApp API', a
     body: JSON.stringify({ phone: newPhone, pin: '987654' }),
   });
   assert.equal(merchantLogin.status, 200);
+  const database = new Database(TEST_DB_PATH);
+  database.prepare("UPDATE shops SET is_active = 0, publication_status = 'suspended' WHERE id = ?").run(createdPayload.shop.id);
+  database.close();
+  const inactiveOwnerLogin = await fetch(`${BASE_URL}/api/auth/merchant-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: newPhone, pin: '987654' }),
+  });
+  assert.equal(inactiveOwnerLogin.status, 200, await inactiveOwnerLogin.text());
+  const inactiveOwnerCookie = inactiveOwnerLogin.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(inactiveOwnerCookie);
+  const identityStatus = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/identity-verification`, {
+    headers: { Cookie: inactiveOwnerCookie },
+  });
+  assert.equal(identityStatus.status, 200, await identityStatus.text());
 });
 
 test('standard registration keeps delivery zones but does not grant premium social links', async () => {

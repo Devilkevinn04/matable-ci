@@ -62,11 +62,15 @@ export function canPublishShop(shop: ShopRecord, currentDate = new Date()): bool
 
 export function isShopPubliclyVisible(shop: ShopRecord, currentDate = new Date()): boolean {
   const publicationStatus = shop.publication_status ?? (shop.is_active ? 'active' : 'suspended');
+  if (!shop.is_active || publicationStatus === 'suspended') return false;
+  if (shop.merchant_verification_status === 'verified') return true;
   return publicationStatus === 'active' && canPublishShop(shop, currentDate);
 }
 
 export function canReceiveShopOrders(shop: ShopRecord, currentDate = new Date()): boolean {
-  return isShopPubliclyVisible(shop, currentDate) && computeIsShopOpen(shop);
+  return isShopPubliclyVisible(shop, currentDate)
+    && getShopPublicationBlockReason(shop, currentDate) === null
+    && computeIsShopOpen(shop);
 }
 
 export function getProductUnitPriceWithModifiers(product: ProductRecord, selectedModifiers: string[] = []): number {

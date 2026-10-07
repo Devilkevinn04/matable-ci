@@ -638,6 +638,7 @@ const {
   requireMerchantOwner,
   requireMerchantAccess,
   requireMerchantOwnShop,
+  requireMerchantIdentityOwnShop,
   cleanupExpiredSessions,
 } = createAuthSessionHelpers({ shops, refreshSubscriptionState });
 
@@ -784,7 +785,7 @@ async function startServer() {
 
   const app = express();
   const PORT = Number(process.env.PORT || 3000);
-  const verificationRouters = createMerchantVerificationRouter({ dbRun, dbGet, dbAll, dbTransaction, requireMerchantOwnShop });
+  const verificationRouters = createMerchantVerificationRouter({ dbRun, dbGet, dbAll, dbTransaction, requireMerchantIdentityOwnShop });
 
   applySecurityHeaders(app);
 

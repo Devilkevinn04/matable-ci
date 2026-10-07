@@ -359,6 +359,13 @@ export function createAuthSessionHelpers({
     next();
   }
 
+  async function requireMerchantIdentityOwnShop(req: Request, res: Response, next: express.NextFunction) {
+    const shop = await requireMerchantIdentity(req, res);
+    if (!shop) return;
+    if (Number(req.params.id) !== shop.id) return res.status(403).json({ error: 'Accès refusé à cette boutique.' });
+    next();
+  }
+
   async function cleanupExpiredSessions() {
     const now = Date.now();
     for (const [token, session] of merchantSessions) {
@@ -400,6 +407,7 @@ export function createAuthSessionHelpers({
     requireMerchantOwner,
     requireMerchantAccess,
     requireMerchantOwnShop,
+    requireMerchantIdentityOwnShop,
     cleanupExpiredSessions,
   };
 }

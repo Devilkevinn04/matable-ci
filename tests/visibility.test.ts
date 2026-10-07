@@ -129,7 +129,7 @@ test('trial limits and annual subscription prices match the published offer', ()
   assert.equal(getSubscriptionPrice('pro', 'annual'), 80000);
 });
 
-test('expired subscriptions remain publicly available during the two-day grace period only', () => {
+test('verified shops remain visible after subscription expiry but stop receiving orders after grace', () => {
   const shop = makeShop(1, {
     publication_status: 'active',
     merchant_verification_status: 'verified',
@@ -138,5 +138,6 @@ test('expired subscriptions remain publicly available during the two-day grace p
   });
   assert.equal(isShopPubliclyVisible(shop, new Date('2026-10-04T12:00:00.000Z')), true);
   assert.equal(canReceiveShopOrders(shop, new Date('2026-10-04T12:00:00.000Z')), true);
-  assert.equal(isShopPubliclyVisible(shop, new Date('2026-10-06T00:00:00.000Z')), false);
+  assert.equal(isShopPubliclyVisible(shop, new Date('2026-10-06T00:00:00.000Z')), true);
+  assert.equal(canReceiveShopOrders(shop, new Date('2026-10-06T00:00:00.000Z')), false);
 });

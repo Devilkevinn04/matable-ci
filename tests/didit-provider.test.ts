@@ -62,7 +62,7 @@ test('merchant session creation records consent and returns only Didit hosted ve
         return { changes: 1 };
       },
     }),
-    requireMerchantOwnShop: (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
+    requireMerchantIdentityOwnShop: (_req: express.Request, _res: express.Response, next: express.NextFunction) => next(),
   };
 
   const app = express();

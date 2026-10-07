@@ -53,7 +53,9 @@ export function AdminIdentityVerificationPanel({
 
   useEffect(() => {
     void refresh();
-    const timer = window.setInterval(() => void refresh(false), 30000);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refresh(false);
+    }, 120000);
     return () => window.clearInterval(timer);
   }, []);
 

@@ -92,7 +92,7 @@ export const AdminDashboard: React.FC = () => {
   const [contentModeration, setContentModeration] = useState<AdminContentModeration>({ reviews: [], reports: [] });
   const [contentModerationError, setContentModerationError] = useState('');
 
-  const fetchAdminShops = async (refreshOperations = true) => {
+  const fetchAdminShops = async () => {
     try {
       setLoading(true);
       const sessionRes = await fetch('/api/auth/session', { method: 'GET' });
@@ -117,7 +117,7 @@ export const AdminDashboard: React.FC = () => {
         await fetchAnalytics(analyticsDays);
         await fetchFinance(financeDays);
         await fetchSubscriptions();
-        if (refreshOperations) await fetchOperations();
+        await fetchOperations();
       } else if (res.status === 401) {
         setIsAuthenticated(false);
       }
@@ -241,14 +241,6 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     fetchAdminShops();
   }, []);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const refreshTimer = window.setInterval(() => {
-      fetchAdminShops(false);
-    }, 30000);
-    return () => window.clearInterval(refreshTimer);
-  }, [isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated && adminView === 'moderation') void fetchContentModeration();

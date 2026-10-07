@@ -48,9 +48,15 @@ export function MerchantIdentityVerification({ shopId, onStatusChange }: Merchan
 
   useEffect(() => {
     void refreshStatus();
-    const timer = window.setInterval(() => void refreshStatus(), 15000);
-    return () => window.clearInterval(timer);
   }, [refreshStatus]);
+
+  useEffect(() => {
+    if (!['submitted', 'under_review'].includes(status?.status || '')) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshStatus();
+    }, 60000);
+    return () => window.clearInterval(timer);
+  }, [refreshStatus, status?.status]);
 
   async function startVerification() {
     setBusy(true);

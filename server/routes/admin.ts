@@ -199,7 +199,6 @@ export function createAdminRouter(options: AdminRouterOptions) {
   };
 
   router.get('/analytics', async (req, res) => {
-    await refreshRuntimeDataFromDatabase();
     const shops = await loadShops();
     const requestedDays = Number(req.query.days);
     const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 90) : 30;
@@ -307,7 +306,6 @@ export function createAdminRouter(options: AdminRouterOptions) {
   });
 
   router.get('/payments', async (req, res) => {
-    await refreshRuntimeDataFromDatabase();
     const requestedDays = Number(req.query.days);
     const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 365) : 30;
     const since = new Date(Date.now() - days * 86400000).toISOString();
@@ -394,7 +392,6 @@ export function createAdminRouter(options: AdminRouterOptions) {
   });
 
   router.get('/subscriptions', async (_req, res) => {
-    await refreshRuntimeDataFromDatabase();
     const shops = await loadShops();
     const now = new Date();
     const extensionLogs = await dbAll<{ shop_id: number; details: string; created_at: string }>(
@@ -576,7 +573,6 @@ export function createAdminRouter(options: AdminRouterOptions) {
   });
 
   router.get('/shops', async (_req, res) => {
-    await refreshRuntimeDataFromDatabase();
     const [shops, productCounts, orderStats] = await Promise.all([
       loadShops(),
       dbAll<{ shop_id: number; count: number }>('SELECT shop_id, COUNT(*) AS count FROM products GROUP BY shop_id'),
@@ -616,7 +612,6 @@ export function createAdminRouter(options: AdminRouterOptions) {
   });
 
   router.get('/health', async (_req, res) => {
-    await refreshRuntimeDataFromDatabase();
     const latestAnalytics = await dbGet<{ created_at?: string }>('SELECT created_at FROM analytics_events ORDER BY created_at DESC LIMIT 1');
     const counts = {
       shops: Number((await dbGet<{ count: number }>('SELECT COUNT(*) AS count FROM shops'))?.count || 0),
@@ -631,7 +626,6 @@ export function createAdminRouter(options: AdminRouterOptions) {
   });
 
   router.get('/orders', async (req, res) => {
-    await refreshRuntimeDataFromDatabase();
     const requestedLimit = Number(req.query.limit);
     const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
     const requestedStatus = String(req.query.status || 'all');

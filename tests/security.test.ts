@@ -86,7 +86,7 @@ test('publication eligibility is independent from the shop opening toggle', () =
   assert.equal(canReceiveShopOrders({ ...shop, is_open: true }, currentDate), true);
 });
 
-test('publication requires an active shop, verified identity and eligible subscription', () => {
+test('a Didit-verified active shop is visible without a subscription but cannot bypass admin suspension', () => {
   const currentDate = new Date('2026-10-01T12:00:00.000Z');
   const shop = {
     id: 2,
@@ -99,10 +99,11 @@ test('publication requires an active shop, verified identity and eligible subscr
     trial_end: '2026-10-31T00:00:00.000Z',
   } as any;
 
-  assert.equal(isShopPubliclyVisible({ ...shop, publication_status: 'draft' }, currentDate), false);
+  assert.equal(isShopPubliclyVisible({ ...shop, publication_status: 'draft' }, currentDate), true);
   assert.equal(isShopPubliclyVisible({ ...shop, publication_status: 'suspended' }, currentDate), false);
   assert.equal(isShopPubliclyVisible({ ...shop, merchant_verification_status: 'pending' }, currentDate), false);
-  assert.equal(isShopPubliclyVisible({ ...shop, subscription_status: 'past_due' }, currentDate), false);
+  assert.equal(isShopPubliclyVisible({ ...shop, subscription_status: 'past_due' }, currentDate), true);
+  assert.equal(canReceiveShopOrders({ ...shop, subscription_status: 'past_due' }, currentDate), false);
   assert.equal(isShopPubliclyVisible({ ...shop, is_active: false }, currentDate), false);
 });
 

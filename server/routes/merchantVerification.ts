@@ -18,7 +18,7 @@ interface MerchantVerificationOptions {
   dbGet: DbGet;
   dbAll: DbAll;
   dbTransaction: DbTransaction;
-  requireMerchantOwnShop: RequestHandler;
+  requireMerchantIdentityOwnShop: RequestHandler;
 }
 
 interface DiditSessionResponse {
@@ -76,11 +76,11 @@ function isDiditSession(value: unknown): value is DiditSessionResponse {
 }
 
 export function createMerchantVerificationRouter(options: MerchantVerificationOptions) {
-  const { dbRun, dbGet, dbAll, dbTransaction, requireMerchantOwnShop } = options;
+  const { dbRun, dbGet, dbAll, dbTransaction, requireMerchantIdentityOwnShop } = options;
   const router = Router();
   const webhookRouter = Router();
 
-  router.get('/:id/identity-verification', requireMerchantOwnShop, async (req, res) => {
+  router.get('/:id/identity-verification', requireMerchantIdentityOwnShop, async (req, res) => {
     const shopId = Number(req.params.id);
     const [shop, session] = await Promise.all([
       dbGet<{ merchant_verification_status: string }>('SELECT merchant_verification_status FROM shops WHERE id = ?', [shopId]),
@@ -100,7 +100,7 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
     });
   });
 
-  router.post('/:id/identity-verification/session', requireMerchantOwnShop, async (req, res) => {
+  router.post('/:id/identity-verification/session', requireMerchantIdentityOwnShop, async (req, res) => {
     const shopId = Number(req.params.id);
     const shop = await dbGet<{ id: number; merchant_verification_status: string }>(
       'SELECT id, merchant_verification_status FROM shops WHERE id = ?',
@@ -265,7 +265,7 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
         [event.status, receivedAt, receivedAt, session.session_id],
       );
       await transaction.run(`UPDATE shops SET merchant_verification_status = ?,
-        publication_status = CASE WHEN is_active = 0 THEN 'suspended' WHEN ? = 'verified' THEN publication_status ELSE 'draft' END
+        publication_status = CASE WHEN is_active = 0 OR publication_status = 'suspended' THEN 'suspended' WHEN ? = 'verified' THEN 'active' ELSE 'draft' END
         WHERE id = ?`, [merchantStatus, merchantStatus, session.shop_id]);
       return true;
     });

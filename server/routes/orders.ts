@@ -79,8 +79,8 @@ export function createOrderRouter({
     }
 
     const customerSession = await getCustomerSessionState(req, res);
-    if (!isShopPubliclyVisible(shop)) {
-      const blockReason = getShopPublicationBlockReason(shop);
+    const blockReason = getShopPublicationBlockReason(shop);
+    if (!isShopPubliclyVisible(shop) || blockReason === 'subscription') {
       const error = blockReason === 'verification'
         ? 'Cette boutique doit terminer sa vérification avant de recevoir des commandes.'
         : blockReason === 'subscription'

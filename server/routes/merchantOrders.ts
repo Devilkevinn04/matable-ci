@@ -182,12 +182,19 @@ export function createMerchantOrdersRouter({
     const shop = await getShopFromDatabase(shopId);
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
 
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.parse(`${today}T00:00:00.000Z`) + 86400000).toISOString().slice(0, 10);
     const [orderRows, productRows] = await Promise.all([
-      dbAll<Record<string, unknown>>('SELECT * FROM orders ORDER BY created_at DESC, id DESC'),
-      dbAll<Record<string, unknown>>('SELECT * FROM products WHERE shop_id = ?', [shopId]),
+      dbAll<Record<string, unknown>>(
+        `SELECT id, shop_id, created_at, status, total_amount, items FROM orders
+         WHERE shop_id = ? AND created_at >= ? AND created_at < ?
+         ORDER BY created_at DESC, id DESC`,
+        [shopId, `${today}T00:00:00.000Z`, `${tomorrow}T00:00:00.000Z`],
+      ),
+      dbAll<Record<string, unknown>>('SELECT id, title, stock FROM products WHERE shop_id = ?', [shopId]),
     ]);
     const currentOrders = orderRows.map(mapOrderRow);
-    const shopOrders = currentOrders.filter((order) => order.shop_id === shopId && isSameBusinessDay(order.created_at));
+    const shopOrders = currentOrders.filter((order) => isSameBusinessDay(order.created_at));
     const metrics = summarizeOrderMetrics(currentOrders, shopId);
     const productSalesMap: Record<number, { title: string; quantity: number; revenue: number }> = {};
     shopOrders.forEach((order) => {

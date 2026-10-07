@@ -197,9 +197,6 @@ export function createAuthRouter(options: AuthRouterOptions) {
 
     if (!shop) return res.status(404).json({ error: 'Aucune boutique associée à ce numéro de téléphone.' });
     if (!verifyPin(pin, shop.pin_code_hash)) return res.status(401).json({ error: 'Code PIN incorrect à 6 chiffres.' });
-    if (!shop.is_active) {
-      return res.status(403).json({ error: 'Votre boutique est inactive. Contactez l’administration MaTable.ci pour la réactivation.' });
-    }
 
     await createMerchantSession(res, shop.id, req);
     await clearLoginAttempts(attemptKey);
@@ -214,6 +211,8 @@ export function createAuthRouter(options: AuthRouterOptions) {
         welcome_message: shop.welcome_message,
         is_open: shop.is_open,
         is_active: shop.is_active,
+        publication_status: shop.publication_status,
+        merchant_verification_status: shop.merchant_verification_status,
         category: shop.category,
         theme_config: shop.theme_config,
       },
@@ -260,7 +259,6 @@ export function createAuthRouter(options: AuthRouterOptions) {
     const shopRow = await dbGet<{ id: number }>('SELECT id FROM shops WHERE owner_access_token_hash = ?', [tokenHash]);
     const shop = shopRow ? await getShopFromDatabase(Number(shopRow.id)) : undefined;
     if (!shop) return res.status(401).json({ error: 'Lien d’accès invalide.' });
-    if (!shop.is_active) return res.status(403).json({ error: 'Boutique inactive : contactez l’administrateur pour la réactivation.' });
 
     const consumed = await dbRun(
       'UPDATE shops SET owner_access_token_hash = NULL WHERE id = ? AND owner_access_token_hash = ?',

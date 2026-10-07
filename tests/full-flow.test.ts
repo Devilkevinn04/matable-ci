@@ -555,7 +555,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   assert.equal(adminLogout.response.status, 200, JSON.stringify(adminLogout.payload));
 
   const approvedButDraftDirectory = await apiFetch('/api/shops');
-  assert.equal(approvedButDraftDirectory.payload.some((shop: any) => shop.id === shopId), false);
+  assert.equal(approvedButDraftDirectory.payload.some((shop: any) => shop.id === shopId), true);
 
   const ownerPublication = await apiFetch(`/api/shops/${shopId}/publication-status`, {
     method: 'PATCH',
@@ -903,6 +903,7 @@ test('Didit alone controls merchant verification; signed webhooks are fresh and 
     body: JSON.stringify({ publication_status: 'active' }),
   });
   assert.equal(publication.response.status, 200, JSON.stringify(publication.payload));
+  let trialProductId: number | null = null;
   for (let index = 0; index < 2; index += 1) {
     const product = await apiFetch(`/api/shops/${shopId}/products`, {
       method: 'POST',
@@ -910,6 +911,7 @@ test('Didit alone controls merchant verification; signed webhooks are fresh and 
       body: JSON.stringify({ title: `Article d’essai ${index + 1}`, price: 1500, stock: 2 }),
     });
     assert.equal(product.response.status, 200, JSON.stringify(product.payload));
+    if (index === 0) trialProductId = product.payload.product.id;
   }
   const thirdTrialProduct = await apiFetch(`/api/shops/${shopId}/products`, {
     method: 'POST',
@@ -917,6 +919,26 @@ test('Didit alone controls merchant verification; signed webhooks are fresh and 
     body: JSON.stringify({ title: 'Troisième article d’essai', price: 1500, stock: 2 }),
   });
   assert.equal(thirdTrialProduct.response.status, 409, JSON.stringify(thirdTrialProduct.payload));
+  const testDbAfterTrial = new Database(TEST_DB_PATH);
+  testDbAfterTrial.prepare("UPDATE shops SET subscription_status = 'expired', subscription_expires_at = ? WHERE id = ?")
+    .run(new Date(Date.now() - 4 * 86400000).toISOString(), shopId);
+  testDbAfterTrial.close();
+  const directoryAfterVerification = await fetch(`${BASE_URL}/api/v1/catalog/storefronts`);
+  const visibleAfterVerification = (await directoryAfterVerification.json()).find((shop: any) => shop.id === shopId);
+  assert.ok(visibleAfterVerification, 'A verified shop must appear publicly even when its subscription has expired.');
+  const orderAfterExpiry = await apiFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shopId,
+      customer_name: 'Client Test',
+      customer_phone: '+2250700000000',
+      delivery_location: 'Abidjan',
+      items: [{ product_id: trialProductId, quantity: 1 }],
+    }),
+  });
+  assert.equal(orderAfterExpiry.response.status, 403, JSON.stringify(orderAfterExpiry.payload));
+  assert.match(String(orderAfterExpiry.payload.error), /abonnement actif/i);
   const visibleAfterPublication = await fetch(`${BASE_URL}/api/shops/${registration.payload.shop.slug}`);
   assert.equal(visibleAfterPublication.status, 200);
 });
