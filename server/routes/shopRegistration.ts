@@ -1,10 +1,11 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
+import { databaseMode, dbTransaction } from '../../db.ts';
+import { persistShopInTransaction } from '../repositories/shops.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
 import type { ShopRecord } from '../types.ts';
 
 interface RegistrationOptions {
-  shops: ShopRecord[];
   rateLimitPublicRequest: (limit?: number) => RequestHandler;
   allocateShopId: () => Promise<number>;
   normalizeWhatsAppPhone: (phone: unknown) => string | null;
@@ -25,15 +26,12 @@ interface RegistrationOptions {
   addDays: (date: Date, days: number) => string;
   trialDurationDays: number;
   computeIsShopOpen: (shop: ShopRecord) => boolean;
-  persistShop: (shop: ShopRecord) => Promise<void>;
   createMerchantSession: (res: import('express').Response, shopId: number, req: import('express').Request) => Promise<void>;
   toSafeShop: (shop: ShopRecord) => object;
-  dbGet: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T | undefined>;
 }
 
 export function createShopRegistrationRouter(options: RegistrationOptions) {
   const {
-    shops,
     rateLimitPublicRequest,
     allocateShopId,
     normalizeWhatsAppPhone,
@@ -48,10 +46,8 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     addDays,
     trialDurationDays,
     computeIsShopOpen,
-    persistShop,
     createMerchantSession,
     toSafeShop,
-    dbGet,
   } = options;
   const router = Router();
 
@@ -93,20 +89,13 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
 
     const normalizedWhatsAppPhone = normalizeWhatsAppPhone(whatsapp_number);
     if (!normalizedWhatsAppPhone) return res.status(400).json({ error: 'Numéro WhatsApp ivoirien invalide. Utilisez +225 suivi de 10 chiffres.' });
-    if (shops.some((shop) => shop.whatsapp_number === normalizedWhatsAppPhone)) {
-      return res.status(409).json({ error: 'Ce numéro WhatsApp est déjà associé à une boutique. Utilisez son lien privé de gestion.' });
-    }
-    if (shops.some((shop) => shop.owner_email?.toLowerCase() === ownerEmail)) {
-      return res.status(409).json({ error: 'Cette adresse e-mail est déjà associée à un compte marchand.' });
-    }
-
     const shopCategory: ShopCategory = isShopCategory(category) ? category : 'other';
     const categoryDefaults = getCategoryDefaults(shopCategory);
     const reservedShopId = await allocateShopId();
     const ownerAccessToken = randomUUID();
     const slug = safeName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || `boutique-${Date.now()}`;
-    const uniqueSlug = shops.some((shop) => shop.slug === slug) ? `${slug}-${Date.now().toString().slice(-5)}` : slug;
+    const uniqueSlug = slug;
     const mergedThemeConfig = {
       primary_color: categoryDefaults.primaryColor,
       secondary_color: categoryDefaults.secondaryColor,
@@ -163,15 +152,34 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     };
     if (normalizedOpeningHours.enabled && !normalizedOpeningHours.manual_override) newShop.is_open = computeIsShopOpen(newShop);
 
-    try {
-      await persistShop(newShop);
-    } catch (error) {
-      if (await dbGet<{ id: number }>('SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?)', [ownerEmail])) {
-        return res.status(409).json({ error: 'Cette adresse e-mail est déjà associée à un compte marchand.' });
+    const registrationResult = await dbTransaction(async (transaction) => {
+      if (databaseMode === 'postgresql') {
+        const advisoryKeys = [normalizedWhatsAppPhone, ownerEmail, slug].map((value) =>
+          createHash('sha256').update(value).digest().readInt32BE(0),
+        ).sort((left, right) => left - right);
+        for (const key of advisoryKeys) await transaction.get('SELECT pg_advisory_xact_lock(?)', [key]);
       }
-      throw error;
+      if (await transaction.get('SELECT id FROM shops WHERE whatsapp_number = ?', [normalizedWhatsAppPhone])) return 'duplicate_phone';
+      if (await transaction.get('SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?)', [ownerEmail])) return 'duplicate_email';
+
+      let slugSuffix = 0;
+      while (await transaction.get('SELECT id FROM shops WHERE slug = ?', [newShop.slug])) {
+        slugSuffix += 1;
+        newShop.slug = `${slug}-${Date.now().toString().slice(-5)}${slugSuffix > 1 ? `-${slugSuffix}` : ''}`;
+        if (databaseMode === 'postgresql') {
+          const slugLockKey = createHash('sha256').update(newShop.slug).digest().readInt32BE(0);
+          await transaction.get('SELECT pg_advisory_xact_lock(?)', [slugLockKey]);
+        }
+      }
+      await persistShopInTransaction(newShop, transaction);
+      return 'created';
+    });
+    if (registrationResult === 'duplicate_phone') {
+      return res.status(409).json({ error: 'Ce numéro WhatsApp est déjà associé à une boutique. Utilisez son lien privé de gestion.' });
     }
-    shops.push(newShop);
+    if (registrationResult === 'duplicate_email') {
+      return res.status(409).json({ error: 'Cette adresse e-mail est déjà associée à un compte marchand.' });
+    }
     await createMerchantSession(res, newShop.id, req);
     res.json({
       success: true,

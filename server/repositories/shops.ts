@@ -44,7 +44,21 @@ export async function getShopFromDatabase(shopId: number): Promise<ShopRecord | 
 }
 
 export async function persistShop(shop: ShopRecord): Promise<void> {
-  await dbRun(`
+  await persistShopWith(shop, dbRun);
+}
+
+export async function persistShopInTransaction(
+  shop: ShopRecord,
+  transaction: { run: (sql: string, params?: unknown[]) => Promise<{ changes: number }> },
+): Promise<void> {
+  await persistShopWith(shop, transaction.run);
+}
+
+async function persistShopWith(
+  shop: ShopRecord,
+  run: (sql: string, params?: unknown[]) => Promise<{ changes: number }>,
+): Promise<void> {
+  await run(`
     INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, publication_status, featured_until, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, subscription_status, trial_start, trial_end, last_notification_sent_at, whatsapp_subscription_reminders_enabled, whatsapp_subscription_reminders_consent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash, owner_email)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET name=excluded.name, slug=excluded.slug, whatsapp_number=excluded.whatsapp_number,

@@ -5,6 +5,7 @@ import { computeIsShopOpen, getSubscriptionPlanConfig, getSubscriptionState, nor
 import { getRenewedSubscriptionExpiry, isValidKadevPaySignature } from '../services/kadevPay.ts';
 import type { ShopRecord, SubscriptionTier } from '../types.ts';
 import { getSubscriptionPrice, type SubscriptionTerm } from '../../src/utils/subscriptionFeatures.ts';
+import { getShopFromDatabase, mapShopRow } from '../repositories/shops.ts';
 import {
   BOOST_DURATIONS_DAYS,
   findEarliestBoostStart,
@@ -31,11 +32,11 @@ interface SubscriptionPaymentIntent {
   paid_at: string | null;
 }
 
-export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPayRouterOptions) {
+export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterOptions) {
   const router = Router();
 
   router.post('/shops/:id/subscription-payments', requireMerchantOwnShop, async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const persistedSubscription = await dbGet<{
       subscription_status: string | null;
@@ -96,7 +97,7 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
   });
 
   router.post('/shops/:id/boost-payments', requireMerchantOwnShop, async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const publicKey = String(process.env.KADEVPAY_PUBLIC_KEY || '').trim();
     const webhookSecret = String(process.env.KADEVPAY_WEBHOOK_SECRET || '').trim();
@@ -116,30 +117,18 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
     const createdAt = now.toISOString();
     const reserveUntil = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
     const reservation = await dbTransaction(async (transaction) => {
-      const shopRow = await transaction.get<{
-        city: string | null;
-        category: string;
-        is_open: number | boolean;
-        is_active: number | boolean;
-        merchant_verification_status: string;
-        subscription_status: string;
-        selected_subscription_tier: string | null;
-        trial_start: string | null;
-        trial_end: string | null;
-        subscription_expires_at: string | null;
-      }>(`SELECT city, category, is_open, is_active, merchant_verification_status, subscription_status,
-          selected_subscription_tier, trial_start, trial_end, subscription_expires_at
-        FROM shops WHERE id = ?`, [shop.id]);
+      const shopRow = await transaction.get<Record<string, unknown>>('SELECT * FROM shops WHERE id = ?', [shop.id]);
       if (!shopRow) return { error: 'Boutique introuvable.' } as const;
-      if (Number(shopRow.is_active) !== 1 || Number(shopRow.is_open) !== 1 || !computeIsShopOpen(shop)) {
+      const transactionShop = mapShopRow(shopRow);
+      if (!transactionShop.is_active || !transactionShop.is_open || !computeIsShopOpen(transactionShop)) {
         return { error: 'La boutique doit être active et ouverte pour acheter un boost.' } as const;
       }
-      if (shopRow.merchant_verification_status !== 'verified') {
+      if (transactionShop.merchant_verification_status !== 'verified') {
         return { error: 'La vérification du commerçant doit être validée avant d’acheter un boost.' } as const;
       }
-      const city = String(shopRow.city || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+      const city = String(transactionShop.city || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
       if (!city) return { error: 'Renseignez la ville de la boutique avant d’acheter un boost.' } as const;
-      const category = String(shopRow.category).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+      const category = String(transactionShop.category).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
       if (databaseMode === 'postgresql') {
         await transaction.get('SELECT pg_advisory_xact_lock(hashtextextended(?, 0))', [`boost:${city}:${category}`]);
       }
@@ -151,13 +140,7 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
         return { error: 'Ajoutez au moins 5 produits au catalogue avant d’acheter un boost.' } as const;
       }
 
-      const currentSubscription = getSubscriptionState({
-        subscription_status: shopRow.subscription_status,
-        selected_subscription_tier: shopRow.selected_subscription_tier as SubscriptionTier | undefined,
-        trial_start: shopRow.trial_start,
-        trial_end: shopRow.trial_end,
-        subscription_expires_at: shopRow.subscription_expires_at,
-      }, now);
+      const currentSubscription = getSubscriptionState(transactionShop, now);
       const price = getBoostPrice(durationDays, currentSubscription.isActive && currentSubscription.plan === 'pro');
       if (price === null) return { error: 'Choisissez une durée de boost valide.' } as const;
       const intervals = await transaction.all<{ starts_at: string; ends_at: string }>(
@@ -202,7 +185,7 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
   });
 
   router.get('/shops/:id/subscription-payments/:paymentId', requireMerchantOwnShop, async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const payment = await dbGet<SubscriptionPaymentIntent>(
       'SELECT * FROM subscription_payment_intents WHERE id = ? AND shop_id = ?',
@@ -216,7 +199,7 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
   });
 
   router.get('/shops/:id/boosts', requireMerchantOwnShop, async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const boosts = await dbAll<{
       id: string;
@@ -363,15 +346,6 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
 
     if (result.status === 'not_found') return res.status(404).json({ error: 'Intention de paiement introuvable.' });
     if (result.status === 'mismatch') return res.status(409).json({ error: 'Le montant payé ne correspond pas au montant attendu.' });
-    if (result.status === 'paid') {
-      const shop = shops.find((candidate) => candidate.id === result.shopId);
-      if (shop) {
-        shop.subscription_status = 'active';
-        shop.selected_subscription_tier = result.tier;
-        shop.subscription_expires_at = result.expiresAt;
-        shop.last_notification_sent_at = null;
-      }
-    }
     res.json({ received: true, duplicate: result.status === 'duplicate' });
   });
 

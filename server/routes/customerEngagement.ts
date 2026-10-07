@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { dbAll, dbGet, dbRun } from '../../db.ts';
-import type { ProductRecord, ShopRecord } from '../types.ts';
+import { mapShopRow } from '../repositories/shops.ts';
 import { isShopPubliclyVisible } from '../services/businessRules.ts';
 
 interface CustomerSession {
@@ -9,15 +9,13 @@ interface CustomerSession {
 }
 
 interface CustomerEngagementOptions {
-  shops: ShopRecord[];
-  products: ProductRecord[];
+  shops?: unknown[];
+  products?: unknown[];
   getCustomerSessionState: (req: Request, res?: Response) => Promise<CustomerSession>;
   rateLimitPublicRequest: (limit?: number) => import('express').RequestHandler;
 }
 
 export function createCustomerEngagementRouter({
-  shops,
-  products,
   getCustomerSessionState,
   rateLimitPublicRequest,
 }: CustomerEngagementOptions) {
@@ -35,34 +33,52 @@ export function createCustomerEngagementRouter({
   router.get('/state', async (req, res) => {
     const userId = await requireCustomer(req, res);
     if (!userId) return;
-    const [favorites, likes] = await Promise.all([
-      dbAll<{ target_type: 'shop' | 'product'; target_id: number }>(
-        'SELECT target_type, target_id FROM customer_favorites WHERE user_id = ?',
+    const [savedShopRows, savedProductRows, likedProductRows] = await Promise.all([
+      dbAll<Record<string, unknown>>(
+        `SELECT shops.* FROM customer_favorites
+         JOIN shops ON shops.id = customer_favorites.target_id
+         WHERE customer_favorites.user_id = ? AND customer_favorites.target_type = 'shop'
+         ORDER BY customer_favorites.created_at DESC`,
+        [userId],
+      ),
+      dbAll<Record<string, unknown>>(
+        `SELECT shops.*, products.id AS saved_product_id, products.shop_id AS saved_product_shop_id,
+          products.title AS saved_product_title, products.price AS saved_product_price,
+          products.image_url AS saved_product_image_url
+         FROM customer_favorites
+         JOIN products ON products.id = customer_favorites.target_id
+         JOIN shops ON shops.id = products.shop_id
+         WHERE customer_favorites.user_id = ? AND customer_favorites.target_type = 'product'
+         ORDER BY customer_favorites.created_at DESC`,
         [userId],
       ),
       dbAll<{ product_id: number }>(
-        'SELECT product_id FROM customer_product_likes WHERE user_id = ?',
+        `SELECT customer_product_likes.product_id FROM customer_product_likes
+         JOIN products ON products.id = customer_product_likes.product_id
+         JOIN shops ON shops.id = products.shop_id
+         WHERE customer_product_likes.user_id = ?`,
         [userId],
       ),
     ]);
-    const shopIds = new Set(favorites.filter((item) => item.target_type === 'shop').map((item) => Number(item.target_id)));
-    const productIds = new Set(favorites.filter((item) => item.target_type === 'product').map((item) => Number(item.target_id)));
-    const savedShops = shops.filter((shop) => shopIds.has(shop.id) && isShopPubliclyVisible(shop)).map((shop) => ({
-      id: shop.id,
-      name: shop.name,
-      slug: shop.slug,
-      category: shop.category,
-      city: shop.city,
-    }));
-    const savedProducts = products.filter((product) => productIds.has(product.id)).flatMap((product) => {
-      const shop = shops.find((candidate) => candidate.id === product.shop_id);
-      if (!shop || !isShopPubliclyVisible(shop)) return [];
+    const savedShops = savedShopRows
+      .map(mapShopRow)
+      .filter((shop) => isShopPubliclyVisible(shop))
+      .map((shop) => ({
+        id: shop.id,
+        name: shop.name,
+        slug: shop.slug,
+        category: shop.category,
+        city: shop.city,
+      }));
+    const savedProducts = savedProductRows.flatMap((row) => {
+      const shop = mapShopRow(row);
+      if (!isShopPubliclyVisible(shop)) return [];
       return [{
-        id: product.id,
-        shop_id: shop.id,
-        title: product.title,
-        price: product.price,
-        image_url: product.image_url,
+        id: Number(row.saved_product_id),
+        shop_id: Number(row.saved_product_shop_id),
+        title: String(row.saved_product_title),
+        price: Number(row.saved_product_price),
+        image_url: row.saved_product_image_url == null ? '' : String(row.saved_product_image_url),
         slug: shop.slug,
         shop_name: shop.name,
       }];
@@ -70,7 +86,7 @@ export function createCustomerEngagementRouter({
     res.json({
       favorite_shop_ids: savedShops.map((shop) => shop.id),
       favorite_product_ids: savedProducts.map((product) => product.id),
-      liked_product_ids: likes.map((item) => Number(item.product_id)),
+      liked_product_ids: likedProductRows.map((item) => Number(item.product_id)),
       shops: savedShops,
       products: savedProducts,
     });
@@ -84,11 +100,8 @@ export function createCustomerEngagementRouter({
     if (!['shop', 'product'].includes(targetType) || !Number.isSafeInteger(targetId) || targetId <= 0) {
       return res.status(400).json({ error: 'Favori invalide.' });
     }
-    const product = targetType === 'product' ? products.find((candidate) => candidate.id === targetId) : undefined;
-    const shop = targetType === 'shop'
-      ? shops.find((candidate) => candidate.id === targetId)
-      : product && shops.find((candidate) => candidate.id === product.shop_id);
-    if (!shop || !isShopPubliclyVisible(shop) || (targetType === 'product' && !product)) {
+    const target = await getPublicTarget(targetType, targetId);
+    if (!target) {
       return res.status(404).json({ error: 'Cette boutique ou ce produit est introuvable.' });
     }
 
@@ -111,9 +124,8 @@ export function createCustomerEngagementRouter({
     if (!userId) return;
     const productId = Number(req.params.id);
     if (!Number.isSafeInteger(productId) || productId <= 0) return res.status(400).json({ error: 'Produit invalide.' });
-    const product = products.find((candidate) => candidate.id === productId);
-    const shop = product && shops.find((candidate) => candidate.id === product.shop_id);
-    if (!product || !shop || !isShopPubliclyVisible(shop)) return res.status(404).json({ error: 'Produit introuvable.' });
+    const target = await getPublicTarget('product', productId);
+    if (!target) return res.status(404).json({ error: 'Produit introuvable.' });
 
     const inserted = await dbRun(
       'INSERT INTO customer_product_likes (user_id, product_id, created_at) VALUES (?, ?, ?) ON CONFLICT(user_id, product_id) DO NOTHING',
@@ -130,19 +142,25 @@ export function createCustomerEngagementRouter({
     return res.json({ success: true, is_liked: isLiked, like_count: Number(count?.count) || 0 });
   });
 
-  const getPublicTarget = (targetType: unknown, targetIdValue: unknown) => {
+  const getPublicTarget = async (targetType: unknown, targetIdValue: unknown) => {
     const targetId = Number(targetIdValue);
     if (!['shop', 'product'].includes(String(targetType)) || !Number.isSafeInteger(targetId) || targetId <= 0) return null;
-    const product = targetType === 'product' ? products.find((candidate) => candidate.id === targetId) : undefined;
-    const shop = targetType === 'shop'
-      ? shops.find((candidate) => candidate.id === targetId)
-      : product && shops.find((candidate) => candidate.id === product.shop_id);
-    if (!shop || !isShopPubliclyVisible(shop) || (targetType === 'product' && !product)) return null;
-    return { targetType: String(targetType), targetId, shop, product };
+    const shopRow = targetType === 'shop'
+      ? await dbGet<Record<string, unknown>>('SELECT shops.* FROM shops WHERE shops.id = ?', [targetId])
+      : await dbGet<Record<string, unknown>>(
+        `SELECT shops.* FROM products
+         JOIN shops ON shops.id = products.shop_id
+         WHERE products.id = ?`,
+        [targetId],
+      );
+    if (!shopRow) return null;
+    const shop = mapShopRow(shopRow);
+    if (!isShopPubliclyVisible(shop)) return null;
+    return { targetType: String(targetType), targetId, shop };
   };
 
   router.get('/reviews', async (req, res) => {
-    const target = getPublicTarget(req.query.target_type, req.query.target_id);
+    const target = await getPublicTarget(req.query.target_type, req.query.target_id);
     if (!target) return res.status(404).json({ error: 'Cette boutique ou ce produit est introuvable.' });
     const [reviews, aggregate] = await Promise.all([
       dbAll<{ id: number; rating: number; comment: string; created_at: string; author_name: string }>(
@@ -169,7 +187,7 @@ export function createCustomerEngagementRouter({
   router.post('/reviews', rateLimitPublicRequest(10), async (req, res) => {
     const userId = await requireCustomer(req, res);
     if (!userId) return;
-    const target = getPublicTarget(req.body?.target_type, req.body?.target_id);
+    const target = await getPublicTarget(req.body?.target_type, req.body?.target_id);
     if (!target) return res.status(404).json({ error: 'Cette boutique ou ce produit est introuvable.' });
     const rating = Number(req.body?.rating);
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'La note doit être comprise entre 1 et 5.' });
@@ -205,7 +223,7 @@ export function createCustomerEngagementRouter({
   router.post('/reports', rateLimitPublicRequest(10), async (req, res) => {
     const userId = await requireCustomer(req, res);
     if (!userId) return;
-    const target = getPublicTarget(req.body?.target_type, req.body?.target_id);
+    const target = await getPublicTarget(req.body?.target_type, req.body?.target_id);
     if (!target) return res.status(404).json({ error: 'Cette boutique ou ce produit est introuvable.' });
     const reason = String(req.body?.reason || '');
     const allowedReasons = new Set(['inaccurate', 'fraud', 'inappropriate', 'unavailable', 'other']);

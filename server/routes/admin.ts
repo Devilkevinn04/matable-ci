@@ -3,6 +3,7 @@ import type { dbTransaction } from '../../db.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
 import { getSubscriptionPlanConfig, getSubscriptionState } from '../services/businessRules.ts';
 import { getWhatsAppSubscriptionReminderConfig } from '../services/whatsappNotifications.ts';
+import { mapShopRow } from '../repositories/shops.ts';
 
 interface AdminRouterOptions {
   shops: ShopRecord[];
@@ -20,9 +21,14 @@ interface AdminRouterOptions {
 }
 
 export function createAdminRouter(options: AdminRouterOptions) {
-  const { shops, products, orders, databaseMode, dbAll, dbGet, dbRun, dbTransaction, refreshRuntimeDataFromDatabase, persistShop, toSafeShop, rotateMerchantAccessTokenForShop } = options;
+  const { databaseMode, dbAll, dbGet, dbRun, dbTransaction, refreshRuntimeDataFromDatabase, toSafeShop, rotateMerchantAccessTokenForShop } = options;
   const router = Router();
   const maxTrialExtensionDays = 30;
+  const loadShops = async () => (await dbAll<Record<string, unknown>>('SELECT * FROM shops ORDER BY id')).map(mapShopRow);
+  const getShop = async (shopId: number) => {
+    const row = await dbGet<Record<string, unknown>>('SELECT * FROM shops WHERE id = ?', [shopId]);
+    return row ? mapShopRow(row) : undefined;
+  };
   const getTrialExtensionDays = (value: unknown) => {
     const details: unknown = typeof value === 'string' ? JSON.parse(value) : value;
     if (!details || typeof details !== 'object' || !('days' in details)
@@ -73,8 +79,14 @@ export function createAdminRouter(options: AdminRouterOptions) {
       [reviewId],
     );
     if (!review) return res.status(404).json({ error: 'Avis introuvable.' });
-    await dbRun('UPDATE customer_reviews SET status = ?, reviewed_at = ? WHERE id = ?', [status, new Date().toISOString(), reviewId]);
-    await logAdminAction('customer_review_moderated', Number(review.shop_id), { review_id: reviewId, status });
+    const reviewedAt = new Date().toISOString();
+    await dbTransaction(async ({ run }) => {
+      await run('UPDATE customer_reviews SET status = ?, reviewed_at = ? WHERE id = ?', [status, reviewedAt, reviewId]);
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['super_admin', 'customer_review_moderated', Number(review.shop_id), JSON.stringify({ review_id: reviewId, status }), reviewedAt],
+      );
+    });
     return res.json({ success: true, status });
   });
 
@@ -89,11 +101,17 @@ export function createAdminRouter(options: AdminRouterOptions) {
       [reportId],
     );
     if (!report) return res.status(404).json({ error: 'Signalement introuvable.' });
-    await dbRun('UPDATE customer_reports SET status = ?, reviewed_at = ? WHERE id = ?', [status, new Date().toISOString(), reportId]);
     const shopId = report.target_type === 'shop'
       ? Number(report.target_id)
       : Number((await dbGet<{ shop_id: number }>('SELECT shop_id FROM products WHERE id = ?', [report.target_id]))?.shop_id) || null;
-    await logAdminAction('customer_report_processed', shopId, { report_id: reportId, status });
+    const reviewedAt = new Date().toISOString();
+    await dbTransaction(async ({ run }) => {
+      await run('UPDATE customer_reports SET status = ?, reviewed_at = ? WHERE id = ?', [status, reviewedAt, reportId]);
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['super_admin', 'customer_report_processed', shopId, JSON.stringify({ report_id: reportId, status }), reviewedAt],
+      );
+    });
     return res.json({ success: true, status });
   });
 
@@ -125,21 +143,27 @@ export function createAdminRouter(options: AdminRouterOptions) {
       'SELECT maintenance_enabled, maintenance_message FROM platform_settings WHERE id = 1',
     );
     const updatedAt = new Date().toISOString();
-    await dbRun(`INSERT INTO platform_settings (id, maintenance_enabled, maintenance_message, updated_at, updated_by)
-      VALUES (1, ?, ?, ?, 'super_admin')
-      ON CONFLICT (id) DO UPDATE SET maintenance_enabled = excluded.maintenance_enabled,
-        maintenance_message = excluded.maintenance_message, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
-    [req.body.enabled ? 1 : 0, message, updatedAt]);
-    await logAdminAction('maintenance_updated', null, {
-      enabled: req.body.enabled,
-      previous_enabled: Boolean(previous?.maintenance_enabled),
-      message,
+    await dbTransaction(async ({ run }) => {
+      await run(`INSERT INTO platform_settings (id, maintenance_enabled, maintenance_message, updated_at, updated_by)
+        VALUES (1, ?, ?, ?, 'super_admin')
+        ON CONFLICT (id) DO UPDATE SET maintenance_enabled = excluded.maintenance_enabled,
+          maintenance_message = excluded.maintenance_message, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+      [req.body.enabled ? 1 : 0, message, updatedAt]);
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['super_admin', 'maintenance_updated', null, JSON.stringify({
+          enabled: req.body.enabled,
+          previous_enabled: Boolean(previous?.maintenance_enabled),
+          message,
+        }), updatedAt],
+      );
     });
     res.json({ enabled: req.body.enabled, message, updated_at: updatedAt, updated_by: 'super_admin' });
   });
 
   const getSubscriptionMetrics = async () => {
     const now = new Date();
+    const shops = await loadShops();
     const states = shops.map((shop) => ({ shop, state: getSubscriptionState(shop, now) }));
     const mrrByTier = (['standard', 'premium', 'pro'] as const).map((tier) => {
       const count = states.filter(({ state }) => state.status === 'active' && state.plan === tier).length;
@@ -176,6 +200,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
 
   router.get('/analytics', async (req, res) => {
     await refreshRuntimeDataFromDatabase();
+    const shops = await loadShops();
     const requestedDays = Number(req.query.days);
     const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 90) : 30;
     const since = new Date(Date.now() - days * 86400000).toISOString();
@@ -370,6 +395,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
 
   router.get('/subscriptions', async (_req, res) => {
     await refreshRuntimeDataFromDatabase();
+    const shops = await loadShops();
     const now = new Date();
     const extensionLogs = await dbAll<{ shop_id: number; details: string; created_at: string }>(
       `SELECT shop_id, details, created_at FROM admin_audit_logs
@@ -384,13 +410,22 @@ export function createAdminRouter(options: AdminRouterOptions) {
         (extensionDaysByShopId.get(shop.id) || 0) + getTrialExtensionDays(entry.details),
       );
     }
+    const [productCounts, orderStats] = await Promise.all([
+      dbAll<{ shop_id: number; count: number }>('SELECT shop_id, COUNT(*) AS count FROM products GROUP BY shop_id'),
+      dbAll<{ shop_id: number; count: number; last_order_at: string | null }>(`
+        SELECT shop_id, COUNT(*) AS count, MAX(created_at) AS last_order_at
+        FROM orders WHERE COALESCE(status, 'pending') NOT IN ('cancelled', 'expired') GROUP BY shop_id
+      `),
+    ]);
+    const productCountByShop = new Map(productCounts.map((row) => [Number(row.shop_id), Number(row.count)]));
+    const orderStatsByShop = new Map(orderStats.map((row) => [Number(row.shop_id), row]));
     const subscriptionShops = shops.map((shop) => {
       const subscription = getSubscriptionState(shop, now);
       const trialExpiryMismatch = shop.subscription_status === 'trialing'
         && subscription.trialEnd !== null
         && subscription.expiresAt !== null
         && Date.parse(subscription.trialEnd) !== Date.parse(subscription.expiresAt);
-      const shopOrders = orders.filter((order) => order.shop_id === shop.id && !['cancelled', 'expired'].includes(order.status));
+      const shopOrderStats = orderStatsByShop.get(shop.id);
       return {
         id: shop.id,
         name: shop.name,
@@ -412,9 +447,9 @@ export function createAdminRouter(options: AdminRouterOptions) {
         trial_expiry_mismatch: trialExpiryMismatch,
         next_renewal_at: subscription.status === 'trialing' ? subscription.trialEnd : subscription.expiresAt,
         created_at: shop.created_at,
-        products_count: products.filter((product) => product.shop_id === shop.id).length,
-        orders_count: shopOrders.length,
-        last_order_at: shopOrders.sort((left, right) => right.created_at.localeCompare(left.created_at))[0]?.created_at ?? null,
+        products_count: productCountByShop.get(shop.id) || 0,
+        orders_count: Number(shopOrderStats?.count || 0),
+        last_order_at: shopOrderStats?.last_order_at ?? null,
       };
     }).sort((left, right) => {
       const leftExpiry = left.next_renewal_at ? Date.parse(left.next_renewal_at) : Number.MAX_SAFE_INTEGER;
@@ -438,8 +473,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
   });
 
   router.patch('/subscriptions/:id/extend-trial', async (req, res) => {
-    await refreshRuntimeDataFromDatabase();
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShop(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const days = Number(req.body?.days);
     if (!Number.isInteger(days) || days < 1 || days > 30) {
@@ -499,16 +533,13 @@ export function createAdminRouter(options: AdminRouterOptions) {
       });
     }
     if (result.status === 'conflict') return res.status(409).json({ error: 'L’essai a été modifié entre-temps. Actualisez la liste avant de réessayer.' });
-    shop.trial_end = nextTrialEnd;
-    shop.subscription_expires_at = nextTrialEnd;
-    shop.last_notification_sent_at = null;
-    shop.subscription_status = 'trialing';
-    res.json({ success: true, shop: toSafeShop(shop), trial_end: nextTrialEnd, trial_extension_days_used: result.daysUsed });
+    await refreshRuntimeDataFromDatabase();
+    const updatedShop = await getShop(shop.id);
+    res.json({ success: true, shop: toSafeShop(updatedShop || { ...shop, trial_end: nextTrialEnd, subscription_expires_at: nextTrialEnd, last_notification_sent_at: null, subscription_status: 'trialing' }), trial_end: nextTrialEnd, trial_extension_days_used: result.daysUsed });
   });
 
   router.patch('/subscriptions/:id/reconcile-trial-expiry', async (req, res) => {
-    await refreshRuntimeDataFromDatabase();
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShop(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     if (shop.subscription_status !== 'trialing' || !shop.trial_end) {
       return res.status(409).json({ error: 'Seul un essai actif avec une échéance définie peut être synchronisé.' });
@@ -540,36 +571,48 @@ export function createAdminRouter(options: AdminRouterOptions) {
       return true;
     });
     if (!result) return res.status(409).json({ error: 'L’échéance a été modifiée entre-temps. Actualisez la liste avant de réessayer.' });
-    shop.subscription_expires_at = shop.trial_end;
+    await refreshRuntimeDataFromDatabase();
     res.json({ success: true, subscription_expires_at: shop.trial_end });
   });
 
   router.get('/shops', async (_req, res) => {
     await refreshRuntimeDataFromDatabase();
+    const [shops, productCounts, orderStats] = await Promise.all([
+      loadShops(),
+      dbAll<{ shop_id: number; count: number }>('SELECT shop_id, COUNT(*) AS count FROM products GROUP BY shop_id'),
+      dbAll<{ shop_id: number; count: number; total_sales: number; last_order_at: string | null }>(`
+        SELECT shop_id, COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total_sales, MAX(created_at) AS last_order_at
+        FROM orders WHERE COALESCE(status, 'pending') NOT IN ('cancelled', 'expired') GROUP BY shop_id
+      `),
+    ]);
+    const productCountByShop = new Map(productCounts.map((row) => [Number(row.shop_id), Number(row.count)]));
+    const orderStatsByShop = new Map(orderStats.map((row) => [Number(row.shop_id), row]));
     res.json(shops.map((shop) => {
-      const actionableOrders = orders.filter((order) => order.shop_id === shop.id && order.status !== 'cancelled' && order.status !== 'expired');
-      const totalSales = actionableOrders.reduce((sum, order) => sum + order.total_amount, 0);
+      const stats = orderStatsByShop.get(shop.id);
+      const actionableOrderCount = Number(stats?.count || 0);
+      const totalSales = Number(stats?.total_sales || 0);
       return {
         ...toSafeShop(shop),
-        products_count: products.filter((product) => product.shop_id === shop.id).length,
-        orders_count: actionableOrders.length,
+        products_count: productCountByShop.get(shop.id) || 0,
+        orders_count: actionableOrderCount,
         total_sales: totalSales,
-        average_order_value: actionableOrders.length ? Math.round(totalSales / actionableOrders.length) : 0,
-        last_order_at: actionableOrders.sort((left, right) => right.created_at.localeCompare(left.created_at))[0]?.created_at ?? null,
+        average_order_value: actionableOrderCount ? Math.round(totalSales / actionableOrderCount) : 0,
+        last_order_at: stats?.last_order_at ?? null,
       };
     }));
   });
 
   router.patch('/shops/:id/featured', async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
-    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const days = req.body?.days;
     if (typeof days !== 'number' || !Number.isInteger(days) || days < 0 || days > 90) {
       return res.status(400).json({ error: 'La durée doit être un nombre entier de 0 à 90 jours.' });
     }
-    shop.featured_until = days === 0 ? null : new Date(Date.now() + days * 86400000).toISOString();
-    await persistShop(shop);
-    res.json({ success: true, featured_until: shop.featured_until });
+    const shopId = Number(req.params.id);
+    const featuredUntil = days === 0 ? null : new Date(Date.now() + days * 86400000).toISOString();
+    const updated = await dbTransaction(async ({ run }) => run('UPDATE shops SET featured_until = ? WHERE id = ?', [featuredUntil, shopId]));
+    if (updated.changes !== 1) return res.status(404).json({ error: 'Boutique introuvable.' });
+    await refreshRuntimeDataFromDatabase();
+    res.json({ success: true, featured_until: featuredUntil });
   });
 
   router.get('/health', async (_req, res) => {
@@ -593,46 +636,66 @@ export function createAdminRouter(options: AdminRouterOptions) {
     const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
     const requestedStatus = String(req.query.status || 'all');
     const allowedStatuses = new Set(['pending', 'confirmed', 'delivered', 'cancelled']);
-    const filteredOrders = orders
-      .filter((order) => requestedStatus === 'all' || (allowedStatuses.has(requestedStatus) && order.status === requestedStatus))
-      .sort((left, right) => right.created_at.localeCompare(left.created_at))
-      .slice(0, limit)
-      .map((order) => ({
-        id: order.id, shop_id: order.shop_id,
-        shop_name: shops.find((shop) => shop.id === order.shop_id)?.name || 'Boutique inconnue',
-        customer_name: order.customer_name, customer_phone: order.customer_phone,
-        delivery_location: order.delivery_location, total_amount: order.total_amount,
-        status: order.status, created_at: order.created_at,
-        items_count: (order.items || []).reduce((sum, item) => sum + item.quantity, 0),
+    const filteredOrders = requestedStatus !== 'all' && !allowedStatuses.has(requestedStatus)
+      ? []
+      : await dbAll<Record<string, unknown>>(`
+        SELECT orders.id, orders.shop_id, shops.name AS shop_name, orders.customer_name, orders.customer_phone,
+          orders.delivery_location, orders.total_amount, orders.status, orders.created_at, orders.items
+        FROM orders LEFT JOIN shops ON shops.id = orders.shop_id
+        ${requestedStatus === 'all' ? '' : "WHERE COALESCE(orders.status, 'pending') = ?"}
+        ORDER BY orders.created_at DESC, orders.id DESC LIMIT ?
+      `, requestedStatus === 'all' ? [limit] : [requestedStatus, limit]).then((rows) => rows.map((order) => {
+        const items: OrderRecord['items'] = order.items
+          ? (typeof order.items === 'string' ? JSON.parse(order.items) : order.items) as OrderRecord['items']
+          : [];
+        return {
+          id: Number(order.id), shop_id: Number(order.shop_id),
+          shop_name: order.shop_name == null ? 'Boutique inconnue' : String(order.shop_name),
+          customer_name: String(order.customer_name), customer_phone: String(order.customer_phone),
+          delivery_location: String(order.delivery_location), total_amount: Number(order.total_amount),
+          status: String(order.status || 'pending'), created_at: String(order.created_at),
+          items_count: (items || []).reduce((sum, item) => sum + item.quantity, 0),
+        };
       }));
     res.json({ orders: filteredOrders, total: filteredOrders.length, status: requestedStatus });
   });
 
   router.patch('/shops/:id/toggle-active', async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
-    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-    if (shop.is_active) {
-      shop.is_active = false;
-      shop.publication_status ||= 'active';
-    } else {
-      shop.is_active = true;
-      if (shop.publication_status === 'suspended') shop.publication_status = 'draft';
-    }
-    await persistShop(shop);
-    await logAdminAction(shop.is_active ? 'shop_reactivated' : 'shop_suspended', shop.id, { is_active: shop.is_active });
-    res.json({ success: true, is_active: shop.is_active, shop: toSafeShop(shop) });
+    const shopId = Number(req.params.id);
+    const result = await dbTransaction(async ({ get, run }) => {
+      const row = await get<Record<string, unknown>>('SELECT * FROM shops WHERE id = ?', [shopId]);
+      if (!row) return undefined;
+      const shop = mapShopRow(row);
+      const isActive = !shop.is_active;
+      const publicationStatus = isActive
+        ? (shop.publication_status === 'suspended' ? 'draft' : shop.publication_status)
+        : (shop.publication_status || 'active');
+      const update = await run('UPDATE shops SET is_active = ?, publication_status = ? WHERE id = ?', [isActive ? 1 : 0, publicationStatus, shopId]);
+      if (update.changes !== 1) return undefined;
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['super_admin', isActive ? 'shop_reactivated' : 'shop_suspended', shopId, JSON.stringify({ is_active: isActive }), new Date().toISOString()],
+      );
+      return isActive;
+    });
+    if (result === undefined) return res.status(404).json({ error: 'Boutique introuvable.' });
+    await refreshRuntimeDataFromDatabase();
+    const updatedShop = await getShop(shopId);
+    res.json({ success: true, is_active: result, shop: toSafeShop(updatedShop!) });
   });
 
   router.post('/shops/:id/access-link', async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShop(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const ownerAccessToken = await rotateMerchantAccessTokenForShop(shop.id);
+    await refreshRuntimeDataFromDatabase();
+    const updatedShop = await getShop(shop.id) || shop;
     const origin = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-    res.json({ success: true, shop: toSafeShop(shop), public_url: `${origin}/${shop.slug}`, access_url: `${origin}/app?access=${encodeURIComponent(ownerAccessToken)}` });
+    res.json({ success: true, shop: toSafeShop(updatedShop), public_url: `${origin}/${updatedShop.slug}`, access_url: `${origin}/app?access=${encodeURIComponent(ownerAccessToken)}` });
   });
 
   router.post('/shops/:id/notification', async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShop(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const templates: Record<string, string> = {
       welcome: `Bonjour ${shop.name}, votre espace MaTable.ci est prêt. Pensez à compléter votre catalogue et à partager votre vitrine avec vos clients.`,

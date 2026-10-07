@@ -1,4 +1,5 @@
 import { Router, type RequestHandler } from 'express';
+import { getShopFromDatabase } from '../repositories/shops.ts';
 import { isShopPubliclyVisible } from '../services/businessRules.ts';
 import type { ShopRecord } from '../types.ts';
 
@@ -28,7 +29,7 @@ export function classifyAnalyticsSource(referrer: string, siteHost: string): Ana
   }
 }
 
-export function createTelemetryRouter({ shops, rateLimitPublicRequest, dbGet, dbRun }: TelemetryRouterOptions) {
+export function createTelemetryRouter({ rateLimitPublicRequest, dbGet, dbRun }: TelemetryRouterOptions) {
   const router = Router();
 
   router.get('/health', (_req, res) => {
@@ -41,7 +42,7 @@ export function createTelemetryRouter({ shops, rateLimitPublicRequest, dbGet, db
     if (!sessionId || sessionId.length > 100 || (shopId !== null && !Number.isInteger(shopId))) {
       return res.status(400).json({ error: 'Événement analytics invalide.' });
     }
-    if (shopId !== null && !shops.some((shop) => shop.id === shopId)) {
+    if (shopId !== null && !await getShopFromDatabase(shopId)) {
       return res.status(404).json({ error: 'Boutique introuvable.' });
     }
     const today = new Date().toISOString().slice(0, 10);
@@ -77,7 +78,7 @@ export function createTelemetryRouter({ shops, rateLimitPublicRequest, dbGet, db
       || !sessionId || sessionId.length > 100) {
       return res.status(400).json({ error: 'Événement produit invalide.' });
     }
-    const shop = shops.find((candidate) => candidate.id === shopId);
+    const shop = await getShopFromDatabase(shopId);
     if (!shop || !isShopPubliclyVisible(shop)) return res.status(404).json({ error: 'Boutique introuvable.' });
     const product = await dbGet<{ id: number }>(
       'SELECT id FROM products WHERE id = ? AND shop_id = ?',

@@ -409,7 +409,7 @@ export default function App() {
                       } />
                       <Route path="/app/*" element={normalizedPath === 'app' && !hasMerchantAccessToken && !hasAdminShopSession
                         ? renderCustomerAuth('register')
-                        : <MerchantDashboard openRegistration={openMerchantRegistration || normalizedPath === 'app/creer-boutique'} onBackToDirectory={() => { setOpenMerchantRegistration(false); navigate('/'); }} onOpenStorefront={(slug) => navigate(`/${slug}`)} />
+                        : <MerchantDashboard openRegistration={openMerchantRegistration || normalizedPath === 'app/creer-boutique'} onBackToDirectory={() => { setOpenMerchantRegistration(false); navigate('/'); }} onCustomerLogin={() => navigate('/connexion')} onOpenStorefront={(slug) => navigate(`/${slug}`)} />
                       } />
                       <Route path="/admin/*" element={<AdminDashboard />} />
                       <Route path="/:slug" element={<StorefrontRoute customerUser={customerUser} onCustomerAuthenticated={setCustomerUser} />} />

@@ -1,13 +1,11 @@
 import { Router, type RequestHandler } from 'express';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
 import { canUseSubscriptionFeature, getShopPublicationBlockReason, getSubscriptionPlanConfig } from '../services/businessRules.ts';
-import type { OrderRecord, ShopRecord } from '../types.ts';
+import { getShopFromDatabase } from '../repositories/shops.ts';
+import type { ShopRecord } from '../types.ts';
 
 interface ShopManagementOptions {
-  shops: ShopRecord[];
-  orders: OrderRecord[];
   dbAll: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
-  refreshRuntimeDataFromDatabase: () => Promise<void>;
   requireMerchantAccess: RequestHandler;
   requireMerchantOwnShop: RequestHandler;
   addDays: (date: Date, days: number) => string;
@@ -25,10 +23,7 @@ interface ShopManagementOptions {
 
 export function createShopManagementRouter(options: ShopManagementOptions) {
   const {
-    shops,
-    orders,
     dbAll,
-    refreshRuntimeDataFromDatabase,
     requireMerchantAccess,
     requireMerchantOwnShop,
     addDays,
@@ -50,7 +45,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
   );
 
   router.post('/:id/start-trial', requireMerchantOwnShop, async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     if (shop.trial_start && shop.trial_end) {
       return res.json({ success: true, shop: toSafeShop(shop), trial_days: trialDurationDays, already_started: true });
@@ -68,7 +63,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
   });
 
   router.patch('/:id/subscription-reminder-consent', requireMerchantOwnShop, async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'Le consentement doit être activé ou désactivé.' });
     shop.whatsapp_subscription_reminders_enabled = req.body.enabled;
@@ -82,13 +77,12 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
   });
 
   router.get('/:id/analytics', requireMerchantOwnShop, async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     if (!req.adminShopAccess && !canUseSubscriptionFeature(shop, 'advanced_analytics')) {
       return res.status(403).json({ error: 'Les statistiques détaillées sont réservées à la formule Pro.' });
     }
 
-    await refreshRuntimeDataFromDatabase();
     const requestedDays = Number(req.query.days);
     const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 90) : 30;
     const since = new Date(Date.now() - days * 86400000).toISOString();
@@ -115,10 +109,15 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       ORDER BY views DESC, clicks DESC, p.id ASC
       LIMIT 10
     `, [shop.id, since]);
-    const actionableOrders = orders.filter((order) => order.shop_id === shop.id
-      && order.created_at >= since
-      && order.status !== 'cancelled'
-      && order.status !== 'expired');
+    const orderRows = await dbAll<Record<string, unknown>>('SELECT * FROM orders WHERE shop_id = ? AND created_at >= ? AND status NOT IN (?, ?)', [
+      shop.id, since, 'cancelled', 'expired',
+    ]);
+    const actionableOrders = orderRows.map((row) => ({
+      shop_id: Number(row.shop_id),
+      created_at: String(row.created_at),
+      status: String(row.status || 'pending'),
+      total_amount: Number(row.total_amount || 0),
+    })).filter((order) => order.shop_id === shop.id);
     const byDay = new Map<string, { date: string; page_views: number; unique_visitors: number; orders: number; order_value: number }>();
     for (const row of trafficByDay) {
       byDay.set(row.date, {
@@ -159,7 +158,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
   });
 
   router.post('/:id/access-link', requireMerchantAccess, async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const ownerAccessToken = await rotateMerchantAccessTokenForShop(shop.id);
     const origin = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
@@ -171,7 +170,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
   });
 
   router.patch('/:id/publication-status', requireMerchantOwnShop, async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const requestedStatus = String(req.body?.publication_status || '');
     if (requestedStatus !== 'draft' && requestedStatus !== 'active') {
@@ -190,7 +189,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
   });
 
   router.patch('/:id/toggle-status', requireMerchantAccess, async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable' });
     const { is_open } = req.body;
     shop.is_open = is_open !== undefined ? Boolean(is_open) : !shop.is_open;
@@ -205,7 +204,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
   });
 
   router.put('/:id/theme', requireMerchantOwnShop, async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable' });
     const { theme_config } = req.body;
     if (theme_config) {
@@ -237,7 +236,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
   });
 
   router.put('/:id', requireMerchantOwnShop, async (req, res) => {
-    const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
+    const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable' });
     const { theme_color, welcome_message, is_open, whatsapp_number, name, category, theme_config, city, pin_code, opening_hours } = req.body;
 

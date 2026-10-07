@@ -132,7 +132,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       .then(async (res) => {
         const data = await res.json();
         if (res.ok && data.authenticated && data.userType === 'merchant' && data.shopId) {
-          await loadShopData(Number(data.shopId), Boolean(data.adminShopAccess));
+          await loadShopData(Number(data.shopId));
         }
       })
       .catch(() => undefined)
@@ -204,7 +204,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   };
 
   // Fetch products, orders, and flash bilan
-  const loadShopData = async (shopId: number, adminShopAccess = Boolean(new URLSearchParams(window.location.search).get('admin_shop_id'))) => {
+  const loadShopData = async (shopId: number) => {
     const requestId = ++shopDataRequestId.current;
     const isCurrentRequest = () => requestId === shopDataRequestId.current;
     setDataLoading(true);
@@ -226,7 +226,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       if (shopRes.ok) {
         const sData = await shopRes.json();
         if (!isCurrentRequest()) return;
-        const loadedShop = { ...sData.shop, ...(adminShopAccess ? { admin_mode: true } : {}) };
+        const loadedShop = sData.shop;
         setCurrentShop(loadedShop);
         syncShopSettings(loadedShop);
         setProducts(sData.products || []);

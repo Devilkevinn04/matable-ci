@@ -51,6 +51,7 @@ interface MerchantDashboardProps {
   currentShopSlug?: string;
   onOpenStorefront: (slug: string) => void;
   onBackToDirectory: () => void;
+  onCustomerLogin: () => void;
   openRegistration?: boolean;
 }
 
@@ -75,7 +76,7 @@ import { ProductModal } from './ProductModal';
 import { MerchantIdentityVerification } from './lazyMerchantIdentityVerification';
 import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
 
-export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStorefront, onBackToDirectory, openRegistration = false }) => {
+export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStorefront, onBackToDirectory, onCustomerLogin, openRegistration = false }) => {
 
   const merchantState = useMerchantDashboard(onOpenStorefront, openRegistration);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
@@ -282,10 +283,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     };
   }, [isSettingsDrawerOpen]);
 
-  if (!merchantState.currentShop) return <AuthScreens state={merchantState} onBackToDirectory={onBackToDirectory} />;
+  if (!merchantState.currentShop) return <AuthScreens state={merchantState} onBackToDirectory={onBackToDirectory} onCustomerLogin={onCustomerLogin} />;
 
-  const merchantIdentityVerified = !merchantState.currentShop.merchant_verification_status
-    || ['not_required', 'verified'].includes(merchantState.currentShop.merchant_verification_status);
   if (!merchantState.currentShop.admin_mode && merchantState.currentShop.subscription?.status === 'not_started') {
     return (
       <>
@@ -297,7 +296,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       </>
     );
   }
-  if (!merchantState.currentShop.admin_mode && merchantIdentityVerified && ['expired', 'past_due', 'suspended', 'cancelled'].includes(merchantState.currentShop.subscription?.status || '')) {
+  if (!merchantState.currentShop.admin_mode && ['expired', 'past_due', 'suspended', 'cancelled'].includes(merchantState.currentShop.subscription?.status || '')) {
     return <MerchantTrialOnboarding shop={merchantState.currentShop} isStarting={false} onStart={handleStartTrial} mode="expired" />;
   }
   // 2. AUTHENTICATED -> MERCHANT DASHBOARD

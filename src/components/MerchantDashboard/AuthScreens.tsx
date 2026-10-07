@@ -4,12 +4,13 @@ import { createPortal } from 'react-dom';
 import { ShopCategory } from '../../types';
 import { MerchantState } from './useMerchant';
 import { CATEGORY_DEFAULTS, SHOP_CATEGORIES } from '../../utils/categoryDefaults';
-import { AuthExperienceLayout } from '../AuthExperienceLayout';
+import { AuthAudienceSwitcher, AuthExperienceLayout } from '../AuthExperienceLayout';
 import { MerchantRegistrationScreen } from './MerchantRegistrationScreen';
 
 interface AuthScreensProps {
   state: MerchantState;
   onBackToDirectory: () => void;
+  onCustomerLogin: () => void;
 }
 
 
@@ -25,7 +26,7 @@ const abidjanCommunes = [
   'Yopougon', 'Autre ville / commune',
 ];
 
-export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirectory }) => {
+export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirectory, onCustomerLogin }) => {
   const {
     isSessionLoading, currentShop, phoneInput, setPhoneInput, pinInput, setPinInput,
     accessCodeInput, setAccessCodeInput, showAccessCode, setShowAccessCode, showPinInput,
@@ -60,6 +61,11 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
         onTopAction={() => setIsRegisterModalOpen(true)}
       >
         <div className="w-full">
+          <AuthAudienceSwitcher
+            activeAudience="merchant"
+            onSelectCustomer={onCustomerLogin}
+            onSelectMerchant={() => undefined}
+          />
 
           <div className="mb-6">
             <p className="text-sm font-bold text-[#e6572b]">Espace propriétaire</p>

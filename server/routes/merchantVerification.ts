@@ -1,6 +1,5 @@
 import { Router, type RequestHandler } from 'express';
 import { decryptKycValue, encryptKycValue, hashDocumentNumber, isKycEncryptionConfigured } from '../services/identityCrypto.ts';
-import type { ShopRecord } from '../types.ts';
 
 type DbRun = (sql: string, params?: unknown[]) => Promise<{ changes: number }>;
 type DbGet = <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T | undefined>;
@@ -35,7 +34,6 @@ interface MerchantVerificationOptions {
   dbGet: DbGet;
   dbAll: DbAll;
   requireMerchantOwnShop: RequestHandler;
-  shops: ShopRecord[];
 }
 
 function parseImage(value: unknown) {
@@ -65,7 +63,7 @@ function publicStatus(row?: VerificationRow) {
 }
 
 export function createMerchantVerificationRouter(options: MerchantVerificationOptions) {
-  const { dbRun, dbGet, dbAll, requireMerchantOwnShop, shops } = options;
+  const { dbRun, dbGet, dbAll, requireMerchantOwnShop } = options;
   const router = Router();
 
   router.get('/:id/identity-verification', requireMerchantOwnShop, async (req, res) => {
@@ -129,8 +127,6 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
         encryptKycValue(selfieImage.base64), null, status, decisionMethod, now, reviewedAt,
       ]);
       await dbRun('UPDATE shops SET merchant_verification_status = ? WHERE id = ?', [status, shopId]);
-      const shop = shops.find((candidate) => candidate.id === shopId);
-      if (shop) shop.merchant_verification_status = status;
       res.setHeader('Cache-Control', 'no-store');
       res.status(201).json({ success: true, ...publicStatus({ status, decision_method: decisionMethod, document_type: documentType, document_number_last4: documentNumber.replace(/\s/g, '').slice(-4), submitted_at: now, reviewed_at: reviewedAt, reviewer_note: null } as VerificationRow) });
     } catch (error) {
@@ -186,8 +182,6 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
     const reviewedAt = status === 'under_review' ? null : new Date().toISOString();
     await dbRun("UPDATE merchant_identity_verifications SET status = ?, decision_method = 'manual', reviewed_at = ?, reviewer_note = ? WHERE shop_id = ?", [status, reviewedAt, note, shopId]);
     await dbRun('UPDATE shops SET merchant_verification_status = ? WHERE id = ?', [status, shopId]);
-    const shop = shops.find((candidate) => candidate.id === shopId);
-    if (shop) shop.merchant_verification_status = status as ShopRecord['merchant_verification_status'];
     res.setHeader('Cache-Control', 'no-store');
     res.json({ success: true, status, reviewed_at: reviewedAt });
   });

@@ -97,8 +97,11 @@ const addDays = (d: Date, days: number) => {
 async function refreshSubscriptionState(shop: ShopRecord): Promise<SubscriptionState> {
   const state = getSubscriptionState(shop);
   if (state.status === 'expired' && shop.subscription_status !== 'expired') {
-    shop.subscription_status = 'expired';
-    await persistShop(shop);
+    const update = await dbRun(
+      "UPDATE shops SET subscription_status = 'expired' WHERE id = ? AND subscription_status <> 'expired'",
+      [shop.id],
+    );
+    if (update.changes > 0) shop.subscription_status = 'expired';
   }
   return state;
 }
@@ -106,7 +109,8 @@ async function refreshSubscriptionState(shop: ShopRecord): Promise<SubscriptionS
 async function processSubscriptionAutomation() {
   const now = new Date();
   const reminderConfig = getWhatsAppSubscriptionReminderConfig();
-  for (const shop of shops) {
+  const currentShops = await loadShopsFromDatabase();
+  for (const shop of currentShops) {
     try {
       await refreshSubscriptionState(shop);
       if (!reminderConfig || !shop.whatsapp_subscription_reminders_enabled || shop.last_notification_sent_at) continue;
@@ -131,7 +135,6 @@ async function processSubscriptionAutomation() {
         continue;
       }
 
-      await persistShop(shop);
       await dbRun(`INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at)
         VALUES (?, ?, ?, ?, ?)`, [
         'system', 'subscription_reminder_sent', shop.id,
@@ -701,25 +704,24 @@ const rateLimitPublicRequest = createPublicRateLimitMiddleware(getRateLimitClien
 
 export async function rotateMerchantAccessTokenForShop(shopId: number, previousToken?: string): Promise<string> {
   const token = randomUUID();
-  const shop = shops.find((candidate) => candidate.id === shopId);
-  if (!shop) return token;
-
   const hashedToken = hashAccessToken(token);
-  shop.owner_access_token_hash = hashedToken;
-  if (previousToken) {
-    const previousHash = hashAccessToken(previousToken);
-    if (shop.owner_access_token_hash === previousHash) {
-      shop.owner_access_token_hash = hashedToken;
-    }
-  }
-  await persistShop(shop);
+  const params: unknown[] = [hashedToken, shopId];
+  const expectedTokenCondition = previousToken ? ' AND owner_access_token_hash = ?' : '';
+  if (previousToken) params.push(hashAccessToken(previousToken));
+  const result = await dbRun(
+    `UPDATE shops SET owner_access_token_hash = ? WHERE id = ?${expectedTokenCondition}`,
+    params,
+  );
+  if (result.changes !== 1) throw new Error('Impossible de renouveler le lien marchand : boutique introuvable ou lien précédent déjà remplacé.');
+  const cachedShop = shops.find((candidate) => candidate.id === shopId);
+  if (cachedShop) cachedShop.owner_access_token_hash = hashedToken;
   return token;
 }
 
 setInterval(async () => {
   await cleanupExpiredSessions();
   try {
-    for (const shop of shops) await refreshSubscriptionState(shop);
+    for (const shop of await loadShopsFromDatabase()) await refreshSubscriptionState(shop);
   } catch (error) {
     console.error('Unable to synchronize expired subscriptions.', error);
   }
@@ -781,7 +783,7 @@ async function startServer() {
 
   const app = express();
   const PORT = Number(process.env.PORT || 3000);
-  const verificationRouters = createMerchantVerificationRouter({ dbRun, dbGet, dbAll, requireMerchantOwnShop, shops });
+  const verificationRouters = createMerchantVerificationRouter({ dbRun, dbGet, dbAll, requireMerchantOwnShop });
 
   applySecurityHeaders(app);
 
@@ -801,7 +803,7 @@ async function startServer() {
     const shopId = Number(req.params.id);
     const mutatingMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
     if (!mutatingMethod || !Number.isSafeInteger(shopId) || shopId <= 0
-      || !shops.some((shop) => shop.id === shopId) || !await getAdminSession(req)) {
+      || !await getShopFromDatabase(shopId) || !await getAdminSession(req)) {
       return next();
     }
     res.once('finish', () => {
@@ -888,10 +890,7 @@ async function startServer() {
   app.use('/api/v1/catalog/storefronts', publicShopsRouter);
   app.use('/api/shops', publicShopsRouter);
   app.use('/api/shops', createShopManagementRouter({
-    shops,
-    orders,
     dbAll,
-    refreshRuntimeDataFromDatabase,
     requireMerchantAccess,
     requireMerchantOwnShop,
     addDays,
@@ -909,7 +908,6 @@ async function startServer() {
   app.use('/api/shops', verificationRouters.merchantRouter);
 
   app.use('/api/shops', createShopRegistrationRouter({
-    shops,
     rateLimitPublicRequest,
     allocateShopId: () => allocateRecordId('shops'),
     normalizeWhatsAppPhone,
@@ -924,15 +922,11 @@ async function startServer() {
     addDays,
     trialDurationDays: TRIAL_DURATION_DAYS,
     computeIsShopOpen,
-    persistShop,
     createMerchantSession,
     toSafeShop,
-    dbGet,
   }));
 
   app.use('/api/auth', createAuthRouter({
-    shops,
-    orders,
     sessionDurationMs: SESSION_DURATION_MS,
     adminSessionDurationMs: ADMIN_SESSION_DURATION_MS,
     dummyCustomerPasswordHash: DUMMY_CUSTOMER_PASSWORD_HASH,
@@ -1031,7 +1025,7 @@ async function startServer() {
   };
   const isFrontendPagePath = (pathname: string) => pathname !== '/' && !pathname.startsWith('/api/') && !pathname.startsWith('/@') && !path.extname(pathname);
 
-  app.use(createSeoRouter({ shops, getPublicOrigin, escapeHtml }));
+  app.use(createSeoRouter({ getPublicOrigin, escapeHtml }));
 
   // Vite middleware for development vs. Production static serving
   if (process.env.NODE_ENV !== 'production') {
@@ -1070,16 +1064,24 @@ async function startServer() {
         }
       }
 
+      const seoShops = await loadShopsFromDatabase();
+      const seoProducts = await loadProductsFromDatabase();
+      const {
+        injectLegalSeo: injectCurrentLegalSeo,
+        injectDiscoverySeo: injectCurrentDiscoverySeo,
+        injectShopDirectorySeo: injectCurrentShopDirectorySeo,
+        injectShopOpenGraph: injectCurrentShopOpenGraph,
+      } = createSeoHtmlHelpers({ shops: seoShops, products: seoProducts, sanitizeTextField });
       const url = req.originalUrl.split('?')[0];
       const pathSegments = url.split('/').filter(Boolean);
       const matchSlug = pathSegments.length === 1 && !url.startsWith('/api') && !url.startsWith('/@') && !url.includes('.')
         ? pathSegments[0]
         : null;
       const targetShop = matchSlug && !['app', 'admin'].includes(matchSlug)
-        ? shops.find((shop) => shop.slug === matchSlug && isShopPubliclyVisible(shop))
+        ? seoShops.find((shop) => shop.slug === matchSlug && isShopPubliclyVisible(shop))
         : null;
       const legalPage = matchSlug && ['mentions-legales', 'confidentialite', 'cgu', 'cookies'].includes(matchSlug) ? matchSlug : null;
-      const discoveryPage = findPublicDiscoveryPage(url, shops.filter((shop) => isShopPubliclyVisible(shop)));
+      const discoveryPage = findPublicDiscoveryPage(url, seoShops.filter((shop) => isShopPubliclyVisible(shop)));
 
       if (req.path.replace(/\/+$/, '') === '/comment-ca-marche' && shouldServePublicHtml(req)) {
         try {
@@ -1096,7 +1098,7 @@ async function startServer() {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectShopDirectorySeo(transformed, req));
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectCurrentShopDirectorySeo(transformed, req));
         } catch (error) {
           return next(error);
         }
@@ -1116,7 +1118,7 @@ async function startServer() {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          const finalHtml = injectShopOpenGraph(transformed, targetShop, req);
+          const finalHtml = injectCurrentShopOpenGraph(transformed, targetShop, req);
           return res.status(200).set({ 'Content-Type': 'text/html' }).end(finalHtml);
         } catch (e) {
           return next(e);
@@ -1127,7 +1129,7 @@ async function startServer() {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectLegalSeo(transformed, legalPage, req));
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectCurrentLegalSeo(transformed, legalPage, req));
         } catch (e) {
           return next(e);
         }
@@ -1137,7 +1139,7 @@ async function startServer() {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectDiscoverySeo(transformed, discoveryPage, req));
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectCurrentDiscoverySeo(transformed, discoveryPage, req));
         } catch (e) {
           return next(e);
         }
@@ -1178,7 +1180,7 @@ async function startServer() {
 
     app.use(express.static(distPath, { index: false }));
 
-    app.get('/{*splat}', (req: Request, res: Response) => {
+    app.get('/{*splat}', async (req: Request, res: Response) => {
       if (req.path === '/app' && typeof req.query.access === 'string') {
         return res.status(200).set({
             'Content-Type': 'text/html',
@@ -1187,35 +1189,43 @@ async function startServer() {
           }).send(injectNoIndexSeo(baseHtml, 'Espace commerçant | MaTable.ci'));
       }
 
+      const seoShops = await loadShopsFromDatabase();
+      const seoProducts = await loadProductsFromDatabase();
+      const {
+        injectLegalSeo: injectCurrentLegalSeo,
+        injectDiscoverySeo: injectCurrentDiscoverySeo,
+        injectShopDirectorySeo: injectCurrentShopDirectorySeo,
+        injectShopOpenGraph: injectCurrentShopOpenGraph,
+      } = createSeoHtmlHelpers({ shops: seoShops, products: seoProducts, sanitizeTextField });
       const url = req.originalUrl.split('?')[0];
       const pathSegments = url.split('/').filter(Boolean);
       const matchSlug = pathSegments.length === 1 && !url.startsWith('/api') && !url.includes('.') ? pathSegments[0] : null;
       const targetShop = matchSlug && !['app', 'admin'].includes(matchSlug)
-        ? shops.find((shop) => shop.slug === matchSlug && isShopPubliclyVisible(shop))
+        ? seoShops.find((shop) => shop.slug === matchSlug && isShopPubliclyVisible(shop))
         : null;
       const legalPage = matchSlug && ['mentions-legales', 'confidentialite', 'cgu', 'cookies'].includes(matchSlug) ? matchSlug : null;
-      const discoveryPage = findPublicDiscoveryPage(req.path, shops.filter((shop) => isShopPubliclyVisible(shop)));
+      const discoveryPage = findPublicDiscoveryPage(req.path, seoShops.filter((shop) => isShopPubliclyVisible(shop)));
 
       if (req.path.replace(/\/+$/, '') === '/comment-ca-marche' && baseHtml && shouldServePublicHtml(req)) {
         return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectHowItWorksSeo(baseHtml, req));
       }
       if (req.path.replace(/\/+$/, '') === '/boutiques' && baseHtml && shouldServePublicHtml(req)) {
-        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectShopDirectorySeo(baseHtml, req));
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectCurrentShopDirectorySeo(baseHtml, req));
       }
       if (req.path.replace(/\/+$/, '') === '/faq' && baseHtml && shouldServePublicHtml(req)) {
         return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectFaqSeo(baseHtml, req));
       }
       if (targetShop && baseHtml && shouldServePublicHtml(req)) {
-        const customHtml = injectShopOpenGraph(baseHtml, targetShop, req);
+        const customHtml = injectCurrentShopOpenGraph(baseHtml, targetShop, req);
         return res.status(200).set({ 'Content-Type': 'text/html' }).send(customHtml);
       }
 
       if (legalPage && baseHtml && shouldServePublicHtml(req)) {
-        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectLegalSeo(baseHtml, legalPage, req));
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectCurrentLegalSeo(baseHtml, legalPage, req));
       }
 
       if (discoveryPage && baseHtml && shouldServePublicHtml(req)) {
-        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectDiscoverySeo(baseHtml, discoveryPage, req));
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectCurrentDiscoverySeo(baseHtml, discoveryPage, req));
       }
 
       if (isPrivateSeoPath(req.path) && baseHtml && shouldServePublicHtml(req)) {

@@ -2,11 +2,12 @@ import { createHash, randomUUID, timingSafeEqual as cryptoTimingSafeEqual } from
 import bcrypt from 'bcryptjs';
 import { createRemoteJWKSet, importPKCS8, jwtVerify, SignJWT } from 'jose';
 import { Router, type Request, type RequestHandler, type Response } from 'express';
-import type { OrderRecord, ShopRecord } from '../types.ts';
+import type { ShopRecord } from '../types.ts';
 import { toCustomerProfile, type CustomerProfileRow } from '../services/customerProfile.ts';
 import { dbAll, dbTransaction } from '../../db.ts';
 import { listCustomerSessionRecords, revokeOtherCustomerSessionRecords } from '../repositories/sessions.ts';
 import { clearLoginAttempts, getCustomerLoginLockSeconds, isLoginRateLimited, recordCustomerLoginFailure } from '../services/rateLimits.ts';
+import { getShopFromDatabase, loadShopsFromDatabase } from '../repositories/shops.ts';
 
 interface MerchantSession {
   shopId: number;
@@ -62,8 +63,6 @@ interface CustomerState {
 }
 
 interface AuthRouterOptions {
-  shops: ShopRecord[];
-  orders: OrderRecord[];
   sessionDurationMs: number;
   adminSessionDurationMs: number;
   dummyCustomerPasswordHash: string;
@@ -105,8 +104,6 @@ const timingSafeEqual = (left: string, right: string) => {
 export function createAuthRouter(options: AuthRouterOptions) {
   const router = Router();
   const {
-    shops,
-    orders,
     sessionDurationMs,
     adminSessionDurationMs,
     dummyCustomerPasswordHash,
@@ -190,7 +187,8 @@ export function createAuthRouter(options: AuthRouterOptions) {
     if (await isLoginRateLimited(attemptKey)) return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
 
     const cleanInputPhone = phone.replace(/[^0-9]/g, '');
-    const shop = shops.find((candidate) => {
+    const candidates = await loadShopsFromDatabase();
+    const shop = candidates.find((candidate) => {
       const cleanShopPhone = candidate.whatsapp_number.replace(/[^0-9]/g, '');
       return cleanShopPhone.includes(cleanInputPhone)
         || cleanInputPhone.includes(cleanShopPhone)
@@ -235,7 +233,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
   router.get('/session', async (req, res) => {
     const adminShopId = Number(req.query.admin_shop_id);
     if (Number.isSafeInteger(adminShopId) && adminShopId > 0 && await getAdminSession(req)) {
-      const shop = shops.find((candidate) => candidate.id === adminShopId);
+      const shop = await getShopFromDatabase(adminShopId);
       if (shop) {
         return res.json({
           authenticated: true,
@@ -248,7 +246,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     }
     const state = await getSessionStateForResponse(req, res);
     if (state.userType === 'merchant' && state.shopId) {
-      const shop = shops.find((candidate) => candidate.id === state.shopId);
+      const shop = await getShopFromDatabase(state.shopId);
       const subscription = shop ? await refreshSubscriptionState(shop) : undefined;
       return res.json({ ...state, subscription });
     }
@@ -259,7 +257,8 @@ export function createAuthRouter(options: AuthRouterOptions) {
     const token = String(req.body?.access_token || '').trim();
     if (!token || token.length > 200) return res.status(401).json({ error: 'Lien d’accès invalide.' });
     const tokenHash = hashAccessToken(token);
-    const shop = shops.find((candidate) => candidate.owner_access_token_hash === tokenHash);
+    const shopRow = await dbGet<{ id: number }>('SELECT id FROM shops WHERE owner_access_token_hash = ?', [tokenHash]);
+    const shop = shopRow ? await getShopFromDatabase(Number(shopRow.id)) : undefined;
     if (!shop) return res.status(401).json({ error: 'Lien d’accès invalide.' });
     if (!shop.is_active) return res.status(403).json({ error: 'Boutique inactive : contactez l’administrateur pour la réactivation.' });
 
@@ -268,7 +267,6 @@ export function createAuthRouter(options: AuthRouterOptions) {
       [shop.id, tokenHash],
     );
     if (consumed.changes !== 1) return res.status(401).json({ error: 'Lien d’accès invalide.' });
-    shop.owner_access_token_hash = null;
     await createMerchantSession(res, shop.id, req);
     res.json({ success: true, shop: toSafeShop(shop) });
   });
@@ -746,14 +744,6 @@ export function createAuthRouter(options: AuthRouterOptions) {
       const deleted = await transaction.run('DELETE FROM users WHERE id = ?', [session.user!.id]);
       if (deleted.changes !== 1) throw new Error('La suppression du compte client a échoué.');
     });
-    for (const order of orders) {
-      if (order.customer_user_id !== session.user.id) continue;
-      order.customer_user_id = undefined;
-      order.customer_name = 'Compte supprimé';
-      order.customer_phone = '';
-      order.delivery_location = '';
-      order.delivery_note = '';
-    }
     for (const [token, customerSession] of customerSessions) {
       if (customerSession.userId === session.user.id) customerSessions.delete(token);
     }

@@ -1,5 +1,32 @@
 import React from 'react';
-import { ArrowLeft, ArrowRight, MapPin } from 'lucide-react';
+import { ArrowLeft, ArrowRight, MapPin, Store, UserRound } from 'lucide-react';
+
+export const AuthAudienceSwitcher: React.FC<{
+  activeAudience: 'customer' | 'merchant';
+  onSelectCustomer: () => void;
+  onSelectMerchant: () => void;
+}> = ({ activeAudience, onSelectCustomer, onSelectMerchant }) => (
+  <nav aria-label="Type de connexion" className="mb-6 grid grid-cols-2 rounded-2xl border border-[#e5e1d8] bg-[#f3f1eb] p-1">
+    <button
+      type="button"
+      onClick={onSelectCustomer}
+      aria-current={activeAudience === 'customer' ? 'page' : undefined}
+      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'customer' ? 'bg-white text-[#0f4d3d] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
+    >
+      <UserRound className="h-4 w-4" aria-hidden="true" />
+      Connexion client
+    </button>
+    <button
+      type="button"
+      onClick={onSelectMerchant}
+      aria-current={activeAudience === 'merchant' ? 'page' : undefined}
+      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'merchant' ? 'bg-white text-[#0f4d3d] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
+    >
+      <Store className="h-4 w-4" aria-hidden="true" />
+      Connexion marchand
+    </button>
+  </nav>
+);
 
 interface AuthExperienceLayoutProps {
   eyebrow: string;

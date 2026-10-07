@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { dbGet } from '../db.ts';
+import { dbGet, dbRun } from '../db.ts';
 import { canPublishShop, canReceiveShopOrders, getSubscriptionReminderAt, isShopPubliclyVisible, isSubscriptionReminderDue } from '../server/services/businessRules.ts';
 import {
   isBlockedStaticAsset,
@@ -223,12 +223,24 @@ test('persists merchant session records through the configured database adapter'
 });
 
 test('rotates the merchant access token when an admin renews access', async () => {
+  const shopId = Date.now();
   const oldToken = 'old-token-123';
-  const newToken = await rotateMerchantAccessTokenForShop(1, oldToken);
+  await dbRun(
+    `INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, created_at, category, subscription_tier, owner_access_token_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [shopId, 'Rotation test', `rotation-test-${shopId}`, `225${String(shopId).slice(-10)}`, 'test-pin-hash', new Date().toISOString(), 'other', 'standard', createHash('sha256').update(oldToken).digest('hex')],
+  );
 
-  assert.ok(newToken);
-  assert.notEqual(newToken, oldToken);
-  assert.equal(newToken.length > 10, true);
+  try {
+    const newToken = await rotateMerchantAccessTokenForShop(shopId, oldToken);
+    assert.ok(newToken);
+    assert.notEqual(newToken, oldToken);
+    assert.equal(newToken.length > 10, true);
+    const storedToken = await dbGet<{ owner_access_token_hash: string }>('SELECT owner_access_token_hash FROM shops WHERE id = ?', [shopId]);
+    assert.equal(storedToken?.owner_access_token_hash, createHash('sha256').update(newToken).digest('hex'));
+  } finally {
+    await dbRun('DELETE FROM shops WHERE id = ?', [shopId]);
+  }
 });
 
 test('exposes the documented monthly subscription plan catalog', () => {
