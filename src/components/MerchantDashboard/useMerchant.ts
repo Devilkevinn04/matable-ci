@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useToast } from '../Toast';
 import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks, SubscriptionTier } from '../../types';
 import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../../utils/format';
@@ -58,6 +58,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [orders, setOrders] = useState<Order[]>([]);
   const [flashBilan, setFlashBilan] = useState<FlashBilan | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
+  const shopDataRequestId = useRef(0);
 
   // Catalog search & filter
   const [catalogSearch, setCatalogSearch] = useState('');
@@ -219,10 +220,16 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
   // Fetch products, orders, and flash bilan
   const loadShopData = async (shopId: number) => {
+    const requestId = ++shopDataRequestId.current;
+    const isCurrentRequest = () => requestId === shopDataRequestId.current;
     setDataLoading(true);
+    setProducts([]);
+    setOrders([]);
+    setFlashBilan(null);
     try {
       // 1. Load shop details & products
       const shopRes = await fetch(`/api/shops/${shopId}`);
+      if (!isCurrentRequest()) return;
       if (shopRes.status === 401) {
         setCurrentShop(null);
         setProducts([]);
@@ -233,6 +240,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       }
       if (shopRes.ok) {
         const sData = await shopRes.json();
+        if (!isCurrentRequest()) return;
         setCurrentShop(sData.shop);
         syncShopSettings(sData.shop);
         setProducts(sData.products || []);
@@ -240,6 +248,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
       // 2. Load orders
       const ordersRes = await fetch(`/api/shops/${shopId}/orders`);
+      if (!isCurrentRequest()) return;
       if (ordersRes.status === 401) {
         setCurrentShop(null);
         setProducts([]);
@@ -250,11 +259,14 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       }
       if (ordersRes.ok) {
         const oData = await ordersRes.json();
-        setOrders(Array.isArray(oData) ? oData : (oData.orders || []));
+        if (!isCurrentRequest()) return;
+        const shopOrders = Array.isArray(oData) ? oData : (oData.orders || []);
+        setOrders(shopOrders.filter((order: Order) => order.shop_id === shopId));
       }
 
       // 3. Load Flash Bilan
       const bilanRes = await fetch(`/api/shops/${shopId}/flash-bilan`);
+      if (!isCurrentRequest()) return;
       if (bilanRes.status === 401) {
         setCurrentShop(null);
         setProducts([]);
@@ -265,12 +277,13 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       }
       if (bilanRes.ok) {
         const bData = await bilanRes.json();
+        if (!isCurrentRequest()) return;
         setFlashBilan(bData);
       }
     } catch (err) {
-      console.error('Error loading merchant data', err);
+      if (isCurrentRequest()) console.error('Error loading merchant data', err);
     } finally {
-      setDataLoading(false);
+      if (isCurrentRequest()) setDataLoading(false);
     }
   };
 

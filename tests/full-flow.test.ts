@@ -1420,7 +1420,7 @@ test('security hardening: duplicate shop prevention', async () => {
 
 });
 
-test('merchant A cannot mutate merchant B products', async () => {
+test('merchant A cannot access merchant B products, orders, or settings', async () => {
   const merchantAPhone = uniquePhone();
   const merchantBPhone = uniquePhone();
   const createShop = async (name: string, phone: string) => {
@@ -1481,6 +1481,8 @@ test('merchant A cannot mutate merchant B products', async () => {
     }),
     apiFetch(`/api/shops/${merchantBShopId}/products/${productId}/toggle-visibility`, { method: 'PATCH' }),
     apiFetch(`/api/shops/${merchantBShopId}/products/${productId}`, { method: 'DELETE' }),
+    apiFetch(`/api/shops/${merchantBShopId}/orders`),
+    apiFetch(`/api/shops/${merchantBShopId}/flash-bilan`),
   ]);
 
   for (const attempt of attempts) assert.equal(attempt.response.status, 401, JSON.stringify(attempt.payload));

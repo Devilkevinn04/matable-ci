@@ -10,6 +10,7 @@
     "start": "node build/server.cjs",
     "clean": "rm -rf dist build server.js",
     "archive:release": "python3 scripts/create-release-archive.py",
+    "repair:order-shops": "node --import dotenv/config --import tsx scripts/repair-order-shop-attribution.ts",
     "test:postgres": "node scripts/run-postgres-tests.mjs",
     "lint": "tsc --noEmit",
     "migrate:neon": "node --import dotenv/config --import tsx scripts/migrate-neon.ts",

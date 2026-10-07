@@ -101,7 +101,7 @@ function StorefrontRoute({ customerUser, onCustomerAuthenticated }: {
   onCustomerAuthenticated: (user: CustomerUser) => void;
 }) {
   const { slug = '' } = useParams();
-  return <CustomerStorefront shopSlug={slug} customerUser={customerUser} onCustomerAuthenticated={onCustomerAuthenticated} />;
+  return <CustomerStorefront key={slug} shopSlug={slug} customerUser={customerUser} onCustomerAuthenticated={onCustomerAuthenticated} />;
 }
 
 function NotFoundPage() {

@@ -198,15 +198,18 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     });
   }, [products, searchQuery, selectedCategory]);
 
-  const fetchShopData = async () => {
+  const fetchShopData = async (signal: AbortSignal) => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`/api/v1/catalog/storefronts/${encodeURIComponent(shopSlug)}`);
+      setShop(null);
+      setProducts([]);
+      const res = await fetch(`/api/v1/catalog/storefronts/${encodeURIComponent(shopSlug)}`, { signal });
       if (!res.ok) {
         throw new Error('Boutique introuvable');
       }
       const data = await res.json();
+      if (signal.aborted) return;
       setShop(data.shop);
       setProducts(data.products || []);
 
@@ -231,15 +234,18 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       setSelectedColors(initColors);
       setSelectedModifiers(initModifiers);
     } catch (err: any) {
+      if (signal.aborted) return;
       setError(err.message || 'Erreur lors du chargement');
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchShopData();
+    const controller = new AbortController();
+    void fetchShopData(controller.signal);
     setOrderSuccess(null);
+    return () => controller.abort();
   }, [shopSlug]);
 
   useEffect(() => {
@@ -608,6 +614,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Erreur de validation de commande');
+      }
+      if (Number(data.order?.shop_id) !== shop.id) {
+        throw new Error('La commande ne correspond pas à cette boutique. Veuillez réessayer.');
       }
 
       // 2. Prepare WhatsApp from the exact server-confirmed order.
