@@ -1446,6 +1446,30 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   assert.equal(ownerNotification.payload.delivery_mode, 'whatsapp_click_to_chat');
   assert.ok(String(ownerNotification.payload.whatsapp_url).startsWith('https://wa.me/'));
 
+  const identityVerificationRequest = await apiFetch(`/api/admin/shops/${shopId}/notification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ template: 'identity_verification' }),
+  });
+  assert.equal(identityVerificationRequest.response.status, 200, JSON.stringify(identityVerificationRequest.payload));
+  assert.ok(String(identityVerificationRequest.payload.whatsapp_url).startsWith('https://wa.me/'));
+  assert.match(String(identityVerificationRequest.payload.message), /\/app/);
+  assert.match(String(identityVerificationRequest.payload.message), /Didit/);
+  assert.match(String(identityVerificationRequest.payload.message), new RegExp(created.payload.shop.name));
+  assert.equal(JSON.stringify(identityVerificationRequest.payload).includes('ownerAccessToken'), false);
+  assert.equal(identityVerificationRequest.payload.message.includes('{boutique}'), false);
+
+  const customIdentityCampaignMessage = await apiFetch(`/api/admin/shops/${shopId}/notification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      template: 'identity_verification',
+      message: 'Bonjour {boutique}, connectez-vous ici : {dashboard}.',
+    }),
+  });
+  assert.equal(customIdentityCampaignMessage.response.status, 200, JSON.stringify(customIdentityCampaignMessage.payload));
+  assert.equal(customIdentityCampaignMessage.payload.message, `Bonjour ${created.payload.shop.name}, connectez-vous ici : ${new URL(BASE_URL).origin}/app.`);
+
   const listAfterReject = await apiFetch('/api/admin/shops');
   assert.equal(listAfterReject.response.status, 200);
   const rejectedShop = listAfterReject.payload.find((item: any) => item.id === shopId);

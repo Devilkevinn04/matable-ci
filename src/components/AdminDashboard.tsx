@@ -80,6 +80,13 @@ export const AdminDashboard: React.FC = () => {
   const [notificationShopId, setNotificationShopId] = useState('');
   const [notificationTemplate, setNotificationTemplate] = useState<typeof ownerNotificationTemplates[number]['id']>('welcome');
   const [notificationLoading, setNotificationLoading] = useState(false);
+  const [verificationRequestShopId, setVerificationRequestShopId] = useState<number | null>(null);
+  const [identityCampaignShopIds, setIdentityCampaignShopIds] = useState<number[]>([]);
+  const [identityCampaignIndex, setIdentityCampaignIndex] = useState(0);
+  const [identityCampaignLoading, setIdentityCampaignLoading] = useState(false);
+  const [identityCampaignMessage, setIdentityCampaignMessage] = useState(
+    'Bonjour {boutique}, votre boutique MaTable.ci est actuellement en veille et n’apparaît pas sur le site, car votre identité n’a pas encore été vérifiée. Pour la faire réapparaître, connectez-vous à votre tableau de bord marchand : {dashboard}, puis ouvrez « Vérification d’identité » et suivez les étapes de Didit. Après la vérification, la remise en ligne pourra être finalisée si les autres critères de publication sont remplis. Répondez à ce message si vous avez besoin d’aide.',
+  );
   const [selectedVerificationShopId, setSelectedVerificationShopId] = useState<number | null>(null);
   const [featuredActionShopId, setFeaturedActionShopId] = useState<number | null>(null);
   const [contentModeration, setContentModeration] = useState<AdminContentModeration>({ reviews: [], reports: [] });
@@ -565,6 +572,81 @@ export const AdminDashboard: React.FC = () => {
       showNotice(error instanceof Error ? error.message : 'Impossible de préparer la notification.');
     } finally {
       setNotificationLoading(false);
+    }
+  };
+
+  const requestOwnerIdentityVerification = async (shopId: number) => {
+    const popup = window.open('about:blank', '_blank');
+    if (!popup) {
+      showNotice('Autorisez les fenêtres pop-up pour préparer le message WhatsApp.');
+      return;
+    }
+    popup.opener = null;
+    setVerificationRequestShopId(shopId);
+    try {
+      const response = await fetch(`/api/admin/shops/${shopId}/notification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template: 'identity_verification' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de préparer la demande WhatsApp.');
+      if (typeof data.whatsapp_url !== 'string' || !data.whatsapp_url.startsWith('https://wa.me/')) {
+        throw new Error('Le lien WhatsApp reçu est invalide.');
+      }
+      popup.location.href = data.whatsapp_url;
+      showNotice('Message WhatsApp prêt. Vérifiez-le et envoyez-le au propriétaire.');
+    } catch (error) {
+      popup.close();
+      showNotice(error instanceof Error ? error.message : 'Impossible de préparer la demande WhatsApp.');
+    } finally {
+      setVerificationRequestShopId(null);
+    }
+  };
+
+  const identityVerificationCandidates = shops.filter((shop) =>
+    ['pending', 'submitted', 'under_review', 'rejected'].includes(shop.merchant_verification_status || '')
+    && shop.publication_status !== 'active');
+  const identityCampaignRecipients = identityCampaignShopIds
+    .map((shopId) => shops.find((shop) => shop.id === shopId))
+    .filter((shop): shop is AdminShopItem => Boolean(shop));
+  const identityCampaignRecipient = identityCampaignRecipients[identityCampaignIndex];
+  const startIdentityCampaign = () => {
+    const recipients = identityVerificationCandidates
+      .filter((shop) => /^\d{8,15}$/.test(String(shop.whatsapp_number || '').replace(/\D/g, '')))
+      .map((shop) => shop.id);
+    setIdentityCampaignShopIds(recipients);
+    setIdentityCampaignIndex(0);
+    if (recipients.length === 0) showNotice('Aucun propriétaire en attente avec un numéro WhatsApp valide.');
+  };
+  const prepareNextIdentityCampaignMessage = async () => {
+    if (!identityCampaignRecipient) return;
+    const popup = window.open('about:blank', '_blank');
+    if (!popup) {
+      showNotice('Autorisez les fenêtres pop-up pour ouvrir WhatsApp.');
+      return;
+    }
+    popup.opener = null;
+    setIdentityCampaignLoading(true);
+    try {
+      const response = await fetch(`/api/admin/shops/${identityCampaignRecipient.id}/notification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template: 'identity_verification', message: identityCampaignMessage }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de préparer ce message WhatsApp.');
+      if (typeof data.whatsapp_url !== 'string' || !data.whatsapp_url.startsWith('https://wa.me/')) {
+        throw new Error('Le lien WhatsApp reçu est invalide.');
+      }
+      popup.location.href = data.whatsapp_url;
+      setIdentityCampaignIndex((index) => index + 1);
+      showNotice(`Message prêt pour ${identityCampaignRecipient.name}. Vérifiez-le et envoyez-le dans WhatsApp avant de continuer.`);
+    } catch (error) {
+      popup.close();
+      showNotice(error instanceof Error ? error.message : 'Impossible de préparer le message WhatsApp.');
+    } finally {
+      setIdentityCampaignLoading(false);
     }
   };
 
@@ -1065,6 +1147,76 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-black text-amber-950">Campagne : boutiques en veille pour vérification d’identité</h3>
+                <p className="mt-1 max-w-2xl text-[11px] leading-5 text-amber-900">
+                  {identityVerificationCandidates.length} boutique(s) non vérifiée(s) et non publiée(s). Les messages WhatsApp seront préparés un par un : vous devrez vérifier et envoyer chacun d’eux manuellement.
+                </p>
+                {identityVerificationCandidates.length > 0 && identityVerificationCandidates.length > identityCampaignShopIds.length && (
+                  <p className="mt-1 text-[11px] text-amber-800">
+                    {identityVerificationCandidates.filter((shop) => !/^\d{8,15}$/.test(String(shop.whatsapp_number || '').replace(/\D/g, ''))).length} sans numéro WhatsApp valide et ignorée(s).
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={startIdentityCampaign}
+                disabled={identityVerificationCandidates.length === 0 || identityCampaignLoading}
+                className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-950 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Users className="h-3.5 w-3.5" /> Préparer la campagne
+              </button>
+            </div>
+            <label htmlFor="admin-identity-campaign-message" className="mt-3 block text-xs font-bold text-amber-950">Message commun ({'{boutique}'} et {'{dashboard}'} seront remplacés automatiquement)</label>
+            <textarea
+              id="admin-identity-campaign-message"
+              value={identityCampaignMessage}
+              maxLength={2000}
+              rows={4}
+              onChange={(event) => setIdentityCampaignMessage(event.target.value)}
+              className="mt-1 min-h-24 w-full resize-y rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-amber-600"
+            />
+            {identityCampaignShopIds.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 pt-3">
+                <p className="text-xs font-semibold text-amber-950" aria-live="polite">
+                  {identityCampaignRecipient
+                    ? `Destinataire ${identityCampaignIndex + 1}/${identityCampaignRecipients.length} : ${identityCampaignRecipient.name}. ${identityCampaignIndex} message(s) préparé(s), envoi non confirmé.`
+                    : `${identityCampaignRecipients.length} message(s) préparé(s). La campagne est terminée ; l’envoi reste à confirmer dans WhatsApp.`}
+                </p>
+                {identityCampaignRecipient ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIdentityCampaignIndex((index) => index + 1)}
+                      disabled={identityCampaignLoading}
+                      className="min-h-9 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-950 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Passer ce destinataire
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void prepareNextIdentityCampaignMessage()}
+                      disabled={identityCampaignLoading}
+                      className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-amber-800 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Send className="h-3.5 w-3.5" /> {identityCampaignLoading ? 'Préparation…' : 'Ouvrir le prochain WhatsApp'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setIdentityCampaignShopIds([]); setIdentityCampaignIndex(0); }}
+                    className="min-h-9 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-950"
+                  >
+                    Fermer la campagne
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
         </section>
         )}
 
@@ -1104,7 +1256,11 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         {adminView === 'identity' && (
-        <AdminIdentityVerificationPanel selectedShopId={selectedVerificationShopId} />
+        <AdminIdentityVerificationPanel
+          selectedShopId={selectedVerificationShopId}
+          requestingShopId={verificationRequestShopId}
+          onRequestVerification={(shopId) => void requestOwnerIdentityVerification(shopId)}
+        />
         )}
 
         {adminView === 'shops' && (

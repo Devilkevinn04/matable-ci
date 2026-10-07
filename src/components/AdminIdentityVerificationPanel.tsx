@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LoaderCircle, RefreshCw, ShieldCheck } from 'lucide-react';
+import { LoaderCircle, RefreshCw, Send, ShieldCheck } from 'lucide-react';
 
 interface VerificationItem {
   shop_id: number;
@@ -23,9 +23,15 @@ const statusLabels: Record<string, string> = {
 
 interface AdminIdentityVerificationPanelProps {
   selectedShopId: number | null;
+  requestingShopId: number | null;
+  onRequestVerification: (shopId: number) => void;
 }
 
-export function AdminIdentityVerificationPanel({ selectedShopId }: AdminIdentityVerificationPanelProps) {
+export function AdminIdentityVerificationPanel({
+  selectedShopId,
+  requestingShopId,
+  onRequestVerification,
+}: AdminIdentityVerificationPanelProps) {
   const [items, setItems] = useState<VerificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -81,6 +87,17 @@ export function AdminIdentityVerificationPanel({ selectedShopId }: AdminIdentity
                 </span>
               </div>
               {item.provider_status && <p className="mt-2 text-xs text-slate-600">Statut fournisseur : <strong>{item.provider_status}</strong></p>}
+              {item.status !== 'verified' && (
+                <button
+                  type="button"
+                  onClick={() => onRequestVerification(item.shop_id)}
+                  disabled={requestingShopId !== null}
+                  className="mt-3 inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {requestingShopId === item.shop_id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  {item.status === 'pending' ? 'Demander la vérification sur WhatsApp' : 'Relancer le propriétaire sur WhatsApp'}
+                </button>
+              )}
             </article>
           ))}</div>}
     </section>

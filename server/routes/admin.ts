@@ -697,6 +697,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
   router.post('/shops/:id/notification', async (req, res) => {
     const shop = await getShop(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    const template = String(req.body?.template || '').trim();
     const templates: Record<string, string> = {
       welcome: `Bonjour ${shop.name}, votre espace MaTable.ci est prêt. Pensez à compléter votre catalogue et à partager votre vitrine avec vos clients.`,
       catalog: `Bonjour ${shop.name}, pensez à vérifier vos articles, vos prix et vos disponibilités afin que votre vitrine MaTable.ci reste à jour.`,
@@ -704,15 +705,34 @@ export function createAdminRouter(options: AdminRouterOptions) {
       support: `Bonjour ${shop.name}, nous vous contactons au sujet de votre boutique MaTable.ci. Répondez à ce message si vous avez besoin d’aide.`,
       trial_expiring: `Bonjour ${shop.name}, votre essai MaTable.ci arrive à échéance. Connectez-vous à votre espace commerçant pour choisir une formule et garder votre vitrine visible. L’équipe MaTable.ci reste disponible si besoin.`,
     };
-    const template = String(req.body?.template || '').trim();
+    if (template === 'identity_verification') {
+      const origin = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+      const messageTemplate = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+      if (req.body?.message !== undefined && (!messageTemplate || messageTemplate.length > 2000)) {
+        return res.status(400).json({ error: 'Le message doit contenir entre 1 et 2 000 caractères.' });
+      }
+      templates.identity_verification = messageTemplate || `Bonjour {boutique}, votre boutique MaTable.ci est actuellement en veille et n’apparaît pas sur le site, car votre identité n’a pas encore été vérifiée. Pour la faire réapparaître, connectez-vous à votre tableau de bord marchand : {dashboard}, puis ouvrez « Vérification d’identité » et suivez les étapes de Didit. Après la vérification, la remise en ligne pourra être finalisée si les autres critères de publication sont remplis. Répondez à ce message si vous avez besoin d’aide.`;
+      if (shop.merchant_verification_status === 'verified'
+        || shop.merchant_verification_status === 'not_required'
+        || shop.publication_status === 'active') {
+        return res.status(409).json({ error: 'Cette boutique ne fait plus partie des boutiques en attente de vérification.' });
+      }
+    }
     if (!templates[template]) return res.status(400).json({ error: 'Modèle de notification invalide.' });
     if (template === 'trial_expiring' && !shop.whatsapp_subscription_reminders_enabled) {
       return res.status(409).json({ error: 'Le commerçant n’a pas autorisé les rappels WhatsApp.' });
     }
-    const message = templates[template];
-    const phone = shop.whatsapp_number.replace(/\D/g, '');
+    const phone = String(shop.whatsapp_number || '').replace(/\D/g, '');
+    if (!/^\d{8,15}$/.test(phone)) return res.status(409).json({ error: 'Le numéro WhatsApp de cette boutique est absent ou invalide.' });
+    const origin = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+    const message = template === 'identity_verification'
+      ? templates[template].replace(/\{boutique\}/g, shop.name).replace(/\{dashboard\}/g, `${origin}/app`)
+      : templates[template];
     if (template === 'trial_expiring') {
       await logAdminAction('trial_reminder_prepared', shop.id, { delivery_mode: 'whatsapp_click_to_chat' });
+    }
+    if (template === 'identity_verification') {
+      await logAdminAction('identity_verification_request_prepared', shop.id, { delivery_mode: 'whatsapp_click_to_chat' });
     }
     res.json({ success: true, delivery_mode: 'whatsapp_click_to_chat', template, message, whatsapp_url: `https://wa.me/${phone}?text=${encodeURIComponent(message)}` });
   });

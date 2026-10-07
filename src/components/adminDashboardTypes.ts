@@ -163,6 +163,7 @@ export const ownerNotificationTemplates = [
   { id: 'orders', label: 'Rappel nouvelles commandes' },
   { id: 'support', label: 'Proposition d’assistance' },
   { id: 'trial_expiring', label: 'Relance essai arrivant à échéance' },
+  { id: 'identity_verification', label: 'Demande de vérification d’identité' },
 ] as const;
 
 export const subscriptionStatusLabels: Record<string, string> = {
