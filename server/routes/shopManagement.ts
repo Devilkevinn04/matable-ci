@@ -62,6 +62,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     shop.subscription_status = 'trialing';
     shop.trial_start = startedAt.toISOString();
     shop.trial_end = addDays(startedAt, trialDurationDays);
+    shop.subscription_expires_at = shop.trial_end;
     await persistShop(shop);
     res.json({ success: true, shop: toSafeShop(shop), trial_days: trialDurationDays, plan: getSubscriptionPlanConfig(tier) });
   });

@@ -140,6 +140,15 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   });
   assert.equal(startTrial.status, 200);
 
+  const expiryDb = new Database(TEST_DB_PATH);
+  try {
+    const expiredAt = new Date(Date.now() - 3 * 86400000).toISOString();
+    expiryDb.prepare('UPDATE shops SET trial_end = ?, subscription_expires_at = ? WHERE id = ?')
+      .run(expiredAt, expiredAt, createdPayload.shop.id);
+  } finally {
+    expiryDb.close();
+  }
+
   const intentResponse = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },

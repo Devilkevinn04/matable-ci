@@ -100,6 +100,13 @@ test('Pro subscription exposes consented product stats and activates discounted 
   assert.equal(trial.status, 200, JSON.stringify(trialPayload));
   assert.equal(trialPayload.shop.subscription.plan, 'standard');
   assert.equal(trialPayload.shop.subscription.trialDaysRemaining, 7);
+  const earlyPaymentResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/subscription-payments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier: 'pro', term: 'annual' }),
+  });
+  assert.equal(earlyPaymentResponse.status, 409);
+  assert.match((await earlyPaymentResponse.json()).error, /essai Standard reste actif/i);
   const unverifiedBoost = await fetch(`${BASE_URL}/api/shops/${shopId}/boost-payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
@@ -154,6 +161,15 @@ test('Pro subscription exposes consented product stats and activates discounted 
     body: JSON.stringify({ duration_days: 7 }),
   });
   assert.equal(emptyCatalogBoost.status, 409);
+
+  const testDb = new Database(TEST_DB_PATH);
+  try {
+    const expiredAt = new Date(Date.now() - 3 * 86400000).toISOString();
+    testDb.prepare(`UPDATE shops SET trial_end = ?, subscription_expires_at = ? WHERE id = ?`)
+      .run(expiredAt, expiredAt, shopId);
+  } finally {
+    testDb.close();
+  }
 
   const subscriptionIntentResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/subscription-payments`, {
     method: 'POST',

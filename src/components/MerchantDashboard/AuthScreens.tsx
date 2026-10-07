@@ -306,7 +306,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                     <p className="mt-1 text-xs leading-5 text-[#6b5548]">Catalogue, horaires, zones de service et commandes WhatsApp sont inclus. Premium et Pro ajoutent personnalisation, réseaux sociaux, événements, visibilité et statistiques.</p>
                   </div>
                   <div className="rounded-xl bg-white p-3 text-xs leading-5 text-[#155c3d]">
-                    Après la création, vous recevez vos liens privé et vitrine. L’essai gratuit vous permet de tester la formule choisie avant tout renouvellement payant.
+                    Après la création, votre essai Standard gratuit de 7 jours commence immédiatement. À son échéance, choisissez une formule et réglez-la avec KadevPay pour continuer.
                   </div>
                 </section>
 

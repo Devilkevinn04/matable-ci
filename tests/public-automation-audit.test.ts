@@ -117,6 +117,14 @@ async function loginAndApproveShop(shop: { id: number; owner_access_token: strin
 }
 
 async function payForSubscription(shopId: number, merchantCookie: string, tier: 'premium' | 'pro') {
+  const expiryDb = new Database(TEST_DB_PATH);
+  try {
+    const expiredAt = new Date(Date.now() - 3 * 86400000).toISOString();
+    expiryDb.prepare('UPDATE shops SET trial_end = ?, subscription_expires_at = ? WHERE id = ?')
+      .run(expiredAt, expiredAt, shopId);
+  } finally {
+    expiryDb.close();
+  }
   const amount = tier === 'premium' ? 5000 : 8000;
   const intentResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/subscription-payments`, {
     method: 'POST',

@@ -1182,9 +1182,11 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.match(String(registration.payload.message), /Boutique créée/i);
   assert.equal(registration.payload.shop.is_active, true);
   assert.equal(registration.payload.shop.is_open, true);
-  assert.equal(registration.payload.shop.subscription.status, 'not_started');
-  assert.equal(registration.payload.shop.subscription.trialStart, null);
-  assert.equal(registration.payload.shop.subscription.trialEnd, null);
+  assert.equal(registration.payload.shop.subscription.status, 'trialing');
+  assert.equal(registration.payload.shop.subscription.plan, 'standard');
+  assert.equal(typeof registration.payload.shop.subscription.trialStart, 'string');
+  assert.equal(typeof registration.payload.shop.subscription.trialEnd, 'string');
+  assert.equal(registration.payload.shop.subscription.trialDaysRemaining, 7);
   assert.ok(registration.payload.owner_access_token);
 
   const newShopId = registration.payload.shop.id;
@@ -1200,9 +1202,11 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.equal(trialStart.payload.shop.subscription.trialDaysRemaining, 7);
   const persistedDatabase = new Database(TEST_DB_PATH, { readonly: true });
   try {
-    const savedPlan = persistedDatabase.prepare('SELECT selected_subscription_tier, subscription_status FROM shops WHERE id = ?').get(newShopId) as { selected_subscription_tier: string; subscription_status: string };
+    const savedPlan = persistedDatabase.prepare('SELECT selected_subscription_tier, subscription_status, trial_start, trial_end, subscription_expires_at FROM shops WHERE id = ?').get(newShopId) as { selected_subscription_tier: string; subscription_status: string; trial_start: string; trial_end: string; subscription_expires_at: string };
     assert.equal(savedPlan.selected_subscription_tier, 'standard');
     assert.equal(savedPlan.subscription_status, 'trialing');
+    assert.ok(savedPlan.trial_start);
+    assert.equal(savedPlan.trial_end, savedPlan.subscription_expires_at);
   } finally {
     persistedDatabase.close();
   }

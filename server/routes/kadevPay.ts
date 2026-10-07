@@ -37,6 +37,25 @@ export function createKadevPayRouter({ shops, requireMerchantOwnShop }: KadevPay
   router.post('/shops/:id/subscription-payments', requireMerchantOwnShop, async (req, res) => {
     const shop = shops.find((candidate) => candidate.id === Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    const persistedSubscription = await dbGet<{
+      subscription_status: string | null;
+      selected_subscription_tier: string | null;
+      trial_start: string | null;
+      trial_end: string | null;
+      subscription_expires_at: string | null;
+    }>(`SELECT subscription_status, selected_subscription_tier, trial_start, trial_end, subscription_expires_at
+      FROM shops WHERE id = ?`, [shop.id]);
+    if (!persistedSubscription) return res.status(404).json({ error: 'Boutique introuvable.' });
+    const currentSubscription = getSubscriptionState({
+      ...persistedSubscription,
+      selected_subscription_tier: normalizeSubscriptionTier(persistedSubscription.selected_subscription_tier),
+    });
+    if (currentSubscription.status === 'trialing') {
+      const trialEnd = currentSubscription.trialEnd
+        ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long', timeZone: 'Africa/Abidjan' }).format(new Date(currentSubscription.trialEnd))
+        : 'la fin de votre essai';
+      return res.status(409).json({ error: `Votre essai Standard reste actif jusqu’au ${trialEnd}. Vous pourrez choisir et payer une formule à son échéance.` });
+    }
 
     const publicKey = String(process.env.KADEVPAY_PUBLIC_KEY || '').trim();
     const webhookSecret = String(process.env.KADEVPAY_WEBHOOK_SECRET || '').trim();

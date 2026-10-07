@@ -133,6 +133,8 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       },
     };
     const now = new Date();
+    const trialStart = now.toISOString();
+    const trialEnd = addDays(now, trialDurationDays);
     const newShop: ShopRecord = {
       id: reservedShopId,
       name: safeName,
@@ -144,9 +146,11 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       welcome_message: normalizeWelcomeMessage(safeWelcomeMessage, shopCategory),
       is_open: true,
       is_active: true,
-      subscription_status: 'not_started',
-      trial_start: null,
-      trial_end: null,
+      selected_subscription_tier: 'standard',
+      subscription_status: 'trialing',
+      trial_start: trialStart,
+      trial_end: trialEnd,
+      subscription_expires_at: trialEnd,
       last_notification_sent_at: null,
       created_at: now.toISOString(),
       category: shopCategory,
@@ -173,7 +177,7 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       success: true,
       shop: toSafeShop(newShop),
       owner_access_token: ownerAccessToken,
-      message: 'Boutique créée. Les commandes clients sont envoyées au vendeur via un reçu WhatsApp à ouvrir manuellement.',
+      message: `Boutique créée. Votre essai Standard gratuit de ${trialDurationDays} jours commence maintenant. Choisissez ensuite une formule et réglez-la avec KadevPay pour poursuivre. Les commandes clients vous sont transmises via un reçu WhatsApp à ouvrir manuellement.`,
     });
   });
 

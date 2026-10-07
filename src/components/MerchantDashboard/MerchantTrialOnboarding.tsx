@@ -51,8 +51,13 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
   const didReceivePaymentSuccess = useRef(false);
   const selectedPlan = plans.find((plan) => plan.tier === selectedTier) || plans[0];
   const paymentFlowActive = previewOnly || mode !== 'start' || purchaseNow;
+  const isTrialActive = shop.subscription?.status === 'trialing';
   const supportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour l’espace commerçant de ${shop.name}.`);
-  const isTrialExpired = mode === 'expired' && Boolean(shop.subscription?.trialEnd) && !shop.subscription?.expiresAt;
+  const trialEndTime = shop.subscription?.trialEnd ? Date.parse(shop.subscription.trialEnd) : NaN;
+  const subscriptionExpiryTime = shop.subscription?.expiresAt ? Date.parse(shop.subscription.expiresAt) : NaN;
+  const isTrialExpired = mode === 'expired'
+    && Number.isFinite(trialEndTime)
+    && (!Number.isFinite(subscriptionExpiryTime) || subscriptionExpiryTime <= trialEndTime);
   const expiredTitle = isTrialExpired
     ? 'Votre période d’essai est terminée'
     : shop.subscription?.status === 'past_due'
@@ -69,7 +74,7 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
       : 'Choisissez une formule et sa durée, puis réglez-la avec KadevPay. Votre accès sera réactivé après confirmation sécurisée du paiement.';
 
   useEffect(() => {
-    if (!paymentFlowActive || previewOnly) return;
+    if (!paymentFlowActive || previewOnly || isTrialActive) return;
     if (window.KadevPay) {
       setIsKadevPayReady(true);
       return;
@@ -90,7 +95,7 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
       script.removeEventListener('load', onLoad);
       script.removeEventListener('error', onError);
     };
-  }, [paymentFlowActive, previewOnly]);
+  }, [paymentFlowActive, previewOnly, isTrialActive]);
 
   const verifyPayment = async (paymentId: string) => {
     for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -293,7 +298,7 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
 
         <aside className={`mt-5 flex items-start gap-3 rounded-2xl border p-4 text-sm ${mode === 'plans' ? 'border-[#dbe8dc] bg-white text-[#345448] sm:mt-7 sm:px-5' : 'border-sky-200 bg-sky-50 text-sky-950'}`}>
           {mode === 'plans' ? <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-[#176b55]" /> : <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-sky-800" />}
-          <p>{previewOnly ? 'Aperçu de démonstration : comparez les formules librement. Aucun paiement ne sera lancé.' : paymentFlowActive ? 'Vous gardez la main : le paiement est lancé uniquement après votre validation et votre formule est activée après confirmation sécurisée de KadevPay.' : 'Aucun paiement n’est demandé pour commencer l’essai. Vous pourrez choisir et payer une formule à tout moment.'}</p>
+          <p>{previewOnly ? 'Aperçu de démonstration : comparez les formules librement. Aucun paiement ne sera lancé.' : isTrialActive ? 'Votre essai Standard gratuit est en cours. Vous pourrez choisir et payer une formule avec KadevPay après son échéance.' : paymentFlowActive ? 'Vous gardez la main : le paiement est lancé uniquement après votre validation et votre formule est activée après confirmation sécurisée de KadevPay.' : 'Votre essai Standard gratuit de 7 jours commence à la création de votre boutique. À son échéance, choisissez une formule et payez-la pour continuer.'}</p>
         </aside>
 
         {mode === 'expired' && <div className="mt-5 rounded-xl border border-slate-200 bg-white px-4"><WhatsAppSubscriptionReminderConsent shop={shop} /></div>}
@@ -303,9 +308,9 @@ export function MerchantTrialOnboarding({ shop, isStarting, onStart, mode = 'sta
             previewOnly ? (
               <button type="button" disabled className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-300 px-5 py-3 text-sm font-bold text-slate-600">Aperçu · paiement désactivé</button>
             ) : (
-              <button type="button" onClick={() => void startSubscriptionPayment()} disabled={!isKadevPayReady || isPaymentStarting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
+              <button type="button" onClick={() => void startSubscriptionPayment()} disabled={!isKadevPayReady || isPaymentStarting || isTrialActive} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
                 {isPaymentStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                {isPaymentStarting ? 'Vérification du paiement…' : isKadevPayReady ? `Continuer avec ${selectedPlan.label}` : 'Chargement de KadevPay…'}
+                    {isPaymentStarting ? 'Vérification du paiement…' : isTrialActive ? 'Paiement disponible après l’essai' : isKadevPayReady ? `Continuer avec ${selectedPlan.label}` : 'Chargement de KadevPay…'}
               </button>
             )
           ) : (
