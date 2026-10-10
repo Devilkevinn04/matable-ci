@@ -44,9 +44,11 @@ test('WhatsApp receipt includes every server-confirmed item and its exact option
 
   assert.match(text, /Attiéké poisson/);
   assert.match(text, /Options\/Sauces : Alloco, Piment à part/);
+  assert.match(text, /\*Commune \/ lieu souhaité :\* Cocody/);
   assert.match(text, /2 x 3\s?000 FCFA = \*6\s?000 FCFA\*/);
   assert.match(text, /\*Jus de gingembre\* \[Taille: Grand\] \[Couleur: Vert\]/);
   assert.match(text, /Quantité : 1 x 500 FCFA = \*500 FCFA\*/);
   assert.match(text, /TOTAL INDICATIF : 6\s?500 FCFA/);
+  assert.match(text, /MaTable ne fournit ni n’organise la livraison/);
   assert.equal(new URL(url).searchParams.get('text'), text);
 });

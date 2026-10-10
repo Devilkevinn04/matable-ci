@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { 
   ShoppingBag, 
   Bookmark,
@@ -35,7 +36,7 @@ import { CustomerCheckoutAuth } from './CustomerCheckoutAuth';
 import { CustomerTrustPanel } from './CustomerTrustPanel';
 import { getCanonicalOrigin } from '../utils/seoCanonical';
 import { useCustomerCart } from './useCustomerCart';
-import { isAgeRestrictedProduct, isAtLeastAge } from '../utils/ageRestrictedProducts';
+import { isAgeRestrictedProduct } from '../utils/ageRestrictedProducts';
 
 interface CustomerStorefrontProps {
   shopSlug: string;
@@ -54,12 +55,19 @@ function getAnalyticsReferrerHost(): string {
 
 export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug, customerUser, onCustomerAuthenticated }) => {
   const toast = useToast();
+  const prefersReducedMotion = useReducedMotion();
   const [shop, setShop] = useState<Shop | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [hasAgeRestrictedProducts, setHasAgeRestrictedProducts] = useState(false);
   const [ageVerified, setAgeVerified] = useState(false);
-  const [ageBirthDate, setAgeBirthDate] = useState('');
+  const [ageDenied, setAgeDenied] = useState(false);
+  const [ageConfirmationComplete, setAgeConfirmationComplete] = useState(false);
+  const [isAgeGateClosing, setIsAgeGateClosing] = useState(false);
   const [ageVerificationError, setAgeVerificationError] = useState('');
+  const [isVerifyingAge, setIsVerifyingAge] = useState(false);
+  const ageDialogRef = useRef<HTMLElement>(null);
+  const ageExitButtonRef = useRef<HTMLAnchorElement>(null);
+  const ageConfirmationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [favoriteProductIds, setFavoriteProductIds] = useState<Set<number>>(new Set());
   const [likedProductIds, setLikedProductIds] = useState<Set<number>>(new Set());
   const [isFavoriteShop, setIsFavoriteShop] = useState(false);
@@ -180,22 +188,55 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     }
   };
 
-  const handleAgeVerification = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!isAtLeastAge(ageBirthDate, 18)) {
-      setAgeVerificationError('Vous devez avoir au moins 18 ans pour accéder à ces produits.');
-      return;
-    }
-
+  const handleAgeVerification = async () => {
+    if (isVerifyingAge) return;
     setAgeVerificationError('');
-    const loaded = await fetchShopData(new AbortController().signal, true);
-    if (loaded) {
-      setAgeVerified(true);
-      setAgeBirthDate('');
-    } else {
-      setAgeVerificationError('Impossible de charger les produits. Réessayez.');
+    setIsVerifyingAge(true);
+    try {
+      const loaded = await fetchShopData(new AbortController().signal, true);
+      if (loaded) {
+        setAgeConfirmationComplete(true);
+        ageConfirmationTimerRef.current = setTimeout(
+          () => {
+            setIsAgeGateClosing(true);
+            ageConfirmationTimerRef.current = setTimeout(
+              () => setAgeVerified(true),
+              prefersReducedMotion ? 0 : 400,
+            );
+          },
+          prefersReducedMotion ? 0 : 650,
+        );
+      } else {
+        setAgeVerificationError('Impossible de charger les produits. Réessayez.');
+      }
+    } finally {
+      setIsVerifyingAge(false);
     }
   };
+
+  useEffect(() => () => {
+    if (ageConfirmationTimerRef.current) clearTimeout(ageConfirmationTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!hasAgeRestrictedProducts || ageVerified) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.body.style.overflow = 'hidden';
+    ageDialogRef.current?.focus();
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [hasAgeRestrictedProducts, ageVerified]);
+
+  useEffect(() => {
+    if (!hasAgeRestrictedProducts || ageVerified) return;
+    if (ageDenied) ageExitButtonRef.current?.focus();
+    else ageDialogRef.current?.focus();
+  }, [ageDenied, hasAgeRestrictedProducts, ageVerified]);
 
   useEffect(() => {
     if (ageVerified || !cart.some((item) => isAgeRestrictedProduct(item.product))) return;
@@ -536,7 +577,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         whatsappTrackingToken: String(data.whatsapp_tracking_token || ''),
       });
       setMessageCopied(false);
-      toast.success('Commande acceptée automatiquement. Vous pouvez contacter le commerçant sur WhatsApp.');
+      toast.success('Demande enregistrée. Confirmez les modalités directement avec la boutique sur WhatsApp.');
 
       // Update only local stock so the confirmation screen stays mounted.
       const confirmedQuantities = new Map<number, number>();
@@ -576,6 +617,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             <div className="loading-progress">
               <div className="loading-progress-bar" />
             </div>
+            <p className="mt-1.5 text-[11px] leading-5 text-slate-500">Indiquez où vous souhaitez récupérer votre commande ou être contacté pour en convenir avec la boutique.</p>
             <div className="loading-dots">
               <span />
               <span />
@@ -784,6 +826,32 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
       {/* Main storefront content */}
       <div className="max-w-6xl mx-auto px-4 pt-4">
+        <section aria-label="Comment commander" className="mb-5 rounded-2xl border border-[#ded8ce] bg-[#fffdf9] p-4 shadow-[0_8px_24px_rgba(33,23,18,0.05)] sm:p-5">
+          <div className="mb-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#8c5a36]">Simple et direct</p>
+            <h2 className="mt-1 text-base font-black text-[#211712] sm:text-lg">Votre commande, en trois étapes</h2>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              { number: '01', title: 'Choisissez vos articles', description: 'Ajoutez vos envies au panier.' },
+              { number: '02', title: 'Écrivez à la boutique', description: 'Envoyez votre récapitulatif sur WhatsApp.' },
+              { number: '03', title: 'Convenez avec le commerçant', description: 'Retrait ou livraison et frais éventuels se règlent directement avec lui.' },
+            ].map((step) => (
+              <div key={step.number} className="flex items-start gap-3 rounded-xl bg-[#f8f3ec] p-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#e4f1ec] text-xs font-black text-[#0f4d3d]">{step.number}</span>
+                <div>
+                  <h3 className="text-xs font-black text-[#211712]">{step.title}</h3>
+                  <p className="mt-1 text-[11px] leading-5 text-[#6f6a61]">{step.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 flex items-start gap-2 text-[11px] leading-5 text-[#6f6a61]">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#176b55]" />
+            MaTable met en relation le client et la boutique ; MaTable ne fournit ni n’organise de service de livraison.
+          </p>
+        </section>
+
         {/* Closed warning */}
         {!shop.is_open && (
           <div className="mb-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-3 shadow-2xs">
@@ -799,6 +867,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           </div>
         )}
 
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
+        <div className="min-w-0">
         {/* Catalog Section Header */}
         <div id="store-catalogue" className="scroll-mt-24 mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-[#ded8ce] pb-4">
           <div className="relative pl-4">
@@ -816,7 +886,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
         {/* Search Bar & Category Filter */}
         {(products.length > 4 || categories.length > 1) && (
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="sticky top-[3.5rem] z-20 -mx-4 mb-5 flex flex-col gap-3 border-y border-[#ded8ce] bg-[#faf8f3]/95 px-4 py-3 shadow-sm backdrop-blur-md sm:top-[4.25rem] sm:flex-row sm:items-center sm:justify-between">
           {products.length > 4 && <div className="relative w-full sm:max-w-sm">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
             <input
@@ -878,37 +948,159 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             - Fashion: 3:4 portrait grid with size/color options
             - Food: 1:1 or 16:9 landscape cards with prep_time & modifiers
         */}
-        {hasAgeRestrictedProducts && !ageVerified && (
-          <section className="mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 sm:p-5" aria-labelledby="age-restricted-title">
-            <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-amber-900">
-                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <h2 id="age-restricted-title" className="text-base font-black text-amber-950">Certains produits sont réservés aux adultes (18+)</h2>
-                <p className="mt-1 text-sm leading-6 text-amber-900">Confirmez votre majorité pour les afficher. Votre date de naissance n’est ni enregistrée ni transmise à MaTable.ci.</p>
-                <form onSubmit={handleAgeVerification} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
-                  <label className="block flex-1 text-xs font-bold text-amber-950">
-                    Date de naissance
-                    <input
-                      type="date"
-                      value={ageBirthDate}
-                      onChange={(event) => setAgeBirthDate(event.target.value)}
-                      max={new Date().toISOString().slice(0, 10)}
-                      required
-                      autoComplete="bday"
-                      className="mt-1.5 min-h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm font-medium text-slate-900 outline-none focus:border-amber-700 focus:ring-2 focus:ring-amber-700/15"
-                    />
-                  </label>
-                  <button type="submit" className="min-h-11 rounded-xl bg-amber-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-950">
-                    Confirmer mon âge
-                  </button>
-                </form>
-                {ageVerificationError && <p role="alert" className="mt-2 text-sm font-bold text-rose-800">{ageVerificationError}</p>}
-                <p className="mt-2 text-[11px] leading-5 text-amber-800">Cette confirmation repose sur votre déclaration et ne constitue pas une vérification d’identité.</p>
-              </div>
-            </div>
-          </section>
+        {hasAgeRestrictedProducts && !ageVerified && typeof document !== 'undefined' && createPortal(
+          <AnimatePresence>
+            <motion.div
+              key="age-gate"
+              initial={prefersReducedMotion ? false : { opacity: 0 }}
+              animate={{ opacity: isAgeGateClosing ? 0 : 1 }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.42, ease: 'easeOut' }}
+              className="fixed inset-0 z-[120] grid place-items-center overflow-y-auto bg-[rgba(10,28,22,0.42)] p-4 backdrop-blur-[8px]"
+            >
+              <motion.section
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 28, scale: 0.94 }}
+                animate={isAgeGateClosing ? { opacity: 0, y: -18, scale: 0.96 } : { opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: prefersReducedMotion ? 0 : 0.55, ease: [0.22, 1, 0.36, 1] }}
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="age-gate-title"
+                aria-describedby="age-gate-question"
+                tabIndex={-1}
+                ref={ageDialogRef}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    return;
+                  }
+                  if (event.key !== 'Tab') return;
+
+                  const focusable = event.currentTarget.querySelectorAll<HTMLElement>(
+                    'button:not(:disabled), a[href], summary',
+                  );
+                  const first = focusable[0];
+                  const last = focusable[focusable.length - 1];
+                  if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last?.focus();
+                  } else if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first?.focus();
+                  }
+                }}
+                className="age-verification-dialog relative w-full max-w-[420px] rounded-[28px] bg-white px-6 pb-6 pt-8 text-center text-[#12362d] shadow-[0_40px_80px_-24px_rgba(0,0,0,0.55)] focus:outline-none sm:px-7"
+              >
+                <div className="relative mx-auto mb-[18px] grid h-[68px] w-[68px] place-items-center rounded-full bg-[#0f2e26] text-[22px] font-extrabold text-white">
+                  <motion.span
+                    animate={prefersReducedMotion ? undefined : { opacity: [0.7, 0], scale: [0.92, 1.35] }}
+                    transition={{ duration: 2.6, repeat: Infinity, ease: 'easeOut', delay: 0.8 }}
+                    aria-hidden="true"
+                    className="absolute -inset-[7px] rounded-full border-2 border-[#176b55]"
+                  />
+                  <AnimatePresence mode="wait" initial={false}>
+                    {ageConfirmationComplete ? (
+                      <motion.span
+                        key="age-confirmed"
+                        initial={prefersReducedMotion ? false : { opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute grid place-items-center text-[#7fe3bf]"
+                        aria-label="Accès autorisé"
+                      >
+                        <CheckCircle2 className="h-[30px] w-[30px]" aria-hidden="true" />
+                      </motion.span>
+                    ) : (
+                      <motion.span key="age-label" exit={{ opacity: 0 }}>
+                        18+
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <AnimatePresence mode="wait" initial={false}>
+                  {ageDenied ? (
+                    <motion.div
+                      key="age-denied"
+                      initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: prefersReducedMotion ? 0 : 0.35, ease: 'easeOut' }}
+                    >
+                      <h2 id="age-gate-title" className="mb-2 text-[22px] font-bold leading-tight tracking-[-0.015em]">
+                        Merci pour votre réponse
+                      </h2>
+                      <p id="age-gate-question" className="mb-[22px] text-base leading-6 text-[#5d6f69]">
+                        Cette sélection n’est pas accessible aux moins de 18 ans. Vous pouvez continuer à explorer les autres boutiques.
+                      </p>
+                      <motion.a
+                        ref={ageExitButtonRef}
+                        href="/"
+                        whileHover={prefersReducedMotion ? undefined : { y: -2 }}
+                        whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+                        className="flex h-14 w-full items-center justify-center rounded-2xl bg-[#176b55] px-4 text-base font-semibold text-white shadow-[0_14px_26px_-14px_rgba(23,107,85,0.8)] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#176b55]"
+                      >
+                        Voir les autres boutiques
+                      </motion.a>
+                      <p className="mt-4 text-[13px] text-[#5d6f69]">
+                        L’accès à cette sélection reste fermé pendant cette visite.
+                      </p>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="age-question"
+                      initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={prefersReducedMotion ? undefined : { opacity: 0, y: -8 }}
+                      transition={{ duration: prefersReducedMotion ? 0 : 0.35, ease: 'easeOut' }}
+                    >
+                      <h2 id="age-gate-title" className="mb-1.5 text-[22px] font-bold leading-tight tracking-[-0.015em]">
+                        Cette sélection est réservée aux adultes
+                      </h2>
+                      <p id="age-gate-question" className="mb-[22px] text-base text-[#5d6f69]">
+                        Avez-vous 18 ans ou plus ?
+                      </p>
+
+                      {ageVerificationError && (
+                        <p role="alert" className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">
+                          {ageVerificationError}
+                        </p>
+                      )}
+
+                      <motion.button
+                        type="button"
+                        onClick={() => void handleAgeVerification()}
+                        disabled={isVerifyingAge || ageConfirmationComplete}
+                        whileHover={prefersReducedMotion ? undefined : { y: -2 }}
+                        whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+                        className="relative flex h-14 w-full items-center justify-center overflow-hidden rounded-2xl bg-[#176b55] px-4 text-[17px] font-semibold text-white shadow-[0_14px_26px_-14px_rgba(23,107,85,0.8)] transition-colors hover:bg-[#145d4a] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#176b55] disabled:cursor-wait disabled:opacity-80"
+                      >
+                        {isVerifyingAge ? 'Vérification en cours…' : ageConfirmationComplete ? 'Accès autorisé' : 'Oui, j’ai 18 ans ou plus'}
+                      </motion.button>
+                      <motion.button
+                        type="button"
+                        onClick={() => setAgeDenied(true)}
+                        disabled={isVerifyingAge || ageConfirmationComplete}
+                        whileHover={prefersReducedMotion ? undefined : { backgroundColor: 'rgba(127,127,127,0.08)' }}
+                        whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+                        className="mt-2.5 flex h-14 w-full items-center justify-center rounded-2xl border-[1.5px] border-[#e2e6e3] bg-transparent px-4 text-[17px] font-semibold text-[#12362d] transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#176b55] disabled:cursor-wait disabled:opacity-60"
+                      >
+                        Non, j’ai moins de 18 ans
+                      </motion.button>
+
+                      <details className="mt-4 text-left text-sm text-[#5d6f69]">
+                        <summary className="cursor-pointer list-none text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#176b55]">
+                          Pourquoi cette question ?
+                        </summary>
+                        <p className="mt-2.5 leading-[1.5]">
+                          Certains articles de cette boutique sont interdits aux mineurs. Votre réponse n’est pas enregistrée dans votre compte. Une pièce d’identité peut être demandée à la livraison.
+                        </p>
+                      </details>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.section>
+            </motion.div>
+          </AnimatePresence>,
+          document.body,
         )}
         {products.length === 0 && !hasAgeRestrictedProducts ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center sm:py-14">
@@ -935,7 +1127,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         ) : (
           <div className={products.length === 1
             ? 'mx-auto grid w-full max-w-md grid-cols-1 gap-3 sm:gap-4'
-            : 'grid grid-cols-1 min-[560px]:grid-cols-2 gap-3 sm:gap-4'
+            : 'grid grid-cols-1 min-[640px]:grid-cols-2 gap-3 sm:gap-4'
           }>
             {filteredProducts.map((product) => {
               const activeModifiers = selectedModifiers[product.id] || [];
@@ -989,18 +1181,95 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
         <details className="mt-8 rounded-xl border border-[#ded8ce] bg-[#fffdf9] px-4 py-3 shadow-sm">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-            <div><p className="text-[10px] font-black uppercase text-slate-500">Informations pratiques</p><h3 className="mt-1 text-sm font-black text-slate-900">Horaires, livraison & contact</h3></div>
+            <div><p className="text-[10px] font-black uppercase text-slate-500">Informations pratiques</p><h3 className="mt-1 text-sm font-black text-slate-900">Horaires, remise & contact</h3></div>
             <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#52645c]"><MapPin className="h-3.5 w-3.5" />{shop.city || 'Abidjan'}</span>
           </summary>
           <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="flex items-center gap-2 text-[11px] font-bold text-slate-700"><Clock className="h-3.5 w-3.5 text-[#1D6B57]" />Horaires</span><span className="text-right text-[11px] font-black text-slate-800">{hoursSummary}</span></div>
           {shop.theme_config?.social_links && Object.values(shop.theme_config.social_links).some(Boolean) &&           <div className="mt-3 flex gap-5 overflow-x-auto border-b border-[#e5d9ca]">{shop.theme_config.social_links.instagram && <a href={shop.theme_config.social_links.instagram} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Instagram</a>}{shop.theme_config.social_links.facebook && <a href={shop.theme_config.social_links.facebook} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Facebook</a>}{shop.theme_config.social_links.website && <a href={shop.theme_config.social_links.website} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Site web</a>}{shop.theme_config.social_links.whatsapp && <a href={shop.theme_config.social_links.whatsapp} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">WhatsApp</a>}</div>}
-          {shop.theme_config?.delivery_zones && shop.theme_config.delivery_zones.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{shop.theme_config.delivery_zones.map((zone, index) => <div key={`${zone.label}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5"><div className="flex items-center justify-between gap-2"><span className="text-xs font-black text-slate-800">{zone.label}</span><span className="text-[10px] font-bold uppercase text-slate-500">{zone.mode}</span></div><div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-600"><span>{zone.description || 'Service disponible'}</span><span className="font-black text-[#1D6B57]">{zone.fee ? `${zone.fee.toLocaleString('fr-FR')} FCFA` : 'Gratuit'}</span></div></div>)}</div>}
+          {shop.theme_config?.delivery_zones && shop.theme_config.delivery_zones.length > 0 && (
+            <div className="mt-3">
+              <p className="mb-2 text-[11px] font-bold text-slate-600">Zones et tarifs communiqués par la boutique :</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {shop.theme_config.delivery_zones.map((zone, index) => (
+                  <div key={`${zone.label}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-black text-slate-800">{zone.label}</span>
+                      <span className="text-[10px] font-bold uppercase text-slate-500">{zone.mode}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-600">
+                      <span>{zone.description || 'Modalité à confirmer'}</span>
+                      <span className="font-black text-[#1D6B57]">{zone.fee ? `${zone.fee.toLocaleString('fr-FR')} FCFA` : 'Gratuit (à confirmer)'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] leading-5 text-slate-500">Ces indications et les frais éventuels sont à confirmer directement avec la boutique sur WhatsApp. MaTable n’assure ni n’organise le transport.</p>
+            </div>
+          )}
         </details>
+        </div>
+
+        <aside aria-label="Récapitulatif de la commande" className="hidden xl:block">
+          <div className="sticky top-24 rounded-2xl border border-[#ded8ce] bg-[#fffdf9] p-4 shadow-[0_12px_32px_rgba(33,23,18,0.08)]">
+            <div className="flex items-center justify-between gap-3 border-b border-[#e5d9ca] pb-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-[#8c5a36]">Votre sélection</p>
+                <h2 className="mt-1 text-base font-black text-[#211712]">Ma commande</h2>
+              </div>
+              <span className="rounded-full bg-[#e4f1ec] px-2.5 py-1 text-xs font-black text-[#0f4d3d]">{totalCartCount}</span>
+            </div>
+
+            {cart.length === 0 ? (
+              <div className="py-8 text-center">
+                <ShoppingBag className="mx-auto h-8 w-8 text-[#c5b6a3]" />
+                <p className="mt-2 text-sm font-bold text-[#4a3a30]">Votre panier est vide</p>
+                <p className="mt-1 text-xs leading-5 text-[#6f6a61]">Ajoutez des articles pour préparer votre commande.</p>
+              </div>
+            ) : (
+              <>
+                <ul className="my-3 max-h-[45vh] space-y-3 overflow-y-auto">
+                  {cart.map((item, index) => (
+                    <li key={`${item.product.id}-${index}`} className="flex items-start gap-2.5">
+                      <CategoryProductImage
+                        imageUrl={item.product.image_url}
+                        category={shop.category}
+                        title={item.product.title}
+                        className="h-12 w-12 shrink-0 rounded-lg"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-black text-[#211712]">{item.product.title}</p>
+                        <p className="mt-0.5 text-[11px] text-[#6f6a61]">{formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers))}</p>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <button type="button" onClick={() => updateQuantity(index, -1)} aria-label={`Retirer un ${item.product.title}`} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#ded8ce] bg-white text-[#4a3a30] hover:bg-[#f8f3ec]"><Minus className="h-3 w-3" /></button>
+                          <span className="min-w-4 text-center text-xs font-black tabular-nums text-[#211712]">{item.quantity}</span>
+                          <button type="button" onClick={() => updateQuantity(index, 1)} disabled={item.quantity >= item.product.stock} aria-label={`Ajouter un ${item.product.title}`} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#ded8ce] bg-white text-[#4a3a30] hover:bg-[#f8f3ec] disabled:cursor-not-allowed disabled:opacity-40"><Plus className="h-3 w-3" /></button>
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-right text-xs font-black text-[#211712]">{formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers) * item.quantity)}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="border-t border-[#e5d9ca] pt-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-bold text-[#4a3a30]">Total des articles</span>
+                    <span className="text-base font-black text-[#211712]">{formatFCFA(totalCartAmount)}</span>
+                  </div>
+                  <p className="mt-1 text-[10px] leading-4 text-[#6f6a61]">Hors remise/livraison et frais éventuels, à convenir directement avec la boutique.</p>
+                  <button type="button" onClick={() => setIsCartOpen(true)} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-4 text-sm font-black text-white transition hover:bg-[#176b55]">
+                    Préparer ma commande <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </aside>
+        </div>
+
       </div>
 
       {/* 4. FLOATING BOTTOM BAR (Cart Summary) */}
       {totalCartCount > 0 && !isCartOpen && (
-        createPortal(<div className="fixed inset-x-0 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-lg px-4">
+        createPortal(<div className="fixed inset-x-0 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-lg px-4 xl:hidden">
           <button
             id="floating-cart-btn"
             onClick={() => setIsCartOpen(true)}
@@ -1070,13 +1339,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     <CheckCircle2 className="w-10 h-10" />
                   </div>
                   <h4 className="text-xl font-extrabold text-slate-900 mb-1">
-                    Commande acceptée automatiquement (N° {orderSuccess.orderId})
+                    Demande enregistrée (N° {orderSuccess.orderId})
                   </h4>
                   <p className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full inline-block font-semibold mb-4">
-                    ✓ Stock réservé · commande validée
+                    ✓ Articles réservés · récapitulatif prêt
                   </p>
                   <p className="text-sm text-slate-600 max-w-sm mx-auto mb-6 leading-relaxed">
-                    Votre commande est enregistrée sans validation manuelle. Contactez le commerçant sur WhatsApp pour convenir de la livraison et du paiement.
+                    Envoyez votre récapitulatif au commerçant sur WhatsApp pour confirmer la disponibilité, le retrait ou la livraison et les frais éventuels. MaTable ne fournit pas la livraison.
                   </p>
 
                   <a
@@ -1162,7 +1431,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                             {item.selected_modifiers && item.selected_modifiers.length > 0 && (
                               <span className="text-amber-700">+{item.selected_modifiers.join(', ')}</span>
                             )}
-                            {trustTarget && <CustomerTrustPanel targetType={trustTarget.type} targetId={trustTarget.id} targetName={trustTarget.name} onClose={() => setTrustTarget(null)} />}
                           </div>
                           <span className="text-xs font-semibold text-slate-600 block mt-0.5">
                             {formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers))} x {item.quantity} = {formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers) * item.quantity)}
@@ -1286,7 +1554,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     {/* Delivery Location / Commune */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Quartier / Commune *
+                        Commune / lieu souhaité *
                       </label>
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         {[
@@ -1356,11 +1624,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     {/* Delivery Note */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Précision pour le livreur (Optionnel)
+                        Repère ou précision pour la boutique (optionnel)
                       </label>
                       <input 
                         type="text"
-                        placeholder="Ex: Face pharmacie Saint-Jean, portail vert..."
+                        placeholder="Ex. : retrait sur place ou repère de quartier..."
                         value={deliveryNote}
                         onChange={(e) => setDeliveryNote(e.target.value)}
                         className="w-full text-sm px-3.5 py-2 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[#E6572B] bg-white"
@@ -1410,7 +1678,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                           </span>
                         </div>
                         <span className="text-[10px] text-slate-400 mt-0.5">
-                          *(Frais de livraison à régler au coursier selon la commune)*
+                          Remise ou livraison et frais éventuels à convenir directement avec la boutique sur WhatsApp. MaTable n’organise pas le transport.
                         </span>
                       </div>
 
@@ -1421,7 +1689,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-black text-base shadow-lg hover:shadow-emerald-600/30 flex items-center justify-center gap-2.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Phone className="w-5 h-5 fill-white" />
-                        <span>{isSubmitting ? 'Validation...' : 'Commander sur WhatsApp'}</span>
+                        <span>{isSubmitting ? 'Préparation...' : 'Préparer ma commande'}</span>
                       </button>
                       <p className="text-center text-[11px] text-slate-400 mt-2">
                         Décrémente le stock en direct et ouvre WhatsApp avec votre reçu pré-rempli.
@@ -1433,6 +1701,14 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             </div>
           </div>
         </div>, document.body)
+      )}
+      {trustTarget && (
+        <CustomerTrustPanel
+          targetType={trustTarget.type}
+          targetId={trustTarget.id}
+          targetName={trustTarget.name}
+          onClose={() => setTrustTarget(null)}
+        />
       )}
     </div>
   );

@@ -56,7 +56,7 @@ export function generateWhatsAppOrderReceipt(
     `----------------------------------------`,
     `👤 *Client :* ${order.customer_name.trim()}`,
     `📞 *Téléphone :* ${order.customer_phone.trim()}`,
-    `📍 *Lieu de livraison :* ${order.delivery_location.trim()}`,
+    `📍 *Commune / lieu souhaité :* ${order.delivery_location.trim()}`,
   ];
 
   if (order.delivery_slot) {
@@ -94,7 +94,8 @@ export function generateWhatsAppOrderReceipt(
 
   lines.push(`----------------------------------------`);
   lines.push(`💰 *TOTAL INDICATIF : ${formatFCFA(order.total_amount)}*`);
-  lines.push(`📌 *Prix final à confirmer avec le vendeur selon disponibilité, livraison et mode de paiement.*`);
+  lines.push(`📌 *Disponibilité, retrait ou livraison et frais éventuels à confirmer directement avec la boutique.*`);
+  lines.push(`🚚 *MaTable ne fournit ni n’organise la livraison.*`);
   lines.push(`----------------------------------------`);
   lines.push(`Merci de me confirmer la disponibilité, le montant final et le mode de paiement. ✨`);
 

@@ -52,6 +52,11 @@ button, input, select, textarea {
   box-shadow: 0 0 0 5px rgba(23, 107, 85, 0.2);
 }
 
+.age-verification-dialog:focus-visible {
+  outline: none;
+  box-shadow: 0 40px 80px -24px rgba(0, 0, 0, 0.55);
+}
+
 @media (forced-colors: active) {
   :focus-visible {
     outline-color: Highlight;
