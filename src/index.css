@@ -243,6 +243,11 @@ button, input, select, textarea {
   animation: product-marquee-right linear infinite;
 }
 
+.product-marquee:hover .product-marquee-track,
+.product-marquee:focus-within .product-marquee-track {
+  animation-play-state: paused;
+}
+
 @keyframes product-marquee-left {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }

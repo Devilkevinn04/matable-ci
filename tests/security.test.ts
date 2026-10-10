@@ -38,11 +38,11 @@ test('calculates the merchant trial state on the server', () => {
   assert.equal(state.isActive, true);
   const expiredState = getSubscriptionState({ ...state, subscription_status: 'trialing', trial_end: trialEnd }, new Date('2026-10-06T12:00:00.000Z'));
   assert.equal(expiredState.trialDaysRemaining, 0);
-  assert.equal(expiredState.status, 'expired');
+  assert.equal(expiredState.status, 'past_due');
   assert.equal(expiredState.isActive, false);
 });
 
-test('subscriptions remain active through their expiry date and offer a reminder two days beforehand', () => {
+test('subscriptions enter grace after expiry and offer a reminder two days beforehand', () => {
   const trial = {
     subscription_status: 'trialing',
     trial_start: '2026-09-03T10:00:00.000Z',
@@ -53,7 +53,7 @@ test('subscriptions remain active through their expiry date and offer a reminder
   const nextDay = getSubscriptionState(trial, new Date('2026-10-04T00:00:00.000Z'));
   assert.equal(lastTrialDay.status, 'trialing');
   assert.equal(lastTrialDay.trialDaysRemaining, 1);
-  assert.equal(nextDay.status, 'expired');
+  assert.equal(nextDay.status, 'past_due');
   assert.equal(nextDay.trialDaysRemaining, 0);
   assert.equal(getSubscriptionReminderAt(trial, new Date('2026-10-01T00:00:00.000Z'))?.toISOString(), '2026-10-01T00:00:00.000Z');
   assert.equal(isSubscriptionReminderDue(trial, new Date('2026-09-30T23:59:59.000Z')), false);
@@ -62,7 +62,8 @@ test('subscriptions remain active through their expiry date and offer a reminder
 
   const paid = { ...trial, subscription_status: 'active', trial_end: null, subscription_expires_at: '2026-10-03T12:00:00.000Z' };
   assert.equal(getSubscriptionState(paid, new Date('2026-10-03T23:59:00.000Z')).status, 'active');
-  assert.equal(getSubscriptionState(paid, new Date('2026-10-04T00:00:00.000Z')).status, 'expired');
+  assert.equal(getSubscriptionState(paid, new Date('2026-10-04T00:00:00.000Z')).status, 'past_due');
+  assert.equal(getSubscriptionState(paid, new Date('2026-10-06T00:00:00.000Z')).status, 'suspended');
 });
 
 test('publication eligibility is independent from the shop opening toggle', () => {
@@ -86,7 +87,7 @@ test('publication eligibility is independent from the shop opening toggle', () =
   assert.equal(canReceiveShopOrders({ ...shop, is_open: true }, currentDate), true);
 });
 
-test('a Didit-verified active shop is visible without a subscription but cannot bypass admin suspension', () => {
+test('a Didit-verified shop stays visible during payment grace but cannot bypass suspension', () => {
   const currentDate = new Date('2026-10-01T12:00:00.000Z');
   const shop = {
     id: 2,
@@ -99,26 +100,28 @@ test('a Didit-verified active shop is visible without a subscription but cannot 
     trial_end: '2026-10-31T00:00:00.000Z',
   } as any;
 
-  assert.equal(isShopPubliclyVisible({ ...shop, publication_status: 'draft' }, currentDate), true);
+  assert.equal(isShopPubliclyVisible({ ...shop, publication_status: 'draft' }, currentDate), false);
   assert.equal(isShopPubliclyVisible({ ...shop, publication_status: 'suspended' }, currentDate), false);
   assert.equal(isShopPubliclyVisible({ ...shop, merchant_verification_status: 'pending' }, currentDate), false);
-  assert.equal(isShopPubliclyVisible({ ...shop, subscription_status: 'past_due' }, currentDate), true);
-  assert.equal(canReceiveShopOrders({ ...shop, subscription_status: 'past_due' }, currentDate), false);
+  const pastDue = { ...shop, subscription_status: 'past_due', trial_end: '2026-09-30T00:00:00.000Z' };
+  assert.equal(isShopPubliclyVisible(pastDue, currentDate), true);
+  assert.equal(canReceiveShopOrders(pastDue, currentDate), true);
   assert.equal(isShopPubliclyVisible({ ...shop, is_active: false }, currentDate), false);
 });
 
-test('counts only actionable orders in revenue and status totals', () => {
+test('excludes cancelled and expired order values while preserving received counts', () => {
   const orders = [
     { id: 1, shop_id: 8, total_amount: 15000, created_at: '2026-09-19T08:00:00.000Z', status: 'pending' },
     { id: 2, shop_id: 8, total_amount: 24000, created_at: '2026-09-19T09:30:00.000Z', status: 'confirmed' },
     { id: 3, shop_id: 8, total_amount: 33000, created_at: '2026-09-19T10:00:00.000Z', status: 'delivered' },
     { id: 4, shop_id: 8, total_amount: 22000, created_at: '2026-09-19T11:00:00.000Z', status: 'cancelled' },
     { id: 5, shop_id: 8, total_amount: 41000, created_at: '2026-09-18T18:00:00.000Z', status: 'delivered' },
+    { id: 6, shop_id: 8, total_amount: 19000, created_at: '2026-09-19T12:00:00.000Z', status: 'expired' },
   ] as any[];
 
   const metrics = summarizeOrderMetrics(orders, 8, new Date('2026-09-19T18:00:00.000Z'));
 
-  assert.equal(metrics.received, 4);
+  assert.equal(metrics.received, 5);
   assert.equal(metrics.confirmed, 1);
   assert.equal(metrics.delivered, 1);
   assert.equal(metrics.cancelled, 1);

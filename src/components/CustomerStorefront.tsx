@@ -18,7 +18,8 @@ import {
   ChevronDown,
   ChevronUp,
   Tag,
-  Search
+  Search,
+  ShieldCheck
 } from 'lucide-react';
 import { Shop, Product } from '../types';
 import { formatFCFA, generateWhatsAppOrderReceipt, getProductUnitPrice } from '../utils/format';
@@ -34,6 +35,7 @@ import { CustomerCheckoutAuth } from './CustomerCheckoutAuth';
 import { CustomerTrustPanel } from './CustomerTrustPanel';
 import { getCanonicalOrigin } from '../utils/seoCanonical';
 import { useCustomerCart } from './useCustomerCart';
+import { isAgeRestrictedProduct, isAtLeastAge } from '../utils/ageRestrictedProducts';
 
 interface CustomerStorefrontProps {
   shopSlug: string;
@@ -54,6 +56,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const toast = useToast();
   const [shop, setShop] = useState<Shop | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [hasAgeRestrictedProducts, setHasAgeRestrictedProducts] = useState(false);
+  const [ageVerified, setAgeVerified] = useState(false);
+  const [ageBirthDate, setAgeBirthDate] = useState('');
+  const [ageVerificationError, setAgeVerificationError] = useState('');
   const [favoriteProductIds, setFavoriteProductIds] = useState<Set<number>>(new Set());
   const [likedProductIds, setLikedProductIds] = useState<Set<number>>(new Set());
   const [isFavoriteShop, setIsFavoriteShop] = useState(false);
@@ -113,28 +119,35 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
+      if (!ageVerified && isAgeRestrictedProduct(p)) return false;
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch = !q ||
         `${p.title} ${p.description || ''} ${p.category || ''}`.toLowerCase().includes(q);
       const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
-  }, [products, searchQuery, selectedCategory]);
+  }, [products, searchQuery, selectedCategory, ageVerified]);
 
-  const fetchShopData = async (signal: AbortSignal) => {
+  const fetchShopData = async (signal: AbortSignal, ageConfirmed = false): Promise<boolean> => {
     try {
-      setLoading(true);
-      setError(null);
-      setShop(null);
-      setProducts([]);
-      const res = await fetch(`/api/v1/catalog/storefronts/${encodeURIComponent(shopSlug)}`, { signal });
+      if (!ageConfirmed) {
+        setLoading(true);
+        setError(null);
+      }
+      if (!ageConfirmed) {
+        setShop(null);
+        setProducts([]);
+      }
+      const ageQuery = ageConfirmed ? '?age_confirmed=1' : '';
+      const res = await fetch(`/api/v1/catalog/storefronts/${encodeURIComponent(shopSlug)}${ageQuery}`, { signal });
       if (!res.ok) {
         throw new Error('Boutique introuvable');
       }
       const data = await res.json();
-      if (signal.aborted) return;
+      if (signal.aborted) return false;
       setShop(data.shop);
       setProducts(data.products || []);
+      setHasAgeRestrictedProducts(Boolean(data.has_age_restricted_products));
 
       // Initialize default selections for products
       const initSizes: Record<number, string> = {};
@@ -156,13 +169,38 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       setSelectedSizes(initSizes);
       setSelectedColors(initColors);
       setSelectedModifiers(initModifiers);
+      return true;
     } catch (err: any) {
-      if (signal.aborted) return;
-      setError(err.message || 'Erreur lors du chargement');
+      if (signal.aborted) return false;
+      if (ageConfirmed) setAgeVerificationError('Impossible de charger les produits. Réessayez.');
+      else setError(err.message || 'Erreur lors du chargement');
+      return false;
     } finally {
-      if (!signal.aborted) setLoading(false);
+      if (!signal.aborted && !ageConfirmed) setLoading(false);
     }
   };
+
+  const handleAgeVerification = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!isAtLeastAge(ageBirthDate, 18)) {
+      setAgeVerificationError('Vous devez avoir au moins 18 ans pour accéder à ces produits.');
+      return;
+    }
+
+    setAgeVerificationError('');
+    const loaded = await fetchShopData(new AbortController().signal, true);
+    if (loaded) {
+      setAgeVerified(true);
+      setAgeBirthDate('');
+    } else {
+      setAgeVerificationError('Impossible de charger les produits. Réessayez.');
+    }
+  };
+
+  useEffect(() => {
+    if (ageVerified || !cart.some((item) => isAgeRestrictedProduct(item.product))) return;
+    setCart((items) => items.filter((item) => !isAgeRestrictedProduct(item.product)));
+  }, [ageVerified, cart, setCart]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -427,6 +465,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!shop || cart.length === 0) return;
+    if (!ageVerified && cart.some((item) => isAgeRestrictedProduct(item.product))) {
+      toast.error('Confirmez votre majorité avant de commander ces produits.');
+      return;
+    }
 
     const trimmedName = customerName.trim();
     const normalizedPhone = normalizeCustomerPhoneValue(customerPhone);
@@ -459,6 +501,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           delivery_note: deliveryNote,
           delivery_slot: shop.category === 'food' ? deliverySlot : undefined,
           payment_method_preference: paymentMethod,
+          age_confirmed: ageVerified,
           items: cart.map(item => ({
             product_id: item.product.id,
             quantity: item.quantity,
@@ -835,7 +878,39 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             - Fashion: 3:4 portrait grid with size/color options
             - Food: 1:1 or 16:9 landscape cards with prep_time & modifiers
         */}
-        {products.length === 0 ? (
+        {hasAgeRestrictedProducts && !ageVerified && (
+          <section className="mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 sm:p-5" aria-labelledby="age-restricted-title">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-amber-900">
+                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 id="age-restricted-title" className="text-base font-black text-amber-950">Certains produits sont réservés aux adultes (18+)</h2>
+                <p className="mt-1 text-sm leading-6 text-amber-900">Confirmez votre majorité pour les afficher. Votre date de naissance n’est ni enregistrée ni transmise à MaTable.ci.</p>
+                <form onSubmit={handleAgeVerification} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <label className="block flex-1 text-xs font-bold text-amber-950">
+                    Date de naissance
+                    <input
+                      type="date"
+                      value={ageBirthDate}
+                      onChange={(event) => setAgeBirthDate(event.target.value)}
+                      max={new Date().toISOString().slice(0, 10)}
+                      required
+                      autoComplete="bday"
+                      className="mt-1.5 min-h-11 w-full rounded-xl border border-amber-300 bg-white px-3 text-sm font-medium text-slate-900 outline-none focus:border-amber-700 focus:ring-2 focus:ring-amber-700/15"
+                    />
+                  </label>
+                  <button type="submit" className="min-h-11 rounded-xl bg-amber-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-950">
+                    Confirmer mon âge
+                  </button>
+                </form>
+                {ageVerificationError && <p role="alert" className="mt-2 text-sm font-bold text-rose-800">{ageVerificationError}</p>}
+                <p className="mt-2 text-[11px] leading-5 text-amber-800">Cette confirmation repose sur votre déclaration et ne constitue pas une vérification d’identité.</p>
+              </div>
+            </div>
+          </section>
+        )}
+        {products.length === 0 && !hasAgeRestrictedProducts ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center sm:py-14">
             <ShoppingBag className="mx-auto mb-3 h-10 w-10 text-slate-300" />
             <h3 className="text-base font-black text-slate-900">La sélection arrive bientôt</h3>
@@ -843,6 +918,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             <a href={`https://wa.me/${shop.whatsapp_number.replace(/\D/g, '')}?text=${encodeURIComponent(`Bonjour, je souhaite connaître les articles disponibles chez ${shop.name}.`)}`} target="_blank" rel="noreferrer" className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold text-white" style={{ backgroundColor: primaryColor }}><Phone className="h-4 w-4" />Demander le catalogue</a>
           </div>
         ) : filteredProducts.length === 0 ? (
+          hasAgeRestrictedProducts && !ageVerified ? null : (
           <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 p-6">
             <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-800 font-bold text-sm">Aucun article ne correspond à votre recherche.</p>
@@ -855,6 +931,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               Afficher tout le catalogue
             </button>
           </div>
+          )
         ) : (
           <div className={products.length === 1
             ? 'mx-auto grid w-full max-w-md grid-cols-1 gap-3 sm:gap-4'
@@ -938,7 +1015,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 {totalCartCount}
               </div>
               <div className="text-left">
-                <span className="text-xs text-slate-300 block">Total panier</span>
+                <span className="text-xs text-white/80 block">Articles · hors livraison</span>
                 <span className="font-black text-base sm:text-lg text-white">
                   {formatFCFA(totalCartAmount)}
                 </span>
@@ -1327,7 +1404,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     <div className="pt-4 border-t border-slate-200">
                       <div className="flex flex-col mb-4">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-bold text-slate-700">Total panier :</span>
+                          <span className="text-sm font-bold text-slate-700">Total des articles :</span>
                           <span className="text-xl font-black text-slate-900">
                             {formatFCFA(totalCartAmount)}
                           </span>

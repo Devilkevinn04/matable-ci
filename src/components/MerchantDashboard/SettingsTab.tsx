@@ -18,6 +18,7 @@ interface SettingsTabProps {
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const [showPlanChooser, setShowPlanChooser] = useState(false);
+  const [merchantDataExporting, setMerchantDataExporting] = useState(false);
   const {
     currentShop, products, orders, activeTab, showSettingsPin, setShowSettingsPin, setCurrentShop, settingsSubTab, setSettingsSubTab,
     catalogSearch, setCatalogSearch, catalogFilter, setCatalogFilter,
@@ -36,104 +37,127 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
     handleOpenAddModal, handleOpenEditModal, handleUpdateOrderStatus, handleImageUpload, handleSaveProduct, handleDeleteProduct,
     handleSaveGeneralSettings, addDeliveryZone, updateDeliveryZone, removeDeliveryZone, toast, copyOwnerLink, copyRegistrationLinks
   } = state;
-  const totalRevenue = orders.reduce((total, order) => total + order.total_amount, 0);
   const lowStockCount = products.filter((product) => product.stock > 0 && product.stock <= 3).length;
   const outOfStockCount = products.filter((product) => product.stock === 0).length;
   const featuredUntil = currentShop?.featured_until || null;
   const isFeatured = Boolean(featuredUntil && Date.parse(featuredUntil) > Date.now());
   const canUseSocialLinks = Boolean(currentShop?.admin_mode || currentShop?.subscription?.isActive
     && isSubscriptionFeatureIncluded(currentShop.subscription.plan, 'social_links'));
+  const settingsGroups = [
+    {
+      label: 'Ma boutique',
+      items: [
+        { id: 'themes', label: 'Apparence', icon: Palette },
+        { id: 'general', label: 'Coordonnées', icon: Store },
+        { id: 'hours', label: 'Horaires', icon: Clock },
+      ],
+    },
+    {
+      label: 'Mon activité',
+      items: [
+        { id: 'bilan', label: 'Flash bilan', icon: Send },
+        { id: 'analytics', label: 'Statistiques Pro', icon: TrendingUp },
+      ],
+    },
+    {
+      label: 'Compte',
+      items: [
+        { id: 'verification', label: 'Vérification', icon: ShieldCheck },
+        { id: 'subscription', label: 'Abonnement', icon: DollarSign },
+      ],
+    },
+  ] as const;
+  const settingsCopy: Record<typeof settingsSubTab, { eyebrow: string; title: string; description: string }> = {
+    themes: { eyebrow: 'Ma boutique', title: 'Apparence de la vitrine', description: 'Personnalisez les couleurs, les images et la présentation de votre boutique.' },
+    general: { eyebrow: 'Ma boutique', title: 'Informations de la boutique', description: 'Gardez vos coordonnées, votre contact et vos informations de livraison à jour.' },
+    hours: { eyebrow: 'Ma boutique', title: 'Horaires et disponibilité', description: 'Définissez les jours et heures pendant lesquels vos clients peuvent commander.' },
+    bilan: { eyebrow: 'Mon activité', title: 'Suivi de votre activité', description: 'Consultez les chiffres du jour et partagez votre bilan sur WhatsApp.' },
+    verification: { eyebrow: 'Compte', title: 'Vérification du commerce', description: 'Suivez la vérification de votre identité et de votre boutique.' },
+    subscription: { eyebrow: 'Compte', title: 'Abonnement et visibilité', description: 'Consultez votre formule, son échéance et les options de visibilité.' },
+    analytics: { eyebrow: 'Mon activité', title: 'Statistiques de la vitrine', description: 'Analysez les visites et les commandes générées par votre boutique.' },
+  };
+  const activeSettingsCopy = settingsCopy[settingsSubTab];
+  const exportMerchantData = async () => {
+    if (!currentShop) return;
+    setMerchantDataExporting(true);
+    try {
+      const response = await fetch('/api/auth/merchant-data-export', { credentials: 'include', cache: 'no-store' });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Impossible de préparer vos données.');
+      }
+      const downloadUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `matable-donnees-boutique-${currentShop.id}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Impossible de préparer vos données.');
+    } finally {
+      setMerchantDataExporting(false);
+    }
+  };
 
   return (
     <>
 {/* TAB 4: SETTINGS & THEMES */}
 
-          <div className="space-y-6">
+          <div className="space-y-5">
+            <header className="flex flex-col gap-4 rounded-3xl border border-[#e7dfd3] bg-white p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1D6B57]">{activeSettingsCopy.eyebrow} · Paramètres</p>
+                <h2 className="mt-1 text-2xl font-black tracking-tight text-[#211712]">{activeSettingsCopy.title}</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{activeSettingsCopy.description}</p>
+              </div>
+              <span className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full border border-[#d8e9df] bg-[#eff7f1] px-3 py-1.5 text-xs font-bold text-[#155544]">
+                <span className={`h-2 w-2 rounded-full ${currentShop.is_open ? 'bg-[#1D6B57]' : 'bg-[#e6572b]'}`} />
+                {currentShop.is_open ? 'Boutique ouverte' : 'Boutique fermée'}
+              </span>
+            </header>
+
             {/* Settings Sub-Tab Navigation */}
-            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 sm:grid-cols-3 xl:grid-cols-7">
-              <button
-                type="button"
-                onClick={() => setSettingsSubTab('themes')}
-                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${
-                  settingsSubTab === 'themes'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Palette className="w-4 h-4" />
-                <span className="truncate">Thèmes & style</span>
-              </button>
+            <nav aria-label="Rubriques des paramètres" className="grid gap-3 md:grid-cols-3">
+              {settingsGroups.map((group) => (
+                <section key={group.label} className="rounded-2xl border border-[#e7dfd3] bg-white p-3">
+                  <h3 className="px-2 pb-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{group.label}</h3>
+                  <div className="grid gap-1">
+                    {group.items.map(({ id, label, icon: Icon }) => {
+                      const isActive = settingsSubTab === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          aria-current={isActive ? 'page' : undefined}
+                          onClick={() => setSettingsSubTab(id)}
+                          className={`flex min-h-10 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold transition-colors ${
+                            isActive
+                              ? 'bg-[#eaf4ef] text-[#155544]'
+                              : 'text-slate-600 hover:bg-[#f7f4ee] hover:text-[#211712]'
+                          }`}
+                        >
+                          <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#1D6B57]' : 'text-slate-400'}`} />
+                          <span className="flex-1">{label}</span>
+                          {isActive && <span className="h-1.5 w-1.5 rounded-full bg-[#1D6B57]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </nav>
 
-              <button
-                type="button"
-                onClick={() => setSettingsSubTab('general')}
-                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${
-                  settingsSubTab === 'general'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Store className="w-4 h-4" />
-                <span className="truncate">Coordonnées</span>
+            <section className="flex flex-col gap-4 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+              <div className="max-w-2xl">
+                <h3 className="text-sm font-extrabold text-[#211712]">Mes données</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-600">Téléchargez les données MaTable.ci enregistrées pour cette boutique. Les données conservées directement par des prestataires externes ne sont pas incluses. Pour demander la suppression du compte, contactez l’assistance.</p>
+              </div>
+              <button type="button" onClick={exportMerchantData} disabled={merchantDataExporting} className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#d9cfc2] px-4 text-sm font-bold text-[#4a3a30] disabled:opacity-50">
+                {merchantDataExporting ? 'Préparation…' : 'Télécharger mes données'}
               </button>
-
-              <button
-                type="button"
-                onClick={() => setSettingsSubTab('hours')}
-                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${
-                  settingsSubTab === 'hours'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Clock className="w-4 h-4" />
-                <span className="truncate">Horaires</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSettingsSubTab('bilan')}
-                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${
-                  settingsSubTab === 'bilan'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Send className="w-4 h-4" />
-                <span className="truncate">Flash bilan</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSettingsSubTab('verification')}
-                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${
-                  settingsSubTab === 'verification'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span className="truncate">Vérification</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSettingsSubTab('subscription')}
-                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${settingsSubTab === 'subscription' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
-              >
-                <DollarSign className="w-4 h-4" />
-                <span className="truncate">Mon forfait</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSettingsSubTab('analytics')}
-                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black transition-colors ${settingsSubTab === 'analytics' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}`}
-              >
-                <TrendingUp className="w-4 h-4" />
-                <span className="truncate">Statistiques Pro</span>
-              </button>
-            </div>
+            </section>
 
             {/* Sub-Tab 1: THEME CUSTOMIZER */}
             {settingsSubTab === 'themes' && (
@@ -204,10 +228,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
 
             {/* Sub-Tab 2: GENERAL SETTINGS */}
             {settingsSubTab === 'general' && (
-              <form onSubmit={handleSaveGeneralSettings} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-                <h3 className="font-extrabold text-slate-900 text-base">
-                  Coordonnées de la boutique & Sécurité
-                </h3>
+              <form onSubmit={handleSaveGeneralSettings} className="space-y-5 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
+                <div className="flex items-center gap-3 border-b border-[#eee8df] pb-4">
+                  <span className="rounded-2xl bg-[#eaf4ef] p-3 text-[#1D6B57]"><Store className="h-5 w-5" /></span>
+                  <div>
+                    <h3 className="font-extrabold text-[#211712] text-base">Informations publiques</h3>
+                    <p className="mt-0.5 text-xs text-slate-500">Les détails que vos clients retrouvent sur votre vitrine.</p>
+                  </div>
+                </div>
 
                 {settingsSaved && (
                   <div className="p-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold flex items-center gap-2">
@@ -227,7 +255,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       required
                       value={settingsName}
                       onChange={(e) => setSettingsName(e.target.value)}
-                      className="w-full text-xs p-3 rounded-xl border border-slate-300 font-bold focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      className="w-full rounded-xl border border-[#ded7cd] bg-[#fffdf9] p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
                     />
                   </div>
 
@@ -239,7 +267,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       type="text"
                       value={settingsCity}
                       onChange={(e) => setSettingsCity(e.target.value)}
-                      className="w-full text-xs p-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      className="w-full rounded-xl border border-[#ded7cd] bg-[#fffdf9] p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
                     />
                   </div>
                 </div>
@@ -254,7 +282,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                     value={settingsWelcome}
                     onChange={(e) => setSettingsWelcome(e.target.value)}
                     placeholder="Ex: Nuisettes soyeuses & lingerie fine. Livraison discrète à Abidjan..."
-                    className="w-full text-xs p-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    className="w-full rounded-xl border border-[#ded7cd] bg-[#fffdf9] p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
                   />
                 </div>
 
@@ -268,7 +296,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                     required
                     value={settingsPhone}
                     onChange={(e) => setSettingsPhone(e.target.value)}
-                    className="w-full text-xs p-3 rounded-xl border border-slate-300 font-mono focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    className="w-full rounded-xl border border-[#ded7cd] bg-[#fffdf9] p-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
                     Les clients seront automatiquement redirigés vers ce numéro WhatsApp avec leur panier validé.
@@ -387,7 +415,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 <div className="pt-2">
                   <button
                     type="submit"
-                    className="py-2.5 px-5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-sm transition-colors"
+                    className="rounded-xl bg-[#1D6B57] px-5 py-3 text-xs font-extrabold text-white shadow-sm transition-colors hover:bg-[#155544]"
                   >
                     Enregistrer les coordonnées
                   </button>
@@ -397,7 +425,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
 
             {/* Sub-Tab 3: OPENING HOURS & AUTOMATION */}
             {settingsSubTab === 'hours' && (
-              <form onSubmit={handleSaveOpeningHours} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-6">
+              <form onSubmit={handleSaveOpeningHours} className="space-y-6 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                   <div className="flex items-center gap-2.5">
                     <span className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 shrink-0">
@@ -598,7 +626,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
 
             {/* Sub-Tab 4: FLASH BILAN 20H */}
             {settingsSubTab === 'bilan' && (
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-6">
+              <div className="space-y-6 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                   <div className="flex items-center gap-2.5">
                     <span className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 shrink-0">
@@ -653,15 +681,15 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 {/* Recap Highlights */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Ventes du jour</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Valeur des commandes actives aujourd’hui</span>
                     <span className="text-base font-black text-slate-900">
-                      {flashBilan ? formatFCFA(flashBilan.total_sales) : formatFCFA(totalRevenue)}
+                      {flashBilan ? formatFCFA(flashBilan.total_sales) : '—'}
                     </span>
                   </div>
                   <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">Commandes</span>
                     <span className="text-base font-black text-slate-900">
-                      {flashBilan ? flashBilan.total_orders : orders.length}
+                      {flashBilan ? flashBilan.total_orders : '—'}
                     </span>
                   </div>
                   <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">

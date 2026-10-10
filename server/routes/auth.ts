@@ -43,6 +43,8 @@ interface PendingCustomerOAuthProfile {
 
 const GOOGLE_OIDC_KEYS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 const APPLE_OIDC_KEYS = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
+const TERMS_DOCUMENT = '/cgu';
+const PRIVACY_DOCUMENT = '/confidentialite';
 
 interface AdminSession {
   expiresAt: number;
@@ -483,6 +485,9 @@ export function createAuthRouter(options: AuthRouterOptions) {
     const firstName = sanitizeTextField(String(req.body?.first_name || pending.firstName), 60).trim();
     const lastName = sanitizeTextField(String(req.body?.last_name || pending.lastName), 60).trim();
     const phone = String(req.body?.phone || '').trim();
+    if (req.body?.accepted_terms_privacy !== true) {
+      return res.status(400).json({ error: 'Veuillez accepter les CGU et la politique de confidentialité pour créer votre compte.' });
+    }
     if (!firstName || !lastName) return res.status(400).json({ error: 'Le prénom et le nom sont requis.' });
     if (!/^\+?225\d{8,12}$/.test(phone)) return res.status(400).json({ error: 'Le téléphone est requis au format ivoirien.' });
 
@@ -491,15 +496,27 @@ export function createAuthRouter(options: AuthRouterOptions) {
       [pending.email],
     );
     if (user && !user.is_active) return res.status(403).json({ error: 'Ce compte est désactivé. Contactez l’assistance.' });
+    let consentSaved = false;
     if (!user) {
       const phoneOwner = await dbGet<{ id: number }>('SELECT id FROM users WHERE phone = ?', [phone]);
       if (phoneOwner) return res.status(409).json({ error: 'Ce téléphone est déjà associé à un autre compte.' });
       const name = `${firstName} ${lastName}`;
-      const inserted = await dbGet<{ id: number }>(
-        'INSERT INTO users (name, first_name, last_name, phone, email, password_hash, created_at, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1) RETURNING id',
-        [name, firstName, lastName, phone, pending.email, bcrypt.hashSync(randomUUID(), 10), new Date().toISOString()],
-      );
+      const createdAt = new Date().toISOString();
+      const inserted = await dbTransaction(async (transaction) => {
+        const result = await transaction.get<{ id: number }>(
+          'INSERT INTO users (name, first_name, last_name, phone, email, password_hash, created_at, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1) RETURNING id',
+          [name, firstName, lastName, phone, pending.email, bcrypt.hashSync(randomUUID(), 10), createdAt],
+        );
+        if (result) {
+          await transaction.run(
+            'INSERT INTO customer_account_consents (user_id, terms_document, privacy_document, accepted_at) VALUES (?, ?, ?, ?)',
+            [result.id, TERMS_DOCUMENT, PRIVACY_DOCUMENT, createdAt],
+          );
+        }
+        return result;
+      });
       if (!inserted) return res.status(500).json({ error: 'Impossible de créer le compte.' });
+      consentSaved = true;
       user = await dbGet<CustomerProfileRow & { is_active: number }>(
         'SELECT id, name, first_name, last_name, phone, email, created_at, is_active FROM users WHERE id = ?',
         [inserted.id],
@@ -507,6 +524,12 @@ export function createAuthRouter(options: AuthRouterOptions) {
     }
     if (!user || !(await linkCustomerOAuthIdentity(pending.provider, pending.providerUserId, user.id, pending.email))) {
       return res.status(409).json({ error: 'Cette identité sociale est déjà liée à un autre compte.' });
+    }
+    if (!consentSaved) {
+      await dbRun(
+        'INSERT INTO customer_account_consents (user_id, terms_document, privacy_document, accepted_at) VALUES (?, ?, ?, ?)',
+        [user.id, TERMS_DOCUMENT, PRIVACY_DOCUMENT, new Date().toISOString()],
+      );
     }
 
     pendingOAuthProfiles.delete(pendingId);
@@ -525,6 +548,9 @@ export function createAuthRouter(options: AuthRouterOptions) {
     const safeEmail = String(email || '').trim().toLowerCase();
     const safePassword = String(password || '');
 
+    if (req.body?.accepted_terms_privacy !== true) {
+      return res.status(400).json({ error: 'Veuillez accepter les CGU et la politique de confidentialité pour créer votre compte.' });
+    }
     if (!safeFirstName || !safeLastName) return res.status(400).json({ error: 'Le prénom et le nom sont requis.' });
     if (!/^\+?225\d{8,12}$/.test(safePhone)) return res.status(400).json({ error: 'Le téléphone est requis au format ivoirien.' });
     if (!safeEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) return res.status(400).json({ error: 'Un email valide est requis.' });
@@ -534,7 +560,20 @@ export function createAuthRouter(options: AuthRouterOptions) {
     if (existing) return res.status(409).json({ error: 'Un compte existe déjà avec cet email ou ce téléphone.' });
 
     const passwordHash = bcrypt.hashSync(safePassword, 10);
-    const inserted = await dbGet<{ id: number }>('INSERT INTO users (name, first_name, last_name, phone, email, password_hash, created_at, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1) RETURNING id', [safeName, safeFirstName, safeLastName, safePhone, safeEmail, passwordHash, new Date().toISOString()]);
+    const createdAt = new Date().toISOString();
+    const inserted = await dbTransaction(async (transaction) => {
+      const result = await transaction.get<{ id: number }>(
+        'INSERT INTO users (name, first_name, last_name, phone, email, password_hash, created_at, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1) RETURNING id',
+        [safeName, safeFirstName, safeLastName, safePhone, safeEmail, passwordHash, createdAt],
+      );
+      if (result) {
+        await transaction.run(
+          'INSERT INTO customer_account_consents (user_id, terms_document, privacy_document, accepted_at) VALUES (?, ?, ?, ?)',
+          [result.id, TERMS_DOCUMENT, PRIVACY_DOCUMENT, createdAt],
+        );
+      }
+      return result;
+    });
     const user = inserted ? await dbGet<{ id: number; name: string; first_name: string; last_name: string; phone: string; email: string; created_at: string }>('SELECT id, name, first_name, last_name, phone, email, created_at FROM users WHERE id = ?', [inserted.id]) : undefined;
     if (!user) return res.status(500).json({ error: 'Impossible de créer le compte.' });
 
@@ -663,7 +702,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     const session = await getCustomerSessionState(req, res);
     if (!session.authenticated || !session.user) return res.status(401).json({ error: 'Authentification client requise.' });
     const userId = session.user.id;
-    const [profile, orders, favorites, likes, reviews, reports] = await Promise.all([
+    const [profile, orders, favorites, likes, reviews, reports, consents] = await Promise.all([
       dbGet<CustomerProfileRow>(
         'SELECT id, name, first_name, last_name, phone, email, created_at FROM users WHERE id = ?',
         [userId],
@@ -690,6 +729,10 @@ export function createAuthRouter(options: AuthRouterOptions) {
         'SELECT target_type, target_id, reason, details, status, created_at FROM customer_reports WHERE user_id = ? ORDER BY created_at DESC',
         [userId],
       ),
+      dbAll<{ terms_document: string; privacy_document: string; accepted_at: string }>(
+        'SELECT terms_document, privacy_document, accepted_at FROM customer_account_consents WHERE user_id = ? ORDER BY accepted_at',
+        [userId],
+      ),
     ]);
     if (!profile) return res.status(404).json({ error: 'Compte client introuvable.' });
     res.setHeader('Cache-Control', 'no-store');
@@ -705,6 +748,67 @@ export function createAuthRouter(options: AuthRouterOptions) {
       likes,
       reviews,
       reports,
+      account_consents: consents,
+    });
+  });
+
+  router.get('/merchant-data-export', rateLimitPublicRequest(5), async (req, res) => {
+    const state = await getSessionStateForResponse(req, res);
+    const shopId = Number(state.shopId);
+    if (!state.authenticated || state.userType !== 'merchant' || !Number.isSafeInteger(shopId) || shopId <= 0) {
+      return res.status(401).json({ error: 'Authentification commerçant requise.' });
+    }
+    const [shop, products, orders, payments, consent, analytics] = await Promise.all([
+      dbGet<Record<string, unknown>>(
+        `SELECT id, name, slug, whatsapp_number, theme_color, welcome_message, is_open, is_active,
+          publication_status, featured_until, merchant_verification_status, selected_subscription_tier,
+          subscription_expires_at, subscription_status, trial_start, trial_end, created_at, category,
+          city, owner_email, theme_config, opening_hours
+         FROM shops WHERE id = ?`,
+        [shopId],
+      ),
+      dbAll<Record<string, unknown>>(
+        `SELECT id, title, description, price, stock, image_url, is_available, is_visible, sizes, colors,
+          lookbook_image, created_at, gallery_images, prep_time, modifier_groups, attributes
+         FROM products WHERE shop_id = ? ORDER BY id`,
+        [shopId],
+      ),
+      dbAll<Record<string, unknown>>(
+        `SELECT id, customer_name, customer_phone, delivery_location, delivery_note, delivery_slot,
+          payment_method_preference, total_amount, created_at, status, items
+         FROM orders WHERE shop_id = ? ORDER BY created_at DESC`,
+        [shopId],
+      ),
+      dbAll<Record<string, unknown>>(
+        `SELECT id, payment_type, tier, amount, currency, status, provider_reference, created_at, paid_at
+         FROM subscription_payment_intents WHERE shop_id = ? ORDER BY created_at DESC`,
+        [shopId],
+      ),
+      dbAll<{ terms_document: string; privacy_document: string; accepted_at: string }>(
+        'SELECT terms_document, privacy_document, accepted_at FROM merchant_account_consents WHERE shop_id = ? ORDER BY accepted_at',
+        [shopId],
+      ),
+      dbAll<{ day: string; event_type: string; total: number | string }>(
+        `SELECT SUBSTR(created_at, 1, 10) AS day, event_type, COUNT(*) AS total
+         FROM analytics_events WHERE shop_id = ? GROUP BY SUBSTR(created_at, 1, 10), event_type ORDER BY day, event_type`,
+        [shopId],
+      ),
+    ]);
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Disposition', `attachment; filename="matable-donnees-boutique-${shopId}.json"`);
+    res.json({
+      exported_at: new Date().toISOString(),
+      scope: 'Données MaTable.ci enregistrées pour cette boutique. Les fichiers et données conservés directement par les prestataires externes ne sont pas inclus.',
+      shop,
+      products,
+      orders: orders.map((order) => ({
+        ...order,
+        items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items,
+      })),
+      payments,
+      account_consents: consent,
+      analytics: analytics.map((event) => ({ ...event, total: Number(event.total) })),
     });
   });
 

@@ -4,6 +4,7 @@ import { ArrowRight, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, He
 import { AuthAudienceSwitcher, AuthExperienceLayout } from './AuthExperienceLayout';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
 import { CustomerMerchantRegistrationForm } from './CustomerMerchantRegistrationForm';
+import { TermsPrivacyConsent } from './TermsPrivacyConsent';
 import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
 import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
 
@@ -43,6 +44,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingOAuthProfile, setPendingOAuthProfile] = useState<PendingOAuthProfile | null>(null);
+  const [acceptedTermsPrivacy, setAcceptedTermsPrivacy] = useState(false);
 
   useEffect(() => setMode(initialMode), [initialMode]);
 
@@ -79,7 +81,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ first_name: firstName, last_name: lastName, phone: normalizeCustomerPhone(phone) }),
+          body: JSON.stringify({ first_name: firstName, last_name: lastName, phone: normalizeCustomerPhone(phone), accepted_terms_privacy: acceptedTermsPrivacy }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Impossible de terminer la création du compte.');
@@ -91,7 +93,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(mode === 'login' ? { email, password } : { first_name: firstName, last_name: lastName, phone: normalizeCustomerPhone(phone), email, password }),
+        body: JSON.stringify(mode === 'login' ? { email, password } : { first_name: firstName, last_name: lastName, phone: normalizeCustomerPhone(phone), email, password, accepted_terms_privacy: acceptedTermsPrivacy }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de terminer la demande.');
@@ -106,6 +108,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
   const switchMode = (nextMode: 'login' | 'register') => {
     setMode(nextMode);
     setAccountType('customer');
+    setAcceptedTermsPrivacy(false);
     setError('');
     onModeChange(nextMode);
   };
@@ -140,10 +143,10 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
 
       {mode === 'register' && !pendingOAuthProfile && (
         <div className="mb-5 grid grid-cols-2 rounded-full bg-[#f0eee7] p-1" role="group" aria-label="Type de compte">
-          <button type="button" onClick={() => setAccountType('customer')} aria-pressed={accountType === 'customer'} className={`flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition ${accountType === 'customer' ? 'bg-[#0f4d3d] text-white shadow-sm' : 'text-[#59655c] hover:bg-white/70'}`}>
+          <button type="button" onClick={() => { setAccountType('customer'); setAcceptedTermsPrivacy(false); }} aria-pressed={accountType === 'customer'} className={`flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition ${accountType === 'customer' ? 'bg-[#0f4d3d] text-white shadow-sm' : 'text-[#59655c] hover:bg-white/70'}`}>
             <UserRound className="h-4 w-4" /> Client
           </button>
-          <button type="button" onClick={() => setAccountType('merchant')} aria-pressed={accountType === 'merchant'} className={`flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition ${accountType === 'merchant' ? 'bg-[#0f4d3d] text-white shadow-sm' : 'text-[#59655c] hover:bg-white/70'}`}>
+          <button type="button" onClick={() => { setAccountType('merchant'); setAcceptedTermsPrivacy(false); }} aria-pressed={accountType === 'merchant'} className={`flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition ${accountType === 'merchant' ? 'bg-[#0f4d3d] text-white shadow-sm' : 'text-[#59655c] hover:bg-white/70'}`}>
             <Store className="h-4 w-4" /> Commerçant
           </button>
         </div>
@@ -158,6 +161,9 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
           {mode === 'register' && <label className="block text-sm font-semibold text-[#34463d]">Numéro de téléphone<input type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="tel" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="+225 07 00 00 00 00" /></label>}
           {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#34463d]">Adresse e-mail<div className="relative mt-1.5"><Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#869188]" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-11 pr-4 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="vous@exemple.ci" /></div></label>}
           {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#34463d]">Mot de passe<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="8 caractères minimum" /></label>}
+          {(pendingOAuthProfile || mode === 'register') && (
+            <TermsPrivacyConsent id="customer-account-terms-privacy" checked={acceptedTermsPrivacy} onChange={setAcceptedTermsPrivacy} />
+          )}
           {error && <p role="alert" className="rounded-xl border border-[#e6572b]/30 bg-[#fff0e8] px-3 py-2.5 text-sm font-semibold text-[#a33e24]">{error}</p>}
           <button type="submit" disabled={isSubmitting} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">{isSubmitting ? 'Vérification...' : pendingOAuthProfile ? 'Terminer mon inscription' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'} <ArrowRight className="h-4 w-4" /></button>
           {mode === 'login' && <a href="/recuperation-acces?type=customer" className="block text-center text-xs font-semibold text-[#52635b] underline underline-offset-2 hover:text-[#0f4d3d]">Mot de passe oublié ?</a>}

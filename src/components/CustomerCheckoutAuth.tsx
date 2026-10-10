@@ -3,6 +3,7 @@ import { ArrowRight, CheckCircle2, Eye, EyeOff, Lock, Mail, ShieldCheck, Sparkle
 import { CustomerUser } from './CustomerAuth';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
 import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
+import { TermsPrivacyConsent } from './TermsPrivacyConsent';
 
 interface CustomerCheckoutAuthProps {
   onAuthenticated: (user: CustomerUser) => void;
@@ -26,6 +27,7 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
   const [phone, setPhone] = useState(prefillPhone ? normalizeCustomerPhone(prefillPhone) : '+225');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [acceptedTermsPrivacy, setAcceptedTermsPrivacy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,7 +45,7 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(mode === 'login' ? { email, password } : { first_name: firstName, last_name: lastName, phone: normalizeCustomerPhone(phone), email, password }),
+        body: JSON.stringify(mode === 'login' ? { email, password } : { first_name: firstName, last_name: lastName, phone: normalizeCustomerPhone(phone), email, password, accepted_terms_privacy: acceptedTermsPrivacy }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de continuer.');
@@ -76,14 +78,14 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
       <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-[#f2eee8] p-1">
         <button
           type="button"
-          onClick={() => { setMode('login'); setError(''); }}
+          onClick={() => { setMode('login'); setAcceptedTermsPrivacy(false); setError(''); }}
           className={`rounded-lg px-2 py-2 text-xs font-bold transition ${mode === 'login' ? 'bg-white text-[#211712] shadow-sm ring-1 ring-[#e8ddd0]' : 'text-[#4a3a30]'}`}
         >
           Se connecter
         </button>
         <button
           type="button"
-          onClick={() => { setMode('register'); setError(''); }}
+          onClick={() => { setMode('register'); setAcceptedTermsPrivacy(false); setError(''); }}
           className={`rounded-lg px-2 py-2 text-xs font-bold transition ${mode === 'register' ? 'bg-white text-[#211712] shadow-sm ring-1 ring-[#e8ddd0]' : 'text-[#4a3a30]'}`}
         >
           Créer un compte
@@ -179,6 +181,10 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
             </button>
           </div>
         </label>
+
+        {mode === 'register' && (
+          <TermsPrivacyConsent id="checkout-customer-terms-privacy" checked={acceptedTermsPrivacy} onChange={setAcceptedTermsPrivacy} />
+        )}
 
         {error && (
           <p role="alert" aria-live="polite" className="rounded-xl border-2 border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">

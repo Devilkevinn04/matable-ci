@@ -38,6 +38,7 @@ before(async () => {
       NODE_ENV: 'test',
       PORT: String(TEST_PORT),
       MATABLE_DB_PATH: TEST_DB_PATH,
+      APP_URL: BASE_URL,
       KADEVPAY_PUBLIC_KEY: 'kdvp_test_public_key',
       KADEVPAY_WEBHOOK_SECRET: 'public-audit-test-secret',
     },
@@ -152,6 +153,7 @@ test('public directory shows active shops from the local onboarding flow', async
       whatsapp_number: newPhone,
       email: ownerEmail,
       pin_code: '456789',
+      accepted_terms_privacy: true,
       category: 'fashion',
       city: 'Abidjan',
       subscription_tier: 'standard',
@@ -342,6 +344,35 @@ test('public product feed filters by category and city and ranks consented inter
   assert.equal(invalidCategory.status, 400);
 });
 
+test('public product feed paginates large catalogs without returning the whole catalog', async () => {
+  const directory = await fetch(`${BASE_URL}/api/v1/catalog/storefronts`).then((response) => response.json()) as Array<{
+    id: number;
+    products_preview?: Array<{ id: number }>;
+  }>;
+  const shop = directory.find((candidate) => candidate.products_preview?.length);
+  assert.ok(shop, 'A public shop with an existing product is required.');
+
+  const database = new Database(TEST_DB_PATH);
+  const insertProduct = database.prepare(
+    `INSERT INTO products (shop_id, title, description, price, stock, is_available, is_visible, created_at)
+     VALUES (?, ?, ?, ?, ?, 1, 1, ?)`,
+  );
+  const insertManyProducts = database.transaction(() => {
+    for (let index = 0; index < 60; index += 1) {
+      insertProduct.run(shop.id, `Produit pagination ${index}`, 'Test pagination', 1000, 10, new Date(Date.now() + index).toISOString());
+    }
+  });
+  insertManyProducts();
+  database.close();
+
+  const response = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/feed?sort=new&limit=24`);
+  assert.equal(response.status, 200);
+  const feed = await response.json() as { has_more: boolean; products: Array<{ title: string }> };
+  assert.equal(feed.products.length, 24);
+  assert.equal(feed.has_more, true);
+  assert.match(feed.products[0].title, /^Produit pagination/);
+});
+
 test('merchant access-link pages are not cached and do not leak their URL as referrer', async () => {
   const response = await fetch(`${BASE_URL}/app?access=one-time-secret`);
   assert.equal(response.status, 200);
@@ -358,6 +389,7 @@ test('shop and product API defaults are category-aware and product placeholders 
       whatsapp_number: uniquePhone(),
       email: uniqueEmail(),
       pin_code: '274915',
+      accepted_terms_privacy: true,
       category: 'beauty',
       theme_config: {
         custom_banner_url: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200',
@@ -404,6 +436,56 @@ test('shop and product API defaults are category-aware and product placeholders 
   const productPayload = await productResponse.json();
   assert.equal(productPayload.product.image_url, '');
   assert.deepEqual(productPayload.product.attributes, { care_type: 'Hydratant', volume: '250 ml' });
+
+  const restrictedProductResponse = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/products`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: cookie,
+    },
+    body: JSON.stringify({
+      title: 'Puff rechargeable',
+      price: 6000,
+      stock: 4,
+    }),
+  });
+  assert.equal(restrictedProductResponse.status, 200);
+  const restrictedProduct = (await restrictedProductResponse.json()).product;
+
+  const storefrontResponse = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/${createdPayload.shop.slug}`);
+  assert.equal(storefrontResponse.status, 200);
+  const storefront = await storefrontResponse.json();
+  assert.equal(storefront.has_age_restricted_products, true);
+  assert.equal(storefront.products.some((product: { id: number }) => product.id === restrictedProduct.id), false);
+
+  const ageConfirmedStorefrontResponse = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/${createdPayload.shop.slug}?age_confirmed=1`);
+  assert.equal(ageConfirmedStorefrontResponse.status, 200);
+  assert.match(ageConfirmedStorefrontResponse.headers.get('cache-control') || '', /private, no-store/);
+  const ageConfirmedStorefront = await ageConfirmedStorefrontResponse.json();
+  assert.equal(ageConfirmedStorefront.products.some((product: { id: number }) => product.id === restrictedProduct.id), true);
+
+  const publicDirectory = await fetch(`${BASE_URL}/api/v1/catalog/storefronts`);
+  const directoryShops = await publicDirectory.json();
+  const directoryShop = directoryShops.find((shop: { slug: string }) => shop.slug === createdPayload.shop.slug);
+  assert.equal(directoryShop.products_preview.some((product: { id: number }) => product.id === restrictedProduct.id), false);
+
+  const publicFeed = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/feed?sort=new&limit=48`);
+  const publicFeedPayload = await publicFeed.json();
+  assert.equal(publicFeedPayload.products.some((product: { id: number }) => product.id === restrictedProduct.id), false);
+
+  const restrictedOrder = await fetch(`${BASE_URL}/api/orders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: createdPayload.shop.id,
+      customer_name: 'Client test',
+      customer_phone: uniquePhone(),
+      delivery_location: 'Cocody',
+      payment_method_preference: 'to_confirm',
+      items: [{ product_id: restrictedProduct.id, quantity: 1 }],
+    }),
+  });
+  assert.equal(restrictedOrder.status, 403);
 
   const persistedDb = new Database(TEST_DB_PATH, { readonly: true });
   try {
@@ -531,6 +613,7 @@ test('registration flow is coherent without external payment or WhatsApp API', a
       whatsapp_number: newPhone,
       email: uniqueEmail(),
       pin_code: '987654',
+      accepted_terms_privacy: true,
       category: 'food',
       city: 'San Pedro',
       subscription_tier: 'premium',
@@ -573,6 +656,7 @@ test('standard registration keeps delivery zones but does not grant premium soci
       whatsapp_number: newPhone,
       email: uniqueEmail(),
       pin_code: '112233',
+      accepted_terms_privacy: true,
       category: 'fashion',
       city: 'Yopougon',
       subscription_tier: 'standard',
@@ -633,6 +717,7 @@ test('merchant can update storefront social links and service zones', async () =
       whatsapp_number: newPhone,
       email: uniqueEmail(),
       pin_code: '445566',
+      accepted_terms_privacy: true,
       category: 'beauty',
       city: 'Yopougon',
       subscription_tier: 'standard',
@@ -720,6 +805,7 @@ test('onboarding preserves explicit opening-hours and keeps the storefront open 
       whatsapp_number: newPhone,
       email: uniqueEmail(),
       pin_code: '778899',
+      accepted_terms_privacy: true,
       category: 'food',
       city: 'Abidjan',
       subscription_tier: 'standard',
@@ -757,6 +843,7 @@ test('public directory prioritizes open shops before closed ones in discovery or
       whatsapp_number: closedPhone,
       email: uniqueEmail(),
       pin_code: '332211',
+      accepted_terms_privacy: true,
       category: 'beauty',
       city: 'Abidjan',
       subscription_tier: 'standard',
@@ -797,6 +884,7 @@ test('public directory prioritizes open shops before closed ones in discovery or
       whatsapp_number: openPhone,
       email: uniqueEmail(),
       pin_code: '112244',
+      accepted_terms_privacy: true,
       category: 'food',
       city: 'Yopougon',
       subscription_tier: 'standard',
@@ -834,6 +922,7 @@ test('shop pages expose canonical SEO metadata for social sharing and indexing',
       whatsapp_number: newPhone,
       email: uniqueEmail(),
       pin_code: '667788',
+      accepted_terms_privacy: true,
       category: 'fashion',
       city: 'Abidjan',
       subscription_tier: 'standard',
@@ -864,6 +953,7 @@ test('free onboarding keeps the shop active without subscription controls', asyn
       whatsapp_number: uniquePhone(),
       email: uniqueEmail(),
       pin_code: '223344',
+      accepted_terms_privacy: true,
       category: 'food',
       city: 'Bouaké',
       subscription_tier: 'standard',

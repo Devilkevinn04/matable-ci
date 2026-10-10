@@ -39,6 +39,13 @@ const sqliteSchema = `
     city TEXT, owner_email TEXT, subscription_tier TEXT NOT NULL, theme_config TEXT, opening_hours TEXT,
     owner_access_token_hash TEXT
   );
+  CREATE TABLE IF NOT EXISTS merchant_account_consents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    terms_document TEXT NOT NULL,
+    privacy_document TEXT NOT NULL,
+    accepted_at TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
     price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT,
@@ -93,6 +100,13 @@ const sqliteSchema = `
     first_name TEXT NOT NULL DEFAULT '', last_name TEXT NOT NULL DEFAULT '',
     email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, is_active INTEGER NOT NULL DEFAULT 1
+  );
+  CREATE TABLE IF NOT EXISTS customer_account_consents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    terms_document TEXT NOT NULL,
+    privacy_document TEXT NOT NULL,
+    accepted_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS user_sessions (
     token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at INTEGER NOT NULL,
@@ -259,6 +273,13 @@ const postgresMigrations = [
     city TEXT, owner_email TEXT, subscription_tier TEXT NOT NULL, theme_config JSONB, opening_hours JSONB,
     owner_access_token_hash TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS merchant_account_consents (
+    id BIGSERIAL PRIMARY KEY,
+    shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    terms_document TEXT NOT NULL,
+    privacy_document TEXT NOT NULL,
+    accepted_at TEXT NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
     price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT,
@@ -361,6 +382,13 @@ const postgresMigrations = [
     first_name TEXT NOT NULL DEFAULT '', last_name TEXT NOT NULL DEFAULT '',
     email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, is_active INTEGER NOT NULL DEFAULT 1
+  )`,
+  `CREATE TABLE IF NOT EXISTS customer_account_consents (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    terms_document TEXT NOT NULL,
+    privacy_document TEXT NOT NULL,
+    accepted_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS user_sessions (
     token TEXT PRIMARY KEY, user_id BIGINT NOT NULL, expires_at BIGINT NOT NULL,

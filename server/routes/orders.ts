@@ -4,6 +4,7 @@ import { getShopPublicationBlockReason, isShopPubliclyVisible } from '../service
 import { mapProductRow } from '../repositories/products.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
+import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
 
 interface CustomerSession {
   authenticated: boolean;
@@ -114,6 +115,9 @@ export function createOrderRouter({
           const product = productRow ? mapProductRow(productRow) : undefined;
           if (!product) {
             throw Object.assign(new Error(`Article #${productId} introuvable dans le catalogue.`), { statusCode: 400 });
+          }
+          if (!req.body?.age_confirmed && isAgeRestrictedProduct(product)) {
+            throw Object.assign(new Error('Une confirmation de majorité est requise pour commander ces produits.'), { statusCode: 403 });
           }
           const stockQuantity = reservedProductIds.has(product.id) ? 0 : (requestedQuantities.get(product.id) || 0);
           const currentStock = Number(product.stock);

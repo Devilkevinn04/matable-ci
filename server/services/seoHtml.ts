@@ -3,6 +3,7 @@ import type { ProductRecord, ShopRecord } from '../types.ts';
 import { escapeHtml, isShopPubliclyVisible } from './businessRules.ts';
 import { getCategoryDefaults } from '../../src/utils/categoryDefaults.ts';
 import { findPublicDiscoveryPage, toDiscoveryCitySlug } from '../../src/utils/discoverySeo.ts';
+import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
 import { FAQ_SECTIONS } from '../../src/utils/faqContent.ts';
 
 interface SeoHtmlHelperOptions {
@@ -135,7 +136,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField }: Seo
     const customImage = targetShop.theme_config?.custom_banner_url;
     const image = customImage && /^https?:\/\//i.test(String(customImage)) ? String(customImage) : defaultImage;
     const shopProducts = products
-      .filter((product) => product.shop_id === targetShop.id && product.is_available && product.stock > 0)
+      .filter((product) => product.shop_id === targetShop.id && product.is_available && product.stock > 0 && !isAgeRestrictedProduct(product))
       .slice(0, 30);
     const structuredData = {
       '@context': 'https://schema.org',

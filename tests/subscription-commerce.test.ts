@@ -76,6 +76,7 @@ test('Pro subscription exposes consented product stats and activates discounted 
       pin_code: '224466',
       category: 'beauty',
       city: 'Abidjan',
+      accepted_terms_privacy: true,
     }),
   });
   const createdPayload = await created.json();

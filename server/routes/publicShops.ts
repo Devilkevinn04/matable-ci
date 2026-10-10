@@ -5,6 +5,7 @@ import { rankShopsByVisibility } from '../services/visibility.ts';
 import type { ProductRecord, ShopRecord } from '../types.ts';
 import { isShopCategory } from '../../src/utils/categoryDefaults.ts';
 import { toDiscoveryCitySlug } from '../../src/utils/discoverySeo.ts';
+import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
 import { mapProductRow } from '../repositories/products.ts';
 import { mapShopRow } from '../repositories/shops.ts';
 
@@ -12,6 +13,7 @@ const publicShopColumns = `id, name, slug, theme_color, welcome_message, is_open
   publication_status, featured_until, merchant_verification_status, selected_subscription_tier,
   subscription_status, trial_start, trial_end, subscription_expires_at, created_at, category, city,
   theme_config, opening_hours`;
+const FEED_QUERY_BATCH_SIZE = 48;
 
 interface MerchantSession {
   shopId: number;
@@ -48,9 +50,12 @@ export function createPublicShopsRouter({
 
   router.get('/feed', async (req, res) => {
     const sort = typeof req.query.sort === 'string' ? req.query.sort : 'popular';
-    if (sort !== 'popular' && sort !== 'new') return res.status(400).json({ error: 'Tri de fil invalide.' });
+    if (sort !== 'popular' && sort !== 'new' && sort !== 'for_you') return res.status(400).json({ error: 'Tri de fil invalide.' });
     const category = typeof req.query.category === 'string' ? req.query.category : '';
     if (category && !isShopCategory(category)) return res.status(400).json({ error: 'Catégorie invalide.' });
+    const preferredCategories: string[] = typeof req.query.preferred_categories === 'string'
+      ? req.query.preferred_categories.split(',').map((value) => value.trim()).filter(isShopCategory).slice(0, 4)
+      : [];
     const citySlug = typeof req.query.city === 'string' ? toDiscoveryCitySlug(req.query.city) : '';
     const limitValue = Number(req.query.limit ?? 24);
     const offsetValue = Number(req.query.offset ?? 0);
@@ -63,62 +68,82 @@ export function createPublicShopsRouter({
       && (!category || shop.category === category)
       && (!citySlug || toDiscoveryCitySlug(shop.city || '') === citySlug));
     const publicShopsById = new Map(publicShopRecords.map((shop) => [shop.id, shop]));
-    const productRows = await dbAll<Record<string, unknown>>(
-      'SELECT id, shop_id, title, price, stock, created_at FROM products WHERE is_available = 1 AND stock > 0',
-    );
-    let feedProducts = productRows
-      .map((row) => ({
-        id: Number(row.id),
-        shop_id: Number(row.shop_id),
-        title: String(row.title),
-        description: null,
-        price: Number(row.price),
-        stock: Number(row.stock),
-        image_url: '',
-        is_available: true,
-        created_at: row.created_at == null ? null : String(row.created_at),
-      }))
-      .filter((product) => publicShopsById.has(product.shop_id));
-    const countsByProduct = new Map<string, { views: number; clicks: number }>();
-    if (sort === 'popular' && publicShopRecords.length > 0) {
-      const shopIds = publicShopRecords.map((shop) => shop.id);
-      const eventCounts = await dbAll<{ shop_id: number; path: string | null; views: number | string; clicks: number | string }>(
-        `SELECT shop_id, path,
-          SUM(CASE WHEN event_type = 'product_view' THEN 1 ELSE 0 END) AS views,
-          SUM(CASE WHEN event_type = 'product_click' THEN 1 ELSE 0 END) AS clicks
-         FROM analytics_events
-         WHERE shop_id IN (${shopIds.map(() => '?').join(', ')})
-           AND event_type IN ('product_view', 'product_click')
-           AND path LIKE '/product/%'
-           AND created_at >= ?
-         GROUP BY shop_id, path`,
-        [...shopIds, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()],
+    const shopIds = publicShopRecords.map((shop) => shop.id);
+    const popularityByProductId = new Map<number, { views: number; clicks: number }>();
+    const popularityJoin = sort === 'popular' && shopIds.length > 0
+      ? `LEFT JOIN (
+          SELECT shop_id, path,
+            SUM(CASE WHEN event_type = 'product_view' THEN 1 ELSE 0 END) AS views,
+            SUM(CASE WHEN event_type = 'product_click' THEN 1 ELSE 0 END) AS clicks
+          FROM analytics_events
+          WHERE shop_id IN (${shopIds.map(() => '?').join(', ')})
+            AND event_type IN ('product_view', 'product_click')
+            AND path LIKE '/product/%'
+            AND created_at >= ?
+          GROUP BY shop_id, path
+        ) popularity ON popularity.shop_id = p.shop_id
+          AND popularity.path = '/product/' || CAST(p.id AS TEXT)`
+      : '';
+    const queryParameters: (number | string)[] = [];
+    if (popularityJoin) {
+      queryParameters.push(...shopIds, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+    }
+    queryParameters.push(...shopIds);
+
+    let orderBy = 'p.created_at DESC, p.id DESC';
+    if (sort === 'popular') {
+      orderBy = 'COALESCE(popularity.views, 0) + COALESCE(popularity.clicks, 0) DESC, p.created_at DESC, p.id DESC';
+    } else if (sort === 'for_you' && preferredCategories.length > 0) {
+      const categoryPlaceholders = preferredCategories.map(() => '?').join(', ');
+      orderBy = `CASE WHEN s.category IN (${categoryPlaceholders}) THEN 0 ELSE 1 END,
+        CASE WHEN p.created_at >= ? THEN 0 ELSE 1 END,
+        CASE ${preferredCategories.map((_, index) => `WHEN s.category = ? THEN ${index}`).join(' ')} ELSE ${preferredCategories.length} END,
+        p.created_at DESC, p.id DESC`;
+      queryParameters.push(...preferredCategories, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), ...preferredCategories);
+    }
+
+    const feedProducts: ProductRecord[] = [];
+    let rawOffset = 0;
+    const requiredProductCount = offset + limit + 1;
+    let hasMoreRawProducts = shopIds.length > 0;
+    while (feedProducts.length < requiredProductCount && hasMoreRawProducts) {
+      const productRows = await dbAll<Record<string, unknown>>(
+        `SELECT p.id, p.shop_id, p.title, p.description, p.price, p.stock, p.created_at,
+          ${popularityJoin ? 'COALESCE(popularity.views, 0)' : '0'} AS views,
+          ${popularityJoin ? 'COALESCE(popularity.clicks, 0)' : '0'} AS clicks
+         FROM products p
+         JOIN shops s ON s.id = p.shop_id
+         ${popularityJoin}
+         WHERE p.is_available = 1 AND p.stock > 0
+           AND p.shop_id IN (${shopIds.map(() => '?').join(', ')})
+         ORDER BY ${orderBy}
+         LIMIT ? OFFSET ?`,
+        [...queryParameters, FEED_QUERY_BATCH_SIZE, rawOffset],
       );
-      for (const row of eventCounts) {
-        const productId = /^\/product\/(\d+)$/.exec(String(row.path || ''))?.[1];
-        if (!productId) continue;
-        countsByProduct.set(`${Number(row.shop_id)}:${productId}`, {
+      hasMoreRawProducts = productRows.length === FEED_QUERY_BATCH_SIZE;
+      rawOffset += productRows.length;
+      for (const row of productRows) {
+        const product = {
+          id: Number(row.id),
+          shop_id: Number(row.shop_id),
+          title: String(row.title),
+          description: row.description == null ? null : String(row.description),
+          price: Number(row.price),
+          stock: Number(row.stock),
+          image_url: '',
+          is_available: true,
+          created_at: row.created_at == null ? null : String(row.created_at),
+        } as ProductRecord;
+        if (isAgeRestrictedProduct(product)) continue;
+        popularityByProductId.set(product.id, {
           views: Number(row.views) || 0,
           clicks: Number(row.clicks) || 0,
         });
+        feedProducts.push(product);
+        if (feedProducts.length >= requiredProductCount) break;
       }
     }
-
-    const getPopularity = (product: ProductRecord) => countsByProduct.get(`${product.shop_id}:${product.id}`) || { views: 0, clicks: 0 };
-    const getCreatedAt = (product: ProductRecord) => product.created_at ? Date.parse(product.created_at) || 0 : 0;
-    const hasPopularityData = feedProducts.some((product) => {
-      const counts = getPopularity(product);
-      return counts.views + counts.clicks > 0;
-    });
-    feedProducts = [...feedProducts].sort((left, right) => {
-      if (sort === 'popular' && hasPopularityData) {
-        const leftCounts = getPopularity(left);
-        const rightCounts = getPopularity(right);
-        const popularityDifference = rightCounts.views + rightCounts.clicks - leftCounts.views - leftCounts.clicks;
-        if (popularityDifference) return popularityDifference;
-      }
-      return getCreatedAt(right) - getCreatedAt(left) || right.id - left.id;
-    });
+    const hasPopularityData = [...popularityByProductId.values()].some(({ views, clicks }) => views > 0 || clicks > 0);
 
     const now = new Date().toISOString();
     const activeBoosts = publicShopRecords.length > 0
@@ -145,11 +170,11 @@ export function createPublicShopsRouter({
     res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
     res.json({
       sort,
-      ranking_fallback: sort === 'popular' && !hasPopularityData,
+      ranking_fallback: (sort === 'popular' && !hasPopularityData) || (sort === 'for_you' && preferredCategories.length === 0),
       has_more: offset + limit < feedProducts.length,
       products: page.map((product) => {
         const shop = publicShopsById.get(product.shop_id)!;
-        const popularity = getPopularity(product);
+        const popularity = popularityByProductId.get(product.id) || { views: 0, clicks: 0 };
         return {
           ...product,
           image_url: imageByProductId.get(product.id) || '',
@@ -182,8 +207,8 @@ export function createPublicShopsRouter({
           publicShopIds,
         ),
         dbAll<Record<string, unknown>>(
-          `SELECT id, shop_id, title, image_url, price FROM (
-             SELECT id, shop_id, title, image_url, price,
+          `SELECT id, shop_id, title, description, image_url, price FROM (
+             SELECT id, shop_id, title, description, image_url, price,
                ROW_NUMBER() OVER (PARTITION BY shop_id ORDER BY id) AS preview_rank
              FROM products
              WHERE shop_id IN (${publicShopIds.map(() => '?').join(', ')}) AND is_available = 1 AND stock > 0
@@ -195,6 +220,7 @@ export function createPublicShopsRouter({
     const productCounts = new Map(productCountRows.map((row) => [Number(row.shop_id), Number(row.count) || 0]));
     const productsPreviewByShop = new Map<number, { id: number; title: string; image_url: string; price: number }[]>();
     for (const row of previewRows) {
+      if (isAgeRestrictedProduct({ title: String(row.title || ''), description: String(row.description || '') })) continue;
       const shopId = Number(row.shop_id);
       const previews = productsPreviewByShop.get(shopId) || [];
       previews.push({
@@ -283,6 +309,11 @@ export function createPublicShopsRouter({
       [shop.id],
     );
     const shopProducts = productRows.map(mapProductRow);
+    const hasAgeRestrictedProducts = shopProducts.some(isAgeRestrictedProduct);
+    const ageConfirmed = req.query.age_confirmed === '1';
+    const publicShopProducts = !isMerchantForShop && !ageConfirmed
+      ? shopProducts.filter((product) => !isAgeRestrictedProduct(product))
+      : shopProducts;
     const productLikeCounts = await getProductLikeCounts(shopProducts.map((product) => product.id));
     const activeBoost = await dbGet<{ starts_at: string; ends_at: string }>(
       `SELECT starts_at, ends_at FROM shop_boosts
@@ -292,7 +323,7 @@ export function createPublicShopsRouter({
       [shop.id, new Date().toISOString(), new Date().toISOString()],
     );
     if (!isMerchantForShop && isShopPubliclyVisible(shop)) {
-      res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+      res.setHeader('Cache-Control', ageConfirmed ? 'private, no-store' : 'public, max-age=30, stale-while-revalidate=60');
     }
     res.json({
       shop: {
@@ -314,7 +345,8 @@ export function createPublicShopsRouter({
         opening_hours: shop.opening_hours,
         ...(isAdminForShop ? { admin_mode: true } : {}),
       },
-      products: shopProducts.map((product) => ({ ...product, like_count: productLikeCounts.get(product.id) || 0 })),
+      has_age_restricted_products: hasAgeRestrictedProducts,
+      products: publicShopProducts.map((product) => ({ ...product, like_count: productLikeCounts.get(product.id) || 0 })),
     });
   });
 

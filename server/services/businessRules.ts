@@ -37,7 +37,7 @@ export function getShopPublicationBlockReason(
   const verificationStatus = shop.merchant_verification_status || 'not_required';
   if (verificationStatus !== 'verified' && verificationStatus !== 'not_required') return 'verification';
   const subscription = getSubscriptionState(shop, currentDate);
-  if (subscription.status === 'expired' && isShopInSubscriptionGracePeriod(shop, currentDate)) return null;
+  if (subscription.status === 'past_due' && isShopInSubscriptionGracePeriod(shop, currentDate)) return null;
   if (subscription.status !== 'trialing' && subscription.status !== 'active') return 'subscription';
   return null;
 }
@@ -63,7 +63,6 @@ export function canPublishShop(shop: ShopRecord, currentDate = new Date()): bool
 export function isShopPubliclyVisible(shop: ShopRecord, currentDate = new Date()): boolean {
   const publicationStatus = shop.publication_status ?? (shop.is_active ? 'active' : 'suspended');
   if (!shop.is_active || publicationStatus === 'suspended') return false;
-  if (shop.merchant_verification_status === 'verified') return true;
   return publicationStatus === 'active' && canPublishShop(shop, currentDate);
 }
 
@@ -141,7 +140,6 @@ export function getSubscriptionState(
   const expiresAt = shop.subscription_expires_at || null;
   const trialEndTime = trialEnd ? Date.parse(trialEnd) : NaN;
   const trialCutoff = trialEnd ? subscriptionExpiryCutoff(trialEnd) : NaN;
-  const expiresAtCutoff = expiresAt ? subscriptionExpiryCutoff(expiresAt) : NaN;
   const rawTrialDaysRemaining = Number.isFinite(trialEndTime)
     ? Math.ceil((trialEndTime - currentDate.getTime()) / 86400000)
     : 0;
@@ -152,10 +150,16 @@ export function getSubscriptionState(
   const configuredStatus: SubscriptionStatus = ['not_started', 'trialing', 'active', 'past_due', 'cancelled', 'expired', 'suspended'].includes(rawConfiguredStatus)
     ? (rawConfiguredStatus as SubscriptionStatus)
     : (trialDaysRemaining > 0 ? 'trialing' : 'active');
-  const status: SubscriptionStatus = (configuredStatus === 'trialing' && trialEnd && trialCutoff <= currentDate.getTime())
-    || (configuredStatus === 'active' && Number.isFinite(expiresAtCutoff) && expiresAtCutoff <= currentDate.getTime())
-    ? 'expired'
-    : configuredStatus;
+  const isTrial = configuredStatus === 'trialing' || (!expiresAt && Boolean(trialEnd));
+  const expiration = isTrial ? trialEnd : expiresAt || trialEnd;
+  const expirationCutoff = expiration ? subscriptionExpiryCutoff(expiration) : NaN;
+  const graceCutoff = expiration ? getSubscriptionGraceCutoff(expiration) : null;
+  let status = configuredStatus;
+  if (['trialing', 'active', 'past_due', 'expired'].includes(configuredStatus)
+    && Number.isFinite(expirationCutoff)
+    && currentDate.getTime() >= expirationCutoff) {
+    status = graceCutoff !== null && currentDate.getTime() < graceCutoff ? 'past_due' : 'suspended';
+  }
   return {
     plan: status === 'trialing' ? 'standard' : normalizeSubscriptionTier(shop.selected_subscription_tier),
     status,
@@ -212,7 +216,9 @@ export function summarizeOrderMetrics<T extends Pick<OrderRecord, 'shop_id' | 't
   const confirmed = filteredOrders.filter((order) => order.status === 'confirmed').length;
   const delivered = filteredOrders.filter((order) => order.status === 'delivered').length;
   const cancelled = filteredOrders.filter((order) => order.status === 'cancelled').length;
-  const caOrdered = filteredOrders.filter((order) => order.status !== 'cancelled').reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+  const caOrdered = filteredOrders
+    .filter((order) => !['cancelled', 'expired'].includes(order.status || 'pending'))
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
   const caConfirmed = filteredOrders.filter((order) => order.status === 'confirmed').reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
   const caDelivered = filteredOrders.filter((order) => order.status === 'delivered').reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
   return {

@@ -117,6 +117,7 @@ async function registerCustomer(firstName = 'Client', lastName = 'Test') {
       phone: uniquePhone(),
       email: `client-${Date.now()}-${Math.random().toString(36).slice(2)}@example.ci`,
       password: 'MotDePasse!123',
+      accepted_terms_privacy: true,
     }),
   });
   assert.equal(registered.response.status, 200, JSON.stringify(registered.payload));
@@ -174,6 +175,18 @@ test('customer registration and login are supported with email, phone, and passw
   const unique = Date.now();
   const email = `client${unique}@example.com`;
   const phone = `+225070${String(unique).slice(-8)}`;
+  const missingConsent = await apiFetch('/api/auth/customer-register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      first_name: 'Sans',
+      last_name: 'Consentement',
+      phone,
+      email,
+      password: 'MotDePasse!123',
+    }),
+  });
+  assert.equal(missingConsent.response.status, 400);
 
   const register = await apiFetch('/api/auth/customer-register', {
     method: 'POST',
@@ -184,6 +197,7 @@ test('customer registration and login are supported with email, phone, and passw
       phone,
       email,
       password: 'MotDePasse!123',
+      accepted_terms_privacy: true,
     }),
   });
 
@@ -192,6 +206,14 @@ test('customer registration and login are supported with email, phone, and passw
   assert.equal(register.payload.user.email, email);
   assert.equal(register.payload.user.first_name, 'Client');
   assert.equal(register.payload.user.last_name, 'Test');
+  const customerExport = await apiFetch('/api/auth/customer-data-export');
+  assert.equal(customerExport.response.status, 200);
+  assert.equal(customerExport.payload.account_consents.length, 1);
+  assert.deepEqual(
+    [customerExport.payload.account_consents[0].terms_document, customerExport.payload.account_consents[0].privacy_document],
+    ['/cgu', '/confidentialite'],
+  );
+  assert.ok(Number.isFinite(Date.parse(customerExport.payload.account_consents[0].accepted_at)));
 
   const session = await apiFetch('/api/auth/customer-session');
   assert.equal(session.response.status, 200, `Unexpected session response: ${JSON.stringify(session.payload)}`);
@@ -285,7 +307,7 @@ test('customer can update their profile and password while revoking other sessio
   const register = await apiFetch('/api/auth/customer-register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ first_name: 'Awa', last_name: 'Client', phone: uniquePhone(), email, password: initialPassword }),
+    body: JSON.stringify({ first_name: 'Awa', last_name: 'Client', phone: uniquePhone(), email, password: initialPassword, accepted_terms_privacy: true }),
   });
   assert.equal(register.response.status, 200, JSON.stringify(register.payload));
   const earlierSessionCookies = cookieJar;
@@ -354,6 +376,7 @@ test('customer favorites and product likes are private, persistent, and toggleab
       phone: uniquePhone(),
       email,
       password: 'MotDePasse!123',
+      accepted_terms_privacy: true,
     }),
   });
   assert.equal(registration.response.status, 200, JSON.stringify(registration.payload));
@@ -441,7 +464,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   const registration = await apiFetch('/api/shops', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Boutique Parcours Client', whatsapp_number: merchantPhone, email: uniqueEmail(), pin_code: '638294', category: 'food' }),
+    body: JSON.stringify({ name: 'Boutique Parcours Client', whatsapp_number: merchantPhone, email: uniqueEmail(), pin_code: '638294', category: 'food', accepted_terms_privacy: true }),
   });
   assert.equal(registration.response.status, 200, JSON.stringify(registration.payload));
   const shopId = registration.payload.shop.id;
@@ -503,7 +526,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   const customerRegistration = await apiFetch('/api/auth/customer-register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ first_name: 'Client', last_name: 'Compte', phone: customerPhone, email: customerEmail, password: 'MotDePasse!123' }),
+    body: JSON.stringify({ first_name: 'Client', last_name: 'Compte', phone: customerPhone, email: customerEmail, password: 'MotDePasse!123', accepted_terms_privacy: true }),
   });
   assert.equal(customerRegistration.response.status, 200, JSON.stringify(customerRegistration.payload));
   assert.equal(customerRegistration.payload.user.first_name, 'Client');
@@ -555,7 +578,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   assert.equal(adminLogout.response.status, 200, JSON.stringify(adminLogout.payload));
 
   const approvedButDraftDirectory = await apiFetch('/api/shops');
-  assert.equal(approvedButDraftDirectory.payload.some((shop: any) => shop.id === shopId), true);
+  assert.equal(approvedButDraftDirectory.payload.some((shop: any) => shop.id === shopId), false);
 
   const ownerPublication = await apiFetch(`/api/shops/${shopId}/publication-status`, {
     method: 'PATCH',
@@ -771,7 +794,7 @@ test('Didit alone controls merchant verification; signed webhooks are fresh and 
   const registration = await apiFetch('/api/shops', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Boutique vérification Didit', whatsapp_number: uniquePhone(), email: uniqueEmail(), pin_code: '684219', category: 'fashion' }),
+    body: JSON.stringify({ name: 'Boutique vérification Didit', whatsapp_number: uniquePhone(), email: uniqueEmail(), pin_code: '684219', category: 'fashion', accepted_terms_privacy: true }),
   });
   assert.equal(registration.response.status, 200, JSON.stringify(registration.payload));
   const shopId = registration.payload.shop.id;
@@ -925,7 +948,7 @@ test('Didit alone controls merchant verification; signed webhooks are fresh and 
   testDbAfterTrial.close();
   const directoryAfterVerification = await fetch(`${BASE_URL}/api/v1/catalog/storefronts`);
   const visibleAfterVerification = (await directoryAfterVerification.json()).find((shop: any) => shop.id === shopId);
-  assert.ok(visibleAfterVerification, 'A verified shop must appear publicly even when its subscription has expired.');
+  assert.equal(visibleAfterVerification, undefined, 'A shop must be hidden after its subscription grace period without deleting its data.');
   const orderAfterExpiry = await apiFetch('/api/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -940,7 +963,7 @@ test('Didit alone controls merchant verification; signed webhooks are fresh and 
   assert.equal(orderAfterExpiry.response.status, 403, JSON.stringify(orderAfterExpiry.payload));
   assert.match(String(orderAfterExpiry.payload.error), /abonnement actif/i);
   const visibleAfterPublication = await fetch(`${BASE_URL}/api/shops/${registration.payload.shop.slug}`);
-  assert.equal(visibleAfterPublication.status, 200);
+  assert.equal(visibleAfterPublication.status, 404);
 });
 
 test('concurrent single-item orders cannot oversell the last unit', async () => {
@@ -1296,6 +1319,7 @@ test('new merchant registration flow is local and immediately usable', async () 
       category: 'fashion',
       city: 'Abidjan',
       welcome_message: 'Bienvenue chez Boutique Test Premium',
+      accepted_terms_privacy: true,
     }),
   });
 
@@ -1305,6 +1329,21 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.equal(registration.payload.shop.is_open, true);
   assert.equal(registration.payload.shop.subscription.status, 'trialing');
   assert.equal(registration.payload.shop.subscription.plan, 'standard');
+  const shopConsentDb = new Database(TEST_DB_PATH);
+  try {
+    const consent = shopConsentDb.prepare('SELECT terms_document, privacy_document, accepted_at FROM merchant_account_consents WHERE shop_id = ?').get(registration.payload.shop.id) as { terms_document: string; privacy_document: string; accepted_at: string } | undefined;
+    assert.deepEqual(consent && [consent.terms_document, consent.privacy_document], ['/cgu', '/confidentialite']);
+    assert.ok(consent?.accepted_at);
+    assert.ok(Number.isFinite(Date.parse(consent!.accepted_at)));
+  } finally {
+    shopConsentDb.close();
+  }
+  const merchantDataExport = await apiFetch('/api/auth/merchant-data-export');
+  assert.equal(merchantDataExport.response.status, 200, JSON.stringify(merchantDataExport.payload));
+  assert.equal(merchantDataExport.payload.shop.id, registration.payload.shop.id);
+  assert.equal(merchantDataExport.payload.account_consents.length, 1);
+  assert.equal('pin_code_hash' in merchantDataExport.payload.shop, false);
+  assert.equal('owner_access_token_hash' in merchantDataExport.payload.shop, false);
   assert.equal(typeof registration.payload.shop.subscription.trialStart, 'string');
   assert.equal(typeof registration.payload.shop.subscription.trialEnd, 'string');
   assert.equal(registration.payload.shop.subscription.trialDaysRemaining, 7);
@@ -1389,6 +1428,7 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
       category: 'food',
       city: 'Yamoussoukro',
       subscription_tier: 'standard',
+      accepted_terms_privacy: true,
     }),
   });
   assert.equal(created.response.status, 200);
@@ -1604,16 +1644,18 @@ test('security hardening: duplicate shop prevention', async () => {
       pin_code: '777777',
       category: 'fashion',
       city: 'Abidjan',
+      accepted_terms_privacy: true,
     }),
   });
   assert.equal(first.response.status, 200);
 
-  const missingEmail = await apiFetch('/api/shops', {
+  const missingConsent = await apiFetch('/api/shops', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Sans e-mail', whatsapp_number: uniquePhone(), pin_code: '456789', category: 'fashion' }),
+    body: JSON.stringify({ name: 'Sans consentement', whatsapp_number: uniquePhone(), email: uniqueEmail(), pin_code: '456789', category: 'fashion' }),
   });
-  assert.equal(missingEmail.response.status, 400);
+  assert.equal(missingConsent.response.status, 400);
+  assert.match(missingConsent.payload.error, /accepter/i);
 
   const duplicate = await apiFetch('/api/shops', {
     method: 'POST',
@@ -1625,6 +1667,7 @@ test('security hardening: duplicate shop prevention', async () => {
       pin_code: '402138',
       category: 'fashion',
       city: 'Abidjan',
+      accepted_terms_privacy: true,
     }),
   });
   assert.equal(duplicate.response.status, 409);
@@ -1632,7 +1675,7 @@ test('security hardening: duplicate shop prevention', async () => {
   const duplicateEmail = await apiFetch('/api/shops', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'E-mail déjà utilisé', whatsapp_number: uniquePhone(), email: email.toUpperCase(), pin_code: '402138', category: 'fashion' }),
+    body: JSON.stringify({ name: 'E-mail déjà utilisé', whatsapp_number: uniquePhone(), email: email.toUpperCase(), pin_code: '402138', category: 'fashion', accepted_terms_privacy: true }),
   });
   assert.equal(duplicateEmail.response.status, 409);
 
@@ -1645,7 +1688,7 @@ test('merchant A cannot access merchant B products, orders, or settings', async 
     const response = await apiFetch('/api/shops', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, whatsapp_number: phone, email: uniqueEmail(), pin_code: '638294', category: 'fashion', city: 'Abidjan' }),
+      body: JSON.stringify({ name, whatsapp_number: phone, email: uniqueEmail(), pin_code: '638294', category: 'fashion', city: 'Abidjan', accepted_terms_privacy: true }),
     });
     assert.equal(response.response.status, 200, JSON.stringify(response.payload));
     return response.payload.shop.id as number;

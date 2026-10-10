@@ -105,6 +105,8 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
   </form>;
   return (
     <main className="public-directory min-h-screen bg-[#f7f3ee] text-[#25231f]">
+      {!discoveryPage && !isShopDirectoryPage && <ProductNewsFeed onOpenShop={onOpenShop} />}
+
       {discoveryPage ? (
         <section className="mx-auto w-full max-w-[1184px] px-5 pb-7 pt-10 sm:px-8 sm:pb-10 sm:pt-14">
           <nav aria-label="Fil d’Ariane" className="mb-5 text-sm text-[#6f6a61]">
@@ -239,8 +241,6 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           })}
         </div>}
       </section>}
-
-      {!discoveryPage && !isShopDirectoryPage && <ProductNewsFeed onOpenShop={onOpenShop} />}
 
       {(discoveryPage || isShopDirectoryPage) && <section id="boutiques" className={`mx-auto w-full scroll-mt-24 px-5 pb-12 pt-5 sm:px-8 sm:pb-16 ${isShopDirectoryPage ? 'max-w-[1280px] lg:px-12' : 'max-w-[1184px]'}`}>
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">

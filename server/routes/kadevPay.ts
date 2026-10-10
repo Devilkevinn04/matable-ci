@@ -6,6 +6,7 @@ import { getRenewedSubscriptionExpiry, isValidKadevPaySignature } from '../servi
 import type { ShopRecord, SubscriptionTier } from '../types.ts';
 import { getSubscriptionPrice, type SubscriptionTerm } from '../../src/utils/subscriptionFeatures.ts';
 import { getShopFromDatabase, mapShopRow } from '../repositories/shops.ts';
+import { sendMerchantSubscriptionReceiptEmail } from '../services/email.ts';
 import {
   BOOST_DURATIONS_DAYS,
   BOOST_MINIMUM_PRODUCT_COUNT,
@@ -253,8 +254,8 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
 
     if (isFailedPayment) {
       const result = await dbTransaction(async (transaction) => {
-        const payment = await transaction.get<{ status: string; amount: number; payment_type: string }>(
-          'SELECT status, amount, payment_type FROM subscription_payment_intents WHERE id = ?',
+        const payment = await transaction.get<{ status: string; amount: number; payment_type: string; shop_id: number }>(
+          'SELECT status, amount, payment_type, shop_id FROM subscription_payment_intents WHERE id = ?',
           [paymentId],
         );
         if (!payment) return 'not_found' as const;
@@ -266,6 +267,22 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
         if (failed.changes === 1 && payment.payment_type === 'promotion') {
           await transaction.run(`UPDATE shop_boosts SET status = 'cancelled', reservation_expires_at = NULL
             WHERE payment_intent_id = ? AND status = 'pending_payment'`, [paymentId]);
+        } else if (failed.changes === 1 && payment.payment_type === 'subscription') {
+          const shop = await transaction.get<{
+            subscription_status: string | null;
+            selected_subscription_tier: string | null;
+            trial_start: string | null;
+            trial_end: string | null;
+            subscription_expires_at: string | null;
+          }>(`SELECT subscription_status, selected_subscription_tier, trial_start, trial_end, subscription_expires_at
+            FROM shops WHERE id = ?`, [payment.shop_id]);
+          const subscriptionState = shop
+            ? getSubscriptionState({ ...shop, selected_subscription_tier: normalizeSubscriptionTier(shop.selected_subscription_tier) })
+            : null;
+          if (subscriptionState && ['past_due', 'suspended'].includes(subscriptionState.status)) {
+            await transaction.run(`UPDATE shops SET subscription_status = ?
+              WHERE id = ? AND subscription_status <> 'suspended'`, [subscriptionState.status, payment.shop_id]);
+          }
         }
         return failed.changes === 1 ? 'failed' as const : 'duplicate' as const;
       });
@@ -327,8 +344,12 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
         return { status: 'boost_paid' as const };
       }
 
-      const shopRecord = await transaction.get<{ subscription_expires_at: string | null }>(
-        'SELECT subscription_expires_at FROM shops WHERE id = ?',
+      const shopRecord = await transaction.get<{
+        name: string;
+        owner_email: string | null;
+        subscription_expires_at: string | null;
+      }>(
+        'SELECT name, owner_email, subscription_expires_at FROM shops WHERE id = ?',
         [payment.shop_id],
       );
       if (!shopRecord) return { status: 'not_found' as const };
@@ -342,11 +363,40 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
         SET subscription_status = 'active', selected_subscription_tier = ?, subscription_tier = ?, subscription_expires_at = ?, last_notification_sent_at = NULL
         WHERE id = ?`, [payment.tier, payment.tier, expiresAt, payment.shop_id]);
       if (updatedShop.changes !== 1) throw new Error('Shop disappeared while applying a KadevPay payment.');
-      return { status: 'paid' as const, shopId: payment.shop_id, tier: payment.tier, expiresAt };
+      return {
+        status: 'paid' as const,
+        shopId: payment.shop_id,
+        tier: payment.tier,
+        expiresAt,
+        receipt: {
+          shopName: shopRecord.name,
+          ownerEmail: shopRecord.owner_email,
+          paymentId: payment.id,
+          providerReference,
+          tierLabel: getSubscriptionPlanConfig(payment.tier).label,
+          term: payment.subscription_term,
+          amount: payment.amount,
+          currency: payment.currency,
+          paidAt,
+        },
+      };
     });
 
     if (result.status === 'not_found') return res.status(404).json({ error: 'Intention de paiement introuvable.' });
     if (result.status === 'mismatch') return res.status(409).json({ error: 'Le montant payé ne correspond pas au montant attendu.' });
+    if (result.status === 'paid' && result.receipt.ownerEmail) {
+      try {
+        const emailResult = await sendMerchantSubscriptionReceiptEmail({
+          ...result.receipt,
+          ownerEmail: result.receipt.ownerEmail,
+        });
+        if (!emailResult.sent && emailResult.error !== 'email_disabled_in_test') {
+          console.warn(`Subscription receipt email skipped for payment ${result.receipt.paymentId}: ${emailResult.error || 'unknown_error'}`);
+        }
+      } catch (error) {
+        console.warn(`Subscription receipt email failed for payment ${result.receipt.paymentId}:`, error);
+      }
+    }
     res.json({ received: true, duplicate: result.status === 'duplicate' });
   });
 

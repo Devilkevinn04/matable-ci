@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Store, ShieldCheck, ShoppingBag, ArrowLeft, Compass, CircleHelp, Newspaper, Menu, X, Sparkles, ArrowUpRight } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
 import { CustomerUser } from './CustomerAuth';
 
 interface NavigationProps {
@@ -27,7 +28,11 @@ export const Navigation: React.FC<NavigationProps> = ({
   onLogoutCustomer,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useLocation();
   const prefersReducedMotion = useReducedMotion();
+  React.useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname, location.search, location.hash]);
   const menuVariants = {
     closed: {
       opacity: 0,
@@ -53,10 +58,10 @@ export const Navigation: React.FC<NavigationProps> = ({
     <header className="sticky top-0 z-50 border-b border-[#e5d9ca] bg-[#fffdf9]/95 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-2 px-4 py-2.5 sm:gap-3 sm:px-8 sm:py-4">
         <div className="flex min-w-0 items-center gap-3">
-          <a href="/" aria-label="MaTable.ci, accueil" className="flex items-center gap-2.5 text-left">
+          <Link to="/" aria-label="MaTable.ci, accueil" className="flex items-center gap-2.5 text-left">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0f4d3d] font-black text-white">M</span>
             <span className="text-xl font-black tracking-tight text-[#211712]">MaTable<span className="text-[#1D6B57]">.ci</span></span>
-          </a>
+          </Link>
         </div>
 
         <motion.button
@@ -86,15 +91,15 @@ export const Navigation: React.FC<NavigationProps> = ({
         <nav className="hidden min-w-0 flex-1 items-center justify-end gap-3 xl:flex" aria-label="Navigation principale">
           {isDirectory && (
             <div className="mr-auto flex shrink-0 items-center gap-1 rounded-full border border-[#e9e1d7] bg-[#f8f5ef] p-1">
-              <a href="/#actualites" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
+              <Link to="/#actualites" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
                 <Newspaper className="h-4 w-4" aria-hidden="true" />Le fil du jour
-              </a>
-              <a href="/boutiques" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
+              </Link>
+              <Link to="/boutiques" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
                 <Compass className="h-4 w-4" aria-hidden="true" />Boutiques
-              </a>
-              <a href="/comment-ca-marche" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
+              </Link>
+              <Link to="/comment-ca-marche" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
                 <CircleHelp className="h-4 w-4" aria-hidden="true" />Comment ça marche
-              </a>
+              </Link>
             </div>
           )}
           {currentRole === 'storefront' && !isDirectory && (
@@ -156,15 +161,15 @@ export const Navigation: React.FC<NavigationProps> = ({
               )}
               {isDirectory && (
                 <motion.div variants={menuItemVariants} className="grid gap-1 rounded-2xl bg-[#f7f3ee] p-1">
-                  <a href="/#actualites" onClick={() => setMobileMenuOpen(false)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-[#31584c] hover:bg-white">
+                  <Link to="/#actualites" onClick={() => setMobileMenuOpen(false)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-[#31584c] hover:bg-white">
                     <Newspaper className="h-4 w-4" aria-hidden="true" />Le fil du jour
-                  </a>
-                  <a href="/boutiques" onClick={() => setMobileMenuOpen(false)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-[#31584c] hover:bg-white">
+                  </Link>
+                  <Link to="/boutiques" onClick={() => setMobileMenuOpen(false)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-[#31584c] hover:bg-white">
                     <Compass className="h-4 w-4" aria-hidden="true" />Boutiques
-                  </a>
-                  <a href="/comment-ca-marche" onClick={() => setMobileMenuOpen(false)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-[#31584c] hover:bg-white">
+                  </Link>
+                  <Link to="/comment-ca-marche" onClick={() => setMobileMenuOpen(false)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-[#31584c] hover:bg-white">
                     <CircleHelp className="h-4 w-4" aria-hidden="true" />Comment ça marche
-                  </a>
+                  </Link>
                 </motion.div>
               )}
               {currentRole === 'storefront' && !isDirectory && (

@@ -26,7 +26,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         question: 'Faut-il un compte pour passer commande ?',
-        answer: 'Oui. Vous pouvez parcourir les boutiques et préparer votre panier librement. La connexion ou la création de votre compte MaTable.ci sera demandée au moment de finaliser la commande, et votre panier sera conservé.',
+        answer: 'Non. Vous pouvez commander sans créer de compte en renseignant les informations demandées au paiement. La connexion ou la création d’un compte reste facultative et permet de retrouver les commandes associées à votre profil.',
       },
       {
         question: 'Comment suivre ou modifier ma commande ?',
@@ -39,7 +39,11 @@ export const FAQ_SECTIONS: FaqSection[] = [
     questions: [
       {
         question: 'Que puis-je faire dans mon profil client ?',
-        answer: 'Votre espace client affiche votre adresse e-mail, votre téléphone et les commandes liées à votre compte avec leur statut et leur montant. Vous pouvez y accéder depuis « Mon compte » après connexion.',
+        answer: 'Votre espace client affiche votre adresse e-mail, votre téléphone et les commandes liées à votre compte avec leur statut et leur montant. Depuis la rubrique Sécurité, vous pouvez aussi télécharger les données du compte ou demander sa suppression. Vous pouvez y accéder depuis « Mon compte » après connexion.',
+      },
+      {
+        question: 'Comment demander une copie ou la suppression des données de ma boutique ?',
+        answer: 'Téléchargez les données MaTable.ci de votre boutique depuis Paramètres, rubrique « Mes données ». Les fichiers ou données conservés directement par des prestataires externes ne sont pas inclus. La suppression d’un compte commerçant n’est pas proposée en libre-service : contactez l’assistance depuis la page de récupération d’accès; une vérification du compte peut être nécessaire.',
       },
       {
         question: 'MaTable.ci encaisse-t-il le paiement ?',

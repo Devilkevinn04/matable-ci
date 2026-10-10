@@ -64,6 +64,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   onAddToCart,
   onDecreaseQuantity,
 }) => {
+  const productTitle = product.title.trim() || 'Produit local';
   const outOfStock = product.stock <= 0;
   const hasProductPhoto = Boolean(product.image_url?.trim());
   const description = product.description || '';
@@ -76,7 +77,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
       className={`bg-[#fffdf9] border border-[#ded8ce] ${cardRadius} ${shadowClass} overflow-hidden flex flex-col transition-all hover:border-[#176b55] hover:-translate-y-0.5`}
     >
       <div className={`relative bg-slate-100 overflow-hidden ${layoutStyle === 'grid_portrait' && hasProductPhoto ? 'aspect-square sm:aspect-3/4' : 'aspect-16/9 sm:aspect-4/3'}`}>
-        <CategoryProductImage imageUrl={product.image_url} category={category} title={product.title} className="absolute inset-0 h-full w-full transition-transform duration-500 hover:scale-105" />
+        <CategoryProductImage imageUrl={product.image_url} category={category} title={productTitle} className="absolute inset-0 h-full w-full transition-transform duration-500 hover:scale-105" />
         {product.prep_time && <span className="absolute top-2.5 left-2.5 bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1"><Clock className="w-3 h-3 text-amber-400" /><span>{product.prep_time} min</span></span>}
         {outOfStock && <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[2px] flex items-center justify-center"><span className="bg-rose-600 text-white font-black text-xs px-3.5 py-1.5 rounded-full shadow-lg">Rupture de stock</span></div>}
         <div className="absolute right-2.5 top-2.5 z-10 flex items-center gap-1.5">
@@ -91,11 +92,11 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
         </div>
       </div>
 
-      {product.lookbook_image && <img src={product.lookbook_image} alt={`Lookbook de ${product.title}`} loading="lazy" referrerPolicy="no-referrer" className="h-24 w-full object-cover border-b border-slate-100" onError={(event) => { event.currentTarget.style.display = 'none'; }} />}
-      {product.gallery_images?.length ? <div className="flex gap-1.5 overflow-x-auto border-b border-slate-100 p-1.5">{product.gallery_images.map((image, index) => <img key={`${product.id}-${index}`} src={image} alt={`Photo ${index + 1} de ${product.title}`} loading="lazy" referrerPolicy="no-referrer" className="h-16 w-16 shrink-0 rounded-lg object-cover" onError={(event) => { event.currentTarget.style.display = 'none'; }} />)}</div> : null}
+      {product.lookbook_image && <img src={product.lookbook_image} alt={`Lookbook de ${productTitle}`} loading="lazy" referrerPolicy="no-referrer" className="h-24 w-full object-cover border-b border-slate-100" onError={(event) => { event.currentTarget.style.display = 'none'; }} />}
+      {product.gallery_images?.length ? <div className="flex gap-1.5 overflow-x-auto border-b border-slate-100 p-1.5">{product.gallery_images.map((image, index) => <img key={`${product.id}-${index}`} src={image} alt={`Photo ${index + 1} de ${productTitle}`} loading="lazy" referrerPolicy="no-referrer" className="h-16 w-16 shrink-0 rounded-lg object-cover" onError={(event) => { event.currentTarget.style.display = 'none'; }} />)}</div> : null}
 
       <div className="p-4 flex flex-col flex-1">
-        <h3 className="font-extrabold text-slate-900 text-base leading-snug mb-1">{product.title}</h3>
+        <h3 className="font-extrabold text-slate-900 text-base leading-snug mb-1">{productTitle}</h3>
         {description ? <div className="mb-3"><p className="text-slate-600 text-xs leading-relaxed">{shouldTruncate && !isDescriptionExpanded ? `${description.slice(0, 130)}...` : description}</p>{shouldTruncate && <button type="button" onClick={onToggleDescription} className="text-[11px] font-bold text-slate-800 hover:text-slate-950 flex items-center gap-0.5 mt-1">{isDescriptionExpanded ? <><span>Moins de détails</span><ChevronUp className="w-3 h-3" /></> : <><span>Détails & conseils</span><ChevronDown className="w-3 h-3" /></>}</button>}</div> : <div className="mb-2" />}
 
         {category === 'fashion' && <div className="space-y-2 mb-3 pt-2 border-t border-slate-100">

@@ -85,7 +85,7 @@ test('subscription renewal adds a calendar month or year after the later of now 
   );
 });
 
-test('paid subscriptions expire when their persisted expiry date is reached', () => {
+test('paid subscriptions enter grace at expiry and suspend after the two-day grace period', () => {
   const currentDate = new Date('2026-10-03T00:00:00.000Z');
   const expired = getSubscriptionState({
     subscription_status: 'active',
@@ -102,8 +102,18 @@ test('paid subscriptions expire when their persisted expiry date is reached', ()
     selected_subscription_tier: 'premium',
   }, currentDate);
 
-  assert.equal(expired.status, 'expired');
+  assert.equal(expired.status, 'past_due');
   assert.equal(expired.isActive, false);
+  assert.equal(
+    getSubscriptionState({
+      subscription_status: 'active',
+      trial_start: null,
+      trial_end: null,
+      subscription_expires_at: '2026-10-02T00:00:00.000Z',
+      selected_subscription_tier: 'premium',
+    }, new Date('2026-10-05T00:00:00.000Z')).status,
+    'suspended',
+  );
   assert.equal(current.status, 'active');
   assert.equal(current.isActive, true);
 });
@@ -119,6 +129,7 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
       pin_code: '456789',
       category: 'fashion',
       city: 'Abidjan',
+      accepted_terms_privacy: true,
     }),
   });
   const createdPayload = await created.json();
@@ -283,7 +294,7 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   assert.equal(duplicateWebhook.status, 200);
   assert.equal((await duplicateWebhook.json()).duplicate, true);
 
-  const expiredAt = new Date(Date.now() - 2 * 86400000).toISOString();
+  const expiredAt = new Date(Date.now() - 4 * 86400000).toISOString();
   const expirationDb = new Database(TEST_DB_PATH);
   try {
     expirationDb.prepare('UPDATE shops SET subscription_status = ?, subscription_expires_at = ? WHERE id = ?')
@@ -294,14 +305,14 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   const subscriptionOverview = await fetch(`${BASE_URL}/api/admin/subscriptions`, { headers: { Cookie: adminCookie } });
   assert.equal(subscriptionOverview.status, 200);
   const expiredShop = (await subscriptionOverview.json()).shops.find((shop: { id: number }) => shop.id === createdPayload.shop.id);
-  assert.equal(expiredShop.status, 'expired');
+  assert.equal(expiredShop.status, 'suspended');
   const merchantSessionAfterExpiry = await fetch(`${BASE_URL}/api/auth/session`, { headers: { Cookie: merchantCookie } });
   const expiredSession = await merchantSessionAfterExpiry.json();
-  assert.equal(expiredSession.subscription.status, 'expired');
+  assert.equal(expiredSession.subscription.status, 'suspended');
   const persistedExpiry = new Database(TEST_DB_PATH);
   try {
     const storedStatus = persistedExpiry.prepare('SELECT subscription_status FROM shops WHERE id = ?').get(createdPayload.shop.id) as { subscription_status: string };
-    assert.equal(storedStatus.subscription_status, 'expired');
+    assert.equal(storedStatus.subscription_status, 'suspended');
   } finally {
     persistedExpiry.close();
   }
@@ -318,6 +329,7 @@ test('merchant trial is Standard and does not grant Pro analytics', async () => 
       pin_code: '684219',
       category: 'fashion',
       city: 'Abidjan',
+      accepted_terms_privacy: true,
     }),
   });
   const createdPayload = await created.json();
@@ -353,6 +365,7 @@ test('admin can review and extend expiring trials with a durable audit entry', a
       pin_code: '867530',
       category: 'fashion',
       city: 'Abidjan',
+      accepted_terms_privacy: true,
     }),
   });
   const createdPayload = await created.json();

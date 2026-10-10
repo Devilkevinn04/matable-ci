@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
 import { databaseMode, dbTransaction } from '../../db.ts';
 import { persistShopInTransaction } from '../repositories/shops.ts';
+import { sendMerchantWelcomeEmail } from '../services/email.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
 import type { ShopRecord } from '../types.ts';
 
@@ -54,6 +55,7 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
   router.post('/', rateLimitPublicRequest(10), async (req, res) => {
     const { name, whatsapp_number, pin_code, pin, category, city, welcome_message, theme_config, opening_hours } = req.body;
     const ownerEmail = String(req.body?.email || '').trim().toLowerCase();
+    const acceptedTermsPrivacy = req.body?.accepted_terms_privacy === true;
     const effectivePin = pin_code || pin;
     const safeName = sanitizeTextField(name, 100);
     const safeCity = sanitizeTextField(city || 'Abidjan', 100);
@@ -79,6 +81,9 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail) || ownerEmail.length > 254) {
       return res.status(400).json({ error: 'Une adresse e-mail valide est obligatoire pour le responsable.' });
+    }
+    if (!acceptedTermsPrivacy) {
+      return res.status(400).json({ error: 'Veuillez accepter les CGU et la politique de confidentialité pour créer une boutique.' });
     }
     if (safeName.length < 2 || !whatsapp_number || !/^[0-9]{6}$/.test(String(effectivePin || '').trim())) {
       return res.status(400).json({ error: 'Nom, numéro WhatsApp et code PIN requis.' });
@@ -172,6 +177,10 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
         }
       }
       await persistShopInTransaction(newShop, transaction);
+      await transaction.run(
+        'INSERT INTO merchant_account_consents (shop_id, terms_document, privacy_document, accepted_at) VALUES (?, ?, ?, ?)',
+        [newShop.id, '/cgu', '/confidentialite', now.toISOString()],
+      );
       return 'created';
     });
     if (registrationResult === 'duplicate_phone') {
@@ -180,6 +189,20 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     if (registrationResult === 'duplicate_email') {
       return res.status(409).json({ error: 'Cette adresse e-mail est déjà associée à un compte marchand.' });
     }
+
+    try {
+      const mailResult = await sendMerchantWelcomeEmail({
+        shopName: newShop.name,
+        ownerEmail,
+        appUrl: String(process.env.APP_URL || 'http://localhost:3000').trim() || 'http://localhost:3000',
+      });
+      if (!mailResult.sent) {
+        console.warn(`Merchant welcome email skipped for ${ownerEmail}: ${mailResult.error || 'unknown_error'}`);
+      }
+    } catch (error) {
+      console.warn(`Merchant welcome email failed for ${ownerEmail}:`, error);
+    }
+
     await createMerchantSession(res, newShop.id, req);
     res.json({
       success: true,

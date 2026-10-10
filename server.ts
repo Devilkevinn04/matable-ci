@@ -96,12 +96,13 @@ const addDays = (d: Date, days: number) => {
 
 async function refreshSubscriptionState(shop: ShopRecord): Promise<SubscriptionState> {
   const state = getSubscriptionState(shop);
-  if (state.status === 'expired' && shop.subscription_status !== 'expired') {
+  if ((state.status === 'past_due' || state.status === 'suspended')
+    && shop.subscription_status !== state.status) {
     const update = await dbRun(
-      "UPDATE shops SET subscription_status = 'expired' WHERE id = ? AND subscription_status <> 'expired'",
-      [shop.id],
+      'UPDATE shops SET subscription_status = ? WHERE id = ? AND COALESCE(subscription_status, ?) = ?',
+      [state.status, shop.id, '', shop.subscription_status || ''],
     );
-    if (update.changes > 0) shop.subscription_status = 'expired';
+    if (update.changes > 0) shop.subscription_status = state.status;
   }
   return state;
 }

@@ -55,7 +55,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                 onClick={handleOpenAddModal}
                 disabled={trialCatalogFull}
                 title={trialCatalogFull ? `La période d’essai est limitée à ${TRIAL_CATALOG_LIMIT} articles.` : undefined}
-                className="py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors self-start sm:self-auto disabled:cursor-not-allowed disabled:opacity-45"
+                className="py-2.5 px-4 rounded-xl bg-[#1D6B57] hover:bg-[#155544] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors self-start sm:self-auto disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <Plus className="w-4 h-4" />
                 <span>{trialCatalogFull ? 'Limite d’essai atteinte' : 'Ajouter un article'}</span>
@@ -71,7 +71,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   placeholder="Rechercher un article..."
                   value={catalogSearch}
                   onChange={(e) => setCatalogSearch(e.target.value)}
-                  className="w-full text-xs py-2 pl-9 pr-3 rounded-xl border-[2px] border-[#211712] bg-white text-[#211712] focus:outline-none focus:border-[#1b3a63]"
+                  className="w-full text-xs py-2 pl-9 pr-3 rounded-xl border-[2px] border-[#211712] bg-white text-[#211712] focus:outline-none focus:border-[#1D6B57]"
                 />
               </div>
 
@@ -80,7 +80,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   onClick={() => setCatalogFilter('all')}
                   className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 border-[2px] ${
                     catalogFilter === 'all'
-                      ? 'bg-[#1b3a63] text-white border-[#211712] shadow-[2px_2px_0_rgba(33,23,18,0.94)]'
+                      ? 'bg-[#1D6B57] text-white border-[#211712] shadow-[2px_2px_0_rgba(33,23,18,0.94)]'
                       : 'bg-white text-[#211712] border-[#211712] hover:bg-[#f7f0e7]'
                   }`}
                 >

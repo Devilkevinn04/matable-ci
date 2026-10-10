@@ -195,9 +195,10 @@ export function createMerchantOrdersRouter({
     ]);
     const currentOrders = orderRows.map(mapOrderRow);
     const shopOrders = currentOrders.filter((order) => isSameBusinessDay(order.created_at));
+    const valueOrders = shopOrders.filter((order) => !['cancelled', 'expired'].includes(order.status || 'pending'));
     const metrics = summarizeOrderMetrics(currentOrders, shopId);
     const productSalesMap: Record<number, { title: string; quantity: number; revenue: number }> = {};
-    shopOrders.forEach((order) => {
+    valueOrders.forEach((order) => {
       (order.items || []).forEach((item) => {
         if (!productSalesMap[item.product_id]) {
           productSalesMap[item.product_id] = { title: item.product_title || `Article #${item.product_id}`, quantity: 0, revenue: 0 };

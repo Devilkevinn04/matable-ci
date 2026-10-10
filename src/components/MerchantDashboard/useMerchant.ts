@@ -6,6 +6,8 @@ import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
 import { TRIAL_DURATION_DAYS } from '../../utils/subscriptionFeatures';
 import { useMerchantProductEditor } from './useMerchantProductEditor';
 
+export type MerchantOrderFilter = 'all' | 'actionable' | OrderStatus;
+
 export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, openRegistration: boolean = false) => {
   const toast = useToast();
 
@@ -34,6 +36,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [regCity, setRegCity] = useState('Abidjan');
   const [regCityOther, setRegCityOther] = useState('');
   const [regEmail, setRegEmail] = useState('');
+  const [regAcceptedTermsPrivacy, setRegAcceptedTermsPrivacy] = useState(false);
   const [regCategory, setRegCategory] = useState<ShopCategory>('fashion');
   const [regLoading, setRegLoading] = useState(false);
   const [trialStarting, setTrialStarting] = useState(false);
@@ -66,7 +69,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   // Orders search & filter
   const [orderSearch, setOrderSearch] = useState('');
   const [orderPaymentFilter, setOrderPaymentFilter] = useState<'all' | 'wave' | 'mobile_money' | 'cash' | 'to_confirm'>('all');
-  const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | OrderStatus>('all');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<MerchantOrderFilter>('all');
 
   const productEditor = useMerchantProductEditor(currentShop, setProducts);
   const {
@@ -366,6 +369,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
           city: regCity === 'Autre ville / commune' ? regCityOther.trim() : regCity.trim(),
           category: regCategory,
           email: regEmail.trim(),
+          accepted_terms_privacy: regAcceptedTermsPrivacy,
           welcome_message: CATEGORY_DEFAULTS[regCategory].welcomeMessage,
         }),
       });
@@ -799,6 +803,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     regCity,
     regCityOther,
     regEmail,
+    regAcceptedTermsPrivacy,
+    setRegAcceptedTermsPrivacy,
     regCategory,
     regLoading,
     trialStarting,

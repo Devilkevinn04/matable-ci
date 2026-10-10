@@ -1,15 +1,15 @@
 import React from 'react';
 import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Sparkles, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes } from 'lucide-react';
-import { MerchantState } from './useMerchant';
+import type { MerchantOrderFilter, MerchantState } from './useMerchant';
 import { ThemeCustomizer } from '../ThemeCustomizer';
 import { formatFCFA } from '../../utils/format';
 
 interface OrdersTabProps {
   state: MerchantState;
-  filteredOrders: any[]; totalRevenue: number; avgBasket: number;
+  filteredOrders: any[]; orderValue: number; averageOrderValue: number;
 }
 
-export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, totalRevenue, avgBasket }) => {
+export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, orderValue, averageOrderValue }) => {
   const {
     currentShop, products, orders, activeTab, settingsSubTab, setSettingsSubTab,
     catalogSearch, setCatalogSearch, catalogFilter, setCatalogFilter,
@@ -28,6 +28,16 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, tot
     handleOpenAddModal, handleOpenEditModal, handleUpdateOrderStatus, handleImageUpload, handleSaveProduct, handleDeleteProduct,
     handleSaveGeneralSettings, addDeliveryZone, updateDeliveryZone, removeDeliveryZone, toast, copyOwnerLink, copyRegistrationLinks
   } = state;
+  const orderStatusOptions: { id: MerchantOrderFilter; label: string; count: number }[] = [
+    { id: 'all', label: 'Toutes', count: orders.length },
+    { id: 'actionable', label: 'À traiter', count: orders.filter(o => !['delivered', 'cancelled', 'expired'].includes(o.status || 'pending')).length },
+    { id: 'pending', label: '⏳ En attente', count: orders.filter(o => (o.status || 'pending') === 'pending').length },
+    { id: 'confirmed', label: '✓ Acceptées', count: orders.filter(o => o.status === 'confirmed').length },
+    { id: 'preparing', label: '🍳 En préparation', count: orders.filter(o => o.status === 'preparing').length },
+    { id: 'ready', label: '📦 Prêtes', count: orders.filter(o => o.status === 'ready').length },
+    { id: 'delivered', label: '✨ Livrées', count: orders.filter(o => o.status === 'delivered').length },
+    { id: 'cancelled', label: '✕ Annulées', count: orders.filter(o => o.status === 'cancelled').length },
+  ];
 
   return (
     <>
@@ -35,23 +45,23 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, tot
 
           <div className="space-y-4">
             {/* Orders Statistics Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eaf4ef] font-bold text-[#1D6B57]">
                   <DollarSign className="w-5 h-5" />
                 </div>
                 <div>
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Valeur des commandes
+                    Valeur des commandes actives
                   </span>
                   <span className="font-black text-slate-900 text-lg">
-                    {formatFCFA(totalRevenue)}
+                    {formatFCFA(orderValue)}
                   </span>
                 </div>
               </div>
 
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+              <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f7f4ee] font-bold text-[#1D6B57]">
                   <ShoppingBag className="w-5 h-5" />
                 </div>
                 <div>
@@ -64,98 +74,61 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, tot
                 </div>
               </div>
 
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+              <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fff6ea] font-bold text-[#b94c24]">
                   <TrendingUp className="w-5 h-5" />
                 </div>
                 <div>
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Panier Moyen
+                    Panier moyen actif
                   </span>
                   <span className="font-black text-slate-900 text-lg">
-                    {formatFCFA(avgBasket)}
+                    {formatFCFA(averageOrderValue)}
                   </span>
                 </div>
               </div>
             </div>
 
             {/* Filter and Search Bar for Orders */}
-            <div className="bg-white p-3 rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-center gap-3">
-              <div className="relative w-full sm:w-72">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <div className="space-y-3 rounded-2xl border border-[#e7dfd3] bg-white p-3 sm:p-4">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="relative w-full sm:flex-1">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Rechercher par client, tél ou #..."
                   value={orderSearch}
                   onChange={(e) => setOrderSearch(e.target.value)}
-                  className="w-full text-xs py-2 pl-9 pr-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    className="min-h-10 w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/20"
                 />
               </div>
-
-              <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-                <button
-                  onClick={() => setOrderPaymentFilter('all')}
-                  className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 ${
-                    orderPaymentFilter === 'all'
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  Toutes ({orders.length})
-                </button>
-                <button
-                  onClick={() => setOrderPaymentFilter('wave')}
-                  className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 ${
-                    orderPaymentFilter === 'wave'
-                      ? 'bg-sky-600 text-white'
-                      : 'bg-sky-50 text-sky-700 hover:bg-sky-100'
-                  }`}
-                >
-                  Wave souhaité ({orders.filter(o => o.payment_method_preference === 'wave').length})
-                </button>
-                <button
-                  onClick={() => setOrderPaymentFilter('mobile_money')}
-                  className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 ${
-                    orderPaymentFilter === 'mobile_money'
-                      ? 'bg-orange-600 text-white'
-                      : 'bg-orange-50 text-orange-700 hover:bg-orange-100'
-                  }`}
-                >
-                  Mobile Money souhaité ({orders.filter(o => o.payment_method_preference === 'mobile_money').length})
-                </button>
-                <button
-                  onClick={() => setOrderPaymentFilter('cash')}
-                  className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 ${orderPaymentFilter === 'cash' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
-                >
-                  Espèces ({orders.filter(o => o.payment_method_preference === 'cash').length})
-                </button>
-                <button
-                  onClick={() => setOrderPaymentFilter('to_confirm')}
-                  className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 ${orderPaymentFilter === 'to_confirm' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'}`}
-                >
-                  À convenir ({orders.filter(o => o.payment_method_preference === 'to_confirm').length})
-                </button>
+                <label className="flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-600 sm:w-56">
+                  <span className="shrink-0">Paiement</span>
+                  <select
+                    value={orderPaymentFilter}
+                    onChange={(event) => setOrderPaymentFilter(event.target.value as typeof orderPaymentFilter)}
+                    className="min-w-0 flex-1 border-0 bg-transparent py-2 text-xs font-bold text-slate-800 outline-none"
+                  >
+                    <option value="all">Tous les modes</option>
+                    <option value="wave">Wave ({orders.filter(o => o.payment_method_preference === 'wave').length})</option>
+                    <option value="mobile_money">Mobile Money ({orders.filter(o => o.payment_method_preference === 'mobile_money').length})</option>
+                    <option value="cash">Espèces ({orders.filter(o => o.payment_method_preference === 'cash').length})</option>
+                    <option value="to_confirm">À convenir ({orders.filter(o => o.payment_method_preference === 'to_confirm').length})</option>
+                  </select>
+                </label>
               </div>
 
               {/* Status filter bar */}
-              <div className="flex items-center gap-1.5 w-full overflow-x-auto pb-1 mt-2">
-                <span className="text-[11px] font-bold text-slate-400 mr-1 uppercase">Statut :</span>
-                {[
-                  { id: 'all', label: 'Toutes', count: orders.length },
-                  { id: 'pending', label: '⏳ En attente', count: orders.filter(o => (o.status || 'pending') === 'pending').length },
-                  { id: 'confirmed', label: '✓ Confirmées', count: orders.filter(o => o.status === 'confirmed').length },
-                  { id: 'preparing', label: '🍳 En préparation', count: orders.filter(o => o.status === 'preparing').length },
-                  { id: 'ready', label: '📦 Prêtes', count: orders.filter(o => o.status === 'ready').length },
-                  { id: 'delivered', label: '✨ Livrées', count: orders.filter(o => o.status === 'delivered').length },
-                  { id: 'cancelled', label: '✕ Annulées', count: orders.filter(o => o.status === 'cancelled').length },
-                ].map(st => (
+              <div className="flex items-center gap-1.5 overflow-x-auto border-t border-[#f0ebe2] pt-3">
+                <span className="mr-1 shrink-0 text-[10px] font-black uppercase tracking-wider text-slate-400">Statut</span>
+                {orderStatusOptions.map(st => (
                   <button
                     key={st.id}
-                    onClick={() => setOrderStatusFilter(st.id as any)}
-                    className={`text-[11px] font-bold py-1 px-2.5 rounded-lg transition-colors shrink-0 ${
+                    onClick={() => setOrderStatusFilter(st.id)}
+                    className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors ${
                       orderStatusFilter === st.id
-                        ? 'bg-slate-900 text-white shadow-2xs'
-                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                        ? 'bg-[#1D6B57] text-white'
+                        : 'border border-transparent bg-[#f7f4ee] text-slate-600 hover:bg-[#eee8dc]'
                     }`}
                   >
                     {st.label} ({st.count})
@@ -207,7 +180,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, tot
                           {/* Status Badge */}
                           {order.status === 'confirmed' && (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                              ✓ Confirmée
+                              ✓ Acceptée · stock réservé
                             </span>
                           )}
                           {order.status === 'delivered' && (

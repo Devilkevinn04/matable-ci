@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ShopRecord } from '../server/types';
 import { getShopVisibilityScore, rankShopsByVisibility } from '../server/services/visibility';
-import { canReceiveShopOrders, canUseSubscriptionFeature, isShopPubliclyVisible } from '../server/services/businessRules';
+import { canReceiveShopOrders, canUseSubscriptionFeature, getSubscriptionState, isShopPubliclyVisible } from '../server/services/businessRules';
 import { getSubscriptionPrice, isSubscriptionFeatureIncluded, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from '../src/utils/subscriptionFeatures';
 
 function makeShop(id: number, overrides: Partial<ShopRecord> = {}): ShopRecord {
@@ -129,7 +129,7 @@ test('trial limits and annual subscription prices match the published offer', ()
   assert.equal(getSubscriptionPrice('pro', 'annual'), 80000);
 });
 
-test('verified shops remain visible after subscription expiry but stop receiving orders after grace', () => {
+test('shops remain public through the grace period, then become suspended and hidden', () => {
   const shop = makeShop(1, {
     publication_status: 'active',
     merchant_verification_status: 'verified',
@@ -138,6 +138,37 @@ test('verified shops remain visible after subscription expiry but stop receiving
   });
   assert.equal(isShopPubliclyVisible(shop, new Date('2026-10-04T12:00:00.000Z')), true);
   assert.equal(canReceiveShopOrders(shop, new Date('2026-10-04T12:00:00.000Z')), true);
-  assert.equal(isShopPubliclyVisible(shop, new Date('2026-10-06T00:00:00.000Z')), true);
+  assert.equal(getSubscriptionState(shop, new Date('2026-10-04T12:00:00.000Z')).status, 'past_due');
+  assert.equal(isShopPubliclyVisible(shop, new Date('2026-10-05T23:59:59.999Z')), true);
+  assert.equal(getSubscriptionState(shop, new Date('2026-10-06T00:00:00.000Z')).status, 'suspended');
+  assert.equal(isShopPubliclyVisible(shop, new Date('2026-10-06T00:00:00.000Z')), false);
   assert.equal(canReceiveShopOrders(shop, new Date('2026-10-06T00:00:00.000Z')), false);
+});
+
+test('past-due and suspended subscriptions respect expiry grace regardless of KYC status', () => {
+  const verified = makeShop(1, {
+    publication_status: 'active',
+    merchant_verification_status: 'verified',
+    subscription_status: 'past_due',
+    subscription_expires_at: '2026-10-03T12:00:00.000Z',
+  });
+  const unverified = makeShop(2, {
+    publication_status: 'active',
+    merchant_verification_status: 'not_required',
+    subscription_status: 'past_due',
+    subscription_expires_at: '2026-10-03T12:00:00.000Z',
+  });
+  const suspended = { ...verified, subscription_status: 'suspended' as const };
+  const duringGrace = new Date('2026-10-05T12:00:00.000Z');
+  const afterGrace = new Date('2026-10-06T00:00:00.000Z');
+
+  assert.equal(isShopPubliclyVisible(verified, duringGrace), true);
+  assert.equal(isShopPubliclyVisible(unverified, duringGrace), true);
+  assert.equal(isShopPubliclyVisible(suspended, duringGrace), false);
+  assert.equal(isShopPubliclyVisible(verified, afterGrace), false);
+});
+
+test('verified shops still need an active publication status', () => {
+  const draft = makeShop(1, { publication_status: 'draft', merchant_verification_status: 'verified' });
+  assert.equal(isShopPubliclyVisible(draft), false);
 });

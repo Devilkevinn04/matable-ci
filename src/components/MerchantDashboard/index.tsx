@@ -38,6 +38,7 @@ import {
   ShieldCheck,
   CreditCard,
   MessageCircle,
+  LogOut,
 } from 'lucide-react';
 import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks } from '../../types';
 import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../../utils/format';
@@ -306,11 +307,15 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     return <MerchantTrialOnboarding shop={merchantState.currentShop} isStarting={false} onStart={handleStartTrial} mode="expired" />;
   }
   // 2. AUTHENTICATED -> MERCHANT DASHBOARD
-  const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
+  const activeOrders = orders.filter((order) => !['cancelled', 'expired'].includes(order.status || 'pending'));
+  const orderValue = activeOrders.reduce((sum, order) => sum + order.total_amount, 0);
   const dashboardSupportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour la boutique ${currentShop.name}.`);
-  const avgBasket = orders.length > 0 ? Math.round(totalRevenue / orders.length) : 0;
+  const avgBasket = activeOrders.length > 0 ? Math.round(orderValue / activeOrders.length) : 0;
   const lowStockCount = products.filter(p => p.stock > 0 && p.stock <= 3).length;
   const outOfStockCount = products.filter(p => p.stock === 0).length;
+  const actionableOrderCount = orders.filter((order) =>
+    !['delivered', 'cancelled', 'expired'].includes(order.status || 'pending'),
+  ).length;
   const isShopVerified = !currentShop.merchant_verification_status || ['not_required', 'verified'].includes(currentShop.merchant_verification_status);
   const isDiditVerified = currentShop.merchant_verification_status === 'verified';
   const hasActiveSubscription = currentShop.subscription?.isActive !== false;
@@ -349,11 +354,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     if (!matchesSearch) return false;
 
     // Status filter
-    if (orderStatusFilter !== 'all') {
-      const currentStatus = o.status || 'pending';
-      if (currentStatus !== orderStatusFilter) {
-        return false;
-      }
+    const currentStatus = o.status || 'pending';
+    if (orderStatusFilter === 'actionable') {
+      if (['delivered', 'cancelled', 'expired'].includes(currentStatus)) return false;
+    } else if (orderStatusFilter !== 'all' && currentStatus !== orderStatusFilter) {
+      return false;
     }
 
     // Payment preference filter
@@ -372,7 +377,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   });
 
   return (
-    <div className="merchant-dashboard min-h-screen pb-20 bg-[#f6f7f4]">
+    <div className="merchant-dashboard min-h-screen pb-20 bg-[#fffaf2]">
       {currentShop.admin_mode && (
         <div role="status" className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 px-4 py-2 text-xs font-bold text-white">
           <span>Mode super-admin · Gestion complète de {currentShop.name}</span>
@@ -381,7 +386,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       )}
       {/* Top Shop Control Bar */}
       <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur-sm">
-        <div className="mx-auto grid max-w-5xl gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             {currentShop.theme_config?.logo_url ? (
               <img
@@ -413,10 +418,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             </div>
           </div>
 
-          <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="flex w-full flex-wrap gap-2 md:w-auto md:justify-end">
             <button
               onClick={handleToggleShopStatus}
-              className={`flex min-h-11 min-w-0 w-full items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-center text-[11px] font-bold transition-colors sm:text-xs ${
+              className={`flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-center text-[11px] font-bold transition-colors sm:text-xs md:flex-none ${
                 currentShop.is_open
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
                   : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
@@ -427,30 +432,30 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             </button>
 
             {!isShopVerified ? (
-              <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('verification'); }} className="flex min-h-11 min-w-0 w-full items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-2 py-2 text-center text-[11px] font-bold text-amber-950 transition-colors hover:bg-amber-100 sm:text-xs">
+              <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('verification'); }} className="flex min-h-10 min-w-0 flex-1 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-[11px] font-bold text-amber-950 transition-colors hover:bg-amber-100 sm:text-xs md:flex-none">
                 <span className="truncate">Identité à vérifier</span>
               </button>
             ) : isAdminSuspended ? (
-              <span className="flex min-h-11 min-w-0 w-full items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-2 py-2 text-center text-[11px] font-bold text-rose-950 sm:text-xs">
+              <span className="flex min-h-10 min-w-0 flex-1 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-center text-[11px] font-bold text-rose-950 sm:text-xs md:flex-none">
                 Suspendue par l’administration
               </span>
             ) : isShopPublished ? (
               <button
                 onClick={() => onOpenStorefront(currentShop.slug)}
-                className="flex min-h-11 min-w-0 w-full items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-2 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-slate-800 sm:text-xs"
+                className="flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#1D6B57] px-3 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-[#155544] sm:text-xs md:flex-none"
               >
                 <span className="truncate">Voir ma vitrine</span>
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               </button>
             ) : !hasActiveSubscription ? (
-              <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="flex min-h-11 min-w-0 w-full items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-2 py-2 text-center text-[11px] font-bold text-amber-950 transition-colors hover:bg-amber-100 sm:text-xs">
+              <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="flex min-h-10 min-w-0 flex-1 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-[11px] font-bold text-amber-950 transition-colors hover:bg-amber-100 sm:text-xs md:flex-none">
                 Abonnement requis
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => void handlePublicationStatusChange('active')}
-                className="flex min-h-11 min-w-0 w-full items-center justify-center rounded-xl bg-slate-900 px-2 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-slate-800 sm:text-xs"
+                className="flex min-h-10 min-w-0 flex-1 items-center justify-center rounded-xl bg-[#1D6B57] px-3 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-[#155544] sm:text-xs md:flex-none"
               >
                 <span className="truncate">Publier ma boutique</span>
               </button>
@@ -462,18 +467,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               aria-expanded={isSettingsDrawerOpen}
               aria-controls="merchant-menu-drawer"
               onClick={() => setIsSettingsDrawerOpen(true)}
-              className="inline-flex min-h-11 min-w-0 w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-2 text-center text-[11px] font-bold text-slate-700 hover:bg-slate-50 lg:hidden"
+              className="inline-flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-center text-[11px] font-bold text-slate-700 hover:bg-slate-50 lg:hidden"
             >
               <Menu className="h-4 w-4 shrink-0" />Menu
-            </button>
-
-            {/* Logout button */}
-            <button
-              onClick={handleLogout}
-              className="min-h-11 min-w-0 w-full truncate rounded-xl border border-slate-200 px-2 py-2 text-center text-[11px] font-bold text-slate-600 transition-colors hover:bg-slate-100 sm:text-xs"
-              title="Se déconnecter"
-            >
-              Déconnexion
             </button>
           </div>
         </div>
@@ -521,41 +517,78 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       )}
 
       {activeTab === 'overview' && (
-      <div className="max-w-5xl mx-auto px-4 pt-5">
-        <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm" aria-labelledby="setup-checklist-title">
-          <details className="group">
-            <summary className="flex cursor-pointer list-none flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Mise en route</p>
-                <h2 id="setup-checklist-title" className="mt-1 text-base font-black text-slate-900">Votre boutique est presque prête</h2>
-              </div>
-              <div className="flex items-center gap-3 self-start sm:self-auto">
-                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
-                  {[Boolean(currentShop.name), Boolean(currentShop.theme_config?.logo_url), products.length > 0, products.length >= productChecklistTarget, isShopLaunchReady, isShopPublished].filter(Boolean).length}/6 étapes
-                </span>
-                <span className="text-xs font-bold text-slate-600 group-open:hidden">Voir les étapes</span>
-                <span className="hidden text-xs font-bold text-slate-600 group-open:inline">Masquer</span>
-                <ChevronRight className="h-4 w-4 text-slate-600 transition-transform group-open:rotate-90" />
-              </div>
-            </summary>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mx-auto max-w-7xl px-4 pt-4">
+        <section className="overflow-hidden rounded-[26px] border border-[#e7dfd3] bg-gradient-to-br from-[#fffdf8] via-[#fefaf4] to-[#edf7f0] p-4 shadow-[0_16px_36px_rgba(37,35,31,0.05)] sm:p-5" aria-labelledby="setup-checklist-title">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Lancement boutique</p>
+              <h2 id="setup-checklist-title" className="mt-1 text-xl font-black text-[#211712] sm:text-2xl">Votre vitrine est presque prête</h2>
+            </div>
+            <div className="flex items-center gap-2 self-start rounded-full bg-white/80 px-3 py-1.5 shadow-sm ring-1 ring-[#e8e0d6] sm:self-auto">
+              <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Progression</span>
+              <span className="rounded-full bg-[#eaf4ef] px-2.5 py-1 text-xs font-black text-[#155544]">
+                {[Boolean(currentShop.name), Boolean(currentShop.theme_config?.logo_url), products.length > 0, products.length >= productChecklistTarget, isShopLaunchReady, isShopPublished].filter(Boolean).length}/6
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 lg:grid-cols-[1.25fr_0.75fr]">
+            <div className="grid gap-2 sm:grid-cols-2">
               {[
-                { label: 'Ajouter le nom de ma boutique', done: Boolean(currentShop.name), action: () => { setActiveTab('settings'); setSettingsSubTab('general'); } },
-                { label: 'Ajouter une photo ou un logo', done: Boolean(currentShop.theme_config?.logo_url), action: () => { setActiveTab('settings'); setSettingsSubTab('themes'); } },
-                { label: 'Ajouter mon premier produit', done: products.length > 0, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
-                { label: `Ajouter au moins ${productChecklistTarget} produits`, done: products.length >= productChecklistTarget, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
-                {
-                  label: !isShopVerified
-                    ? 'Vérifier mon identité'
-                    : isAdminSuspended
-                      ? 'Suspension administrative'
+                { label: 'Nom boutique', done: Boolean(currentShop.name), action: () => { setActiveTab('settings'); setSettingsSubTab('general'); } },
+                { label: 'Logo / photo', done: Boolean(currentShop.theme_config?.logo_url), action: () => { setActiveTab('settings'); setSettingsSubTab('themes'); } },
+                { label: 'Premier produit', done: products.length > 0, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
+                { label: `${productChecklistTarget} produits minimum`, done: products.length >= productChecklistTarget, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
+              ].map((step) => (
+                <button key={step.label} type="button" onClick={step.action} className="flex min-h-[74px] items-start gap-3 rounded-2xl border border-[#e8e0d6] bg-white/90 px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-[#f8fdf9]">
+                  <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${step.done ? 'bg-[#0f4d3d] text-white' : 'border-2 border-slate-300 bg-slate-50 text-transparent'}`}>
+                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                  <span>
+                    <span className="block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">Étape</span>
+                    <span className="mt-1 block text-sm font-bold text-[#211712]">{step.label}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="rounded-[22px] border border-[#dfe8dd] bg-[#f3faf6] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Action clé</p>
+                  <h3 className="mt-1 text-lg font-black text-[#211712]">
+                    {!isShopVerified
+                      ? 'Vérifier mon identité'
+                      : isAdminSuspended
+                        ? 'Suspension administrative'
+                        : isShopPublished
+                          ? 'Boutique publiée'
+                          : !hasActiveSubscription
+                            ? 'Abonnement requis'
+                            : 'Publier ma boutique'}
+                  </h3>
+                </div>
+                <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isShopLaunchReady ? 'bg-[#0f4d3d] text-white' : 'bg-white text-[#0f4d3d] ring-1 ring-[#dfe8dd]'}`}>
+                  <Check className="h-4 w-4" />
+                </span>
+              </div>
+
+              <p className="mt-3 text-sm leading-6 text-[#4b5a52]">
+                {!isShopVerified
+                  ? 'La vérification de votre identité est nécessaire avant que votre boutique soit visible publiquement.'
+                  : isAdminSuspended
+                    ? 'Votre boutique a une restriction administrative. Contactez l’assistance pour la réactiver.'
                     : isShopPublished
-                      ? 'Boutique publiée'
+                      ? 'Votre boutique est prête à recevoir des commandes et à être partagée.'
                       : !hasActiveSubscription
-                        ? 'Abonnement requis'
-                        : 'Publier ma boutique',
-                  done: isShopLaunchReady,
-                  action: !isShopVerified
+                        ? 'Un abonnement est nécessaire pour activer la publication et les commandes commerciales.'
+                        : 'Activez immédiatement votre boutique pour qu’elle soit visible et commandeable.'}
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={!isShopVerified
                     ? () => { setActiveTab('settings'); setSettingsSubTab('verification'); }
                     : isAdminSuspended
                       ? () => toast.error('Contactez l’administration pour faire réexaminer la suspension.')
@@ -563,65 +596,119 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                       ? () => onOpenStorefront(currentShop.slug)
                       : !hasActiveSubscription
                         ? () => { setSettingsSubTab('subscription'); setActiveTab('settings'); }
-                        : () => void handlePublicationStatusChange('active'),
-                },
-                { label: 'Partager ma boutique', done: isShopPublished, action: () => isShopPublished ? copyOwnerLink('public') : toast.error('Publiez votre boutique avant de partager son lien public.') },
-              ].map((step) => (
-                <button key={step.label} type="button" onClick={step.action} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-left text-xs font-bold text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50">
-                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${step.done ? 'bg-emerald-600 text-white' : 'border-2 border-slate-300 bg-white text-transparent'}`}>
-                    <Check className="h-3 w-3" aria-hidden="true" />
-                  </span>
-                  <span>{step.label}</span>
+                        : () => void handlePublicationStatusChange('active')}
+                  className="inline-flex min-h-10 items-center justify-center rounded-full bg-[#0f4d3d] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#155544]"
+                >
+                  {isShopPublished ? 'Voir la boutique' : 'Continuer'}
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => isShopPublished ? copyOwnerLink('public') : toast.error('Publiez votre boutique avant de partager son lien public.')}
+                  className="inline-flex min-h-10 items-center justify-center rounded-full border border-[#dfe8dd] bg-white px-4 py-2 text-xs font-bold text-[#155544] transition hover:bg-[#edf7f0]"
+                >
+                  Partager le lien
+                </button>
+              </div>
             </div>
-          </details>
+          </div>
         </section>
       </div>
       )}
 
       {/* Main Container */}
-      <div className="mx-auto max-w-6xl px-4 py-6">
-        <div className="grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start">
-          <nav aria-label="Navigation principale commerçant" className="hidden min-w-0 rounded-xl border border-slate-200 bg-white p-1.5 lg:sticky lg:top-28 lg:flex lg:flex-col lg:overflow-visible">
+      <div className="mx-auto max-w-7xl px-4 py-6">
+        <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
+          <nav aria-label="Navigation principale commerçant" className="hidden min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-2 lg:sticky lg:top-28 lg:flex lg:flex-col lg:gap-1">
+            <p className="px-3 pb-2 pt-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Espace commerçant</p>
             {[
               { id: 'overview' as const, label: 'Accueil', icon: LayoutDashboard },
-              { id: 'catalog' as const, label: `Catalogue (${products.length})`, icon: Package },
-              { id: 'orders' as const, label: `Commandes (${orders.length})`, icon: ShoppingBag },
-            ].map(({ id, label, icon: Icon }) => (
-              <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => setActiveTab(id)} className={`flex min-h-11 min-w-max items-center justify-start gap-2 rounded-lg border px-3 py-2.5 text-left text-xs font-bold transition-all sm:text-sm lg:w-full ${activeTab === id ? 'border-slate-900 bg-slate-900 text-white shadow-sm' : 'border-transparent bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
-                <Icon className="h-4 w-4 shrink-0" /><span>{label}</span>
+              { id: 'catalog' as const, label: 'Catalogue', count: products.length, icon: Package },
+              { id: 'orders' as const, label: 'Commandes', count: actionableOrderCount, icon: ShoppingBag },
+            ].map(({ id, label, icon: Icon, count }) => (
+              <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => setActiveTab(id)} className={`flex min-h-11 min-w-0 items-center justify-start gap-3 rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition-all sm:text-sm lg:w-full ${activeTab === id ? 'border-[#1D6B57]/10 bg-[#eaf4ef] text-[#155544]' : 'border-transparent bg-white text-slate-700 hover:bg-[#f7f4ee]'}`}>
+                <Icon className="h-4 w-4 shrink-0" /><span className="flex-1">{label}</span>
+                {count !== undefined && count > 0 && (
+                  <span className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-[10px] font-black ${id === 'orders' ? 'bg-[#e6572b] text-white' : 'bg-slate-100 text-slate-600'}`}>{count}</span>
+                )}
               </button>
             ))}
-            <button type="button" aria-expanded={isSettingsDrawerOpen} onClick={() => setIsSettingsDrawerOpen(true)} className="inline-flex min-h-11 min-w-max items-center justify-start gap-2 rounded-lg border border-transparent bg-white px-3 py-2.5 text-left text-xs font-bold text-slate-700 transition hover:bg-slate-50 sm:text-sm lg:w-full">
-              <Menu className="h-4 w-4 shrink-0" /><span>Réglages</span>
+            <button type="button" aria-current={activeTab === 'settings' ? 'page' : undefined} onClick={() => { setSettingsSubTab('general'); setActiveTab('settings'); }} className={`inline-flex min-h-11 min-w-max items-center justify-start gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left text-xs font-bold transition hover:bg-[#f7f4ee] sm:text-sm lg:w-full ${activeTab === 'settings' ? 'bg-[#eaf4ef] text-[#155544]' : 'bg-white text-slate-700'}`}>
+            <Store className="h-4 w-4 shrink-0" /><span>Paramètres</span>
+            </button>
+            <button type="button" onClick={handleLogout} className="mt-2 inline-flex min-h-11 min-w-max items-center justify-start gap-3 rounded-xl border-t border-[#eee8dc] px-3 py-2.5 text-left text-xs font-bold text-slate-500 transition hover:bg-[#fff6ea] hover:text-[#b94c24] sm:text-sm lg:w-full">
+            <LogOut className="h-4 w-4 shrink-0" /><span>Déconnexion</span>
             </button>
           </nav>
 
           <div className="min-w-0">
           {activeTab === 'overview' && (
-          <section className="space-y-5">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div><p className="text-xs font-bold uppercase text-[#176b55]">Vue d’ensemble</p><h2 className="mt-1 text-xl font-black text-[#211712]">Bonjour, {currentShop.name}</h2><p className="mt-1 text-sm text-slate-600">Votre espace de travail pour aujourd’hui.</p></div>
-              <span className={`self-start rounded-full px-3 py-1.5 text-xs font-extrabold ${isShopPublished ? 'bg-emerald-100 text-emerald-900' : isAdminSuspended ? 'bg-rose-100 text-rose-900' : 'bg-amber-100 text-amber-950'}`}>{isShopPublished ? 'Boutique publiée' : isAdminSuspended ? 'Suspendue par l’administration' : !isShopVerified ? 'Vérification en cours' : 'Boutique en veille'}</span>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                { label: 'Commandes', value: orders.length },
-                { label: 'Articles au catalogue', value: `${products.length}${currentShop.subscription?.status === 'trialing' ? `/${TRIAL_CATALOG_LIMIT}` : ''}` },
-                { label: 'Essai restant', value: currentShop.subscription?.status === 'trialing' ? `${currentShop.subscription.trialDaysRemaining} jours` : '—' },
-                { label: 'Ouverture commerciale', value: currentShop.is_open ? 'Ouverte' : 'Fermée' },
-              ].map((metric) => <div key={metric.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{metric.label}</p><strong className="mt-2 block text-xl font-black text-slate-900">{metric.value}</strong></div>)}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => { setActiveTab('catalog'); if (currentShop.admin_mode || !(currentShop.subscription?.status === 'trialing' && products.length >= TRIAL_CATALOG_LIMIT)) handleOpenAddModal(); }} disabled={!currentShop.admin_mode && currentShop.subscription?.status === 'trialing' && products.length >= TRIAL_CATALOG_LIMIT} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />Ajouter un article</button>
-              <button type="button" onClick={() => setActiveTab('orders')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><ShoppingBag className="h-4 w-4" />Consulter les commandes</button>
-            </div>
-          </section>
+            <section className="space-y-4">
+              <div className="flex flex-col gap-4 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1D6B57]">Vue d’ensemble</p>
+                  <h2 className="mt-1 text-2xl font-black tracking-tight text-[#211712]">Bonjour, {currentShop.name}</h2>
+                  <p className="mt-1 text-sm text-slate-600">Les informations essentielles de votre boutique.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => { setActiveTab('catalog'); if (currentShop.admin_mode || !(currentShop.subscription?.status === 'trialing' && products.length >= TRIAL_CATALOG_LIMIT)) handleOpenAddModal(); }} disabled={!currentShop.admin_mode && currentShop.subscription?.status === 'trialing' && products.length >= TRIAL_CATALOG_LIMIT} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1D6B57] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#155544] disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />Ajouter un article</button>
+                </div>
+              </div>
+              {(actionableOrderCount > 0 || lowStockCount > 0 || outOfStockCount > 0) && (
+                <section aria-labelledby="merchant-priorities-title" className="rounded-2xl border border-[#edc59c] bg-[#fff6ea] p-4">
+                  <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#fce7d6] text-[#b94c24]"><AlertTriangle className="h-4 w-4" /></span>
+                    <div className="min-w-0 flex-1">
+                      <h3 id="merchant-priorities-title" className="text-sm font-black text-[#211712]">À traiter en priorité</h3>
+                      <p className="mt-0.5 text-xs text-slate-600">Commandes en cours et articles à réapprovisionner.</p>
+                    </div>
+                    <div className="flex w-full flex-wrap justify-start gap-2 sm:w-auto sm:justify-end">
+                      {actionableOrderCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => { setOrderSearch(''); setOrderPaymentFilter('all'); setOrderStatusFilter('actionable'); setActiveTab('orders'); }}
+                          className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-[#1D6B57] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#155544]"
+                        >
+                          <ShoppingBag className="h-4 w-4" />
+                          {actionableOrderCount} commande{actionableOrderCount > 1 ? 's' : ''}
+                        </button>
+                      )}
+                      {outOfStockCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => { setCatalogSearch(''); setCatalogFilter('out_of_stock'); setActiveTab('catalog'); }}
+                          className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-[#e6572b]/30 bg-white px-3 py-2 text-xs font-bold text-[#a43b1d] transition hover:bg-[#fff0e8]"
+                        >
+                          <Package className="h-4 w-4" />
+                          {outOfStockCount} épuisé{outOfStockCount > 1 ? 's' : ''}
+                        </button>
+                      )}
+                      {lowStockCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => { setCatalogSearch(''); setCatalogFilter('low_stock'); setActiveTab('catalog'); }}
+                          className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 transition hover:bg-amber-50"
+                        >
+                          <AlertTriangle className="h-4 w-4" />
+                          {lowStockCount} stock{lowStockCount > 1 ? 's' : ''} bas
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              )}
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { label: 'À traiter', value: actionableOrderCount, hint: `${orders.length} commande${orders.length === 1 ? '' : 's'} au total`, tone: 'text-[#b94c24]', icon: ShoppingBag },
+                  { label: 'Articles', value: `${products.length}${currentShop.subscription?.status === 'trialing' ? ` / ${TRIAL_CATALOG_LIMIT}` : ''}`, hint: 'Dans votre catalogue', tone: 'text-[#1D6B57]', icon: Package },
+                  { label: 'Statut boutique', value: currentShop.is_open ? 'Ouverte' : 'Fermée', hint: isShopPublished ? 'Vitrine publiée' : isAdminSuspended ? 'Suspendue par l’administration' : !isShopVerified ? 'Vérification en cours' : 'Vitrine en veille', tone: currentShop.is_open ? 'text-[#1D6B57]' : 'text-amber-700', icon: Store },
+                  ...(currentShop.subscription?.status === 'trialing' ? [{ label: 'Essai gratuit', value: `${currentShop.subscription.trialDaysRemaining} j`, hint: 'Restants', tone: 'text-[#b94c24]', icon: Clock }] : []),
+                ].map((metric) => <div key={metric.label} className="flex min-h-[104px] items-start gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4"><span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f7f4ee] ${metric.tone}`}><metric.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="text-xs font-semibold text-slate-500">{metric.label}</p><strong className="mt-1 block truncate text-xl font-black text-[#211712]">{metric.value}</strong><p className="mt-1 truncate text-[11px] text-slate-500">{metric.hint}</p></div></div>)}
+              </div>
+            </section>
         )}
 
         {activeTab === 'catalog' && <CatalogTab state={merchantState} filteredProducts={filteredProducts} />}
-        {activeTab === 'orders' && <OrdersTab state={merchantState} filteredOrders={filteredOrders} totalRevenue={totalRevenue} avgBasket={avgBasket} />}
+        {activeTab === 'orders' && <OrdersTab state={merchantState} filteredOrders={filteredOrders} orderValue={orderValue} averageOrderValue={avgBasket} />}
           {activeTab === 'settings' && <SettingsTab state={merchantState} />}
           </div>
         </div>
@@ -639,9 +726,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Espace commerçant</p><div className="space-y-1">
                 {[
                   { id: 'overview' as const, label: 'Accueil', icon: LayoutDashboard },
-                  { id: 'catalog' as const, label: `Catalogue (${products.length})`, icon: Package },
-                  { id: 'orders' as const, label: `Commandes (${orders.length})`, icon: ShoppingBag },
-                ].map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => { setActiveTab(id); setIsSettingsDrawerOpen(false); }} className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold ${activeTab === id ? 'bg-emerald-50 text-emerald-900' : 'text-slate-800 hover:bg-emerald-50'}`}><Icon className="h-4 w-4 text-emerald-800" />{label}</button>)}
+                  { id: 'catalog' as const, label: 'Catalogue', count: products.length, icon: Package },
+                  { id: 'orders' as const, label: 'Commandes', count: actionableOrderCount, icon: ShoppingBag },
+                ].map(({ id, label, icon: Icon, count }) => <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => { setActiveTab(id); setIsSettingsDrawerOpen(false); }} className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold ${activeTab === id ? 'bg-[#eaf4ef] text-[#155544]' : 'text-slate-800 hover:bg-[#f7f4ee]'}`}><Icon className="h-4 w-4 text-[#1D6B57]" /><span className="flex-1">{label}</span>{count !== undefined && count > 0 && <span className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-[10px] font-black ${id === 'orders' ? 'bg-[#e6572b] text-white' : 'bg-slate-100 text-slate-600'}`}>{count}</span>}</button>)}
               </div></div>
               <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Boutique</p><div className="space-y-1">
                 {[

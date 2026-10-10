@@ -12,7 +12,7 @@ Application React + Vite + Express pour la gestion de vitrines locales, de comma
 - Les commandes utilisent le click-to-chat WhatsApp (`wa.me`). Les paiements intégrés et les notifications automatiques ne font pas partie de la V1.
 - Une commande client est enregistrée localement, puis le client ouvre manuellement un reçu prérempli vers le WhatsApp du vendeur.
 - Le prix d’une commande est recalculé côté serveur à partir du catalogue et des options sélectionnées.
-- La publication (`publication_status`) est distincte de l’ouverture (`is_open`). Une boutique n’est publique que si elle est publiée, éligible KYC et couverte par un essai ou un abonnement actif. Après l’échéance, elle reste visible pendant le délai de grâce de deux jours ; `is_open` contrôle uniquement la prise de commandes.
+- La publication (`publication_status`) est distincte de l’ouverture (`is_open`). Une boutique n’est publique que si elle est publiée, éligible KYC et couverte par un essai ou un abonnement actif, ou encore dans ses deux jours de grâce après échéance. Elle est masquée ensuite sans suppression de ses données ni blocage de l’accès marchand ; `is_open` contrôle uniquement la prise de commandes.
 - Le stockage local et les tests utilisent SQLite (`better-sqlite3`). En production (`NODE_ENV=production`), le serveur utilise PostgreSQL via `DATABASE_URL` (Neon recommandé). Les écritures de commandes et de stock sont transactionnelles.
 - Les sessions marchand et super-admin sont sécurisées via cookies `HttpOnly` et contrôles de sécurité sur les tentatives.
 - La gestion de stock est protégée contre les oversells concurrentiels.
@@ -55,6 +55,9 @@ APPLE_KEY_ID=""
 APPLE_PRIVATE_KEY=""
 
 VITE_WHATSAPP_ADMIN_PHONE=""
+RESEND_API_KEY=""
+RESEND_FROM_EMAIL="MaTable.ci <welcome@exemple.com>"
+EMAIL_FROM="MaTable.ci <welcome@exemple.com>"
 KADEVPAY_PUBLIC_KEY=""
 KADEVPAY_WEBHOOK_SECRET=""
 ```
@@ -63,7 +66,45 @@ KADEVPAY_WEBHOOK_SECRET=""
 
 En production, `NODE_ENV=production` sélectionne PostgreSQL et `DATABASE_URL`; le fichier SQLite n’est alors pas ouvert. Au premier démarrage, le serveur crée les tables de base si nécessaire, puis applique de façon idempotente les évolutions de schéma. Le runner versionné peut aussi être exécuté explicitement après la création du schéma de base avec `npm run migrate:neon`. Les migrations sont additives : elles ne copient ni ne réécrivent les données métier existantes.
 
+Le fil public interroge le catalogue par lots paginés côté base, au lieu de charger tous les produits à chaque visite. Le CDN peut ainsi mettre en cache les pages publiques sans que chaque rendu du fil transfère le catalogue entier depuis PostgreSQL.
+
 Le workflow GitHub Actions « PostgreSQL integration » exécute le lint, les tests et un test de migrations/adaptateur sur un PostgreSQL temporaire. Pour valider un environnement Neon séparément, exécutez `DATABASE_URL=<URL-de-la-base-de-test> npm run test:postgres`; n’utilisez jamais l’URL de production pour ce test.
+
+### Sauvegarde PostgreSQL et validation de restauration
+
+`npm run db:backup` utilise `DATABASE_URL` (en production, celle configurée dans Render) et `pg_dump` au format custom. Il refuse d’écraser un fichier existant, vérifie l’archive avec `pg_restore --list` et produit un fichier SHA-256 adjacent (`.dump.sha256`). Exemple avec un chemin choisi :
+
+```sh
+npm run db:backup -- --output backups/matable-prod-2026-10-10.dump
+```
+
+Installez les outils client PostgreSQL (`pg_dump`, `pg_restore` et `psql`) dans l’environnement d’exécution, avec une version compatible avec le serveur. Le dossier local `backups/` est ignoré par Git et ne constitue pas un stockage durable. L’opérateur doit configurer séparément une planification (par exemple un ordonnanceur externe) et la copie chiffrée vers un stockage indépendant, avec rétention et contrôle d’accès adaptés. **Aucune planification ni destination de stockage externe n’est configurée par ce dépôt ; les sauvegardes ne sont donc pas déclarées opérationnelles tant que ces responsabilités externes ne sont pas mises en place et vérifiées.** Les fichiers de sauvegarde contiennent des données de production : ne les commitez pas et protégez-les comme des secrets.
+
+Pour tester réellement une restauration, créez d’abord une base PostgreSQL jetable dont le schéma applicatif `public` est vide, distincte de la production. Le script exige la confirmation `--confirm-disposable`, vérifie le SHA-256, compare source et cible, autorise les schémas système du fournisseur mais refuse tout objet applicatif déjà présent dans `public`, restaure uniquement `public` sans supprimer d’objets existants et compare les nombres de lignes des tables métier principales avec la source. Lancez d’abord le préflight non destructif :
+
+```sh
+export DATABASE_URL='postgresql://…' # base source utilisée pour protéger la production
+export RESTORE_TARGET_DATABASE_URL='postgresql://…' # base jetable vide, jamais la production
+npm run db:restore:validate -- --dump backups/matable-prod-2026-10-10.dump --confirm-disposable --preflight-only
+```
+
+Après confirmation qu’il s’agit bien d’une base jetable, relancez cette commande sans `--preflight-only` pour effectuer la restauration. Alternative : passer la cible explicitement avec `--target-url '<URL-de-la-base-jetable>'`. Ne mettez jamais une URL avec identifiants dans des journaux ou scripts versionnés. La validation peuple la cible ; supprimez/recréez cette base avant un nouvel essai. Pour une vérification manuelle du checksum : `(cd backups && shasum -a 256 -c matable-prod-2026-10-10.dump.sha256)`. N’exécutez jamais cette procédure avec une cible de production.
+
+Les commandes de sauvegarde et de validation chargent `.env` automatiquement. Pour migrer vers une autre base PostgreSQL, conserver l’URL source dans `DATABASE_URL` (ou `SOURCE_DATABASE_URL`) et placer temporairement l’URL cible dans `RESTORE_TARGET_DATABASE_URL` (ou `TARGET_DATABASE_URL`); une cible explicite peut aussi être passée à `--target-url`. Pour Supabase, copier l’URI **Session pooler** depuis **Connect** et y remplacer le marqueur `[YOUR-PASSWORD]` par le mot de passe réel de la base. Créer d’abord une archive avec `npm run db:backup`, puis lancer le préflight avec `--preflight-only`. La validation vérifie le checksum, protège la source, refuse tout objet applicatif préexistant dans `public` et ne restaure que ce schéma (jamais les schémas gérés par Supabase). Effectuer la restauration seulement dans une base jetable confirmée ; garder Neon actif jusqu’à validation complète et retour arrière prêt avant une bascule Render.
+
+#### Migration Neon vers Supabase PostgreSQL
+
+Supabase Free n’inclut pas de sauvegardes automatiques, met en pause les projets inactifs et offre actuellement 500 Mo de base et 5 Go de transfert réseau par mois. Une migration ne supprime donc pas à elle seule le risque de quota de transfert : limiter les réponses SQL, garder les pages publiques en cache et surveiller l’egress après bascule. La taille de la base (environ 39 Mo au moment de la migration) est distincte du transfert réseau cumulé.
+
+1. Créer un projet Supabase dans la région proche des utilisateurs/déploiement, avec Data API désactivée si l’application n’utilise que son propre serveur PostgreSQL. Générer un mot de passe dédié et le conserver uniquement dans le gestionnaire de secrets.
+2. Faire une sauvegarde locale de Neon avec `npm run db:backup -- --output backups/matable-neon-<date>.dump`.
+3. Ajouter temporairement l’URL PostgreSQL Supabase, obtenue dans **Connect**, à `RESTORE_TARGET_DATABASE_URL` dans `.env`. Ne la coller ni dans le dépôt, ni dans un ticket, ni dans le chat.
+4. Restaurer l’archive avec la commande de validation ci-dessus. La cible doit être neuve/vide ; ne jamais restaurer sur Neon ni sur une base avec des données.
+5. Vérifier que les comptages de lignes des tables principales correspondent. Lancer les migrations si nécessaire avec `DATABASE_URL=<cible> npm run migrate:neon`, puis tester une version de préproduction contre Supabase avant la production.
+6. Au créneau de bascule, arrêter les écritures applicatives, refaire une sauvegarde finale, restaurer cette dernière sur Supabase, remplacer le secret `DATABASE_URL` du service Render par l’URL Supabase, redéployer et contrôler l’état de santé, les boutiques, produits, commandes et paiements.
+7. Garder Neon intact comme secours jusqu’à vérification des commandes et paiements après bascule. Ne pas supprimer Neon avant une période d’observation et une sauvegarde restaurable hors fournisseur.
+
+Une URL de connexion PostgreSQL est un secret d’accès complet. Utiliser l’URL directe ou le pooler de session Supabase selon la connectivité réseau de Render ; un pooler transactionnel n’est pas adapté à tous les usages de session PostgreSQL. Supabase Free n’offre pas de sauvegarde gérée : planifier `db:backup`, chiffrer l’archive avant de la copier vers un stockage indépendant, et exécuter périodiquement une restauration sur une base jetable.
 
 
 Exemple de configuration :
@@ -91,7 +132,9 @@ Créer le projet Neon puis configurer `DATABASE_URL` dans Render. Le service Ren
 
 KadevPay encaisse les abonnements mensuels ou annuels des commerçants ainsi que les boosts. L’annuel facture 10 mensualités pour 12 mois de service. Les commandes des clients restent payées directement aux boutiques. Configurer `KADEVPAY_PUBLIC_KEY` et le secret HMAC `KADEVPAY_WEBHOOK_SECRET` dans Render, puis déclarer l’endpoint `https://<domaine-public>/api/webhooks/kadevpay` dans le tableau de bord KadevPay. Le serveur n’active l’abonnement ou le boost qu’après un webhook signé correspondant à l’intention et au montant attendus. Commencer avec les clés de test; les paiements réels nécessitent un compte KadevPay vérifié et un compte de versement configuré.
 
-Les échéances restent actives jusqu’à la fin de leur date civile en Côte d’Ivoire; l’écran de renouvellement apparaît le lendemain. Le serveur vérifie les statuts toutes les 15 minutes et envoie un rappel WhatsApp Business à 48 heures de l’échéance uniquement aux commerçants ayant activé l’opt-in dans « Mon forfait ». Changer le numéro WhatsApp révoque cet accord. Pour l’envoi automatique, configurer dans Render `WHATSAPP_CLOUD_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_SUBSCRIPTION_REMINDER_TEMPLATE` et `WHATSAPP_GRAPH_API_VERSION`. Le modèle Meta doit être approuvé comme modèle utilitaire et contenir deux paramètres de corps : le nom de la boutique et sa date d’échéance. Le code ne déclenche aucun prélèvement automatique : le commerçant doit toujours ouvrir le checkout KadevPay et confirmer le paiement.
+Les échéances restent actives jusqu’à la fin de leur date civile en Côte d’Ivoire; l’écran de renouvellement apparaît le lendemain. Le statut effectif passe à `past_due` pendant le délai de grâce, puis `suspended` et la boutique est masquée publiquement. Les données et l’accès marchand sont conservés afin de permettre le renouvellement. Le serveur envoie un rappel WhatsApp Business à 48 heures de l’échéance uniquement aux commerçants ayant activé l’opt-in dans « Mon forfait ». Changer le numéro WhatsApp révoque cet accord. Pour l’envoi automatique, configurer dans Render `WHATSAPP_CLOUD_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_SUBSCRIPTION_REMINDER_TEMPLATE` et `WHATSAPP_GRAPH_API_VERSION`. Le modèle Meta doit être approuvé comme modèle utilitaire et contenir deux paramètres de corps : le nom de la boutique et sa date d’échéance. Le code ne déclenche aucun prélèvement automatique : le commerçant doit toujours ouvrir le checkout KadevPay et confirmer le paiement.
+
+Après confirmation d’un abonnement par un webhook KadevPay signé et vérifié, un reçu est généré et envoyé à l’adresse e-mail du propriétaire via Resend. Configurer `RESEND_API_KEY` et une adresse d’expédition vérifiée dans `RESEND_FROM_EMAIL` (ou `EMAIL_FROM`). Aucun reçu d’abonnement n’est émis à partir d’une simple déclaration de paiement côté navigateur. La validation locale ne prouve pas le fonctionnement d’un compte KadevPay ou Resend en production : un paiement réel exige les identifiants et domaines vérifiés des fournisseurs.
 
 ## Règles métier
 
