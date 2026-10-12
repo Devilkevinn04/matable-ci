@@ -3,7 +3,15 @@ import assert from 'node:assert/strict';
 import type { ShopRecord } from '../server/types';
 import { getShopVisibilityScore, rankShopsByVisibility } from '../server/services/visibility';
 import { canReceiveShopOrders, canUseSubscriptionFeature, getSubscriptionState, isShopPubliclyVisible } from '../server/services/businessRules';
-import { getSubscriptionPrice, isSubscriptionFeatureIncluded, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from '../src/utils/subscriptionFeatures';
+import {
+  getSubscriptionAnalyticsDayLimit,
+  getSubscriptionPrice,
+  getSubscriptionProductLimit,
+  getSubscriptionProductPhotoLimit,
+  isSubscriptionFeatureIncluded,
+  TRIAL_CATALOG_LIMIT,
+  TRIAL_DURATION_DAYS,
+} from '../src/utils/subscriptionFeatures';
 
 function makeShop(id: number, overrides: Partial<ShopRecord> = {}): ShopRecord {
   return {
@@ -121,6 +129,15 @@ test('shared marketing tier matrix matches server feature thresholds', () => {
 test('trial limits and annual subscription prices match the published offer', () => {
   assert.equal(TRIAL_DURATION_DAYS, 7);
   assert.equal(TRIAL_CATALOG_LIMIT, 2);
+  assert.equal(getSubscriptionProductLimit('standard'), 30);
+  assert.equal(getSubscriptionProductLimit('premium'), 100);
+  assert.equal(getSubscriptionProductLimit('pro'), Number.POSITIVE_INFINITY);
+  assert.equal(getSubscriptionProductPhotoLimit('standard'), 2);
+  assert.equal(getSubscriptionProductPhotoLimit('premium'), 5);
+  assert.equal(getSubscriptionProductPhotoLimit('pro'), 6);
+  assert.equal(getSubscriptionAnalyticsDayLimit('standard'), 7);
+  assert.equal(getSubscriptionAnalyticsDayLimit('premium'), 30);
+  assert.equal(getSubscriptionAnalyticsDayLimit('pro'), 90);
   assert.equal(getSubscriptionPrice('standard'), 3000);
   assert.equal(getSubscriptionPrice('premium'), 5000);
   assert.equal(getSubscriptionPrice('pro'), 8000);

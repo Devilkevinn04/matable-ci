@@ -5,7 +5,7 @@ import { ThemeCustomizer } from '../ThemeCustomizer';
 import { formatFCFA } from '../../utils/format';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
 import { CategoryProductImage } from '../CategoryProductImage';
-import { TRIAL_CATALOG_LIMIT } from '../../utils/subscriptionFeatures';
+import { getSubscriptionProductLimit, TRIAL_CATALOG_LIMIT } from '../../utils/subscriptionFeatures';
 
 interface CatalogTabProps {
   state: MerchantState;
@@ -34,7 +34,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
   const lowStockCount = products.filter((product) => product.stock > 0 && product.stock <= 3).length;
   const outOfStockCount = products.filter((product) => product.stock === 0).length;
   const trialCatalogLimited = !currentShop.admin_mode && currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0;
-  const trialCatalogFull = trialCatalogLimited && products.length >= TRIAL_CATALOG_LIMIT;
+  const productLimit = trialCatalogLimited ? TRIAL_CATALOG_LIMIT : getSubscriptionProductLimit(currentShop.subscription?.plan);
+  const catalogFull = !currentShop.admin_mode && Number.isFinite(productLimit) && products.length >= productLimit;
 
   return (
     <>
@@ -46,19 +47,21 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
               <div>
                 <h2 className="text-lg font-black text-slate-900">Articles du catalogue</h2>
                 <p className="text-xs text-slate-500">
-                  {trialCatalogLimited ? `Essai gratuit · ${products.length}/${TRIAL_CATALOG_LIMIT} articles · ${currentShop.subscription?.trialDaysRemaining} jours restants` : getCategoryDefaults(currentShop.category).catalogDescription}
+                  {trialCatalogLimited
+                    ? `Essai gratuit · ${products.length}/${TRIAL_CATALOG_LIMIT} articles · ${currentShop.subscription?.trialDaysRemaining} jours restants`
+                    : `${products.length} / ${Number.isFinite(productLimit) ? productLimit : 'illimité'} articles · ${getCategoryDefaults(currentShop.category).catalogDescription}`}
                 </p>
               </div>
 
               <button
                 id="add-product-modal-btn"
                 onClick={handleOpenAddModal}
-                disabled={trialCatalogFull}
-                title={trialCatalogFull ? `La période d’essai est limitée à ${TRIAL_CATALOG_LIMIT} articles.` : undefined}
+                disabled={catalogFull}
+                title={catalogFull ? `La limite de votre formule est de ${productLimit} articles.` : undefined}
                 className="py-2.5 px-4 rounded-xl bg-[#1D6B57] hover:bg-[#155544] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors self-start sm:self-auto disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <Plus className="w-4 h-4" />
-                <span>{trialCatalogFull ? 'Limite d’essai atteinte' : 'Ajouter un article'}</span>
+                <span>{catalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</span>
               </button>
             </div>
 
@@ -158,12 +161,12 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                 </p>
                 <button
                   onClick={handleOpenAddModal}
-                  disabled={trialCatalogFull}
-                  title={trialCatalogFull ? `La période d’essai est limitée à ${TRIAL_CATALOG_LIMIT} articles.` : undefined}
+                  disabled={catalogFull}
+                  title={catalogFull ? `La limite de votre formule est de ${productLimit} articles.` : undefined}
                   className="py-2.5 px-4 rounded-xl bg-slate-900 text-white font-bold text-xs inline-flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>{trialCatalogFull ? 'Limite d’essai atteinte' : products.length === 0 && !catalogSearch && catalogFilter === 'all' ? 'Ajouter mon premier produit' : 'Ajouter un article'}</span>
+                  <span>{catalogFull ? 'Limite du forfait atteinte' : products.length === 0 && !catalogSearch && catalogFilter === 'all' ? 'Ajouter mon premier produit' : 'Ajouter un article'}</span>
                 </button>
               </div>
             ) : (

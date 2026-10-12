@@ -24,6 +24,47 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+self.addEventListener('push', (event) => {
+  let message = {};
+  try {
+    message = event.data ? event.data.json() : {};
+  } catch {
+    message = { title: 'MaTable.ci', body: event.data?.text() || 'Vous avez une nouvelle notification.' };
+  }
+  const title = typeof message.title === 'string' ? message.title : 'MaTable.ci';
+  const body = typeof message.body === 'string' ? message.body : 'Vous avez une nouvelle notification.';
+  const requestedUrl = typeof message.url === 'string' ? message.url : '/merchant';
+  const url = requestedUrl.startsWith('/') && !requestedUrl.startsWith('//') && !requestedUrl.includes('\\')
+    ? requestedUrl
+    : '/merchant';
+  event.waitUntil(self.registration.showNotification(title, {
+    body,
+    icon: '/icon-192.svg',
+    badge: '/icon-192.svg',
+    tag: typeof message.tag === 'string' ? message.tag : 'matable-notification',
+    data: { url },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const requestedUrl = typeof event.notification.data?.url === 'string' ? event.notification.data.url : '/merchant';
+  const targetUrl = new URL(
+    requestedUrl.startsWith('/') && !requestedUrl.startsWith('//') && !requestedUrl.includes('\\') ? requestedUrl : '/merchant',
+    self.location.origin,
+  ).href;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clients) => {
+    for (const client of clients) {
+      if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+        await client.focus();
+        if ('navigate' in client && client.url !== targetUrl) await client.navigate(targetUrl);
+        return;
+      }
+    }
+    await self.clients.openWindow(targetUrl);
+  }));
+});
+
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') {
     return;

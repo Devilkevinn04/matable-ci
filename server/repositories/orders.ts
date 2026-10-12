@@ -23,6 +23,7 @@ export async function loadOrdersFromDatabase(): Promise<OrderRecord[]> {
     whatsapp_tracking_available: Boolean(row.whatsapp_tracking_available),
     whatsapp_clicked_at: row.whatsapp_clicked_at == null ? null : String(row.whatsapp_clicked_at),
     customer_user_id: row.customer_user_id == null ? undefined : Number(row.customer_user_id),
+    attribution_campaign: row.attribution_campaign == null ? null : String(row.attribution_campaign),
     items: row.items ? (typeof row.items === 'string' ? JSON.parse(row.items) : row.items) : [],
   }));
 }
@@ -31,8 +32,9 @@ export async function persistOrder(order: OrderRecord): Promise<void> {
   await dbRun(`
     INSERT INTO orders (
       id, shop_id, customer_name, customer_phone, delivery_location, delivery_note,
-      delivery_slot, payment_method_preference, total_amount, created_at, status, items, customer_user_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      delivery_slot, payment_method_preference, total_amount, created_at, status, items, customer_user_id,
+      attribution_campaign
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET status=excluded.status
   `, [
     order.id,
@@ -48,5 +50,6 @@ export async function persistOrder(order: OrderRecord): Promise<void> {
     order.status || 'pending',
     JSON.stringify(order.items ?? []),
     order.customer_user_id ?? null,
+    order.attribution_campaign ?? null,
   ]);
 }

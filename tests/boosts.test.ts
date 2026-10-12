@@ -1,16 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findEarliestBoostStart } from '../server/services/boosts.ts';
+import { findEarliestBoostStart, getBoostCapacityScope } from '../server/services/boosts.ts';
 import { getBoostPrice } from '../src/utils/boostPricing.ts';
 
 test('boost prices apply the Pro discount and reject unsupported durations', () => {
+  assert.equal(getBoostPrice(1, false), 1000);
+  assert.equal(getBoostPrice(3, false), 1500);
   assert.equal(getBoostPrice(7, false), 2000);
-  assert.equal(getBoostPrice(15, false), 2800);
-  assert.equal(getBoostPrice(30, false), 3000);
+  assert.equal(getBoostPrice(1, true), 850);
+  assert.equal(getBoostPrice(3, true), 1275);
   assert.equal(getBoostPrice(7, true), 1700);
-  assert.equal(getBoostPrice(15, true), 2380);
-  assert.equal(getBoostPrice(30, true), 2550);
-  assert.equal(getBoostPrice(14, false), null);
+  assert.equal(getBoostPrice(15, false), null);
 });
 
 test('boost scheduling starts immediately when fewer than five intervals overlap', () => {
@@ -34,4 +34,10 @@ test('boost scheduling finds the first time one of five occupied slots expires',
     findEarliestBoostStart(intervals, 7, now).toISOString(),
     new Date(now.getTime() + 7 * 86400000).toISOString(),
   );
+});
+
+test('boost placements have separate capacity scopes', () => {
+  assert.equal(getBoostCapacityScope('home', 'abidjan', 'beauty').lockKey, 'boost:placement:home');
+  assert.deepEqual(getBoostCapacityScope('category', 'abidjan', 'beauty').params, ['category', 'beauty']);
+  assert.deepEqual(getBoostCapacityScope('city', 'abidjan', 'beauty').params, ['city', 'abidjan']);
 });

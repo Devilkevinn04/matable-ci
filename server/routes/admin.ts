@@ -4,6 +4,13 @@ import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
 import { getSubscriptionPlanConfig, getSubscriptionState } from '../services/businessRules.ts';
 import { getWhatsAppSubscriptionReminderConfig } from '../services/whatsappNotifications.ts';
 import { mapShopRow } from '../repositories/shops.ts';
+import {
+  getPushSubscriptionCount,
+  getVapidConfiguration,
+  normalizePushText,
+  normalizePushUrl,
+  sendPlatformAnnouncementPush,
+} from '../services/pushNotifications.ts';
 
 interface AdminRouterOptions {
   shops: ShopRecord[];
@@ -41,6 +48,50 @@ export function createAdminRouter(options: AdminRouterOptions) {
     'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
     ['super_admin', action, shopId, JSON.stringify(details), new Date().toISOString()],
   );
+
+  router.get('/push/status', async (_req, res) => {
+    const [announcements, subscriptionCount] = await Promise.all([
+      dbAll<Record<string, unknown>>(
+        'SELECT id, title, body, url, created_at, recipient_count, sent_count, failed_count FROM platform_announcements ORDER BY created_at DESC LIMIT 20',
+      ),
+      getPushSubscriptionCount(),
+    ]);
+    return res.json({
+      configured: Boolean(getVapidConfiguration()),
+      subscribed_devices: subscriptionCount,
+      announcements,
+    });
+  });
+
+  router.post('/push/announcements', async (req, res) => {
+    if (!getVapidConfiguration()) {
+      return res.status(503).json({ error: 'Configurez VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY et VAPID_SUBJECT avant de publier une annonce Push.' });
+    }
+    const title = normalizePushText(req.body?.title, 100);
+    const body = normalizePushText(req.body?.body, 240);
+    const url = normalizePushUrl(req.body?.url || '/app');
+    if (title.length < 3 || body.length < 3 || !url) {
+      return res.status(400).json({ error: 'Titre (3–100 caractères), message (3–240 caractères) et lien interne valide requis.' });
+    }
+    const createdAt = new Date().toISOString();
+    const inserted = await dbGet<{ id: number }>(
+      `INSERT INTO platform_announcements (title, body, url, created_at)
+       VALUES (?, ?, ?, ?) RETURNING id`,
+      [title, body, url, createdAt],
+    );
+    if (!inserted) throw new Error('Impossible d’enregistrer l’annonce de la plateforme.');
+    const delivery = await sendPlatformAnnouncementPush({ id: Number(inserted.id), title, body, url });
+    await dbRun(`UPDATE platform_announcements SET recipient_count = ?, sent_count = ?, failed_count = ? WHERE id = ?`,
+      [delivery.recipientShops, delivery.sent, delivery.failed, inserted.id]);
+    await logAdminAction('platform_push_announcement_sent', null, {
+      announcement_id: inserted.id,
+      recipients: delivery.recipientShops,
+      attempted: delivery.attempted,
+      sent: delivery.sent,
+      failed: delivery.failed,
+    });
+    return res.status(201).json({ success: true, id: inserted.id, delivery });
+  });
 
   router.get('/content-moderation', async (_req, res) => {
     const [reviews, reports] = await Promise.all([
@@ -204,7 +255,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
     const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 90) : 30;
     const since = new Date(Date.now() - days * 86400000).toISOString();
     const previousSince = new Date(Date.parse(since) - days * 86400000).toISOString();
-    const [dailyTraffic, dailyOrders, currentTraffic, previousTraffic, currentOrders, previousOrders, sourceRows, trafficByShop, ordersByShop] = await Promise.all([
+    const [dailyTraffic, dailyOrders, currentTraffic, previousTraffic, currentOrders, previousOrders, sourceRows, campaignRows, campaignOrderRows, campaignClickRows, trafficByShop, ordersByShop] = await Promise.all([
       dbAll<{ date: string; page_views: number; unique_visitors: number }>(`
         SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS page_views,
           COUNT(DISTINCT session_id) AS unique_visitors
@@ -237,6 +288,28 @@ export function createAdminRouter(options: AdminRouterOptions) {
         FROM analytics_events WHERE event_type = 'page_view' AND created_at >= ?
         GROUP BY source ORDER BY visits DESC
       `, [since]),
+      dbAll<{ campaign: string; visits: number; visitors: number }>(`
+        SELECT campaign, COUNT(*) AS visits, COUNT(DISTINCT session_id) AS visitors
+        FROM analytics_events
+        WHERE event_type = 'page_view' AND created_at >= ? AND campaign IS NOT NULL
+        GROUP BY campaign ORDER BY visits DESC, campaign ASC
+        LIMIT 50
+      `, [since]),
+      dbAll<{ campaign: string; orders: number; sales: number }>(`
+        SELECT attribution_campaign AS campaign, COUNT(*) AS orders,
+          COALESCE(SUM(total_amount), 0) AS sales
+        FROM orders
+        WHERE attribution_campaign IS NOT NULL AND created_at >= ?
+          AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+        GROUP BY attribution_campaign
+      `, [since]),
+      dbAll<{ campaign: string; whatsapp_clicks: number }>(`
+        SELECT orders.attribution_campaign AS campaign, COUNT(*) AS whatsapp_clicks
+        FROM orders
+        JOIN order_whatsapp_tracking ON order_whatsapp_tracking.order_id = orders.id
+        WHERE orders.attribution_campaign IS NOT NULL AND order_whatsapp_tracking.clicked_at >= ?
+        GROUP BY orders.attribution_campaign
+      `, [since]),
       dbAll<{ shop_id: number; page_views: number; unique_visitors: number }>(`
         SELECT shop_id, COUNT(*) AS page_views, COUNT(DISTINCT session_id) AS unique_visitors
         FROM analytics_events WHERE event_type = 'page_view' AND shop_id IS NOT NULL AND created_at >= ?
@@ -250,6 +323,26 @@ export function createAdminRouter(options: AdminRouterOptions) {
     ]);
     const trafficByShopId = new Map(trafficByShop.map((row) => [Number(row.shop_id), row]));
     const ordersByShopId = new Map(ordersByShop.map((row) => [Number(row.shop_id), row]));
+    const campaignOrdersByName = new Map(campaignOrderRows.map((row) => [row.campaign, row]));
+    const campaignClicksByName = new Map(campaignClickRows.map((row) => [row.campaign, row]));
+    const campaignNames = new Set([
+      ...campaignRows.map((row) => row.campaign),
+      ...campaignOrderRows.map((row) => row.campaign),
+      ...campaignClickRows.map((row) => row.campaign),
+    ]);
+    const campaignVisitorsByName = new Map(campaignRows.map((row) => [row.campaign, row]));
+    const campaigns = [...campaignNames].sort().map((campaign) => {
+      const campaignVisitors = campaignVisitorsByName.get(campaign);
+      const campaignOrders = campaignOrdersByName.get(campaign);
+      return {
+        campaign,
+        visits: Number(campaignVisitors?.visits || 0),
+        visitors: Number(campaignVisitors?.visitors || 0),
+        orders: Number(campaignOrders?.orders || 0),
+        sales: Number(campaignOrders?.sales || 0),
+        whatsapp_clicks: Number(campaignClicksByName.get(campaign)?.whatsapp_clicks || 0),
+      };
+    });
     const byShop = shops.map((shop) => {
       const traffic = trafficByShopId.get(shop.id);
       const commerce = ordersByShopId.get(shop.id);
@@ -289,7 +382,9 @@ export function createAdminRouter(options: AdminRouterOptions) {
       order_daily: daily.map(({ date, orders: orderCount, sales }) => ({ date, orders: orderCount, sales })),
       sources: sourceRows.map((row) => ({
         source: row.source || 'unknown', visits: Number(row.visits || 0), visitors: Number(row.visitors || 0),
-      })), by_shop: byShop,
+      })),
+      campaigns,
+      by_shop: byShop,
       totals: {
         page_views: totalViews, unique_visitors: totalVisitors, orders: totalOrders,
         sales: totalSales,
@@ -466,7 +561,34 @@ export function createAdminRouter(options: AdminRouterOptions) {
       LEFT JOIN shops ON shops.id = logs.shop_id
       ORDER BY logs.created_at DESC LIMIT 20
     `);
-    res.json({ summary: await getSubscriptionMetrics(), shops: subscriptionShops, audit_logs: auditLogs });
+    const activitySince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const [visitorMetrics, shopMetrics, whatsappMetrics] = await Promise.all([
+      dbAll<{ unique_visitors: number }>(`
+        SELECT COUNT(DISTINCT session_id) AS unique_visitors
+        FROM analytics_events
+        WHERE event_type = 'page_view' AND created_at >= ?
+      `, [activitySince]),
+      dbAll<{ shops_created: number }>(`
+        SELECT COUNT(*) AS shops_created
+        FROM shops
+        WHERE created_at >= ?
+      `, [activitySince]),
+      dbAll<{ whatsapp_clicks: number }>(`
+        SELECT COUNT(*) AS whatsapp_clicks
+        FROM order_whatsapp_tracking
+        WHERE clicked_at >= ?
+      `, [activitySince]),
+    ]);
+    res.json({
+      summary: await getSubscriptionMetrics(),
+      weekly_activity: {
+        unique_visitors: Number(visitorMetrics[0]?.unique_visitors || 0),
+        shops_created: Number(shopMetrics[0]?.shops_created || 0),
+        whatsapp_clicks: Number(whatsappMetrics[0]?.whatsapp_clicks || 0),
+      },
+      shops: subscriptionShops,
+      audit_logs: auditLogs,
+    });
   });
 
   router.patch('/subscriptions/:id/extend-trial', async (req, res) => {
@@ -628,17 +750,41 @@ export function createAdminRouter(options: AdminRouterOptions) {
   router.get('/orders', async (req, res) => {
     const requestedLimit = Number(req.query.limit);
     const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
+    const requestedOffset = Number(req.query.offset);
+    const offset = Number.isInteger(requestedOffset) ? Math.max(0, requestedOffset) : 0;
     const requestedStatus = String(req.query.status || 'all');
-    const allowedStatuses = new Set(['pending', 'confirmed', 'delivered', 'cancelled']);
-    const filteredOrders = requestedStatus !== 'all' && !allowedStatuses.has(requestedStatus)
-      ? []
-      : await dbAll<Record<string, unknown>>(`
+    const allowedStatuses = new Set(['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'expired']);
+    if (requestedStatus !== 'all' && !allowedStatuses.has(requestedStatus)) {
+      return res.status(400).json({ error: 'Filtre de statut de commande invalide.' });
+    }
+    const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : '';
+    const filters: string[] = [];
+    const params: unknown[] = [];
+    if (requestedStatus !== 'all') {
+      filters.push("COALESCE(orders.status, 'pending') = ?");
+      params.push(requestedStatus);
+    }
+    if (search) {
+      filters.push(`(CAST(orders.id AS TEXT) = ? OR LOWER(orders.customer_name) LIKE LOWER(?)
+        OR LOWER(orders.customer_phone) LIKE LOWER(?) OR LOWER(shops.name) LIKE LOWER(?))`);
+      params.push(search, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const [filteredOrders, totalRow] = await Promise.all([
+      dbAll<Record<string, unknown>>(`
         SELECT orders.id, orders.shop_id, shops.name AS shop_name, orders.customer_name, orders.customer_phone,
           orders.delivery_location, orders.total_amount, orders.status, orders.created_at, orders.items
         FROM orders LEFT JOIN shops ON shops.id = orders.shop_id
-        ${requestedStatus === 'all' ? '' : "WHERE COALESCE(orders.status, 'pending') = ?"}
-        ORDER BY orders.created_at DESC, orders.id DESC LIMIT ?
-      `, requestedStatus === 'all' ? [limit] : [requestedStatus, limit]).then((rows) => rows.map((order) => {
+        ${where}
+        ORDER BY orders.created_at DESC, orders.id DESC LIMIT ? OFFSET ?
+      `, [...params, limit, offset]),
+      dbGet<{ total: number }>(`
+        SELECT COUNT(*) AS total FROM orders
+        LEFT JOIN shops ON shops.id = orders.shop_id
+        ${where}
+      `, params),
+    ]);
+    const orders = filteredOrders.map((order) => {
         const items: OrderRecord['items'] = order.items
           ? (typeof order.items === 'string' ? JSON.parse(order.items) : order.items) as OrderRecord['items']
           : [];
@@ -650,32 +796,203 @@ export function createAdminRouter(options: AdminRouterOptions) {
           status: String(order.status || 'pending'), created_at: String(order.created_at),
           items_count: (items || []).reduce((sum, item) => sum + item.quantity, 0),
         };
-      }));
-    res.json({ orders: filteredOrders, total: filteredOrders.length, status: requestedStatus });
+      });
+    res.json({ orders, total: Number(totalRow?.total || 0), limit, offset, status: requestedStatus, search });
+  });
+
+  router.get('/customers', async (req, res) => {
+    const requestedLimit = Number(req.query.limit);
+    const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
+    const requestedOffset = Number(req.query.offset);
+    const offset = Number.isInteger(requestedOffset) ? Math.max(0, requestedOffset) : 0;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : '';
+    const searchFilter = search
+      ? `WHERE LOWER(users.first_name) LIKE LOWER(?) OR LOWER(users.last_name) LIKE LOWER(?)
+        OR LOWER(users.email) LIKE LOWER(?) OR users.phone LIKE ?`
+      : '';
+    const searchParams = search ? [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`] : [];
+    const [customers, count] = await Promise.all([
+      dbAll<Record<string, unknown>>(`
+        SELECT users.id, users.first_name, users.last_name, users.name, users.email, users.phone,
+          users.created_at, users.is_active,
+          COUNT(orders.id) AS orders_count,
+          COALESCE(SUM(CASE WHEN COALESCE(orders.status, 'pending') NOT IN ('cancelled', 'expired')
+            THEN orders.total_amount ELSE 0 END), 0) AS order_value,
+          MAX(orders.created_at) AS last_order_at
+        FROM users LEFT JOIN orders ON orders.customer_user_id = users.id
+        ${searchFilter}
+        GROUP BY users.id
+        ORDER BY users.created_at DESC, users.id DESC
+        LIMIT ? OFFSET ?
+      `, [...searchParams, limit, offset]),
+      dbGet<{ total: number }>(`SELECT COUNT(*) AS total FROM users ${searchFilter}`, searchParams),
+    ]);
+    res.json({
+      customers: customers.map((customer) => ({
+        id: Number(customer.id),
+        first_name: String(customer.first_name || ''),
+        last_name: String(customer.last_name || ''),
+        name: String(customer.name || ''),
+        email: String(customer.email || ''),
+        phone: String(customer.phone || ''),
+        created_at: String(customer.created_at),
+        is_active: Boolean(customer.is_active),
+        orders_count: Number(customer.orders_count || 0),
+        order_value: Number(customer.order_value || 0),
+        last_order_at: customer.last_order_at == null ? null : String(customer.last_order_at),
+      })),
+      total: Number(count?.total || 0),
+      limit,
+      offset,
+      search,
+    });
   });
 
   router.patch('/shops/:id/toggle-active', async (req, res) => {
     const shopId = Number(req.params.id);
+    const expectedIsActive = req.body?.expected_is_active;
+    const reason = typeof req.body?.reason === 'string'
+      ? req.body.reason.trim().replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 500)
+      : '';
+    if (!Number.isSafeInteger(shopId) || shopId <= 0
+      || typeof expectedIsActive !== 'boolean'
+      || reason.length < 3) {
+      return res.status(400).json({ error: 'Un motif (au moins 3 caractères) et le statut actuel sont requis.' });
+    }
     const result = await dbTransaction(async ({ get, run }) => {
       const row = await get<Record<string, unknown>>('SELECT * FROM shops WHERE id = ?', [shopId]);
       if (!row) return undefined;
       const shop = mapShopRow(row);
+      if (shop.is_active !== expectedIsActive) return null;
       const isActive = !shop.is_active;
       const publicationStatus = isActive
         ? (shop.publication_status === 'suspended' ? 'draft' : shop.publication_status)
         : (shop.publication_status || 'active');
-      const update = await run('UPDATE shops SET is_active = ?, publication_status = ? WHERE id = ?', [isActive ? 1 : 0, publicationStatus, shopId]);
+      const update = await run('UPDATE shops SET is_active = ?, publication_status = ? WHERE id = ? AND is_active = ?', [
+        isActive ? 1 : 0, publicationStatus, shopId, expectedIsActive ? 1 : 0,
+      ]);
       if (update.changes !== 1) return undefined;
       await run(
         'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
-        ['super_admin', isActive ? 'shop_reactivated' : 'shop_suspended', shopId, JSON.stringify({ is_active: isActive }), new Date().toISOString()],
+        ['super_admin', isActive ? 'shop_reactivated' : 'shop_suspended', shopId, JSON.stringify({ is_active: isActive, reason }), new Date().toISOString()],
       );
       return isActive;
     });
+    if (result === null) return res.status(409).json({ error: 'Le statut de la boutique a changé. Actualisez la liste avant de réessayer.' });
     if (result === undefined) return res.status(404).json({ error: 'Boutique introuvable.' });
     await refreshRuntimeDataFromDatabase();
     const updatedShop = await getShop(shopId);
     res.json({ success: true, is_active: result, shop: toSafeShop(updatedShop!) });
+  });
+
+  router.delete('/shops/:id', async (req, res) => {
+    const shopId = Number(req.params.id);
+    const confirmationSlug = typeof req.body?.confirmation_slug === 'string' ? req.body.confirmation_slug.trim() : '';
+    const reason = typeof req.body?.reason === 'string'
+      ? req.body.reason.trim().replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 500)
+      : '';
+    if (!Number.isSafeInteger(shopId) || shopId <= 0 || !confirmationSlug || reason.length < 3) {
+      return res.status(400).json({ error: 'Le slug de confirmation et un motif d’au moins 3 caractères sont requis.' });
+    }
+
+    const result = await dbTransaction(async ({ get, run }) => {
+      const row = await get<Record<string, unknown>>('SELECT id, name, slug FROM shops WHERE id = ?', [shopId]);
+      if (!row) return { kind: 'missing' as const };
+      if (row.slug !== confirmationSlug) return { kind: 'confirmation_mismatch' as const };
+
+      const reviews = await run(
+        `DELETE FROM customer_reviews
+         WHERE shop_id = ? OR (target_type = 'product' AND target_id IN (SELECT id FROM products WHERE shop_id = ?))`,
+        [shopId, shopId],
+      );
+      const reports = await run(
+        `DELETE FROM customer_reports
+         WHERE (target_type = 'shop' AND target_id = ?)
+           OR (target_type = 'product' AND target_id IN (SELECT id FROM products WHERE shop_id = ?))`,
+        [shopId, shopId],
+      );
+      await run(
+        "DELETE FROM customer_favorites WHERE target_type = 'product' AND target_id IN (SELECT id FROM products WHERE shop_id = ?)",
+        [shopId],
+      );
+      await run('DELETE FROM customer_product_likes WHERE product_id IN (SELECT id FROM products WHERE shop_id = ?)', [shopId]);
+      await run("DELETE FROM customer_favorites WHERE target_type = 'shop' AND target_id = ?", [shopId]);
+      await run('DELETE FROM order_whatsapp_tracking WHERE order_id IN (SELECT id FROM orders WHERE shop_id = ?)', [shopId]);
+      const orders = await run('DELETE FROM orders WHERE shop_id = ?', [shopId]);
+      await run('DELETE FROM analytics_events WHERE shop_id = ?', [shopId]);
+      await run('DELETE FROM merchant_sessions WHERE shop_id = ?', [shopId]);
+      await run('DELETE FROM shop_boosts WHERE shop_id = ?', [shopId]);
+      const products = await run('DELETE FROM products WHERE shop_id = ?', [shopId]);
+      const deletedShop = await run('DELETE FROM shops WHERE id = ? AND slug = ?', [shopId, confirmationSlug]);
+      if (deletedShop.changes !== 1) throw new Error(`Shop ${shopId} changed during permanent deletion.`);
+
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['super_admin', 'shop_permanently_deleted', null, JSON.stringify({
+          shop_id: shopId,
+          shop_name: row.name,
+          shop_slug: row.slug,
+          reason,
+          deleted_products: products.changes,
+          deleted_orders: orders.changes,
+          deleted_reviews: reviews.changes,
+          deleted_reports: reports.changes,
+        }), new Date().toISOString()],
+      );
+      return { kind: 'deleted' as const };
+    });
+
+    if (result.kind === 'missing') return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (result.kind === 'confirmation_mismatch') return res.status(409).json({ error: 'Le slug ne correspond pas à la boutique. Actualisez la liste avant de réessayer.' });
+    await refreshRuntimeDataFromDatabase();
+    return res.json({ success: true });
+  });
+
+  router.patch('/subscriptions/:id/set-expiry', async (req, res) => {
+    const shopId = Number(req.params.id);
+    const expiryDate = typeof req.body?.expiry_date === 'string' ? req.body.expiry_date : '';
+    const expectedExpiry = req.body?.expected_subscription_expires_at;
+    const reason = typeof req.body?.reason === 'string'
+      ? req.body.reason.trim().replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 500)
+      : '';
+    if (!Number.isSafeInteger(shopId) || shopId <= 0
+      || !/^\d{4}-\d{2}-\d{2}$/.test(expiryDate)
+      || Number.isNaN(Date.parse(`${expiryDate}T00:00:00.000Z`))
+      || new Date(`${expiryDate}T00:00:00.000Z`).toISOString().slice(0, 10) !== expiryDate
+      || typeof expectedExpiry !== 'string' && expectedExpiry !== null
+      || reason.length < 3) {
+      return res.status(400).json({ error: 'Une date valide, le statut actuel et un motif (au moins 3 caractères) sont requis.' });
+    }
+    const shop = await getShop(shopId);
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (shop.subscription_status !== 'active') {
+      return res.status(409).json({ error: 'Seul un abonnement actif peut recevoir une échéance manuelle.' });
+    }
+    if ((shop.subscription_expires_at ?? null) !== expectedExpiry) {
+      return res.status(409).json({ error: 'L’échéance a changé. Actualisez la liste avant de réessayer.' });
+    }
+    const nextExpiry = `${expiryDate}T23:59:59.999Z`;
+    const actionAt = new Date().toISOString();
+    const updated = await dbTransaction(async ({ run }) => {
+      const result = expectedExpiry === null
+        ? await run(`UPDATE shops SET subscription_expires_at = ? WHERE id = ?
+          AND subscription_status = 'active' AND subscription_expires_at IS NULL`, [nextExpiry, shopId])
+        : await run(`UPDATE shops SET subscription_expires_at = ? WHERE id = ?
+          AND subscription_status = 'active' AND subscription_expires_at = ?`, [nextExpiry, shopId, expectedExpiry]);
+      if (result.changes !== 1) return false;
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['super_admin', 'subscription_expiry_corrected', shopId, JSON.stringify({
+          previous_subscription_expires_at: expectedExpiry,
+          subscription_expires_at: nextExpiry,
+          reason,
+        }), actionAt],
+      );
+      return true;
+    });
+    if (!updated) return res.status(409).json({ error: 'L’abonnement a été modifié entre-temps. Actualisez la liste avant de réessayer.' });
+    await refreshRuntimeDataFromDatabase();
+    res.json({ success: true, subscription_expires_at: nextExpiry });
   });
 
   router.post('/shops/:id/access-link', async (req, res) => {

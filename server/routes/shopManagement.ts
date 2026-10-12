@@ -1,6 +1,9 @@
 import { Router, type RequestHandler } from 'express';
+import { dbAll, dbRun } from '../../db.ts';
+import { getSubscriptionAnalyticsDayLimit } from '../../src/utils/subscriptionFeatures.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
-import { canUseSubscriptionFeature, getShopPublicationBlockReason, getSubscriptionPlanConfig } from '../services/businessRules.ts';
+import { canUseSubscriptionFeature, getShopPublicationBlockReason, getSubscriptionPlanConfig, getSubscriptionState } from '../services/businessRules.ts';
+import { getVapidConfiguration, isAllowedPushEndpoint } from '../services/pushNotifications.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import type { ShopRecord } from '../types.ts';
 
@@ -76,15 +79,71 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     });
   });
 
+  router.get('/:id/push/config', requireMerchantOwnShop, async (req, res) => {
+    const shopId = Number(req.params.id);
+    const shop = await getShopFromDatabase(shopId);
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    const vapid = getVapidConfiguration();
+    const subscriptions = await dbAll<{ count: number | string }>(
+      'SELECT COUNT(*) AS count FROM merchant_push_subscriptions WHERE shop_id = ?',
+      [shopId],
+    );
+    return res.json({
+      configured: Boolean(vapid),
+      public_key: vapid?.publicKey || null,
+      subscribed_devices: Number(subscriptions[0]?.count || 0),
+    });
+  });
+
+  router.put('/:id/push/subscription', requireMerchantOwnShop, async (req, res) => {
+    const shopId = Number(req.params.id);
+    if (!await getShopFromDatabase(shopId)) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (!getVapidConfiguration()) return res.status(503).json({ error: 'Les notifications Push ne sont pas encore configurées sur le serveur.' });
+    const subscription = req.body?.subscription;
+    const endpoint = typeof subscription?.endpoint === 'string' ? subscription.endpoint.trim() : '';
+    const p256dh = typeof subscription?.keys?.p256dh === 'string' ? subscription.keys.p256dh : '';
+    const auth = typeof subscription?.keys?.auth === 'string' ? subscription.keys.auth : '';
+    let endpointUrl: URL;
+    try {
+      endpointUrl = new URL(endpoint);
+    } catch {
+      return res.status(400).json({ error: 'Abonnement navigateur invalide.' });
+    }
+    if (!isAllowedPushEndpoint(endpointUrl) || endpoint.length > 2048 || !p256dh || p256dh.length > 256
+      || !auth || auth.length > 256) {
+      return res.status(400).json({ error: 'Abonnement navigateur invalide.' });
+    }
+    const now = new Date().toISOString();
+    const saved = await dbRun(`INSERT INTO merchant_push_subscriptions
+      (shop_id, endpoint, p256dh, auth, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT (endpoint) DO UPDATE SET
+        p256dh = excluded.p256dh, auth = excluded.auth, updated_at = excluded.updated_at
+      WHERE merchant_push_subscriptions.shop_id = excluded.shop_id`,
+    [shopId, endpoint, p256dh, auth, now, now]);
+    if (saved.changes !== 1) return res.status(409).json({ error: 'Cet appareil est déjà associé à un autre compte marchand.' });
+    return res.json({ success: true });
+  });
+
+  router.delete('/:id/push/subscription', requireMerchantOwnShop, async (req, res) => {
+    const shopId = Number(req.params.id);
+    const endpoint = typeof req.body?.endpoint === 'string' ? req.body.endpoint : '';
+    if (!endpoint || endpoint.length > 2048) return res.status(400).json({ error: 'Appareil invalide.' });
+    await dbRun('DELETE FROM merchant_push_subscriptions WHERE shop_id = ? AND endpoint = ?', [shopId, endpoint]);
+    return res.json({ success: true });
+  });
+
   router.get('/:id/analytics', requireMerchantOwnShop, async (req, res) => {
     const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-    if (!req.adminShopAccess && !canUseSubscriptionFeature(shop, 'advanced_analytics')) {
-      return res.status(403).json({ error: 'Les statistiques détaillées sont réservées à la formule Pro.' });
+    const subscription = getSubscriptionState(shop);
+    if (!req.adminShopAccess && !subscription.isActive) {
+      return res.status(403).json({ error: 'Les statistiques sont disponibles avec un essai ou un abonnement actif.' });
     }
 
     const requestedDays = Number(req.query.days);
-    const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 90) : 30;
+    const planDayLimit = req.adminShopAccess ? 90 : getSubscriptionAnalyticsDayLimit(subscription.plan);
+    const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), planDayLimit) : planDayLimit;
     const since = new Date(Date.now() - days * 86400000).toISOString();
     const totals = await dbAll<{ page_views: number; unique_visitors: number }>(`
       SELECT COUNT(*) AS page_views, COUNT(DISTINCT session_id) AS unique_visitors
@@ -112,6 +171,11 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     const orderRows = await dbAll<Record<string, unknown>>('SELECT * FROM orders WHERE shop_id = ? AND created_at >= ? AND status NOT IN (?, ?)', [
       shop.id, since, 'cancelled', 'expired',
     ]);
+    const whatsappClicks = await dbAll<{ count: number | string }>(`
+      SELECT COUNT(*) AS count FROM order_whatsapp_tracking tracking
+      JOIN orders ON orders.id = tracking.order_id
+      WHERE orders.shop_id = ? AND tracking.clicked_at >= ?
+    `, [shop.id, since]);
     const actionableOrders = orderRows.map((row) => ({
       shop_id: Number(row.shop_id),
       created_at: String(row.created_at),
@@ -144,6 +208,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
         unique_visitors: Number(totals[0]?.unique_visitors || 0),
         orders: actionableOrders.length,
         order_value: actionableOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0),
+        whatsapp_clicks: Number(whatsappClicks[0]?.count || 0),
         product_views: productActivity.reduce((sum, item) => sum + Number(item.views || 0), 0),
         product_clicks: productActivity.reduce((sum, item) => sum + Number(item.clicks || 0), 0),
       },

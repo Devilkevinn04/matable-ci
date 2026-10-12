@@ -147,9 +147,10 @@ export function createPublicShopsRouter({
 
     const now = new Date().toISOString();
     const activeBoosts = publicShopRecords.length > 0
-      ? await dbAll<{ shop_id: number }>(
-        `SELECT DISTINCT shop_id FROM shop_boosts
+      ? await dbAll<{ shop_id: number; placement: string }>(
+        `SELECT DISTINCT shop_id, placement FROM shop_boosts
          WHERE shop_id IN (${publicShopRecords.map(() => '?').join(', ')})
+           AND placement IN ('home', 'directory')
            AND status IN ('scheduled', 'active') AND starts_at <= ? AND ends_at > ?`,
         [...publicShopRecords.map((shop) => shop.id), now, now],
       )
@@ -232,12 +233,20 @@ export function createPublicShopsRouter({
       productsPreviewByShop.set(shopId, previews);
     }
     const now = new Date().toISOString();
-    const activeBoosts = await dbAll<{ shop_id: number }>(
-      `SELECT DISTINCT shop_id FROM shop_boosts
+    const activeBoosts = await dbAll<{ shop_id: number; placement: string }>(
+      `SELECT DISTINCT shop_id, placement FROM shop_boosts
         WHERE status IN ('scheduled', 'active') AND starts_at <= ? AND ends_at > ?`,
       [now, now],
     );
-    const sponsoredShopIds = new Set(activeBoosts.map((boost) => Number(boost.shop_id)));
+    const boostPlacementsByShop = new Map<number, string[]>();
+    for (const boost of activeBoosts) {
+      const placements = boostPlacementsByShop.get(Number(boost.shop_id)) || [];
+      placements.push(String(boost.placement));
+      boostPlacementsByShop.set(Number(boost.shop_id), placements);
+    }
+    const sponsoredShopIds = new Set(activeBoosts
+      .filter((boost) => ['home', 'directory'].includes(boost.placement))
+      .map((boost) => Number(boost.shop_id)));
     const rankedShops = rankShopsByVisibility(publicShopRecords, productCounts, computeIsShopOpen, Date.parse(now), sponsoredShopIds);
     res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
     res.json(rankedShops.map(({ shop, is_open, is_featured, is_sponsored }) => {
@@ -254,6 +263,7 @@ export function createPublicShopsRouter({
           is_open,
           is_featured,
           is_sponsored,
+          boost_placements: boostPlacementsByShop.get(shop.id) || [],
           is_active: shop.is_active,
           publication_status: shop.publication_status,
           category: shop.category,

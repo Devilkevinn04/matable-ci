@@ -7,7 +7,7 @@ import {
   BOOST_DURATIONS_DAYS,
   BOOST_MINIMUM_PRODUCT_COUNT,
   BOOST_PRICES,
-  MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY,
+  MAX_SIMULTANEOUS_BOOSTS_PER_PLACEMENT_SCOPE,
   getBoostPrice,
 } from '../../utils/boostPricing';
 import {
@@ -310,7 +310,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                   {BOOST_DURATIONS_DAYS.map((days) => (
                     <div key={days} className="rounded-xl border border-[#eee6da] bg-white p-4">
                       <p className="text-xs font-bold text-slate-500">Durée</p>
-                      <p className="mt-1 text-sm font-extrabold text-slate-900">{days} jours</p>
+                      <p className="mt-1 text-sm font-extrabold text-slate-900">{days === 1 ? '24 h' : `${days} jours`}</p>
                       <p className="mt-3 text-xs font-bold text-slate-500">Tarif standard</p>
                       <p className="mt-1 text-lg font-black text-[#183b31]">{new Intl.NumberFormat('fr-FR').format(BOOST_PRICES[days])} FCFA</p>
                       <p className="mt-2 text-xs font-bold text-emerald-800">Pro : {new Intl.NumberFormat('fr-FR').format(getBoostPrice(days, true))} FCFA (−{PRO_BOOST_DISCOUNT_PERCENT} %)</p>
@@ -319,7 +319,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                 </div>
                 <ul className="mt-4 grid gap-2 text-xs leading-5 text-slate-600 sm:grid-cols-2">
                   <li>• Achat possible pour une boutique vérifiée, ouverte, avec une ville renseignée et au moins {BOOST_MINIMUM_PRODUCT_COUNT} produits.</li>
-                  <li>• Maximum {MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY} boosts actifs simultanément par ville et catégorie. Si les créneaux sont complets, le boost payé est réservé au prochain créneau disponible.</li>
+                  <li>• Un seul emplacement par achat : accueil, haut de catégorie ou boutiques de la ville. Jusqu’à {MAX_SIMULTANEOUS_BOOSTS_PER_PLACEMENT_SCOPE} boosts simultanés par emplacement (accueil), catégorie ou ville.</li>
                   <li>• La durée commence à la date prévue, même si la boutique est temporairement masquée.</li>
                   <li>• Pas de remboursement après activation. Si MaTable.ci ne peut pas activer le boost payé, contactez l’assistance pour demander un remboursement.</li>
                 </ul>

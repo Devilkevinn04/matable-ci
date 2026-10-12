@@ -23,6 +23,7 @@ import { createPublicRateLimitMiddleware } from './server/services/rateLimits.ts
 import { buildSessionFingerprint, createAuthSessionHelpers, isRequestFingerprintMatch } from './server/services/authSessions.ts';
 import { createSeoHtmlHelpers } from './server/services/seoHtml.ts';
 import { getWhatsAppSubscriptionReminderConfig, sendWhatsAppSubscriptionReminder } from './server/services/whatsappNotifications.ts';
+import { retryPendingMerchantPushes, sendMerchantPush } from './server/services/pushNotifications.ts';
 import { seedDemoDatabaseIfEmpty } from './server/services/demoSeed.ts';
 import { applySecurityHeaders } from './server/middleware/securityHeaders.ts';
 import { createMaintenanceModeMiddleware } from './server/middleware/maintenanceMode.ts';
@@ -43,7 +44,7 @@ import {
 import {
   computeIsShopOpen,
   escapeHtml,
-    getSubscriptionReminderAt,
+    getSubscriptionReminderDaysBefore,
   getProductUnitPriceWithModifiers,
   getSubscriptionState,
   getValidSelectedModifiers,
@@ -109,37 +110,64 @@ async function refreshSubscriptionState(shop: ShopRecord): Promise<SubscriptionS
 
 async function processSubscriptionAutomation() {
   const now = new Date();
+  try {
+    await retryPendingMerchantPushes();
+  } catch (error) {
+    console.error('Automatic Push retry cycle failed.', error);
+  }
   const reminderConfig = getWhatsAppSubscriptionReminderConfig();
   const currentShops = await loadShopsFromDatabase();
   for (const shop of currentShops) {
     try {
       await refreshSubscriptionState(shop);
-      if (!reminderConfig || !shop.whatsapp_subscription_reminders_enabled || shop.last_notification_sent_at) continue;
       const subscription = getSubscriptionState(shop, now);
-      const reminderAt = getSubscriptionReminderAt(shop, now);
       const expiresAt = subscription.status === 'trialing' ? subscription.trialEnd : subscription.expiresAt;
-      if (!subscription.isActive || !reminderAt || !expiresAt || now < reminderAt) continue;
+      const daysBefore = getSubscriptionReminderDaysBefore(shop, now);
+      if (!subscription.isActive || !daysBefore || !expiresAt) continue;
+
+      void sendMerchantPush(shop.id, {
+        eventKey: `subscription-${expiresAt.slice(0, 10)}-${daysBefore}`,
+        category: 'subscription',
+        title: daysBefore === 1 ? 'Votre abonnement expire demain' : `Échéance dans ${daysBefore} jours`,
+        body: `Votre boutique ${shop.name} arrive à échéance. Renouvelez pour garder toutes ses fonctionnalités.`,
+        url: '/app',
+        tag: `subscription-${expiresAt.slice(0, 10)}-${daysBefore}`,
+      }).catch((error: unknown) => console.error(`Unable to queue subscription notification for shop ${shop.id}.`, error));
+      if (!reminderConfig || !shop.whatsapp_subscription_reminders_enabled) continue;
 
       const claimedAt = now.toISOString();
-      const claim = await dbRun(
-        'UPDATE shops SET last_notification_sent_at = ? WHERE id = ? AND last_notification_sent_at IS NULL',
-        [claimedAt, shop.id],
-      );
+      const retryBefore = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString();
+      const claim = await dbRun(`INSERT INTO subscription_reminder_deliveries
+        (shop_id, expires_at, days_before, attempted_at, attempts)
+        VALUES (?, ?, ?, ?, 1)
+        ON CONFLICT (shop_id, expires_at, days_before) DO UPDATE
+          SET attempted_at = excluded.attempted_at,
+              attempts = subscription_reminder_deliveries.attempts + 1
+          WHERE subscription_reminder_deliveries.sent_at IS NULL
+            AND subscription_reminder_deliveries.attempted_at <= ?`,
+      [shop.id, expiresAt, daysBefore, claimedAt, retryBefore]);
       if (claim.changes !== 1) continue;
-      shop.last_notification_sent_at = claimedAt;
 
       const delivery = await sendWhatsAppSubscriptionReminder(shop, expiresAt, reminderConfig);
       if (!delivery.sent) {
-        shop.last_notification_sent_at = null;
-        await dbRun('UPDATE shops SET last_notification_sent_at = NULL WHERE id = ? AND last_notification_sent_at = ?', [shop.id, claimedAt]);
+        await dbRun(`INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at)
+          VALUES (?, ?, ?, ?, ?)`, [
+          'system', 'subscription_reminder_failed', shop.id,
+          JSON.stringify({ expires_at: expiresAt, days_before: daysBefore, channel: 'whatsapp_business', error: delivery.error || 'unknown_error' }),
+          claimedAt,
+        ]);
         console.error(`Automatic subscription reminder failed for shop ${shop.id}: ${delivery.error || 'unknown_error'}`);
         continue;
       }
 
+      await dbRun('UPDATE shops SET last_notification_sent_at = ? WHERE id = ?', [claimedAt, shop.id]);
+      await dbRun(`UPDATE subscription_reminder_deliveries SET sent_at = ?
+        WHERE shop_id = ? AND expires_at = ? AND days_before = ? AND sent_at IS NULL`,
+      [claimedAt, shop.id, expiresAt, daysBefore]);
       await dbRun(`INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at)
         VALUES (?, ?, ?, ?, ?)`, [
         'system', 'subscription_reminder_sent', shop.id,
-        JSON.stringify({ expires_at: expiresAt, channel: 'whatsapp_business' }), claimedAt,
+        JSON.stringify({ expires_at: expiresAt, days_before: daysBefore, channel: 'whatsapp_business' }), claimedAt,
       ]);
     } catch (error) {
       console.error(`Subscription automation failed for shop ${shop.id}.`, error);

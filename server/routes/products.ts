@@ -1,8 +1,14 @@
 import { Router, type RequestHandler } from 'express';
 import { databaseMode, dbAll, dbTransaction } from '../../db.ts';
+import {
+  getSubscriptionProductLimit,
+  getSubscriptionProductPhotoLimit,
+} from '../../src/utils/subscriptionFeatures.ts';
 import { mapProductRow } from '../repositories/products.ts';
 import { getProductFromDatabase } from '../repositories/products.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
+import { getSubscriptionState } from '../services/businessRules.ts';
+import { dispatchStockTransitionPush } from '../services/pushNotifications.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
 import type { ProductRecord } from '../types.ts';
 
@@ -41,16 +47,12 @@ export function createProductRouter({
     const shopId = Number(req.params.id);
     const shop = await getShopFromDatabase(shopId);
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-    const trialEndTime = shop.trial_end ? Date.parse(shop.trial_end) : NaN;
-    const isTrialCatalogLimited = shop.subscription_status === 'trialing'
-      && !req.adminShopAccess
-      && Number.isFinite(trialEndTime)
-      && trialEndTime > Date.now();
-    const productCount = isTrialCatalogLimited
-      ? Number((await dbAll<{ count: number | string }>('SELECT COUNT(*) AS count FROM products WHERE shop_id = ?', [shopId]))[0]?.count || 0)
-      : 0;
-    const trialCatalogLimitReached = isTrialCatalogLimited && productCount >= trialProductLimit;
-    if (trialCatalogLimitReached) return res.status(409).json({ error: `La période d’essai permet jusqu’à ${trialProductLimit} articles au catalogue.` });
+    const subscription = getSubscriptionState(shop);
+    const isActiveTrial = subscription.status === 'trialing' && !req.adminShopAccess;
+    const productLimit = isActiveTrial ? trialProductLimit : getSubscriptionProductLimit(subscription.plan);
+    const photoLimit = isActiveTrial
+      ? getSubscriptionProductPhotoLimit('standard')
+      : getSubscriptionProductPhotoLimit(subscription.plan);
 
     const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
     const safeTitle = sanitizeTextField(title, 120);
@@ -61,7 +63,7 @@ export function createProductRouter({
     }
 
     const newProduct: ProductRecord = {
-      id: await allocateProductId(),
+      id: 0,
       shop_id: shopId,
       created_at: new Date().toISOString(),
       title: safeTitle,
@@ -81,7 +83,49 @@ export function createProductRouter({
       attributes: sanitizeProductAttributes(attributes, shop.category),
     };
 
-    await persistProduct(newProduct);
+    const photoCount = (newProduct.image_url ? 1 : 0)
+      + (newProduct.lookbook_image ? 1 : 0)
+      + (newProduct.gallery_images?.length || 0);
+    if (!req.adminShopAccess && photoCount > photoLimit) {
+      return res.status(409).json({ error: `Votre formule permet jusqu’à ${photoLimit} photos par article.` });
+    }
+
+    newProduct.id = await allocateProductId();
+    if (req.adminShopAccess || !Number.isFinite(productLimit)) {
+      await persistProduct(newProduct);
+    } else {
+      const result = await dbTransaction(async (transaction) => {
+        await transaction.get(
+          `SELECT id FROM shops WHERE id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+          [shopId],
+        );
+        const count = await transaction.get<{ count: number | string }>(
+          'SELECT COUNT(*) AS count FROM products WHERE shop_id = ?',
+          [shopId],
+        );
+        if (Number(count?.count || 0) >= productLimit) return 'limit_reached';
+        await transaction.run(`
+          INSERT INTO products (id, shop_id, title, description, price, stock, image_url, is_available, is_visible, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
+        `, [
+          newProduct.id, newProduct.shop_id, newProduct.title, newProduct.description ?? null, newProduct.price, newProduct.stock,
+          newProduct.image_url, newProduct.is_available ? 1 : 0, newProduct.is_visible === false ? 0 : 1, newProduct.category ?? null,
+          newProduct.sizes ? JSON.stringify(newProduct.sizes) : null, newProduct.colors ? JSON.stringify(newProduct.colors) : null,
+          newProduct.lookbook_image ?? null, newProduct.gallery_images?.length ? JSON.stringify(newProduct.gallery_images) : null,
+          newProduct.prep_time ?? null, newProduct.modifier_groups ? JSON.stringify(newProduct.modifier_groups) : null,
+          newProduct.attributes && Object.keys(newProduct.attributes).length ? JSON.stringify(newProduct.attributes) : null,
+          newProduct.created_at,
+        ]);
+        return 'created';
+      });
+      if (result === 'limit_reached') {
+        return res.status(409).json({
+          error: isActiveTrial
+            ? `La période d’essai permet jusqu’à ${productLimit} articles au catalogue.`
+            : `Votre formule permet jusqu’à ${productLimit} articles. Passez à une formule supérieure pour continuer.`,
+        });
+      }
+    }
     products.unshift(newProduct);
     res.json({ success: true, product: newProduct });
   });
@@ -97,6 +141,22 @@ export function createProductRouter({
 
     const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
     const shop = await getShopFromDatabase(shopId);
+    if (shop && !req.adminShopAccess) {
+      const subscription = getSubscriptionState(shop);
+      const photoLimit = subscription.status === 'trialing'
+        ? getSubscriptionProductPhotoLimit('standard')
+        : getSubscriptionProductPhotoLimit(subscription.plan);
+      const nextLookbook = lookbook_image !== undefined ? String(lookbook_image || '') : String(product.lookbook_image || '');
+      const nextGallery = gallery_images !== undefined ? sanitizeGalleryImages(gallery_images) : product.gallery_images || [];
+      const nextMainImage = image_url !== undefined ? normalizeProductImage(image_url) : product.image_url;
+      const nextPhotoCount = (nextMainImage ? 1 : 0) + (nextLookbook ? 1 : 0) + nextGallery.length;
+      const currentPhotoCount = (product.image_url ? 1 : 0)
+        + (product.lookbook_image ? 1 : 0)
+        + (product.gallery_images?.length || 0);
+      if (nextPhotoCount > photoLimit && nextPhotoCount > currentPhotoCount) {
+        return res.status(409).json({ error: `Votre formule permet jusqu’à ${photoLimit} photos par article.` });
+      }
+    }
     if (title !== undefined) {
       const safeTitle = sanitizeTextField(title, 120);
       if (safeTitle.length < 2) return res.status(400).json({ error: 'Titre de produit invalide.' });
@@ -126,6 +186,9 @@ export function createProductRouter({
 
     product.is_available = Boolean(product.is_visible) && product.stock > 0;
     await persistProduct(product);
+    if (stock !== undefined) {
+      dispatchStockTransitionPush(shopId, product, currentProduct.stock, product.stock, `stock-edit-${productId}-${Date.now()}`);
+    }
     const productIndex = cachedProduct ? products.indexOf(cachedProduct) : -1;
     if (productIndex >= 0) products[productIndex] = product;
     else products.unshift(product);
@@ -151,12 +214,13 @@ export function createProductRouter({
       const isAvailable = stock > 0 && isVisible;
       const updatedProduct = { ...current, stock, is_visible: isVisible, is_available: isAvailable };
       await transaction.run('UPDATE products SET stock = ?, is_available = ?, is_visible = ? WHERE id = ? AND shop_id = ?', [stock, isAvailable ? 1 : 0, isVisible ? 1 : 0, productId, shopId]);
-      return updatedProduct;
+      return { product: updatedProduct, previousStock: current.stock };
     });
     if (!updated) return res.status(404).json({ error: 'Produit introuvable.' });
-    const product = updated;
-    if (cachedProduct) Object.assign(cachedProduct, updated);
-    else products.unshift(updated);
+    const { product, previousStock } = updated;
+    dispatchStockTransitionPush(shopId, product, previousStock, product.stock, `stock-update-${productId}-${Date.now()}`);
+    if (cachedProduct) Object.assign(cachedProduct, product);
+    else products.unshift(product);
     res.json({ success: true, stock: product.stock, product });
   });
 

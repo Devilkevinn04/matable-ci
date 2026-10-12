@@ -9,7 +9,7 @@ Application React + Vite + Express pour la gestion de vitrines locales, de comma
 
 ## État actuel
 
-- Les commandes utilisent le click-to-chat WhatsApp (`wa.me`). Les paiements intégrés et les notifications automatiques ne font pas partie de la V1.
+- Les demandes de commande utilisent le click-to-chat WhatsApp (`wa.me`). Les paiements d’abonnement et de boosts sont intégrés avec KadevPay; les rappels d’échéance WhatsApp Business nécessitent une configuration fournisseur et le consentement du commerçant.
 - Une commande client est enregistrée localement, puis le client ouvre manuellement un reçu prérempli vers le WhatsApp du vendeur.
 - Le prix d’une commande est recalculé côté serveur à partir du catalogue et des options sélectionnées.
 - La publication (`publication_status`) est distincte de l’ouverture (`is_open`). Une boutique n’est publique que si elle est publiée, éligible KYC et couverte par un essai ou un abonnement actif, ou encore dans ses deux jours de grâce après échéance. Elle est masquée ensuite sans suppression de ses données ni blocage de l’accès marchand ; `is_open` contrôle uniquement la prise de commandes.
@@ -18,6 +18,15 @@ Application React + Vite + Express pour la gestion de vitrines locales, de comma
 - La gestion de stock est protégée contre les oversells concurrentiels.
 - Les nouvelles boutiques démarrent en `not_started`. Elles peuvent commencer un essai Standard de 7 jours (2 produits maximum), ou payer directement Standard (3 000), Premium (5 000) ou Pro (8 000 FCFA/mois).
 - Pendant l’essai, l’identité est vérifiée avant l’accès au dashboard. Une boutique vérifiée doit ensuite être publiée explicitement ; son ouverture commerciale reste contrôlée séparément.
+- Les notifications Push navigateur sont facultatives et activées appareil par appareil dans « Plus > Paramètres > Compte > Notifications ». Elles couvrent les commandes, les passages de stock bas/épuisé, les échéances J−14/J−7/J−3/J−1, les changements Didit et les annonces envoyées depuis le centre opérationnel admin. Les rappels WhatsApp restent séparés.
+
+## Espace commerçant
+
+Le dashboard propose les vues Accueil, Produits, Commandes et Statistiques, avec une navigation mobile à cinq onglets ; les réglages, le partage, l’abonnement, les boosts et l’assistance sont regroupés dans « Plus ». Le catalogue, le suivi des commandes, les horaires, l’apparence, la vérification, les rappels d’échéance consentis et les statistiques sont disponibles selon l’état de la boutique et le forfait.
+
+Les limites sont vérifiées côté serveur : Standard permet 30 produits et 2 photos par produit, Premium 100 produits et 5 photos, Pro un nombre illimité de produits et jusqu’à 6 photos. Les statistiques couvrent respectivement 7, 30 et 90 jours. L’essai reste limité à 2 produits et bénéficie des statistiques sur 7 jours.
+
+Les fonctions suivantes ne sont pas encore disponibles dans le dashboard : comptes d’équipe, import CSV des produits, export CSV des commandes, codes promotionnels, programme de parrainage et téléchargement d’un QR code de boutique. Le partage actuel donne accès aux liens de vitrine et d’accès privé ; il ne génère pas encore de kit visuel personnalisé.
 
 ## Démarrage local
 
@@ -47,6 +56,9 @@ ADMIN_ACCESS_KEY="CHANGE_ME_ADMIN_KEY"
 DIDIT_API_KEY=""
 DIDIT_WORKFLOW_ID=""
 DIDIT_WEBHOOK_SECRET=""
+VAPID_PUBLIC_KEY=""
+VAPID_PRIVATE_KEY=""
+VAPID_SUBJECT="mailto:assistance@matable.ci"
 GOOGLE_OAUTH_CLIENT_ID=""
 GOOGLE_OAUTH_CLIENT_SECRET=""
 APPLE_SERVICE_ID=""
@@ -113,7 +125,7 @@ Exemple de configuration :
 NODE_ENV="production"
 PORT="3000"
 DATABASE_URL="postgresql://..."
-APP_URL="https://matable.ci"
+APP_URL="https://matable-ci.onrender.com"
 TRUST_PROXY_HOPS="1"
 ADMIN_ACCESS_KEY="<cle-tres-longue-et-securisee>"
 DIDIT_API_KEY="<cle-api-didit>"
@@ -122,6 +134,14 @@ DIDIT_WEBHOOK_SECRET="<secret-webhook-didit>"
 ```
 
 Dans la console Didit, configurez le webhook `https://<domaine-public>/api/webhooks/didit` pour les événements de changement de statut (`status.updated`). L’API key, l’identifiant du workflow et le secret du webhook restent dans les variables serveur Render et ne doivent jamais être exposés au navigateur. Le serveur refuse de démarrer une vérification tant que l’API key et l’identifiant de workflow ne sont pas configurés.
+
+Tant que le domaine personnalisé `matable.ci` n’est pas résolu et configuré dans Render, utilisez `https://matable-ci.onrender.com` comme `APP_URL`. Les URL canoniques et de partage dans `index.html` doivent également correspondre à l’adresse publique active ; remettez-les à `https://matable.ci` après validation du domaine personnalisé.
+
+#### Audience et actions super-admin
+
+Les statistiques d’audience sont collectées uniquement après consentement analytique. Les liens `?src=tiktok`, `?utm_source=instagram` et `?utm_campaign=campagne_nom` attribuent la visite consentie à une campagne (identifiant limité à 80 caractères alphanumériques, tirets et tirets bas). L’onglet Audience présente l’origine, les campagnes, les sessions, les commandes, le volume de ventes associé et les clics WhatsApp attribués ; il ne conserve pas les URL complètes de provenance. Les boutiques créées et les clics WhatsApp sont aussi résumés sur 7 jours dans Abonnements.
+
+Les actions super-admin de suspension/réactivation exigent un motif, une confirmation et sont consignées. La correction manuelle d’une échéance d’abonnement actif demande une date et un motif de vérification ; elle ne confirme pas un paiement et ne doit être utilisée qu’après contrôle d’un justificatif. Les corrections d’essai synchronisent uniquement l’expiration technique avec la fin d’essai enregistrée.
 
 
 ### Base Neon gratuite sur Render
@@ -132,13 +152,19 @@ Créer le projet Neon puis configurer `DATABASE_URL` dans Render. Le service Ren
 
 KadevPay encaisse les abonnements mensuels ou annuels des commerçants ainsi que les boosts. L’annuel facture 10 mensualités pour 12 mois de service. Les commandes des clients restent payées directement aux boutiques. Configurer `KADEVPAY_PUBLIC_KEY` et le secret HMAC `KADEVPAY_WEBHOOK_SECRET` dans Render, puis déclarer l’endpoint `https://<domaine-public>/api/webhooks/kadevpay` dans le tableau de bord KadevPay. Le serveur n’active l’abonnement ou le boost qu’après un webhook signé correspondant à l’intention et au montant attendus. Commencer avec les clés de test; les paiements réels nécessitent un compte KadevPay vérifié et un compte de versement configuré.
 
-Les échéances restent actives jusqu’à la fin de leur date civile en Côte d’Ivoire; l’écran de renouvellement apparaît le lendemain. Le statut effectif passe à `past_due` pendant le délai de grâce, puis `suspended` et la boutique est masquée publiquement. Les données et l’accès marchand sont conservés afin de permettre le renouvellement. Le serveur envoie un rappel WhatsApp Business à 48 heures de l’échéance uniquement aux commerçants ayant activé l’opt-in dans « Mon forfait ». Changer le numéro WhatsApp révoque cet accord. Pour l’envoi automatique, configurer dans Render `WHATSAPP_CLOUD_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_SUBSCRIPTION_REMINDER_TEMPLATE` et `WHATSAPP_GRAPH_API_VERSION`. Le modèle Meta doit être approuvé comme modèle utilitaire et contenir deux paramètres de corps : le nom de la boutique et sa date d’échéance. Le code ne déclenche aucun prélèvement automatique : le commerçant doit toujours ouvrir le checkout KadevPay et confirmer le paiement.
+Les échéances restent actives jusqu’à la fin de leur date civile en Côte d’Ivoire; l’écran de renouvellement apparaît le lendemain. Le statut effectif passe à `past_due` pendant le délai de grâce, puis `suspended` et la boutique est masquée publiquement. Les données et l’accès marchand sont conservés afin de permettre le renouvellement. Si les secrets WhatsApp Business sont configurés, le serveur envoie les rappels à J−14, J−7, J−3 et J−1 uniquement aux commerçants ayant activé l’opt-in dans « Mon forfait ». Chaque échéance et chaque palier sont enregistrés pour éviter les doublons; un échec fournisseur est journalisé et peut être retenté. Changer le numéro WhatsApp révoque l’accord. Configurer dans Render `WHATSAPP_CLOUD_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_SUBSCRIPTION_REMINDER_TEMPLATE` et `WHATSAPP_GRAPH_API_VERSION`. Le modèle Meta doit être approuvé comme modèle utilitaire et contenir deux paramètres de corps : le nom de la boutique et sa date d’échéance. L’envoi automatique dépend de ces identifiants secrets Meta et de l’approbation du modèle; aucune valeur secrète ne doit être placée dans le dépôt. Le code ne déclenche aucun prélèvement automatique : le commerçant doit toujours ouvrir le checkout KadevPay et confirmer le paiement.
+
+### Notifications Push navigateur
+
+Générez une paire VAPID dédiée au serveur, par exemple avec `npx web-push generate-vapid-keys`, puis configurez `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` et `VAPID_SUBJECT` dans les variables d’environnement de Render et en local. Le sujet doit être une URL HTTPS du service ou une adresse `mailto:` de support. La clé privée reste exclusivement côté serveur : ne la placez ni dans une variable `VITE_*`, ni dans le dépôt, ni dans un ticket ou une capture. Sans les trois variables, l’interface indique que le service n’est pas configuré et aucun abonnement Push ne peut être créé.
+
+Chaque commerçant choisit explicitement ses appareils et peut les désabonner dans ses paramètres. Les abonnements sont liés à la boutique authentifiée ; les endpoints expirés (HTTP 404/410) sont supprimés. Les envois sont dédupliqués et les échecs sont journalisés sans annuler la commande, la modification du stock ou la vérification d’identité à l’origine de l’alerte. Les Push exigent HTTPS (Render le fournit) et l’autorisation du navigateur. Le centre opérationnel admin affiche le nombre d’appareils associés, l’état VAPID, l’historique des annonces et permet leur diffusion uniquement aux appareils abonnés.
 
 Après confirmation d’un abonnement par un webhook KadevPay signé et vérifié, un reçu est généré et envoyé à l’adresse e-mail du propriétaire via Resend. Configurer `RESEND_API_KEY` et une adresse d’expédition vérifiée dans `RESEND_FROM_EMAIL` (ou `EMAIL_FROM`). Aucun reçu d’abonnement n’est émis à partir d’une simple déclaration de paiement côté navigateur. La validation locale ne prouve pas le fonctionnement d’un compte KadevPay ou Resend en production : un paiement réel exige les identifiants et domaines vérifiés des fournisseurs.
 
 ## Règles métier
 
-L’essai marchand Standard reste gratuit pendant 7 jours et permet deux produits. Les tarifs mensuels sont Standard 3 000 FCFA, Premium 5 000 FCFA et Pro 8 000 FCFA; l’annuel coûte 10 mensualités pour 12 mois de service. Le délai de grâce avant masquage est de deux jours. Un boost de 7, 15 ou 30 jours coûte respectivement 2 000, 2 800 ou 3 000 FCFA; Pro donne 15 % de remise. Une boutique doit être vérifiée, ouverte et présenter au moins deux produits. Cinq boosts peuvent être actifs simultanément par ville et catégorie; les réservations payées débutent au premier créneau disponible. Les boosts courent pendant leur durée prévue même si la vitrine est masquée. Après activation, les paiements ne sont pas remboursables, sauf impossibilité de MaTable.ci d’activer le service payé, auquel cas le commerçant peut demander un remboursement à l’assistance.
+L’essai marchand Standard reste gratuit pendant 7 jours et permet deux produits. Les tarifs mensuels sont Standard 3 000 FCFA, Premium 5 000 FCFA et Pro 8 000 FCFA; l’annuel coûte 10 mensualités pour 12 mois de service. Le délai de grâce avant masquage est de deux jours. Un boost de 24 h, 3 jours ou 7 jours coûte respectivement 1 000, 1 500 ou 2 000 FCFA; Pro donne 15 % de remise. Chaque achat choisit un seul emplacement au même tarif : accueil, haut de catégorie ou boutiques de la ville. Cinq créneaux simultanés sont disponibles sur l’accueil, par catégorie ou par ville selon l’emplacement; les réservations payées débutent au premier créneau libre. Une boutique doit être vérifiée, ouverte et présenter au moins deux produits. Le bilan d’un boost présente les visites consenties de la vitrine et les clics WhatsApp suivis sur sa période; il ne s’agit pas d’une mesure de ventes ni d’une garantie de portée. Les boosts courent pendant leur durée prévue même si la vitrine est masquée. Après activation, les paiements ne sont pas remboursables, sauf impossibilité de MaTable.ci d’activer le service payé, auquel cas le commerçant peut demander un remboursement à l’assistance.
 
 Les valeurs initiales de catégorie (message, présentation, exemples de produits, palette et illustrations) sont centralisées dans `src/utils/categoryDefaults.ts`. Les illustrations produit sont des placeholders d’affichage : `image_url` reste vide tant qu’aucune photo réelle n’est fournie. Les anciennes valeurs génériques connues sont remplacées à l’affichage, sans migration automatique des boutiques ou produits existants.
 

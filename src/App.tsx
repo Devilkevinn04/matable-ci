@@ -4,7 +4,7 @@ import { Navigation } from './components/Navigation';
 import { ToastProvider } from './components/Toast';
 import { Footer } from './components/Footer';
 import { LegalPageKey, LegalPages } from './components/LegalPages';
-import { CookieBanner } from './components/CookieBanner';
+import { CookieBanner, hasAnalyticsConsent } from './components/CookieBanner';
 import { CustomerAccount, CustomerAuth, CustomerUser } from './components/CustomerAuth';
 import { FaqPage } from './components/FaqPage';
 import { AccountRecoveryPage } from './components/AccountRecoveryPage';
@@ -13,6 +13,7 @@ import type { MerchantState } from './components/MerchantDashboard/useMerchant';
 import type { Shop } from './types';
 import { findPublicDiscoveryPage } from './utils/discoverySeo';
 import { getCanonicalOrigin } from './utils/seoCanonical';
+import { ANALYTICS_CAMPAIGN_SESSION_KEY, getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from './utils/analyticsAttribution';
 
 const CustomerStorefront = React.lazy(() => import('./components/CustomerStorefront').then((module) => ({ default: module.CustomerStorefront })));
 const MerchantDashboard = React.lazy(() => import('./components/MerchantDashboard/index').then((module) => ({ default: module.MerchantDashboard })));
@@ -280,6 +281,48 @@ export default function App() {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [location.pathname, location.hash]);
+
+  useEffect(() => {
+    const trackPageView = () => {
+      const isPrivateRoute = path === '/app' || path.startsWith('/app/')
+        || path === '/admin' || path.startsWith('/admin/')
+        || path === '/compte' || path === '/connexion' || path === '/inscription'
+        || isRecoveryPage || hasMerchantAccessToken || hasAdminShopSession;
+      if (isPrivateRoute || isUnknownStorefront || !hasAnalyticsConsent()) return;
+
+      const sessionStorageKey = 'matable_analytics_session';
+      const sessionId = window.sessionStorage.getItem(sessionStorageKey) || window.crypto.randomUUID();
+      window.sessionStorage.setItem(sessionStorageKey, sessionId);
+
+      const campaignParams = new URLSearchParams(location.search);
+      const campaignValue = campaignParams.get('src') || campaignParams.get('utm_source') || campaignParams.get('utm_campaign');
+      const campaign = campaignValue && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(campaignValue)
+        ? campaignValue.toLowerCase()
+        : null;
+      let referrerHost = '';
+      try {
+        referrerHost = document.referrer ? new URL(document.referrer).hostname : '';
+      } catch (error) {
+        console.error('Unable to determine analytics referrer host.', error);
+      }
+
+      fetch('/api/analytics/page-view', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          path: location.pathname,
+          referrer_host: referrerHost,
+          campaign,
+        }),
+      }).catch((error: unknown) => console.error('Unable to record page view analytics.', error));
+    };
+
+    trackPageView();
+    window.addEventListener('matable-cookie-preferences-updated', trackPageView);
+    return () => window.removeEventListener('matable-cookie-preferences-updated', trackPageView);
+  }, [path, location.search, isRecoveryPage, hasMerchantAccessToken, hasAdminShopSession, isUnknownStorefront]);
 
   useEffect(() => {
     let isCurrentRequest = true;

@@ -1,22 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import type { Shop } from '../../types';
-import { isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
+import { getSubscriptionAnalyticsDayLimit } from '../../utils/subscriptionFeatures';
 
 type ProAnalytics = {
   days: number;
-  summary: { page_views: number; unique_visitors: number; orders: number; order_value: number; product_views: number; product_clicks: number };
+  summary: { page_views: number; unique_visitors: number; orders: number; order_value: number; whatsapp_clicks: number; product_views: number; product_clicks: number };
   daily: { date: string; page_views: number; unique_visitors: number; orders: number; order_value: number }[];
   top_products: { product_id: number; title: string; views: number; clicks: number }[];
 };
 
 export function ProAnalyticsPanel({ shop }: { shop: Shop }) {
-  const [days, setDays] = useState(30);
+  const maxDays = shop.admin_mode ? 90 : getSubscriptionAnalyticsDayLimit(shop.subscription?.plan);
+  const [days, setDays] = useState(maxDays);
   const [analytics, setAnalytics] = useState<ProAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
-  const canUseAnalytics = shop.admin_mode || shop.subscription?.isActive === true
-    && isSubscriptionFeatureIncluded(shop.subscription.plan, 'advanced_analytics');
+  const canUseAnalytics = shop.admin_mode || shop.subscription?.isActive === true;
 
   useEffect(() => {
     if (!canUseAnalytics) return;
@@ -37,12 +37,16 @@ export function ProAnalyticsPanel({ shop }: { shop: Shop }) {
     return () => { isCurrentRequest = false; };
   }, [canUseAnalytics, days, refreshKey, shop.id]);
 
+  useEffect(() => {
+    setDays(maxDays);
+  }, [maxDays]);
+
   if (!canUseAnalytics) {
     return (
       <section className="max-w-3xl rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
-        <p className="text-xs font-bold uppercase text-emerald-800">Statistiques avancées · Pro</p>
+        <p className="text-xs font-bold uppercase text-emerald-800">Statistiques de la boutique</p>
         <h3 className="mt-1 text-lg font-extrabold text-slate-900">Suivez la visibilité de votre boutique</h3>
-        <p className="mt-2 text-sm leading-6 text-slate-600">La formule Pro rassemble les visites consenties, les vues et clics produits, les commandes et leur valeur sur une période de 7 à 90 jours.</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Les statistiques sont accessibles pendant un essai ou un abonnement actif.</p>
       </section>
     );
   }
@@ -51,6 +55,7 @@ export function ProAnalyticsPanel({ shop }: { shop: Shop }) {
     { label: 'Visites consenties', value: analytics?.summary.page_views ?? 0 },
     { label: 'Sessions uniques', value: analytics?.summary.unique_visitors ?? 0 },
     { label: 'Commandes actionnables', value: analytics?.summary.orders ?? 0 },
+    { label: 'Clics WhatsApp suivis', value: analytics?.summary.whatsapp_clicks ?? 0 },
     { label: 'Valeur des commandes', value: `${new Intl.NumberFormat('fr-FR').format(analytics?.summary.order_value ?? 0)} FCFA` },
     { label: 'Vues produits consenties', value: analytics?.summary.product_views ?? 0 },
     { label: 'Clics produits', value: analytics?.summary.product_clicks ?? 0 },
@@ -60,16 +65,14 @@ export function ProAnalyticsPanel({ shop }: { shop: Shop }) {
     <section className="max-w-5xl space-y-4" aria-labelledby="merchant-pro-analytics-title">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
-          <p className="text-xs font-bold uppercase text-emerald-800">Formule Pro</p>
+          <p className="text-xs font-bold uppercase text-emerald-800">Formule {shop.subscription?.plan || 'Pro'}</p>
           <h3 id="merchant-pro-analytics-title" className="mt-1 text-lg font-extrabold text-slate-900">Statistiques de la boutique</h3>
-          <p className="mt-1 text-xs text-slate-500">Une visite n’est comptée que si le navigateur a accepté les statistiques.</p>
+          <p className="mt-1 text-xs text-slate-500">Votre formule donne accès aux statistiques sur {maxDays} jours. Une visite n’est comptée qu’après consentement.</p>
         </div>
         <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
           Période
           <select value={days} onChange={(event) => setDays(Number(event.target.value))} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2">
-            <option value={7}>7 jours</option>
-            <option value={30}>30 jours</option>
-            <option value={90}>90 jours</option>
+            {[7, 30, 90].filter((period) => period <= maxDays).map((period) => <option key={period} value={period}>{period} jours</option>)}
           </select>
         </label>
       </div>

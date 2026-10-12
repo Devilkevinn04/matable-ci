@@ -182,7 +182,34 @@ export function getSubscriptionReminderAt(
       ? subscription.expiresAt
       : null;
   const endTime = endDate ? Date.parse(endDate) : NaN;
-  return Number.isFinite(endTime) ? new Date(endTime - 2 * 86400000) : null;
+  if (!subscription.isActive || !Number.isFinite(endTime)) return null;
+  const expiryDay = toBusinessDateKey(new Date(endTime));
+  const currentDay = toBusinessDateKey(currentDate);
+  const expiryMidnight = Date.parse(`${expiryDay}T00:00:00.000Z`);
+  const currentMidnight = Date.parse(`${currentDay}T00:00:00.000Z`);
+  const remainingDays = Math.round((expiryMidnight - currentMidnight) / 86400000);
+  const nextReminderDays = [14, 7, 3, 1]
+    .filter((days) => days <= remainingDays)
+    .sort((left, right) => right - left)[0];
+  if (nextReminderDays === undefined || remainingDays <= 0) return null;
+  return new Date(currentMidnight + (remainingDays - nextReminderDays) * 86400000);
+}
+
+export function getSubscriptionReminderDaysBefore(
+  shop: Pick<ShopRecord, 'subscription_status' | 'trial_start' | 'trial_end' | 'subscription_expires_at' | 'selected_subscription_tier'>,
+  currentDate = new Date(),
+): number | null {
+  const subscription = getSubscriptionState(shop, currentDate);
+  if (!subscription.isActive) return null;
+  const endDate = subscription.status === 'trialing' ? subscription.trialEnd : subscription.expiresAt;
+  if (!endDate) return null;
+  const expiryDay = toBusinessDateKey(endDate);
+  const currentDay = toBusinessDateKey(currentDate);
+  const expiryMidnight = Date.parse(`${expiryDay}T00:00:00.000Z`);
+  const currentMidnight = Date.parse(`${currentDay}T00:00:00.000Z`);
+  const remainingDays = Math.round((expiryMidnight - currentMidnight) / 86400000);
+  if (remainingDays <= 0) return null;
+  return [14, 7, 3, 1].includes(remainingDays) ? remainingDays : null;
 }
 
 export function isSubscriptionReminderDue(
@@ -190,9 +217,8 @@ export function isSubscriptionReminderDue(
   currentDate = new Date(),
 ): boolean {
   const reminderAt = getSubscriptionReminderAt(shop, currentDate);
-  return getSubscriptionState(shop, currentDate).isActive
-    && reminderAt !== null
-    && currentDate.getTime() >= reminderAt.getTime();
+  return reminderAt !== null && currentDate.getTime() >= reminderAt.getTime()
+    && getSubscriptionReminderDaysBefore(shop, currentDate) !== null;
 }
 
 function toBusinessDateKey(value: string | Date, timeZone = 'Africa/Abidjan'): string {

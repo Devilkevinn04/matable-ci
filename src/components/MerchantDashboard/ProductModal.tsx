@@ -7,6 +7,7 @@ import { ThemeCustomizer } from '../ThemeCustomizer';
 import { formatFCFA } from '../../utils/format';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
 import { CategoryProductImage } from '../CategoryProductImage';
+import { getSubscriptionProductPhotoLimit } from '../../utils/subscriptionFeatures';
 
 interface ProductModalProps {
   state: MerchantState;
@@ -37,6 +38,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
 
   if (!isProductModalOpen) return null;
   const categoryDefaults = getCategoryDefaults(currentShop.category);
+  const productPhotoLimit = currentShop.admin_mode ? 6
+    : currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0
+      ? getSubscriptionProductPhotoLimit('standard')
+      : getSubscriptionProductPhotoLimit(currentShop.subscription?.plan);
+  const productPhotoCount = (prodImage ? 1 : 0) + (prodLookbookImage ? 1 : 0) + prodGalleryImages.length;
+  const canAddLookbookPhoto = Boolean(prodLookbookImage) || productPhotoCount < productPhotoLimit;
   const modifierGroups = prodModifierGroups;
   const updateModifierGroups = (update: (groups: ProductModifierGroupDraft[]) => ProductModifierGroupDraft[]) => {
     setProdModifierGroups((groups) => update(groups));
@@ -387,18 +394,19 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                       <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400"><Upload className="h-6 w-6" /></div>
                     )}
                     <div className="flex flex-wrap items-center gap-2">
-                      <input id="product-lookbook-upload" type="file" accept="image/jpeg,image/png,image/webp,image/avif" onChange={handleLookbookImageUpload} className="sr-only" />
-                      <label htmlFor="product-lookbook-upload" className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-emerald-800 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-900">
+                      <input id="product-lookbook-upload" type="file" accept="image/jpeg,image/png,image/webp,image/avif" onChange={handleLookbookImageUpload} disabled={!canAddLookbookPhoto} className="sr-only" />
+                      <label htmlFor="product-lookbook-upload" className={`inline-flex min-h-10 items-center gap-2 rounded-lg bg-emerald-800 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-900 ${canAddLookbookPhoto ? 'cursor-pointer' : 'cursor-not-allowed opacity-45'}`}>
                         <Upload className="h-3.5 w-3.5" /> {prodLookbookImage ? 'Remplacer la photo' : 'Choisir une photo'}
                       </label>
                       {prodLookbookImage && <button type="button" onClick={() => setProdLookbookImage('')} className="inline-flex items-center gap-1 rounded-lg px-2 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50"><Trash2 className="h-3.5 w-3.5" /> Retirer</button>}
                       <p className="w-full text-[10px] text-slate-500">JPG, PNG, WebP ou AVIF, 8 Mo maximum. Photo optimisée automatiquement.</p>
+                      {!canAddLookbookPhoto && <p className="w-full text-[10px] font-semibold text-amber-700">Limite de {productPhotoLimit} photos atteinte pour votre formule.</p>}
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-xs font-bold text-slate-700">Photos supplémentaires <span className="font-normal text-slate-400">(optionnelles, {prodGalleryImages.length}/6)</span></label>
+                  <label className="mb-1.5 block text-xs font-bold text-slate-700">Photos du produit <span className="font-normal text-slate-400">({productPhotoCount}/{productPhotoLimit})</span></label>
                   <div className="flex flex-wrap gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3">
                     {prodGalleryImages.map((image, index) => (
                       <div key={index} className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -413,7 +421,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                         </button>
                       </div>
                     ))}
-                    {prodGalleryImages.length < 6 && (
+                    {productPhotoCount < productPhotoLimit && prodGalleryImages.length < 6 && (
                       <div className="flex h-20 w-20 shrink-0 items-center justify-center">
                         <input
                           id="product-gallery-upload"

@@ -601,12 +601,20 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
       customer_phone: uniquePhone(),
       delivery_location: 'Cocody Angré',
       total_amount: 1,
+      attribution_campaign: 'launch_tiktok_1',
       items: [{ product_id: productId, quantity: 1 }],
     }),
   });
   assert.equal(guestOrder.response.status, 200, JSON.stringify(guestOrder.payload));
   assert.equal(guestOrder.payload.order.customer_user_id, undefined);
+  assert.equal(guestOrder.payload.order.attribution_campaign, 'launch_tiktok_1');
   assert.equal(guestOrder.payload.order.total_amount, 2500);
+  const guestWhatsappClick = await apiFetch(`/api/orders/${guestOrder.payload.order.id}/whatsapp-click`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: guestOrder.payload.whatsapp_tracking_token }),
+  });
+  assert.equal(guestWhatsappClick.response.status, 200);
   cookieJar = customerSessionCookies;
 
   const accountOrder = await apiFetch('/api/orders', {
@@ -1283,7 +1291,18 @@ test('existing merchant full flow: login, product management, order lifecycle, b
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: 'pending' }),
   });
-  assert.equal(adminReopenOrder.response.status, 200, JSON.stringify(adminReopenOrder.payload));
+  assert.equal(adminReopenOrder.response.status, 400);
+  assert.match(String(adminReopenOrder.payload.error), /motif admin/i);
+  const auditedAdminReopenOrder = await apiFetch(`/api/shops/1/orders/${competingOrder.payload.order.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'pending', reason: 'Correction du statut après contrôle' }),
+  });
+  assert.equal(auditedAdminReopenOrder.response.status, 200, JSON.stringify(auditedAdminReopenOrder.payload));
+  const orderStatusAudit = await apiFetch('/api/admin/subscriptions');
+  const orderAuditEntry = orderStatusAudit.payload.audit_logs.find((entry: { action: string; shop_id: number; details: string }) =>
+    entry.action === 'admin_order_status_updated' && entry.shop_id === 1 && entry.details.includes('Correction du statut après contrôle'));
+  assert.ok(orderAuditEntry, 'admin order status change must be recorded with its reason');
   const stockAfterAdminReopen = await apiFetch('/api/shops/1/products');
   assert.equal(stockAfterAdminReopen.payload.find((item: any) => item.id === createdProduct.id).stock, 5);
   const adminLogoutAfterRepair = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
@@ -1490,6 +1509,18 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   const adminOrders = await apiFetch('/api/admin/orders?limit=10');
   assert.equal(adminOrders.response.status, 200, JSON.stringify(adminOrders.payload));
   assert.ok(Array.isArray(adminOrders.payload.orders));
+  assert.equal(typeof adminOrders.payload.total, 'number');
+  const searchedAdminOrders = await apiFetch(`/api/admin/orders?limit=10&search=${encodeURIComponent(created.payload.shop.name)}`);
+  assert.equal(searchedAdminOrders.response.status, 200, JSON.stringify(searchedAdminOrders.payload));
+  assert.ok(searchedAdminOrders.payload.orders.every((order: any) => order.shop_name === created.payload.shop.name));
+  const invalidAdminOrderFilter = await apiFetch('/api/admin/orders?status=unknown');
+  assert.equal(invalidAdminOrderFilter.response.status, 400);
+
+  const adminCustomers = await apiFetch('/api/admin/customers?limit=10');
+  assert.equal(adminCustomers.response.status, 200, JSON.stringify(adminCustomers.payload));
+  assert.ok(Array.isArray(adminCustomers.payload.customers));
+  assert.ok(adminCustomers.payload.customers.every((customer: any) => !('password_hash' in customer)));
+  assert.equal(typeof adminCustomers.payload.total, 'number');
 
   const adminAnalytics = await apiFetch('/api/admin/analytics?days=7');
   assert.equal(adminAnalytics.response.status, 200, JSON.stringify(adminAnalytics.payload));
@@ -1539,7 +1570,11 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   assert.equal(rejectedShop.is_active, true);
   const publicationStatusBeforeToggle = rejectedShop.publication_status;
 
-  const disableShop = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, { method: 'PATCH' });
+  const disableShop = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expected_is_active: true, reason: 'Contrôle administratif de test.' }),
+  });
   assert.equal(disableShop.response.status, 200, JSON.stringify(disableShop.payload));
   assert.equal(disableShop.payload.is_active, false);
   assert.equal(disableShop.payload.shop.publication_status, publicationStatusBeforeToggle);
@@ -1584,7 +1619,11 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   const adminAudit = await apiFetch('/api/admin/subscriptions');
   assert.ok(adminAudit.payload.audit_logs.some((entry: { action: string; shop_id: number }) =>
     entry.action === 'admin_shop_operation' && entry.shop_id === shopId));
-  const enableShop = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, { method: 'PATCH' });
+  const enableShop = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expected_is_active: false, reason: 'Fin du contrôle administratif de test.' }),
+  });
   assert.equal(enableShop.response.status, 200, JSON.stringify(enableShop.payload));
   assert.equal(enableShop.payload.is_active, true);
   assert.equal(enableShop.payload.shop.publication_status, publicationStatusBeforeToggle);
@@ -1620,9 +1659,20 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   const publicApiRestored = await apiFetch('/api/analytics/page-view', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ shop_id: shopId, session_id: `maintenance-restored-${Date.now()}`, path: `/${created.payload.shop.slug}` }),
+    body: JSON.stringify({
+      shop_id: shopId,
+      session_id: `maintenance-restored-${Date.now()}`,
+      path: `/${created.payload.shop.slug}`,
+      campaign: 'launch_tiktok_1',
+    }),
   });
   assert.equal(publicApiRestored.response.status, 204);
+  const campaignAnalytics = await apiFetch('/api/admin/analytics?days=7');
+  assert.equal(campaignAnalytics.response.status, 200);
+  const launchCampaign = campaignAnalytics.payload.campaigns.find((campaign: { campaign: string }) => campaign.campaign === 'launch_tiktok_1');
+  assert.ok(launchCampaign);
+  assert.ok(launchCampaign.orders >= 1);
+  assert.ok(launchCampaign.whatsapp_clicks >= 1);
 
   const changedFingerprint = await apiFetch('/api/auth/session', {
     headers: { 'Accept-Language': 'en-US' },

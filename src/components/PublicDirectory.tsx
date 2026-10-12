@@ -15,6 +15,7 @@ interface DirectoryShop {
   is_open?: boolean;
   is_featured?: boolean;
   is_sponsored?: boolean;
+  boost_placements?: string[];
   is_active?: boolean;
   products_count?: number;
   welcome_message?: string | null;
@@ -65,11 +66,26 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
     if (isShopCategory(value)) return getCategoryDefaults(value).label;
     return value || 'Commerce local';
   };
-  const filteredShops = useMemo(() => shops.filter((shop) =>
+  const filteredShops = useMemo(() => {
+    const filtered = shops.filter((shop) =>
     shopMatchesDirectorySearch(shop, query, categoryLabel(shop.category))
       && (category === 'all' || shop.category === category)
       && (!discoveryPage?.citySlug || toDiscoveryCitySlug(shop.city || '') === discoveryPage.citySlug)
-  ), [shops, query, category, discoveryPage?.citySlug]);
+    );
+    const targetPlacement = discoveryPage?.citySlug
+      ? 'city'
+      : discoveryPage?.category || category !== 'all'
+        ? 'category'
+        : !isShopDirectoryPage
+          ? 'home'
+          : null;
+    if (!targetPlacement) return filtered;
+    return filtered.map((shop, index) => ({ shop, index })).sort((left, right) => {
+      const leftBoosted = left.shop.boost_placements?.includes(targetPlacement) || left.shop.boost_placements?.includes('directory');
+      const rightBoosted = right.shop.boost_placements?.includes(targetPlacement) || right.shop.boost_placements?.includes('directory');
+      return Number(rightBoosted) - Number(leftBoosted) || left.index - right.index;
+    }).map(({ shop }) => shop);
+  }, [shops, query, category, discoveryPage?.citySlug, discoveryPage?.category, isShopDirectoryPage]);
   const getShopImage = (shop: DirectoryShop) => normalizeCustomBannerImage(shop.theme_config?.custom_banner_url, shop.category)
     || (shop.products_preview?.[0]
       ? getProductImageForDisplay(shop.products_preview[0].image_url, shop.category)
@@ -296,9 +312,12 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-5 lg:p-6">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-[10px] font-bold uppercase tracking-[0.1em] text-[#b9441f] sm:text-xs sm:tracking-[0.13em]"><span className="sm:hidden">Adresse</span><span className="hidden sm:inline">Une adresse à découvrir</span></span>
-                    <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-1 text-[10px] font-bold sm:px-3 sm:py-1.5 sm:text-xs ${shop.is_open ? 'bg-[#e2eee6] text-[#0f4d3d]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>
+                    <div className="flex shrink-0 items-center gap-1">
+                    {shop.boost_placements?.some((placement) => placement === (discoveryPage?.citySlug ? 'city' : discoveryPage?.category || category !== 'all' ? 'category' : !isShopDirectoryPage ? 'home' : 'directory') || placement === 'directory') && <span className="rounded-full bg-amber-100 px-2 py-1 text-[9px] font-bold text-amber-950 sm:text-[10px]">Sponsorisé</span>}
+                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold sm:px-3 sm:py-1.5 sm:text-xs ${shop.is_open ? 'bg-[#e2eee6] text-[#0f4d3d]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>
                       {shop.is_open ? <><CheckCircle2 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />Ouverte</> : <><Clock3 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />Fermée</>}
                     </span>
+                    </div>
                   </div>
                   <div className="mt-2 flex min-w-0 items-center gap-2 sm:mt-4 sm:gap-3">
                     {shop.theme_config?.logo_url && <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e9e1d7] bg-white sm:h-12 sm:w-12 sm:rounded-2xl">

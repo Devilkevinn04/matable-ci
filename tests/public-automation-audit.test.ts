@@ -698,7 +698,8 @@ test('standard registration keeps delivery zones but does not grant premium soci
   });
   assert.equal(deniedEventMode.status, 403);
   const deniedAnalytics = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/analytics`, { headers: { Cookie: merchantCookie } });
-  assert.equal(deniedAnalytics.status, 403);
+  assert.equal(deniedAnalytics.status, 200);
+  assert.equal((await deniedAnalytics.json()).days, 7);
 
   const publicBySlug = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.slug}`);
   assert.equal(publicBySlug.status, 200);
@@ -737,8 +738,12 @@ test('merchant can update storefront social links and service zones', async () =
   assert.ok(merchantCookieHeader);
   await submitAndApproveShop(createdPayload.shop.id, merchantCookieHeader, 'premium');
   const premiumAnalytics = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/analytics`, { headers: { Cookie: merchantCookieHeader } });
-  assert.equal(premiumAnalytics.status, 403);
+  assert.equal(premiumAnalytics.status, 200);
+  assert.equal((await premiumAnalytics.json()).days, 7);
   await payForSubscription(createdPayload.shop.id, merchantCookieHeader, 'premium');
+  const paidPremiumAnalytics = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/analytics?days=90`, { headers: { Cookie: merchantCookieHeader } });
+  assert.equal(paidPremiumAnalytics.status, 200);
+  assert.equal((await paidPremiumAnalytics.json()).days, 30);
 
   const updateRes = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}`, {
     method: 'PUT',
@@ -1074,4 +1079,97 @@ test('admin analytics excludes cancelled and expired orders from revenue and dai
   assert.equal(shopAnalytics.sales - (baselineShop?.sales || 0), 100);
   assert.equal(dailyOrders - baselineDailyOrders, 1);
   assert.equal(dailySales - baselineDailySales, 100);
+});
+
+test('admin permanently deletes a shop and associated data only after slug confirmation, and records an audit entry', async () => {
+  const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'super-admin-demo-key' }),
+  });
+  assert.equal(adminLogin.status, 200);
+  const adminCookie = adminLogin.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(adminCookie);
+
+  const shopId = Date.now() * 10;
+  const productId = shopId + 1;
+  const orderId = shopId + 2;
+  const paymentId = `delete-test-payment-${shopId}`;
+  const slug = `delete-test-${shopId}`;
+  const now = new Date().toISOString();
+  const testDb = new Database(TEST_DB_PATH);
+  try {
+    testDb.prepare(`
+      INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, created_at, category, subscription_tier)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(shopId, 'Boutique à supprimer', slug, '+2250700000099', 'test-hash', now, 'fashion', 'standard');
+    testDb.prepare('INSERT INTO products (id, shop_id, title, price) VALUES (?, ?, ?, ?)').run(productId, shopId, 'Produit temporaire', 1000);
+    testDb.prepare(`
+      INSERT INTO orders (id, shop_id, customer_name, customer_phone, delivery_location, total_amount, created_at, items)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(orderId, shopId, 'Client test', '+2250700000000', 'Abidjan', 1000, now, '[]');
+    testDb.prepare('INSERT INTO order_whatsapp_tracking (order_id, token_hash) VALUES (?, ?)').run(orderId, `delete-test-token-${shopId}`);
+    testDb.prepare(`
+      INSERT INTO subscription_payment_intents (id, shop_id, tier, amount, currency, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(paymentId, shopId, 'standard', 1000, 'XOF', 'paid', now);
+    testDb.prepare(
+      'INSERT INTO analytics_events (shop_id, event_type, session_id, path, created_at) VALUES (?, ?, ?, ?, ?)',
+    ).run(shopId, 'page_view', `delete-test-session-${shopId}`, '/', now);
+    testDb.prepare(
+      'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+    ).run('super_admin', 'test_shop_action', shopId, '{}', now);
+  } finally {
+    testDb.close();
+  }
+
+  const invalidConfirmation = await fetch(`${BASE_URL}/api/admin/shops/${shopId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: JSON.stringify({ confirmation_slug: 'wrong-slug', reason: 'Test de suppression' }),
+  });
+  assert.equal(invalidConfirmation.status, 409);
+  const remains = new Database(TEST_DB_PATH);
+  assert.equal((remains.prepare('SELECT COUNT(*) AS count FROM shops WHERE id = ?').get(shopId) as { count: number }).count, 1);
+  remains.close();
+
+  const response = await fetch(`${BASE_URL}/api/admin/shops/${shopId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: JSON.stringify({ confirmation_slug: slug, reason: 'Boutique de test à retirer' }),
+  });
+  assert.equal(response.status, 200);
+
+  const verifyDb = new Database(TEST_DB_PATH);
+  try {
+    for (const [table, id] of [
+      ['shops', shopId],
+      ['products', productId],
+      ['orders', orderId],
+      ['subscription_payment_intents', paymentId],
+      ['analytics_events', shopId],
+    ] as const) {
+      const key = table === 'subscription_payment_intents' ? 'id' : table === 'analytics_events' ? 'shop_id' : 'id';
+      assert.equal((verifyDb.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE ${key} = ?`).get(id) as { count: number }).count, 0, `${table} remains after deleting shop`);
+    }
+    assert.equal((verifyDb.prepare('SELECT COUNT(*) AS count FROM order_whatsapp_tracking WHERE order_id = ?').get(orderId) as { count: number }).count, 0);
+    const audit = verifyDb.prepare(`
+      SELECT shop_id, details FROM admin_audit_logs WHERE action = 'shop_permanently_deleted' ORDER BY id DESC LIMIT 1
+    `).get() as { shop_id: number | null; details: string } | undefined;
+    assert.ok(audit);
+    assert.equal(audit.shop_id, null);
+    assert.deepEqual(JSON.parse(audit.details), {
+      shop_id: shopId,
+      shop_name: 'Boutique à supprimer',
+      shop_slug: slug,
+      reason: 'Boutique de test à retirer',
+      deleted_products: 1,
+      deleted_orders: 1,
+      deleted_reviews: 0,
+      deleted_reports: 0,
+    });
+    assert.equal((verifyDb.prepare('SELECT shop_id FROM admin_audit_logs WHERE action = ?').get('test_shop_action') as { shop_id: number | null }).shop_id, null);
+  } finally {
+    verifyDb.close();
+  }
 });

@@ -31,6 +31,7 @@ import { CategoryProductImage } from './CategoryProductImage';
 import { CustomerProductCard } from './CustomerProductCard';
 import { useToast } from './Toast';
 import { hasAnalyticsConsent } from './CookieBanner';
+import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from '../utils/analyticsAttribution';
 import { CustomerUser } from './CustomerAuth';
 import { CustomerCheckoutAuth } from './CustomerCheckoutAuth';
 import { CustomerTrustPanel } from './CustomerTrustPanel';
@@ -553,6 +554,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           })),
           website,
           form_started_at: formStartedAt,
+          attribution_campaign: hasAnalyticsConsent()
+            ? getAnalyticsCampaignFromSearch(window.location.search) || getStoredAnalyticsCampaign()
+            : null,
         }),
       });
 

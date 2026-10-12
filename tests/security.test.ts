@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { dbGet, dbRun } from '../db.ts';
-import { canPublishShop, canReceiveShopOrders, getSubscriptionReminderAt, isShopPubliclyVisible, isSubscriptionReminderDue } from '../server/services/businessRules.ts';
+import { canPublishShop, canReceiveShopOrders, getSubscriptionReminderAt, getSubscriptionReminderDaysBefore, isShopPubliclyVisible, isSubscriptionReminderDue } from '../server/services/businessRules.ts';
 import {
   isBlockedStaticAsset,
   buildSessionFingerprint,
@@ -42,7 +42,7 @@ test('calculates the merchant trial state on the server', () => {
   assert.equal(expiredState.isActive, false);
 });
 
-test('subscriptions enter grace after expiry and offer a reminder two days beforehand', () => {
+test('subscriptions enter grace after expiry and schedule reminders at J-14, J-7, J-3 and J-1', () => {
   const trial = {
     subscription_status: 'trialing',
     trial_start: '2026-09-03T10:00:00.000Z',
@@ -55,10 +55,17 @@ test('subscriptions enter grace after expiry and offer a reminder two days befor
   assert.equal(lastTrialDay.trialDaysRemaining, 1);
   assert.equal(nextDay.status, 'past_due');
   assert.equal(nextDay.trialDaysRemaining, 0);
-  assert.equal(getSubscriptionReminderAt(trial, new Date('2026-10-01T00:00:00.000Z'))?.toISOString(), '2026-10-01T00:00:00.000Z');
-  assert.equal(isSubscriptionReminderDue(trial, new Date('2026-09-30T23:59:59.000Z')), false);
-  assert.equal(isSubscriptionReminderDue(trial, new Date('2026-10-01T00:00:00.000Z')), true);
+  assert.equal(getSubscriptionReminderDaysBefore(trial, new Date('2026-10-01T00:00:00.000Z')), null);
+  assert.equal(getSubscriptionReminderDaysBefore(trial, new Date('2026-10-02T00:00:00.000Z')), 1);
+  assert.equal(getSubscriptionReminderAt(trial, new Date('2026-10-01T00:00:00.000Z'))?.toISOString(), '2026-10-02T00:00:00.000Z');
+  assert.equal(isSubscriptionReminderDue(trial, new Date('2026-10-01T00:00:00.000Z')), false);
+  assert.equal(isSubscriptionReminderDue(trial, new Date('2026-10-02T00:00:00.000Z')), true);
   assert.equal(isSubscriptionReminderDue(trial, new Date('2026-10-04T00:00:00.000Z')), false);
+  const reminderSchedule = { ...trial, trial_end: '2026-10-15' };
+  assert.equal(getSubscriptionReminderDaysBefore(reminderSchedule, new Date('2026-10-01T00:00:00.000Z')), 14);
+  assert.equal(getSubscriptionReminderDaysBefore(reminderSchedule, new Date('2026-10-08T00:00:00.000Z')), 7);
+  assert.equal(getSubscriptionReminderDaysBefore(reminderSchedule, new Date('2026-10-12T00:00:00.000Z')), 3);
+  assert.equal(getSubscriptionReminderDaysBefore(reminderSchedule, new Date('2026-10-14T00:00:00.000Z')), 1);
 
   const paid = { ...trial, subscription_status: 'active', trial_end: null, subscription_expires_at: '2026-10-03T12:00:00.000Z' };
   assert.equal(getSubscriptionState(paid, new Date('2026-10-03T23:59:00.000Z')).status, 'active');

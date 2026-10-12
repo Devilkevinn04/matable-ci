@@ -2,6 +2,40 @@ export type SubscriptionTier = 'standard' | 'premium' | 'pro';
 export type SubscriptionFeature = 'custom_branding' | 'event_mode' | 'social_links' | 'advanced_analytics' | 'boost_discount';
 export type SubscriptionTerm = 'monthly' | 'annual';
 
+export const SUBSCRIPTION_PRODUCT_LIMITS: Record<SubscriptionTier, number> = {
+  standard: 30,
+  premium: 100,
+  pro: Number.POSITIVE_INFINITY,
+};
+
+export const SUBSCRIPTION_PRODUCT_PHOTO_LIMITS: Record<SubscriptionTier, number> = {
+  standard: 2,
+  premium: 5,
+  pro: 6,
+};
+
+export const SUBSCRIPTION_ANALYTICS_DAY_LIMITS: Record<SubscriptionTier, number> = {
+  standard: 7,
+  premium: 30,
+  pro: 90,
+};
+
+export function normalizeSubscriptionTier(tier: string | null | undefined): SubscriptionTier {
+  return tier === 'premium' || tier === 'pro' ? tier : 'standard';
+}
+
+export function getSubscriptionProductLimit(tier: string | null | undefined): number {
+  return SUBSCRIPTION_PRODUCT_LIMITS[normalizeSubscriptionTier(tier)];
+}
+
+export function getSubscriptionProductPhotoLimit(tier: string | null | undefined): number {
+  return SUBSCRIPTION_PRODUCT_PHOTO_LIMITS[normalizeSubscriptionTier(tier)];
+}
+
+export function getSubscriptionAnalyticsDayLimit(tier: string | null | undefined): number {
+  return SUBSCRIPTION_ANALYTICS_DAY_LIMITS[normalizeSubscriptionTier(tier)];
+}
+
 export const TRIAL_DURATION_DAYS = 7;
 export const TRIAL_CATALOG_LIMIT = 2;
 export const SUBSCRIPTION_EXPIRY_GRACE_DAYS = 2;
@@ -15,9 +49,10 @@ export const SUBSCRIPTION_PLANS = {
     headline: 'Lancez votre boutique en ligne',
     description: 'Les essentiels pour présenter vos produits et recevoir des demandes.',
     benefits: [
-      'Vitrine publique et catalogue avec photos, prix et stock',
+      'Jusqu’à 30 articles et 2 photos par article',
       'Commandes directes sur WhatsApp',
       'Présence dans l’annuaire MaTable.ci',
+      'Statistiques de base sur 7 jours',
     ],
   },
   premium: {
@@ -30,6 +65,9 @@ export const SUBSCRIPTION_PLANS = {
       'Tout Standard',
       'Couleurs, polices, logo et bannière personnalisés',
       'Réseaux sociaux et bandeau événementiel',
+      'Jusqu’à 100 articles et 5 photos par article',
+      'Statistiques sur 30 jours et produits les plus consultés',
+      'Meilleure visibilité dans l’annuaire',
     ],
   },
   pro: {
@@ -40,6 +78,7 @@ export const SUBSCRIPTION_PLANS = {
     description: 'Visibilité maximale et statistiques détaillées de la vitrine.',
     benefits: [
       'Tout Premium',
+      'Articles illimités et jusqu’à 6 photos par article',
       'Statistiques détaillées sur 90 jours',
       'Meilleure visibilité naturelle dans l’annuaire',
       `Réduction de ${PRO_BOOST_DISCOUNT_PERCENT}% sur les boosts payants`,

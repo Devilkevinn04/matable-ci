@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes, ShieldCheck } from 'lucide-react';
+import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes, ShieldCheck, Bell } from 'lucide-react';
 import type { Shop } from '../../types';
 import { MerchantState } from './useMerchant';
 import { ThemeCustomizer } from '../ThemeCustomizer';
@@ -10,6 +10,7 @@ import { isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures'
 import { WhatsAppSubscriptionReminderConsent } from './WhatsAppSubscriptionReminderConsent';
 import { MerchantBoostPurchase } from './MerchantBoostPurchase';
 import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
+import { PushNotificationSettings } from './PushNotificationSettings';
 
 interface SettingsTabProps {
   state: MerchantState;
@@ -64,6 +65,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
       items: [
         { id: 'verification', label: 'Vérification', icon: ShieldCheck },
         { id: 'subscription', label: 'Abonnement', icon: DollarSign },
+        { id: 'notifications', label: 'Notifications', icon: Bell },
       ],
     },
   ] as const;
@@ -75,6 +77,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
     verification: { eyebrow: 'Compte', title: 'Vérification du commerce', description: 'Suivez la vérification de votre identité et de votre boutique.' },
     subscription: { eyebrow: 'Compte', title: 'Abonnement et visibilité', description: 'Consultez votre formule, son échéance et les options de visibilité.' },
     analytics: { eyebrow: 'Mon activité', title: 'Statistiques de la vitrine', description: 'Analysez les visites et les commandes générées par votre boutique.' },
+    notifications: { eyebrow: 'Compte', title: 'Notifications Push', description: 'Choisissez si cet appareil peut recevoir les alertes importantes de votre boutique.' },
   };
   const activeSettingsCopy = settingsCopy[settingsSubTab];
   const exportMerchantData = async () => {
@@ -225,6 +228,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
             ))}
 
             {settingsSubTab === 'analytics' && currentShop && <ProAnalyticsPanel shop={currentShop} />}
+            {settingsSubTab === 'notifications' && currentShop && <PushNotificationSettings shop={currentShop} />}
 
             {/* Sub-Tab 2: GENERAL SETTINGS */}
             {settingsSubTab === 'general' && (

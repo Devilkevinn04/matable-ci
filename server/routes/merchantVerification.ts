@@ -1,5 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
+import { sendMerchantPush } from '../services/pushNotifications.ts';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CONSENT_VERSION = 'didit-v1';
@@ -247,7 +248,7 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
     }
 
     const receivedAt = new Date(timestamp * 1000).toISOString();
-    const sessionKnown = await dbTransaction(async (transaction) => {
+    const webhookResult = await dbTransaction(async (transaction) => {
       const session = await transaction.get<{ session_id: string; shop_id: number; last_webhook_at: string | null }>(
         `SELECT session_id, shop_id, last_webhook_at FROM didit_verification_sessions WHERE session_id = ?${process.env.NODE_ENV === 'production' ? ' FOR UPDATE' : ''}`,
         [event.session_id],
@@ -260,14 +261,20 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
         'SELECT session_id FROM didit_verification_sessions WHERE shop_id = ? ORDER BY created_at DESC LIMIT 1',
         [session.shop_id],
       );
-      if (latestSession?.session_id !== session.session_id) return true;
+      if (latestSession?.session_id !== session.session_id) return { shopId: null, previousStatus: '', nextStatus: '' };
       const inserted = await transaction.run(
         'INSERT INTO didit_webhook_events (event_id, received_at) VALUES (?, ?) ON CONFLICT(event_id) DO NOTHING',
         [event.event_id, new Date().toISOString()],
       );
-      if (inserted.changes !== 1 || (session.last_webhook_at && Date.parse(session.last_webhook_at) > timestamp * 1000)) return true;
+      if (inserted.changes !== 1 || (session.last_webhook_at && Date.parse(session.last_webhook_at) > timestamp * 1000)) {
+        return { shopId: null, previousStatus: '', nextStatus: '' };
+      }
 
       const merchantStatus = mapDiditStatus(event.status);
+      const currentShop = await transaction.get<{ merchant_verification_status: string }>(
+        'SELECT merchant_verification_status FROM shops WHERE id = ?',
+        [session.shop_id],
+      );
       await transaction.run(
         'UPDATE didit_verification_sessions SET status = ?, updated_at = ?, last_webhook_at = ? WHERE session_id = ?',
         [event.status, receivedAt, receivedAt, session.session_id],
@@ -275,9 +282,28 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       await transaction.run(`UPDATE shops SET merchant_verification_status = ?,
         publication_status = CASE WHEN is_active = 0 OR publication_status = 'suspended' THEN 'suspended' WHEN ? = 'verified' THEN 'active' ELSE 'draft' END
         WHERE id = ?`, [merchantStatus, merchantStatus, session.shop_id]);
-      return true;
+      return {
+        shopId: session.shop_id,
+        previousStatus: currentShop?.merchant_verification_status || '',
+        nextStatus: merchantStatus,
+      };
     });
-    if (!sessionKnown) return res.status(503).json({ error: 'Session Didit inconnue, réessayez le webhook.' });
+    if (!webhookResult) return res.status(503).json({ error: 'Session Didit inconnue, réessayez le webhook.' });
+    if (webhookResult.shopId && webhookResult.previousStatus !== webhookResult.nextStatus) {
+      const verified = webhookResult.nextStatus === 'verified';
+      void sendMerchantPush(webhookResult.shopId, {
+        eventKey: `identity-${event.event_id}`,
+        category: 'identity',
+        title: verified ? 'Identité vérifiée' : webhookResult.nextStatus === 'rejected' ? 'Action requise pour votre identité' : 'Vérification mise à jour',
+        body: verified
+          ? 'Votre identité est vérifiée. Consultez votre tableau de bord pour la suite.'
+          : webhookResult.nextStatus === 'rejected'
+            ? 'Votre vérification nécessite une correction. Consultez les détails dans votre tableau de bord.'
+            : 'Le statut de votre vérification a évolué. Consultez votre tableau de bord.',
+        url: '/app',
+        tag: `identity-${webhookResult.shopId}`,
+      }).catch((error: unknown) => console.error(`Unable to queue identity notification for shop ${webhookResult.shopId}.`, error));
+    }
     await dbRun('DELETE FROM didit_webhook_events WHERE received_at < ?', [new Date(Date.now() - 30 * 86400000).toISOString()]);
     res.status(204).end();
   });

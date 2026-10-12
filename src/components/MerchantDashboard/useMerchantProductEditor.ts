@@ -5,6 +5,7 @@ import { compressImageClientSide } from '../../utils/format';
 import { buildProductSavePayload, createProductDraft, productToDraft } from './productForm';
 import type { ProductModifierGroupDraft } from './productForm';
 import { useToast } from '../Toast';
+import { getSubscriptionProductPhotoLimit } from '../../utils/subscriptionFeatures';
 
 const MAX_GALLERY_IMAGES = 6;
 
@@ -103,6 +104,16 @@ export function useMerchantProductEditor(
   const handleLookbookImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    const photoLimit = currentShop?.admin_mode ? 6
+      : currentShop?.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0
+        ? getSubscriptionProductPhotoLimit('standard')
+        : getSubscriptionProductPhotoLimit(currentShop?.subscription?.plan);
+    const currentPhotoCount = (prodImage ? 1 : 0) + (prodLookbookImage ? 1 : 0) + prodGalleryImages.length;
+    if (!prodLookbookImage && currentPhotoCount >= photoLimit) {
+      toast.error(`Votre formule permet jusqu’à ${photoLimit} photos par article.`);
+      event.target.value = '';
+      return;
+    }
     if (!file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) {
       toast.error('Choisissez une image de 8 Mo maximum.');
       event.target.value = '';
@@ -121,13 +132,18 @@ export function useMerchantProductEditor(
   const handleGalleryImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
-    if (prodGalleryImages.length >= MAX_GALLERY_IMAGES) {
-      toast.error(`Vous pouvez ajouter jusqu'à ${MAX_GALLERY_IMAGES} photos supplémentaires.`);
+    const photoLimit = currentShop?.admin_mode ? 6
+      : currentShop?.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0
+        ? getSubscriptionProductPhotoLimit('standard')
+        : getSubscriptionProductPhotoLimit(currentShop?.subscription?.plan);
+    const occupiedNonGallerySlots = (prodImage ? 1 : 0) + (prodLookbookImage ? 1 : 0);
+    const remainingSlots = Math.min(MAX_GALLERY_IMAGES - prodGalleryImages.length, photoLimit - occupiedNonGallerySlots - prodGalleryImages.length);
+    if (remainingSlots <= 0) {
+      toast.error(`Votre formule permet jusqu’à ${photoLimit} photos par article.`);
       event.target.value = '';
       return;
     }
 
-    const remainingSlots = MAX_GALLERY_IMAGES - prodGalleryImages.length;
     const filesToProcess = files.slice(0, remainingSlots);
     const oversized = filesToProcess.some((file) => !file.type.startsWith('image/') || file.size > 8 * 1024 * 1024);
     if (oversized) {

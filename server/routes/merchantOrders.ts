@@ -73,6 +73,12 @@ export function createMerchantOrdersRouter({
     if (!status || !validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Statut invalide. Valeurs possibles : pending, confirmed, preparing, ready, delivered, cancelled, expired.' });
     }
+    const adminReason = typeof req.body?.reason === 'string'
+      ? req.body.reason.trim().replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 500)
+      : '';
+    if (req.adminShopAccess && adminReason.length < 3) {
+      return res.status(400).json({ error: 'Un motif admin (au moins 3 caractères) est obligatoire.' });
+    }
 
     const allowedTransitions: Record<string, string[]> = {
       pending: ['confirmed', 'cancelled'],
@@ -144,6 +150,17 @@ export function createMerchantOrdersRouter({
         }
 
         await transaction.run('UPDATE orders SET status = ? WHERE id = ? AND shop_id = ?', [status, order.id, shopId]);
+        if (req.adminShopAccess) {
+          await transaction.run(
+            'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+            ['super_admin', 'admin_order_status_updated', shopId, JSON.stringify({
+              order_id: order.id,
+              previous_status: previousStatus,
+              status,
+              reason: adminReason,
+            }), new Date().toISOString()],
+          );
+        }
         order.status = status as OrderRecord['status'];
         return { order, previousStatus, unchanged: false };
       });

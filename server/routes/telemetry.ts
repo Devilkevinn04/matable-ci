@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from 'express';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import { isShopPubliclyVisible } from '../services/businessRules.ts';
 import type { ShopRecord } from '../types.ts';
+import { normalizeAnalyticsCampaign } from '../../src/utils/analyticsAttribution.ts';
 
 interface TelemetryRouterOptions {
   shops: ShopRecord[];
@@ -11,6 +12,8 @@ interface TelemetryRouterOptions {
 }
 
 export type AnalyticsSource = 'direct' | 'search' | 'social' | 'referral' | 'internal';
+
+export { normalizeAnalyticsCampaign } from '../../src/utils/analyticsAttribution.ts';
 
 export function classifyAnalyticsSource(referrer: string, siteHost: string): AnalyticsSource {
   if (!referrer) return 'direct';
@@ -48,20 +51,25 @@ export function createTelemetryRouter({ rateLimitPublicRequest, dbGet, dbRun }: 
     const today = new Date().toISOString().slice(0, 10);
     const referrer = typeof req.body?.referrer_host === 'string' ? req.body.referrer_host : String(req.get('referer') || '');
     const source = classifyAnalyticsSource(referrer, String(req.get('host') || ''));
+    const campaign = normalizeAnalyticsCampaign(req.body?.campaign);
     const shopCondition = shopId === null ? 'shop_id IS NULL' : 'shop_id = ?';
-    const analyticsParams = shopId === null ? [sessionId, `${today}%`] : [shopId, sessionId, `${today}%`];
+    const path = String(req.body?.path || '').slice(0, 300);
+    const analyticsParams = shopId === null
+      ? [sessionId, path, `${today}%`]
+      : [shopId, sessionId, path, `${today}%`];
     const alreadyTracked = await dbGet(`
       SELECT 1 FROM analytics_events
-      WHERE ${shopCondition} AND event_type = 'page_view' AND session_id = ? AND created_at LIKE ?
+      WHERE ${shopCondition} AND event_type = 'page_view' AND session_id = ? AND path = ? AND created_at LIKE ?
       LIMIT 1
     `, analyticsParams);
     if (!alreadyTracked) {
-      await dbRun('INSERT INTO analytics_events (shop_id, event_type, session_id, path, source, created_at) VALUES (?, ?, ?, ?, ?, ?)', [
+      await dbRun('INSERT INTO analytics_events (shop_id, event_type, session_id, path, source, campaign, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [
         shopId,
         'page_view',
         sessionId,
-        String(req.body?.path || '').slice(0, 300),
+        path,
         source,
+        campaign,
         new Date().toISOString(),
       ]);
     }

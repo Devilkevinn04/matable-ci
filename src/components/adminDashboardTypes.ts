@@ -13,6 +13,7 @@ export interface AdminAnalytics {
   daily: { date: string; page_views: number; unique_visitors: number; orders: number; sales: number }[];
   by_shop: { shop_id: number; shop_name: string; page_views: number; unique_visitors: number; orders: number; sales: number; conversion_rate: number }[];
   sources: { source: 'direct' | 'search' | 'social' | 'referral' | 'internal' | 'unknown'; visits: number; visitors: number }[];
+  campaigns: { campaign: string; visits: number; visitors: number; orders: number; sales: number; whatsapp_clicks: number }[];
   totals: { page_views: number; unique_visitors: number; orders: number; sales: number; conversion_rate: number };
   previous: { page_views: number; unique_visitors: number; orders: number; sales: number; conversion_rate: number };
 }
@@ -98,6 +99,11 @@ export interface AdminSubscriptions {
     whatsapp_reminders_enabled: boolean;
     whatsapp_reminder_opt_ins: number;
   };
+  weekly_activity: {
+    unique_visitors: number;
+    shops_created: number;
+    whatsapp_clicks: number;
+  };
   shops: AdminSubscriptionShop[];
   audit_logs: { id: number; action: string; shop_id: number | null; shop_name: string | null; details: string; created_at: string }[];
 }
@@ -110,9 +116,23 @@ export interface AdminOrder {
   customer_phone: string;
   delivery_location: string;
   total_amount: number;
-  status: string;
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'expired';
   created_at: string;
   items_count: number;
+}
+
+export interface AdminCustomer {
+  id: number;
+  first_name: string;
+  last_name: string;
+  name: string;
+  email: string;
+  phone: string;
+  created_at: string;
+  is_active: boolean;
+  orders_count: number;
+  order_value: number;
+  last_order_at: string | null;
 }
 
 export interface AdminHealth {
@@ -189,9 +209,10 @@ export const formatAudienceChange = (current: number, previous: number, percenta
   if (percentagePoints) {
     const change = current - previous;
     if (change === 0) return 'Stable';
+    if (previous === 0) return `0 → ${current.toFixed(1)} pt`;
     return `${change > 0 ? '+' : ''}${change.toFixed(1)} pt`;
   }
-  if (previous === 0) return current === 0 ? 'Stable' : 'Nouveau';
+  if (previous === 0) return current === 0 ? '0 dans les deux périodes' : `0 → ${new Intl.NumberFormat('fr-FR').format(current)}`;
   const change = Math.round(((current - previous) / previous) * 100);
   return `${change > 0 ? '+' : ''}${change}%`;
 };

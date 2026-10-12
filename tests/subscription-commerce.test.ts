@@ -131,6 +131,19 @@ test('Pro subscription exposes consented product stats and activates discounted 
   });
   assert.equal(emptyCatalogBoost.status, 409);
 
+  const tooManyTrialPhotos = await fetch(`${BASE_URL}/api/shops/${shopId}/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({
+      title: 'Produit avec trop de photos',
+      price: 1500,
+      stock: 5,
+      image_url: 'https://example.com/product-main.jpg',
+      gallery_images: ['https://example.com/product-extra-1.jpg', 'https://example.com/product-extra-2.jpg'],
+    }),
+  });
+  assert.equal(tooManyTrialPhotos.status, 409);
+
   const firstProductResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
@@ -138,6 +151,21 @@ test('Pro subscription exposes consented product stats and activates discounted 
   });
   const firstProductPayload = await firstProductResponse.json();
   assert.equal(firstProductResponse.status, 200, JSON.stringify(firstProductPayload));
+  const tooManyPhotosOnUpdate = await fetch(`${BASE_URL}/api/shops/${shopId}/products/${firstProductPayload.product.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({
+      image_url: 'https://example.com/product-main.jpg',
+      gallery_images: ['https://example.com/product-extra-1.jpg', 'https://example.com/product-extra-2.jpg'],
+    }),
+  });
+  assert.equal(tooManyPhotosOnUpdate.status, 409);
+  const withinTrialPhotoLimit = await fetch(`${BASE_URL}/api/shops/${shopId}/products/${firstProductPayload.product.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ image_url: 'https://example.com/product-main.jpg', gallery_images: ['https://example.com/product-extra-1.jpg'] }),
+  });
+  assert.equal(withinTrialPhotoLimit.status, 200, await withinTrialPhotoLimit.text());
   const singleProductBoost = await fetch(`${BASE_URL}/api/shops/${shopId}/boost-payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
@@ -211,11 +239,12 @@ test('Pro subscription exposes consented product stats and activates discounted 
   const boostIntentResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/boost-payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
-    body: JSON.stringify({ duration_days: 7 }),
+    body: JSON.stringify({ duration_days: 7, placement: 'home' }),
   });
   const boostIntent = await boostIntentResponse.json();
   assert.equal(boostIntentResponse.status, 201, JSON.stringify(boostIntent));
   assert.equal(boostIntent.amount, 1700);
+  assert.equal(boostIntent.placement, 'home');
   assert.equal(boostIntent.scheduled, false);
   const boostPaymentBody = JSON.stringify({
     event: 'payment.success',
@@ -236,7 +265,48 @@ test('Pro subscription exposes consented product stats and activates discounted 
   const boostStatus = await boostStatusResponse.json();
   assert.equal(boostStatus.status, 'paid');
   assert.equal(boostStatus.boost.status, 'active');
+  assert.equal(boostStatus.boost.placement, 'home');
   assert.equal(Date.parse(boostStatus.boost.ends_at) - Date.parse(boostStatus.boost.starts_at), 7 * 86400000);
+  const boostStoreVisit = await fetch(`${BASE_URL}/api/analytics/page-view`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shopId,
+      path: `/${createdPayload.shop.slug}`,
+      session_id: 'boost-recap-consented-visitor',
+    }),
+  });
+  assert.equal(boostStoreVisit.status, 204);
+  const boostOrderResponse = await fetch(`${BASE_URL}/api/orders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shopId,
+      customer_name: 'Visiteur boost',
+      customer_phone: '+2250700000011',
+      delivery_location: 'Abidjan',
+      payment_method_preference: 'wave',
+      items: [{ product_id: products[0].id, quantity: 1 }],
+    }),
+  });
+  const boostOrder = await boostOrderResponse.json();
+  assert.equal(boostOrderResponse.status, 200, JSON.stringify(boostOrder));
+  const boostOrderClick = await fetch(`${BASE_URL}/api/orders/${boostOrder.order.id}/whatsapp-click`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: boostOrder.whatsapp_tracking_token }),
+  });
+  assert.equal(boostOrderClick.status, 200);
+  const boostHistoryResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/boosts`, { headers: { Cookie: merchantCookie } });
+  const boostHistory = await boostHistoryResponse.json();
+  assert.equal(boostHistoryResponse.status, 200, JSON.stringify(boostHistory));
+  assert.equal(boostHistory.boosts[0].placement, 'home');
+  assert.equal(boostHistory.boosts[0].views, 1);
+  assert.equal(boostHistory.boosts[0].whatsapp_clicks, 1);
+  const sponsoredDirectory = await fetch(`${BASE_URL}/api/shops`).then((response) => response.json());
+  const sponsoredShop = sponsoredDirectory.find((shop: { id: number }) => shop.id === shopId);
+  assert.ok(sponsoredShop.boost_placements.includes('home'));
+  assert.equal(sponsoredShop.is_sponsored, true);
   const directory = await fetch(`${BASE_URL}/api/shops`).then((response) => response.json());
   assert.equal(directory.find((listedShop: { id: number }) => listedShop.id === shopId)?.is_sponsored, true);
   const sessionAfterBoost = await fetch(`${BASE_URL}/api/auth/session`, { headers: { Cookie: merchantCookie } }).then((response) => response.json());

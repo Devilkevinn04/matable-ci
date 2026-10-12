@@ -27,7 +27,7 @@ export const WhatsAppSubscriptionReminderConsent: React.FC<WhatsAppSubscriptionR
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Impossible de modifier cette préférence.');
       setEnabled(result.enabled);
-      setMessage(result.enabled ? 'Rappel automatique activé.' : 'Rappel automatique désactivé.');
+      setMessage(result.enabled ? 'Votre accord pour les rappels est enregistré.' : 'Votre accord pour les rappels est retiré.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Impossible de modifier cette préférence.');
     } finally {
@@ -46,8 +46,8 @@ export const WhatsAppSubscriptionReminderConsent: React.FC<WhatsAppSubscriptionR
           className="mt-0.5 h-4 w-4 accent-emerald-700"
         />
         <span>
-          <strong className="block text-sm text-slate-900">Recevoir un rappel WhatsApp avant l’échéance</strong>
-          <span className="mt-1 block text-xs leading-5 text-slate-600">Un message sera envoyé automatiquement 2 jours avant la fin de l’essai ou de l’abonnement. Vous pouvez retirer votre accord ici à tout moment.</span>
+          <strong className="block text-sm text-slate-900">Autoriser les rappels WhatsApp avant l’échéance</strong>
+          <span className="mt-1 block text-xs leading-5 text-slate-600">Si WhatsApp Business est configuré sur MaTable.ci, des messages peuvent être envoyés à J−14, J−7, J−3 et J−1 avant la fin de l’essai ou de l’abonnement. Vous pouvez retirer votre accord ici à tout moment.</span>
           {enabled && shop.whatsapp_subscription_reminders_consent_at && <span className="mt-1 block text-[11px] text-slate-500">Accord donné le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.whatsapp_subscription_reminders_consent_at))}.</span>}
         </span>
       </label>

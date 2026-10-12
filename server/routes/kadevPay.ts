@@ -11,9 +11,10 @@ import {
   BOOST_DURATIONS_DAYS,
   BOOST_MINIMUM_PRODUCT_COUNT,
   findEarliestBoostStart,
-  MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY,
+  MAX_SIMULTANEOUS_BOOSTS_PER_PLACEMENT_SCOPE,
+  getBoostCapacityScope,
 } from '../services/boosts.ts';
-import { getBoostPrice } from '../../src/utils/boostPricing.ts';
+import { BOOST_PLACEMENTS, getBoostPrice } from '../../src/utils/boostPricing.ts';
 
 interface KadevPayRouterOptions {
   shops: ShopRecord[];
@@ -112,6 +113,10 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
     if (!BOOST_DURATIONS_DAYS.some((duration) => duration === durationDays)) {
       return res.status(400).json({ error: 'Choisissez une durée de boost valide.' });
     }
+    const placement = req.body?.placement === undefined ? 'category' : req.body.placement;
+    if (!BOOST_PLACEMENTS.some((validPlacement) => validPlacement === placement)) {
+      return res.status(400).json({ error: 'Choisissez un emplacement de boost valide.' });
+    }
 
     const paymentId = randomUUID();
     const boostId = randomUUID();
@@ -131,9 +136,8 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
       const city = String(transactionShop.city || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
       if (!city) return { error: 'Renseignez la ville de la boutique avant d’acheter un boost.' } as const;
       const category = String(transactionShop.category).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
-      if (databaseMode === 'postgresql') {
-        await transaction.get('SELECT pg_advisory_xact_lock(hashtextextended(?, 0))', [`boost:${city}:${category}`]);
-      }
+      const capacityScope = getBoostCapacityScope(placement, city, category);
+      if (databaseMode === 'postgresql') await transaction.get('SELECT pg_advisory_xact_lock(hashtextextended(?, 0))', [capacityScope.lockKey]);
       const productCount = await transaction.get<{ product_count: number | string }>(
         'SELECT COUNT(*) AS product_count FROM products WHERE shop_id = ?',
         [shop.id],
@@ -147,21 +151,21 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
       if (price === null) return { error: 'Choisissez une durée de boost valide.' } as const;
       const intervals = await transaction.all<{ starts_at: string; ends_at: string }>(
         `SELECT starts_at, ends_at FROM shop_boosts
-          WHERE city = ? AND category = ?
+          WHERE ${capacityScope.where}
             AND (status IN ('scheduled', 'active')
               OR (status = 'pending_payment' AND reservation_expires_at > ?))`,
-        [city, category, createdAt],
+        [...capacityScope.params, createdAt],
       );
-      const startsAt = findEarliestBoostStart(intervals, durationDays, now, MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY);
+      const startsAt = findEarliestBoostStart(intervals, durationDays, now, MAX_SIMULTANEOUS_BOOSTS_PER_PLACEMENT_SCOPE);
       const endsAt = new Date(startsAt.getTime() + durationDays * 86400000);
       await transaction.run(`INSERT INTO subscription_payment_intents
         (id, shop_id, payment_type, tier, subscription_term, amount, currency, status, created_at)
         VALUES (?, ?, 'promotion', 'standard', 'monthly', ?, 'XOF', 'pending', ?)`,
       [paymentId, shop.id, price, createdAt]);
       await transaction.run(`INSERT INTO shop_boosts
-        (id, shop_id, payment_intent_id, city, category, starts_at, ends_at, status, reservation_expires_at, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?)`,
-      [boostId, shop.id, paymentId, city, category, startsAt.toISOString(), endsAt.toISOString(), reserveUntil, createdAt]);
+        (id, shop_id, payment_intent_id, city, category, placement, starts_at, ends_at, status, reservation_expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?)`,
+      [boostId, shop.id, paymentId, city, category, placement, startsAt.toISOString(), endsAt.toISOString(), reserveUntil, createdAt]);
       return { price, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() } as const;
     });
     if ('error' in reservation) {
@@ -179,10 +183,11 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
       phone: shop.whatsapp_number,
       boost_id: boostId,
       duration_days: durationDays,
+      placement,
       starts_at: reservation.startsAt,
       ends_at: reservation.endsAt,
       scheduled: Date.parse(reservation.startsAt) > now.getTime(),
-      max_simultaneous: MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY,
+      max_simultaneous: MAX_SIMULTANEOUS_BOOSTS_PER_PLACEMENT_SCOPE,
     });
   });
 
@@ -195,7 +200,7 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
     );
     if (!payment) return res.status(404).json({ error: 'Paiement introuvable.' });
     const boost = payment.payment_type === 'promotion'
-      ? await dbGet('SELECT starts_at, ends_at, status FROM shop_boosts WHERE payment_intent_id = ?', [payment.id])
+      ? await dbGet('SELECT starts_at, ends_at, status, placement FROM shop_boosts WHERE payment_intent_id = ?', [payment.id])
       : undefined;
     res.json({ status: payment.status, subscription: getSubscriptionState(shop), boost });
   });
@@ -209,12 +214,27 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
       ends_at: string;
       status: string;
       amount: number;
-    }[]>(`SELECT b.id, b.starts_at, b.ends_at, b.status, p.amount
+      placement: string;
+      views: number;
+      whatsapp_clicks: number;
+    }>(`SELECT b.id, b.starts_at, b.ends_at, b.status, p.amount
+      , b.placement,
+      (SELECT COUNT(*) FROM analytics_events a WHERE a.shop_id = b.shop_id
+        AND a.event_type = 'page_view' AND a.created_at >= b.starts_at AND a.created_at < b.ends_at) AS views,
+      (SELECT COUNT(*) FROM order_whatsapp_tracking t JOIN orders o ON o.id = t.order_id
+        WHERE o.shop_id = b.shop_id AND t.clicked_at >= b.starts_at AND t.clicked_at < b.ends_at) AS whatsapp_clicks
       FROM shop_boosts b
       JOIN subscription_payment_intents p ON p.id = b.payment_intent_id
-      WHERE b.shop_id = ? AND b.status IN ('scheduled', 'active') AND b.ends_at > ?
-      ORDER BY b.starts_at DESC`, [shop.id, new Date().toISOString()]);
-    res.json({ boosts });
+      WHERE b.shop_id = ? AND b.status IN ('scheduled', 'active')
+      ORDER BY b.starts_at DESC LIMIT 20`, [shop.id]);
+    res.json({
+      boosts: boosts.map((boost) => ({
+        ...boost,
+        amount: Number(boost.amount),
+        views: Number(boost.views || 0),
+        whatsapp_clicks: Number(boost.whatsapp_clicks || 0),
+      })),
+    });
   });
 
   router.post('/webhooks/kadevpay', async (req: Request, res) => {
@@ -306,15 +326,15 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
           id: string;
           city: string;
           category: string;
+          placement: string;
           starts_at: string;
           ends_at: string;
           status: string;
           reservation_expires_at: string | null;
         }>('SELECT * FROM shop_boosts WHERE payment_intent_id = ?', [payment.id]);
         if (!boost) return { status: 'not_found' as const };
-        if (databaseMode === 'postgresql') {
-          await transaction.get('SELECT pg_advisory_xact_lock(hashtextextended(?, 0))', [`boost:${boost.city}:${boost.category}`]);
-        }
+        const capacityScope = getBoostCapacityScope(boost.placement as 'home' | 'category' | 'city' | 'directory', boost.city, boost.category);
+        if (databaseMode === 'postgresql') await transaction.get('SELECT pg_advisory_xact_lock(hashtextextended(?, 0))', [capacityScope.lockKey]);
         let startsAt = Date.parse(boost.starts_at);
         let endsAt = Date.parse(boost.ends_at);
         const reservationExpired = !boost.reservation_expires_at
@@ -322,13 +342,13 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
         if (reservationExpired) {
           const intervals = await transaction.all<{ starts_at: string; ends_at: string }>(
             `SELECT starts_at, ends_at FROM shop_boosts
-              WHERE city = ? AND category = ? AND id <> ?
+              WHERE ${capacityScope.where} AND id <> ?
                 AND (status IN ('scheduled', 'active')
                   OR (status = 'pending_payment' AND reservation_expires_at > ?))`,
-            [boost.city, boost.category, boost.id, now.toISOString()],
+            [...capacityScope.params, boost.id, now.toISOString()],
           );
           const days = (endsAt - startsAt) / 86400000;
-          startsAt = findEarliestBoostStart(intervals, days, now, MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY).getTime();
+          startsAt = findEarliestBoostStart(intervals, days, now, MAX_SIMULTANEOUS_BOOSTS_PER_PLACEMENT_SCOPE).getTime();
           endsAt = startsAt + days * 86400000;
         }
         const paidAt = now.toISOString();

@@ -5,6 +5,8 @@ import { mapProductRow } from '../repositories/products.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
 import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
+import { normalizeAnalyticsCampaign } from '../../src/utils/analyticsAttribution.ts';
+import { dispatchStockTransitionPush, sendMerchantPush } from '../services/pushNotifications.ts';
 
 interface CustomerSession {
   authenticated: boolean;
@@ -47,6 +49,7 @@ export function createOrderRouter({
 
   router.post('/orders', rateLimitPublicRequest(30), async (req, res) => {
     const { shop_id, customer_name, customer_phone, delivery_location, delivery_note, delivery_slot, payment_method_preference, items, website, form_started_at } = req.body;
+    const attributionCampaign = normalizeAnalyticsCampaign(req.body?.attribution_campaign);
     if (String(website || '').trim()) return res.status(400).json({ error: 'Requête rejetée.' });
     if (form_started_at !== undefined) {
       const formAge = Date.now() - Number(form_started_at);
@@ -91,7 +94,7 @@ export function createOrderRouter({
     }
     const customerUserId = customerSession.authenticated ? customerSession.user?.id : undefined;
     const whatsappTrackingToken = crypto.randomUUID();
-    const stockUpdates: { product: ProductRecord; stock: number; isAvailable: boolean }[] = [];
+    const stockUpdates: { product: ProductRecord; previousStock: number; stock: number; isAvailable: boolean }[] = [];
     try {
       const createdOrder = await dbTransaction(async (transaction) => {
         const orderIdRecord = await transaction.get<{ id: number }>(`
@@ -137,7 +140,7 @@ export function createOrderRouter({
             if (update.changes !== 1) {
               throw Object.assign(new Error(`Le stock de "${product.title}" vient de changer. Réessayez la commande.`), { statusCode: 409, product_id: product.id, stock: currentStock });
             }
-            stockUpdates.push({ product, stock, isAvailable });
+            stockUpdates.push({ product, previousStock: currentStock, stock, isAvailable });
             reservedProductIds.add(product.id);
           }
 
@@ -168,6 +171,7 @@ export function createOrderRouter({
           id: orderId,
           shop_id: shop.id,
           customer_user_id: customerUserId,
+          attribution_campaign: attributionCampaign,
           customer_name: validatedCustomer.customer_name || customer_name,
           customer_phone: validatedCustomer.customer_phone || customer_phone,
           delivery_location: validatedCustomer.delivery_location || delivery_location,
@@ -184,11 +188,13 @@ export function createOrderRouter({
         await transaction.run(`
           INSERT INTO orders (
             id, shop_id, customer_name, customer_phone, delivery_location, delivery_note,
-            delivery_slot, payment_method_preference, total_amount, created_at, status, items, customer_user_id
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            delivery_slot, payment_method_preference, total_amount, created_at, status, items, customer_user_id,
+            attribution_campaign
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [newOrder.id, newOrder.shop_id, newOrder.customer_name, newOrder.customer_phone, newOrder.delivery_location,
           newOrder.delivery_note ?? null, newOrder.delivery_slot ?? null, newOrder.payment_method_preference,
-          newOrder.total_amount, newOrder.created_at, newOrder.status, JSON.stringify(newOrder.items ?? []), newOrder.customer_user_id ?? null]);
+          newOrder.total_amount, newOrder.created_at, newOrder.status, JSON.stringify(newOrder.items ?? []), newOrder.customer_user_id ?? null,
+          newOrder.attribution_campaign ?? null]);
         await transaction.run(
           'INSERT INTO order_whatsapp_tracking (order_id, token_hash, clicked_at) VALUES (?, ?, NULL)',
           [orderId, hashAccessToken(whatsappTrackingToken)],
@@ -200,6 +206,17 @@ export function createOrderRouter({
         update.product.is_available = update.isAvailable;
       }
       orders.unshift(createdOrder);
+      void sendMerchantPush(shop.id, {
+        eventKey: `order-${createdOrder.id}`,
+        category: 'orders',
+        title: 'Nouvelle commande',
+        body: `Une commande de ${createdOrder.total_amount.toLocaleString('fr-FR')} FCFA vient d’arriver.`,
+        url: '/app',
+        tag: `order-${createdOrder.id}`,
+      }).catch((error: unknown) => console.error(`Unable to queue order notification for shop ${shop.id}.`, error));
+      for (const update of stockUpdates) {
+        dispatchStockTransitionPush(shop.id, update.product, update.previousStock, update.stock, `stock-order-${createdOrder.id}-${update.product.id}`);
+      }
       res.json({
         success: true,
         order: createdOrder,

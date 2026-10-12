@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { LoaderCircle, Sparkles } from 'lucide-react';
 import type { Shop } from '../../types';
 import {
+  BOOST_PLACEMENTS,
   BOOST_DURATIONS_DAYS,
   BOOST_MINIMUM_PRODUCT_COUNT,
   BOOST_PRICES,
   getBoostPrice,
+  type BoostPlacement,
 } from '../../utils/boostPricing';
 import { isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
 
@@ -20,10 +22,14 @@ interface MerchantBoost {
   ends_at: string;
   status: 'scheduled' | 'active';
   amount: number;
+  placement: BoostPlacement | 'directory';
+  views: number;
+  whatsapp_clicks: number;
 }
 
 export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurchaseProps) {
   const [duration, setDuration] = useState<(typeof BOOST_DURATIONS_DAYS)[number]>(7);
+  const [placement, setPlacement] = useState<BoostPlacement>('category');
   const [boosts, setBoosts] = useState<MerchantBoost[]>([]);
   const [isKadevPayReady, setIsKadevPayReady] = useState(false);
   const [isPaymentStarting, setIsPaymentStarting] = useState(false);
@@ -90,9 +96,13 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
         const data = await response.json();
         if (data.status === 'paid') {
           const startsAt = data.boost?.starts_at ? new Date(data.boost.starts_at) : null;
+          const activePlacement = data.boost?.placement || placement;
+          const placementLabel = activePlacement === 'home' ? 'sur l’accueil'
+            : activePlacement === 'city' ? 'dans les boutiques de votre ville'
+              : 'en haut de sa catégorie';
           setMessage(startsAt && startsAt.getTime() > Date.now()
-            ? `Boost payé et réservé. Il commencera le ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(startsAt)}.`
-            : 'Boost payé et activé. Il apparaîtra comme sponsorisé dans l’annuaire.');
+            ? `Boost payé et réservé ${placementLabel}. Il commencera le ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(startsAt)}.`
+            : `Boost payé et activé ${placementLabel}.`);
           const boostsResponse = await fetch(`/api/shops/${shop.id}/boosts`, { credentials: 'include' });
           if (boostsResponse.ok) {
             const boostData = await boostsResponse.json();
@@ -122,7 +132,7 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ duration_days: duration }),
+        body: JSON.stringify({ duration_days: duration, placement }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de préparer le paiement du boost.');
@@ -155,18 +165,25 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h4 id="boost-purchase-title" className="flex items-center gap-2 text-sm font-extrabold text-slate-900"><Sparkles className="h-4 w-4 text-amber-600" />Boost sponsorisé</h4>
-          <p className="mt-1 max-w-xl text-xs leading-5 text-slate-600">Votre boutique est mise en avant dans l’annuaire pour 7, 15 ou 30 jours. Si les créneaux de votre ville et catégorie sont complets, le boost payé est réservé au prochain créneau disponible.</p>
+          <p className="mt-1 max-w-xl text-xs leading-5 text-slate-600">Choisissez un emplacement et une durée. Les créneaux complets sont réservés au prochain créneau libre.</p>
         </div>
         {isPro && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-900">−15 % Pro</span>}
       </div>
       {eligible ? (
         <>
+          <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Emplacement du boost">
+            {BOOST_PLACEMENTS.map((value) => (
+              <button key={value} type="button" aria-pressed={placement === value} onClick={() => setPlacement(value)} className={`min-h-10 rounded-lg border px-3 py-2 text-xs font-bold ${placement === value ? 'border-emerald-800 bg-emerald-50 text-emerald-950' : 'border-slate-300 bg-white text-slate-700'}`}>
+                {value === 'home' ? 'Accueil' : value === 'category' ? 'Haut de catégorie' : 'Boutiques de ma ville'}
+              </button>
+            ))}
+          </div>
           <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Durée du boost">
             {BOOST_DURATIONS_DAYS.map((days) => {
               const price = getBoostPrice(days, isPro) ?? BOOST_PRICES[days];
               return (
                 <button key={days} type="button" aria-pressed={duration === days} onClick={() => setDuration(days)} className={`min-h-11 rounded-lg border px-3 py-2 text-xs font-bold ${duration === days ? 'border-emerald-800 bg-emerald-50 text-emerald-950' : 'border-slate-300 bg-white text-slate-700'}`}>
-                  {days} jours · {new Intl.NumberFormat('fr-FR').format(price)} F
+                  {days === 1 ? '24 h' : `${days} jours`} · {new Intl.NumberFormat('fr-FR').format(price)} F
                 </button>
               );
             })}
@@ -187,9 +204,13 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
           const startsAt = new Date(boost.starts_at);
           const endsAt = new Date(boost.ends_at);
           const active = startsAt.getTime() <= Date.now() && endsAt.getTime() > Date.now();
+          const placementLabel = boost.placement === 'home' ? 'Accueil'
+            : boost.placement === 'city' ? 'Ville'
+              : boost.placement === 'directory' ? 'Annuaire'
+                : 'Haut de catégorie';
           return <li key={boost.id} className="flex flex-wrap justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700">
-            <span className="font-bold">{active ? 'Boost actif' : 'Boost réservé'} · {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(startsAt)} – {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(endsAt)}</span>
-            <span>{new Intl.NumberFormat('fr-FR').format(boost.amount)} FCFA</span>
+            <span className="font-bold">{active ? 'Boost actif' : endsAt.getTime() <= Date.now() ? 'Boost terminé' : 'Boost réservé'} · {placementLabel} · {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(startsAt)} – {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(endsAt)}</span>
+            <span className="text-right">{new Intl.NumberFormat('fr-FR').format(boost.amount)} FCFA<br /><span className="text-slate-500">{boost.views} visite(s) consentie(s) · {boost.whatsapp_clicks} clic(s) WhatsApp</span></span>
           </li>;
         })}
       </ul>}

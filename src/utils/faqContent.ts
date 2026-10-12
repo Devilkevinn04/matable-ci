@@ -76,7 +76,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         question: 'Comment fonctionne la mise en avant payante ?',
-        answer: 'Une boutique vérifiée, ouverte et disposant d’au moins 2 produits peut acheter un boost de 7 jours (2 000 FCFA), 15 jours (2 800 FCFA) ou 30 jours (3 000 FCFA). Les boutiques Pro bénéficient de 15 % de réduction. Cinq boosts peuvent se dérouler simultanément par ville et catégorie; si les créneaux sont occupés, votre boost est réservé et commence au premier créneau disponible après confirmation du paiement.',
+        answer: 'Une boutique vérifiée, ouverte et disposant d’au moins 2 produits peut choisir un emplacement (accueil, haut de catégorie ou boutiques de sa ville) et un boost de 24 h (1 000 FCFA), 3 jours (1 500 FCFA) ou 7 jours (2 000 FCFA). Les boutiques Pro bénéficient de 15 % de réduction. Jusqu’à cinq boosts peuvent être actifs simultanément sur l’accueil, par catégorie ou par ville. Si un emplacement est complet, le boost payé est réservé au premier créneau libre. Le bilan affiche les visites consenties de la vitrine et les clics WhatsApp suivis pendant la campagne.',
       },
     ],
   },

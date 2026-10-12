@@ -26,6 +26,9 @@ const migrationVersions = [
   '021_customer_favorites_and_likes',
   '022_customer_reviews_and_reports',
   '023_didit_merchant_verification',
+  '024_analytics_campaign_attribution',
+  '025_boost_placements_and_reminders',
+  '026_merchant_push_notifications',
 ];
 const connectionString = process.env.DATABASE_URL;
 

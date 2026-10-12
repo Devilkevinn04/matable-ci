@@ -56,7 +56,7 @@ const sqliteSchema = `
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, customer_name TEXT NOT NULL,
     customer_phone TEXT NOT NULL, delivery_location TEXT NOT NULL, delivery_note TEXT,
     delivery_slot TEXT, payment_method_preference TEXT, total_amount INTEGER NOT NULL,
-    created_at TEXT NOT NULL, items TEXT, customer_user_id INTEGER
+    created_at TEXT NOT NULL, items TEXT, customer_user_id INTEGER, attribution_campaign TEXT
   );
   CREATE TABLE IF NOT EXISTS order_whatsapp_tracking (
     order_id INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
@@ -199,6 +199,44 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'subscription_expires_at', 'TEXT');
   addColumn('shops', 'whatsapp_subscription_reminders_enabled', 'INTEGER NOT NULL DEFAULT 0');
   addColumn('shops', 'whatsapp_subscription_reminders_consent_at', 'TEXT');
+  connection.exec(`CREATE TABLE IF NOT EXISTS merchant_push_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`);
+  connection.exec('CREATE INDEX IF NOT EXISTS idx_merchant_push_subscriptions_shop ON merchant_push_subscriptions(shop_id)');
+  connection.exec(`CREATE TABLE IF NOT EXISTS merchant_push_deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    event_key TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    attempted_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 1,
+    sent_at TEXT,
+    last_error TEXT,
+    attempted_count INTEGER NOT NULL DEFAULT 0,
+    sent_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (shop_id, event_key)
+  )`);
+  addColumn('merchant_push_deliveries', 'payload_json', "TEXT NOT NULL DEFAULT '{}'");
+  addColumn('merchant_push_deliveries', 'attempted_count', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('merchant_push_deliveries', 'sent_count', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('merchant_push_deliveries', 'failed_count', 'INTEGER NOT NULL DEFAULT 0');
+  connection.exec(`CREATE TABLE IF NOT EXISTS platform_announcements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    url TEXT NOT NULL DEFAULT '/app',
+    created_at TEXT NOT NULL,
+    recipient_count INTEGER NOT NULL DEFAULT 0,
+    sent_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0
+  )`);
   addColumn('subscription_payment_intents', 'payment_type', "TEXT NOT NULL DEFAULT 'subscription'");
   addColumn('subscription_payment_intents', 'subscription_term', "TEXT NOT NULL DEFAULT 'monthly'");
   connection.exec(`CREATE TABLE IF NOT EXISTS shop_boosts (
@@ -207,13 +245,27 @@ function migrateSqlite(connection: Database.Database) {
     payment_intent_id TEXT NOT NULL UNIQUE REFERENCES subscription_payment_intents(id) ON DELETE CASCADE,
     city TEXT NOT NULL,
     category TEXT NOT NULL,
+    placement TEXT NOT NULL DEFAULT 'directory',
     starts_at TEXT NOT NULL,
     ends_at TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending_payment',
     reservation_expires_at TEXT,
     created_at TEXT NOT NULL
   )`);
+  addColumn('shop_boosts', 'placement', "TEXT NOT NULL DEFAULT 'directory'");
   connection.exec('CREATE INDEX IF NOT EXISTS idx_shop_boosts_capacity ON shop_boosts(city, category, status, starts_at, ends_at)');
+  connection.exec('CREATE INDEX IF NOT EXISTS idx_shop_boosts_placement_capacity ON shop_boosts(placement, city, category, status, starts_at, ends_at)');
+  connection.exec(`CREATE TABLE IF NOT EXISTS subscription_reminder_deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    days_before INTEGER NOT NULL,
+    attempted_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 1,
+    sent_at TEXT,
+    UNIQUE (shop_id, expires_at, days_before)
+  )`);
+  addColumn('subscription_reminder_deliveries', 'attempts', 'INTEGER NOT NULL DEFAULT 1');
   if (!hadPublicationStatus) {
     connection.exec(`UPDATE shops SET publication_status = CASE
       WHEN is_active = 0 THEN 'suspended'
@@ -225,6 +277,8 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('orders', 'status', "TEXT DEFAULT 'pending'");
   addColumn('orders', 'customer_user_id', 'INTEGER');
   addColumn('analytics_events', 'source', 'TEXT');
+  addColumn('analytics_events', 'campaign', 'TEXT');
+  addColumn('orders', 'attribution_campaign', 'TEXT');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_shop_created ON subscription_payment_intents(shop_id, created_at DESC)');
   addColumn('products', 'category', 'TEXT');
@@ -291,8 +345,9 @@ const postgresMigrations = [
     customer_phone TEXT NOT NULL, delivery_location TEXT NOT NULL, delivery_note TEXT,
     delivery_slot TEXT, payment_method_preference TEXT, total_amount INTEGER NOT NULL,
     created_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', items JSONB,
-    customer_user_id BIGINT
+    customer_user_id BIGINT, attribution_campaign TEXT
   )`,
+  'ALTER TABLE orders ADD COLUMN IF NOT EXISTS attribution_campaign TEXT',
   `CREATE TABLE IF NOT EXISTS order_whatsapp_tracking (
     order_id INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
     token_hash TEXT NOT NULL UNIQUE, clicked_at TEXT
@@ -311,18 +366,71 @@ const postgresMigrations = [
     payment_intent_id TEXT NOT NULL UNIQUE REFERENCES subscription_payment_intents(id) ON DELETE CASCADE,
     city TEXT NOT NULL,
     category TEXT NOT NULL,
+    placement TEXT NOT NULL DEFAULT 'directory',
     starts_at TEXT NOT NULL,
     ends_at TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending_payment',
     reservation_expires_at TEXT,
     created_at TEXT NOT NULL
   )`,
+  "ALTER TABLE shop_boosts ADD COLUMN IF NOT EXISTS placement TEXT NOT NULL DEFAULT 'directory'",
   'CREATE INDEX IF NOT EXISTS idx_shop_boosts_capacity ON shop_boosts(city, category, status, starts_at, ends_at)',
+  'CREATE INDEX IF NOT EXISTS idx_shop_boosts_placement_capacity ON shop_boosts(placement, city, category, status, starts_at, ends_at)',
+  `CREATE TABLE IF NOT EXISTS subscription_reminder_deliveries (
+    id BIGSERIAL PRIMARY KEY,
+    shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    days_before INTEGER NOT NULL,
+    attempted_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 1,
+    sent_at TEXT,
+    UNIQUE (shop_id, expires_at, days_before)
+  )`,
+  'ALTER TABLE subscription_reminder_deliveries ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 1',
+  `CREATE TABLE IF NOT EXISTS merchant_push_subscriptions (
+    id BIGSERIAL PRIMARY KEY,
+    shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_merchant_push_subscriptions_shop ON merchant_push_subscriptions(shop_id)',
+  `CREATE TABLE IF NOT EXISTS merchant_push_deliveries (
+    id BIGSERIAL PRIMARY KEY,
+    shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    event_key TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    attempted_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 1,
+    sent_at TEXT,
+    last_error TEXT,
+    attempted_count INTEGER NOT NULL DEFAULT 0,
+    sent_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (shop_id, event_key)
+  )`,
+  "ALTER TABLE merchant_push_deliveries ADD COLUMN IF NOT EXISTS payload_json TEXT NOT NULL DEFAULT '{}'",
+  'ALTER TABLE merchant_push_deliveries ADD COLUMN IF NOT EXISTS attempted_count INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE merchant_push_deliveries ADD COLUMN IF NOT EXISTS sent_count INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE merchant_push_deliveries ADD COLUMN IF NOT EXISTS failed_count INTEGER NOT NULL DEFAULT 0',
+  `CREATE TABLE IF NOT EXISTS platform_announcements (
+    id BIGSERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    url TEXT NOT NULL DEFAULT '/app',
+    created_at TEXT NOT NULL,
+    recipient_count INTEGER NOT NULL DEFAULT 0,
+    sent_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0
+  )`,
   `CREATE TABLE IF NOT EXISTS analytics_events (
     id BIGSERIAL PRIMARY KEY, shop_id INTEGER, event_type TEXT NOT NULL,
-    session_id TEXT NOT NULL, path TEXT, source TEXT, created_at TEXT NOT NULL
+    session_id TEXT NOT NULL, path TEXT, source TEXT, campaign TEXT, created_at TEXT NOT NULL
   )`,
   'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS source TEXT',
+  'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS campaign TEXT',
   `CREATE TABLE IF NOT EXISTS platform_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1), maintenance_enabled INTEGER NOT NULL DEFAULT 0,
     maintenance_message TEXT NOT NULL DEFAULT 'Le service revient bientôt. Merci de votre patience.',

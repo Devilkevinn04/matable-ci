@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Clock, Download, Eye, Filter, Search, Star } from 'lucide-react';
+import { Clock, Download, Eye, Filter, Search, Star, Trash2 } from 'lucide-react';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
 import type { AdminShopItem } from './adminDashboardTypes';
 
@@ -17,6 +17,7 @@ interface AdminShopListProps {
   featuredActionShopId: number | null;
   onSetFeatured: (shopId: number, days: number) => void;
   onToggleActive: (shopId: number) => void;
+  onRequestDelete: (shop: Pick<AdminShopItem, 'id' | 'name' | 'slug'>) => void;
 }
 
 export function AdminShopList({
@@ -33,6 +34,7 @@ export function AdminShopList({
   featuredActionShopId,
   onSetFeatured,
   onToggleActive,
+  onRequestDelete,
 }: AdminShopListProps) {
   return (
     <>
@@ -136,6 +138,9 @@ export function AdminShopList({
                   </select>
                   <button onClick={() => onToggleActive(shop.id)} className={`rounded-xl border px-3 py-2 text-xs font-extrabold ${shop.is_active ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
                     {shop.is_active ? '● ON' : '○ OFF'}
+                  </button>
+                  <button type="button" onClick={() => onRequestDelete({ id: shop.id, name: shop.name, slug: shop.slug })} aria-label={`Supprimer définitivement ${shop.name}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-extrabold text-rose-800 hover:bg-rose-50">
+                    <Trash2 className="h-4 w-4" />Supprimer
                   </button>
                 </div>
               </motion.div>

@@ -318,7 +318,7 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   }
 });
 
-test('merchant trial is Standard and does not grant Pro analytics', async () => {
+test('merchant trial provides basic analytics limited to seven days', async () => {
   const created = await fetch(`${BASE_URL}/api/shops`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -351,7 +351,9 @@ test('merchant trial is Standard and does not grant Pro analytics', async () => 
   const analytics = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/analytics?days=30`, {
     headers: { Cookie: merchantCookie },
   });
-  assert.equal(analytics.status, 403);
+  assert.equal(analytics.status, 200);
+  const analyticsPayload = await analytics.json();
+  assert.equal(analyticsPayload.days, 7);
 });
 
 test('admin can review and extend expiring trials with a durable audit entry', async () => {
@@ -493,6 +495,31 @@ test('admin can review and extend expiring trials with a durable audit entry', a
     body: JSON.stringify({ days: 1, expected_trial_end: finalExtension.trial_end }),
   });
   assert.equal(extensionAtCap.status, 409);
+
+  testDb = new Database(TEST_DB_PATH);
+  try {
+    testDb.prepare(`UPDATE shops SET subscription_status = 'active', subscription_expires_at = NULL WHERE id = ?`)
+      .run(createdPayload.shop.id);
+  } finally {
+    testDb.close();
+  }
+  const manualExpiryResponse = await fetch(`${BASE_URL}/api/admin/subscriptions/${createdPayload.shop.id}/set-expiry`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: JSON.stringify({
+      expiry_date: '2026-11-30',
+      expected_subscription_expires_at: null,
+      reason: 'Justificatif de paiement vérifié.',
+    }),
+  });
+  const manualExpiry = await manualExpiryResponse.json();
+  assert.equal(manualExpiryResponse.status, 200, JSON.stringify(manualExpiry));
+  assert.equal(manualExpiry.subscription_expires_at, '2026-11-30T23:59:59.999Z');
+  const expiryAudit = await fetch(`${BASE_URL}/api/admin/subscriptions`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
+  assert.ok(expiryAudit.audit_logs.some((entry: { action: string; shop_id: number; details: string }) =>
+    entry.action === 'subscription_expiry_corrected'
+    && entry.shop_id === createdPayload.shop.id
+    && entry.details.includes('Justificatif de paiement vérifié.')));
 
   const consentDisabled = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-reminder-consent`, {
     method: 'PATCH',

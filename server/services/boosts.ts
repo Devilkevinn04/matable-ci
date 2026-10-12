@@ -1,13 +1,14 @@
 import {
   BOOST_DURATIONS_DAYS,
   BOOST_MINIMUM_PRODUCT_COUNT,
-  MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY,
+  MAX_SIMULTANEOUS_BOOSTS_PER_PLACEMENT_SCOPE,
+  type BoostPlacement,
 } from '../../src/utils/boostPricing.ts';
 
 export {
   BOOST_DURATIONS_DAYS,
   BOOST_MINIMUM_PRODUCT_COUNT,
-  MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY,
+  MAX_SIMULTANEOUS_BOOSTS_PER_PLACEMENT_SCOPE,
 } from '../../src/utils/boostPricing.ts';
 
 export interface BoostInterval {
@@ -15,11 +16,26 @@ export interface BoostInterval {
   ends_at: string;
 }
 
+export function getBoostCapacityScope(placement: BoostPlacement | 'directory', city: string, category: string) {
+  if (placement === 'home') return { lockKey: 'boost:placement:home', where: 'placement = ?', params: ['home'] };
+  if (placement === 'category') {
+    return { lockKey: `boost:placement:category:${category}`, where: 'placement = ? AND category = ?', params: ['category', category] };
+  }
+  if (placement === 'city') {
+    return { lockKey: `boost:placement:city:${city}`, where: 'placement = ? AND city = ?', params: ['city', city] };
+  }
+  return {
+    lockKey: `boost:placement:directory:${city}:${category}`,
+    where: 'placement = ? AND city = ? AND category = ?',
+    params: ['directory', city, category],
+  };
+}
+
 export function findEarliestBoostStart(
   intervals: BoostInterval[],
   durationDays: number,
   now = new Date(),
-  capacity = MAX_SIMULTANEOUS_BOOSTS_PER_CITY_CATEGORY,
+  capacity = MAX_SIMULTANEOUS_BOOSTS_PER_PLACEMENT_SCOPE,
 ): Date {
   const validIntervals = intervals
     .map((interval) => ({ start: Date.parse(interval.starts_at), end: Date.parse(interval.ends_at) }))

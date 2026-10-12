@@ -24,9 +24,12 @@ import {
   ShoppingBag,
   LogOut,
   Flag,
+  UserRound,
+  Trash2,
 } from 'lucide-react';
 import { AdminIdentityVerificationPanel } from './AdminIdentityVerificationPanel';
 import { AdminShopList } from './AdminShopList';
+import { AdminPushAnnouncements } from './AdminPushAnnouncements';
 import {
   audienceSourceLabels,
   formatAudienceChange,
@@ -35,6 +38,7 @@ import {
 } from './adminDashboardTypes';
 import type {
   AdminAnalytics,
+  AdminCustomer,
   AdminContentModeration,
   AdminFinance,
   AdminHealth,
@@ -45,8 +49,51 @@ import type {
   AdminSubscriptions,
 } from './adminDashboardTypes';
 
+const adminOrderTransitions: Record<AdminOrder['status'], AdminOrder['status'][]> = {
+  pending: ['confirmed', 'cancelled'],
+  confirmed: ['preparing', 'delivered', 'cancelled'],
+  preparing: ['ready', 'cancelled'],
+  ready: ['delivered', 'cancelled'],
+  delivered: [],
+  cancelled: ['pending', 'confirmed'],
+  expired: [],
+};
+
 export const AdminDashboard: React.FC = () => {
-  const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'identity' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'moderation'>('overview');
+  const getAdminAuditReason = (details: string) => {
+    try {
+      const parsed: unknown = JSON.parse(details);
+      if (parsed && typeof parsed === 'object' && 'reason' in parsed && typeof parsed.reason === 'string') {
+        return parsed.reason;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  };
+  const getReminderLeadDays = (details: string) => {
+    try {
+      const parsed: unknown = JSON.parse(details);
+      if (parsed && typeof parsed === 'object' && 'days_before' in parsed && typeof parsed.days_before === 'number') {
+        return parsed.days_before;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  };
+  const getReminderFailure = (details: string) => {
+    try {
+      const parsed: unknown = JSON.parse(details);
+      if (parsed && typeof parsed === 'object' && 'error' in parsed && typeof parsed.error === 'string') {
+        return parsed.error;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  };
+  const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'moderation'>('overview');
   const [shops, setShops] = useState<AdminShopItem[]>([]);
   const [adminKey, setAdminKey] = useState('');
   const [showAdminKey, setShowAdminKey] = useState(false);
@@ -58,8 +105,16 @@ export const AdminDashboard: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [sortBy, setSortBy] = useState<'sales' | 'orders' | 'name'>('sales');
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [deleteShopTarget, setDeleteShopTarget] = useState<Pick<AdminShopItem, 'id' | 'name' | 'slug'> | null>(null);
+  const [deleteShopConfirmation, setDeleteShopConfirmation] = useState('');
+  const [deleteShopReason, setDeleteShopReason] = useState('');
+  const [deleteShopAcknowledged, setDeleteShopAcknowledged] = useState(false);
+  const [deleteShopLoading, setDeleteShopLoading] = useState(false);
+  const [deleteShopError, setDeleteShopError] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
   const [analyticsDays, setAnalyticsDays] = useState(30);
+  const [audienceShopSearch, setAudienceShopSearch] = useState('');
+  const [audienceShopSort, setAudienceShopSort] = useState<'views' | 'sessions' | 'orders' | 'sales' | 'conversion' | 'name'>('views');
   const [finance, setFinance] = useState<AdminFinance | null>(null);
   const [financeDays, setFinanceDays] = useState(90);
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
@@ -70,7 +125,17 @@ export const AdminDashboard: React.FC = () => {
   const [subscriptionSearch, setSubscriptionSearch] = useState('');
   const [trialExtensionDays, setTrialExtensionDays] = useState(7);
   const [subscriptionActionShopId, setSubscriptionActionShopId] = useState<number | null>(null);
+  const [expiryDrafts, setExpiryDrafts] = useState<Record<number, { date: string; reason: string }>>({});
   const [adminOrders, setAdminOrders] = useState<AdminOrder[]>([]);
+  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
+  const [orderTotal, setOrderTotal] = useState(0);
+  const [orderPage, setOrderPage] = useState(0);
+  const [orderActionLoadingId, setOrderActionLoadingId] = useState<number | null>(null);
+  const [adminCustomers, setAdminCustomers] = useState<AdminCustomer[]>([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerTotal, setCustomerTotal] = useState(0);
+  const [customerPage, setCustomerPage] = useState(0);
+  const [customerLoading, setCustomerLoading] = useState(false);
   const [adminHealth, setAdminHealth] = useState<AdminHealth | null>(null);
   const [maintenanceMode, setMaintenanceMode] = useState<AdminMaintenance | null>(null);
   const [maintenanceEnabledDraft, setMaintenanceEnabledDraft] = useState(false);
@@ -162,6 +227,71 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const fetchAdminCustomers = async () => {
+    try {
+      setCustomerLoading(true);
+      const params = new URLSearchParams({ limit: '100', offset: String(customerPage * 100), search: customerSearch });
+      const response = await fetch(`/api/admin/customers?${params}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de charger les clients.');
+      setAdminCustomers(data.customers || []);
+      setCustomerTotal(Number(data.total || 0));
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Impossible de charger les clients.');
+    } finally {
+      setCustomerLoading(false);
+    }
+  };
+
+  const fetchAdminOrders = async () => {
+    try {
+      const params = new URLSearchParams({
+        limit: '100',
+        offset: String(orderPage * 100),
+        search: orderSearch.trim(),
+        status: orderStatusFilter,
+      });
+      const response = await fetch(`/api/admin/orders?${params}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de charger les commandes.');
+      setAdminOrders(data.orders || []);
+      setOrderTotal(Number(data.total || 0));
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Impossible de charger les commandes.');
+    }
+  };
+
+  const updateOrderStatus = async (order: AdminOrder, status: AdminOrder['status']) => {
+    if (!adminOrderTransitions[order.status].includes(status)) {
+      showNotice(`Transition non autorisée : ${order.status} → ${status}.`);
+      return;
+    }
+    const reason = window.prompt(`Motif obligatoire pour la commande #${order.id} (${order.status} → ${status}) :`);
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      showNotice('Saisissez un motif d’au moins 3 caractères.');
+      return;
+    }
+    if (!window.confirm(`Confirmer le changement de statut de la commande #${order.id} ? Le stock sera ajusté selon le workflow et le motif journalisé.`)) return;
+    try {
+      setOrderActionLoadingId(order.id);
+      const response = await fetch(`/api/shops/${order.shop_id}/orders/${order.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, reason }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de modifier cette commande.');
+      showNotice(`Commande #${order.id} mise à jour.`);
+      await fetchOperations();
+      await fetchAdminOrders();
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Impossible de modifier cette commande.');
+    } finally {
+      setOrderActionLoadingId(null);
+    }
+  };
+
   const moderateContent = async (kind: 'reviews' | 'reports', id: number, status: string) => {
     try {
       const response = await fetch(`/api/admin/content-moderation/${kind}/${id}`, {
@@ -246,6 +376,16 @@ export const AdminDashboard: React.FC = () => {
     if (isAuthenticated && adminView === 'moderation') void fetchContentModeration();
   }, [isAuthenticated, adminView]);
 
+  useEffect(() => {
+    if (isAuthenticated && adminView === 'customers') void fetchAdminCustomers();
+  }, [isAuthenticated, adminView, customerSearch, customerPage]);
+
+  useEffect(() => {
+    if (!isAuthenticated || adminView !== 'orders') return;
+    const timer = window.setTimeout(() => { void fetchAdminOrders(); }, 250);
+    return () => window.clearTimeout(timer);
+  }, [isAuthenticated, adminView, orderSearch, orderStatusFilter, orderPage]);
+
   const handleAdminLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     setAuthError(null);
@@ -320,6 +460,36 @@ export const AdminDashboard: React.FC = () => {
       await fetchSubscriptions();
     } catch (error) {
       showNotice(error instanceof Error ? error.message : 'Impossible de synchroniser les échéances.');
+    } finally {
+      setSubscriptionActionShopId(null);
+    }
+  };
+
+  const handleSetSubscriptionExpiry = async (shop: AdminSubscriptionShop) => {
+    const draft = expiryDrafts[shop.id];
+    if (!draft?.date || draft.reason.trim().length < 3) {
+      showNotice('Choisissez une date et indiquez un motif d’au moins 3 caractères.');
+      return;
+    }
+    if (!window.confirm(`Enregistrer le ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(`${draft.date}T12:00:00`))} comme échéance de ${shop.name} ? Vérifiez au préalable le paiement et la période couverte. Cette opération sera journalisée.`)) return;
+    setSubscriptionActionShopId(shop.id);
+    try {
+      const response = await fetch(`/api/admin/subscriptions/${shop.id}/set-expiry`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          expiry_date: draft.date,
+          expected_subscription_expires_at: shop.subscription_expires_at,
+          reason: draft.reason,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de corriger l’échéance.');
+      setExpiryDrafts((previous) => ({ ...previous, [shop.id]: { date: '', reason: '' } }));
+      showNotice(`Échéance corrigée pour ${shop.name}.`);
+      await fetchSubscriptions();
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Impossible de corriger l’échéance.');
     } finally {
       setSubscriptionActionShopId(null);
     }
@@ -408,9 +578,22 @@ export const AdminDashboard: React.FC = () => {
 
   // Manual ON/OFF toggle
   const handleToggleActive = async (shopId: number) => {
+    const shop = shops.find((item) => item.id === shopId);
+    if (!shop) return;
+    const reason = window.prompt(shop.is_active
+      ? `Motif obligatoire pour suspendre ${shop.name} :`
+      : `Motif obligatoire pour réactiver ${shop.name} :`);
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      showNotice('Saisissez un motif d’au moins 3 caractères.');
+      return;
+    }
+    if (!window.confirm(`${shop.is_active ? 'Suspendre' : 'Réactiver'} la boutique ${shop.name} ? Le motif sera conservé dans le journal admin.`)) return;
     try {
       const res = await fetch(`/api/admin/shops/${shopId}/toggle-active`, {
         method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expected_is_active: shop.is_active, reason }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -418,12 +601,39 @@ export const AdminDashboard: React.FC = () => {
           prev.map(s => (s.id === shopId ? { ...s, ...data.shop } : s))
         );
         await fetchSubscriptions();
-        showNotice('Statut boutique mis à jour.');
+        showNotice(shop.is_active ? 'Boutique suspendue avec motif enregistré.' : 'Boutique réactivée avec motif enregistré.');
       } else {
         showNotice(data.error || 'Impossible de mettre à jour le statut.');
       }
     } catch {
       showNotice('Impossible de contacter le serveur.');
+    }
+  };
+
+  const handleDeleteShop = async () => {
+    if (!deleteShopTarget || deleteShopConfirmation.trim() !== deleteShopTarget.slug || deleteShopReason.trim().length < 3 || !deleteShopAcknowledged) return;
+    setDeleteShopLoading(true);
+    setDeleteShopError(null);
+    try {
+      const response = await fetch(`/api/admin/shops/${deleteShopTarget.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmation_slug: deleteShopConfirmation.trim(), reason: deleteShopReason }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de supprimer cette boutique.');
+      setShops((current) => current.filter((shop) => shop.id !== deleteShopTarget.id));
+      setDeleteShopTarget(null);
+      setDeleteShopConfirmation('');
+      setDeleteShopReason('');
+      setDeleteShopAcknowledged(false);
+      setDeleteShopError(null);
+      await Promise.all([fetchAnalytics(analyticsDays), fetchSubscriptions(), fetchAdminOrders()]);
+      showNotice('Boutique supprimée définitivement. L’action est inscrite au journal admin.');
+    } catch (error) {
+      setDeleteShopError(error instanceof Error ? error.message : 'Impossible de supprimer cette boutique.');
+    } finally {
+      setDeleteShopLoading(false);
     }
   };
 
@@ -481,11 +691,7 @@ export const AdminDashboard: React.FC = () => {
     if (sortBy === 'orders') return b.orders_count - a.orders_count;
     return a.name.localeCompare(b.name);
   });
-  const filteredAdminOrders = adminOrders.filter((order) => {
-    const query = orderSearch.trim().toLowerCase();
-    return !query || [order.shop_name, order.customer_name, order.customer_phone, String(order.id)]
-      .some((value) => value.toLowerCase().includes(query));
-  });
+  const filteredAdminOrders = adminOrders;
   const filteredFinancePayments = (finance?.payments || []).filter((payment) => {
     const query = paymentSearch.trim().toLowerCase();
     const matchesQuery = !query || [payment.shop_name, payment.provider_reference || '', payment.id]
@@ -513,9 +719,28 @@ export const AdminDashboard: React.FC = () => {
   ])].sort((left, right) => left - right);
 
   const activeShopsCount = shops.filter(s => s.is_active).length;
-  const totalSales = shops.reduce((sum, shop) => sum + shop.total_sales, 0);
-  const totalOrders = shops.reduce((sum, shop) => sum + shop.orders_count, 0);
-  const averageOrderValue = totalOrders ? Math.round(totalSales / totalOrders) : 0;
+  const overviewDaily = analytics?.daily || [];
+  const overviewChartMaxSales = Math.max(1, ...overviewDaily.map((day) => day.sales));
+  const overviewChartX = (index: number) => 24 + index * (672 / Math.max(overviewDaily.length - 1, 1));
+  const overviewSalesY = (sales: number) => 182 - (sales / overviewChartMaxSales) * 150;
+  const overviewSalesPoints = overviewDaily
+    .map((day, index) => `${overviewChartX(index)},${overviewSalesY(day.sales)}`)
+    .join(' ');
+  const overviewSalesArea = overviewDaily.length
+    ? `M ${overviewChartX(0)},182 L ${overviewDaily.map((day, index) => `${overviewChartX(index)},${overviewSalesY(day.sales)}`).join(' L ')} L ${overviewChartX(overviewDaily.length - 1)},182 Z`
+    : '';
+  const overviewTickDays = overviewDaily.filter((_, index) => index % Math.max(1, Math.ceil(overviewDaily.length / 6)) === 0 || index === overviewDaily.length - 1);
+  const overviewTopShops = [...(analytics?.by_shop || [])].sort((left, right) => right.sales - left.sales).slice(0, 5);
+  const filteredAudienceShops = (analytics?.by_shop || [])
+    .filter((shop) => shop.shop_name.toLocaleLowerCase('fr').includes(audienceShopSearch.trim().toLocaleLowerCase('fr')))
+    .sort((left, right) => {
+      if (audienceShopSort === 'name') return left.shop_name.localeCompare(right.shop_name, 'fr');
+      const field = audienceShopSort === 'views' ? 'page_views'
+        : audienceShopSort === 'sessions' ? 'unique_visitors'
+          : audienceShopSort === 'orders' ? 'orders'
+            : audienceShopSort === 'sales' ? 'sales' : 'conversion_rate';
+      return right[field] - left[field];
+    });
 
   const exportShopsCsv = () => {
     const headers = ['Boutique', 'Slug', 'Statut', 'Valeur commandes FCFA', 'Commandes', 'Panier moyen', 'Produits'];
@@ -725,6 +950,7 @@ export const AdminDashboard: React.FC = () => {
             { id: 'overview' as const, label: 'Accueil', icon: Activity },
             { id: 'shops' as const, label: `Boutiques (${shops.length})`, icon: Store },
             { id: 'orders' as const, label: 'Commandes', icon: ShoppingBag },
+            { id: 'customers' as const, label: `Clients (${customerTotal})`, icon: UserRound },
             { id: 'moderation' as const, label: 'Avis & signalements', icon: Flag },
             { id: 'identity' as const, label: `Identité (${pendingVerificationShops.length})`, icon: ShieldCheck },
             { id: 'audience' as const, label: 'Audience', icon: BarChart3 },
@@ -741,24 +967,88 @@ export const AdminDashboard: React.FC = () => {
         <div className="min-w-0 space-y-6">
         {adminView === 'overview' && (
           <section aria-labelledby="admin-overview-title" className="space-y-4">
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <div><p className="text-xs font-bold uppercase text-[#176b55]">Accueil</p><h2 id="admin-overview-title" className="mt-1 text-xl font-black text-[#211712]">Vue d’ensemble</h2></div>
-              <p className="text-xs text-slate-500">Actualisation automatique toutes les 30 secondes</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div><p className="text-xs font-bold uppercase tracking-[0.12em] text-[#176b55]">Centre de pilotage</p><h2 id="admin-overview-title" className="mt-1 text-2xl font-black text-[#211712]">Vue d’ensemble</h2><p className="mt-1 text-xs text-slate-500">{analytics ? `Données du ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${analytics.daily[0]?.date || new Date().toISOString().slice(0, 10)}T12:00:00`))} au ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${analytics.daily.at(-1)?.date || new Date().toISOString().slice(0, 10)}T12:00:00`))} · actualisation automatique toutes les 30 secondes` : 'Chargement des données de la période…'}</p></div>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="sr-only" htmlFor="admin-overview-days">Période des indicateurs</label>
+                <select id="admin-overview-days" value={analyticsDays} onChange={(event) => { const days = Number(event.target.value); setAnalyticsDays(days); void fetchAnalytics(days); }} className="min-h-10 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 sm:flex-none">
+                  <option value={7}>7 derniers jours</option>
+                  <option value={30}>30 derniers jours</option>
+                  <option value={90}>90 derniers jours</option>
+                </select>
+                <button type="button" onClick={() => void fetchAnalytics(analyticsDays)} className="min-h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Actualiser les chiffres</button>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              {[{ label: 'Boutiques actives', value: `${activeShopsCount}/${shops.length}`, tone: 'bg-emerald-50 border-emerald-100 text-emerald-900' }, { label: 'Valeur des commandes', value: `${new Intl.NumberFormat('fr-FR').format(totalSales)} F`, tone: 'bg-sky-50 border-sky-100 text-sky-900' }, { label: 'Commandes', value: totalOrders, tone: 'bg-slate-100 border-slate-200 text-slate-900' }, { label: 'Panier moyen', value: `${new Intl.NumberFormat('fr-FR').format(averageOrderValue)} F`, tone: 'bg-amber-50 border-amber-100 text-amber-900' }].map((item, index) => (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+              {[
+                { label: 'Boutiques actives', value: `${activeShopsCount}/${shops.length}`, comparison: `${shops.length ? Math.round((activeShopsCount / shops.length) * 100) : 0}% du réseau`, tone: 'border-emerald-100 bg-emerald-50' },
+                { label: 'Montant des commandes', value: analytics ? `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F` : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.sales, analytics.previous.sales)} vs période précédente` : 'Chargement…', tone: 'border-sky-100 bg-sky-50' },
+                { label: 'Commandes', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.orders) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.orders, analytics.previous.orders)} vs période précédente` : 'Chargement…', tone: 'border-slate-200 bg-slate-50' },
+                { label: 'Visites consenties', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.page_views) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.page_views, analytics.previous.page_views)} vs période précédente` : 'Chargement…', tone: 'border-violet-100 bg-violet-50' },
+                { label: 'Sessions uniques', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.unique_visitors) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.unique_visitors, analytics.previous.unique_visitors)} vs période précédente` : 'Chargement…', tone: 'border-indigo-100 bg-indigo-50' },
+                { label: 'Conversion visites → commandes', value: analytics ? `${analytics.totals.conversion_rate.toLocaleString('fr-FR')}%` : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.conversion_rate, analytics.previous.conversion_rate, true)} vs période précédente` : 'Chargement…', tone: 'border-amber-100 bg-amber-50' },
+              ].map((item, index) => (
                 <motion.div
                   key={item.label}
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.04, duration: 0.3 }}
-                  className={`rounded-2xl border p-3 shadow-sm ${item.tone}`}
+                  className={`min-w-0 rounded-2xl border p-3 shadow-sm ${item.tone}`}
                 >
-                  <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600">{item.label}</span>
-                  <span className="mt-2 block text-xl font-black text-slate-900">{item.value}</span>
+                  <span className="block min-h-8 text-[10px] font-bold uppercase leading-4 tracking-[0.08em] text-slate-600">{item.label}</span>
+                  <span className="mt-2 block break-words text-lg font-black text-slate-900 sm:text-xl">{item.value}</span>
+                  <span className="mt-1 block text-[10px] leading-4 text-slate-500">{item.comparison}</span>
                 </motion.div>
               ))}
             </div>
+            <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-600">Les montants agrègent les commandes hors annulation et expiration : ce n’est pas un relevé des paiements réellement encaissés. Les visites ne comptent que les sessions ayant accepté les statistiques.</p>
+            {analytics && (
+              <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]">
+                <section aria-labelledby="admin-sales-chart-title" className="min-w-0 chart-panel p-4 md:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div><h3 id="admin-sales-chart-title" className="text-sm font-black text-slate-900">Valeur des commandes par jour</h3><p className="mt-1 text-xs text-slate-500">{analytics.days} jours · commandes non annulées ni expirées</p></div>
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-600"><span className="h-2.5 w-2.5 rounded-full bg-emerald-700" />Montant des commandes · FCFA</span>
+                  </div>
+                  {overviewDaily.length === 0 ? <p className="py-10 text-center text-sm text-slate-500">Aucune journée dans cette période.</p> : (
+                    <>
+                      <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-2">
+                        <div className="flex h-48 flex-col justify-between pt-6 pb-9 text-right text-[9px] tabular-nums text-slate-400">
+                          {[1, 0.75, 0.5, 0.25, 0].map((ratio) => <span key={ratio} title={`${new Intl.NumberFormat('fr-FR').format(overviewChartMaxSales * ratio)} F`}>{new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(overviewChartMaxSales * ratio)} F</span>)}
+                        </div>
+                        <div className="relative h-48 min-w-0 rounded-xl border border-slate-200 bg-white px-1 py-1">
+                          <svg role="img" aria-label={`Valeur des commandes en FCFA par jour sur ${analytics.days} jours`} viewBox="0 0 720 210" preserveAspectRatio="none" className="h-full w-full overflow-visible">
+                            {[32, 69.5, 107, 144.5, 182].map((y) => <line key={y} x1="24" x2="696" y1={y} y2={y} stroke="#e2e8f0" strokeWidth="1" />)}
+                            {overviewSalesArea && <path d={overviewSalesArea} fill="url(#admin-sales-fill)" />}
+                            <defs><linearGradient id="admin-sales-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#047857" stopOpacity="0.22" /><stop offset="100%" stopColor="#047857" stopOpacity="0.015" /></linearGradient></defs>
+                            <polyline points={overviewSalesPoints} fill="none" stroke="#047857" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                            {overviewDaily.map((day, index) => <circle key={`sales-${day.date}`} cx={overviewChartX(index)} cy={overviewSalesY(day.sales)} r="2.2" fill="#047857"><title>{new Date(`${day.date}T12:00:00`).toLocaleDateString('fr-FR')} · {new Intl.NumberFormat('fr-FR').format(day.sales)} FCFA · {day.orders} commande{day.orders === 1 ? '' : 's'}</title></circle>)}
+                          </svg>
+                          <div className="absolute inset-x-2 bottom-1 flex justify-between text-[9px] tabular-nums text-slate-400">{overviewTickDays.map((day) => <span key={day.date}>{new Date(`${day.date}T12:00:00`).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</span>)}</div>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        <div className="rounded-lg bg-slate-50 px-3 py-2"><span className="block text-[10px] text-slate-500">Montant total</span><strong className="mt-1 block text-sm tabular-nums text-slate-900">{new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F</strong></div>
+                        <div className="rounded-lg bg-slate-50 px-3 py-2"><span className="block text-[10px] text-slate-500">Commandes comptées</span><strong className="mt-1 block text-sm tabular-nums text-slate-900">{new Intl.NumberFormat('fr-FR').format(analytics.totals.orders)}</strong></div>
+                        <div className="col-span-2 rounded-lg bg-slate-50 px-3 py-2 sm:col-span-1"><span className="block text-[10px] text-slate-500">Moyenne par commande</span><strong className="mt-1 block text-sm tabular-nums text-slate-900">{new Intl.NumberFormat('fr-FR').format(analytics.totals.orders ? Math.round(analytics.totals.sales / analytics.totals.orders) : 0)} F</strong></div>
+                      </div>
+                      <details className="mt-3 rounded-xl border border-slate-200 bg-white">
+                        <summary className="cursor-pointer px-3 py-2.5 text-xs font-bold text-slate-700">Voir les valeurs exactes par jour ({overviewDaily.length} jours)</summary>
+                        <div className="max-h-64 overflow-auto border-t border-slate-200">
+                          <table className="w-full min-w-[520px] text-left text-xs">
+                            <thead className="sticky top-0 bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="px-3 py-2">Date</th><th className="px-3 py-2 text-right">Commandes</th><th className="px-3 py-2 text-right">Valeur (FCFA)</th></tr></thead>
+                            <tbody>{overviewDaily.map((day) => <tr key={day.date} className="border-t border-slate-100"><th scope="row" className="px-3 py-2 font-medium text-slate-700">{new Date(`${day.date}T12:00:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' })}</th><td className="px-3 py-2 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.orders)}</td><td className="px-3 py-2 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.sales)}</td></tr>)}</tbody>
+                          </table>
+                        </div>
+                      </details>
+                    </>
+                  )}
+                </section>
+                <section aria-labelledby="admin-top-shops-title" className="min-w-0 chart-panel p-4 md:p-5">
+                  <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3"><div><h3 id="admin-top-shops-title" className="text-sm font-black text-slate-900">Boutiques par montant commandé</h3><p className="mt-1 text-xs text-slate-500">Classement sur la même période</p></div><button type="button" onClick={() => setAdminView('shops')} className="shrink-0 text-xs font-bold text-sky-800 underline underline-offset-2">Toutes</button></div>
+                  {overviewTopShops.length === 0 || overviewTopShops.every((shop) => shop.sales === 0) ? <p className="py-6 text-sm text-slate-500">Aucun montant de commande sur cette période.</p> : <div className="mt-2 divide-y divide-slate-100">{overviewTopShops.filter((shop) => shop.sales > 0).map((shop, index) => <div key={shop.shop_id} className="py-3"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-2"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-50 text-[10px] font-black text-emerald-800">{index + 1}</span><div className="min-w-0"><p className="truncate text-xs font-bold text-slate-800">{shop.shop_name}</p><p className="mt-1 text-[10px] text-slate-500">{shop.orders} commande{shop.orders === 1 ? '' : 's'} · {shop.unique_visitors} session{shop.unique_visitors === 1 ? '' : 's'} unique{shop.unique_visitors === 1 ? '' : 's'}</p></div></div><strong className="shrink-0 text-xs tabular-nums text-slate-900">{new Intl.NumberFormat('fr-FR').format(shop.sales)} F</strong></div><div className="ml-8 mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-700" style={{ width: `${Math.min(100, shop.sales / Math.max(1, overviewTopShops[0]?.sales || 1) * 100)}%` }} /></div></div>)}</div>}
+                </section>
+              </div>
+            )}
             <div className="grid gap-4 lg:grid-cols-2">
               <section aria-labelledby="admin-follow-up-title" className="min-w-0 chart-panel p-4 md:p-5">
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3"><div className="min-w-0"><h3 id="admin-follow-up-title" className="text-sm font-black text-slate-900">Dossiers à suivre</h3><p className="mt-1 text-xs text-slate-500">Vérifications nécessitant une revue.</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">{pendingVerificationShops.length}</span></div>
@@ -780,17 +1070,62 @@ export const AdminDashboard: React.FC = () => {
         {adminView === 'orders' && (
           <section aria-labelledby="admin-orders-title" className="chart-panel p-4 md:p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div><h2 id="admin-orders-title" className="text-sm font-black text-slate-900">Commandes récentes</h2><p className="mt-1 text-xs text-slate-500">Les 50 dernières commandes chargées par le service.</p></div>
+              <div><h2 id="admin-orders-title" className="text-sm font-black text-slate-900">Gestion des commandes</h2><p className="mt-1 text-xs text-slate-500">{orderTotal} commande(s) correspondante(s), affichage par pages de 100.</p></div>
               <button type="button" onClick={() => exportOperationsCsv(`matable-commandes-${new Date().toISOString().slice(0, 10)}.csv`, ['ID', 'Boutique', 'Client', 'Téléphone', 'Montant', 'Statut', 'Date'], filteredAdminOrders.map(order => [order.id, order.shop_name, order.customer_name, order.customer_phone, order.total_amount, order.status, order.created_at]))} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
             </div>
-            <label className="relative mt-4 block"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input type="search" value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Rechercher boutique, client, téléphone ou numéro" className="min-h-10 w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-sky-700" /></label>
+            <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
+              <label className="relative block"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input type="search" value={orderSearch} onChange={(event) => { setOrderSearch(event.target.value); setOrderPage(0); }} placeholder="Rechercher boutique, client, téléphone ou numéro" className="min-h-10 w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-sky-700" /></label>
+              <select value={orderStatusFilter} onChange={(event) => { setOrderStatusFilter(event.target.value); setOrderPage(0); }} aria-label="Filtrer les commandes par statut" className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                <option value="all">Tous les statuts</option>
+                {['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'expired'].map((status) => <option key={status} value={status}>{status}</option>)}
+              </select>
+            </div>
             <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
               {filteredAdminOrders.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucune commande correspondante.</p> : filteredAdminOrders.map((order) => (
                 <article key={order.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0"><h3 className="truncate text-sm font-bold text-slate-900">#{order.id} · {order.shop_name}</h3><p className="mt-1 truncate text-xs text-slate-600">{order.customer_name} · {order.items_count} article(s)</p><p className="mt-1 text-xs text-slate-500">{order.customer_phone} · {new Date(order.created_at).toLocaleString('fr-FR')}</p></div>
-                  <div className="flex shrink-0 items-center justify-between gap-4 sm:justify-end"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{order.status}</span><strong className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} FCFA</strong></div>
+                  <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 sm:justify-end"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{order.status}</span><strong className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} FCFA</strong>
+                    {adminOrderTransitions[order.status].length > 0 && (
+                      <label className="sr-only" htmlFor={`order-status-${order.id}`}>Modifier le statut de la commande {order.id}</label>
+                    )}
+                    {adminOrderTransitions[order.status].length > 0 && (
+                      <select id={`order-status-${order.id}`} defaultValue="" disabled={orderActionLoadingId === order.id} onChange={(event) => { const status = event.target.value as AdminOrder['status']; if (status) void updateOrderStatus(order, status); event.currentTarget.value = ''; }} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-bold text-slate-700 disabled:opacity-50">
+                        <option value="" disabled>Changer le statut…</option>
+                        {adminOrderTransitions[order.status].map((status) => <option key={status} value={status}>{status}</option>)}
+                      </select>
+                    )}
+                  </div>
                 </article>
               ))}
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <button type="button" disabled={orderPage === 0} onClick={() => setOrderPage((page) => page - 1)} className="min-h-9 rounded-lg border border-slate-300 px-3 py-1 text-xs font-bold disabled:opacity-40">Précédent</button>
+              <span className="text-xs text-slate-500">Page {orderPage + 1} / {Math.max(1, Math.ceil(orderTotal / 100))}</span>
+              <button type="button" disabled={(orderPage + 1) * 100 >= orderTotal} onClick={() => setOrderPage((page) => page + 1)} className="min-h-9 rounded-lg border border-slate-300 px-3 py-1 text-xs font-bold disabled:opacity-40">Suivant</button>
+            </div>
+          </section>
+        )}
+
+        {adminView === 'customers' && (
+          <section aria-labelledby="admin-customers-title" className="chart-panel p-4 md:p-5">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div><h2 id="admin-customers-title" className="text-sm font-black text-slate-900">Répertoire clients</h2><p className="mt-1 text-xs text-slate-500">{customerTotal} compte(s) · les commandes invités peuvent ne pas être liées à un compte.</p></div>
+              <label className="relative block w-full sm:max-w-md"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input type="search" value={customerSearch} onChange={(event) => { setCustomerSearch(event.target.value); setCustomerPage(0); }} placeholder="Rechercher nom, téléphone ou e-mail" className="min-h-10 w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-sky-700" /></label>
+            </div>
+            {customerLoading ? <p className="py-6 text-center text-sm text-slate-500">Chargement des clients…</p> : (
+              <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
+                {adminCustomers.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucun compte client correspondant.</p> : adminCustomers.map((customer) => (
+                  <article key={customer.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0"><h3 className="truncate text-sm font-bold text-slate-900">{[customer.first_name, customer.last_name].filter(Boolean).join(' ') || customer.name || `Client #${customer.id}`}</h3><p className="mt-1 truncate text-xs text-slate-600">{customer.phone}{customer.email ? ` · ${customer.email}` : ''}</p><p className="mt-1 text-xs text-slate-500">Inscrit le {new Date(customer.created_at).toLocaleDateString('fr-FR')} · {customer.is_active ? 'Compte actif' : 'Compte désactivé'}</p></div>
+                    <div className="shrink-0 text-left sm:text-right"><strong className="block text-sm text-slate-900">{customer.orders_count} commande(s) liée(s)</strong><span className="text-xs text-slate-500">Montant des commandes non annulées (non encaissé) : {new Intl.NumberFormat('fr-FR').format(customer.order_value)} FCFA</span></div>
+                  </article>
+                ))}
+              </div>
+            )}
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <button type="button" disabled={customerPage === 0} onClick={() => setCustomerPage((page) => page - 1)} className="min-h-9 rounded-lg border border-slate-300 px-3 py-1 text-xs font-bold disabled:opacity-40">Précédent</button>
+              <span className="text-xs text-slate-500">Page {customerPage + 1} / {Math.max(1, Math.ceil(customerTotal / 100))}</span>
+              <button type="button" disabled={(customerPage + 1) * 100 >= customerTotal} onClick={() => setCustomerPage((page) => page + 1)} className="min-h-9 rounded-lg border border-slate-300 px-3 py-1 text-xs font-bold disabled:opacity-40">Suivant</button>
             </div>
           </section>
         )}
@@ -805,8 +1140,8 @@ export const AdminDashboard: React.FC = () => {
             <div className="col-span-2 flex min-w-0 items-center gap-2 sm:col-span-1">
               <Activity className="w-5 h-5 text-rose-600" />
               <div>
-                <h2 className="font-black text-slate-900 text-sm">Audience & flux</h2>
-                <p className="text-[11px] text-slate-500 leading-4">Visites consenties, sessions, commandes et conversion.</p>
+                <h2 className="font-black text-slate-900 text-sm">Audience et acquisition</h2>
+                <p className="text-[11px] text-slate-500 leading-4">Mesures agrégées pour comprendre d’où vient le trafic et quelles boutiques sont consultées.</p>
               </div>
             </div>
             <select
@@ -819,8 +1154,8 @@ export const AdminDashboard: React.FC = () => {
               <option value={30}>30 derniers jours</option>
               <option value={90}>90 derniers jours</option>
             </select>
-            <button type="button" onClick={() => exportOperationsCsv(`matable-audience-${new Date().toISOString().slice(0, 10)}.csv`, ['Boutique', 'Visites consenties', 'Sessions uniques', 'Commandes', 'Chiffre d’affaires FCFA', 'Ratio commandes'], analytics?.by_shop.map(shop => [shop.shop_name, shop.page_views, shop.unique_visitors, shop.orders, shop.sales, shop.conversion_rate]) || [])} disabled={!analytics?.by_shop.length} className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-50 sm:w-auto sm:px-3">
-              <Download className="h-4 w-4" />Exporter
+            <button type="button" onClick={() => exportOperationsCsv(`matable-audience-${new Date().toISOString().slice(0, 10)}.csv`, ['Boutique', 'Pages vues consenties', 'Sessions distinctes', 'Commandes valides', 'Valeur des commandes FCFA', 'Commandes / sessions (%)'], filteredAudienceShops.map(shop => [shop.shop_name, shop.page_views, shop.unique_visitors, shop.orders, shop.sales, shop.conversion_rate]))} disabled={!filteredAudienceShops.length} className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-50 sm:w-auto sm:px-3">
+              <Download className="h-4 w-4" />Exporter les boutiques filtrées
             </button>
           </div>
 
@@ -828,75 +1163,125 @@ export const AdminDashboard: React.FC = () => {
             <>
               <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
                 {[
-                  { label: 'Visites consenties', value: analytics.totals.page_views, current: analytics.totals.page_views, previous: analytics.previous.page_views, icon: Eye, tone: 'text-slate-700' },
-                  { label: 'Sessions uniques', value: analytics.totals.unique_visitors, current: analytics.totals.unique_visitors, previous: analytics.previous.unique_visitors, icon: Users, tone: 'text-sky-700' },
-                  { label: 'Commandes', value: analytics.totals.orders, current: analytics.totals.orders, previous: analytics.previous.orders, icon: ShoppingBag, tone: 'text-emerald-700' },
-                  { label: 'Chiffre d’affaires', value: `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F`, current: analytics.totals.sales, previous: analytics.previous.sales, icon: DollarSign, tone: 'text-amber-700' },
-                  { label: 'Ratio commandes', value: `${analytics.totals.conversion_rate}%`, current: analytics.totals.conversion_rate, previous: analytics.previous.conversion_rate, percentagePoints: true, icon: TrendingUp, tone: 'text-rose-700' },
-                ].map(({ label, value, current, previous, percentagePoints, icon: Icon, tone }) => (
+                  { label: 'Pages vues mesurées', value: new Intl.NumberFormat('fr-FR').format(analytics.totals.page_views), detail: 'Même page, session et boutique : une fois par jour au plus', current: analytics.totals.page_views, previous: analytics.previous.page_views, icon: Eye, tone: 'text-slate-700' },
+                  { label: 'Sessions distinctes', value: new Intl.NumberFormat('fr-FR').format(analytics.totals.unique_visitors), detail: 'Navigations temporaires, pas des personnes identifiées', current: analytics.totals.unique_visitors, previous: analytics.previous.unique_visitors, icon: Users, tone: 'text-sky-700' },
+                  { label: 'Commandes non annulées', value: new Intl.NumberFormat('fr-FR').format(analytics.totals.orders), detail: 'Commandes annulées et expirées exclues', current: analytics.totals.orders, previous: analytics.previous.orders, icon: ShoppingBag, tone: 'text-emerald-700' },
+                  { label: 'Montant des commandes', value: `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} FCFA`, detail: 'Montant demandé, pas un encaissement confirmé', current: analytics.totals.sales, previous: analytics.previous.sales, icon: DollarSign, tone: 'text-amber-700' },
+                  { label: 'Commandes / sessions', value: `${analytics.totals.conversion_rate.toLocaleString('fr-FR')}%`, detail: 'Commandes ÷ sessions distinctes; pas une attribution de vente', current: analytics.totals.conversion_rate, previous: analytics.previous.conversion_rate, percentagePoints: true, icon: TrendingUp, tone: 'text-rose-700' },
+                ].map(({ label, value, detail, current, previous, percentagePoints, icon: Icon, tone }) => (
                   <div key={label} className="metric-card p-3">
                     <Icon className={`w-4 h-4 ${tone} mb-3`} />
-                    <span className="block text-[11px] text-slate-500">{label}</span>
-                    <strong className="mt-1 block text-lg text-slate-900">{value}</strong>
-                    <span className="mt-1 block text-[10px] font-bold text-slate-500">{formatAudienceChange(current, previous, percentagePoints)} vs période précédente</span>
+                    <span className="block min-h-8 text-xs font-semibold leading-4 text-slate-600">{label}</span>
+                    <strong className="mt-1 block break-words text-lg tabular-nums text-slate-900">{value}</strong>
+                    <span className="mt-1 block min-h-8 text-[10px] leading-4 text-slate-500">{detail}</span>
+                    <span className="mt-1 block text-[10px] leading-4 text-slate-500">{formatAudienceChange(current, previous, percentagePoints)} vs {analytics.days} jours précédents</span>
                   </div>
                 ))}
               </div>
 
-              <p className="mt-2 text-[11px] text-slate-500">Comparaison avec les {analytics.days} jours précédents. Mesure limitée aux sessions ayant accepté les statistiques; une visite est comptée une fois par navigateur et par boutique.</p>
+              <aside className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-5 text-sky-950">
+                <strong>Comment lire ces chiffres ?</strong> Seules les pages vues enregistrées après consentement aux statistiques sont comptées. Les sessions utilisent un identifiant temporaire du navigateur : elles ne représentent pas des personnes uniques. Le ratio « commandes / sessions » rapproche deux totaux sur la période, mais ne prouve pas qu’une visite a généré une commande. Aucune liste de visiteurs identifiables n’est collectée ici.
+              </aside>
 
               <div className="mt-5 grid lg:grid-cols-[1.2fr_1fr] gap-4">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
                   <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-xs font-black text-slate-800">Visites consenties par jour</h3>
+                    <h3 className="text-sm font-black text-slate-800">Pages vues consenties par jour</h3>
                     <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-800">{analyticsDays} jours</span>
                   </div>
-                  <div className="chart-grid relative h-44 rounded-2xl border border-slate-200 bg-white p-3">
-                    <svg viewBox="0 0 420 160" className="h-full w-full">
-                      <path d="M18 35H402 M18 82H402 M18 140H402" stroke="#e2e8e5" strokeWidth="1" />
-                      <polyline
-                        fill="none"
-                        stroke="#176b55"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        points={chartPoints}
-                      />
-                      {analytics.daily.map((day, index) => {
-                        const x = 18 + (index * (384 / Math.max(analytics.daily.length - 1, 1)));
-                        const y = 140 - (day.page_views / maxDailyViews) * 96;
-                        return <circle key={day.date} cx={x} cy={y} r="2.5" fill="#d58b42" />;
-                      })}
-                    </svg>
-                    <div className="absolute inset-x-3 bottom-3 flex justify-between text-[9px] text-slate-400">
-                      {analytics.daily.filter((_, index) => index % Math.max(1, Math.ceil(analytics.daily.length / 6)) === 0 || index === analytics.daily.length - 1).map((day) => (
-                        <span key={day.date}>{day.date.slice(5)}</span>
-                      ))}
+                  <div className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-2">
+                    <div className="flex h-44 flex-col justify-between pb-6 text-right text-[10px] tabular-nums text-slate-500">
+                      {[maxDailyViews, Math.round(maxDailyViews / 2), 0].map((value, index) => <span key={`${value}-${index}`}>{new Intl.NumberFormat('fr-FR').format(value)}</span>)}
+                    </div>
+                    <div className="chart-grid relative h-44 min-w-0 rounded-2xl border border-slate-200 bg-white p-3">
+                      <svg role="img" aria-label={`Pages vues consenties par jour, échelle de 0 à ${maxDailyViews}`} viewBox="0 0 420 160" className="h-full w-full">
+                        <path d="M18 35H402 M18 82H402 M18 140H402" stroke="#e2e8e5" strokeWidth="1" />
+                        <polyline fill="none" stroke="#176b55" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={chartPoints} />
+                        {analytics.daily.map((day, index) => {
+                          const x = 18 + (index * (384 / Math.max(analytics.daily.length - 1, 1)));
+                          const y = 140 - (day.page_views / maxDailyViews) * 96;
+                          return <circle key={day.date} cx={x} cy={y} r="2.5" fill="#d58b42"><title>{new Date(`${day.date}T12:00:00`).toLocaleDateString('fr-FR')} · {day.page_views} page(s) vue(s)</title></circle>;
+                        })}
+                      </svg>
+                      <div className="absolute inset-x-3 bottom-2 flex justify-between text-[9px] tabular-nums text-slate-500">
+                        {analytics.daily.filter((_, index) => index % Math.max(1, Math.ceil(analytics.daily.length / 6)) === 0 || index === analytics.daily.length - 1).map((day) => (
+                          <span key={day.date}>{new Date(`${day.date}T12:00:00`).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</span>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
                   <h3 className="text-xs font-black text-slate-800">Origine des visites</h3>
-                  <p className="mt-1 text-[10px] text-slate-500">Catégories calculées sans conserver les URL référentes.</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">Origine du référent associé à chaque page vue; une navigation interne peut être comptée séparément. Aucune URL complète n’est conservée.</p>
                   <div className="mt-3 space-y-3">
                     {analytics.sources.length === 0 ? <p className="py-3 text-xs text-slate-500">Aucune visite consentie sur cette période.</p> : analytics.sources.map((source) => (
                       <div key={source.source}>
-                        <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-slate-700"><span>{audienceSourceLabels[source.source]}</span><span>{source.visits} visites</span></div>
-                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-700" style={{ width: `${Math.min(100, (source.visits / Math.max(1, analytics.sources[0].visits)) * 100)}%` }} /></div>
-                        <div className="mt-1 text-[10px] text-slate-500">{source.visitors} sessions uniques</div>
+                        <div className="flex items-center justify-between gap-2 text-xs font-bold text-slate-700"><span>{audienceSourceLabels[source.source]}</span><span className="tabular-nums">{new Intl.NumberFormat('fr-FR').format(source.visits)} pages · {analytics.totals.page_views ? Math.round(source.visits / analytics.totals.page_views * 100) : 0}%</span></div>
+                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-700" style={{ width: `${Math.min(100, (source.visits / Math.max(1, analytics.totals.page_views)) * 100)}%` }} /></div>
+                        <div className="mt-1 text-[11px] text-slate-500">{new Intl.NumberFormat('fr-FR').format(source.visitors)} sessions distinctes · catégories de provenance, pas de personnes identifiées</div>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
 
-              <div className="mt-5 overflow-x-auto">
-                <div className="mb-2"><h3 className="text-xs font-black text-slate-800">Performance par boutique</h3><p className="mt-1 text-[10px] text-slate-500">Les ratios rapprochent commandes et visiteurs sur la période; ils ne représentent pas une attribution individuelle.</p></div>
-                <table className="w-full min-w-[680px] border-collapse text-left text-xs">
-                  <thead><tr className="border-y border-slate-200 text-[10px] uppercase text-slate-500"><th className="py-2 pr-3">Boutique</th><th className="px-3 py-2 text-right">Visites</th><th className="px-3 py-2 text-right">Sessions</th><th className="px-3 py-2 text-right">Commandes</th><th className="px-3 py-2 text-right">CA</th><th className="py-2 pl-3 text-right">Ratio</th></tr></thead>
-                  <tbody>{analytics.by_shop.slice(0, 10).map((shop) => <tr key={shop.shop_id} className="border-b border-slate-100 text-slate-700"><th className="py-2.5 pr-3 font-bold">{shop.shop_name}</th><td className="px-3 py-2.5 text-right tabular-nums">{shop.page_views}</td><td className="px-3 py-2.5 text-right tabular-nums">{shop.unique_visitors}</td><td className="px-3 py-2.5 text-right tabular-nums">{shop.orders}</td><td className="px-3 py-2.5 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.sales)} F</td><td className="py-2.5 pl-3 text-right font-bold tabular-nums">{shop.conversion_rate}%</td></tr>)}</tbody>
-                </table>
+              <details className="mt-5 rounded-2xl border border-slate-200 bg-white">
+                <summary className="cursor-pointer px-4 py-3 text-sm font-bold text-slate-800">Détail quotidien des indicateurs ({analytics.daily.length} jours)</summary>
+                <div className="max-h-80 overflow-auto border-t border-slate-200">
+                  <table className="w-full min-w-[700px] border-collapse text-left text-xs">
+                    <thead className="sticky top-0 bg-slate-50 text-[10px] uppercase text-slate-600"><tr><th className="px-3 py-2.5">Date</th><th className="px-3 py-2.5 text-right">Pages vues consenties</th><th className="px-3 py-2.5 text-right">Sessions distinctes</th><th className="px-3 py-2.5 text-right">Commandes valides</th><th className="px-3 py-2.5 text-right">Valeur des commandes (FCFA)</th></tr></thead>
+                    <tbody>{analytics.daily.map((day) => <tr key={day.date} className="border-t border-slate-100"><th scope="row" className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-700">{new Date(`${day.date}T12:00:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'long', year: 'numeric' })}</th><td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.page_views)}</td><td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.unique_visitors)}</td><td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.orders)}</td><td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.sales)}</td></tr>)}</tbody>
+                  </table>
+                </div>
+              </details>
+
+              <section aria-labelledby="campaign-performance-title" className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <h3 id="campaign-performance-title" className="text-xs font-black text-slate-800">Campagnes de partage</h3>
+                    <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-600">Les campagnes sont reconnues via ?src=nom ou ?utm_source=nom sur une visite consentie. Les commandes et clics WhatsApp sont associés à la campagne conservée au moment du parcours; cette association ne prouve pas qu’une campagne a causé une commande.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => exportOperationsCsv(`matable-campagnes-${new Date().toISOString().slice(0, 10)}.csv`, ['Campagne', 'Visites consenties', 'Sessions uniques', 'Commandes', 'Ventes FCFA', 'Clics WhatsApp'], analytics.campaigns.map(({ campaign, visits, visitors, orders, sales, whatsapp_clicks }) => [campaign, visits, visitors, orders, sales, whatsapp_clicks]))}
+                    disabled={!analytics.campaigns.length}
+                    className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 disabled:opacity-50"
+                  >
+                    <Download className="h-3.5 w-3.5" />Exporter
+                  </button>
+                </div>
+                {analytics.campaigns.length === 0 ? <p className="py-3 text-xs text-slate-500">Aucune visite de campagne mesurée sur cette période.</p> : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[720px] border-collapse text-left text-xs">
+                      <thead><tr className="border-y border-slate-200 text-[10px] uppercase text-slate-500"><th className="py-2 pr-3">Campagne</th><th className="px-3 py-2 text-right">Visites</th><th className="px-3 py-2 text-right">Sessions</th><th className="px-3 py-2 text-right">Commandes</th><th className="px-3 py-2 text-right">Ventes</th><th className="py-2 pl-3 text-right">Clics WhatsApp</th></tr></thead>
+                      <tbody>{analytics.campaigns.map(({ campaign, visits, visitors, orders, sales, whatsapp_clicks }) => (
+                        <tr key={campaign} className="border-b border-slate-100"><th scope="row" className="py-2 pr-3 font-bold text-slate-800">{campaign}</th><td className="px-3 py-2 text-right text-slate-700">{visits}</td><td className="px-3 py-2 text-right text-slate-700">{visitors}</td><td className="px-3 py-2 text-right text-slate-700">{orders}</td><td className="px-3 py-2 text-right text-slate-700">{new Intl.NumberFormat('fr-FR').format(sales)} F</td><td className="py-2 pl-3 text-right text-slate-700">{whatsapp_clicks}</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+
+              <div className="mt-5">
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div><h3 className="text-sm font-black text-slate-800">Audience par boutique</h3><p className="mt-1 text-xs text-slate-600">{filteredAudienceShops.length} boutique(s) affichée(s) sur {analytics.by_shop.length}. « Commandes / sessions » est un ratio agrégé, pas un parcours attribué.</p></div>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(200px,1fr)_200px]">
+                    <label className="sr-only" htmlFor="audience-shop-search">Rechercher une boutique</label>
+                    <input id="audience-shop-search" type="search" value={audienceShopSearch} onChange={(event) => setAudienceShopSearch(event.target.value)} placeholder="Filtrer par nom de boutique" className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-sky-700" />
+                    <label className="sr-only" htmlFor="audience-shop-sort">Trier les boutiques</label>
+                    <select id="audience-shop-sort" value={audienceShopSort} onChange={(event) => setAudienceShopSort(event.target.value as typeof audienceShopSort)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">
+                      <option value="views">Trier : pages vues</option><option value="sessions">Trier : sessions</option><option value="orders">Trier : commandes</option><option value="sales">Trier : valeur commandée</option><option value="conversion">Trier : commandes / sessions</option><option value="name">Trier : nom</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full min-w-[760px] border-collapse text-left text-xs">
+                    <thead className="bg-slate-50"><tr className="border-b border-slate-200 text-[10px] uppercase text-slate-600"><th className="px-3 py-3">Boutique</th><th className="px-3 py-3 text-right">Pages vues</th><th className="px-3 py-3 text-right">Sessions</th><th className="px-3 py-3 text-right">Commandes valides</th><th className="px-3 py-3 text-right">Valeur commandée (FCFA)</th><th className="px-3 py-3 text-right">Commandes / sessions</th></tr></thead>
+                    <tbody>{filteredAudienceShops.length === 0 ? <tr><td colSpan={6} className="px-3 py-8 text-center text-sm text-slate-500">Aucune boutique ne correspond à cette recherche.</td></tr> : filteredAudienceShops.map((shop) => <tr key={shop.shop_id} className="border-b border-slate-100 text-slate-700 last:border-0"><th scope="row" className="px-3 py-3 font-bold">{shop.shop_name}</th><td className="px-3 py-3 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.page_views)}</td><td className="px-3 py-3 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.unique_visitors)}</td><td className="px-3 py-3 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.orders)}</td><td className="px-3 py-3 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.sales)}</td><td className="px-3 py-3 text-right font-bold tabular-nums">{shop.conversion_rate.toLocaleString('fr-FR')}%</td></tr>)}</tbody>
+                  </table>
+                </div>
               </div>
             </>
           ) : (
@@ -972,7 +1357,7 @@ export const AdminDashboard: React.FC = () => {
               <div>
                 <p className="text-xs font-bold uppercase text-emerald-800">Revenus récurrents</p>
                 <h2 id="admin-subscriptions-title" className="mt-1 text-xl font-black text-slate-900">Abonnements</h2>
-                <p className="mt-1 text-xs text-slate-500">{subscriptions?.summary.whatsapp_reminders_enabled ? `Rappels automatiques à J−2 · ${subscriptions.summary.whatsapp_reminder_opt_ins} boutique(s) consentante(s).` : 'Configurez WhatsApp Business API pour activer les rappels automatiques ; les relances manuelles restent disponibles.'}</p>
+                <p className="mt-1 text-xs text-slate-500">{subscriptions?.summary.whatsapp_reminders_enabled ? `Rappels automatiques à J−14, J−7, J−3 et J−1 · ${subscriptions.summary.whatsapp_reminder_opt_ins} boutique(s) consentante(s).` : 'Configurez WhatsApp Business API pour activer les rappels automatiques ; les relances manuelles restent disponibles.'}</p>
               </div>
               <button type="button" onClick={() => void fetchSubscriptions()} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">Actualiser</button>
             </header>
@@ -984,6 +1369,17 @@ export const AdminDashboard: React.FC = () => {
                 <div className="border-l-2 border-amber-500 pl-3"><p className="text-xs text-slate-500">Essais actifs · fin sous 7 j</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.active_trials} · {subscriptions.summary.trials_expiring_7d}</strong></div>
                 <div className="border-l-2 border-rose-600 pl-3"><p className="text-xs text-slate-500">Conversion essai → payant</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.converted_trials}/{subscriptions.summary.completed_trials} · {subscriptions.summary.trial_conversion_rate}%</strong></div>
               </div>
+              <section aria-labelledby="weekly-activity-title" className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3">
+                  <h3 id="weekly-activity-title" className="text-sm font-black text-slate-900">Activité des 7 derniers jours</h3>
+                  <p className="mt-1 text-xs text-slate-500">Visiteurs distincts ayant accepté les statistiques, nouvelles boutiques et clics de suivi WhatsApp.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Visiteurs</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.unique_visitors}</strong></div>
+                  <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Boutiques créées</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.shops_created}</strong></div>
+                  <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Clics WhatsApp</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.whatsapp_clicks}</strong></div>
+                </div>
+              </section>
 
               {inconsistentTrialExpiries.length > 0 && <section aria-labelledby="trial-expiry-integrity-title" className="rounded-xl border border-amber-300 bg-amber-50 p-4">
                 <div className="flex items-start gap-3">
@@ -999,6 +1395,27 @@ export const AdminDashboard: React.FC = () => {
                             <p className="mt-1 text-xs text-amber-900">Fin d’essai : {shop.trial_end ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.trial_end)) : 'non définie'} · Expiration enregistrée : {shop.subscription_expires_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.subscription_expires_at)) : 'non définie'}</p>
                           </div>
                           <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleReconcileTrialExpiry(shop)} className="min-h-9 shrink-0 rounded-lg border border-amber-700 bg-white px-3 py-1.5 text-xs font-bold text-amber-950 hover:bg-amber-100 disabled:opacity-50">Synchroniser l’échéance</button>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>}
+
+              {subscriptions.shops.some((shop) => shop.status === 'active' && !shop.subscription_expires_at) && <section aria-labelledby="missing-subscription-expiry-title" className="rounded-xl border border-rose-300 bg-rose-50 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-700" />
+                  <div className="min-w-0 flex-1">
+                    <h3 id="missing-subscription-expiry-title" className="text-sm font-black text-rose-950">Abonnements actifs sans échéance</h3>
+                    <p className="mt-1 text-xs text-rose-900">Vérifiez une preuve de paiement ou l’historique avant de corriger ces comptes. Aucune date ne peut être déduite automatiquement.</p>
+                    <div className="mt-3 divide-y divide-rose-200">
+                      {subscriptions.shops.filter((shop) => shop.status === 'active' && !shop.subscription_expires_at).map((shop) => (
+                        <article key={shop.id} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <h4 className="truncate text-sm font-bold text-rose-950">{shop.name}</h4>
+                            <p className="mt-1 text-xs text-rose-900">Compte #{shop.id} · formule {shop.plan} · échéance non définie</p>
+                          </div>
+                          <span className="text-xs font-bold text-rose-800">Vérification manuelle requise</span>
                         </article>
                       ))}
                     </div>
@@ -1051,6 +1468,42 @@ export const AdminDashboard: React.FC = () => {
                         <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-bold text-slate-900">{shop.name}</h4><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-slate-700">{shop.plan}</span><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${statusTone}`}>{subscriptionStatusLabels[shop.status] || shop.status}</span>{!shop.is_active && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-900">Boutique suspendue</span>}</div>
                         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{shop.whatsapp_number}</span><span>{shop.products_count} article(s)</span><span>{shop.orders_count} commande(s)</span><span>{shop.publication_status === 'active' ? 'Publiée' : 'Non publiée'}</span><span>{shop.whatsapp_reminders_opt_in ? 'Rappel WhatsApp activé' : 'Sans opt-in WhatsApp'}</span><span>Inscrite le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.created_at))}</span></div>
                         <p className="mt-1 text-xs text-slate-500">{shop.status === 'trialing' ? 'Fin d’essai' : 'Prochain renouvellement'} : {shop.next_renewal_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.next_renewal_at)) : 'Non défini'}{shop.trial_start ? ` · Prolongation cumulée : ${shop.trial_extension_days_used}/30 jours` : ''} · Dernière commande : {shop.last_order_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.last_order_at)) : 'aucune'}</p>
+                        {shop.status === 'active' && <div className="mt-3 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[minmax(150px,190px)_minmax(180px,1fr)_auto]">
+                          <label className="text-[10px] font-bold text-slate-600">Échéance vérifiée
+                            <input
+                              type="date"
+                              aria-label={`Nouvelle échéance de ${shop.name}`}
+                              value={expiryDrafts[shop.id]?.date ?? shop.subscription_expires_at?.slice(0, 10) ?? ''}
+                              onChange={(event) => setExpiryDrafts((previous) => ({
+                                ...previous,
+                                [shop.id]: { date: event.target.value, reason: previous[shop.id]?.reason ?? '' },
+                              }))}
+                              className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-800"
+                            />
+                          </label>
+                          <label className="text-[10px] font-bold text-slate-600">Motif / référence de vérification
+                            <input
+                              type="text"
+                              maxLength={500}
+                              aria-label={`Motif de correction d’échéance pour ${shop.name}`}
+                              placeholder="Ex. reçu vérifié, période payée…"
+                              value={expiryDrafts[shop.id]?.reason ?? ''}
+                              onChange={(event) => setExpiryDrafts((previous) => ({
+                                ...previous,
+                                [shop.id]: { date: previous[shop.id]?.date ?? shop.subscription_expires_at?.slice(0, 10) ?? '', reason: event.target.value },
+                              }))}
+                              className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-800"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            disabled={subscriptionActionShopId === shop.id || !expiryDrafts[shop.id]?.date || (expiryDrafts[shop.id]?.reason.trim().length ?? 0) < 3}
+                            onClick={() => void handleSetSubscriptionExpiry(shop)}
+                            className="self-end min-h-9 rounded-md bg-slate-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                          >
+                            Enregistrer
+                          </button>
+                        </div>}
                       </div>
                       <div className="flex shrink-0 flex-wrap gap-2">
                         {shop.status === 'trialing' && shop.trial_days_remaining !== null && shop.trial_days_remaining <= 7 && shop.whatsapp_reminders_opt_in && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handlePrepareTrialReminder(shop)} className="min-h-9 rounded-lg border border-emerald-700 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50">WhatsApp</button>}
@@ -1065,7 +1518,7 @@ export const AdminDashboard: React.FC = () => {
               <section aria-labelledby="subscription-audit-title" className="border-t border-slate-200 pt-4">
                 <h3 id="subscription-audit-title" className="text-sm font-black text-slate-900">Actions admin récentes</h3>
                 {subscriptions.audit_logs.length === 0 ? <p className="mt-2 text-xs text-slate-500">Les prolongations, corrections et relances apparaîtront ici.</p> : <div className="mt-2 divide-y divide-slate-200">
-                {subscriptions.audit_logs.slice(0, 8).map((entry) => <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs"><span className="font-semibold text-slate-800">{entry.action === 'trial_extended' ? 'Essai prolongé' : entry.action === 'trial_expiry_reconciled' ? 'Échéance d’essai synchronisée' : entry.action === 'trial_reminder_prepared' ? 'Relance WhatsApp préparée' : entry.action === 'shop_suspended' ? 'Boutique suspendue' : entry.action === 'shop_reactivated' ? 'Boutique réactivée' : entry.action} · {entry.shop_name || 'Boutique supprimée'}</span><time className="text-slate-500">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(entry.created_at))}</time></div>)}
+                {subscriptions.audit_logs.slice(0, 8).map((entry) => <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs"><div><span className="font-semibold text-slate-800">{entry.action === 'trial_extended' ? 'Essai prolongé' : entry.action === 'trial_expiry_reconciled' ? 'Échéance d’essai synchronisée' : entry.action === 'subscription_expiry_corrected' ? 'Échéance d’abonnement corrigée' : entry.action === 'trial_reminder_prepared' ? 'Relance WhatsApp préparée' : entry.action === 'subscription_reminder_sent' ? `Rappel WhatsApp envoyé J−${getReminderLeadDays(entry.details) ?? '?'}` : entry.action === 'subscription_reminder_failed' ? `Échec du rappel WhatsApp J−${getReminderLeadDays(entry.details) ?? '?'}` : entry.action === 'shop_suspended' ? 'Boutique suspendue' : entry.action === 'shop_reactivated' ? 'Boutique réactivée' : entry.action === 'admin_order_status_updated' ? 'Statut de commande modifié' : entry.action} · {entry.shop_name || 'Boutique supprimée'}</span>{getAdminAuditReason(entry.details) && <p className="mt-1 text-slate-500">Motif : {getAdminAuditReason(entry.details)}</p>}{entry.action === 'subscription_reminder_failed' && getReminderFailure(entry.details) && <p className="mt-1 text-rose-700">Erreur fournisseur : {getReminderFailure(entry.details)}</p>}</div><time className="text-slate-500">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(entry.created_at))}</time></div>)}
                 </div>}
               </section>
             </>}
@@ -1138,6 +1591,8 @@ export const AdminDashboard: React.FC = () => {
               </button>
             </div>
           </div>
+
+          <AdminPushAnnouncements />
 
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1270,12 +1725,54 @@ export const AdminDashboard: React.FC = () => {
             featuredActionShopId={featuredActionShopId}
             onSetFeatured={(shopId, days) => void handleSetFeatured(shopId, days)}
             onToggleActive={(shopId) => void handleToggleActive(shopId)}
+            onRequestDelete={(shop) => {
+              setDeleteShopTarget(shop);
+              setDeleteShopConfirmation('');
+              setDeleteShopReason('');
+              setDeleteShopAcknowledged(false);
+              setDeleteShopError(null);
+            }}
           />
         )}
         </div>
         </div>
 
       </main>
+      {deleteShopTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4" onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !deleteShopLoading) setDeleteShopTarget(null);
+        }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="delete-shop-title" className="my-auto w-full max-w-lg rounded-2xl border border-rose-200 bg-white p-5 shadow-2xl sm:p-6">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-100 text-rose-800"><Trash2 className="h-5 w-5" /></span>
+              <div>
+                <h2 id="delete-shop-title" className="text-lg font-black text-slate-950">Supprimer définitivement cette boutique ?</h2>
+                <p className="mt-1 break-all text-sm font-bold text-rose-800">{deleteShopTarget.name} · /{deleteShopTarget.slug}</p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs leading-5 text-rose-950">
+              Cette action effacera la boutique, ses produits et commandes, ainsi que l’historique des paiements et boosts, les avis, signalements, favoris, sessions du commerçant et statistiques associés. Elle est irréversible. Le journal admin conservera uniquement l’identifiant, le nom, le slug et le motif de suppression.
+            </div>
+            <div className="mt-4 space-y-3">
+              <label className="block text-xs font-bold text-slate-700" htmlFor="delete-shop-confirmation">Pour confirmer, retape exactement le slug : <span className="font-mono text-rose-800">{deleteShopTarget.slug}</span></label>
+              <input id="delete-shop-confirmation" autoComplete="off" value={deleteShopConfirmation} onChange={(event) => setDeleteShopConfirmation(event.target.value)} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 font-mono text-sm text-slate-900 outline-none focus:border-rose-600" />
+              <label className="block text-xs font-bold text-slate-700" htmlFor="delete-shop-reason">Motif obligatoire (conservé au journal d’audit)</label>
+              <textarea id="delete-shop-reason" value={deleteShopReason} onChange={(event) => setDeleteShopReason(event.target.value)} maxLength={500} rows={3} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-rose-600" />
+              <label className="flex items-start gap-2 text-xs leading-5 text-slate-700">
+                <input type="checkbox" checked={deleteShopAcknowledged} onChange={(event) => setDeleteShopAcknowledged(event.target.checked)} className="mt-1 h-4 w-4 accent-rose-700" />
+                <span>Je comprends que les données listées ci-dessus seront supprimées sans possibilité de restauration.</span>
+              </label>
+              {deleteShopError && <p role="alert" className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900">{deleteShopError}</p>}
+            </div>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" disabled={deleteShopLoading} onClick={() => setDeleteShopTarget(null)} className="min-h-10 rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-50">Annuler</button>
+              <button type="button" disabled={deleteShopLoading || deleteShopConfirmation.trim() !== deleteShopTarget.slug || deleteShopReason.trim().length < 3 || !deleteShopAcknowledged} onClick={() => void handleDeleteShop()} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-rose-700 px-4 py-2 text-sm font-black text-white hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-40">
+                <Trash2 className="h-4 w-4" />{deleteShopLoading ? 'Suppression…' : 'Supprimer définitivement'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 };

@@ -119,6 +119,7 @@ export interface OrderRecord {
   id: number;
   shop_id: number;
   customer_user_id?: number;
+  attribution_campaign?: string | null;
   customer_name: string;
   customer_phone: string;
   delivery_location: string;
