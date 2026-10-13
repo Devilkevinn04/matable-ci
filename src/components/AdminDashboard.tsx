@@ -649,9 +649,8 @@ export const AdminDashboard: React.FC = () => {
           {adminView === 'identity' && (
             <AdminIdentityVerificationPanel
               selectedShopId={null}
-              requestingShopId={null}
-              onRequestVerification={() => undefined}
-              allowRequest={false}
+              requestingShopId={verificationRequestShopId}
+              onRequestVerification={(shopId) => void requestOwnerIdentityVerification(shopId)}
             />
           )}
           {adminView === 'moderation' && (

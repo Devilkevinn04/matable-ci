@@ -52,6 +52,11 @@ export function createAdminRouter(options: AdminRouterOptions) {
     if (path.startsWith('/content-moderation')) {
       return requireVerification(req, res, next);
     }
+    if (req.method === 'POST'
+      && /^\/shops\/\d+\/notification$/.test(path)
+      && req.body?.template === 'identity_verification') {
+      return requireVerification(req, res, next);
+    }
     return requireSuperAdmin(req, res, next);
   });
   const loadShops = async () => (await dbAll<Record<string, unknown>>('SELECT * FROM shops ORDER BY id')).map(mapShopRow);

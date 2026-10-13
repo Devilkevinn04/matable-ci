@@ -187,6 +187,20 @@ test('verification admin can access moderation endpoints but not super-admin pus
   const identityQueue = await apiFetch('/api/admin/identity-verifications');
   assert.equal(identityQueue.response.status, 200, JSON.stringify(identityQueue.payload));
 
+  const verificationReminder = await apiFetch('/api/admin/shops/999999/notification', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ template: 'identity_verification' }),
+  });
+  assert.equal(verificationReminder.response.status, 404, JSON.stringify(verificationReminder.payload));
+
+  const forbiddenGeneralNotification = await apiFetch('/api/admin/shops/999999/notification', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ template: 'welcome' }),
+  });
+  assert.equal(forbiddenGeneralNotification.response.status, 403, JSON.stringify(forbiddenGeneralNotification.payload));
+
   const moderationQueue = await apiFetch('/api/admin/content-moderation');
   assert.equal(moderationQueue.response.status, 200, JSON.stringify(moderationQueue.payload));
 
