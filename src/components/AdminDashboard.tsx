@@ -59,6 +59,8 @@ const adminOrderTransitions: Record<AdminOrder['status'], AdminOrder['status'][]
   expired: [],
 };
 
+type AdminRole = 'super_admin' | 'verification_admin';
+
 export const AdminDashboard: React.FC = () => {
   const getAdminAuditReason = (details: string) => {
     try {
@@ -96,6 +98,8 @@ export const AdminDashboard: React.FC = () => {
   const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'moderation'>('overview');
   const [shops, setShops] = useState<AdminShopItem[]>([]);
   const [adminKey, setAdminKey] = useState('');
+  const [adminRole, setAdminRole] = useState<AdminRole>('super_admin');
+  const [loginRole, setLoginRole] = useState<AdminRole>('super_admin');
   const [showAdminKey, setShowAdminKey] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -171,6 +175,15 @@ export const AdminDashboard: React.FC = () => {
       if (!sessionData.authenticated || sessionData.userType !== 'admin') {
         setIsAuthenticated(false);
         setShops([]);
+        return;
+      }
+      const role: AdminRole = sessionData.role === 'verification_admin' ? 'verification_admin' : 'super_admin';
+      setAdminRole(role);
+      if (role === 'verification_admin') {
+        setShops([]);
+        setAdminView('identity');
+        setIsAuthenticated(true);
+        await fetchContentModeration();
         return;
       }
 
@@ -392,7 +405,7 @@ export const AdminDashboard: React.FC = () => {
     const res = await fetch('/api/auth/admin-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: adminKey }),
+      body: JSON.stringify({ key: adminKey, role: loginRole }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -544,22 +557,42 @@ export const AdminDashboard: React.FC = () => {
             <div className="brand-mark">M</div>
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">MaTable.ci</div>
-              <h1 className="text-xl font-black text-slate-900">Accès super-admin</h1>
+              <h1 className="text-xl font-black text-slate-900">
+                {loginRole === 'verification_admin' ? 'Accès vérification' : 'Accès super-admin'}
+              </h1>
             </div>
           </div>
           <div className="mb-4 rounded-2xl bg-gradient-to-r from-[#eef5ff] to-[#f7e7c7] p-4 border-[2px] border-[#211712]">
             <div className="flex items-center gap-2 text-[#1b3a63] font-bold text-xs">
               <ShieldCheck className="w-4 h-4" />
-              Espace de contrôle central
+              {loginRole === 'verification_admin' ? 'Espace de vérification' : 'Espace de contrôle central'}
             </div>
-            <p className="mt-2 text-sm text-[#4a3a30]">Entrez la clé configurée côté serveur pour piloter les boutiques et les alertes.</p>
+            <p className="mt-2 text-sm text-[#4a3a30]">
+              {loginRole === 'verification_admin'
+                ? 'Entrez la clé de vérification configurée côté serveur. Cet accès est limité aux vérifications et à la modération.'
+                : 'Entrez la clé configurée côté serveur pour piloter les boutiques et les alertes.'}
+            </p>
           </div>
+          <label className="mb-3 block text-xs font-bold text-slate-700" htmlFor="admin-role">Type d’accès</label>
+          <select
+            id="admin-role"
+            value={loginRole}
+            onChange={(event) => {
+              setLoginRole(event.target.value as AdminRole);
+              setAdminKey('');
+              setAuthError(null);
+            }}
+            className="mb-4 w-full rounded-2xl border-[2px] border-[#211712] bg-[#fffaf2] px-3 py-3 text-sm font-medium text-[#211712] outline-none focus:border-[#1b3a63] focus:bg-white"
+          >
+            <option value="super_admin">Super-admin</option>
+            <option value="verification_admin">Admin de vérification</option>
+          </select>
           <div className="relative">
             <input
               type={showAdminKey ? 'text' : 'password'}
               value={adminKey}
               onChange={(event) => setAdminKey(event.target.value)}
-              placeholder="Clé super-admin"
+              placeholder={loginRole === 'verification_admin' ? 'Clé admin de vérification' : 'Clé super-admin'}
               required
               className="w-full rounded-2xl border-[2px] border-[#211712] bg-[#fffaf2] px-3 py-3 pr-12 text-sm font-medium text-[#211712] outline-none transition focus:border-[#1b3a63] focus:bg-white"
             />
@@ -572,6 +605,106 @@ export const AdminDashboard: React.FC = () => {
             Se connecter
           </button>
         </motion.form>
+      </div>
+    );
+  }
+
+  if (adminRole === 'verification_admin') {
+    return (
+      <div className="admin-login min-h-screen p-4 sm:p-6">
+        <main className="mx-auto w-full max-w-5xl space-y-5">
+          <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-[#211712] bg-[#fffaf2] p-4 shadow-[5px_5px_0_rgba(33,23,18,0.96)]">
+            <div className="flex items-center gap-3">
+              <div className="brand-mark">M</div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">MaTable.ci</p>
+                <h1 className="text-lg font-black text-slate-900">Espace vérification</h1>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleAdminLogout()}
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl border-2 border-[#211712] bg-white px-3 text-sm font-bold text-slate-800"
+            >
+              <LogOut className="h-4 w-4" /> Déconnexion
+            </button>
+          </header>
+          <nav aria-label="Navigation vérification" className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setAdminView('identity')}
+              className={`min-h-10 rounded-xl border-2 border-[#211712] px-4 text-sm font-bold ${adminView === 'identity' ? 'bg-[#1b3a63] text-white' : 'bg-white text-slate-800'}`}
+            >
+              Vérifications d’identité
+            </button>
+            <button
+              type="button"
+              onClick={() => setAdminView('moderation')}
+              className={`min-h-10 rounded-xl border-2 border-[#211712] px-4 text-sm font-bold ${adminView === 'moderation' ? 'bg-[#1b3a63] text-white' : 'bg-white text-slate-800'}`}
+            >
+              Avis et signalements
+            </button>
+          </nav>
+          {actionNotice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{actionNotice}</p>}
+          {adminView === 'identity' && (
+            <AdminIdentityVerificationPanel
+              selectedShopId={null}
+              requestingShopId={null}
+              onRequestVerification={() => undefined}
+              allowRequest={false}
+            />
+          )}
+          {adminView === 'moderation' && (
+            <section aria-labelledby="verification-moderation-title" className="space-y-5">
+              <div>
+                <h2 id="verification-moderation-title" className="text-xl font-black text-slate-900">Avis et signalements</h2>
+                <p className="mt-1 text-sm text-slate-600">Accès limité à la revue des contenus et des signalements.</p>
+              </div>
+              {contentModerationError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{contentModerationError}</p>}
+              <section className="chart-panel p-4 md:p-5">
+                <h3 className="text-sm font-black text-slate-900">Avis à modérer ({contentModeration.reviews.length})</h3>
+                <div className="mt-3 divide-y divide-slate-200">
+                  {contentModeration.reviews.length === 0 ? <p className="py-4 text-sm text-slate-500">Aucun avis en attente.</p> : contentModeration.reviews.map((review) => (
+                    <article key={review.id} className="py-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">{review.target_type === 'shop' ? review.shop_name : review.product_title || review.shop_name} · {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</p>
+                          <p className="mt-1 text-xs text-slate-500">{review.customer_name || 'Client'} · {new Date(review.created_at).toLocaleString('fr-FR')}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => void moderateContent('reviews', review.id, 'approved')} className="min-h-9 rounded-lg bg-emerald-700 px-3 text-xs font-bold text-white">Publier</button>
+                          <button type="button" onClick={() => void moderateContent('reviews', review.id, 'hidden')} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700">Masquer</button>
+                        </div>
+                      </div>
+                      {review.comment && <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{review.comment}</p>}
+                    </article>
+                  ))}
+                </div>
+              </section>
+              <section className="chart-panel p-4 md:p-5">
+                <h3 className="text-sm font-black text-slate-900">Signalements ouverts ({contentModeration.reports.length})</h3>
+                <div className="mt-3 divide-y divide-slate-200">
+                  {contentModeration.reports.length === 0 ? <p className="py-4 text-sm text-slate-500">Aucun signalement ouvert.</p> : contentModeration.reports.map((report) => (
+                    <article key={report.id} className="py-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">{report.target_type === 'shop' ? report.shop_name : report.product_title || report.shop_name} · {report.reason}</p>
+                          <p className="mt-1 text-xs text-slate-500">{report.customer_name || 'Client'} · {new Date(report.created_at).toLocaleString('fr-FR')} · {report.status === 'in_review' ? 'En cours' : 'Nouveau'}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={() => void moderateContent('reports', report.id, 'in_review')} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700">Prendre en charge</button>
+                          <button type="button" onClick={() => void moderateContent('reports', report.id, 'resolved')} className="min-h-9 rounded-lg bg-emerald-700 px-3 text-xs font-bold text-white">Traité</button>
+                          <button type="button" onClick={() => void moderateContent('reports', report.id, 'dismissed')} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700">Sans suite</button>
+                        </div>
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{report.details || 'Aucun détail supplémentaire.'}</p>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            </section>
+          )}
+        </main>
       </div>
     );
   }

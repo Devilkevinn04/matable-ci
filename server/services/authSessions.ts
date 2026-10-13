@@ -156,10 +156,15 @@ export function createAuthSessionHelpers({
   async function getSessionStateForResponse(req: Request, res?: Response) {
     const adminToken = getCookie(req, 'matable_admin_session');
     if (adminToken) {
-      const adminSessionToken = await getAdminSession(req);
-      if (adminSessionToken) {
-        if (res) setAdminSessionCookie(res, adminSessionToken);
-        return { authenticated: true, userType: 'admin', shopId: null };
+      const role = await getAdminSessionRole(req);
+      if (role) {
+        if (res) setAdminSessionCookie(res, adminToken);
+        return {
+          authenticated: true,
+          userType: 'admin',
+          shopId: null,
+          role,
+        };
       }
     }
 

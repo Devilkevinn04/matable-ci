@@ -181,8 +181,17 @@ test('verification admin can access moderation endpoints but not super-admin pus
   assert.equal(verificationLogin.response.status, 200, JSON.stringify(verificationLogin.payload));
   assert.equal(verificationLogin.payload.role, 'verification_admin');
 
+  const session = await apiFetch('/api/auth/session');
+  assert.equal(session.payload.role, 'verification_admin');
+
+  const identityQueue = await apiFetch('/api/admin/identity-verifications');
+  assert.equal(identityQueue.response.status, 200, JSON.stringify(identityQueue.payload));
+
   const moderationQueue = await apiFetch('/api/admin/content-moderation');
   assert.equal(moderationQueue.response.status, 200, JSON.stringify(moderationQueue.payload));
+
+  const protectedShops = await apiFetch('/api/admin/shops');
+  assert.equal(protectedShops.response.status, 403, JSON.stringify(protectedShops.payload));
 
   const protectedPush = await apiFetch('/api/admin/push/announcements', {
     method: 'POST',

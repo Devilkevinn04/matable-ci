@@ -25,12 +25,14 @@ interface AdminIdentityVerificationPanelProps {
   selectedShopId: number | null;
   requestingShopId: number | null;
   onRequestVerification: (shopId: number) => void;
+  allowRequest?: boolean;
 }
 
 export function AdminIdentityVerificationPanel({
   selectedShopId,
   requestingShopId,
   onRequestVerification,
+  allowRequest = true,
 }: AdminIdentityVerificationPanelProps) {
   const [items, setItems] = useState<VerificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,7 +91,7 @@ export function AdminIdentityVerificationPanel({
                 </span>
               </div>
               {item.provider_status && <p className="mt-2 text-xs text-slate-600">Statut fournisseur : <strong>{item.provider_status}</strong></p>}
-              {item.status !== 'verified' && (
+              {allowRequest && item.status !== 'verified' && (
                 <button
                   type="button"
                   onClick={() => onRequestVerification(item.shop_id)}

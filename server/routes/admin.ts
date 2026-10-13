@@ -48,6 +48,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
   const requireVerification = requireVerificationAdminAccess ?? ((req: any, res: any, next: any) => next());
   router.use((req, res, next) => {
     const path = String(req.path || '');
+    if (path.startsWith('/identity-verifications')) return next();
     if (path.startsWith('/content-moderation')) {
       return requireVerification(req, res, next);
     }
