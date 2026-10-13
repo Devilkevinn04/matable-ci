@@ -311,6 +311,7 @@ export function createAuthSessionHelpers({
     if (!role) {
       return res.status(401).json({ error: 'Authentification admin requise.' });
     }
+    req.adminRole = role;
     next();
   }
 
@@ -331,8 +332,18 @@ export function createAuthSessionHelpers({
   }
 
   async function requireMerchantIdentity(req: Request, res: Response): Promise<ShopRecord | null> {
-    const adminSessionToken = await getAdminSession(req);
-    if (adminSessionToken) {
+    const adminRole = await getAdminSessionRole(req);
+    if (adminRole) {
+      if (adminRole === 'verification_admin') {
+        const path = req.originalUrl.split('?')[0];
+        const canReadOrders = req.method === 'GET' && /^\/api\/shops\/\d+\/orders$/.test(path);
+        const canUpdateOrder = req.method === 'PATCH' && /^\/api\/shops\/\d+\/orders\/\d+\/status$/.test(path);
+        if (!canReadOrders && !canUpdateOrder) {
+          res.status(403).json({ error: 'Cet accès admin ne permet pas cette opération marchand.' });
+          return null;
+        }
+        req.adminRole = adminRole;
+      }
       const adminShop = await getShopFromDatabase(Number(req.params.id));
       if (!adminShop) {
         res.status(404).json({ error: 'Boutique introuvable.' });

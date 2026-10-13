@@ -180,11 +180,9 @@ export const AdminDashboard: React.FC = () => {
       const role: AdminRole = sessionData.role === 'verification_admin' ? 'verification_admin' : 'super_admin';
       setAdminRole(role);
       if (role === 'verification_admin') {
-        setShops([]);
-        setAdminView('identity');
-        setIsAuthenticated(true);
-        await fetchContentModeration();
-        return;
+        setSortBy('orders');
+        setAudienceShopSort('views');
+        setNotificationTemplate('welcome');
       }
 
       const res = await fetch('/api/admin/shops');
@@ -193,9 +191,14 @@ export const AdminDashboard: React.FC = () => {
         setShops(data);
         setIsAuthenticated(true);
         await fetchAnalytics(analyticsDays);
-        await fetchFinance(financeDays);
-        await fetchSubscriptions();
-        await fetchOperations();
+        if (role === 'super_admin') {
+          await fetchFinance(financeDays);
+          await fetchSubscriptions();
+        }
+        await fetchOperations(role);
+        await fetchAdminCustomers();
+        await fetchAdminOrders();
+        await fetchContentModeration();
       } else if (res.status === 401) {
         setIsAuthenticated(false);
       }
@@ -206,21 +209,27 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const fetchOperations = async () => {
+  const fetchOperations = async (role = adminRole) => {
     try {
       setOperationsLoading(true);
-      const [healthRes, ordersRes, maintenanceRes] = await Promise.all([
+      const [healthRes, ordersRes] = await Promise.all([
         fetch('/api/admin/health'),
         fetch('/api/admin/orders?limit=50'),
-        fetch('/api/admin/maintenance'),
       ]);
-      if (!healthRes.ok || !ordersRes.ok || !maintenanceRes.ok) throw new Error('Impossible de charger les outils opérationnels.');
-      const [health, orderData, maintenance] = await Promise.all([healthRes.json(), ordersRes.json(), maintenanceRes.json()]);
+      if (!healthRes.ok || !ordersRes.ok) throw new Error('Impossible de charger les outils opérationnels.');
+      const [health, orderData] = await Promise.all([healthRes.json(), ordersRes.json()]);
       setAdminHealth(health);
       setAdminOrders(orderData.orders || []);
-      setMaintenanceMode(maintenance);
-      setMaintenanceEnabledDraft(maintenance.enabled);
-      setMaintenanceMessageDraft(maintenance.message);
+      if (role === 'super_admin') {
+        const maintenanceRes = await fetch('/api/admin/maintenance');
+        if (!maintenanceRes.ok) throw new Error('Impossible de charger le mode maintenance.');
+        const maintenance = await maintenanceRes.json();
+        setMaintenanceMode(maintenance);
+        setMaintenanceEnabledDraft(maintenance.enabled);
+        setMaintenanceMessageDraft(maintenance.message);
+      } else {
+        setMaintenanceMode(null);
+      }
     } catch {
       showNotice('Les outils opérationnels sont momentanément indisponibles.');
     } finally {
@@ -609,105 +618,6 @@ export const AdminDashboard: React.FC = () => {
     );
   }
 
-  if (adminRole === 'verification_admin') {
-    return (
-      <div className="admin-login min-h-screen p-4 sm:p-6">
-        <main className="mx-auto w-full max-w-5xl space-y-5">
-          <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-[#211712] bg-[#fffaf2] p-4 shadow-[5px_5px_0_rgba(33,23,18,0.96)]">
-            <div className="flex items-center gap-3">
-              <div className="brand-mark">M</div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">MaTable.ci</p>
-                <h1 className="text-lg font-black text-slate-900">Espace vérification</h1>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => void handleAdminLogout()}
-              className="inline-flex min-h-10 items-center gap-2 rounded-xl border-2 border-[#211712] bg-white px-3 text-sm font-bold text-slate-800"
-            >
-              <LogOut className="h-4 w-4" /> Déconnexion
-            </button>
-          </header>
-          <nav aria-label="Navigation vérification" className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setAdminView('identity')}
-              className={`min-h-10 rounded-xl border-2 border-[#211712] px-4 text-sm font-bold ${adminView === 'identity' ? 'bg-[#1b3a63] text-white' : 'bg-white text-slate-800'}`}
-            >
-              Vérifications d’identité
-            </button>
-            <button
-              type="button"
-              onClick={() => setAdminView('moderation')}
-              className={`min-h-10 rounded-xl border-2 border-[#211712] px-4 text-sm font-bold ${adminView === 'moderation' ? 'bg-[#1b3a63] text-white' : 'bg-white text-slate-800'}`}
-            >
-              Avis et signalements
-            </button>
-          </nav>
-          {actionNotice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{actionNotice}</p>}
-          {adminView === 'identity' && (
-            <AdminIdentityVerificationPanel
-              selectedShopId={null}
-              requestingShopId={verificationRequestShopId}
-              onRequestVerification={(shopId) => void requestOwnerIdentityVerification(shopId)}
-            />
-          )}
-          {adminView === 'moderation' && (
-            <section aria-labelledby="verification-moderation-title" className="space-y-5">
-              <div>
-                <h2 id="verification-moderation-title" className="text-xl font-black text-slate-900">Avis et signalements</h2>
-                <p className="mt-1 text-sm text-slate-600">Accès limité à la revue des contenus et des signalements.</p>
-              </div>
-              {contentModerationError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{contentModerationError}</p>}
-              <section className="chart-panel p-4 md:p-5">
-                <h3 className="text-sm font-black text-slate-900">Avis à modérer ({contentModeration.reviews.length})</h3>
-                <div className="mt-3 divide-y divide-slate-200">
-                  {contentModeration.reviews.length === 0 ? <p className="py-4 text-sm text-slate-500">Aucun avis en attente.</p> : contentModeration.reviews.map((review) => (
-                    <article key={review.id} className="py-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-bold text-slate-900">{review.target_type === 'shop' ? review.shop_name : review.product_title || review.shop_name} · {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</p>
-                          <p className="mt-1 text-xs text-slate-500">{review.customer_name || 'Client'} · {new Date(review.created_at).toLocaleString('fr-FR')}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button type="button" onClick={() => void moderateContent('reviews', review.id, 'approved')} className="min-h-9 rounded-lg bg-emerald-700 px-3 text-xs font-bold text-white">Publier</button>
-                          <button type="button" onClick={() => void moderateContent('reviews', review.id, 'hidden')} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700">Masquer</button>
-                        </div>
-                      </div>
-                      {review.comment && <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{review.comment}</p>}
-                    </article>
-                  ))}
-                </div>
-              </section>
-              <section className="chart-panel p-4 md:p-5">
-                <h3 className="text-sm font-black text-slate-900">Signalements ouverts ({contentModeration.reports.length})</h3>
-                <div className="mt-3 divide-y divide-slate-200">
-                  {contentModeration.reports.length === 0 ? <p className="py-4 text-sm text-slate-500">Aucun signalement ouvert.</p> : contentModeration.reports.map((report) => (
-                    <article key={report.id} className="py-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-bold text-slate-900">{report.target_type === 'shop' ? report.shop_name : report.product_title || report.shop_name} · {report.reason}</p>
-                          <p className="mt-1 text-xs text-slate-500">{report.customer_name || 'Client'} · {new Date(report.created_at).toLocaleString('fr-FR')} · {report.status === 'in_review' ? 'En cours' : 'Nouveau'}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button type="button" onClick={() => void moderateContent('reports', report.id, 'in_review')} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700">Prendre en charge</button>
-                          <button type="button" onClick={() => void moderateContent('reports', report.id, 'resolved')} className="min-h-9 rounded-lg bg-emerald-700 px-3 text-xs font-bold text-white">Traité</button>
-                          <button type="button" onClick={() => void moderateContent('reports', report.id, 'dismissed')} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700">Sans suite</button>
-                        </div>
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{report.details || 'Aucun détail supplémentaire.'}</p>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            </section>
-          )}
-        </main>
-      </div>
-    );
-  }
-
   // Manual ON/OFF toggle
   const handleToggleActive = async (shopId: number) => {
     const shop = shops.find((item) => item.id === shopId);
@@ -732,7 +642,7 @@ export const AdminDashboard: React.FC = () => {
         setShops(prev =>
           prev.map(s => (s.id === shopId ? { ...s, ...data.shop } : s))
         );
-        await fetchSubscriptions();
+        if (adminRole === 'super_admin') await fetchSubscriptions();
         showNotice(shop.is_active ? 'Boutique suspendue avec motif enregistré.' : 'Boutique réactivée avec motif enregistré.');
       } else {
         showNotice(data.error || 'Impossible de mettre à jour le statut.');
@@ -875,17 +785,18 @@ export const AdminDashboard: React.FC = () => {
     });
 
   const exportShopsCsv = () => {
-    const headers = ['Boutique', 'Slug', 'Statut', 'Valeur commandes FCFA', 'Commandes', 'Panier moyen', 'Produits'];
-    const rows = filteredShops.map(shop => [
-      shop.name, shop.slug, shop.is_active ? 'active' : 'inactive', shop.total_sales,
-      shop.orders_count, shop.average_order_value, shop.products_count,
-    ]);
+    const headers = adminRole === 'super_admin'
+      ? ['Boutique', 'Slug', 'Statut', 'Valeur commandes FCFA', 'Commandes', 'Panier moyen', 'Produits']
+      : ['Boutique', 'Slug', 'Statut', 'Commandes', 'Produits'];
+    const rows = filteredShops.map(shop => adminRole === 'super_admin'
+      ? [shop.name, shop.slug, shop.is_active ? 'active' : 'inactive', shop.total_sales, shop.orders_count, shop.average_order_value, shop.products_count]
+      : [shop.name, shop.slug, shop.is_active ? 'active' : 'inactive', shop.orders_count, shop.products_count]);
     const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `matable-super-admin-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `matable-admin-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -1018,8 +929,8 @@ export const AdminDashboard: React.FC = () => {
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="min-w-0 break-words text-lg font-black tracking-tight text-[#211712] sm:text-xl">Super-Admin MaTable.ci</h1>
-                  <span className="dashboard-chip dashboard-chip-soft">Tour de contrôle</span>
+                  <h1 className="min-w-0 break-words text-lg font-black tracking-tight text-[#211712] sm:text-xl">{adminRole === 'super_admin' ? 'Super-Admin MaTable.ci' : 'Administration MaTable.ci'}</h1>
+                  <span className="dashboard-chip dashboard-chip-soft">{adminRole === 'super_admin' ? 'Tour de contrôle' : 'Espace vérification'}</span>
                 </div>
                 <p className="text-[11px] text-[#4a3a30] mt-0.5 leading-4 max-w-xl">
                   Administration des boutiques, commandes et vérifications
@@ -1077,7 +988,7 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         <div className="grid min-w-0 gap-3 sm:gap-4 lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start xl:grid-cols-[220px_minmax(0,1fr)]">
-        <nav aria-label="Navigation super-admin" className="grid min-w-0 grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white/90 p-1.5 backdrop-blur-sm sm:grid-cols-4 sm:gap-2 lg:sticky lg:top-6 lg:grid-cols-1 lg:gap-2 lg:p-2">
+        <nav aria-label={adminRole === 'super_admin' ? 'Navigation super-admin' : 'Navigation administration'} className="grid min-w-0 grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white/90 p-1.5 backdrop-blur-sm sm:grid-cols-4 sm:gap-2 lg:sticky lg:top-6 lg:grid-cols-1 lg:gap-2 lg:p-2">
           {[
             { id: 'overview' as const, label: 'Accueil', icon: Activity },
             { id: 'shops' as const, label: `Boutiques (${shops.length})`, icon: Store },
@@ -1089,7 +1000,7 @@ export const AdminDashboard: React.FC = () => {
             { id: 'finance' as const, label: 'Finances', icon: CreditCard },
             { id: 'subscriptions' as const, label: 'Abonnements', icon: RefreshCw },
             { id: 'operations' as const, label: 'Opérations', icon: Activity },
-          ].map(({ id, label, icon: Icon }) => (
+          ].filter(({ id }) => adminRole === 'super_admin' || !['finance', 'subscriptions'].includes(id)).map(({ id, label, icon: Icon }) => (
             <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-10 min-w-0 items-center justify-start gap-2 rounded-lg border px-2 py-2 text-left text-[11px] font-bold transition sm:min-h-11 sm:px-3 sm:text-sm ${adminView === id ? 'border-slate-900 bg-slate-900 text-white shadow-sm' : 'border-transparent bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
               <Icon className="h-4 w-4 shrink-0" /><span className="min-w-0 break-words">{label}</span>
             </button>
@@ -1111,10 +1022,10 @@ export const AdminDashboard: React.FC = () => {
                 <button type="button" onClick={() => void fetchAnalytics(analyticsDays)} className="min-h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Actualiser les chiffres</button>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${adminRole === 'super_admin' ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}>
               {[
                 { label: 'Boutiques actives', value: `${activeShopsCount}/${shops.length}`, comparison: `${shops.length ? Math.round((activeShopsCount / shops.length) * 100) : 0}% du réseau`, tone: 'border-emerald-100 bg-emerald-50' },
-                { label: 'Montant des commandes', value: analytics ? `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F` : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.sales, analytics.previous.sales)} vs période précédente` : 'Chargement…', tone: 'border-sky-100 bg-sky-50' },
+                ...(adminRole === 'super_admin' ? [{ label: 'Montant des commandes', value: analytics ? `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F` : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.sales, analytics.previous.sales)} vs période précédente` : 'Chargement…', tone: 'border-sky-100 bg-sky-50' }] : []),
                 { label: 'Commandes', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.orders) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.orders, analytics.previous.orders)} vs période précédente` : 'Chargement…', tone: 'border-slate-200 bg-slate-50' },
                 { label: 'Visites consenties', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.page_views) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.page_views, analytics.previous.page_views)} vs période précédente` : 'Chargement…', tone: 'border-violet-100 bg-violet-50' },
                 { label: 'Sessions uniques', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.unique_visitors) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.unique_visitors, analytics.previous.unique_visitors)} vs période précédente` : 'Chargement…', tone: 'border-indigo-100 bg-indigo-50' },
@@ -1133,8 +1044,8 @@ export const AdminDashboard: React.FC = () => {
                 </motion.div>
               ))}
             </div>
-            <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-600">Les montants agrègent les commandes hors annulation et expiration : ce n’est pas un relevé des paiements réellement encaissés. Les visites ne comptent que les sessions ayant accepté les statistiques.</p>
-            {analytics && (
+            {adminRole === 'super_admin' && <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-600">Les montants agrègent les commandes hors annulation et expiration : ce n’est pas un relevé des paiements réellement encaissés. Les visites ne comptent que les sessions ayant accepté les statistiques.</p>}
+            {analytics && adminRole === 'super_admin' && (
               <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]">
                 <section aria-labelledby="admin-sales-chart-title" className="min-w-0 chart-panel p-4 md:p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1189,7 +1100,7 @@ export const AdminDashboard: React.FC = () => {
               </section>
               <section aria-labelledby="admin-recent-orders-title" className="min-w-0 chart-panel p-4 md:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3"><div className="min-w-0"><h3 id="admin-recent-orders-title" className="text-sm font-black text-slate-900">Commandes récentes</h3><p className="mt-1 text-xs text-slate-500">Dernières demandes enregistrées.</p></div><button type="button" onClick={() => setAdminView('orders')} className="shrink-0 text-xs font-bold text-sky-800 underline underline-offset-2">Toutes les commandes</button></div>
-                {adminOrders.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucune commande enregistrée.</p> : <div className="divide-y divide-slate-200">{adminOrders.slice(0, 5).map((order) => <div key={order.id} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-900">#{order.id} · {order.shop_name}</p><p className="mt-1 truncate text-xs text-slate-500">{order.customer_name} · {new Date(order.created_at).toLocaleDateString('fr-FR')}</p></div><div className="shrink-0 text-right"><strong className="block text-sm text-slate-900">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} F</strong><span className="text-[10px] font-semibold text-slate-500">{order.status}</span></div></div>)}</div>}
+                {adminOrders.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucune commande enregistrée.</p> : <div className="divide-y divide-slate-200">{adminOrders.slice(0, 5).map((order) => <div key={order.id} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-900">#{order.id} · {order.shop_name}</p><p className="mt-1 truncate text-xs text-slate-500">{order.customer_name} · {new Date(order.created_at).toLocaleDateString('fr-FR')}</p></div><div className="shrink-0 text-right">{adminRole === 'super_admin' && <strong className="block text-sm text-slate-900">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} F</strong>}<span className="text-[10px] font-semibold text-slate-500">{order.status}</span></div></div>)}</div>}
               </section>
             </div>
             <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1203,7 +1114,7 @@ export const AdminDashboard: React.FC = () => {
           <section aria-labelledby="admin-orders-title" className="chart-panel p-4 md:p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div><h2 id="admin-orders-title" className="text-sm font-black text-slate-900">Gestion des commandes</h2><p className="mt-1 text-xs text-slate-500">{orderTotal} commande(s) correspondante(s), affichage par pages de 100.</p></div>
-              <button type="button" onClick={() => exportOperationsCsv(`matable-commandes-${new Date().toISOString().slice(0, 10)}.csv`, ['ID', 'Boutique', 'Client', 'Téléphone', 'Montant', 'Statut', 'Date'], filteredAdminOrders.map(order => [order.id, order.shop_name, order.customer_name, order.customer_phone, order.total_amount, order.status, order.created_at]))} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
+              <button type="button" onClick={() => exportOperationsCsv(`matable-commandes-${new Date().toISOString().slice(0, 10)}.csv`, adminRole === 'super_admin' ? ['ID', 'Boutique', 'Client', 'Téléphone', 'Montant', 'Statut', 'Date'] : ['ID', 'Boutique', 'Client', 'Téléphone', 'Statut', 'Date'], filteredAdminOrders.map(order => adminRole === 'super_admin' ? [order.id, order.shop_name, order.customer_name, order.customer_phone, order.total_amount, order.status, order.created_at] : [order.id, order.shop_name, order.customer_name, order.customer_phone, order.status, order.created_at]))} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
               <label className="relative block"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input type="search" value={orderSearch} onChange={(event) => { setOrderSearch(event.target.value); setOrderPage(0); }} placeholder="Rechercher boutique, client, téléphone ou numéro" className="min-h-10 w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-sky-700" /></label>
@@ -1216,7 +1127,7 @@ export const AdminDashboard: React.FC = () => {
               {filteredAdminOrders.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucune commande correspondante.</p> : filteredAdminOrders.map((order) => (
                 <article key={order.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0"><h3 className="truncate text-sm font-bold text-slate-900">#{order.id} · {order.shop_name}</h3><p className="mt-1 truncate text-xs text-slate-600">{order.customer_name} · {order.items_count} article(s)</p><p className="mt-1 text-xs text-slate-500">{order.customer_phone} · {new Date(order.created_at).toLocaleString('fr-FR')}</p></div>
-                  <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 sm:justify-end"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{order.status}</span><strong className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} FCFA</strong>
+                  <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 sm:justify-end"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{order.status}</span>{adminRole === 'super_admin' && <strong className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} FCFA</strong>}
                     {adminOrderTransitions[order.status].length > 0 && (
                       <label className="sr-only" htmlFor={`order-status-${order.id}`}>Modifier le statut de la commande {order.id}</label>
                     )}
@@ -1249,7 +1160,7 @@ export const AdminDashboard: React.FC = () => {
                 {adminCustomers.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucun compte client correspondant.</p> : adminCustomers.map((customer) => (
                   <article key={customer.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0"><h3 className="truncate text-sm font-bold text-slate-900">{[customer.first_name, customer.last_name].filter(Boolean).join(' ') || customer.name || `Client #${customer.id}`}</h3><p className="mt-1 truncate text-xs text-slate-600">{customer.phone}{customer.email ? ` · ${customer.email}` : ''}</p><p className="mt-1 text-xs text-slate-500">Inscrit le {new Date(customer.created_at).toLocaleDateString('fr-FR')} · {customer.is_active ? 'Compte actif' : 'Compte désactivé'}</p></div>
-                    <div className="shrink-0 text-left sm:text-right"><strong className="block text-sm text-slate-900">{customer.orders_count} commande(s) liée(s)</strong><span className="text-xs text-slate-500">Montant des commandes non annulées (non encaissé) : {new Intl.NumberFormat('fr-FR').format(customer.order_value)} FCFA</span></div>
+                    <div className="shrink-0 text-left sm:text-right"><strong className="block text-sm text-slate-900">{customer.orders_count} commande(s) liée(s)</strong>{adminRole === 'super_admin' && <span className="text-xs text-slate-500">Montant des commandes non annulées (non encaissé) : {new Intl.NumberFormat('fr-FR').format(customer.order_value)} FCFA</span>}</div>
                   </article>
                 ))}
               </div>
@@ -1363,8 +1274,8 @@ export const AdminDashboard: React.FC = () => {
                 <summary className="cursor-pointer px-4 py-3 text-sm font-bold text-slate-800">Détail quotidien des indicateurs ({analytics.daily.length} jours)</summary>
                 <div className="max-h-80 overflow-auto border-t border-slate-200">
                   <table className="w-full min-w-[700px] border-collapse text-left text-xs">
-                    <thead className="sticky top-0 bg-slate-50 text-[10px] uppercase text-slate-600"><tr><th className="px-3 py-2.5">Date</th><th className="px-3 py-2.5 text-right">Pages vues consenties</th><th className="px-3 py-2.5 text-right">Sessions distinctes</th><th className="px-3 py-2.5 text-right">Commandes valides</th><th className="px-3 py-2.5 text-right">Valeur des commandes (FCFA)</th></tr></thead>
-                    <tbody>{analytics.daily.map((day) => <tr key={day.date} className="border-t border-slate-100"><th scope="row" className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-700">{new Date(`${day.date}T12:00:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'long', year: 'numeric' })}</th><td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.page_views)}</td><td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.unique_visitors)}</td><td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.orders)}</td><td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.sales)}</td></tr>)}</tbody>
+                    <thead className="sticky top-0 bg-slate-50 text-[10px] uppercase text-slate-600"><tr><th className="px-3 py-2.5">Date</th><th className="px-3 py-2.5 text-right">Pages vues consenties</th><th className="px-3 py-2.5 text-right">Sessions distinctes</th><th className="px-3 py-2.5 text-right">Commandes valides</th>{adminRole === 'super_admin' && <th className="px-3 py-2.5 text-right">Valeur des commandes (FCFA)</th>}</tr></thead>
+                    <tbody>{analytics.daily.map((day) => <tr key={day.date} className="border-t border-slate-100"><th scope="row" className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-700">{new Date(`${day.date}T12:00:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'long', year: 'numeric' })}</th><td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.page_views)}</td><td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.unique_visitors)}</td><td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.orders)}</td>{adminRole === 'super_admin' && <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.sales)}</td>}</tr>)}</tbody>
                   </table>
                 </div>
               </details>
@@ -1377,7 +1288,7 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                   <button
                     type="button"
-                    onClick={() => exportOperationsCsv(`matable-campagnes-${new Date().toISOString().slice(0, 10)}.csv`, ['Campagne', 'Visites consenties', 'Sessions uniques', 'Commandes', 'Ventes FCFA', 'Clics WhatsApp'], analytics.campaigns.map(({ campaign, visits, visitors, orders, sales, whatsapp_clicks }) => [campaign, visits, visitors, orders, sales, whatsapp_clicks]))}
+                    onClick={() => exportOperationsCsv(`matable-campagnes-${new Date().toISOString().slice(0, 10)}.csv`, adminRole === 'super_admin' ? ['Campagne', 'Visites consenties', 'Sessions uniques', 'Commandes', 'Ventes FCFA', 'Clics WhatsApp'] : ['Campagne', 'Visites consenties', 'Sessions uniques', 'Commandes', 'Clics WhatsApp'], analytics.campaigns.map(({ campaign, visits, visitors, orders, sales, whatsapp_clicks }) => adminRole === 'super_admin' ? [campaign, visits, visitors, orders, sales, whatsapp_clicks] : [campaign, visits, visitors, orders, whatsapp_clicks]))}
                     disabled={!analytics.campaigns.length}
                     className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 disabled:opacity-50"
                   >
@@ -1387,9 +1298,9 @@ export const AdminDashboard: React.FC = () => {
                 {analytics.campaigns.length === 0 ? <p className="py-3 text-xs text-slate-500">Aucune visite de campagne mesurée sur cette période.</p> : (
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[720px] border-collapse text-left text-xs">
-                      <thead><tr className="border-y border-slate-200 text-[10px] uppercase text-slate-500"><th className="py-2 pr-3">Campagne</th><th className="px-3 py-2 text-right">Visites</th><th className="px-3 py-2 text-right">Sessions</th><th className="px-3 py-2 text-right">Commandes</th><th className="px-3 py-2 text-right">Ventes</th><th className="py-2 pl-3 text-right">Clics WhatsApp</th></tr></thead>
+                      <thead><tr className="border-y border-slate-200 text-[10px] uppercase text-slate-500"><th className="py-2 pr-3">Campagne</th><th className="px-3 py-2 text-right">Visites</th><th className="px-3 py-2 text-right">Sessions</th><th className="px-3 py-2 text-right">Commandes</th>{adminRole === 'super_admin' && <th className="px-3 py-2 text-right">Ventes</th>}<th className="py-2 pl-3 text-right">Clics WhatsApp</th></tr></thead>
                       <tbody>{analytics.campaigns.map(({ campaign, visits, visitors, orders, sales, whatsapp_clicks }) => (
-                        <tr key={campaign} className="border-b border-slate-100"><th scope="row" className="py-2 pr-3 font-bold text-slate-800">{campaign}</th><td className="px-3 py-2 text-right text-slate-700">{visits}</td><td className="px-3 py-2 text-right text-slate-700">{visitors}</td><td className="px-3 py-2 text-right text-slate-700">{orders}</td><td className="px-3 py-2 text-right text-slate-700">{new Intl.NumberFormat('fr-FR').format(sales)} F</td><td className="py-2 pl-3 text-right text-slate-700">{whatsapp_clicks}</td></tr>
+                        <tr key={campaign} className="border-b border-slate-100"><th scope="row" className="py-2 pr-3 font-bold text-slate-800">{campaign}</th><td className="px-3 py-2 text-right text-slate-700">{visits}</td><td className="px-3 py-2 text-right text-slate-700">{visitors}</td><td className="px-3 py-2 text-right text-slate-700">{orders}</td>{adminRole === 'super_admin' && <td className="px-3 py-2 text-right text-slate-700">{new Intl.NumberFormat('fr-FR').format(sales)} F</td>}<td className="py-2 pl-3 text-right text-slate-700">{whatsapp_clicks}</td></tr>
                       ))}</tbody>
                     </table>
                   </div>
@@ -1404,14 +1315,14 @@ export const AdminDashboard: React.FC = () => {
                     <input id="audience-shop-search" type="search" value={audienceShopSearch} onChange={(event) => setAudienceShopSearch(event.target.value)} placeholder="Filtrer par nom de boutique" className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-sky-700" />
                     <label className="sr-only" htmlFor="audience-shop-sort">Trier les boutiques</label>
                     <select id="audience-shop-sort" value={audienceShopSort} onChange={(event) => setAudienceShopSort(event.target.value as typeof audienceShopSort)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">
-                      <option value="views">Trier : pages vues</option><option value="sessions">Trier : sessions</option><option value="orders">Trier : commandes</option><option value="sales">Trier : valeur commandée</option><option value="conversion">Trier : commandes / sessions</option><option value="name">Trier : nom</option>
+                      <option value="views">Trier : pages vues</option><option value="sessions">Trier : sessions</option><option value="orders">Trier : commandes</option>{adminRole === 'super_admin' && <option value="sales">Trier : valeur commandée</option>}<option value="conversion">Trier : commandes / sessions</option><option value="name">Trier : nom</option>
                     </select>
                   </div>
                 </div>
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="w-full min-w-[760px] border-collapse text-left text-xs">
-                    <thead className="bg-slate-50"><tr className="border-b border-slate-200 text-[10px] uppercase text-slate-600"><th className="px-3 py-3">Boutique</th><th className="px-3 py-3 text-right">Pages vues</th><th className="px-3 py-3 text-right">Sessions</th><th className="px-3 py-3 text-right">Commandes valides</th><th className="px-3 py-3 text-right">Valeur commandée (FCFA)</th><th className="px-3 py-3 text-right">Commandes / sessions</th></tr></thead>
-                    <tbody>{filteredAudienceShops.length === 0 ? <tr><td colSpan={6} className="px-3 py-8 text-center text-sm text-slate-500">Aucune boutique ne correspond à cette recherche.</td></tr> : filteredAudienceShops.map((shop) => <tr key={shop.shop_id} className="border-b border-slate-100 text-slate-700 last:border-0"><th scope="row" className="px-3 py-3 font-bold">{shop.shop_name}</th><td className="px-3 py-3 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.page_views)}</td><td className="px-3 py-3 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.unique_visitors)}</td><td className="px-3 py-3 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.orders)}</td><td className="px-3 py-3 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.sales)}</td><td className="px-3 py-3 text-right font-bold tabular-nums">{shop.conversion_rate.toLocaleString('fr-FR')}%</td></tr>)}</tbody>
+                    <thead className="bg-slate-50"><tr className="border-b border-slate-200 text-[10px] uppercase text-slate-600"><th className="px-3 py-3">Boutique</th><th className="px-3 py-3 text-right">Pages vues</th><th className="px-3 py-3 text-right">Sessions</th><th className="px-3 py-3 text-right">Commandes valides</th>{adminRole === 'super_admin' && <th className="px-3 py-3 text-right">Valeur commandée (FCFA)</th>}<th className="px-3 py-3 text-right">Commandes / sessions</th></tr></thead>
+                    <tbody>{filteredAudienceShops.length === 0 ? <tr><td colSpan={adminRole === 'super_admin' ? 6 : 5} className="px-3 py-8 text-center text-sm text-slate-500">Aucune boutique ne correspond à cette recherche.</td></tr> : filteredAudienceShops.map((shop) => <tr key={shop.shop_id} className="border-b border-slate-100 text-slate-700 last:border-0"><th scope="row" className="px-3 py-3 font-bold">{shop.shop_name}</th><td className="px-3 py-3 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.page_views)}</td><td className="px-3 py-3 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.unique_visitors)}</td><td className="px-3 py-3 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.orders)}</td>{adminRole === 'super_admin' && <td className="px-3 py-3 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(shop.sales)}</td>}<td className="px-3 py-3 text-right font-bold tabular-nums">{shop.conversion_rate.toLocaleString('fr-FR')}%</td></tr>)}</tbody>
                   </table>
                 </div>
               </div>
@@ -1422,7 +1333,7 @@ export const AdminDashboard: React.FC = () => {
         </motion.section>
         )}
 
-        {adminView === 'finance' && (
+        {adminView === 'finance' && adminRole === 'super_admin' && (
           <section aria-labelledby="admin-finance-title" className="space-y-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div><p className="text-xs font-bold uppercase text-emerald-800">Recettes MaTable.ci</p><h2 id="admin-finance-title" className="mt-1 text-xl font-black text-slate-900">Argent</h2><p className="mt-1 text-xs text-slate-500">Le MRR ne compte que les abonnements actifs. Les encaissements suivent les confirmations KadevPay.</p></div>
@@ -1483,7 +1394,7 @@ export const AdminDashboard: React.FC = () => {
           </section>
         )}
 
-        {adminView === 'subscriptions' && (
+        {adminView === 'subscriptions' && adminRole === 'super_admin' && (
           <section aria-labelledby="admin-subscriptions-title" className="space-y-5">
             <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -1667,7 +1578,7 @@ export const AdminDashboard: React.FC = () => {
                 <p className="text-[11px] text-slate-500">État du service, stockage et outils de contact propriétaire.</p>
               </div>
             </div>
-            <button type="button" onClick={fetchOperations} disabled={operationsLoading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">
+            <button type="button" onClick={() => void fetchOperations()} disabled={operationsLoading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">
               <RefreshCw className={`w-3.5 h-3.5 ${operationsLoading ? 'animate-spin' : ''}`} /> Actualiser
             </button>
           </div>
@@ -1680,7 +1591,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
           )}
 
-          <div className="mt-5 border-t border-slate-200 pt-5">
+          {adminRole === 'super_admin' && <div className="mt-5 border-t border-slate-200 pt-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="max-w-xl">
                 <div className="flex items-center gap-2">
@@ -1700,7 +1611,7 @@ export const AdminDashboard: React.FC = () => {
             <label className="mt-3 block text-xs font-bold text-slate-700" htmlFor="admin-maintenance-message">Message affiché aux visiteurs</label>
             <textarea id="admin-maintenance-message" value={maintenanceMessageDraft} maxLength={240} onChange={(event) => setMaintenanceMessageDraft(event.target.value)} rows={2} className="mt-1 min-h-20 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-emerald-700" />
             <div className="mt-1 flex justify-between text-[10px] text-slate-500"><span>Ce message sera aussi renvoyé aux API publiques.</span><span>{maintenanceMessageDraft.length}/240</span></div>
-          </div>
+          </div>}
 
           <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
             <div className="flex items-center gap-2">
@@ -1716,7 +1627,7 @@ export const AdminDashboard: React.FC = () => {
                 {shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
               </select>
               <select value={notificationTemplate} onChange={(event) => setNotificationTemplate(event.target.value as typeof notificationTemplate)} className="min-w-0 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
-                {ownerNotificationTemplates.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}
+                {ownerNotificationTemplates.filter((template) => adminRole === 'super_admin' || template.id !== 'trial_expiring').map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}
               </select>
               <button type="button" onClick={prepareOwnerNotification} disabled={notificationLoading || !notificationShopId} className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50">
                 <Send className="w-3.5 h-3.5" /> {notificationLoading ? 'Préparation...' : 'Ouvrir WhatsApp'}
@@ -1724,7 +1635,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          <AdminPushAnnouncements />
+          {adminRole === 'super_admin' && <AdminPushAnnouncements />}
 
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1864,6 +1775,9 @@ export const AdminDashboard: React.FC = () => {
               setDeleteShopAcknowledged(false);
               setDeleteShopError(null);
             }}
+            canSeeFinancials={adminRole === 'super_admin'}
+            canManageMerchantSpace={adminRole === 'super_admin'}
+            canDeleteShops={adminRole === 'super_admin'}
           />
         )}
         </div>

@@ -18,6 +18,9 @@ interface AdminShopListProps {
   onSetFeatured: (shopId: number, days: number) => void;
   onToggleActive: (shopId: number) => void;
   onRequestDelete: (shop: Pick<AdminShopItem, 'id' | 'name' | 'slug'>) => void;
+  canSeeFinancials?: boolean;
+  canManageMerchantSpace?: boolean;
+  canDeleteShops?: boolean;
 }
 
 export function AdminShopList({
@@ -35,6 +38,9 @@ export function AdminShopList({
   onSetFeatured,
   onToggleActive,
   onRequestDelete,
+  canSeeFinancials = true,
+  canManageMerchantSpace = true,
+  canDeleteShops = true,
 }: AdminShopListProps) {
   return (
     <>
@@ -60,7 +66,7 @@ export function AdminShopList({
             </button>
           ))}
           <select value={sortBy} onChange={(event) => onSortChange(event.target.value as typeof sortBy)} className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 outline-none">
-            <option value="sales">Trier par valeur des commandes</option>
+            {canSeeFinancials && <option value="sales">Trier par valeur des commandes</option>}
             <option value="orders">Trier par commandes</option>
             <option value="name">Trier par nom</option>
           </select>
@@ -107,7 +113,7 @@ export function AdminShopList({
                     <span>📍 {shop.city || 'Abidjan'}</span>
                     <span>📦 {shop.products_count} articles</span>
                     <span>🛒 {shop.orders_count} commandes</span>
-                    <span>💰 {new Intl.NumberFormat('fr-FR').format(shop.total_sales)} FCFA</span>
+                    {canSeeFinancials && <span>💰 {new Intl.NumberFormat('fr-FR').format(shop.total_sales)} FCFA</span>}
                   </div>
 
                   <div className="text-xs text-slate-600 flex flex-wrap items-center gap-4 pt-1">
@@ -116,7 +122,7 @@ export function AdminShopList({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 shrink-0">
-                  <button onClick={() => onOpenMerchantSpace(shop.id)} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Gérer intégralement</button>
+                  {canManageMerchantSpace && <button onClick={() => onOpenMerchantSpace(shop.id)} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Gérer intégralement</button>}
                   <select
                     aria-label={`Mettre ${shop.name} à la une`}
                     value={isFeatured ? 'featured' : ''}
@@ -139,9 +145,9 @@ export function AdminShopList({
                   <button onClick={() => onToggleActive(shop.id)} className={`rounded-xl border px-3 py-2 text-xs font-extrabold ${shop.is_active ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
                     {shop.is_active ? '● ON' : '○ OFF'}
                   </button>
-                  <button type="button" onClick={() => onRequestDelete({ id: shop.id, name: shop.name, slug: shop.slug })} aria-label={`Supprimer définitivement ${shop.name}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-extrabold text-rose-800 hover:bg-rose-50">
+                  {canDeleteShops && <button type="button" onClick={() => onRequestDelete({ id: shop.id, name: shop.name, slug: shop.slug })} aria-label={`Supprimer définitivement ${shop.name}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-extrabold text-rose-800 hover:bg-rose-50">
                     <Trash2 className="h-4 w-4" />Supprimer
-                  </button>
+                  </button>}
                 </div>
               </motion.div>
             );

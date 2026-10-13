@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import type { dbTransaction } from '../../db.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
 import { getSubscriptionPlanConfig, getSubscriptionState } from '../services/businessRules.ts';
@@ -25,8 +25,9 @@ interface AdminRouterOptions {
   persistShop: (shop: ShopRecord) => Promise<void>;
   toSafeShop: (shop: ShopRecord) => object;
   rotateMerchantAccessTokenForShop: (shopId: number) => Promise<string>;
-  requireSuperAdminAccess?: (req: any, res: any, next: any) => void;
-  requireVerificationAdminAccess?: (req: any, res: any, next: any) => void;
+  requireAdminAccess?: RequestHandler;
+  requireSuperAdminAccess?: RequestHandler;
+  requireVerificationAdminAccess?: RequestHandler;
 }
 
 export function createAdminRouter(options: AdminRouterOptions) {
@@ -39,25 +40,53 @@ export function createAdminRouter(options: AdminRouterOptions) {
     refreshRuntimeDataFromDatabase,
     toSafeShop,
     rotateMerchantAccessTokenForShop,
+    requireAdminAccess,
     requireSuperAdminAccess,
     requireVerificationAdminAccess,
   } = options;
   const router = Router();
   const maxTrialExtensionDays = 30;
+  const requireAdmin = requireAdminAccess ?? ((_req, _res, next) => next());
   const requireSuperAdmin = requireSuperAdminAccess ?? ((req: any, res: any, next: any) => next());
   const requireVerification = requireVerificationAdminAccess ?? ((req: any, res: any, next: any) => next());
+  const isVerificationAdmin = (req: { adminRole?: string }) => req.adminRole === 'verification_admin';
   router.use((req, res, next) => {
     const path = String(req.path || '');
     if (path.startsWith('/identity-verifications')) return next();
     if (path.startsWith('/content-moderation')) {
       return requireVerification(req, res, next);
     }
+    if (isVerificationAdmin(req)) {
+      const allowedRead = req.method === 'GET'
+        && ['/shops', '/orders', '/customers', '/analytics', '/health'].includes(path);
+      const allowedShopAction = req.method === 'PATCH'
+        && /^\/shops\/\d+\/(featured|toggle-active)$/.test(path);
+      const allowedNotification = req.method === 'POST'
+        && /^\/shops\/\d+\/notification$/.test(path)
+        && ['identity_verification', 'welcome', 'catalog', 'orders', 'support'].includes(String(req.body?.template || ''));
+      if (!allowedRead && !allowedShopAction && !allowedNotification) {
+        return res.status(403).json({ error: 'Cette opération est réservée au super-admin.' });
+      }
+    }
+    if (path === '/payments' || path.startsWith('/subscriptions')
+      || (req.method === 'DELETE' && /^\/shops\/\d+$/.test(path))
+      || (req.method === 'POST' && /^\/shops\/\d+\/access-link$/.test(path))
+      || (req.method === 'PATCH' && path === '/maintenance')
+      || (req.method === 'POST' && path === '/push/announcements')
+      || (req.method === 'GET' && path === '/push/status')) {
+      return requireSuperAdmin(req, res, next);
+    }
     if (req.method === 'POST'
       && /^\/shops\/\d+\/notification$/.test(path)
-      && req.body?.template === 'identity_verification') {
-      return requireVerification(req, res, next);
+      && ['identity_verification', 'welcome', 'catalog', 'orders', 'support'].includes(String(req.body?.template || ''))) {
+      return requireAdmin(req, res, next);
     }
-    return requireSuperAdmin(req, res, next);
+    if (req.method === 'POST'
+      && /^\/shops\/\d+\/notification$/.test(path)
+      && req.body?.template === 'trial_expiring') {
+      return requireSuperAdmin(req, res, next);
+    }
+    return requireAdmin(req, res, next);
   });
   const loadShops = async () => (await dbAll<Record<string, unknown>>('SELECT * FROM shops ORDER BY id')).map(mapShopRow);
   const getShop = async (shopId: number) => {
@@ -163,7 +192,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       await run('UPDATE customer_reviews SET status = ?, reviewed_at = ? WHERE id = ?', [status, reviewedAt, reviewId]);
       await run(
         'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
-        ['super_admin', 'customer_review_moderated', Number(review.shop_id), JSON.stringify({ review_id: reviewId, status }), reviewedAt],
+        [req.adminRole || 'super_admin', 'customer_review_moderated', Number(review.shop_id), JSON.stringify({ review_id: reviewId, status }), reviewedAt],
       );
     });
     return res.json({ success: true, status });
@@ -188,7 +217,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       await run('UPDATE customer_reports SET status = ?, reviewed_at = ? WHERE id = ?', [status, reviewedAt, reportId]);
       await run(
         'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
-        ['super_admin', 'customer_report_processed', shopId, JSON.stringify({ report_id: reportId, status }), reviewedAt],
+        [req.adminRole || 'super_admin', 'customer_report_processed', shopId, JSON.stringify({ report_id: reportId, status }), reviewedAt],
       );
     });
     return res.json({ success: true, status });
@@ -405,7 +434,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
     const previousTotalVisitors = Number(previousTraffic?.unique_visitors || 0);
     const previousTotalOrders = Number(previousOrders?.orders || 0);
     const previousTotalSales = Number(previousOrders?.sales || 0);
-    res.json({
+    const response = {
       days, since, previous_since: previousSince, daily,
       order_daily: daily.map(({ date, orders: orderCount, sales }) => ({ date, orders: orderCount, sales })),
       sources: sourceRows.map((row) => ({
@@ -425,7 +454,16 @@ export function createAdminRouter(options: AdminRouterOptions) {
         sales: previousTotalSales,
         conversion_rate: previousTotalVisitors ? Number(((previousTotalOrders / previousTotalVisitors) * 100).toFixed(1)) : 0,
       },
-    });
+    };
+    if (isVerificationAdmin(req)) {
+      response.daily.forEach((day) => { day.sales = 0; });
+      response.order_daily.forEach((day) => { day.sales = 0; });
+      response.campaigns.forEach((campaign) => { campaign.sales = 0; });
+      response.by_shop.forEach((shop) => { shop.sales = 0; });
+      response.totals.sales = 0;
+      response.previous.sales = 0;
+    }
+    res.json(response);
   });
 
   router.get('/payments', async (req, res) => {
@@ -741,9 +779,17 @@ export function createAdminRouter(options: AdminRouterOptions) {
         ...toSafeShop(shop),
         products_count: productCountByShop.get(shop.id) || 0,
         orders_count: actionableOrderCount,
-        total_sales: totalSales,
-        average_order_value: actionableOrderCount ? Math.round(totalSales / actionableOrderCount) : 0,
+        total_sales: isVerificationAdmin(_req) ? 0 : totalSales,
+        average_order_value: isVerificationAdmin(_req) || !actionableOrderCount ? 0 : Math.round(totalSales / actionableOrderCount),
         last_order_at: stats?.last_order_at ?? null,
+        ...(isVerificationAdmin(_req) ? {
+          selected_subscription_tier: undefined,
+          subscription_status: undefined,
+          subscription_expires_at: undefined,
+          trial_start: undefined,
+          trial_end: undefined,
+          subscription: undefined,
+        } : {}),
       };
     }));
   });
@@ -820,7 +866,8 @@ export function createAdminRouter(options: AdminRouterOptions) {
           id: Number(order.id), shop_id: Number(order.shop_id),
           shop_name: order.shop_name == null ? 'Boutique inconnue' : String(order.shop_name),
           customer_name: String(order.customer_name), customer_phone: String(order.customer_phone),
-          delivery_location: String(order.delivery_location), total_amount: Number(order.total_amount),
+          delivery_location: String(order.delivery_location),
+          total_amount: isVerificationAdmin(req) ? 0 : Number(order.total_amount),
           status: String(order.status || 'pending'), created_at: String(order.created_at),
           items_count: (items || []).reduce((sum, item) => sum + item.quantity, 0),
         };
@@ -866,7 +913,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
         created_at: String(customer.created_at),
         is_active: Boolean(customer.is_active),
         orders_count: Number(customer.orders_count || 0),
-        order_value: Number(customer.order_value || 0),
+        order_value: isVerificationAdmin(req) ? 0 : Number(customer.order_value || 0),
         last_order_at: customer.last_order_at == null ? null : String(customer.last_order_at),
       })),
       total: Number(count?.total || 0),
@@ -902,7 +949,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       if (update.changes !== 1) return undefined;
       await run(
         'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
-        ['super_admin', isActive ? 'shop_reactivated' : 'shop_suspended', shopId, JSON.stringify({ is_active: isActive, reason }), new Date().toISOString()],
+        [req.adminRole || 'super_admin', isActive ? 'shop_reactivated' : 'shop_suspended', shopId, JSON.stringify({ is_active: isActive, reason }), new Date().toISOString()],
       );
       return isActive;
     });
@@ -910,7 +957,10 @@ export function createAdminRouter(options: AdminRouterOptions) {
     if (result === undefined) return res.status(404).json({ error: 'Boutique introuvable.' });
     await refreshRuntimeDataFromDatabase();
     const updatedShop = await getShop(shopId);
-    res.json({ success: true, is_active: result, shop: toSafeShop(updatedShop!) });
+    const shopResponse = isVerificationAdmin(req)
+      ? { id: updatedShop!.id, is_active: updatedShop!.is_active, publication_status: updatedShop!.publication_status }
+      : toSafeShop(updatedShop!);
+    res.json({ success: true, is_active: result, shop: shopResponse });
   });
 
   router.delete('/shops/:id', async (req, res) => {

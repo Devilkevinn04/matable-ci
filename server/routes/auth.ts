@@ -90,6 +90,7 @@ interface AuthRouterOptions {
   sanitizeTextField: (value: string | null | undefined, maxLength?: number) => string;
   getCustomerSessionState: (req: Request, res?: Response) => Promise<CustomerState>;
   getAdminSession: (req: Request) => Promise<string | null>;
+  getAdminSessionRole: (req: Request) => Promise<'super_admin' | 'verification_admin' | null>;
   deleteAdminSessionRecord: (token: string) => Promise<void>;
   saveAdminSessionRecord: (token: string, session: AdminSession) => Promise<void>;
   saveCustomerSessionRecord: (token: string, session: CustomerSession) => Promise<void>;
@@ -131,6 +132,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     sanitizeTextField,
     getCustomerSessionState,
     getAdminSession,
+    getAdminSessionRole,
     deleteAdminSessionRecord,
     saveAdminSessionRecord,
     saveCustomerSessionRecord,
@@ -234,7 +236,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
 
   router.get('/session', async (req, res) => {
     const adminShopId = Number(req.query.admin_shop_id);
-    if (Number.isSafeInteger(adminShopId) && adminShopId > 0 && await getAdminSession(req)) {
+    if (Number.isSafeInteger(adminShopId) && adminShopId > 0 && await getAdminSessionRole(req) === 'super_admin') {
       const shop = await getShopFromDatabase(adminShopId);
       if (shop) {
         return res.json({

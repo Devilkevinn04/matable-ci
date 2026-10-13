@@ -73,6 +73,7 @@ declare global {
     interface Request {
       user?: { id: number };
       adminShopAccess?: boolean;
+      adminRole?: string;
     }
   }
 }
@@ -883,6 +884,7 @@ async function startServer() {
     persistShop,
     toSafeShop,
     rotateMerchantAccessTokenForShop,
+    requireAdminAccess,
     requireSuperAdminAccess,
     requireVerificationAdminAccess,
   }));
@@ -1003,6 +1005,7 @@ async function startServer() {
     sanitizeTextField,
     getCustomerSessionState,
     getAdminSession,
+    getAdminSessionRole,
     deleteAdminSessionRecord,
     saveAdminSessionRecord,
     saveCustomerSessionRecord,

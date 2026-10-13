@@ -62,7 +62,14 @@ export function createMerchantOrdersRouter({
       order_whatsapp_tracking.clicked_at AS whatsapp_clicked_at
       FROM orders LEFT JOIN order_whatsapp_tracking ON order_whatsapp_tracking.order_id = orders.id
       WHERE orders.shop_id = ? ORDER BY orders.created_at DESC, orders.id DESC`, [shopId]);
-    res.json(rows.map(mapOrderRow));
+    const shopOrders = rows.map(mapOrderRow);
+    res.json(req.adminRole === 'verification_admin'
+      ? shopOrders.map((order) => ({
+        ...order,
+        total_amount: 0,
+        items: order.items?.map((item) => ({ ...item, unit_price: 0 })),
+      }))
+      : shopOrders);
   });
 
   router.patch('/:id/orders/:orderId/status', requireMerchantAccess, async (req, res) => {
@@ -153,7 +160,7 @@ export function createMerchantOrdersRouter({
         if (req.adminShopAccess) {
           await transaction.run(
             'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
-            ['super_admin', 'admin_order_status_updated', shopId, JSON.stringify({
+            [req.adminRole || 'super_admin', 'admin_order_status_updated', shopId, JSON.stringify({
               order_id: order.id,
               previous_status: previousStatus,
               status,
@@ -174,10 +181,17 @@ export function createMerchantOrdersRouter({
       }
       const cachedOrder = orders.find((candidate) => candidate.id === orderId && candidate.shop_id === shopId);
       if (cachedOrder) cachedOrder.status = result.order.status;
-      if (result.unchanged) return res.json({ success: true, order: result.order });
+      const responseOrder = req.adminRole === 'verification_admin'
+        ? {
+          ...result.order,
+          total_amount: 0,
+          items: result.order.items?.map((item) => ({ ...item, unit_price: 0 })),
+        }
+        : result.order;
+      if (result.unchanged) return res.json({ success: true, order: responseOrder });
       res.json({
         success: true,
-        order: result.order,
+        order: responseOrder,
         message: status === 'confirmed' && result.previousStatus === 'pending'
           ? 'Commande confirmée et stock réservé.'
           : status === 'cancelled'

@@ -172,7 +172,7 @@ test('home page and direct merchant plan preview load successfully', async () =>
   assert.match(plansPreview.response.headers.get('content-type') || '', /text\/html/);
 });
 
-test('verification admin can access moderation endpoints but not super-admin push actions', async () => {
+test('verification admin can use general non-financial tools but cannot access super-admin finance or destructive actions', async () => {
   const verificationLogin = await apiFetch('/api/auth/admin-login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -194,18 +194,76 @@ test('verification admin can access moderation endpoints but not super-admin pus
   });
   assert.equal(verificationReminder.response.status, 404, JSON.stringify(verificationReminder.payload));
 
-  const forbiddenGeneralNotification = await apiFetch('/api/admin/shops/999999/notification', {
+  const shops = await apiFetch('/api/admin/shops');
+  assert.equal(shops.response.status, 200, JSON.stringify(shops.payload));
+  assert.ok(shops.payload.length > 0);
+  assert.equal(shops.payload[0].total_sales, 0);
+  assert.equal(Object.hasOwn(shops.payload[0], 'subscription'), false);
+  const shopId = shops.payload[0].id;
+  const initialActive = shops.payload[0].is_active;
+  const shopToggle = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expected_is_active: initialActive, reason: 'Test de droits vérification' }),
+  });
+  assert.equal(shopToggle.response.status, 200, JSON.stringify(shopToggle.payload));
+  assert.equal(shopToggle.payload.is_active, !initialActive);
+  assert.equal(Object.hasOwn(shopToggle.payload.shop, 'subscription'), false);
+  const restoreShop = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expected_is_active: !initialActive, reason: 'Restauration après test' }),
+  });
+  assert.equal(restoreShop.response.status, 200, JSON.stringify(restoreShop.payload));
+
+  const generalNotification = await apiFetch(`/api/admin/shops/${shopId}/notification`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ template: 'welcome' }),
   });
-  assert.equal(forbiddenGeneralNotification.response.status, 403, JSON.stringify(forbiddenGeneralNotification.payload));
+  assert.equal(generalNotification.response.status, 200, JSON.stringify(generalNotification.payload));
+
+  const forbiddenSubscriptionReminder = await apiFetch(`/api/admin/shops/${shopId}/notification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ template: 'trial_expiring' }),
+  });
+  assert.equal(forbiddenSubscriptionReminder.response.status, 403, JSON.stringify(forbiddenSubscriptionReminder.payload));
 
   const moderationQueue = await apiFetch('/api/admin/content-moderation');
   assert.equal(moderationQueue.response.status, 200, JSON.stringify(moderationQueue.payload));
 
-  const protectedShops = await apiFetch('/api/admin/shops');
-  assert.equal(protectedShops.response.status, 403, JSON.stringify(protectedShops.payload));
+  const orders = await apiFetch('/api/admin/orders');
+  assert.equal(orders.response.status, 200, JSON.stringify(orders.payload));
+  assert.ok(orders.payload.orders.every((order: { total_amount: number }) => order.total_amount === 0));
+  const merchantOrders = await apiFetch(`/api/shops/${shopId}/orders`);
+  assert.equal(merchantOrders.response.status, 200, JSON.stringify(merchantOrders.payload));
+  assert.ok(merchantOrders.payload.every((order: { total_amount: number; items: { unit_price: number }[] }) =>
+    order.total_amount === 0 && order.items.every((item) => item.unit_price === 0)));
+  const customers = await apiFetch('/api/admin/customers');
+  assert.equal(customers.response.status, 200, JSON.stringify(customers.payload));
+  assert.ok(customers.payload.customers.every((customer: { order_value: number }) => customer.order_value === 0));
+  const analytics = await apiFetch('/api/admin/analytics?days=7');
+  assert.equal(analytics.response.status, 200, JSON.stringify(analytics.payload));
+  assert.equal(analytics.payload.totals.sales, 0);
+  assert.ok(analytics.payload.daily.every((day: { sales: number }) => day.sales === 0));
+  assert.equal((await apiFetch('/api/admin/health')).response.status, 200);
+
+  for (const path of ['/api/admin/payments', '/api/admin/subscriptions', '/api/admin/maintenance', '/api/admin/push/status']) {
+    const forbidden = await apiFetch(path);
+    assert.equal(forbidden.response.status, 403, `${path}: ${JSON.stringify(forbidden.payload)}`);
+  }
+  for (const [path, method, body] of [
+    ['/api/admin/shops/999999', 'DELETE', undefined],
+    ['/api/admin/shops/999999/access-link', 'POST', undefined],
+    ['/api/admin/maintenance', 'PATCH', { enabled: true, message: 'Not allowed' }],
+  ] as const) {
+    const forbidden = await apiFetch(path, {
+      method,
+      ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+    });
+    assert.equal(forbidden.response.status, 403, `${method} ${path}: ${JSON.stringify(forbidden.payload)}`);
+  }
 
   const protectedPush = await apiFetch('/api/admin/push/announcements', {
     method: 'POST',
