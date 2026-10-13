@@ -25,21 +25,23 @@ export async function deleteMerchantSessionRecord(token: string) {
   await dbRun('DELETE FROM merchant_sessions WHERE token = ?', [hashSessionToken(token)]);
 }
 
-export async function saveAdminSessionRecord(token: string, session: { expiresAt: number; fingerprint: string }) {
+export async function saveAdminSessionRecord(token: string, session: { expiresAt: number; fingerprint: string; role?: string }) {
+  const role = session.role ?? 'super_admin';
   await dbRun(`
-    INSERT INTO admin_sessions (token, expires_at, fingerprint, created_at)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO admin_sessions (token, expires_at, fingerprint, role, created_at)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(token) DO UPDATE SET
       expires_at = excluded.expires_at,
       fingerprint = excluded.fingerprint,
+      role = excluded.role,
       created_at = excluded.created_at
-  `, [hashSessionToken(token), session.expiresAt, session.fingerprint, new Date().toISOString()]);
+  `, [hashSessionToken(token), session.expiresAt, session.fingerprint, role, new Date().toISOString()]);
 }
 
-export async function getAdminSessionRecord(token: string): Promise<{ expiresAt: number; fingerprint: string } | null> {
-  const row = await dbGet<{ expires_at: number; fingerprint: string }>('SELECT expires_at, fingerprint FROM admin_sessions WHERE token = ?', [hashSessionToken(token)]);
+export async function getAdminSessionRecord(token: string): Promise<{ expiresAt: number; fingerprint: string; role?: string } | null> {
+  const row = await dbGet<{ expires_at: number; fingerprint: string; role?: string }>('SELECT expires_at, fingerprint, role FROM admin_sessions WHERE token = ?', [hashSessionToken(token)]);
   if (!row) return null;
-  return { expiresAt: Number(row.expires_at), fingerprint: row.fingerprint };
+  return { expiresAt: Number(row.expires_at), fingerprint: row.fingerprint, role: row.role ?? 'super_admin' };
 }
 
 export async function deleteAdminSessionRecord(token: string) {

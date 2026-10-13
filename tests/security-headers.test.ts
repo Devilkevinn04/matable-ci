@@ -26,6 +26,9 @@ test('allows Google Fonts through the production content security policy', async
 
     assert.match(policy ?? '', /style-src[^;]*https:\/\/fonts\.googleapis\.com/);
     assert.match(policy ?? '', /font-src[^;]*https:\/\/fonts\.gstatic\.com/);
+    assert.match(policy ?? '', /script-src[^;]*https:\/\/pay\.kadev\.ci/);
+    assert.match(policy ?? '', /connect-src[^;]*https:\/\/pay\.kadev\.ci/);
+    assert.match(policy ?? '', /frame-src[^;]*https:\/\/pay\.kadev\.ci/);
   } finally {
     if (server.listening) {
       await new Promise<void>((resolve, reject) => {

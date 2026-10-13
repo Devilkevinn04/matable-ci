@@ -2,7 +2,8 @@ services:
   - type: web
     name: matable-ci
     env: node
-    plan: free
+    plan: starter
+    healthCheckPath: /health
     buildCommand: npm ci && npm run build
     startCommand: npm start
     envVars:

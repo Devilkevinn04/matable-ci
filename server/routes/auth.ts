@@ -49,6 +49,7 @@ const PRIVACY_DOCUMENT = '/confidentialite';
 interface AdminSession {
   expiresAt: number;
   fingerprint: string;
+  role?: string;
 }
 
 interface SessionState {
@@ -272,20 +273,41 @@ export function createAuthRouter(options: AuthRouterOptions) {
   });
 
   router.post('/admin-login', async (req, res) => {
-    const configuredKey = String(process.env.ADMIN_ACCESS_KEY || '').trim();
-    if (!configuredKey) return res.status(503).json({ error: 'ADMIN_ACCESS_KEY doit être configurée côté serveur.' });
+    const requestedRole = String(req.body?.role || 'super_admin').trim();
+    if (requestedRole !== 'super_admin' && requestedRole !== 'verification_admin') {
+      return res.status(400).json({ error: 'Rôle admin invalide.' });
+    }
 
-    const adminAttemptKey = `${req.ip}:admin`;
+    const configuredKey = requestedRole === 'verification_admin'
+      ? String(process.env.VERIFICATION_ADMIN_ACCESS_KEY || '').trim()
+      : String(process.env.ADMIN_ACCESS_KEY || '').trim();
+    if (!configuredKey) {
+      return res.status(503).json({
+        error: requestedRole === 'verification_admin'
+          ? 'VERIFICATION_ADMIN_ACCESS_KEY doit être configurée côté serveur.'
+          : 'ADMIN_ACCESS_KEY doit être configurée côté serveur.',
+      });
+    }
+
+    const adminAttemptKey = `${req.ip}:admin:${requestedRole}`;
     if (await isLoginRateLimited(adminAttemptKey)) return res.status(429).json({ error: 'Trop de tentatives de connexion admin. Réessayez plus tard.' });
-    if (!timingSafeEqual(String(req.body?.key || ''), configuredKey)) return res.status(401).json({ error: 'Clé super-admin incorrecte.' });
+    if (!timingSafeEqual(String(req.body?.key || ''), configuredKey)) {
+      return res.status(401).json({
+        error: requestedRole === 'verification_admin' ? 'Clé admin de vérification incorrecte.' : 'Clé super-admin incorrecte.',
+      });
+    }
 
     await clearLoginAttempts(adminAttemptKey);
     const token = randomUUID();
-    const adminSession = { expiresAt: Date.now() + adminSessionDurationMs, fingerprint: buildSessionFingerprint(req) };
+    const adminSession: AdminSession = {
+      expiresAt: Date.now() + adminSessionDurationMs,
+      fingerprint: buildSessionFingerprint(req),
+      role: requestedRole,
+    };
     adminSessions.set(token, adminSession);
     await saveAdminSessionRecord(token, adminSession);
     setAdminSessionCookie(res, token);
-    res.json({ success: true });
+    res.json({ success: true, role: requestedRole });
   });
 
   router.post('/admin-logout', async (req, res) => {

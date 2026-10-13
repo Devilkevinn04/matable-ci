@@ -131,6 +131,7 @@ before(async () => {
     env: {
       ...process.env,
       ADMIN_ACCESS_KEY: 'super-admin-demo-key',
+      VERIFICATION_ADMIN_ACCESS_KEY: 'verification-admin-demo-key',
       DIDIT_WEBHOOK_SECRET,
       GOOGLE_OAUTH_CLIENT_ID: '',
       GOOGLE_OAUTH_CLIENT_SECRET: '',
@@ -169,6 +170,29 @@ test('home page and direct merchant plan preview load successfully', async () =>
   const plansPreview = await apiFetch('/__preview/merchant-plans');
   assert.equal(plansPreview.response.status, 200);
   assert.match(plansPreview.response.headers.get('content-type') || '', /text\/html/);
+});
+
+test('verification admin can access moderation endpoints but not super-admin push actions', async () => {
+  const verificationLogin = await apiFetch('/api/auth/admin-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'verification-admin-demo-key', role: 'verification_admin' }),
+  });
+  assert.equal(verificationLogin.response.status, 200, JSON.stringify(verificationLogin.payload));
+  assert.equal(verificationLogin.payload.role, 'verification_admin');
+
+  const moderationQueue = await apiFetch('/api/admin/content-moderation');
+  assert.equal(moderationQueue.response.status, 200, JSON.stringify(moderationQueue.payload));
+
+  const protectedPush = await apiFetch('/api/admin/push/announcements', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Forbidden', body: 'This should be blocked for verification admin', url: '/app' }),
+  });
+  assert.equal(protectedPush.response.status, 403, JSON.stringify(protectedPush.payload));
+
+  const logout = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
+  assert.equal(logout.response.status, 200, JSON.stringify(logout.payload));
 });
 
 test('customer registration and login are supported with email, phone, and password', async () => {

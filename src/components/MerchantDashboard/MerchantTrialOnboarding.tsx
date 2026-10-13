@@ -137,11 +137,12 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
     setIsPaymentStarting(true);
     didReceivePaymentSuccess.current = false;
     try {
+      const clientRequestId = crypto.randomUUID();
       const response = await fetch(`/api/shops/${shop.id}/subscription-payments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ tier: selectedTier, term }),
+        body: JSON.stringify({ tier: selectedTier, term, client_request_id: clientRequestId }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de préparer le paiement KadevPay.');

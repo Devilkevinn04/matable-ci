@@ -21,8 +21,16 @@ const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const ADMIN_SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 
 type MerchantSession = { shopId: number; expiresAt: number; fingerprint: string };
-type AdminSession = { expiresAt: number; fingerprint: string };
+type AdminRole = 'super_admin' | 'verification_admin';
+type AdminSession = { expiresAt: number; fingerprint: string; role?: AdminRole | string };
 type CustomerSession = { userId: number; expiresAt: number; fingerprint: string };
+
+const ADMIN_ROLES = new Set<AdminRole>(['super_admin', 'verification_admin']);
+const normalizeAdminRole = (role?: string | null): AdminRole | null => {
+  if (role === 'verification_admin') return 'verification_admin';
+  if (role === 'super_admin' || !role) return 'super_admin';
+  return null;
+};
 
 export function buildSessionFingerprint(req: Request): string {
   const userAgent = String(req.headers['user-agent'] || '').trim();
@@ -102,7 +110,7 @@ export function createAuthSessionHelpers({
     res.setHeader('Set-Cookie', `matable_admin_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`);
   }
 
-  async function getAdminSession(req: Request): Promise<string | null> {
+  async function getAdminSessionRole(req: Request): Promise<AdminRole | null> {
     const token = getCookie(req, 'matable_admin_session');
     let session = token ? adminSessions.get(token) : undefined;
 
@@ -119,16 +127,30 @@ export function createAuthSessionHelpers({
       return null;
     }
 
+    const normalizedRole = normalizeAdminRole(session.role);
+    if (!normalizedRole || !ADMIN_ROLES.has(normalizedRole)) {
+      adminSessions.delete(token);
+      await deleteAdminSessionRecord(token);
+      return null;
+    }
+
     if (!isRequestFingerprintMatch(session, req)) {
       adminSessions.delete(token);
       await deleteAdminSessionRecord(token);
       return null;
     }
 
-    const renewedSession = { ...session, expiresAt: Date.now() + ADMIN_SESSION_DURATION_MS };
+    const renewedSession = { ...session, role: normalizedRole, expiresAt: Date.now() + ADMIN_SESSION_DURATION_MS };
     adminSessions.set(token, renewedSession);
     await saveAdminSessionRecord(token, renewedSession);
-    return token;
+    return normalizedRole;
+  }
+
+  async function getAdminSession(req: Request): Promise<string | null> {
+    const role = await getAdminSessionRole(req);
+    if (!role) return null;
+    const token = getCookie(req, 'matable_admin_session');
+    return token || null;
   }
 
   async function getSessionStateForResponse(req: Request, res?: Response) {
@@ -280,8 +302,25 @@ export function createAuthSessionHelpers({
   }
 
   async function requireAdminAccess(req: Request, res: Response, next: express.NextFunction) {
-    if (!await getAdminSession(req)) {
-      return res.status(401).json({ error: 'Authentification super-admin requise.' });
+    const role = await getAdminSessionRole(req);
+    if (!role) {
+      return res.status(401).json({ error: 'Authentification admin requise.' });
+    }
+    next();
+  }
+
+  async function requireSuperAdminAccess(req: Request, res: Response, next: express.NextFunction) {
+    const role = await getAdminSessionRole(req);
+    if (!role || role !== 'super_admin') {
+      return res.status(403).json({ error: 'Accès super-admin requis.' });
+    }
+    next();
+  }
+
+  async function requireVerificationAdminAccess(req: Request, res: Response, next: express.NextFunction) {
+    const role = await getAdminSessionRole(req);
+    if (!role || (role !== 'super_admin' && role !== 'verification_admin')) {
+      return res.status(403).json({ error: 'Accès vérification requis.' });
     }
     next();
   }
@@ -399,10 +438,13 @@ export function createAuthSessionHelpers({
     clearSessionCookie,
     setAdminSessionCookie,
     getAdminSession,
+    getAdminSessionRole,
     getSessionStateForResponse,
     requireCustomerAccess,
     getCustomerSessionState,
     requireAdminAccess,
+    requireSuperAdminAccess,
+    requireVerificationAdminAccess,
     requireMerchantIdentity,
     requireMerchantOwner,
     requireMerchantAccess,

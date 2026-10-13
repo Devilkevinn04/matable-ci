@@ -25,12 +25,34 @@ interface AdminRouterOptions {
   persistShop: (shop: ShopRecord) => Promise<void>;
   toSafeShop: (shop: ShopRecord) => object;
   rotateMerchantAccessTokenForShop: (shopId: number) => Promise<string>;
+  requireSuperAdminAccess?: (req: any, res: any, next: any) => void;
+  requireVerificationAdminAccess?: (req: any, res: any, next: any) => void;
 }
 
 export function createAdminRouter(options: AdminRouterOptions) {
-  const { databaseMode, dbAll, dbGet, dbRun, dbTransaction, refreshRuntimeDataFromDatabase, toSafeShop, rotateMerchantAccessTokenForShop } = options;
+  const {
+    databaseMode,
+    dbAll,
+    dbGet,
+    dbRun,
+    dbTransaction,
+    refreshRuntimeDataFromDatabase,
+    toSafeShop,
+    rotateMerchantAccessTokenForShop,
+    requireSuperAdminAccess,
+    requireVerificationAdminAccess,
+  } = options;
   const router = Router();
   const maxTrialExtensionDays = 30;
+  const requireSuperAdmin = requireSuperAdminAccess ?? ((req: any, res: any, next: any) => next());
+  const requireVerification = requireVerificationAdminAccess ?? ((req: any, res: any, next: any) => next());
+  router.use((req, res, next) => {
+    const path = String(req.path || '');
+    if (path.startsWith('/content-moderation')) {
+      return requireVerification(req, res, next);
+    }
+    return requireSuperAdmin(req, res, next);
+  });
   const loadShops = async () => (await dbAll<Record<string, unknown>>('SELECT * FROM shops ORDER BY id')).map(mapShopRow);
   const getShop = async (shopId: number) => {
     const row = await dbGet<Record<string, unknown>>('SELECT * FROM shops WHERE id = ?', [shopId]);
@@ -63,7 +85,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
     });
   });
 
-  router.post('/push/announcements', async (req, res) => {
+  router.post('/push/announcements', requireSuperAdmin, async (req, res) => {
     if (!getVapidConfiguration()) {
       return res.status(503).json({ error: 'Configurez VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY et VAPID_SUBJECT avant de publier une annonce Push.' });
     }
@@ -93,7 +115,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
     return res.status(201).json({ success: true, id: inserted.id, delivery });
   });
 
-  router.get('/content-moderation', async (_req, res) => {
+  router.get('/content-moderation', requireVerification, async (_req, res) => {
     const [reviews, reports] = await Promise.all([
       dbAll<Record<string, unknown>>(
         `SELECT reviews.id, reviews.shop_id, reviews.target_type, reviews.target_id, reviews.rating,
@@ -119,7 +141,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
     return res.json({ reviews, reports });
   });
 
-  router.patch('/content-moderation/reviews/:id', async (req, res) => {
+  router.patch('/content-moderation/reviews/:id', requireVerification, async (req, res) => {
     const reviewId = Number(req.params.id);
     const status = String(req.body?.status || '');
     if (!Number.isSafeInteger(reviewId) || reviewId <= 0 || !['approved', 'hidden'].includes(status)) {
@@ -141,7 +163,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
     return res.json({ success: true, status });
   });
 
-  router.patch('/content-moderation/reports/:id', async (req, res) => {
+  router.patch('/content-moderation/reports/:id', requireVerification, async (req, res) => {
     const reportId = Number(req.params.id);
     const status = String(req.body?.status || '');
     if (!Number.isSafeInteger(reportId) || reportId <= 0 || !['in_review', 'resolved', 'dismissed'].includes(status)) {

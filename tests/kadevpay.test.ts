@@ -118,6 +118,79 @@ test('paid subscriptions enter grace at expiry and suspend after the two-day gra
   assert.equal(current.isActive, true);
 });
 
+test('active subscriptions can be renewed repeatedly and retries stay idempotent', async () => {
+  const created = await fetch(`${BASE_URL}/api/shops`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Boutique renouvellement itératif',
+      whatsapp_number: `+22507${String(Date.now() + 9).slice(-8)}`,
+      email: `renewal-idempotent-${Date.now()}@example.com`,
+      pin_code: '456789',
+      category: 'fashion',
+      city: 'Abidjan',
+      accepted_terms_privacy: true,
+    }),
+  });
+  const createdPayload = await created.json();
+  assert.equal(created.status, 200, JSON.stringify(createdPayload));
+
+  const login = await fetch(`${BASE_URL}/api/auth/merchant-access-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: createdPayload.owner_access_token }),
+  });
+  assert.equal(login.status, 200);
+  const merchantCookie = login.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(merchantCookie);
+
+  const now = new Date();
+  const futureExpiry = new Date(now.getTime() + 30 * 86400000).toISOString();
+  const setActiveDb = new Database(TEST_DB_PATH);
+  try {
+    setActiveDb.prepare('UPDATE shops SET subscription_status = ?, selected_subscription_tier = ?, subscription_expires_at = ? WHERE id = ?')
+      .run('active', 'premium', futureExpiry, createdPayload.shop.id);
+  } finally {
+    setActiveDb.close();
+  }
+
+  const clientRequestId = `repeat-${Date.now()}`;
+  const firstPayment = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier: 'premium', term: 'monthly', client_request_id: clientRequestId }),
+  });
+  const firstPayload = await firstPayment.json();
+  assert.equal(firstPayment.status, 201, JSON.stringify(firstPayload));
+
+  const repeatedPayment = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier: 'premium', term: 'monthly', client_request_id: clientRequestId }),
+  });
+  const repeatedPayload = await repeatedPayment.json();
+  assert.equal(repeatedPayment.status, 200, JSON.stringify(repeatedPayload));
+  assert.equal(repeatedPayload.payment_id, firstPayload.payment_id);
+
+  const duplicateCount = new Database(TEST_DB_PATH);
+  try {
+    const row = duplicateCount.prepare('SELECT COUNT(*) AS count FROM subscription_payment_intents WHERE shop_id = ? AND client_request_id = ?').get(createdPayload.shop.id, clientRequestId) as { count: number };
+    assert.equal(row.count, 1);
+  } finally {
+    duplicateCount.close();
+  }
+
+  const nextExpiry = getRenewedSubscriptionExpiry(futureExpiry, new Date(futureExpiry), 'monthly');
+  assert.ok(new Date(nextExpiry).getTime() > new Date(futureExpiry).getTime());
+
+  const cleanupDb = new Database(TEST_DB_PATH);
+  try {
+    cleanupDb.prepare('DELETE FROM subscription_payment_intents WHERE shop_id = ?').run(createdPayload.shop.id);
+  } finally {
+    cleanupDb.close();
+  }
+});
+
 test('KadevPay renewals require a signed webhook and apply exactly once', async () => {
   const created = await fetch(`${BASE_URL}/api/shops`, {
     method: 'POST',

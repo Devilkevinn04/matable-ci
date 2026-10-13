@@ -660,10 +660,13 @@ const {
   clearSessionCookie,
   setAdminSessionCookie,
   getAdminSession,
+  getAdminSessionRole,
   getSessionStateForResponse,
   requireCustomerAccess,
   getCustomerSessionState,
   requireAdminAccess,
+  requireSuperAdminAccess,
+  requireVerificationAdminAccess,
   requireMerchantOwner,
   requireMerchantAccess,
   requireMerchantOwnShop,
@@ -683,7 +686,7 @@ export function validateRuntimeConfig(): void {
     return;
   }
 
-  const requiredKeys = ['ADMIN_ACCESS_KEY', 'APP_URL', 'PORT', 'DATABASE_URL'];
+  const requiredKeys = ['ADMIN_ACCESS_KEY', 'VERIFICATION_ADMIN_ACCESS_KEY', 'APP_URL', 'PORT', 'DATABASE_URL'];
   const missing = requiredKeys.filter((key) => !String(process.env[key] || '').trim());
 
   if (missing.length > 0) {
@@ -691,8 +694,13 @@ export function validateRuntimeConfig(): void {
   }
 
   const adminAccessKey = String(process.env.ADMIN_ACCESS_KEY || '').trim();
-  if (adminAccessKey.length < 32 || /change_me|demo|example|03062004/i.test(adminAccessKey)) {
+  if (adminAccessKey.length < 32 || /change_me|demo|example|legacy/i.test(adminAccessKey)) {
     throw new Error('ADMIN_ACCESS_KEY doit être une clé forte, unique et longue d’au moins 32 caractères en production.');
+  }
+
+  const verificationAdminAccessKey = String(process.env.VERIFICATION_ADMIN_ACCESS_KEY || '').trim();
+  if (verificationAdminAccessKey.length < 32 || /change_me|demo|example|legacy/i.test(verificationAdminAccessKey)) {
+    throw new Error('VERIFICATION_ADMIN_ACCESS_KEY doit être une clé forte, unique et longue d’au moins 32 caractères en production.');
   }
 
   if (DEMO_MODE) {
@@ -875,8 +883,10 @@ async function startServer() {
     persistShop,
     toSafeShop,
     rotateMerchantAccessTokenForShop,
+    requireSuperAdminAccess,
+    requireVerificationAdminAccess,
   }));
-  app.use('/api/admin/identity-verifications', verificationRouters.adminRouter);
+  app.use('/api/admin/identity-verifications', requireVerificationAdminAccess, verificationRouters.adminRouter);
   const maintenanceHtmlPath = path.join(process.cwd(), process.env.NODE_ENV === 'production' ? 'dist' : 'public', 'maintenance.html');
   const maintenanceHtml = fs.readFileSync(maintenanceHtmlPath, 'utf-8');
   app.use(createMaintenanceModeMiddleware(async () => {
@@ -910,7 +920,15 @@ async function startServer() {
   app.use('/api', createTelemetryRouter({ shops, rateLimitPublicRequest, dbGet, dbRun }));
   app.use('/api', createKadevPayRouter({ shops, requireMerchantOwnShop }));
 
-  // Health check
+  app.get('/health', async (_req, res) => {
+    try {
+      await dbGet('SELECT 1');
+      return res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+    } catch (error) {
+      console.error('Health check failed: database unavailable.', error);
+      return res.status(503).json({ status: 'degraded', error: 'database_unavailable' });
+    }
+  });
 
   // 1. SHOPS
   const publicShopsRouter = createPublicShopsRouter({

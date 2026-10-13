@@ -80,10 +80,37 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
     }
     const term: SubscriptionTerm = requestedTerm === 'annual' ? 'annual' : 'monthly';
     const amount = getSubscriptionPrice(tier, term);
+    const clientRequestId = typeof req.body?.client_request_id === 'string'
+      ? req.body.client_request_id.trim()
+      : '';
+    if (clientRequestId && (clientRequestId.length < 1 || clientRequestId.length > 255)) {
+      return res.status(400).json({ error: 'Le client_request_id est trop long ou invalide.' });
+    }
+    if (clientRequestId) {
+      const existingIntent = await dbGet<SubscriptionPaymentIntent>(
+        'SELECT * FROM subscription_payment_intents WHERE shop_id = ? AND client_request_id = ? ORDER BY created_at DESC LIMIT 1',
+        [shop.id, clientRequestId],
+      );
+      if (existingIntent) {
+        return res.status(200).json({
+          payment_id: existingIntent.id,
+          public_key: publicKey,
+          amount: existingIntent.amount,
+          currency: existingIntent.currency,
+          is_test: publicKey.startsWith('kdvp_test_'),
+          email: shop.owner_email,
+          name: shop.name,
+          phone: shop.whatsapp_number,
+          plan_label: getSubscriptionPlanConfig(existingIntent.tier).label,
+          term: existingIntent.subscription_term,
+          duplicate: true,
+        });
+      }
+    }
     const paymentId = randomUUID();
     const createdAt = new Date().toISOString();
-    await dbRun(`INSERT INTO subscription_payment_intents (id, shop_id, payment_type, tier, subscription_term, amount, currency, status, created_at)
-      VALUES (?, ?, 'subscription', ?, ?, ?, 'XOF', 'pending', ?)`, [paymentId, shop.id, tier, term, amount, createdAt]);
+    await dbRun(`INSERT INTO subscription_payment_intents (id, shop_id, payment_type, tier, subscription_term, amount, currency, client_request_id, status, created_at)
+      VALUES (?, ?, 'subscription', ?, ?, ?, 'XOF', ?, 'pending', ?)`, [paymentId, shop.id, tier, term, amount, clientRequestId || null, createdAt]);
 
     res.status(201).json({
       payment_id: paymentId,

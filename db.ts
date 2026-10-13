@@ -65,7 +65,7 @@ const sqliteSchema = `
   CREATE TABLE IF NOT EXISTS subscription_payment_intents (
     id TEXT PRIMARY KEY, shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
     payment_type TEXT NOT NULL DEFAULT 'subscription', tier TEXT NOT NULL, amount INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'XOF',
-    status TEXT NOT NULL DEFAULT 'pending', provider_reference TEXT UNIQUE,
+    client_request_id TEXT, status TEXT NOT NULL DEFAULT 'pending', provider_reference TEXT UNIQUE,
     created_at TEXT NOT NULL, paid_at TEXT
   );
   CREATE TABLE IF NOT EXISTS analytics_events (
@@ -85,7 +85,7 @@ const sqliteSchema = `
   );
   CREATE TABLE IF NOT EXISTS admin_sessions (
     token TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, fingerprint TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    role TEXT NOT NULL DEFAULT 'super_admin', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
   CREATE TABLE IF NOT EXISTS request_rate_limits (
     key_hash TEXT PRIMARY KEY, request_count INTEGER NOT NULL, reset_at INTEGER NOT NULL
@@ -239,6 +239,8 @@ function migrateSqlite(connection: Database.Database) {
   )`);
   addColumn('subscription_payment_intents', 'payment_type', "TEXT NOT NULL DEFAULT 'subscription'");
   addColumn('subscription_payment_intents', 'subscription_term', "TEXT NOT NULL DEFAULT 'monthly'");
+  addColumn('subscription_payment_intents', 'client_request_id', 'TEXT');
+  connection.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_subscription_payment_intents_client_request_id ON subscription_payment_intents(shop_id, client_request_id) WHERE client_request_id IS NOT NULL AND client_request_id <> ''");
   connection.exec(`CREATE TABLE IF NOT EXISTS shop_boosts (
     id TEXT PRIMARY KEY,
     shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
@@ -293,6 +295,7 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('users', 'password_hash', 'TEXT');
   addColumn('users', 'is_active', 'INTEGER DEFAULT 1');
   addColumn('user_sessions', 'fingerprint', 'TEXT');
+  addColumn('admin_sessions', 'role', "TEXT NOT NULL DEFAULT 'super_admin'");
   addColumn('didit_verification_sessions', 'consent_at', "TEXT NOT NULL DEFAULT ''");
   addColumn('didit_verification_sessions', 'consent_version', "TEXT NOT NULL DEFAULT ''");
   addColumn('didit_verification_sessions', 'last_webhook_at', 'TEXT');
@@ -355,9 +358,11 @@ const postgresMigrations = [
   `CREATE TABLE IF NOT EXISTS subscription_payment_intents (
     id TEXT PRIMARY KEY, shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
     payment_type TEXT NOT NULL DEFAULT 'subscription', tier TEXT NOT NULL, amount INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'XOF',
-    status TEXT NOT NULL DEFAULT 'pending', provider_reference TEXT UNIQUE,
+    client_request_id TEXT, status TEXT NOT NULL DEFAULT 'pending', provider_reference TEXT UNIQUE,
     created_at TEXT NOT NULL, paid_at TEXT
   )`,
+  'ALTER TABLE subscription_payment_intents ADD COLUMN IF NOT EXISTS client_request_id TEXT',
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_subscription_payment_intents_client_request_id ON subscription_payment_intents(shop_id, client_request_id) WHERE client_request_id IS NOT NULL AND client_request_id <> ''",
   "ALTER TABLE subscription_payment_intents ADD COLUMN IF NOT EXISTS payment_type TEXT NOT NULL DEFAULT 'subscription'",
   "ALTER TABLE subscription_payment_intents ADD COLUMN IF NOT EXISTS subscription_term TEXT NOT NULL DEFAULT 'monthly'",
   `CREATE TABLE IF NOT EXISTS shop_boosts (
@@ -431,6 +436,7 @@ const postgresMigrations = [
   )`,
   'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS source TEXT',
   'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS campaign TEXT',
+  'ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT \'super_admin\'',
   `CREATE TABLE IF NOT EXISTS platform_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1), maintenance_enabled INTEGER NOT NULL DEFAULT 0,
     maintenance_message TEXT NOT NULL DEFAULT 'Le service revient bientôt. Merci de votre patience.',
@@ -445,7 +451,7 @@ const postgresMigrations = [
   )`,
   `CREATE TABLE IF NOT EXISTS admin_sessions (
     token TEXT PRIMARY KEY, expires_at BIGINT NOT NULL,
-    fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    fingerprint TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'super_admin', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS request_rate_limits (
     key_hash TEXT PRIMARY KEY, request_count INTEGER NOT NULL, reset_at BIGINT NOT NULL

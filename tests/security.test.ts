@@ -363,7 +363,7 @@ test('rejects unsafe production configuration', () => {
     process.env.APP_URL = 'https://matable.ci';
     process.env.PORT = '3000';
     process.env.MATABLE_DB_PATH = './data/matable.db';
-    process.env.ADMIN_ACCESS_KEY = '03062004';
+    process.env.ADMIN_ACCESS_KEY = 'legacy-admin-key';
     assert.throws(() => validateRuntimeConfig(), /ADMIN_ACCESS_KEY.*32 caractères/i);
 
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
