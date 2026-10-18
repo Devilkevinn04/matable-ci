@@ -1,8 +1,8 @@
 import React from 'react';
-import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Sparkles, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes } from 'lucide-react';
+import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Sparkles, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes, MessageCircle } from 'lucide-react';
 import type { MerchantOrderFilter, MerchantState } from './useMerchant';
 import { ThemeCustomizer } from '../ThemeCustomizer';
-import { formatFCFA } from '../../utils/format';
+import { cleanPhoneForWhatsApp, formatFCFA } from '../../utils/format';
 
 interface OrdersTabProps {
   state: MerchantState;
@@ -96,6 +96,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                 <input
                   type="text"
+                  aria-label="Rechercher une commande par client, téléphone ou numéro"
                   placeholder="Rechercher par client, tél ou #..."
                   value={orderSearch}
                   onChange={(e) => setOrderSearch(e.target.value)}
@@ -105,6 +106,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                 <label className="flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-600 sm:w-56">
                   <span className="shrink-0">Paiement</span>
                   <select
+                    aria-label="Filtrer les commandes par mode de paiement"
                     value={orderPaymentFilter}
                     onChange={(event) => setOrderPaymentFilter(event.target.value as typeof orderPaymentFilter)}
                     className="min-w-0 flex-1 border-0 bg-transparent py-2 text-xs font-bold text-slate-800 outline-none"
@@ -124,6 +126,8 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                 {orderStatusOptions.map(st => (
                   <button
                     key={st.id}
+                    type="button"
+                    aria-pressed={orderStatusFilter === st.id}
                     onClick={() => setOrderStatusFilter(st.id)}
                     className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors ${
                       orderStatusFilter === st.id
@@ -137,18 +141,25 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
               </div>
             </div>
 
-            <p className="-mt-2 text-[11px] leading-5 text-slate-500">
-              Une nouvelle commande est acceptée automatiquement. Le suivi WhatsApp indique le clic sur le bouton, pas l’envoi du message.
+            <p className="-mt-2 rounded-xl border border-slate-200 bg-[#fffdf8] px-3 py-2 text-[11px] leading-5 text-slate-600">
+              Cette liste regroupe les commandes enregistrées sur MaTable.ci. Le mode de règlement choisi n’est pas une confirmation de paiement ; un clic WhatsApp ne confirme ni l’envoi du message ni le paiement.
             </p>
 
             {/* Orders List */}
             {filteredOrders.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 p-6">
                 <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <h3 className="font-bold text-slate-900 text-base">Aucune commande trouvée</h3>
+                <h3 className="font-bold text-slate-900 text-base">{orders.length === 0 ? 'Aucune commande enregistrée' : 'Aucune commande ne correspond'}</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
-                  Modifiez vos critères de recherche ou de filtre pour afficher les commandes correspondantes.
+                  {orders.length === 0
+                    ? 'Les demandes envoyées depuis votre vitrine apparaîtront ici. Partagez votre boutique pour recevoir vos premières commandes.'
+                    : 'Modifiez votre recherche ou vos filtres pour afficher les commandes correspondantes.'}
                 </p>
+                {orders.length === 0 && (
+                  <button type="button" onClick={() => copyOwnerLink('public')} className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-4 text-xs font-bold text-white transition hover:bg-[#155544]">
+                    <ExternalLink className="h-4 w-4" /> Copier le lien de ma vitrine
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
@@ -242,26 +253,36 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                         </div>
                       </div>
 
-                      <div className="flex flex-col sm:items-end justify-between gap-2.5 shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100">
-                        <span className="font-black text-lg text-slate-900">
+                      <div className="flex min-w-0 flex-col gap-2.5 border-t border-slate-100 pt-3 md:w-56 md:shrink-0 md:items-end md:justify-between md:border-t-0 md:pt-0">
+                        <span className="font-black text-lg text-slate-900 md:text-right">
                           {formatFCFA(order.total_amount)}
                         </span>
 
                         {/* Order status action buttons */}
-                        <div className="flex flex-wrap items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                          {order.customer_phone && (
+                            <a
+                              href={`https://wa.me/${cleanPhoneForWhatsApp(order.customer_phone)}?text=${encodeURIComponent(`Bonjour ${order.customer_name}, je vous contacte au sujet de votre demande de commande #${order.id} sur MaTable.ci.`)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-900 transition hover:bg-emerald-100 sm:w-auto"
+                            >
+                              <MessageCircle className="h-4 w-4" /> Contacter sur WhatsApp
+                            </a>
+                          )}
                           {(!order.status || order.status === 'pending') && (
                             <>
                               <button
                                 type="button"
                                 onClick={() => handleUpdateOrderStatus(order.id, 'confirmed')}
-                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                                className="min-h-11 flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-700 sm:flex-none"
                               >
                                 Confirmer
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
-                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors"
+                                className="min-h-11 flex-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100 sm:flex-none"
                               >
                                 Annuler
                               </button>
@@ -273,21 +294,21 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                               <button
                                 type="button"
                                 onClick={() => handleUpdateOrderStatus(order.id, 'preparing')}
-                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors"
+                                className="min-h-11 flex-1 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-600 sm:flex-none"
                               >
                                 Préparer
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleUpdateOrderStatus(order.id, 'delivered')}
-                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                                className="min-h-11 flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700 sm:flex-none"
                               >
                                 Marquer livrée
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
-                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors"
+                                className="min-h-11 flex-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100 sm:flex-none"
                               >
                                 Annuler
                               </button>
@@ -299,14 +320,14 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                               <button
                                 type="button"
                                 onClick={() => handleUpdateOrderStatus(order.id, 'ready')}
-                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors"
+                                className="min-h-11 flex-1 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-700 sm:flex-none"
                               >
                                 Prête
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
-                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors"
+                                className="min-h-11 flex-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100 sm:flex-none"
                               >
                                 Annuler
                               </button>
@@ -318,14 +339,14 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                               <button
                                 type="button"
                                 onClick={() => handleUpdateOrderStatus(order.id, 'delivered')}
-                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                                className="min-h-11 flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700 sm:flex-none"
                               >
                                 Marquer livrée
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
-                                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors"
+                                className="min-h-11 flex-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100 sm:flex-none"
                               >
                                 Annuler
                               </button>
@@ -342,7 +363,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                             <button
                               type="button"
                               onClick={() => handleUpdateOrderStatus(order.id, 'pending')}
-                              className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                              className="min-h-11 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200"
                             >
                               Réactiver la commande
                             </button>

@@ -41,25 +41,6 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
   router.post('/shops/:id/subscription-payments', requireMerchantOwnShop, async (req, res) => {
     const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-    const persistedSubscription = await dbGet<{
-      subscription_status: string | null;
-      selected_subscription_tier: string | null;
-      trial_start: string | null;
-      trial_end: string | null;
-      subscription_expires_at: string | null;
-    }>(`SELECT subscription_status, selected_subscription_tier, trial_start, trial_end, subscription_expires_at
-      FROM shops WHERE id = ?`, [shop.id]);
-    if (!persistedSubscription) return res.status(404).json({ error: 'Boutique introuvable.' });
-    const currentSubscription = getSubscriptionState({
-      ...persistedSubscription,
-      selected_subscription_tier: normalizeSubscriptionTier(persistedSubscription.selected_subscription_tier),
-    });
-    if (currentSubscription.status === 'trialing') {
-      const trialEnd = currentSubscription.trialEnd
-        ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long', timeZone: 'Africa/Abidjan' }).format(new Date(currentSubscription.trialEnd))
-        : 'la fin de votre essai';
-      return res.status(409).json({ error: `Votre essai Standard reste actif jusqu’au ${trialEnd}. Vous pourrez choisir et payer une formule à son échéance.` });
-    }
 
     const publicKey = String(process.env.KADEVPAY_PUBLIC_KEY || '').trim();
     const webhookSecret = String(process.env.KADEVPAY_WEBHOOK_SECRET || '').trim();
@@ -73,7 +54,6 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
       return res.status(400).json({ error: 'Choisissez une formule valide.' });
     }
     const tier = normalizeSubscriptionTier(requestedTier);
-    const plan = getSubscriptionPlanConfig(tier);
     const requestedTerm = req.body?.term;
     if (requestedTerm !== undefined && requestedTerm !== 'monthly' && requestedTerm !== 'annual') {
       return res.status(400).json({ error: 'Choisissez une durée valide.' });
@@ -86,43 +66,47 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
     if (clientRequestId && (clientRequestId.length < 1 || clientRequestId.length > 255)) {
       return res.status(400).json({ error: 'Le client_request_id est trop long ou invalide.' });
     }
-    if (clientRequestId) {
-      const existingIntent = await dbGet<SubscriptionPaymentIntent>(
-        'SELECT * FROM subscription_payment_intents WHERE shop_id = ? AND client_request_id = ? ORDER BY created_at DESC LIMIT 1',
-        [shop.id, clientRequestId],
-      );
-      if (existingIntent) {
-        return res.status(200).json({
-          payment_id: existingIntent.id,
-          public_key: publicKey,
-          amount: existingIntent.amount,
-          currency: existingIntent.currency,
-          is_test: publicKey.startsWith('kdvp_test_'),
-          email: shop.owner_email,
-          name: shop.name,
-          phone: shop.whatsapp_number,
-          plan_label: getSubscriptionPlanConfig(existingIntent.tier).label,
-          term: existingIntent.subscription_term,
-          duplicate: true,
-        });
-      }
-    }
     const paymentId = randomUUID();
     const createdAt = new Date().toISOString();
-    await dbRun(`INSERT INTO subscription_payment_intents (id, shop_id, payment_type, tier, subscription_term, amount, currency, client_request_id, status, created_at)
-      VALUES (?, ?, 'subscription', ?, ?, ?, 'XOF', ?, 'pending', ?)`, [paymentId, shop.id, tier, term, amount, clientRequestId || null, createdAt]);
+    const inserted = await dbRun(`INSERT INTO subscription_payment_intents (id, shop_id, payment_type, tier, subscription_term, amount, currency, client_request_id, status, created_at)
+      VALUES (?, ?, 'subscription', ?, ?, ?, 'XOF', ?, 'pending', ?)
+      ON CONFLICT DO NOTHING`, [paymentId, shop.id, tier, term, amount, clientRequestId || null, createdAt]);
+    const duplicate = inserted.changes !== 1;
+    const intent = duplicate
+      ? await dbGet<SubscriptionPaymentIntent>(
+        'SELECT * FROM subscription_payment_intents WHERE shop_id = ? AND client_request_id = ?',
+        [shop.id, clientRequestId],
+      )
+      : {
+        id: paymentId,
+        shop_id: shop.id,
+        payment_type: 'subscription' as const,
+        tier,
+        subscription_term: term,
+        amount,
+        currency: 'XOF',
+        status: 'pending' as const,
+        provider_reference: null,
+        created_at: createdAt,
+        paid_at: null,
+      };
+    if (!intent) throw new Error('Idempotent KadevPay payment intent could not be loaded after insertion.');
+    if (intent.tier !== tier || intent.subscription_term !== term) {
+      return res.status(409).json({ error: 'Cette clé de requête a déjà été utilisée pour une autre formule ou durée.' });
+    }
 
-    res.status(201).json({
-      payment_id: paymentId,
+    res.status(duplicate ? 200 : 201).json({
+      payment_id: intent.id,
       public_key: publicKey,
-      amount,
-      currency: 'XOF',
+      amount: intent.amount,
+      currency: intent.currency,
       is_test: publicKey.startsWith('kdvp_test_'),
       email: shop.owner_email,
       name: shop.name,
       phone: shop.whatsapp_number,
-      plan_label: plan.label,
-      term,
+      plan_label: getSubscriptionPlanConfig(intent.tier).label,
+      term: intent.subscription_term,
+      ...(duplicate ? { duplicate: true } : {}),
     });
   });
 

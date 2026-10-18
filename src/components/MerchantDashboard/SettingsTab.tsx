@@ -6,7 +6,12 @@ import { ThemeCustomizer } from '../ThemeCustomizer';
 import { MerchantIdentityVerification } from './lazyMerchantIdentityVerification';
 import { ProAnalyticsPanel } from './ProAnalyticsPanel';
 import { cleanPhoneForWhatsApp, formatFCFA } from '../../utils/format';
-import { isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
+import {
+  getSubscriptionProductLimit,
+  getSubscriptionProductPhotoLimit,
+  isSubscriptionFeatureIncluded,
+  TRIAL_CATALOG_LIMIT,
+} from '../../utils/subscriptionFeatures';
 import { WhatsAppSubscriptionReminderConsent } from './WhatsAppSubscriptionReminderConsent';
 import { MerchantBoostPurchase } from './MerchantBoostPurchase';
 import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
@@ -44,6 +49,22 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const isFeatured = Boolean(featuredUntil && Date.parse(featuredUntil) > Date.now());
   const canUseSocialLinks = Boolean(currentShop?.admin_mode || currentShop?.subscription?.isActive
     && isSubscriptionFeatureIncluded(currentShop.subscription.plan, 'social_links'));
+  const subscriptionStatus = currentShop.subscription?.status || 'not_started';
+  const subscriptionStatusLabel = {
+    not_started: 'Non démarré',
+    trialing: 'Essai gratuit en cours',
+    active: 'Actif',
+    past_due: 'Paiement à régulariser',
+    cancelled: 'Résilié',
+    expired: 'Expiré',
+    suspended: 'Suspendu',
+  }[subscriptionStatus];
+  const currentProductLimit = !currentShop.admin_mode
+    && subscriptionStatus === 'trialing'
+    && (currentShop.subscription?.trialDaysRemaining ?? 0) > 0
+    ? TRIAL_CATALOG_LIMIT
+    : getSubscriptionProductLimit(currentShop.subscription?.plan);
+  const currentPhotoLimit = getSubscriptionProductPhotoLimit(currentShop.subscription?.plan);
   const settingsGroups = [
     {
       label: 'Ma boutique',
@@ -178,6 +199,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
               <React.Suspense fallback={<p role="status" className="text-sm text-slate-600">Chargement de la vérification…</p>}>
                 <MerchantIdentityVerification
                   shopId={currentShop.id}
+                  shopName={currentShop.name}
                   onStatusChange={(status) => setCurrentShop((shop) => shop
                     ? { ...shop, merchant_verification_status: status.status as Shop['merchant_verification_status'] }
                     : null)}
@@ -201,10 +223,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">Formule</span><strong className="mt-1 block capitalize text-slate-900">{currentShop.subscription?.plan || 'Standard'}</strong></div>
-                  <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">État</span><strong className="mt-1 block text-slate-900">{currentShop.subscription?.status === 'trialing' ? 'Essai gratuit' : currentShop.subscription?.status === 'active' ? 'Actif' : 'À régulariser'}</strong></div>
-                  <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">{currentShop.subscription?.status === 'active' ? 'Échéance' : 'Fin de l’essai'}</span><strong className="mt-1 block text-slate-900">{(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd) ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd || '')) : 'Non démarré'}</strong></div>
+                  <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">État</span><strong className="mt-1 block text-slate-900">{subscriptionStatusLabel}</strong></div>
+                  <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">{subscriptionStatus === 'active' ? 'Échéance' : subscriptionStatus === 'trialing' ? 'Fin de l’essai' : 'Prochaine échéance'}</span><strong className="mt-1 block text-slate-900">{(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd) ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd || '')) : 'Non démarré'}</strong></div>
                 </div>
-                <p className="text-xs leading-5 text-slate-600">L’essai est gratuit. Après son échéance, le renouvellement sécurisé est disponible via KadevPay; le règlement d’une commande client reste directement convenu avec la boutique.</p>
+                <div className="grid gap-3 rounded-xl border border-[#e7dfd3] bg-[#fffdf8] p-4 sm:grid-cols-2">
+                  <div><span className="text-xs text-slate-500">Capacité du catalogue</span><strong className="mt-1 block text-slate-900">{Number.isFinite(currentProductLimit) ? `${products.filter((product) => product.shop_id === currentShop.id).length} / ${currentProductLimit} produits` : `${products.filter((product) => product.shop_id === currentShop.id).length} produits · illimité`}</strong></div>
+                  <div><span className="text-xs text-slate-500">Photos par produit</span><strong className="mt-1 block text-slate-900">Jusqu’à {currentPhotoLimit}</strong></div>
+                </div>
+                <p className="text-xs leading-5 text-slate-600">Le paiement est ponctuel, sans prélèvement automatique. KadevPay confirme le règlement au serveur avant toute activation. Le paiement des commandes clients reste directement convenu avec la boutique.</p>
                 <WhatsAppSubscriptionReminderConsent shop={currentShop} />
                 <div className="flex flex-col gap-3 rounded-xl border border-[#e3d9cc] bg-[#f7f3ee] p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>

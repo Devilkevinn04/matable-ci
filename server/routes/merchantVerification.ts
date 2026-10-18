@@ -110,6 +110,13 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     if (shop.merchant_verification_status === 'verified') return res.status(409).json({ error: 'Cette identité a déjà été vérifiée.' });
     if (req.body?.consent !== true) return res.status(400).json({ error: 'Votre consentement explicite est requis pour continuer.' });
+    const latestSession = await dbGet<{ status: string }>(
+      'SELECT status FROM didit_verification_sessions WHERE shop_id = ? ORDER BY created_at DESC LIMIT 1',
+      [shopId],
+    );
+    if (latestSession && ['submitted', 'under_review'].includes(mapDiditStatus(latestSession.status))) {
+      return res.status(409).json({ error: 'Une vérification Didit est déjà en cours. Terminez la session ouverte ou contactez l’assistance avant d’en démarrer une autre.' });
+    }
 
     const apiKey = String(process.env.DIDIT_API_KEY || '').trim();
     const workflowId = String(process.env.DIDIT_WORKFLOW_ID || '').trim();
@@ -162,10 +169,13 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       );
       if (!currentShop) return 'shop_missing';
       if (currentShop.merchant_verification_status === 'verified') return 'already_verified';
-      const latestSession = await transaction.get<{ created_at: string }>(
-        'SELECT created_at FROM didit_verification_sessions WHERE shop_id = ? ORDER BY created_at DESC LIMIT 1',
+      const latestSession = await transaction.get<{ created_at: string; status: string }>(
+        'SELECT created_at, status FROM didit_verification_sessions WHERE shop_id = ? ORDER BY created_at DESC LIMIT 1',
         [shop.id],
       );
+      if (latestSession && ['submitted', 'under_review'].includes(mapDiditStatus(latestSession.status))) {
+        return 'verification_in_progress';
+      }
       const currentTime = Date.now();
       const latestTime = latestSession ? Date.parse(latestSession.created_at) : 0;
       const createdAt = new Date(Math.max(currentTime, latestTime + 1)).toISOString();
@@ -189,6 +199,9 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
     });
     if (creationResult === 'already_verified') return res.status(409).json({ error: 'Cette identité a déjà été vérifiée.' });
     if (creationResult === 'shop_missing') return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (creationResult === 'verification_in_progress') {
+      return res.status(409).json({ error: 'Une vérification Didit est déjà en cours. Terminez la session ouverte ou contactez l’assistance avant d’en démarrer une autre.' });
+    }
     if (creationResult === 'duplicate_session') {
       console.error('Didit returned a duplicate session ID; refusing to associate it with another shop.');
       return res.status(502).json({ error: 'Didit a renvoyé une session invalide. Réessayez plus tard.' });

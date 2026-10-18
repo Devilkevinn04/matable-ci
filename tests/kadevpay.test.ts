@@ -155,22 +155,23 @@ test('active subscriptions can be renewed repeatedly and retries stay idempotent
   }
 
   const clientRequestId = `repeat-${Date.now()}`;
-  const firstPayment = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
+  const createPayment = () => fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
     body: JSON.stringify({ tier: 'premium', term: 'monthly', client_request_id: clientRequestId }),
   });
+  const [firstPayment, repeatedPayment] = await Promise.all([createPayment(), createPayment()]);
   const firstPayload = await firstPayment.json();
-  assert.equal(firstPayment.status, 201, JSON.stringify(firstPayload));
+  const repeatedPayload = await repeatedPayment.json();
+  assert.deepEqual([firstPayment.status, repeatedPayment.status].sort(), [200, 201]);
+  assert.equal(repeatedPayload.payment_id, firstPayload.payment_id);
 
-  const repeatedPayment = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
+  const conflictingPayment = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
-    body: JSON.stringify({ tier: 'premium', term: 'monthly', client_request_id: clientRequestId }),
+    body: JSON.stringify({ tier: 'premium', term: 'annual', client_request_id: clientRequestId }),
   });
-  const repeatedPayload = await repeatedPayment.json();
-  assert.equal(repeatedPayment.status, 200, JSON.stringify(repeatedPayload));
-  assert.equal(repeatedPayload.payment_id, firstPayload.payment_id);
+  assert.equal(conflictingPayment.status, 409);
 
   const duplicateCount = new Database(TEST_DB_PATH);
   try {
@@ -222,16 +223,9 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
     body: JSON.stringify({ tier: 'premium' }),
   });
+  const trialPayload = await startTrial.json();
   assert.equal(startTrial.status, 200);
-
-  const expiryDb = new Database(TEST_DB_PATH);
-  try {
-    const expiredAt = new Date(Date.now() - 3 * 86400000).toISOString();
-    expiryDb.prepare('UPDATE shops SET trial_end = ?, subscription_expires_at = ? WHERE id = ?')
-      .run(expiredAt, expiredAt, createdPayload.shop.id);
-  } finally {
-    expiryDb.close();
-  }
+  const trialEnd = trialPayload.shop.subscription.trialEnd as string;
 
   const intentResponse = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
     method: 'POST',
@@ -285,7 +279,7 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   const paidPayload = await paidStatus.json();
   assert.equal(paidPayload.status, 'paid');
   assert.equal(paidPayload.subscription.status, 'active');
-  assert.ok(Date.parse(paidPayload.subscription.expiresAt) > Date.now() + 360 * 86400000);
+  assert.ok(Date.parse(paidPayload.subscription.expiresAt) > Date.parse(trialEnd) + 360 * 86400000);
 
   const failedIntentResponse = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
     method: 'POST',
@@ -366,6 +360,14 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   const duplicateWebhook = await sendWebhook();
   assert.equal(duplicateWebhook.status, 200);
   assert.equal((await duplicateWebhook.json()).duplicate, true);
+  const expiryAfterDuplicate = new Database(TEST_DB_PATH);
+  try {
+    const row = expiryAfterDuplicate.prepare('SELECT subscription_expires_at FROM shops WHERE id = ?')
+      .get(createdPayload.shop.id) as { subscription_expires_at: string };
+    assert.equal(row.subscription_expires_at, paidPayload.subscription.expiresAt);
+  } finally {
+    expiryAfterDuplicate.close();
+  }
 
   const expiredAt = new Date(Date.now() - 4 * 86400000).toISOString();
   const expirationDb = new Database(TEST_DB_PATH);

@@ -60,9 +60,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
     <>
 {/* PRODUCT ADD/EDIT MODAL */}
 
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-sm sm:p-4 lg:p-6" role="presentation">
-          <div role="dialog" aria-modal="true" aria-labelledby="product-dialog-title" className="w-full max-w-[980px] max-h-[94vh] overflow-y-auto rounded-2xl border border-slate-200 bg-[#fffdf9] p-4 shadow-2xl sm:p-5 lg:p-6">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-sm sm:items-center sm:p-4 lg:p-6" role="presentation">
+          <div role="dialog" aria-modal="true" aria-labelledby="product-dialog-title" className="max-h-[94dvh] w-full max-w-[980px] overflow-y-auto overscroll-contain rounded-t-2xl border border-slate-200 bg-[#fffdf9] px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:rounded-2xl sm:p-5 lg:p-6">
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-[#fffdf9] pb-4">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800">
                   <Boxes className="h-5 w-5" />
@@ -75,8 +75,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsProductModalOpen(false)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
                 aria-label="Fermer le formulaire"
               >
                 <X className="h-4 w-4" />
@@ -457,17 +458,17 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
               </section>
               </section>
 
-              <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end lg:gap-3">
+              <div className="sticky bottom-0 z-10 -mx-4 mt-3 flex flex-col-reverse gap-2 border-t border-slate-200 bg-[#fffdf9]/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur sm:static sm:mx-0 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent sm:p-0 sm:pt-1 lg:gap-3">
                 <button
                   type="button"
                   onClick={() => setIsProductModalOpen(false)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-auto lg:px-5 lg:py-3 lg:text-sm"
+                  className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-auto lg:px-5 lg:py-3 lg:text-sm"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
-                  className="w-full rounded-lg bg-emerald-800 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-900 sm:w-auto lg:px-6 lg:py-3 lg:text-sm"
+                  className="min-h-11 w-full rounded-lg bg-emerald-800 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-900 sm:w-auto lg:px-6 lg:py-3 lg:text-sm"
                 >
                   {editingProduct ? 'Enregistrer les modifications' : 'Ajouter au catalogue'}
                 </button>

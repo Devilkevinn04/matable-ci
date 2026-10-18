@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExternalLink, LoaderCircle, RefreshCw, ShieldCheck } from 'lucide-react';
+import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 
 export interface VerificationStatus {
   status: string;
@@ -11,24 +12,28 @@ export interface VerificationStatus {
 
 interface MerchantIdentityVerificationProps {
   shopId: number;
+  shopName: string;
   onStatusChange?: (status: VerificationStatus) => void;
 }
 
 const statusDetails: Record<string, { label: string; description: string; tone: string }> = {
-  pending: { label: 'À compléter', description: 'Démarrez la vérification sécurisée pour pouvoir publier votre boutique.', tone: 'border-amber-200 bg-amber-50 text-amber-950' },
-  submitted: { label: 'Vérification démarrée', description: 'Suivez les instructions affichées par Didit. Le statut sera actualisé automatiquement.', tone: 'border-sky-200 bg-sky-50 text-sky-950' },
-  under_review: { label: 'En cours de vérification', description: 'Didit examine actuellement les informations transmises.', tone: 'border-sky-200 bg-sky-50 text-sky-950' },
+  pending: { label: 'À compléter', description: 'Aucune session de vérification n’est en cours. Démarrez-la pour pouvoir publier votre boutique.', tone: 'border-amber-200 bg-amber-50 text-amber-950' },
+  submitted: { label: 'Vérification démarrée', description: 'Terminez les étapes sur la page Didit déjà ouverte. Cette session reste active ; son résultat sera actualisé ici automatiquement.', tone: 'border-sky-200 bg-sky-50 text-sky-950' },
+  under_review: { label: 'En cours de vérification', description: 'Didit examine les informations transmises. Aucune action n’est nécessaire ; le statut sera actualisé automatiquement.', tone: 'border-sky-200 bg-sky-50 text-sky-950' },
   verified: { label: 'Identité vérifiée', description: 'La vérification Didit est terminée.', tone: 'border-emerald-200 bg-emerald-50 text-emerald-950' },
-  rejected: { label: 'Vérification refusée', description: 'Vous pouvez démarrer une nouvelle vérification ou contacter l’assistance.', tone: 'border-rose-200 bg-rose-50 text-rose-950' },
+  rejected: { label: 'Vérification non validée', description: 'Didit n’a pas validé cette vérification. Le motif détaillé ne nous est pas transmis. Consultez les indications affichées par Didit, puis réessayez ; si le problème persiste, contactez l’assistance.', tone: 'border-rose-200 bg-rose-50 text-rose-950' },
 };
 
-export function MerchantIdentityVerification({ shopId, onStatusChange }: MerchantIdentityVerificationProps) {
+export function MerchantIdentityVerification({ shopId, shopName, onStatusChange }: MerchantIdentityVerificationProps) {
   const [status, setStatus] = useState<VerificationStatus | null>(null);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [hasLoadedStatus, setHasLoadedStatus] = useState(false);
   const onStatusChangeRef = useRef(onStatusChange);
   const details = statusDetails[status?.status || 'pending'] || statusDetails.pending;
+  const canStartVerification = !status || ['pending', 'rejected'].includes(status.status);
+  const supportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour la vérification Didit de la boutique ${shopName}.`);
 
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
@@ -40,6 +45,8 @@ export function MerchantIdentityVerification({ shopId, onStatusChange }: Merchan
       const data = await response.json() as VerificationStatus & { error?: string };
       if (!response.ok) throw new Error(data.error || 'Impossible de charger le statut.');
       setStatus(data);
+      setError('');
+      setHasLoadedStatus(true);
       onStatusChangeRef.current?.(data);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Impossible de charger le statut.');
@@ -92,23 +99,30 @@ export function MerchantIdentityVerification({ shopId, onStatusChange }: Merchan
       <div className={`mt-4 rounded-xl border p-3 ${details.tone}`}>
         <p className="text-sm font-bold">{details.label}</p>
         <p className="mt-1 text-xs">{details.description}</p>
-        {status?.provider_status && <p className="mt-2 text-xs">Statut Didit : {status.provider_status}</p>}
-      </div>
+        </div>
 
-      {status?.status !== 'verified' && (
-        <>
+        {canStartVerification && (
+          <>
           <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm text-slate-700">
             <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-1 h-4 w-4 accent-emerald-800" />
             <span>J’accepte que mes données d’identité et, si le parcours le demande, mes données biométriques soient traitées par Didit afin de vérifier l’identité du responsable de cette boutique. Je comprends que ces données sont transmises directement à Didit et que MaTable.ci reçoit le résultat de la vérification.</span>
           </label>
           <p className="mt-3 text-xs text-slate-500">Consultez la <a href="/confidentialite" target="_blank" rel="noreferrer" className="font-semibold underline">politique de confidentialité</a> pour connaître les détails du traitement et vos droits.</p>
-          <button type="button" onClick={() => void startVerification()} disabled={!consent || busy} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={() => void startVerification()} disabled={!consent || busy || !hasLoadedStatus} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
             {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
             {busy ? 'Connexion à Didit…' : status?.status === 'rejected' ? 'Réessayer avec Didit' : 'Continuer avec Didit'}
           </button>
         </>
       )}
 
+      {status?.status === 'rejected' && supportUrl && (
+        <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-rose-300 px-3 py-2 text-xs font-bold text-rose-900 hover:bg-rose-100">
+          Contacter l’assistance
+        </a>
+      )}
+      {['submitted', 'under_review'].includes(status?.status || '') && (
+        <p className="mt-3 text-xs leading-5 text-slate-600">La création d’une autre session interromprait le suivi de celle-ci. Si vous avez fermé la page Didit avant la fin, contactez l’assistance pour obtenir de l’aide.</p>
+      )}
       <button type="button" onClick={() => void refreshStatus()} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
         <RefreshCw className="h-3.5 w-3.5" /> Actualiser le statut
       </button>

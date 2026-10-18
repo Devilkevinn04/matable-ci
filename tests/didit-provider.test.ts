@@ -18,6 +18,8 @@ test('merchant session creation records consent and returns only Didit hosted ve
   let storedParameters: unknown[] = [];
   let insertChanges = 1;
   let existingSession: { shop_id: number; workflow_id: string } | undefined;
+  let latestSession: { status: string; created_at: string } | undefined;
+  let providerRequestCount = 0;
   const vendorDataValues: string[] = [];
   const originalFetch = globalThis.fetch;
 
@@ -27,6 +29,7 @@ test('merchant session creation records consent and returns only Didit hosted ve
   process.env.NODE_ENV = 'test';
   globalThis.fetch = async (input, init) => {
     if (String(input) !== 'https://verification.didit.me/v3/session/') return originalFetch(input, init);
+    providerRequestCount += 1;
     const headers = new Headers(init?.headers);
     assert.equal(headers.get('x-api-key'), apiKey);
     const request = JSON.parse(String(init?.body));
@@ -44,10 +47,9 @@ test('merchant session creation records consent and returns only Didit hosted ve
   };
 
   const options = {
-    dbGet: async <T>() => ({
-      id: 41,
-      merchant_verification_status: 'pending',
-    } as T),
+    dbGet: async <T>(sql: string) => sql.includes('didit_verification_sessions')
+      ? latestSession as T | undefined
+      : { id: 41, merchant_verification_status: 'pending' } as T,
     dbAll: async <T>() => [] as T[],
     dbRun: async () => ({ changes: 0 }),
     dbTransaction: async <T>(operation: (transaction: {
@@ -58,11 +60,14 @@ test('merchant session creation records consent and returns only Didit hosted ve
         ? { merchant_verification_status: 'pending' } as Row
         : sql.includes('WHERE session_id = ?')
           ? existingSession as Row | undefined
+        : sql.includes('didit_verification_sessions')
+          ? latestSession as Row | undefined
         : undefined,
       run: async (sql, params = []) => {
         webhookStatus.push(sql);
         if (sql.startsWith('INSERT INTO didit_verification_sessions')) {
           storedParameters = params;
+          latestSession = { status: 'Not Started', created_at: String(params[6]) };
           return { changes: insertChanges };
         }
         return { changes: 1 };
@@ -107,17 +112,17 @@ test('merchant session creation records consent and returns only Didit hosted ve
     assert.equal(webhookStatus.length, 2);
     assert.equal(JSON.stringify(payload).includes(apiKey), false);
 
-    insertChanges = 0;
-    existingSession = { shop_id: 41, workflow_id: workflowId };
     const retryResponse = await fetch(`http://127.0.0.1:${address.port}/api/shops/41/identity-verification/session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ consent: true }),
     });
-    assert.equal(retryResponse.status, 201);
-    assert.equal((await retryResponse.json()).session_url, `https://verify.didit.me/session/${sessionId}`);
-    assert.notEqual(vendorDataValues[0], vendorDataValues[1]);
+    assert.equal(retryResponse.status, 409);
+    assert.match((await retryResponse.json()).error, /vérification Didit est déjà en cours/i);
+    assert.equal(providerRequestCount, 1);
 
+    insertChanges = 0;
+    latestSession = { ...latestSession!, status: 'Abandoned' };
     existingSession = { shop_id: 42, workflow_id: workflowId };
     const collisionResponse = await fetch(`http://127.0.0.1:${address.port}/api/shops/41/identity-verification/session`, {
       method: 'POST',

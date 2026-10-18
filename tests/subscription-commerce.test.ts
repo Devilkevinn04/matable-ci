@@ -106,8 +106,10 @@ test('Pro subscription exposes consented product stats and activates discounted 
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
     body: JSON.stringify({ tier: 'pro', term: 'annual' }),
   });
-  assert.equal(earlyPaymentResponse.status, 409);
-  assert.match((await earlyPaymentResponse.json()).error, /essai Standard reste actif/i);
+  assert.equal(earlyPaymentResponse.status, 201);
+  const earlyPayment = await earlyPaymentResponse.json();
+  assert.equal(earlyPayment.amount, 80000);
+  assert.equal(earlyPayment.currency, 'XOF');
   const unverifiedBoost = await fetch(`${BASE_URL}/api/shops/${shopId}/boost-payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },

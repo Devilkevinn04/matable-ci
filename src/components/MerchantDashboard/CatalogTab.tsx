@@ -14,7 +14,7 @@ interface CatalogTabProps {
 
 export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts }) => {
   const {
-    currentShop, products, orders, dataLoading, activeTab, settingsSubTab, setSettingsSubTab,
+    currentShop, products, orders, dataLoading, activeTab, setActiveTab, settingsSubTab, setSettingsSubTab,
     catalogSearch, setCatalogSearch, catalogFilter, setCatalogFilter,
     orderSearch, setOrderSearch, orderPaymentFilter, setOrderPaymentFilter, orderStatusFilter, setOrderStatusFilter,
     settingsName, setSettingsName, settingsWelcome, setSettingsWelcome, settingsOpen, setSettingsOpen,
@@ -36,6 +36,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
   const trialCatalogLimited = !currentShop.admin_mode && currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0;
   const productLimit = trialCatalogLimited ? TRIAL_CATALOG_LIMIT : getSubscriptionProductLimit(currentShop.subscription?.plan);
   const catalogFull = !currentShop.admin_mode && Number.isFinite(productLimit) && products.length >= productLimit;
+  const productLimitLabel = Number.isFinite(productLimit) ? productLimit : 'illimité';
 
   return (
     <>
@@ -48,9 +49,24 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                 <h2 className="text-lg font-black text-slate-900">Articles du catalogue</h2>
                 <p className="text-xs text-slate-500">
                   {trialCatalogLimited
-                    ? `Essai gratuit · ${products.length}/${TRIAL_CATALOG_LIMIT} articles · ${currentShop.subscription?.trialDaysRemaining} jours restants`
-                    : `${products.length} / ${Number.isFinite(productLimit) ? productLimit : 'illimité'} articles · ${getCategoryDefaults(currentShop.category).catalogDescription}`}
+                    ? `Essai gratuit · ${products.length}/${productLimitLabel} articles · ${currentShop.subscription?.trialDaysRemaining} jours restants`
+                    : `${products.length} / ${productLimitLabel} articles · ${getCategoryDefaults(currentShop.category).catalogDescription}`}
                 </p>
+                {Number.isFinite(productLimit) && (
+                  <div className="mt-2 max-w-sm">
+                    <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500">
+                      <span>{products.length} sur {productLimit} articles utilisés</span>
+                      {catalogFull && !currentShop.admin_mode && (
+                        <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="font-extrabold text-[#155544] underline underline-offset-2">
+                          Voir les formules
+                        </button>
+                      )}
+                    </div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#e8e5dc]" role="progressbar" aria-label="Utilisation de la capacité du catalogue" aria-valuemin={0} aria-valuemax={productLimit} aria-valuenow={Math.min(products.length, productLimit)}>
+                      <div className={`h-full rounded-full ${catalogFull ? 'bg-[#b94c24]' : 'bg-[#1D6B57]'}`} style={{ width: `${Math.min(100, (products.length / productLimit) * 100)}%` }} />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <button
@@ -71,6 +87,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                 <Search className="w-4 h-4 text-[#4a3a30] absolute left-3 top-2.5" />
                 <input
                   type="text"
+                  aria-label="Rechercher un produit dans le catalogue"
                   placeholder="Rechercher un article..."
                   value={catalogSearch}
                   onChange={(e) => setCatalogSearch(e.target.value)}
@@ -80,6 +97,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
 
               <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
                 <button
+                  type="button"
+                  aria-pressed={catalogFilter === 'all'}
                   onClick={() => setCatalogFilter('all')}
                   className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 border-[2px] ${
                     catalogFilter === 'all'
@@ -90,6 +109,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   Tous ({products.length})
                 </button>
                 <button
+                  type="button"
+                  aria-pressed={catalogFilter === 'in_stock'}
                   onClick={() => setCatalogFilter('in_stock')}
                   className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 border-[2px] ${
                     catalogFilter === 'in_stock'
@@ -97,9 +118,11 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                       : 'bg-[#edf7f2] text-[#155c3d] border-[#211712] hover:bg-[#e3f3ea]'
                   }`}
                 >
-                  En stock ({products.filter(p => p.stock > 3 && p.is_available !== false).length})
+                  En stock ({products.filter(p => p.stock > 0 && p.is_available !== false).length})
                 </button>
                 <button
+                  type="button"
+                  aria-pressed={catalogFilter === 'low_stock'}
                   onClick={() => setCatalogFilter('low_stock')}
                   className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 border-[2px] ${
                     catalogFilter === 'low_stock'
@@ -110,6 +133,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   Stock bas ({lowStockCount})
                 </button>
                 <button
+                  type="button"
+                  aria-pressed={catalogFilter === 'out_of_stock'}
                   onClick={() => setCatalogFilter('out_of_stock')}
                   className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 border-[2px] ${
                     catalogFilter === 'out_of_stock'
@@ -120,6 +145,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   Épuisé ({outOfStockCount})
                 </button>
                 <button
+                  type="button"
+                  aria-pressed={catalogFilter === 'hidden'}
                   onClick={() => setCatalogFilter('hidden')}
                   className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 border-[2px] ${
                     catalogFilter === 'hidden'
@@ -254,7 +281,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                             type="button"
                             onClick={() => handleQuickStockChange(prod.id, -1)}
                             disabled={prod.stock <= 0}
-                            className="w-6 h-6 rounded-lg bg-white hover:bg-[#f0f0f0] flex items-center justify-center text-[#211712] disabled:opacity-40"
+                            aria-label={`Retirer une unité du stock de ${prod.title}`}
+                            className="min-h-10 min-w-10 rounded-lg bg-white hover:bg-[#f0f0f0] flex items-center justify-center text-[#211712] disabled:opacity-40"
                             title="Décrémenter le stock"
                           >
                             <Minus className="w-3 h-3" />
@@ -265,7 +293,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                           <button
                             type="button"
                             onClick={() => handleQuickStockChange(prod.id, 1)}
-                            className="w-6 h-6 rounded-lg bg-white hover:bg-[#f0f0f0] flex items-center justify-center text-[#211712]"
+                            aria-label={`Ajouter une unité au stock de ${prod.title}`}
+                            className="min-h-10 min-w-10 rounded-lg bg-white hover:bg-[#f0f0f0] flex items-center justify-center text-[#211712]"
                             title="Incrémenter le stock"
                           >
                             <Plus className="w-3 h-3" />
@@ -274,22 +303,28 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
 
                         <div className="flex items-center gap-1">
                           <button
+                            type="button"
                             onClick={() => handleQuickToggleVisibility(prod.id)}
-                            className="p-1.5 rounded-lg border-[2px] border-[#211712] bg-white text-[#211712] hover:bg-[#f7e7c7]"
+                            aria-label={prod.is_available === false ? `Rendre ${prod.title} visible` : `Masquer ${prod.title} de la vitrine`}
+                            className="min-h-10 min-w-10 rounded-lg border-[2px] border-[#211712] bg-white text-[#211712] hover:bg-[#f7e7c7]"
                             title={prod.is_available === false ? "Rendre visible" : "Masquer de la vitrine"}
                           >
                             {prod.is_available === false ? <EyeOff className="w-4 h-4 text-[#b93712]" /> : <Eye className="w-4 h-4" />}
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleOpenEditModal(prod)}
-                            className="p-1.5 rounded-lg border-[2px] border-[#211712] bg-white text-[#211712] hover:bg-[#edf2fb]"
+                            aria-label={`Modifier ${prod.title}`}
+                            className="min-h-10 min-w-10 rounded-lg border-[2px] border-[#211712] bg-white text-[#211712] hover:bg-[#edf2fb]"
                             title="Modifier"
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDeleteProduct(prod.id)}
-                            className="p-1.5 rounded-lg border-[2px] border-[#211712] bg-white text-[#211712] hover:bg-[#fdf1ee]"
+                            aria-label={`Supprimer ${prod.title}`}
+                            className="min-h-10 min-w-10 rounded-lg border-[2px] border-[#211712] bg-white text-[#211712] hover:bg-[#fdf1ee]"
                             title="Supprimer"
                           >
                             <Trash2 className="w-4 h-4 text-[#b93712]" />

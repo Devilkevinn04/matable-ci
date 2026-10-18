@@ -419,8 +419,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const isShopPublished = !isAdminSuspended && (isDiditVerified || hasActiveSubscription && (currentShop.publication_status
     ? currentShop.publication_status === 'active'
     : currentShop.is_active && isShopVerified));
-  const isShopLaunchReady = isShopPublished;
-  const productChecklistTarget = currentShop.subscription?.status === 'trialing' ? TRIAL_CATALOG_LIMIT : 3;
   const trialCatalogLimited = !currentShop.admin_mode
     && currentShop.subscription?.status === 'trialing'
     && currentShop.subscription.trialDaysRemaining > 0;
@@ -473,7 +471,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     if (!matchesSearch) return false;
 
     // Filter match
-    if (catalogFilter === 'in_stock') return p.stock > 3 && p.is_available !== false;
+    if (catalogFilter === 'in_stock') return p.stock > 0 && p.is_available !== false;
     if (catalogFilter === 'low_stock') return p.stock > 0 && p.stock <= 3 && p.is_available !== false;
     if (catalogFilter === 'out_of_stock') return p.stock === 0;
     if (catalogFilter === 'hidden') return p.is_available === false;
@@ -542,7 +540,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   }
 
   const identityAlertCopy = identityStatus === 'rejected'
-    ? { title: 'Vérification à reprendre', description: 'Votre identité n’a pas été validée. Consultez le motif et relancez la vérification.' }
+    ? { title: 'Vérification à reprendre', description: 'Didit n’a pas transmis le motif détaillé à MaTable.ci. Consultez les indications affichées par Didit ou contactez l’assistance.' }
     : ['submitted', 'under_review'].includes(identityStatus)
       ? { title: 'Vérification en cours', description: 'La vérification est en cours. Votre boutique sera publiable une fois l’identité confirmée.' }
       : { title: 'Vérifiez votre identité', description: 'Cette étape est nécessaire pour publier votre boutique et recevoir des commandes.' };
@@ -698,7 +696,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
                 <div><h3 className="text-sm font-extrabold">{identityAlertCopy.title}</h3><p className="mt-1 text-xs leading-5">{identityAlertCopy.description} La boutique reste en veille jusque-là.</p></div>
               </div>
-              <button type="button" onClick={openIdentityVerification} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-amber-950 px-4 text-xs font-bold text-white hover:bg-amber-900">Continuer la vérification</button>
+              <button type="button" onClick={openIdentityVerification} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-amber-950 px-4 text-xs font-bold text-white hover:bg-amber-900">{identityStatus === 'rejected' ? 'Reprendre la vérification' : ['submitted', 'under_review'].includes(identityStatus) ? 'Voir le statut' : 'Commencer la vérification'}</button>
             </article>
           )}
           {isAdminSuspended && (
@@ -734,7 +732,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             <div className="flex items-center gap-2 self-start rounded-full bg-white/80 px-3 py-1.5 shadow-sm ring-1 ring-[#e8e0d6] sm:self-auto">
               <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Progression</span>
               <span className="rounded-full bg-[#eaf4ef] px-2.5 py-1 text-xs font-black text-[#155544]">
-                {[Boolean(currentShop.name), Boolean(currentShop.theme_config?.logo_url), products.length > 0, products.length >= productChecklistTarget, isShopLaunchReady, isShopPublished].filter(Boolean).length}/6
+                {[Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), Boolean(currentShop.theme_config?.logo_url), products.length > 0, isShopVerified, hasActiveSubscription, isShopPublished].filter(Boolean).length}/6
               </span>
             </div>
           </div>
@@ -742,18 +740,25 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           <div className="mt-5 grid gap-3 lg:grid-cols-[1.25fr_0.75fr]">
             <div className="grid gap-2 sm:grid-cols-2">
               {[
-                { label: 'Nom boutique', done: Boolean(currentShop.name), action: () => { setActiveTab('settings'); setSettingsSubTab('general'); } },
-                { label: 'Logo / photo', done: Boolean(currentShop.theme_config?.logo_url), action: () => { setActiveTab('settings'); setSettingsSubTab('themes'); } },
-                { label: 'Premier produit', done: products.length > 0, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
-                { label: `${productChecklistTarget} produits minimum`, done: products.length >= productChecklistTarget, action: () => { setActiveTab('catalog'); handleOpenAddModal(); } },
-              ].map((step) => (
-                <button key={step.label} type="button" onClick={step.action} className="flex min-h-[74px] items-start gap-3 rounded-2xl border border-[#e8e0d6] bg-white/90 px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-[#f8fdf9]">
-                  <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${step.done ? 'bg-[#0f4d3d] text-white' : 'border-2 border-slate-300 bg-slate-50 text-transparent'}`}>
-                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                { label: 'Nom et coordonnées', detail: 'Nom, WhatsApp et localisation', done: Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), action: () => { setActiveTab('settings'); setSettingsSubTab('general'); } },
+                { label: 'Logo de la boutique', detail: 'Aidez vos clients à vous reconnaître', done: Boolean(currentShop.theme_config?.logo_url), action: () => { setActiveTab('settings'); setSettingsSubTab('themes'); } },
+                { label: 'Ajouter vos premiers produits', detail: `${products.length} article${products.length === 1 ? '' : 's'} · limite du forfait : ${Number.isFinite(dashboardProductLimit) ? dashboardProductLimit : 'illimitée'}`, done: products.length > 0, action: () => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); } },
+                { label: 'Vérifier votre identité', detail: isShopVerified ? 'Identité confirmée' : 'Requis avant la publication', done: isShopVerified, action: () => { setActiveTab('settings'); setSettingsSubTab('verification'); } },
+                { label: 'Essai ou abonnement actif', detail: hasActiveSubscription ? 'Votre accès est actif' : 'Choisissez une formule pour publier', done: hasActiveSubscription, action: () => { setActiveTab('settings'); setSettingsSubTab('subscription'); } },
+                { label: 'Publier votre boutique', detail: isShopPublished ? 'Votre vitrine est visible' : 'Activez la publication après les étapes requises', done: isShopPublished, action: () => {
+                  if (isShopPublished) onOpenStorefront(currentShop.slug);
+                  else if (!isShopVerified) { setActiveTab('settings'); setSettingsSubTab('verification'); }
+                  else if (!hasActiveSubscription) { setActiveTab('settings'); setSettingsSubTab('subscription'); }
+                  else void handlePublicationStatusChange('active');
+                } },
+              ].map((step, index) => (
+                <button key={step.label} type="button" onClick={step.action} aria-label={`${step.done ? 'Modifier' : 'Compléter'} : ${step.label}`} className="flex min-h-[82px] items-start gap-3 rounded-2xl border border-[#e8e0d6] bg-white/90 px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-[#f8fdf9]">
+                  <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${step.done ? 'bg-[#0f4d3d] text-white' : 'border-2 border-slate-300 bg-slate-50 text-slate-500'}`}>
+                    {step.done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : index + 1}
                   </span>
                   <span>
-                    <span className="block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">Étape</span>
-                    <span className="mt-1 block text-sm font-bold text-[#211712]">{step.label}</span>
+                    <span className="block text-sm font-bold text-[#211712]">{step.label}</span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">{step.detail}</span>
                   </span>
                 </button>
               ))}
@@ -775,7 +780,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                             : 'Publier ma boutique'}
                   </h3>
                 </div>
-                <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isShopLaunchReady ? 'bg-[#0f4d3d] text-white' : 'bg-white text-[#0f4d3d] ring-1 ring-[#dfe8dd]'}`}>
+                <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isShopPublished ? 'bg-[#0f4d3d] text-white' : 'bg-white text-[#0f4d3d] ring-1 ring-[#dfe8dd]'}`}>
                   <Check className="h-4 w-4" />
                 </span>
               </div>
@@ -885,7 +890,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           { id: 'overview' as const, label: 'Accueil', icon: LayoutDashboard },
           { id: 'catalog' as const, label: 'Produits', icon: Package },
           { id: 'orders' as const, label: 'Commandes', icon: ShoppingBag, count: actionableOrderCount },
-          { id: 'stats' as const, label: 'Stats', icon: BarChart3 },
         ].map(({ id, label, icon: Icon, count }) => (
           <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => { setActiveTab(id); setIsSettingsDrawerOpen(false); }} className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-lg text-[10px] font-bold ${activeTab === id ? 'text-[#155544]' : 'text-slate-500'}`}>
             <Icon className="h-5 w-5" />
@@ -893,6 +897,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             {count !== undefined && count > 0 && <span className="absolute right-[calc(50%-20px)] top-1 min-w-4 rounded-full bg-[#e6572b] px-1 text-center text-[9px] leading-4 text-white">{count}</span>}
           </button>
         ))}
+        <button type="button" onClick={() => { setActiveTab('catalog'); handleOpenAddModal(); setIsSettingsDrawerOpen(false); }} disabled={dashboardCatalogFull} aria-label={dashboardCatalogFull ? 'Limite du forfait atteinte' : 'Ajouter un produit'} className="relative -mt-4 flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl border-4 border-[#fffaf2] bg-[#0f4d3d] px-2 text-[10px] font-extrabold text-white shadow-lg disabled:bg-slate-400">
+          <Plus className="h-5 w-5" /><span>Ajouter</span>
+        </button>
         <button type="button" aria-label={mobileNotificationCount > 0 ? `Plus, ${mobileNotificationCount} priorité${mobileNotificationCount === 1 ? '' : 's'} à consulter` : 'Plus'} aria-expanded={isSettingsDrawerOpen} aria-controls="merchant-menu-drawer" onClick={() => setIsSettingsDrawerOpen(true)} className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-lg text-[10px] font-bold ${isSettingsDrawerOpen || activeTab === 'settings' ? 'text-[#155544]' : 'text-slate-500'}`}>
           <MoreHorizontal className="h-5 w-5" /><span>Plus</span>
           {mobileNotificationCount > 0 && <span aria-hidden="true" className="absolute right-[calc(50%-18px)] top-0 min-w-4 rounded-full bg-[#e6572b] px-1 text-center text-[9px] leading-4 text-white">{mobileNotificationCount > 9 ? '9+' : mobileNotificationCount}</span>}

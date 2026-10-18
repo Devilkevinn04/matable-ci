@@ -195,6 +195,8 @@ function ProductModalDevPreview() {
     setProdModifiers,
     prodModifierMaxSelections,
     setProdModifierMaxSelections,
+    prodModifierGroups: [],
+    setProdModifierGroups: () => undefined,
     prodAttributes,
     setProdAttributes,
     prodIsAvailable,
@@ -443,8 +445,8 @@ export default function App() {
                         ? <React.Suspense fallback={<p role="status" className="p-6 text-center text-sm font-semibold text-slate-600">Chargement de la page…</p>}><MerchantTrialOnboarding shop={merchantPlanPreviewShop} isStarting={false} mode="plans" previewOnly onBack={() => navigate('/boutiques')} /></React.Suspense>
                         : <NotFoundPage />
                       } />
-                      <Route path="/" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app'); }} />} />
-                      <Route path="/boutiques" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app'); }} isShopDirectoryPage />} />
+                      <Route path="/" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app/creer-boutique'); }} />} />
+                      <Route path="/boutiques" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app/creer-boutique'); }} isShopDirectoryPage />} />
                       <Route path="/comment-ca-marche" element={<HowItWorksPage />} />
                       <Route path="/faq" element={<FaqPage />} />
                       <Route path="/recuperation-acces" element={<AccountRecoveryPage initialAccountType={new URLSearchParams(location.search).get('type') === 'merchant' ? 'merchant' : 'customer'} onBack={() => navigate(new URLSearchParams(location.search).get('type') === 'merchant' ? '/app' : '/connexion')} />} />
@@ -453,7 +455,7 @@ export default function App() {
                       <Route path="/cgu" element={<LegalPages page="cgu" />} />
                       <Route path="/cookies" element={<LegalPages page="cookies" />} />
                       <Route path="/boutiques/*" element={discoveryPage
-                        ? <PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={() => navigate('/boutiques')} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app'); }} discoveryPage={discoveryPage} />
+                        ? <PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={() => navigate('/boutiques')} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app/creer-boutique'); }} discoveryPage={discoveryPage} />
                         : isLoadingShops
                           ? <DirectoryPageLoading />
                           : <NotFoundPage />
