@@ -59,10 +59,11 @@ export function createAdminRouter(options: AdminRouterOptions) {
     if (isVerificationAdmin(req)) {
       const allowedModeration = (req.method === 'GET' && path === '/content-moderation')
         || (req.method === 'PATCH' && /^\/content-moderation\/(reviews|reports)\/\d+$/.test(path));
+      const allowedReadOnlyShopList = req.method === 'GET' && path === '/shops/verification-readonly';
       const allowedIdentityReminder = req.method === 'POST'
         && /^\/shops\/\d+\/notification$/.test(path)
         && req.body?.template === 'identity_verification';
-      if (!allowedModeration && !allowedIdentityReminder) {
+      if (!allowedModeration && !allowedReadOnlyShopList && !allowedIdentityReminder) {
         return res.status(403).json({ error: 'Cette opération est réservée au super-admin ou à un rôle autorisé.' });
       }
     }
@@ -91,6 +92,25 @@ export function createAdminRouter(options: AdminRouterOptions) {
     const row = await dbGet<Record<string, unknown>>('SELECT * FROM shops WHERE id = ?', [shopId]);
     return row ? mapShopRow(row) : undefined;
   };
+
+  router.get('/shops/verification-readonly', requireVerification, async (_req, res) => {
+    const shops = await dbAll<{
+      id: number;
+      name: string;
+      slug: string;
+      category: string | null;
+      city: string | null;
+      publication_status: string;
+      merchant_verification_status: string;
+      created_at: string;
+    }>(`
+      SELECT id, name, slug, category, city, publication_status, merchant_verification_status, created_at
+      FROM shops ORDER BY created_at DESC, id DESC
+    `);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json(shops);
+  });
+
   const getTrialExtensionDays = (value: unknown) => {
     const details: unknown = typeof value === 'string' ? JSON.parse(value) : value;
     if (!details || typeof details !== 'object' || !('days' in details)

@@ -58,6 +58,39 @@ interface MerchantDashboardProps {
   openRegistration?: boolean;
 }
 
+interface MerchantReview {
+  id: number;
+  rating: number;
+  comment: string;
+  created_at: string;
+  author_name: string;
+}
+
+interface MerchantReviewsResponse {
+  reviews: MerchantReview[];
+  average_rating: number | null;
+  review_count: number;
+}
+
+function isMerchantReview(value: unknown): value is MerchantReview {
+  if (!value || typeof value !== 'object') return false;
+  const review = value as Record<string, unknown>;
+  return typeof review.id === 'number'
+    && typeof review.rating === 'number'
+    && typeof review.comment === 'string'
+    && typeof review.created_at === 'string'
+    && typeof review.author_name === 'string';
+}
+
+function isMerchantReviewsResponse(value: unknown): value is MerchantReviewsResponse {
+  if (!value || typeof value !== 'object') return false;
+  const payload = value as Record<string, unknown>;
+  return Array.isArray(payload.reviews)
+    && payload.reviews.every(isMerchantReview)
+    && (payload.average_rating === null || typeof payload.average_rating === 'number')
+    && typeof payload.review_count === 'number';
+}
+
 const shopCategoryOptions: { value: ShopCategory; label: string; icon: string }[] = SHOP_CATEGORIES.map((value) => ({
   value,
   label: CATEGORY_DEFAULTS[value].label,
@@ -87,6 +120,19 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const [isHeaderCompact, setIsHeaderCompact] = useState(false);
   const [isIdentityGuideOpen, setIsIdentityGuideOpen] = useState(false);
   const [subscriptionReminderDay, setSubscriptionReminderDay] = useState<number | null>(null);
+  const [dashboardSearch, setDashboardSearch] = useState('');
+  const [shopReviews, setShopReviews] = useState<MerchantReview[]>([]);
+  const [shopReviewSummary, setShopReviewSummary] = useState<{ average: number | null; count: number }>({ average: null, count: 0 });
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState('');
+  const reviewShop = merchantState.currentShop;
+  const reviewShopIsPublished = Boolean(reviewShop
+    && !(!reviewShop.is_active || reviewShop.publication_status === 'suspended')
+    && (reviewShop.merchant_verification_status === 'verified'
+      || reviewShop.subscription?.isActive !== false && (reviewShop.publication_status
+        ? reviewShop.publication_status === 'active'
+        : reviewShop.is_active && (!reviewShop.merchant_verification_status
+          || ['not_required', 'verified'].includes(reviewShop.merchant_verification_status)))));
 
   useEffect(() => {
     const updateHeader = () => setIsHeaderCompact(window.innerWidth < 768 && window.scrollY > 56);
@@ -98,6 +144,47 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       window.removeEventListener('resize', updateHeader);
     };
   }, []);
+
+  useEffect(() => {
+    if (!reviewShop || !reviewShopIsPublished) {
+      setShopReviews([]);
+      setShopReviewSummary({ average: null, count: 0 });
+      setReviewsError('');
+      setReviewsLoading(false);
+      return;
+    }
+
+    let isCurrentRequest = true;
+    setReviewsLoading(true);
+    setReviewsError('');
+    fetch(`/api/customer-engagement/reviews?target_type=shop&target_id=${reviewShop.id}`)
+      .then(async (response) => {
+        const payload: unknown = await response.json();
+        if (!response.ok) {
+          const errorMessage = payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
+            ? payload.error
+            : 'Impossible de charger les avis de votre boutique.';
+          throw new Error(errorMessage);
+        }
+        if (!isMerchantReviewsResponse(payload)) throw new Error('La réponse des avis est invalide.');
+        return payload;
+      })
+      .then((payload) => {
+        if (!isCurrentRequest) return;
+        setShopReviews(payload.reviews);
+        setShopReviewSummary({ average: payload.average_rating, count: payload.review_count });
+      })
+      .catch((error: unknown) => {
+        if (isCurrentRequest) setReviewsError(error instanceof Error ? error.message : 'Impossible de charger les avis de votre boutique.');
+      })
+      .finally(() => {
+        if (isCurrentRequest) setReviewsLoading(false);
+      });
+
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [reviewShop?.id, reviewShopIsPublished]);
 
   useEffect(() => {
     const shop = merchantState.currentShop;
@@ -549,6 +636,50 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     return true;
   });
 
+  function handleDashboardSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = dashboardSearch.trim();
+    if (!query) return;
+    const normalizedQuery = query.toLocaleLowerCase();
+    const matchingOrder = orders.some((order) =>
+      `${order.id} ${order.customer_name} ${order.customer_phone}`
+        .toLocaleLowerCase()
+        .includes(normalizedQuery),
+    );
+    if (matchingOrder) {
+      setOrderSearch(query);
+      setOrderStatusFilter('all');
+      setOrderPaymentFilter('all');
+      setActiveTab('orders');
+      setDashboardSearch('');
+      return;
+    }
+
+    const matchingProduct = products.some((product) =>
+      `${product.title} ${product.description || ''}`.toLocaleLowerCase().includes(normalizedQuery),
+    );
+    if (matchingProduct) {
+      setCatalogSearch(query);
+      setCatalogFilter('all');
+      setActiveTab('catalog');
+      setDashboardSearch('');
+      return;
+    }
+
+    const matchingOrderItem = orders.some((order) =>
+      (order.items || []).some((item) => item.product_title?.toLocaleLowerCase().includes(normalizedQuery)),
+    );
+    if (matchingOrderItem) {
+      setOrderSearch(query);
+      setOrderStatusFilter('all');
+      setOrderPaymentFilter('all');
+      setActiveTab('orders');
+      setDashboardSearch('');
+      return;
+    }
+    toast.error('Aucune commande, aucun client ou produit trouvé pour cette recherche.');
+  }
+
   function dismissIdentityGuide() {
     try {
       window.localStorage.setItem(`matable:merchant-identity-guide:${currentShop.id}`, 'seen');
@@ -588,6 +719,19 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     : subscriptionDaysRemaining === 0
       ? { title: 'Échéance aujourd’hui', description: 'Consultez votre abonnement pour éviter une interruption de service.' }
       : { title: `Échéance dans ${subscriptionDaysRemaining} jour${subscriptionDaysRemaining === 1 ? '' : 's'}`, description: subscriptionStatus === 'trialing' ? 'Préparez la suite de votre essai depuis les options de forfait.' : 'Pensez à renouveler votre forfait avant cette date.' };
+  const recentOrders = [...orders]
+    .sort((first, second) => Date.parse(second.created_at) - Date.parse(first.created_at))
+    .slice(0, 4);
+  const orderStatusLabels: Record<OrderStatus, string> = {
+    pending: 'À confirmer',
+    confirmed: 'Confirmée',
+    preparing: 'En préparation',
+    ready: 'Prête',
+    delivered: 'Livrée',
+    cancelled: 'Annulée',
+    expired: 'Expirée',
+  };
+  const uniqueCustomerCount = new Set(orders.map((order) => order.customer_phone || order.customer_name.trim().toLocaleLowerCase()).filter(Boolean)).size;
 
   return (
     <div className="merchant-dashboard min-h-screen pb-20 bg-[#fffaf2]">
@@ -599,7 +743,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       )}
       {/* Top Shop Control Bar */}
       <div className={`sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur-sm transition-[box-shadow] ${isHeaderCompact ? 'shadow-md' : ''}`}>
-        <div className={`mx-auto flex max-w-7xl transition-[padding,gap] ${isHeaderCompact ? 'items-center gap-2 px-3 py-2' : 'flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between'}`}>
+        <div className={`mx-auto flex max-w-7xl transition-[padding,gap] lg:ml-64 lg:max-w-none ${isHeaderCompact ? 'items-center gap-2 px-3 py-2' : 'flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between'}`}>
           <div className={`flex min-w-0 items-center ${isHeaderCompact ? 'gap-2' : 'gap-3'}`}>
             {currentShop.theme_config?.logo_url ? (
               <img
@@ -725,8 +869,36 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         )}
       </div>
 
+      {activeTab === 'overview' && (
+        <section className="mx-auto max-w-7xl px-4 pt-5 lg:ml-64 lg:max-w-none">
+          <form onSubmit={handleDashboardSearch} role="search" className="mb-4">
+            <label className="sr-only" htmlFor="merchant-dashboard-search">Rechercher une commande, un produit ou un client</label>
+            <div className="relative flex max-w-4xl items-center">
+              <Search className="pointer-events-none absolute left-4 h-4 w-4 text-slate-500" />
+              <input
+                id="merchant-dashboard-search"
+                type="search"
+                value={dashboardSearch}
+                onChange={(event) => setDashboardSearch(event.target.value)}
+                placeholder="Rechercher une commande, un produit, un client"
+                className="min-h-12 w-full rounded-full border border-[#e7dfd3] bg-white py-3 pl-11 pr-28 text-sm shadow-sm focus:border-[#176b55] focus:outline-none"
+              />
+              <button type="submit" className="absolute right-1.5 min-h-9 rounded-full bg-[#0f4d3d] px-4 text-xs font-bold text-white hover:bg-[#176b55]">Rechercher</button>
+            </div>
+          </form>
+          <div className="flex flex-col gap-4 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1D6B57]">Vue d’ensemble</p>
+              <h2 className="mt-1 text-2xl font-black tracking-tight text-[#155544]">Bonjour, {currentShop.name}</h2>
+              <p className="mt-1 text-sm text-slate-600">Voici l’activité de votre boutique aujourd’hui.</p>
+            </div>
+            <button type="button" onClick={() => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); }} disabled={dashboardCatalogFull} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1D6B57] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#155544] disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />{dashboardCatalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</button>
+          </div>
+        </section>
+      )}
+
       {(identityVerificationRequired || subscriptionNeedsAttention || isAdminSuspended || actionableOrderCount > 0 || outOfStockCount > 0 || lowStockCount > 0) && (
-        <section aria-labelledby="merchant-priority-notifications" aria-live="polite" className="mx-auto w-full max-w-7xl space-y-2 px-4 pt-3">
+        <section aria-labelledby="merchant-priority-notifications" aria-live="polite" className="mx-auto w-full max-w-7xl space-y-2 px-4 pt-3 lg:ml-64 lg:w-auto lg:max-w-none">
           <h2 id="merchant-priority-notifications" className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">À faire en priorité</h2>
           {identityVerificationRequired && (
             <article className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-amber-950 sm:flex-row sm:items-center sm:justify-between sm:p-4">
@@ -760,7 +932,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       )}
 
       {activeTab === 'overview' && (
-      <div className="mx-auto max-w-7xl px-4 pt-4">
+      <div className="mx-auto max-w-7xl px-4 pt-4 lg:ml-64 lg:max-w-none">
         <section className="overflow-hidden rounded-[26px] border border-[#e7dfd3] bg-gradient-to-br from-[#fffdf8] via-[#fefaf4] to-[#edf7f0] p-4 shadow-[0_16px_36px_rgba(37,35,31,0.05)] sm:p-5" aria-labelledby="setup-checklist-title">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -866,27 +1038,53 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       )}
 
       {/* Main Container */}
-      <div className="mx-auto max-w-7xl px-4 pb-24 pt-6 lg:pb-6">
-        <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
-          <nav aria-label="Navigation principale commerçant" className="hidden min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-2 lg:sticky lg:top-28 lg:flex lg:flex-col lg:gap-1">
-            <p className="px-3 pb-2 pt-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Espace commerçant</p>
+      <div className="mx-auto max-w-7xl px-4 pb-24 pt-6 lg:ml-64 lg:max-w-none lg:pb-6">
+        <div className="grid gap-6 lg:grid-cols-1 lg:items-start">
+          <nav aria-label="Navigation principale commerçant" className="merchant-sidebar hidden min-w-0 flex-col gap-1 overflow-y-auto p-4 lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-64">
+            <div className="mb-5 px-3 pt-3">
+              <p className="text-2xl font-black tracking-tight text-white">MaTable.ci</p>
+              <p className="mt-1 text-sm text-white/70">Espace commerçant</p>
+            </div>
             {[
-              { id: 'overview' as const, label: 'Accueil', icon: LayoutDashboard },
+              { id: 'overview' as const, label: 'Tableau de bord', icon: LayoutDashboard },
               { id: 'catalog' as const, label: 'Catalogue', count: products.length, icon: Package },
               { id: 'orders' as const, label: 'Commandes', count: actionableOrderCount, icon: ShoppingBag },
               { id: 'stats' as const, label: 'Statistiques', icon: BarChart3 },
             ].map(({ id, label, icon: Icon, count }) => (
-              <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => setActiveTab(id)} className={`flex min-h-11 min-w-0 items-center justify-start gap-3 rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition-all sm:text-sm lg:w-full ${activeTab === id ? 'border-[#1D6B57]/10 bg-[#eaf4ef] text-[#155544]' : 'border-transparent bg-white text-slate-700 hover:bg-[#f7f4ee]'}`}>
+              <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => setActiveTab(id)} className={`flex min-h-11 min-w-0 items-center justify-start gap-3 rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition-all sm:text-sm lg:w-full ${activeTab === id ? 'border-transparent bg-[#176b55] text-white' : 'border-transparent bg-transparent text-white/90 hover:bg-[#176b55] hover:text-white'}`}>
                 <Icon className="h-4 w-4 shrink-0" /><span className="flex-1">{label}</span>
                 {count !== undefined && count > 0 && (
-                  <span className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-[10px] font-black ${id === 'orders' ? 'bg-[#e6572b] text-white' : 'bg-slate-100 text-slate-600'}`}>{count}</span>
+                  <span className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-[10px] font-black ${id === 'orders' ? 'bg-[#e6572b] text-white' : 'bg-white/15 text-white'}`}>{count}</span>
                 )}
               </button>
             ))}
-            <button type="button" aria-current={activeTab === 'settings' ? 'page' : undefined} onClick={() => { setSettingsSubTab('general'); setActiveTab('settings'); }} className={`inline-flex min-h-11 min-w-max items-center justify-start gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left text-xs font-bold transition hover:bg-[#f7f4ee] sm:text-sm lg:w-full ${activeTab === 'settings' ? 'bg-[#eaf4ef] text-[#155544]' : 'bg-white text-slate-700'}`}>
-            <Store className="h-4 w-4 shrink-0" /><span>Paramètres</span>
-            </button>
-            <button type="button" onClick={handleLogout} className="mt-2 inline-flex min-h-11 min-w-max items-center justify-start gap-3 rounded-xl border-t border-[#eee8dc] px-3 py-2.5 text-left text-xs font-bold text-slate-500 transition hover:bg-[#fff6ea] hover:text-[#b94c24] sm:text-sm lg:w-full">
+            <div className="my-2 border-t border-white/15" />
+            <p className="px-3 pb-1 pt-1 text-[10px] font-black uppercase tracking-[0.14em] text-white/70">À suivre</p>
+            {[
+              { id: 'subscription' as const, label: 'Abonnement', icon: CreditCard, badge: subscriptionNeedsAttention ? 'Échéance' : '' },
+              { id: 'verification' as const, label: identityStatus === 'verified' ? 'Identité vérifiée' : 'Vérification d’identité', icon: ShieldCheck, badge: identityVerificationRequired ? 'À faire' : '' },
+            ].map(({ id, label, icon: Icon, badge }) => (
+              <button key={id} type="button" aria-current={activeTab === 'settings' && settingsSubTab === id ? 'page' : undefined} onClick={() => { setSettingsSubTab(id); setActiveTab('settings'); }} className={`flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold transition sm:text-sm ${activeTab === 'settings' && settingsSubTab === id ? 'bg-[#176b55] text-white' : 'text-white/90 hover:bg-[#176b55] hover:text-white'}`}>
+                <Icon className="h-4 w-4 shrink-0" /><span className="flex-1">{label}</span>{badge && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-900">{badge}</span>}
+              </button>
+            ))}
+            <div className="my-2 border-t border-white/15" />
+            <p className="px-3 pb-1 pt-1 text-[10px] font-black uppercase tracking-[0.14em] text-white/70">Paramètres</p>
+            {settingsNavigationGroups.map((group) => (
+              <section key={group.label} className="mb-2">
+                <h2 className="px-3 pb-1 text-[9px] font-black uppercase tracking-wide text-white/60">{group.label}</h2>
+                {group.items.map(({ id, label, icon: Icon }) => (
+                  <button key={id} type="button" aria-current={activeTab === 'settings' && settingsSubTab === id ? 'page' : undefined} onClick={() => { setSettingsSubTab(id); setActiveTab('settings'); }} className={`flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold transition sm:text-sm ${activeTab === 'settings' && settingsSubTab === id ? 'bg-[#176b55] text-white' : 'text-white/90 hover:bg-[#176b55] hover:text-white'}`}>
+                    <Icon className="h-4 w-4 shrink-0" /><span>{label}</span>
+                  </button>
+                ))}
+              </section>
+            ))}
+            <p className="px-3 pb-1 pt-1 text-[10px] font-black uppercase tracking-[0.14em] text-white/70">Partage</p>
+            <button type="button" disabled={!isShopPublished} onClick={() => void copyOwnerLink('public')} className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-[#176b55] disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"><Copy className="h-4 w-4 shrink-0" />Lien vitrine</button>
+            <button type="button" onClick={() => void copyOwnerLink('private')} className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-[#176b55] sm:text-sm"><Key className="h-4 w-4 shrink-0" />Lien d’accès privé</button>
+            {dashboardSupportUrl && <a href={dashboardSupportUrl} target="_blank" rel="noreferrer" className="flex min-h-10 items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-white/90 hover:bg-[#176b55] sm:text-sm"><MessageCircle className="h-4 w-4 shrink-0" />Centre d’aide</a>}
+            <button type="button" onClick={handleLogout} className="mt-2 inline-flex min-h-11 min-w-max items-center justify-start gap-3 rounded-xl border-t border-white/15 px-3 py-2.5 text-left text-xs font-bold text-white/80 transition hover:bg-[#176b55] hover:text-white sm:text-sm lg:w-full">
             <LogOut className="h-4 w-4 shrink-0" /><span>Déconnexion</span>
             </button>
           </nav>
@@ -894,23 +1092,116 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           <div className="min-w-0">
           {activeTab === 'overview' && (
             <section className="space-y-4">
-              <div className="flex flex-col gap-4 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1D6B57]">Vue d’ensemble</p>
-                  <h2 className="mt-1 text-2xl font-black tracking-tight text-[#211712]">Bonjour, {currentShop.name}</h2>
-                  <p className="mt-1 text-sm text-slate-600">Les informations essentielles de votre boutique.</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); }} disabled={dashboardCatalogFull} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1D6B57] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#155544] disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />{dashboardCatalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</button>
-                </div>
-              </div>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {[
-                  { label: 'À traiter', value: actionableOrderCount, hint: `${orders.length} commande${orders.length === 1 ? '' : 's'} au total`, tone: 'text-[#b94c24]', icon: ShoppingBag },
+                  { label: 'Commandes', value: orders.length, hint: `${actionableOrderCount} à traiter`, tone: 'text-[#b94c24]', icon: ShoppingBag },
+                  { label: 'Valeur des commandes', value: formatFCFA(orderValue), hint: 'Hors annulation et expiration', tone: 'text-[#1D6B57]', icon: DollarSign },
+                  { label: 'Clients', value: uniqueCustomerCount, hint: 'Clients ayant commandé', tone: 'text-[#1D6B57]', icon: UserPlus },
                   { label: 'Articles', value: `${products.length} / ${Number.isFinite(dashboardProductLimit) ? dashboardProductLimit : '∞'}`, hint: 'Dans votre catalogue', tone: 'text-[#1D6B57]', icon: Package },
-                  { label: 'Statut boutique', value: currentShop.is_open ? 'Ouverte' : 'Fermée', hint: isShopPublished ? 'Vitrine publiée' : isAdminSuspended ? 'Suspendue par l’administration' : !isShopVerified ? 'Vérification en cours' : 'Vitrine en veille', tone: currentShop.is_open ? 'text-[#1D6B57]' : 'text-amber-700', icon: Store },
-                  ...(currentShop.subscription?.status === 'trialing' ? [{ label: 'Essai gratuit', value: `${currentShop.subscription.trialDaysRemaining} j`, hint: 'Restants', tone: 'text-[#b94c24]', icon: Clock }] : []),
                 ].map((metric) => <div key={metric.label} className="flex min-h-[104px] items-start gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4"><span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f7f4ee] ${metric.tone}`}><metric.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="text-xs font-semibold text-slate-500">{metric.label}</p><strong className="mt-1 block truncate text-xl font-black text-[#211712]">{metric.value}</strong><p className="mt-1 truncate text-[11px] text-slate-500">{metric.hint}</p></div></div>)}
+              </div>
+              <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,0.9fr)]">
+                <section aria-labelledby="merchant-recent-orders-title" className="min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
+                  <div className="mb-3 flex items-center justify-between gap-3 border-b border-[#eee8dc] pb-3">
+                    <h3 id="merchant-recent-orders-title" className="text-lg font-black text-[#155544]">Commandes récentes</h3>
+                    <button type="button" onClick={() => setActiveTab('orders')} className="text-xs font-bold text-[#155544] underline underline-offset-2">Voir tout</button>
+                  </div>
+                  {recentOrders.length === 0 ? (
+                    <p className="py-5 text-sm text-slate-500">Vos nouvelles commandes apparaîtront ici.</p>
+                  ) : (
+                    <ul className="divide-y divide-[#eee8dc]">
+                      {recentOrders.map((order) => {
+                        const orderItemName = order.items?.[0]?.product_title || order.customer_name;
+                        const createdAt = Date.parse(order.created_at);
+                        const orderDate = Number.isFinite(createdAt) ? new Date(createdAt) : null;
+                        const today = new Date();
+                        const isToday = orderDate !== null
+                          && orderDate.getFullYear() === today.getFullYear()
+                          && orderDate.getMonth() === today.getMonth()
+                          && orderDate.getDate() === today.getDate();
+                        const orderDateLabel = orderDate
+                          ? new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short' }).format(orderDate)
+                          : 'Date indisponible';
+                        const orderTime = orderDate
+                          ? new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(orderDate)
+                          : 'Heure indisponible';
+                        return (
+                          <li key={order.id} className="flex min-w-0 flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
+                            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#f8f1e7] text-[#e6572b]"><ShoppingBag className="h-4 w-4" /></span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-bold text-[#211712]">N° {order.id} · {orderItemName}</p>
+                              <p className="mt-0.5 text-xs text-slate-500">{isToday ? 'Aujourd’hui' : orderDateLabel}, {orderTime}</p>
+                            </div>
+                            <span className="rounded-full bg-[#e2eee8] px-2.5 py-1 text-xs font-bold text-[#155544]">{orderStatusLabels[order.status]}</span>
+                            <strong className="min-w-24 text-right text-sm font-black text-[#211712]">{formatFCFA(order.total_amount)}</strong>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
+                <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                  <section aria-labelledby="merchant-shop-card-title" className="overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white">
+                    <div className="h-16 bg-[#e2eee8]" />
+                    <div className="-mt-7 px-4 pb-4">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full border-4 border-white bg-[#f9f0e6] text-xl">
+                        {currentShop.theme_config?.logo_url ? <img src={currentShop.theme_config.logo_url} alt="" className="h-full w-full rounded-full object-cover" /> : getCategoryDefaults(currentShop.category).icon}
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <h3 id="merchant-shop-card-title" className="font-black text-[#155544]">{currentShop.name}</h3>
+                        {isShopVerified && <span className="rounded-full bg-[#e2eee8] px-2 py-0.5 text-[10px] font-bold text-[#155544]">Vérifiée</span>}
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">{currentShop.city || 'Localisation à compléter'} · {currentShop.is_open ? 'Ouverte' : 'Fermée'}</p>
+                      <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('general'); }} className="mt-3 min-h-10 w-full rounded-full border border-[#155544] px-3 text-xs font-bold text-[#155544] hover:bg-[#eaf4ef]">Modifier ma boutique</button>
+                    </div>
+                  </section>
+                  <section aria-labelledby="merchant-quick-actions-title" className="rounded-2xl border border-[#e7dfd3] bg-white p-4">
+                    <h3 id="merchant-quick-actions-title" className="mb-3 font-black text-[#155544]">Accès rapides</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button type="button" onClick={() => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); }} disabled={dashboardCatalogFull} className="min-h-16 rounded-xl bg-[#f7f4ee] p-3 text-left text-xs font-bold text-[#211712] hover:bg-[#eaf4ef] disabled:opacity-50"><Package className="mb-1 h-4 w-4 text-[#155544]" />Ajouter un produit</button>
+                      <button type="button" onClick={() => setActiveTab('orders')} className="min-h-16 rounded-xl bg-[#f7f4ee] p-3 text-left text-xs font-bold text-[#211712] hover:bg-[#eaf4ef]"><ShoppingBag className="mb-1 h-4 w-4 text-[#155544]" />Voir les commandes</button>
+                      <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('hours'); }} className="min-h-16 rounded-xl bg-[#f7f4ee] p-3 text-left text-xs font-bold text-[#211712] hover:bg-[#eaf4ef]"><Clock className="mb-1 h-4 w-4 text-[#155544]" />Gérer les horaires</button>
+                      <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('profile'); }} className="min-h-16 rounded-xl bg-[#f7f4ee] p-3 text-left text-xs font-bold text-[#211712] hover:bg-[#eaf4ef]"><Key className="mb-1 h-4 w-4 text-[#155544]" />Profil et sécurité</button>
+                    </div>
+                  </section>
+                </div>
+              </div>
+              <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,0.9fr)]">
+                <div className="min-w-0 space-y-4">
+                  <ProAnalyticsPanel shop={currentShop} compact />
+                  <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#e7dfd3] bg-[#f9f0e6] p-4 sm:p-5">
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#e6572b] text-white"><TrendingUp className="h-5 w-5" /></span>
+                      <div>
+                        <h3 className="font-black text-[#93602e]">Boostez votre visibilité</h3>
+                        <p className="mt-0.5 text-xs text-slate-600">Mettez votre boutique en avant dans l’annuaire.</p>
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('subscription'); }} className="min-h-10 rounded-full bg-[#0f4d3d] px-5 text-xs font-bold text-white hover:bg-[#176b55]">Découvrir</button>
+                  </section>
+                </div>
+                <section aria-labelledby="merchant-latest-reviews-title" className="min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
+                  <div className="flex items-start justify-between gap-3 border-b border-[#eee8dc] pb-3">
+                    <div>
+                      <h3 id="merchant-latest-reviews-title" className="text-lg font-black text-[#155544]">Derniers avis</h3>
+                      {shopReviewSummary.average !== null && <p className="mt-1 text-xs font-semibold text-slate-500">{shopReviewSummary.average.toLocaleString('fr-FR')} / 5 · {shopReviewSummary.count} avis</p>}
+                    </div>
+                  </div>
+                  {reviewsLoading && <p role="status" className="py-5 text-sm text-slate-500">Chargement des avis…</p>}
+                  {reviewsError && <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">{reviewsError}</p>}
+                  {!reviewsLoading && !reviewsError && !reviewShopIsPublished && <p className="py-5 text-sm text-slate-500">Les avis apparaîtront après la publication de votre boutique.</p>}
+                  {!reviewsLoading && !reviewsError && reviewShopIsPublished && shopReviews.length === 0 && <p className="py-5 text-sm text-slate-500">Aucun avis pour le moment.</p>}
+                  {!reviewsLoading && !reviewsError && shopReviews.slice(0, 2).map((review) => (
+                    <article key={review.id} className="flex gap-3 border-b border-[#eee8dc] py-3 last:border-0">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#e2eee8] text-xs font-black text-[#155544]">{review.author_name.slice(0, 2).toLocaleUpperCase()}</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-[#211712]">{review.author_name} <span className="font-normal text-slate-500">· {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(review.created_at))}</span></p>
+                        <p className="mt-1 text-xs font-bold text-[#93602e]" aria-label={`${review.rating} sur 5 étoiles`}>{'★'.repeat(Math.max(0, Math.min(5, Math.round(review.rating))))}</p>
+                        <p className="mt-1 break-words text-xs leading-5 text-slate-600">{review.comment}</p>
+                      </div>
+                    </article>
+                  ))}
+                </section>
               </div>
             </section>
         )}
@@ -928,6 +1219,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           { id: 'overview' as const, label: 'Accueil', icon: LayoutDashboard },
           { id: 'catalog' as const, label: 'Produits', icon: Package },
           { id: 'orders' as const, label: 'Commandes', icon: ShoppingBag, count: actionableOrderCount },
+          { id: 'stats' as const, label: 'Stats', icon: BarChart3 },
         ].map(({ id, label, icon: Icon, count }) => (
           <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => { setActiveTab(id); setIsSettingsDrawerOpen(false); }} className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-lg text-[10px] font-bold ${activeTab === id ? 'text-[#155544]' : 'text-slate-500'}`}>
             <Icon className="h-5 w-5" />
@@ -935,9 +1227,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             {count !== undefined && count > 0 && <span className="absolute right-[calc(50%-20px)] top-1 min-w-4 rounded-full bg-[#e6572b] px-1 text-center text-[9px] leading-4 text-white">{count}</span>}
           </button>
         ))}
-        <button type="button" onClick={() => { setActiveTab('catalog'); handleOpenAddModal(); setIsSettingsDrawerOpen(false); }} disabled={dashboardCatalogFull} aria-label={dashboardCatalogFull ? 'Limite du forfait atteinte' : 'Ajouter un produit'} className="relative -mt-4 flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl border-4 border-[#fffaf2] bg-[#0f4d3d] px-2 text-[10px] font-extrabold text-white shadow-lg disabled:bg-slate-400">
-          <Plus className="h-5 w-5" /><span>Ajouter</span>
-        </button>
         <button type="button" aria-label={mobileNotificationCount > 0 ? `Plus, ${mobileNotificationCount} priorité${mobileNotificationCount === 1 ? '' : 's'} à consulter` : 'Plus'} aria-expanded={isSettingsDrawerOpen} aria-controls="merchant-menu-drawer" onClick={() => setIsSettingsDrawerOpen(true)} className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-lg text-[10px] font-bold ${isSettingsDrawerOpen || activeTab === 'settings' ? 'text-[#155544]' : 'text-slate-500'}`}>
           <MoreHorizontal className="h-5 w-5" /><span>Plus</span>
           {mobileNotificationCount > 0 && <span aria-hidden="true" className="absolute right-[calc(50%-18px)] top-0 min-w-4 rounded-full bg-[#e6572b] px-1 text-center text-[9px] leading-4 text-white">{mobileNotificationCount > 9 ? '9+' : mobileNotificationCount}</span>}
@@ -997,12 +1286,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <button type="button" onClick={() => setIsSettingsDrawerOpen(false)} aria-label="Fermer le menu" className="rounded-lg border border-slate-300 bg-white p-2 text-slate-700"><X className="h-4 w-4" /></button>
             </header>
             <nav className="mt-5 space-y-5" aria-label="Navigation et réglages commerçant">
-              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Espace commerçant</p><div className="space-y-1">
-                {[
-                  { id: 'catalog' as const, label: 'Catalogue', count: products.length, icon: Package },
-                  { id: 'stats' as const, label: 'Statistiques', icon: BarChart3 },
-                ].map(({ id, label, icon: Icon, count }) => <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => { setActiveTab(id); setIsSettingsDrawerOpen(false); }} className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold ${activeTab === id ? 'bg-[#eaf4ef] text-[#155544]' : 'text-slate-800 hover:bg-[#f7f4ee]'}`}><Icon className="h-4 w-4 text-[#1D6B57]" /><span className="flex-1">{label}</span>{count !== undefined && count > 0 && <span className="min-w-6 rounded-full bg-slate-100 px-1.5 py-0.5 text-center text-[10px] font-black text-slate-600">{count}</span>}</button>)}
-              </div></div>
               <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">À suivre</p><div className="space-y-1">
                 <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><CreditCard className="h-4 w-4 text-emerald-800" /><span className="flex-1">Abonnement</span>{subscriptionNeedsAttention && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-black text-orange-900">Échéance</span>}</button>
                 <button type="button" onClick={() => { setSettingsSubTab('verification'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><ShieldCheck className="h-4 w-4 text-emerald-800" /><span className="flex-1">{identityStatus === 'verified' ? 'Identité vérifiée' : identityStatus === 'rejected' ? 'Reprendre la vérification' : 'Vérifier mon identité'}</span>{identityVerificationRequired && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-900">À faire</span>}</button>

@@ -1282,3 +1282,51 @@ button:hover {
     text-overflow: ellipsis;
   }
 }
+
+.merchant-sidebar,
+.admin-sidebar {
+  background: #0d4c3d;
+  color: #fff;
+}
+
+.merchant-sidebar > p,
+.merchant-sidebar h2,
+.admin-sidebar h2 {
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.merchant-sidebar > div.border-t {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.merchant-sidebar button:not([aria-current="page"]),
+.merchant-sidebar a {
+  background: transparent;
+  color: #f5f4ef;
+}
+
+.admin-sidebar button:not([aria-current="page"]) {
+  border-color: transparent;
+  background: transparent;
+  color: #f5f4ef;
+}
+
+.merchant-sidebar button[aria-current="page"],
+.admin-sidebar button[aria-current="page"] {
+  border-color: transparent;
+  background: #176b55;
+  color: #fff;
+}
+
+.merchant-sidebar button:hover,
+.merchant-sidebar a:hover,
+.admin-sidebar button:not([aria-current="page"]):hover {
+  background: #176b55;
+  color: #fff;
+}
+
+@media (min-width: 1024px) {
+  .admin-sidebar section > h2 {
+    display: none;
+  }
+}

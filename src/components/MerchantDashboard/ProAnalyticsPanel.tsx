@@ -9,9 +9,9 @@ type ProAnalytics = {
   top_products: { product_id: number; title: string; views: number; clicks: number }[];
 };
 
-export function ProAnalyticsPanel({ shop }: { shop: Shop }) {
+export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compact?: boolean }) {
   const maxDays = shop.admin_mode ? 90 : getSubscriptionAnalyticsDayLimit(shop.subscription?.plan);
-  const [days, setDays] = useState(maxDays);
+  const [days, setDays] = useState(compact ? Math.min(7, maxDays) : maxDays);
   const [analytics, setAnalytics] = useState<ProAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -38,8 +38,8 @@ export function ProAnalyticsPanel({ shop }: { shop: Shop }) {
   }, [canUseAnalytics, days, refreshKey, shop.id]);
 
   useEffect(() => {
-    setDays(maxDays);
-  }, [maxDays]);
+    setDays(compact ? Math.min(7, maxDays) : maxDays);
+  }, [compact, maxDays]);
 
   if (!canUseAnalytics) {
     return (
@@ -60,6 +60,55 @@ export function ProAnalyticsPanel({ shop }: { shop: Shop }) {
     { label: 'Vues produits consenties', value: analytics?.summary.product_views ?? 0 },
     { label: 'Clics produits', value: analytics?.summary.product_clicks ?? 0 },
   ];
+  const dailyPoints = (key: 'orders' | 'order_value') => {
+    const daily = analytics?.daily || [];
+    const maxValue = Math.max(1, ...daily.map((day) => day[key]));
+    return daily.map((day, index) => {
+      const x = daily.length <= 1 ? 12 : 12 + (index / (daily.length - 1)) * 296;
+      const y = 96 - (day[key] / maxValue) * 80;
+      return `${x},${y}`;
+    }).join(' ');
+  };
+
+  if (compact) {
+    const daily = analytics?.daily || [];
+    const firstDay = daily[0];
+    const lastDay = daily.at(-1);
+    return (
+      <section aria-labelledby="merchant-overview-analytics-title" className="rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3 border-b border-[#eee8dc] pb-3">
+          <div>
+            <h3 id="merchant-overview-analytics-title" className="text-lg font-black text-[#155544]">Statistiques</h3>
+            <p className="mt-1 text-xs text-slate-500">Évolution sur {analytics?.days || Math.min(7, maxDays)} jours · valeurs de chaque série normalisées</p>
+          </div>
+          <button type="button" onClick={() => setRefreshKey((key) => key + 1)} aria-label="Actualiser les statistiques" className="min-h-9 rounded-full border border-[#dfe8dd] px-3 text-xs font-bold text-[#155544] hover:bg-[#eaf4ef]">Actualiser</button>
+        </div>
+        {loading && <p role="status" className="py-3 text-sm text-slate-500">Chargement des statistiques…</p>}
+        {error && <div role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">{error}</div>}
+        {!loading && !error && daily.length === 0 && <p className="py-6 text-sm text-slate-500">Aucune activité mesurée sur cette période.</p>}
+        {daily.length > 0 && (
+          <>
+            <div className="mt-4 rounded-xl border border-[#eee8dc] bg-[#fffdf9] p-2">
+              <svg role="img" aria-label="Évolution des commandes et de leur valeur par jour" viewBox="0 0 320 110" className="h-40 w-full">
+                {[16, 42, 68, 96].map((y) => <line key={y} x1="12" x2="308" y1={y} y2={y} stroke="#e7dfd3" strokeWidth="1" />)}
+                <polyline points={dailyPoints('orders')} fill="none" stroke="#e6572b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points={dailyPoints('order_value')} fill="none" stroke="#0f4d3d" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <div className="flex justify-between px-1 text-[10px] text-slate-500">
+                <span>{firstDay ? new Intl.DateTimeFormat('fr-FR', { weekday: 'short' }).format(new Date(`${firstDay.date}T12:00:00`)) : ''}</span>
+                <span>{lastDay ? new Intl.DateTimeFormat('fr-FR', { weekday: 'short' }).format(new Date(`${lastDay.date}T12:00:00`)) : ''}</span>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-4 text-[11px] font-semibold text-slate-600">
+              <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#e6572b]" />Commandes</span>
+              <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#0f4d3d]" />Valeur des commandes · FCFA</span>
+            </div>
+            <p className="mt-2 text-[10px] leading-4 text-slate-500">La valeur correspond aux commandes actionnables, pas aux paiements encaissés.</p>
+          </>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="max-w-5xl space-y-4" aria-labelledby="merchant-pro-analytics-title">

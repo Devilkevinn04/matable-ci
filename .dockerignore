@@ -17,3 +17,6 @@ __MACOSX
 *.db-wal
 *.db-shm
 data/
+backups/
+.github
+docs

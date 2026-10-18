@@ -62,6 +62,18 @@ const adminOrderTransitions: Record<AdminOrder['status'], AdminOrder['status'][]
 };
 
 type AdminRole = 'super_admin' | 'verification_admin';
+type AdminView = 'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'verification-shops' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'push' | 'moderation' | 'audit';
+
+interface VerificationShopSummary {
+  id: number;
+  name: string;
+  slug: string;
+  category: string | null;
+  city: string | null;
+  publication_status: string;
+  merchant_verification_status: string;
+  created_at: string;
+}
 
 const adminAuditActionLabels: Record<string, string> = {
   admin_order_status_updated: 'Statut de commande modifié',
@@ -144,8 +156,10 @@ export const AdminDashboard: React.FC = () => {
     }
     return null;
   };
-  const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'moderation' | 'audit'>('overview');
+  const [adminView, setAdminView] = useState<AdminView>('overview');
   const [shops, setShops] = useState<AdminShopItem[]>([]);
+  const [verificationShops, setVerificationShops] = useState<VerificationShopSummary[]>([]);
+  const [verificationShopSearch, setVerificationShopSearch] = useState('');
   const [adminKey, setAdminKey] = useState('');
   const [adminRole, setAdminRole] = useState<AdminRole>('super_admin');
   const [loginRole, setLoginRole] = useState<AdminRole>('super_admin');
@@ -245,8 +259,11 @@ export const AdminDashboard: React.FC = () => {
         setSortBy('orders');
         setAudienceShopSort('views');
         setNotificationTemplate('welcome');
-        setAdminView('identity');
+        if (adminView === 'overview') setAdminView('identity');
         setShops([]);
+        const verificationShopsRes = await fetch('/api/admin/shops/verification-readonly');
+        if (!verificationShopsRes.ok) throw new Error('Impossible de charger la liste des boutiques en lecture seule.');
+        setVerificationShops(await verificationShopsRes.json());
         setIsAuthenticated(true);
         await fetchContentModeration();
         return;
@@ -1037,6 +1054,52 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const pendingVerificationShops = shops.filter((shop) => ['pending', 'submitted', 'under_review'].includes(shop.merchant_verification_status || ''));
+  const pendingVerificationCount = adminRole === 'verification_admin'
+    ? verificationShops.filter((shop) => ['pending', 'submitted', 'under_review'].includes(shop.merchant_verification_status)).length
+    : pendingVerificationShops.length;
+  const adminNavigationGroups: { label: string; items: { id: AdminView; label: string; icon: React.ComponentType<{ className?: string }> }[] }[] = adminRole === 'super_admin'
+    ? [
+      {
+        label: 'Pilotage',
+        items: [
+          { id: 'overview', label: 'Accueil', icon: Activity },
+          { id: 'shops', label: `Boutiques (${shops.length})`, icon: Store },
+          { id: 'orders', label: 'Commandes', icon: ShoppingBag },
+          { id: 'customers', label: `Clients (${customerTotal})`, icon: UserRound },
+        ],
+      },
+      {
+        label: 'Confiance',
+        items: [
+          { id: 'moderation', label: 'Avis & signalements', icon: Flag },
+          { id: 'identity', label: `Identité (${pendingVerificationCount})`, icon: ShieldCheck },
+        ],
+      },
+      {
+        label: 'Mesure',
+        items: [{ id: 'audience', label: 'Audience', icon: BarChart3 }],
+      },
+      {
+        label: 'Plateforme',
+        items: [
+          { id: 'finance', label: 'Finances', icon: CreditCard },
+          { id: 'subscriptions', label: 'Abonnements', icon: RefreshCw },
+          { id: 'operations', label: 'Opérations', icon: Activity },
+          { id: 'push', label: 'Annonces Push', icon: Send },
+          { id: 'audit', label: 'Journal d’audit', icon: ClipboardList },
+        ],
+      },
+    ]
+    : [
+      {
+        label: 'Vérification',
+        items: [
+          { id: 'verification-shops', label: 'Boutiques (lecture)', icon: Store },
+          { id: 'identity', label: `Identité (${pendingVerificationCount})`, icon: ShieldCheck },
+          { id: 'moderation', label: 'Avis & signalements', icon: Flag },
+        ],
+      },
+    ];
   const focusVerificationShop = (shopId: number) => {
     setSelectedVerificationShopId(shopId);
     setAdminView('identity');
@@ -1045,7 +1108,7 @@ export const AdminDashboard: React.FC = () => {
 
   return (
     <div className="admin-dashboard min-h-screen pb-20">
-      <header className="relative overflow-hidden border-b border-slate-200 bg-white/90 text-slate-900 backdrop-blur-sm">
+      <header className="relative overflow-hidden border-b border-slate-200 bg-white/90 text-slate-900 backdrop-blur-sm lg:ml-64">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(148,163,184,0.08),transparent_20%),radial-gradient(circle_at_top_right,_rgba(15,118,110,0.06),transparent_30%)]" />
         <div className="relative max-w-6xl mx-auto px-4 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1086,7 +1149,7 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl space-y-4 px-3 pt-4 sm:space-y-6 sm:px-4 sm:pt-6">
+      <main className="mx-auto w-full max-w-6xl space-y-4 px-3 pt-4 sm:space-y-6 sm:px-4 sm:pt-6 lg:ml-64 lg:w-auto lg:max-w-none">
         {actionNotice && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
@@ -1115,25 +1178,27 @@ export const AdminDashboard: React.FC = () => {
           </motion.div>
         )}
 
-        <div className="grid min-w-0 gap-3 sm:gap-4 lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start xl:grid-cols-[220px_minmax(0,1fr)]">
-        <nav aria-label={adminRole === 'super_admin' ? 'Navigation super-admin' : 'Navigation administration'} className="grid min-w-0 grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white/90 p-1.5 backdrop-blur-sm sm:grid-cols-4 sm:gap-2 lg:sticky lg:top-6 lg:grid-cols-1 lg:gap-2 lg:p-2">
-          {[
-            { id: 'overview' as const, label: 'Accueil', icon: Activity },
-            { id: 'shops' as const, label: `Boutiques (${shops.length})`, icon: Store },
-            { id: 'orders' as const, label: 'Commandes', icon: ShoppingBag },
-            { id: 'customers' as const, label: `Clients (${customerTotal})`, icon: UserRound },
-            { id: 'moderation' as const, label: 'Avis & signalements', icon: Flag },
-            { id: 'identity' as const, label: `Identité (${pendingVerificationShops.length})`, icon: ShieldCheck },
-            { id: 'audience' as const, label: 'Audience', icon: BarChart3 },
-            { id: 'finance' as const, label: 'Finances', icon: CreditCard },
-            { id: 'subscriptions' as const, label: 'Abonnements', icon: RefreshCw },
-            { id: 'operations' as const, label: 'Opérations', icon: Activity },
-            { id: 'audit' as const, label: 'Journal d’audit', icon: ClipboardList },
-          ].filter(({ id }) => adminRole === 'super_admin' || ['identity', 'moderation'].includes(id)).map(({ id, label, icon: Icon }) => (
-            <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-10 min-w-0 items-center justify-start gap-2 rounded-lg border px-2 py-2 text-left text-[11px] font-bold transition sm:min-h-11 sm:px-3 sm:text-sm ${adminView === id ? 'border-slate-900 bg-slate-900 text-white shadow-sm' : 'border-transparent bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
-              <Icon className="h-4 w-4 shrink-0" /><span className="min-w-0 break-words">{label}</span>
-            </button>
+        <div className="grid min-w-0 gap-3 sm:gap-4 lg:grid-cols-1 lg:items-start">
+        <nav aria-label={adminRole === 'super_admin' ? 'Navigation super-admin' : 'Navigation administration'} className="admin-sidebar grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white/90 p-2 backdrop-blur-sm sm:grid-cols-2 lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-64 lg:flex-col lg:gap-3 lg:overflow-y-auto lg:rounded-none lg:border-0 lg:px-4 lg:py-6">
+          <div className="mb-3 hidden px-3 pt-2 lg:block">
+            <p className="text-2xl font-black tracking-tight text-white">MaTable.ci</p>
+            <p className="mt-1 text-sm text-white/70">{adminRole === 'super_admin' ? 'Super-Admin · Tour de contrôle' : 'Espace vérification'}</p>
+          </div>
+          {adminNavigationGroups.map((group) => (
+            <section key={group.label} className="min-w-0">
+              <h2 className="px-2 pb-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">{group.label}</h2>
+              <div className="space-y-1">
+                {group.items.map(({ id, label, icon: Icon }) => (
+                  <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-10 w-full min-w-0 items-center justify-start gap-2 rounded-lg border px-2 py-2 text-left text-[11px] font-bold transition sm:min-h-11 sm:px-3 sm:text-sm ${adminView === id ? 'border-transparent bg-[#176b55] text-white shadow-sm' : 'border-transparent bg-transparent text-white/90 hover:bg-[#176b55] hover:text-white'}`}>
+                    <Icon className="h-4 w-4 shrink-0" /><span className="min-w-0 break-words">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
           ))}
+          <div className="mt-auto hidden rounded-2xl bg-[#176b55] px-4 py-3 text-sm font-bold text-white lg:block">
+            {adminRole === 'super_admin' ? 'Super-Admin' : 'Admin de vérification'}
+          </div>
         </nav>
 
         <div className="min-w-0 space-y-6">
@@ -1151,14 +1216,13 @@ export const AdminDashboard: React.FC = () => {
                 <button type="button" onClick={() => void fetchAnalytics(analyticsDays)} className="min-h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Actualiser les chiffres</button>
               </div>
             </div>
-            <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${adminRole === 'super_admin' ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}>
+            <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${adminRole === 'super_admin' ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
               {[
                 { label: 'Boutiques actives', value: `${activeShopsCount}/${shops.length}`, comparison: `${shops.length ? Math.round((activeShopsCount / shops.length) * 100) : 0}% du réseau`, tone: 'border-emerald-100 bg-emerald-50' },
                 ...(adminRole === 'super_admin' ? [{ label: 'Montant des commandes', value: analytics ? `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F` : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.sales, analytics.previous.sales)} vs période précédente` : 'Chargement…', tone: 'border-sky-100 bg-sky-50' }] : []),
                 { label: 'Commandes', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.orders) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.orders, analytics.previous.orders)} vs période précédente` : 'Chargement…', tone: 'border-slate-200 bg-slate-50' },
                 { label: 'Visites consenties', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.page_views) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.page_views, analytics.previous.page_views)} vs période précédente` : 'Chargement…', tone: 'border-violet-100 bg-violet-50' },
                 { label: 'Sessions uniques', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.unique_visitors) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.unique_visitors, analytics.previous.unique_visitors)} vs période précédente` : 'Chargement…', tone: 'border-indigo-100 bg-indigo-50' },
-                { label: 'Conversion visites → commandes', value: analytics ? `${analytics.totals.conversion_rate.toLocaleString('fr-FR')}%` : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.conversion_rate, analytics.previous.conversion_rate, true)} vs période précédente` : 'Chargement…', tone: 'border-amber-100 bg-amber-50' },
               ].map((item, index) => (
                 <motion.div
                   key={item.label}
@@ -1173,6 +1237,13 @@ export const AdminDashboard: React.FC = () => {
                 </motion.div>
               ))}
             </div>
+            {adminRole === 'super_admin' && (
+              <section aria-label="Taux de conversion des visites en commandes" className="chart-panel px-4 py-3">
+                <p className="text-xs font-semibold text-slate-500">Visites vers commandes</p>
+                <strong className="mt-1 block text-2xl font-black text-[#0f4d3d]">{analytics ? `${analytics.totals.conversion_rate.toLocaleString('fr-FR')}%` : '—'}</strong>
+                <p className="mt-1 text-xs text-slate-500">{analytics ? `${formatAudienceChange(analytics.totals.conversion_rate, analytics.previous.conversion_rate, true)} par rapport à la période précédente` : 'Chargement des données…'}</p>
+              </section>
+            )}
             {adminRole === 'super_admin' && <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-600">Les montants agrègent les commandes hors annulation et expiration : ce n’est pas un relevé des paiements réellement encaissés. Les visites ne comptent que les sessions ayant accepté les statistiques.</p>}
             {analytics && adminRole === 'super_admin' && (
               <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]">
@@ -1801,8 +1872,6 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          {adminRole === 'super_admin' && <AdminPushAnnouncements />}
-
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -1918,6 +1987,36 @@ export const AdminDashboard: React.FC = () => {
           onRequestVerification={(shopId) => void requestOwnerIdentityVerification(shopId)}
         />
         )}
+
+        {adminView === 'verification-shops' && adminRole === 'verification_admin' && (
+          <section aria-labelledby="verification-shops-title" className="chart-panel space-y-4 p-4 md:p-5">
+            <header>
+              <h2 id="verification-shops-title" className="text-lg font-black text-slate-900">Boutiques · consultation seule</h2>
+              <p className="mt-1 text-sm text-slate-600">Consultez les informations nécessaires au suivi d’identité. Les coordonnées privées et les paramètres commerciaux ne sont pas affichés.</p>
+            </header>
+            <label className="relative block">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <input type="search" value={verificationShopSearch} onChange={(event) => setVerificationShopSearch(event.target.value)} placeholder="Rechercher par boutique ou commune" className="min-h-10 w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-emerald-700" />
+            </label>
+            <div className="divide-y divide-slate-200 border-y border-slate-200">
+              {verificationShops.filter((shop) => `${shop.name} ${shop.city || ''}`.toLocaleLowerCase('fr').includes(verificationShopSearch.trim().toLocaleLowerCase('fr'))).map((shop) => (
+                <article key={shop.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-bold text-slate-900">{shop.name}</h3>
+                    <p className="mt-1 text-xs text-slate-500">{[shop.city, shop.category].filter(Boolean).join(' · ') || 'Localisation non renseignée'}</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-700">Identité : {shop.merchant_verification_status.replaceAll('_', ' ')}</p>
+                  </div>
+                  <button type="button" onClick={() => focusVerificationShop(shop.id)} className="min-h-10 shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Examiner le dossier</button>
+                </article>
+              ))}
+              {verificationShops.filter((shop) => `${shop.name} ${shop.city || ''}`.toLocaleLowerCase('fr').includes(verificationShopSearch.trim().toLocaleLowerCase('fr'))).length === 0 && (
+                <p className="py-6 text-center text-sm text-slate-500">{verificationShops.length === 0 ? 'Aucune boutique à afficher.' : 'Aucune boutique ne correspond à cette recherche.'}</p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {adminView === 'push' && adminRole === 'super_admin' && <AdminPushAnnouncements />}
 
         {adminView === 'audit' && adminRole === 'super_admin' && (
           <section aria-labelledby="admin-audit-title" className="chart-panel p-4 md:p-5">

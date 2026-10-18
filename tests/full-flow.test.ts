@@ -234,6 +234,15 @@ test('verification admin is limited to identity follow-up and content moderation
   const moderationQueue = await apiFetch('/api/admin/content-moderation');
   assert.equal(moderationQueue.response.status, 200, JSON.stringify(moderationQueue.payload));
 
+  const verificationShopList = await apiFetch('/api/admin/shops/verification-readonly');
+  assert.equal(verificationShopList.response.status, 200, JSON.stringify(verificationShopList.payload));
+  assert.ok(Array.isArray(verificationShopList.payload));
+  if (verificationShopList.payload.length > 0) {
+    assert.equal(typeof verificationShopList.payload[0].merchant_verification_status, 'string');
+    assert.equal('whatsapp_number' in verificationShopList.payload[0], false);
+    assert.equal('owner_email' in verificationShopList.payload[0], false);
+  }
+
   for (const path of ['/api/admin/payments', '/api/admin/subscriptions', '/api/admin/maintenance', '/api/admin/push/status']) {
     const forbidden = await apiFetch(path);
     assert.equal(forbidden.response.status, 403, `${path}: ${JSON.stringify(forbidden.payload)}`);

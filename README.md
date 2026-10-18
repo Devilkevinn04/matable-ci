@@ -18,7 +18,7 @@ Application React + Vite + Express pour la gestion de vitrines locales, de comma
 - La gestion de stock est protégée contre les oversells concurrentiels.
 - Les nouvelles boutiques démarrent en `not_started`. Elles peuvent commencer un essai Standard de 7 jours (2 produits maximum), ou payer directement Standard (3 000), Premium (5 000) ou Pro (8 000 FCFA/mois).
 - Pendant l’essai, l’identité est vérifiée avant l’accès au dashboard. Une boutique vérifiée doit ensuite être publiée explicitement ; son ouverture commerciale reste contrôlée séparément.
-- Les notifications Push navigateur sont facultatives et activées appareil par appareil dans « Plus > Paramètres > Compte > Notifications ». Elles couvrent les commandes, les passages de stock bas/épuisé, les échéances J−14/J−7/J−3/J−1, les changements Didit et les annonces envoyées depuis le centre opérationnel admin. Les rappels WhatsApp restent séparés.
+- Les notifications Push navigateur sont facultatives et activées appareil par appareil dans « Plus > Paramètres > Compte > Notifications ». Elles couvrent les commandes, les passages de stock bas/épuisé, les échéances J−14/J−7/J−3/J−1, les changements Didit et les annonces envoyées depuis la rubrique dédiée du Super-admin. Les rappels WhatsApp restent séparés.
 
 ## Espace commerçant
 
@@ -32,8 +32,8 @@ Les fonctions suivantes ne sont pas encore disponibles dans le dashboard : compt
 
 Le tableau de bord `/admin` propose deux rôles distincts, sélectionnés au moment de la connexion :
 
-- **Super-admin** : accès complet aux outils d’administration, notamment aux paiements et abonnements, aux liens d’accès des boutiques, au mode maintenance, aux annonces Push, à la suppression de boutiques et au journal d’audit global consultable et filtrable.
-- **Admin de vérification** : espace centré sur la file de vérification Didit et la modération de contenu, avec la possibilité de préparer un rappel WhatsApp de vérification. Il n’accède pas aux vues générales des boutiques, clients, statistiques et opérations, ne peut pas modifier les statuts des commandes, ni gérer les paiements ou abonnements, supprimer des boutiques, créer des liens d’accès privés, modifier le mode maintenance ou publier des annonces Push. Un accès en lecture seule aux commandes d’une boutique reste disponible sur l’API marchand pour les besoins limités.
+- **Super-admin** : accès complet aux outils d’administration, notamment aux paiements et abonnements, aux liens d’accès des boutiques, au mode maintenance, aux annonces Push dédiées, à la suppression de boutiques et au journal d’audit global consultable et filtrable.
+- **Admin de vérification** : espace centré sur la file Didit et la modération de contenu, avec la possibilité de préparer un rappel WhatsApp de vérification. Il dispose d’une liste de boutiques strictement en lecture seule, limitée au nom, à la ville, à la catégorie et aux statuts de publication et d’identité ; elle n’expose pas les coordonnées privées ni les données financières. Il ne peut pas modifier les statuts des commandes, gérer les paiements ou abonnements, supprimer des boutiques, créer des liens d’accès privés, modifier le mode maintenance ou publier des annonces Push. Un accès en lecture seule aux commandes d’une boutique reste disponible sur l’API marchand pour les besoins limités.
 
 Les autorisations sont vérifiées côté serveur ; masquer une rubrique dans l’interface n’est pas le mécanisme de contrôle d’accès. Les deux rôles utilisent des clés indépendantes configurées uniquement sur le serveur. En production, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` sont obligatoires et doivent chacune être fortes, uniques, distinctes et comporter au moins 32 caractères. Configurez-les dans l’environnement de déploiement (par exemple les variables du service Render) ; ne les ajoutez pas au dépôt, au frontend, aux journaux ou aux captures d’écran.
 
