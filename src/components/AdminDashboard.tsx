@@ -14,6 +14,7 @@ import {
   Search,
   Check,
   BarChart3,
+  ClipboardList,
   Download,
   Package,
   TrendingUp,
@@ -38,6 +39,7 @@ import {
 } from './adminDashboardTypes';
 import type {
   AdminAnalytics,
+  AdminAuditLog,
   AdminCustomer,
   AdminContentModeration,
   AdminFinance,
@@ -60,6 +62,53 @@ const adminOrderTransitions: Record<AdminOrder['status'], AdminOrder['status'][]
 };
 
 type AdminRole = 'super_admin' | 'verification_admin';
+
+const adminAuditActionLabels: Record<string, string> = {
+  admin_order_status_updated: 'Statut de commande modifié',
+  customer_report_processed: 'Signalement traité',
+  customer_review_moderated: 'Avis modéré',
+  identity_verification_request_prepared: 'Rappel de vérification préparé',
+  identity_status_updated: 'Statut Didit mis à jour',
+  maintenance_updated: 'Mode maintenance modifié',
+  platform_push_announcement_sent: 'Annonce Push envoyée',
+  shop_permanently_deleted: 'Boutique supprimée',
+  shop_reactivated: 'Boutique réactivée',
+  shop_suspended: 'Boutique suspendue',
+  subscription_expiry_corrected: 'Échéance d’abonnement corrigée',
+  subscription_reminder_failed: 'Échec du rappel d’abonnement',
+  subscription_reminder_sent: 'Rappel d’abonnement envoyé',
+  trial_expiry_reconciled: 'Échéance d’essai synchronisée',
+  trial_extended: 'Essai prolongé',
+  trial_reminder_prepared: 'Rappel d’essai préparé',
+};
+
+const adminAuditDetailLabels: Record<string, string> = {
+  announcement_id: 'Annonce',
+  attempted: 'Tentatives',
+  days: 'Jours ajoutés',
+  delivery_mode: 'Mode',
+  enabled: 'Activé',
+  failed: 'Échecs',
+  previous_enabled: 'État précédent',
+  previous_subscription_expires_at: 'Échéance précédente',
+  previous_trial_end: 'Fin d’essai précédente',
+  previous_status: 'Statut précédent',
+  reason: 'Motif',
+  recipients: 'Boutiques concernées',
+  review_id: 'Avis',
+  sent: 'Envoyés',
+  shop_id: 'Boutique',
+  shop_name: 'Nom de boutique',
+  shop_slug: 'Identifiant boutique',
+  status: 'Statut',
+  event_id: 'Événement Didit',
+  subscription_expires_at: 'Nouvelle échéance',
+  trial_end: 'Nouvelle fin d’essai',
+  deleted_products: 'Produits supprimés',
+  deleted_orders: 'Commandes supprimées',
+  deleted_reviews: 'Avis supprimés',
+  deleted_reports: 'Signalements supprimés',
+};
 
 export const AdminDashboard: React.FC = () => {
   const getAdminAuditReason = (details: string) => {
@@ -95,7 +144,7 @@ export const AdminDashboard: React.FC = () => {
     }
     return null;
   };
-  const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'moderation'>('overview');
+  const [adminView, setAdminView] = useState<'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'moderation' | 'audit'>('overview');
   const [shops, setShops] = useState<AdminShopItem[]>([]);
   const [adminKey, setAdminKey] = useState('');
   const [adminRole, setAdminRole] = useState<AdminRole>('super_admin');
@@ -107,6 +156,9 @@ export const AdminDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [publicationFilter, setPublicationFilter] = useState<'all' | 'draft' | 'active' | 'suspended'>('all');
+  const [verificationFilter, setVerificationFilter] = useState<'all' | 'pending' | 'submitted' | 'under_review' | 'verified' | 'rejected' | 'not_required'>('all');
+  const [subscriptionFilter, setSubscriptionFilter] = useState<'all' | 'not_started' | 'trialing' | 'active' | 'past_due' | 'cancelled' | 'expired' | 'suspended'>('all');
   const [sortBy, setSortBy] = useState<'sales' | 'orders' | 'name'>('sales');
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [deleteShopTarget, setDeleteShopTarget] = useState<Pick<AdminShopItem, 'id' | 'name' | 'slug'> | null>(null);
@@ -121,6 +173,7 @@ export const AdminDashboard: React.FC = () => {
   const [audienceShopSort, setAudienceShopSort] = useState<'views' | 'sessions' | 'orders' | 'sales' | 'conversion' | 'name'>('views');
   const [finance, setFinance] = useState<AdminFinance | null>(null);
   const [financeDays, setFinanceDays] = useState(90);
+  const [financePaymentsPage, setFinancePaymentsPage] = useState(0);
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
   const [paymentTypeFilter, setPaymentTypeFilter] = useState('all');
   const [paymentSearch, setPaymentSearch] = useState('');
@@ -146,6 +199,7 @@ export const AdminDashboard: React.FC = () => {
   const [maintenanceMessageDraft, setMaintenanceMessageDraft] = useState('Le service revient bientôt. Merci de votre patience.');
   const [maintenanceSaving, setMaintenanceSaving] = useState(false);
   const [operationsLoading, setOperationsLoading] = useState(false);
+  const [operationsError, setOperationsError] = useState('');
   const [notificationShopId, setNotificationShopId] = useState('');
   const [notificationTemplate, setNotificationTemplate] = useState<typeof ownerNotificationTemplates[number]['id']>('welcome');
   const [notificationLoading, setNotificationLoading] = useState(false);
@@ -160,6 +214,14 @@ export const AdminDashboard: React.FC = () => {
   const [featuredActionShopId, setFeaturedActionShopId] = useState<number | null>(null);
   const [contentModeration, setContentModeration] = useState<AdminContentModeration>({ reviews: [], reports: [] });
   const [contentModerationError, setContentModerationError] = useState('');
+  const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [auditLogTotal, setAuditLogTotal] = useState(0);
+  const [auditLogPage, setAuditLogPage] = useState(0);
+  const [auditLogSearch, setAuditLogSearch] = useState('');
+  const [auditLogActor, setAuditLogActor] = useState<'all' | AdminRole | 'didit_webhook'>('all');
+  const [auditLogLoading, setAuditLogLoading] = useState(false);
+  const [auditLogError, setAuditLogError] = useState('');
+  const [auditLogRefresh, setAuditLogRefresh] = useState(0);
 
   const fetchAdminShops = async () => {
     try {
@@ -183,7 +245,13 @@ export const AdminDashboard: React.FC = () => {
         setSortBy('orders');
         setAudienceShopSort('views');
         setNotificationTemplate('welcome');
+        setAdminView('identity');
+        setShops([]);
+        setIsAuthenticated(true);
+        await fetchContentModeration();
+        return;
       }
+      setAdminView('overview');
 
       const res = await fetch('/api/admin/shops');
       if (res.ok) {
@@ -212,14 +280,11 @@ export const AdminDashboard: React.FC = () => {
   const fetchOperations = async (role = adminRole) => {
     try {
       setOperationsLoading(true);
-      const [healthRes, ordersRes] = await Promise.all([
-        fetch('/api/admin/health'),
-        fetch('/api/admin/orders?limit=50'),
-      ]);
-      if (!healthRes.ok || !ordersRes.ok) throw new Error('Impossible de charger les outils opérationnels.');
-      const [health, orderData] = await Promise.all([healthRes.json(), ordersRes.json()]);
+      setOperationsError('');
+      const healthRes = await fetch('/api/admin/health');
+      if (!healthRes.ok) throw new Error('Impossible de charger l’état du service.');
+      const health = await healthRes.json();
       setAdminHealth(health);
-      setAdminOrders(orderData.orders || []);
       if (role === 'super_admin') {
         const maintenanceRes = await fetch('/api/admin/maintenance');
         if (!maintenanceRes.ok) throw new Error('Impossible de charger le mode maintenance.');
@@ -230,8 +295,10 @@ export const AdminDashboard: React.FC = () => {
       } else {
         setMaintenanceMode(null);
       }
-    } catch {
-      showNotice('Les outils opérationnels sont momentanément indisponibles.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Les outils opérationnels sont momentanément indisponibles.';
+      setOperationsError(message);
+      showNotice(message);
     } finally {
       setOperationsLoading(false);
     }
@@ -343,9 +410,23 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const fetchFinance = async (days: number) => {
+  const fetchFinance = async (
+    days: number,
+    page = financePaymentsPage,
+    search = paymentSearch,
+    status = paymentStatusFilter,
+    type = paymentTypeFilter,
+  ) => {
     try {
-      const response = await fetch(`/api/admin/payments?days=${days}`);
+      const params = new URLSearchParams({
+        days: String(days),
+        limit: '50',
+        offset: String(page * 50),
+        search,
+        status,
+        type,
+      });
+      const response = await fetch(`/api/admin/payments?${params}`);
       if (!response.ok) throw new Error('Impossible de charger le journal financier.');
       setFinance(await response.json());
     } catch {
@@ -397,6 +478,45 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated && adminView === 'moderation') void fetchContentModeration();
   }, [isAuthenticated, adminView]);
+
+  useEffect(() => {
+    if (!isAuthenticated || adminRole !== 'super_admin' || adminView !== 'finance') return;
+    const timer = window.setTimeout(() => {
+      void fetchFinance(financeDays, financePaymentsPage, paymentSearch, paymentStatusFilter, paymentTypeFilter);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [isAuthenticated, adminRole, adminView, financeDays, financePaymentsPage, paymentSearch, paymentStatusFilter, paymentTypeFilter]);
+
+  useEffect(() => {
+    if (!isAuthenticated || adminRole !== 'super_admin' || adminView !== 'audit') return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setAuditLogLoading(true);
+      setAuditLogError('');
+      const params = new URLSearchParams({
+        limit: '50',
+        offset: String(auditLogPage * 50),
+        search: auditLogSearch,
+        ...(auditLogActor !== 'all' ? { actor: auditLogActor } : {}),
+      });
+      try {
+        const response = await fetch(`/api/admin/audit-logs?${params}`, { cache: 'no-store', signal: controller.signal });
+        const data = await response.json() as { audit_logs?: AdminAuditLog[]; total?: number; error?: string };
+        if (!response.ok) throw new Error(data.error || 'Impossible de charger le journal d’audit.');
+        setAuditLogs(data.audit_logs || []);
+        setAuditLogTotal(Number(data.total || 0));
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setAuditLogError(error instanceof Error ? error.message : 'Impossible de charger le journal d’audit.');
+      } finally {
+        if (!controller.signal.aborted) setAuditLogLoading(false);
+      }
+    }, 200);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [isAuthenticated, adminRole, adminView, auditLogPage, auditLogSearch, auditLogActor, auditLogRefresh]);
 
   useEffect(() => {
     if (isAuthenticated && adminView === 'customers') void fetchAdminCustomers();
@@ -727,7 +847,10 @@ export const AdminDashboard: React.FC = () => {
       s.slug.toLowerCase().includes(searchQuery.toLowerCase())) &&
     (statusFilter === 'all' ||
       (statusFilter === 'active' && s.is_active) ||
-      (statusFilter === 'inactive' && !s.is_active))
+      (statusFilter === 'inactive' && !s.is_active)) &&
+    (publicationFilter === 'all' || (s.publication_status || 'draft') === publicationFilter) &&
+    (verificationFilter === 'all' || (s.merchant_verification_status || 'not_required') === verificationFilter) &&
+    (subscriptionFilter === 'all' || (s.subscription?.status || s.subscription_status || 'not_started') === subscriptionFilter)
   ).sort((a, b) => {
     if (sortBy === 'sales') return b.total_sales - a.total_sales;
     if (sortBy === 'orders') return b.orders_count - a.orders_count;
@@ -738,8 +861,11 @@ export const AdminDashboard: React.FC = () => {
     const query = paymentSearch.trim().toLowerCase();
     const matchesQuery = !query || [payment.shop_name, payment.provider_reference || '', payment.id]
       .some((value) => value.toLowerCase().includes(query));
+    const matchesStatus = paymentStatusFilter === 'all'
+      || payment.status === paymentStatusFilter
+      || paymentStatusFilter === 'failed' && payment.status === 'error';
     return matchesQuery
-      && (paymentStatusFilter === 'all' || payment.status === paymentStatusFilter)
+      && matchesStatus
       && (paymentTypeFilter === 'all' || payment.payment_type === paymentTypeFilter);
   });
   const filteredSubscriptions = (subscriptions?.shops || []).filter((shop) => {
@@ -910,7 +1036,7 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const pendingVerificationShops = shops.filter((shop) => ['submitted', 'under_review'].includes(shop.merchant_verification_status || ''));
+  const pendingVerificationShops = shops.filter((shop) => ['pending', 'submitted', 'under_review'].includes(shop.merchant_verification_status || ''));
   const focusVerificationShop = (shopId: number) => {
     setSelectedVerificationShopId(shopId);
     setAdminView('identity');
@@ -933,7 +1059,9 @@ export const AdminDashboard: React.FC = () => {
                   <span className="dashboard-chip dashboard-chip-soft">{adminRole === 'super_admin' ? 'Tour de contrôle' : 'Espace vérification'}</span>
                 </div>
                 <p className="text-[11px] text-[#4a3a30] mt-0.5 leading-4 max-w-xl">
-                  Administration des boutiques, commandes et vérifications
+                  {adminRole === 'super_admin'
+                    ? 'Pilotage global de la plateforme'
+                    : 'File de vérification Didit et modération de contenu'}
                 </p>
               </div>
             </div>
@@ -970,7 +1098,7 @@ export const AdminDashboard: React.FC = () => {
           </motion.div>
         )}
 
-        {adminView === 'overview' && pendingVerificationShops.length > 0 && (
+        {adminRole === 'super_admin' && adminView === 'overview' && pendingVerificationShops.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -979,10 +1107,10 @@ export const AdminDashboard: React.FC = () => {
           >
             <div className="flex items-start gap-2.5">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-              <p><strong>{pendingVerificationShops.length} dossier(s) d’identité à examiner.</strong> Les photos attendent une validation visuelle.</p>
+              <p><strong>{pendingVerificationShops.length} dossier(s) d’identité nécessitent un suivi.</strong> Les statuts et décisions sont transmis par Didit.</p>
             </div>
-            <button type="button" onClick={() => focusVerificationShop(pendingVerificationShops[0].id)} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-amber-900 px-3 py-2 text-xs font-bold text-white hover:bg-amber-800">
-              Ouvrir le premier dossier
+            <button type="button" onClick={() => setAdminView('identity')} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-lg bg-amber-900 px-3 py-2 text-xs font-bold text-white hover:bg-amber-800">
+              Consulter les statuts
             </button>
           </motion.div>
         )}
@@ -1000,7 +1128,8 @@ export const AdminDashboard: React.FC = () => {
             { id: 'finance' as const, label: 'Finances', icon: CreditCard },
             { id: 'subscriptions' as const, label: 'Abonnements', icon: RefreshCw },
             { id: 'operations' as const, label: 'Opérations', icon: Activity },
-          ].filter(({ id }) => adminRole === 'super_admin' || !['finance', 'subscriptions'].includes(id)).map(({ id, label, icon: Icon }) => (
+            { id: 'audit' as const, label: 'Journal d’audit', icon: ClipboardList },
+          ].filter(({ id }) => adminRole === 'super_admin' || ['identity', 'moderation'].includes(id)).map(({ id, label, icon: Icon }) => (
             <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-10 min-w-0 items-center justify-start gap-2 rounded-lg border px-2 py-2 text-left text-[11px] font-bold transition sm:min-h-11 sm:px-3 sm:text-sm ${adminView === id ? 'border-slate-900 bg-slate-900 text-white shadow-sm' : 'border-transparent bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
               <Icon className="h-4 w-4 shrink-0" /><span className="min-w-0 break-words">{label}</span>
             </button>
@@ -1337,7 +1466,7 @@ export const AdminDashboard: React.FC = () => {
           <section aria-labelledby="admin-finance-title" className="space-y-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div><p className="text-xs font-bold uppercase text-emerald-800">Recettes MaTable.ci</p><h2 id="admin-finance-title" className="mt-1 text-xl font-black text-slate-900">Argent</h2><p className="mt-1 text-xs text-slate-500">Le MRR ne compte que les abonnements actifs. Les encaissements suivent les confirmations KadevPay.</p></div>
-              <select aria-label="Période du journal financier" value={financeDays} onChange={(event) => { const days = Number(event.target.value); setFinanceDays(days); void fetchFinance(days); }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+              <select aria-label="Période du journal financier" value={financeDays} onChange={(event) => { setFinanceDays(Number(event.target.value)); setFinancePaymentsPage(0); }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">
                 <option value={30}>30 derniers jours</option>
                 <option value={90}>90 derniers jours</option>
                 <option value={180}>180 derniers jours</option>
@@ -1369,13 +1498,13 @@ export const AdminDashboard: React.FC = () => {
 
               <section aria-labelledby="admin-payments-list-title" className="space-y-3">
                 <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div><h3 id="admin-payments-list-title" className="text-sm font-black text-slate-900">Journal des paiements</h3><p className="mt-1 text-xs text-slate-500">Jusqu’aux 200 derniers paiements et intentions sur {finance.days} jours.</p></div>
-                  <button type="button" disabled={filteredFinancePayments.length === 0} onClick={() => exportOperationsCsv(`matable-paiements-${new Date().toISOString().slice(0, 10)}.csv`, ['Date', 'Boutique', 'Type', 'Formule', 'Durée', 'Montant', 'Devise', 'Statut', 'Référence'], filteredFinancePayments.map((payment) => [payment.paid_at || payment.created_at, payment.shop_name, payment.payment_type === 'promotion' ? 'Promotion' : 'Abonnement', payment.tier, payment.subscription_term, payment.amount, payment.currency, payment.status, payment.provider_reference || payment.id]))} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"><Download className="h-4 w-4" />Exporter la sélection</button>
+                  <div><h3 id="admin-payments-list-title" className="text-sm font-black text-slate-900">Journal des paiements</h3><p className="mt-1 text-xs text-slate-500">{finance.payment_count.toLocaleString('fr-FR')} transaction(s) correspondant aux filtres sur {finance.days} jours.</p></div>
+                  <button type="button" disabled={filteredFinancePayments.length === 0} onClick={() => exportOperationsCsv(`matable-paiements-${new Date().toISOString().slice(0, 10)}.csv`, ['Date', 'Boutique', 'Type', 'Formule', 'Durée', 'Montant', 'Devise', 'Statut', 'Référence'], filteredFinancePayments.map((payment) => [payment.paid_at || payment.created_at, payment.shop_name, payment.payment_type === 'promotion' ? 'Promotion' : 'Abonnement', payment.tier, payment.subscription_term, payment.amount, payment.currency, payment.status, payment.provider_reference || payment.id]))} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"><Download className="h-4 w-4" />Exporter la page filtrée</button>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-[minmax(180px,1fr)_180px_180px]">
-                  <input type="search" value={paymentSearch} onChange={(event) => setPaymentSearch(event.target.value)} placeholder="Rechercher boutique ou référence" aria-label="Rechercher un paiement" className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-700" />
-                  <select aria-label="Filtrer par type de paiement" value={paymentTypeFilter} onChange={(event) => setPaymentTypeFilter(event.target.value)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700"><option value="all">Tous les types</option><option value="subscription">Abonnements</option><option value="promotion">Promotions</option></select>
-                  <select aria-label="Filtrer par statut de paiement" value={paymentStatusFilter} onChange={(event) => setPaymentStatusFilter(event.target.value)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700"><option value="all">Tous les statuts</option><option value="paid">Confirmés</option><option value="pending">En attente</option><option value="failed">Échecs</option><option value="cancelled">Annulés</option><option value="refunded">Remboursés</option></select>
+                  <input type="search" value={paymentSearch} onChange={(event) => { setPaymentSearch(event.target.value); setFinancePaymentsPage(0); }} placeholder="Rechercher boutique ou référence" aria-label="Rechercher un paiement" className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-700" />
+                  <select aria-label="Filtrer par type de paiement" value={paymentTypeFilter} onChange={(event) => { setPaymentTypeFilter(event.target.value); setFinancePaymentsPage(0); }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700"><option value="all">Tous les types</option><option value="subscription">Abonnements</option><option value="promotion">Promotions</option></select>
+                  <select aria-label="Filtrer par statut de paiement" value={paymentStatusFilter} onChange={(event) => { setPaymentStatusFilter(event.target.value); setFinancePaymentsPage(0); }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700"><option value="all">Tous les statuts</option><option value="paid">Confirmés</option><option value="pending">En attente</option><option value="failed">Échecs</option><option value="cancelled">Annulés</option><option value="refunded">Remboursés</option></select>
                 </div>
                 <div className="divide-y divide-slate-200 border-y border-slate-200">
                   {filteredFinancePayments.length === 0 ? <p className="py-8 text-center text-sm text-slate-500">Aucun paiement correspondant à ces filtres.</p> : filteredFinancePayments.map((payment) => {
@@ -1387,6 +1516,13 @@ export const AdminDashboard: React.FC = () => {
                       <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end"><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${isPaid ? 'bg-emerald-100 text-emerald-900' : isPending ? 'bg-amber-100 text-amber-900' : 'bg-rose-100 text-rose-900'}`}>{statusLabel}</span><strong className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(payment.amount)} {payment.currency}</strong></div>
                     </article>;
                   })}
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-slate-500">Page {financePaymentsPage + 1} · {Math.min(finance.payment_limit, Math.max(0, finance.payment_count - finance.payment_offset))} ligne(s) affichée(s)</p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setFinancePaymentsPage((page) => Math.max(0, page - 1))} disabled={financePaymentsPage === 0} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700 disabled:opacity-40">Précédent</button>
+                    <button type="button" onClick={() => setFinancePaymentsPage((page) => page + 1)} disabled={(financePaymentsPage + 1) * finance.payment_limit >= finance.payment_count} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700 disabled:opacity-40">Suivant</button>
+                  </div>
                 </div>
                 <p className="text-xs text-slate-500">Les promotions restent à zéro tant que leur tarif et leur parcours de paiement ne sont pas activés. Les remboursements ne sont comptés que si leur statut est remonté au journal.</p>
               </section>
@@ -1583,12 +1719,25 @@ export const AdminDashboard: React.FC = () => {
             </button>
           </div>
 
-          {adminHealth && (
-            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3"><span className="text-[10px] font-bold text-emerald-700">Service</span><strong className="mt-1 block text-sm text-emerald-900">Opérationnel</strong></div>
-              <div className={`rounded-2xl border p-3 ${adminHealth.database === 'postgresql' ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}><span className={`text-[10px] font-bold ${adminHealth.database === 'postgresql' ? 'text-emerald-700' : 'text-amber-800'}`}>Base réellement utilisée</span><strong className={`mt-1 block text-sm ${adminHealth.database === 'postgresql' ? 'text-emerald-950' : 'text-amber-950'}`}>{adminHealth.database === 'sqlite' ? 'SQLite (fichier local)' : adminHealth.database === 'postgresql' ? 'PostgreSQL (Neon)' : adminHealth.database}</strong><span className={`mt-1 block text-[10px] leading-4 ${adminHealth.database === 'postgresql' ? 'text-emerald-800' : 'text-amber-900'}`}>{adminHealth.database === 'postgresql' ? 'Connexion persistante activée en production.' : 'SQLite convient au développement et aux tests locaux.'}</span></div>
+          {operationsError && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900">{operationsError}</p>}
+          {adminHealth ? (
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+              <div className={`rounded-2xl border p-3 ${adminHealth.status === 'ok' ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50'}`}>
+                <span className={`text-[10px] font-bold ${adminHealth.status === 'ok' ? 'text-emerald-700' : 'text-rose-800'}`}>Service</span>
+                <strong className={`mt-1 block text-sm ${adminHealth.status === 'ok' ? 'text-emerald-900' : 'text-rose-900'}`}>{adminHealth.status === 'ok' ? 'Opérationnel' : `À vérifier · ${adminHealth.status}`}</strong>
+              </div>
+              <div className={`rounded-2xl border p-3 ${adminHealth.database === 'postgresql' ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+                <span className={`text-[10px] font-bold ${adminHealth.database === 'postgresql' ? 'text-emerald-700' : 'text-amber-800'}`}>Base de données</span>
+                <strong className={`mt-1 block text-sm ${adminHealth.database === 'postgresql' ? 'text-emerald-950' : 'text-amber-950'}`}>{adminHealth.database === 'sqlite' ? 'SQLite (local)' : adminHealth.database === 'postgresql' ? 'PostgreSQL' : adminHealth.database}</strong>
+              </div>
+              <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3"><span className="text-[10px] font-bold text-sky-700">Boutiques</span><strong className="mt-1 block text-sm text-sky-900">{adminHealth.counts.shops}</strong></div>
+              <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3"><span className="text-[10px] font-bold text-sky-700">Produits</span><strong className="mt-1 block text-sm text-sky-900">{adminHealth.counts.products}</strong></div>
               <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3"><span className="text-[10px] font-bold text-sky-700">Commandes</span><strong className="mt-1 block text-sm text-sky-900">{adminHealth.counts.orders}</strong></div>
             </div>
+          ) : (
+            <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600" role="status">
+              {operationsLoading ? 'Chargement de l’état du service…' : 'État du service indisponible. Utilisez « Actualiser » pour réessayer.'}
+            </p>
           )}
 
           {adminRole === 'super_admin' && <div className="mt-5 border-t border-slate-200 pt-5">
@@ -1600,13 +1749,30 @@ export const AdminDashboard: React.FC = () => {
                   <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${maintenanceMode?.enabled ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'}`}>
                     {maintenanceMode?.enabled ? 'Activé' : 'Désactivé'}
                   </span>
+                  {maintenanceMode && (maintenanceEnabledDraft !== maintenanceMode.enabled || maintenanceMessageDraft !== maintenanceMode.message) && <span className="rounded-full bg-sky-100 px-2 py-1 text-[10px] font-bold text-sky-900">Modifications non enregistrées</span>}
                 </div>
                 <p className="mt-1 text-xs leading-5 text-slate-600">Le site marchand et ses API seront suspendus. L’administration, les contrôles de santé et les webhooks de paiement resteront accessibles.</p>
               </div>
-              <button type="button" onClick={saveMaintenanceMode} disabled={maintenanceSaving || !maintenanceMode} className={`inline-flex min-h-10 w-full min-w-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-50 sm:w-auto ${maintenanceEnabledDraft ? 'bg-amber-800 hover:bg-amber-900' : 'bg-emerald-800 hover:bg-emerald-900'}`}>
-                {maintenanceSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                {maintenanceEnabledDraft ? 'Enregistrer la maintenance' : 'Enregistrer les réglages'}
-              </button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                <div className="flex items-center justify-between gap-3 sm:justify-end">
+                  <span className="text-xs font-semibold text-slate-700">Activer le mode</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-label="Activer le mode maintenance"
+                    aria-checked={maintenanceEnabledDraft}
+                    onClick={() => setMaintenanceEnabledDraft((enabled) => !enabled)}
+                    disabled={maintenanceSaving || !maintenanceMode}
+                    className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${maintenanceEnabledDraft ? 'bg-amber-700' : 'bg-slate-300'}`}
+                  >
+                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${maintenanceEnabledDraft ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+                <button type="button" onClick={saveMaintenanceMode} disabled={maintenanceSaving || !maintenanceMode || (maintenanceEnabledDraft === maintenanceMode.enabled && maintenanceMessageDraft === maintenanceMode.message)} className={`inline-flex min-h-10 w-full min-w-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${maintenanceEnabledDraft ? 'bg-amber-800 hover:bg-amber-900' : 'bg-emerald-800 hover:bg-emerald-900'}`}>
+                  {maintenanceSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  {maintenanceSaving ? 'Enregistrement…' : maintenanceEnabledDraft !== maintenanceMode?.enabled ? maintenanceEnabledDraft ? 'Activer la maintenance' : 'Désactiver la maintenance' : 'Enregistrer le message'}
+                </button>
+              </div>
             </div>
             <label className="mt-3 block text-xs font-bold text-slate-700" htmlFor="admin-maintenance-message">Message affiché aux visiteurs</label>
             <textarea id="admin-maintenance-message" value={maintenanceMessageDraft} maxLength={240} onChange={(event) => setMaintenanceMessageDraft(event.target.value)} rows={2} className="mt-1 min-h-20 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-emerald-700" />
@@ -1753,6 +1919,71 @@ export const AdminDashboard: React.FC = () => {
         />
         )}
 
+        {adminView === 'audit' && adminRole === 'super_admin' && (
+          <section aria-labelledby="admin-audit-title" className="chart-panel p-4 md:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 id="admin-audit-title" className="text-lg font-black text-slate-900">Journal d’audit</h2>
+                <p className="mt-1 text-xs text-slate-500">Actions administratives enregistrées, avec leur auteur, leur cible et leur date.</p>
+              </div>
+              <button type="button" onClick={() => setAuditLogRefresh((value) => value + 1)} disabled={auditLogLoading} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">
+                <RefreshCw className={`h-4 w-4 ${auditLogLoading ? 'animate-spin' : ''}`} /> Actualiser
+              </button>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <label className="block">
+                <span className="sr-only">Rechercher dans le journal</span>
+                <input value={auditLogSearch} onChange={(event) => { setAuditLogSearch(event.target.value); setAuditLogPage(0); }} placeholder="Rechercher par boutique ou action" className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/20" />
+              </label>
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                <span>Administrateur</span>
+                <select value={auditLogActor} onChange={(event) => { setAuditLogActor(event.target.value as 'all' | AdminRole | 'didit_webhook'); setAuditLogPage(0); }} className="min-h-10 min-w-40 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800">
+                  <option value="all">Tous les rôles</option>
+                  <option value="super_admin">Super-admin</option>
+                  <option value="verification_admin">Vérification</option>
+                  <option value="didit_webhook">Webhook Didit</option>
+                </select>
+              </label>
+            </div>
+            {auditLogError && <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{auditLogError}</p>}
+            {auditLogLoading ? <p className="mt-5 flex items-center gap-2 text-sm text-slate-500"><RefreshCw className="h-4 w-4 animate-spin" />Chargement du journal…</p>
+              : auditLogs.length === 0 ? <p className="mt-5 rounded-lg bg-slate-50 px-3 py-5 text-sm text-slate-600">Aucune action ne correspond à ces critères.</p>
+                : <div className="mt-4 divide-y divide-slate-200">
+                  {auditLogs.map((entry) => (
+                    <article key={entry.id} className="py-4 first:pt-0 last:pb-0">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-sm font-bold text-slate-900">{adminAuditActionLabels[entry.action] || entry.action.replaceAll('_', ' ')}</h3>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${entry.actor === 'verification_admin' ? 'bg-violet-100 text-violet-800' : entry.actor === 'didit_webhook' ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-700'}`}>{entry.actor === 'verification_admin' ? 'Admin vérification' : entry.actor === 'didit_webhook' ? 'Webhook Didit' : entry.actor === 'super_admin' ? 'Super-admin' : entry.actor}</span>
+                          </div>
+                          <p className="mt-1 text-xs text-slate-600">{entry.shop_name || (entry.shop_id ? `Boutique #${entry.shop_id}` : 'Plateforme')}{entry.shop_id && entry.shop_name ? ` · Boutique #${entry.shop_id}` : ''}</p>
+                        </div>
+                        <time className="shrink-0 text-xs text-slate-500">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(entry.created_at))}</time>
+                      </div>
+                      {Object.entries(entry.details).length > 0 && (
+                        <dl className="mt-3 flex flex-wrap gap-2">
+                          {Object.entries(entry.details).map(([key, value]) => (
+                            <div key={key} className="max-w-full rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px]">
+                              <dt className="inline font-semibold text-slate-500">{adminAuditDetailLabels[key] || key}: </dt>
+                              <dd className="inline break-words text-slate-800">{typeof value === 'boolean' ? value ? 'Oui' : 'Non' : String(value)}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
+                    </article>
+                  ))}
+                </div>}
+            <div className="mt-4 flex flex-col gap-2 border-t border-slate-200 pt-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-slate-500">{auditLogTotal.toLocaleString('fr-FR')} action(s) · page {auditLogPage + 1}</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setAuditLogPage((page) => Math.max(0, page - 1))} disabled={auditLogPage === 0 || auditLogLoading} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700 disabled:opacity-40">Précédent</button>
+                <button type="button" onClick={() => setAuditLogPage((page) => page + 1)} disabled={(auditLogPage + 1) * 50 >= auditLogTotal || auditLogLoading} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700 disabled:opacity-40">Suivant</button>
+              </div>
+            </div>
+          </section>
+        )}
+
         {adminView === 'shops' && (
           <AdminShopList
             shops={filteredShops}
@@ -1760,6 +1991,12 @@ export const AdminDashboard: React.FC = () => {
             onSearchChange={setSearchQuery}
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
+            publicationFilter={publicationFilter}
+            onPublicationFilterChange={setPublicationFilter}
+            verificationFilter={verificationFilter}
+            onVerificationFilterChange={setVerificationFilter}
+            subscriptionFilter={subscriptionFilter}
+            onSubscriptionFilterChange={setSubscriptionFilter}
             sortBy={sortBy}
             onSortChange={setSortBy}
             onExport={exportShopsCsv}

@@ -47,6 +47,43 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       && JSON.stringify(requested[field]) !== JSON.stringify(current[field])
   );
 
+  router.get('/:id/owner-profile', requireMerchantOwnShop, async (req, res) => {
+    const shop = await getShopFromDatabase(Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ email: shop.owner_email || '' });
+  });
+
+  router.patch('/:id/owner-profile', requireMerchantOwnShop, async (req, res) => {
+    const shop = await getShopFromDatabase(Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      return res.status(400).json({ error: 'Saisissez une adresse e-mail valide.' });
+    }
+    const duplicateEmail = await dbAll<{ id: number }>(
+      'SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?) AND id <> ? LIMIT 1',
+      [email, shop.id],
+    );
+    if (duplicateEmail.length) {
+      return res.status(409).json({ error: 'Cette adresse e-mail est déjà associée à une autre boutique.' });
+    }
+
+    const hasPinCode = Object.prototype.hasOwnProperty.call(req.body || {}, 'pin_code');
+    const pinCode = typeof req.body?.pin_code === 'string' ? req.body.pin_code.trim() : '';
+    if (hasPinCode && (typeof req.body.pin_code !== 'string' || isWeakShopPin(pinCode))) {
+      return res.status(400).json({ error: 'Le code PIN est trop simple ou invalide. Utilisez un PIN de 6 chiffres fort.' });
+    }
+    if (hasPinCode) {
+      await dbRun('UPDATE shops SET owner_email = ?, pin_code_hash = ? WHERE id = ?', [email, hashPin(pinCode), shop.id]);
+    } else {
+      await dbRun('UPDATE shops SET owner_email = ? WHERE id = ?', [email, shop.id]);
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, email, pin_updated: hasPinCode });
+  });
+
   router.post('/:id/start-trial', requireMerchantOwnShop, async (req, res) => {
     const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });

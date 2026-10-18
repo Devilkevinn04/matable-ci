@@ -25,6 +25,7 @@ export const AdminPushAnnouncements: React.FC = () => {
   const [url, setUrl] = useState('/app');
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -47,6 +48,14 @@ export const AdminPushAnnouncements: React.FC = () => {
 
   const publish = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!reviewing) {
+      if (!status?.subscribed_devices) {
+        setError('Aucun appareil marchand n’est abonné. Demandez aux commerçants d’activer les notifications Push avant de préparer une diffusion.');
+        return;
+      }
+      setReviewing(true);
+      return;
+    }
     setPublishing(true);
     setError(null);
     setNotice(null);
@@ -61,6 +70,7 @@ export const AdminPushAnnouncements: React.FC = () => {
       setNotice(`Annonce envoyée : ${data.delivery.sent} appareil(s) notifié(s), ${data.delivery.failed} échec(s), dans ${data.delivery.recipientShops} boutique(s) abonnée(s).`);
       setTitle('');
       setBody('');
+      setReviewing(false);
       await refresh();
     } catch (publishError) {
       setError(publishError instanceof Error ? publishError.message : 'Impossible de publier cette annonce.');
@@ -87,13 +97,14 @@ export const AdminPushAnnouncements: React.FC = () => {
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-violet-950">
-        <span>{status?.subscribed_devices ?? 0} appareil(s) marchand actuellement abonné(s)</span>
+        <span>{loading ? 'Chargement du nombre d’appareils abonnés…' : status ? `${status.subscribed_devices} appareil(s) marchand actuellement abonné(s)` : 'Nombre d’appareils abonnés indisponible'}</span>
         <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-white px-2.5 font-bold disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Actualiser
         </button>
       </div>
 
       {status && !status.configured && <p className="mt-3 rounded-xl bg-amber-100 p-3 text-xs leading-5 text-amber-950">Configurez VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY et VAPID_SUBJECT dans l’environnement de production pour activer les envois.</p>}
+      {status?.configured && status.subscribed_devices === 0 && <p className="mt-3 rounded-xl bg-amber-100 p-3 text-xs leading-5 text-amber-950">Aucun appareil marchand n’est abonné pour le moment. Les commerçants doivent activer les notifications dans leur espace marchand avant qu’une annonce puisse être diffusée.</p>}
       {error && <p role="alert" className="mt-3 rounded-xl bg-rose-100 p-3 text-xs text-rose-900">{error}</p>}
       {notice && <p role="status" className="mt-3 rounded-xl bg-emerald-100 p-3 text-xs text-emerald-950">{notice}</p>}
 
@@ -105,9 +116,23 @@ export const AdminPushAnnouncements: React.FC = () => {
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <label className="sr-only" htmlFor="admin-push-url">Lien interne au clic</label>
           <input id="admin-push-url" value={url} onChange={(event) => setUrl(event.target.value)} maxLength={500} placeholder="Lien interne (ex. /)" className="min-h-10 min-w-0 rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-violet-600" />
-          <button type="submit" disabled={publishing || loading || !status?.configured} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-violet-800 px-4 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50">
+          {reviewing && (
+            <div className="rounded-xl border border-violet-200 bg-white p-3 sm:col-span-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-wide text-violet-800">Aperçu avant diffusion</p>
+                  <p className="mt-1 break-words text-sm font-black text-slate-900">{title}</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-700">{body}</p>
+                  <p className="mt-2 break-all text-[11px] text-slate-500">À l’ouverture : {url || 'Aucun lien'}</p>
+                  <p className="mt-2 text-[11px] font-semibold text-violet-900">Destinataires : appareils actuellement abonnés ({status?.subscribed_devices ?? 0})</p>
+                </div>
+                <button type="button" onClick={() => setReviewing(false)} disabled={publishing} className="min-h-9 shrink-0 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700 disabled:opacity-50">Modifier</button>
+              </div>
+            </div>
+          )}
+          <button type="submit" disabled={publishing || loading || !status?.configured || status.subscribed_devices === 0} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-violet-800 px-4 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-50">
             {publishing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-            {publishing ? 'Envoi en cours…' : 'Publier et envoyer'}
+            {publishing ? 'Envoi en cours…' : reviewing ? 'Confirmer et envoyer' : 'Prévisualiser'}
           </button>
         </div>
       </form>

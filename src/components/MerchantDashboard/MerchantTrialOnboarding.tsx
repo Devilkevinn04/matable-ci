@@ -60,6 +60,8 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
   const [isKadevPayReady, setIsKadevPayReady] = useState(false);
   const [isPaymentStarting, setIsPaymentStarting] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState('');
+  const [needsBillingEmail, setNeedsBillingEmail] = useState(false);
+  const [billingEmail, setBillingEmail] = useState('');
   const [paymentIdToVerify, setPaymentIdToVerify] = useState<string | null>(null);
   const didReceivePaymentSuccess = useRef(false);
   const selectedPlan = plans.find((plan) => plan.tier === selectedTier) || plans[0];
@@ -153,10 +155,22 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ tier: selectedTier, term, client_request_id: clientRequestId }),
+        body: JSON.stringify({
+          tier: selectedTier,
+          term,
+          client_request_id: clientRequestId,
+          ...(billingEmail.trim() ? { billing_email: billingEmail.trim() } : {}),
+        }),
       });
       const data = await response.json();
+      if (data.code === 'billing_email_required') {
+        setNeedsBillingEmail(true);
+        setPaymentMessage('Un e-mail est nécessaire pour préparer le paiement et vous envoyer le reçu.');
+        setIsPaymentStarting(false);
+        return;
+      }
       if (!response.ok) throw new Error(data.error || 'Impossible de préparer le paiement KadevPay.');
+      setNeedsBillingEmail(false);
       if (!window.KadevPay) throw new Error('Le module KadevPay n’est pas encore prêt. Réessayez.');
       if (data.is_test) setPaymentMessage('Mode test actif : aucun paiement réel ne sera débité.');
       setPaymentIdToVerify(data.payment_id);
@@ -440,6 +454,34 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                   <RefreshCw className="h-3.5 w-3.5" /> Vérifier à nouveau
                 </button>
                 {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center text-xs font-bold text-emerald-800 underline underline-offset-2">Contacter l’assistance</a>}
+              </div>
+            )}
+            {paymentFlowActive && needsBillingEmail && (
+              <div className="mt-4 max-w-xl rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <label htmlFor="merchant-billing-email" className="block text-sm font-bold text-amber-950">E-mail de facturation</label>
+                <p className="mt-1 text-xs leading-5 text-amber-900">KadevPay utilise Paystack, qui exige une adresse e-mail pour initialiser le paiement. MaTable.ci l’utilisera aussi pour vous envoyer le reçu après confirmation.</p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    id="merchant-billing-email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    maxLength={254}
+                    value={billingEmail}
+                    onChange={(event) => setBillingEmail(event.target.value)}
+                    placeholder="vous@exemple.ci"
+                    className="min-h-11 min-w-0 flex-1 rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void startSubscriptionPayment()}
+                    disabled={isPaymentStarting || !billingEmail.trim()}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-4 py-2 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {isPaymentStarting && <LoaderCircle className="h-4 w-4 animate-spin" />}
+                    Continuer vers le paiement
+                  </button>
+                </div>
               </div>
             )}
           </div>

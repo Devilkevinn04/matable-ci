@@ -323,6 +323,7 @@ test('rejects placeholder production app URLs', () => {
     NODE_ENV: process.env.NODE_ENV,
     DATABASE_URL: process.env.DATABASE_URL,
     ADMIN_ACCESS_KEY: process.env.ADMIN_ACCESS_KEY,
+    VERIFICATION_ADMIN_ACCESS_KEY: process.env.VERIFICATION_ADMIN_ACCESS_KEY,
     APP_URL: process.env.APP_URL,
     PORT: process.env.PORT,
     MATABLE_DB_PATH: process.env.MATABLE_DB_PATH,
@@ -332,6 +333,7 @@ test('rejects placeholder production app URLs', () => {
     process.env.NODE_ENV = 'production';
     process.env.DATABASE_URL = 'postgresql://matable:strongpass@ep-demo.us-east-1.aws.neon.tech/matable';
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
+    process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
     process.env.APP_URL = 'https://example.com';
     process.env.PORT = '3000';
     process.env.MATABLE_DB_PATH = './data/matable.db';
@@ -341,6 +343,7 @@ test('rejects placeholder production app URLs', () => {
     if (previous.NODE_ENV === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous.NODE_ENV;
     if (previous.DATABASE_URL === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = previous.DATABASE_URL;
     if (previous.ADMIN_ACCESS_KEY === undefined) delete process.env.ADMIN_ACCESS_KEY; else process.env.ADMIN_ACCESS_KEY = previous.ADMIN_ACCESS_KEY;
+    if (previous.VERIFICATION_ADMIN_ACCESS_KEY === undefined) delete process.env.VERIFICATION_ADMIN_ACCESS_KEY; else process.env.VERIFICATION_ADMIN_ACCESS_KEY = previous.VERIFICATION_ADMIN_ACCESS_KEY;
     if (previous.APP_URL === undefined) delete process.env.APP_URL; else process.env.APP_URL = previous.APP_URL;
     if (previous.PORT === undefined) delete process.env.PORT; else process.env.PORT = previous.PORT;
     if (previous.MATABLE_DB_PATH === undefined) delete process.env.MATABLE_DB_PATH; else process.env.MATABLE_DB_PATH = previous.MATABLE_DB_PATH;
@@ -351,6 +354,7 @@ test('rejects unsafe production configuration', () => {
     NODE_ENV: process.env.NODE_ENV,
     DATABASE_URL: process.env.DATABASE_URL,
     ADMIN_ACCESS_KEY: process.env.ADMIN_ACCESS_KEY,
+    VERIFICATION_ADMIN_ACCESS_KEY: process.env.VERIFICATION_ADMIN_ACCESS_KEY,
     APP_URL: process.env.APP_URL,
     PORT: process.env.PORT,
     MATABLE_DB_PATH: process.env.MATABLE_DB_PATH,
@@ -360,6 +364,7 @@ test('rejects unsafe production configuration', () => {
     process.env.NODE_ENV = 'production';
     process.env.DATABASE_URL = 'postgresql://matable:strongpass@ep-demo.us-east-1.aws.neon.tech/matable';
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
+    process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
     process.env.APP_URL = 'https://matable.ci';
     process.env.PORT = '3000';
     process.env.MATABLE_DB_PATH = './data/matable.db';

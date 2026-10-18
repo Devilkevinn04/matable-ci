@@ -40,6 +40,7 @@ import {
   LogOut,
   BarChart3,
   MoreHorizontal,
+  Bell,
 } from 'lucide-react';
 import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks } from '../../types';
 import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../../utils/format';
@@ -443,6 +444,43 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       && subscriptionDaysRemaining !== null
       && subscriptionDaysRemaining <= 14);
   const identityStatus = currentShop.merchant_verification_status || 'pending';
+  const settingsNavigationGroups: {
+    label: string;
+    items: {
+      id: typeof settingsSubTab;
+      label: string;
+      icon: React.ComponentType<{ className?: string }>;
+      badge?: string;
+    }[];
+  }[] = [
+    {
+      label: 'Compte',
+      items: [
+        { id: 'profile', label: 'Profil et sécurité', icon: Key },
+      ],
+    },
+    {
+      label: 'Ma boutique',
+      items: [
+        { id: 'themes', label: 'Apparence', icon: Palette },
+        { id: 'general', label: 'Coordonnées et livraison', icon: Store },
+        { id: 'hours', label: 'Horaires', icon: Clock },
+      ],
+    },
+    {
+      label: 'Mon activité',
+      items: [
+        { id: 'bilan', label: 'Flash bilan', icon: Send },
+        { id: 'analytics', label: 'Statistiques Pro', icon: BarChart3 },
+      ],
+    },
+    {
+      label: 'Préférences',
+      items: [
+        { id: 'notifications', label: 'Notifications', icon: Bell },
+      ],
+    },
+  ];
   const priorityNotificationCount = Number(!isShopVerified) + Number(subscriptionNeedsAttention);
   const mobileNotificationCount = priorityNotificationCount
     + Number(actionableOrderCount > 0)
@@ -961,23 +999,48 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             <nav className="mt-5 space-y-5" aria-label="Navigation et réglages commerçant">
               <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Espace commerçant</p><div className="space-y-1">
                 {[
-                  { id: 'overview' as const, label: 'Accueil', icon: LayoutDashboard },
                   { id: 'catalog' as const, label: 'Catalogue', count: products.length, icon: Package },
-                  { id: 'orders' as const, label: 'Commandes', count: actionableOrderCount, icon: ShoppingBag },
                   { id: 'stats' as const, label: 'Statistiques', icon: BarChart3 },
-                ].map(({ id, label, icon: Icon, count }) => <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => { setActiveTab(id); setIsSettingsDrawerOpen(false); }} className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold ${activeTab === id ? 'bg-[#eaf4ef] text-[#155544]' : 'text-slate-800 hover:bg-[#f7f4ee]'}`}><Icon className="h-4 w-4 text-[#1D6B57]" /><span className="flex-1">{label}</span>{count !== undefined && count > 0 && <span className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-[10px] font-black ${id === 'orders' ? 'bg-[#e6572b] text-white' : 'bg-slate-100 text-slate-600'}`}>{count}</span>}</button>)}
+                ].map(({ id, label, icon: Icon, count }) => <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => { setActiveTab(id); setIsSettingsDrawerOpen(false); }} className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold ${activeTab === id ? 'bg-[#eaf4ef] text-[#155544]' : 'text-slate-800 hover:bg-[#f7f4ee]'}`}><Icon className="h-4 w-4 text-[#1D6B57]" /><span className="flex-1">{label}</span>{count !== undefined && count > 0 && <span className="min-w-6 rounded-full bg-slate-100 px-1.5 py-0.5 text-center text-[10px] font-black text-slate-600">{count}</span>}</button>)}
               </div></div>
-              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Boutique</p><div className="space-y-1">
-                {[
-                  ['themes', 'Apparence', Palette],
-                  ['general', 'Informations & livraison', Store],
-                  ['hours', 'Horaires', Clock],
-                ].map(([tab, label, Icon]) => <button key={tab as string} type="button" onClick={() => { setSettingsSubTab(tab as typeof settingsSubTab); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><Icon className="h-4 w-4 text-emerald-800" />{label as string}</button>)}
+              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">À suivre</p><div className="space-y-1">
+                <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><CreditCard className="h-4 w-4 text-emerald-800" /><span className="flex-1">Abonnement</span>{subscriptionNeedsAttention && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-black text-orange-900">Échéance</span>}</button>
+                <button type="button" onClick={() => { setSettingsSubTab('verification'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><ShieldCheck className="h-4 w-4 text-emerald-800" /><span className="flex-1">{identityStatus === 'verified' ? 'Identité vérifiée' : identityStatus === 'rejected' ? 'Reprendre la vérification' : 'Vérifier mon identité'}</span>{identityVerificationRequired && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-900">À faire</span>}</button>
               </div></div>
-              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Vérification</p><button type="button" onClick={() => { setSettingsSubTab('verification'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><ShieldCheck className="h-4 w-4 text-emerald-800" /><span className="flex-1">{identityStatus === 'verified' ? 'Identité vérifiée' : identityStatus === 'rejected' ? 'Reprendre la vérification' : 'Vérifier mon identité'}</span>{identityVerificationRequired && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-900">À faire</span>}</button></div>
-              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Forfait & visibilité</p><button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><CreditCard className="h-4 w-4 text-emerald-800" /><span className="flex-1">Abonnement, paiements et boosts</span>{subscriptionNeedsAttention && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-black text-orange-900">Échéance</span>}</button></div>
-              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Activité</p><button type="button" onClick={() => { setSettingsSubTab('bilan'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><Send className="h-4 w-4 text-emerald-800" />Bilan WhatsApp quotidien</button></div>
-              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Compte & sécurité</p><button type="button" onClick={() => { setSettingsSubTab('general'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><Key className="h-4 w-4 text-emerald-800" />Profil, code secret et données</button></div>
+              <div>
+                <p className="mb-2 text-[10px] font-black uppercase text-slate-500">Paramètres</p>
+                <div className="space-y-4">
+                  {settingsNavigationGroups.map((group) => (
+                    <section key={group.label}>
+                      <h3 className="px-3 pb-1 text-[10px] font-black uppercase tracking-wide text-slate-400">{group.label}</h3>
+                      <div className="space-y-1">
+                        {group.items.map(({ id, label, icon: Icon, badge }) => {
+                          const isActive = activeTab === 'settings' && settingsSubTab === id;
+                          return (
+                            <button
+                              key={id}
+                              type="button"
+                              aria-current={isActive ? 'page' : undefined}
+                              onClick={() => {
+                                setSettingsSubTab(id);
+                                setActiveTab('settings');
+                                setIsSettingsDrawerOpen(false);
+                              }}
+                              className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold ${
+                                isActive ? 'bg-[#eaf4ef] text-[#155544]' : 'text-slate-800 hover:bg-emerald-50'
+                              }`}
+                            >
+                              <Icon className="h-4 w-4 shrink-0 text-emerald-800" />
+                              <span className="flex-1">{label}</span>
+                              {badge && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-900">{badge}</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              </div>
               <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Partage</p>
                 <button type="button" disabled={!isShopPublished} onClick={() => void copyOwnerLink('public')} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-45"><Copy className="h-4 w-4 text-emerald-800" />Lien vitrine</button>
                 <button type="button" onClick={() => void copyOwnerLink('private')} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><Key className="h-4 w-4 text-emerald-800" />Lien d’accès privé</button>

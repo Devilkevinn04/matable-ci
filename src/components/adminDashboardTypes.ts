@@ -6,6 +6,7 @@ export interface AdminShopItem extends Shop {
   total_sales: number;
   average_order_value: number;
   last_order_at: string | null;
+  subscription_status?: string;
 }
 
 export interface AdminAnalytics {
@@ -21,6 +22,9 @@ export interface AdminAnalytics {
 export interface AdminFinance {
   days: number;
   since: string;
+  payment_count: number;
+  payment_limit: number;
+  payment_offset: number;
   summary: {
     confirmed_count: number;
     collected_amount: number;
@@ -106,6 +110,16 @@ export interface AdminSubscriptions {
   };
   shops: AdminSubscriptionShop[];
   audit_logs: { id: number; action: string; shop_id: number | null; shop_name: string | null; details: string; created_at: string }[];
+}
+
+export interface AdminAuditLog {
+  id: number;
+  actor: 'super_admin' | 'verification_admin' | string;
+  action: string;
+  shop_id: number | null;
+  shop_name: string | null;
+  details: Record<string, string | number | boolean | null>;
+  created_at: string;
 }
 
 export interface AdminOrder {

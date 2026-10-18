@@ -227,10 +227,34 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   assert.equal(startTrial.status, 200);
   const trialEnd = trialPayload.shop.subscription.trialEnd as string;
 
-  const intentResponse = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
+  const clearBillingEmail = new Database(TEST_DB_PATH);
+  try {
+    clearBillingEmail.prepare('UPDATE shops SET owner_email = NULL WHERE id = ?').run(createdPayload.shop.id);
+  } finally {
+    clearBillingEmail.close();
+  }
+  const paymentEndpoint = `${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`;
+  const paymentHeaders = { 'Content-Type': 'application/json', Cookie: merchantCookie };
+  const emailRequired = await fetch(paymentEndpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    headers: paymentHeaders,
     body: JSON.stringify({ tier: 'premium', term: 'annual' }),
+  });
+  assert.equal(emailRequired.status, 409);
+  assert.equal((await emailRequired.json()).code, 'billing_email_required');
+
+  const invalidBillingEmail = await fetch(paymentEndpoint, {
+    method: 'POST',
+    headers: paymentHeaders,
+    body: JSON.stringify({ tier: 'premium', term: 'annual', billing_email: 'not-an-email' }),
+  });
+  assert.equal(invalidBillingEmail.status, 400);
+  assert.equal((await invalidBillingEmail.json()).code, 'invalid_billing_email');
+
+  const intentResponse = await fetch(paymentEndpoint, {
+    method: 'POST',
+    headers: paymentHeaders,
+    body: JSON.stringify({ tier: 'premium', term: 'annual', billing_email: 'facturation@example.com' }),
   });
   const intent = await intentResponse.json();
   assert.equal(intentResponse.status, 201, JSON.stringify(intent));
@@ -238,7 +262,17 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   assert.equal(intent.currency, 'XOF');
   assert.equal(intent.public_key, 'kdvp_test_public_key');
   assert.equal(intent.is_test, true);
+  assert.equal(intent.email, 'facturation@example.com');
   assert.equal('secret_key' in intent, false);
+  const savedBillingEmail = new Database(TEST_DB_PATH);
+  try {
+    assert.equal(
+      (savedBillingEmail.prepare('SELECT owner_email FROM shops WHERE id = ?').get(createdPayload.shop.id) as { owner_email: string }).owner_email,
+      'facturation@example.com',
+    );
+  } finally {
+    savedBillingEmail.close();
+  }
 
   const webhookPayload = JSON.stringify({
     event: 'payment.success',
@@ -349,13 +383,26 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   } finally {
     testDb.close();
   }
-  const financeAfterMorePayments = await fetch(`${BASE_URL}/api/admin/payments?days=30`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
-  assert.equal(financeAfterMorePayments.payments.length, 200);
+  const financeAfterMorePayments = await fetch(`${BASE_URL}/api/admin/payments?days=30&limit=100`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
+  assert.equal(financeAfterMorePayments.payments.length, 100);
+  assert.equal(financeAfterMorePayments.payment_count, 207);
+  assert.equal(financeAfterMorePayments.payment_limit, 100);
+  assert.equal(financeAfterMorePayments.payment_offset, 0);
   assert.equal(financeAfterMorePayments.summary.confirmed_count, 206);
   assert.equal(financeAfterMorePayments.summary.collected_amount, 70500);
   assert.equal(financeAfterMorePayments.summary.promotions.count, 205);
   assert.equal(financeAfterMorePayments.summary.promotions.amount, 20500);
   assert.equal(financeAfterMorePayments.summary.failed_count, 1);
+  const secondPaymentPage = await fetch(`${BASE_URL}/api/admin/payments?days=30&limit=100&offset=100`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
+  const lastPaymentPage = await fetch(`${BASE_URL}/api/admin/payments?days=30&limit=100&offset=200`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
+  assert.equal(secondPaymentPage.payments.length, 100);
+  assert.equal(lastPaymentPage.payments.length, 7);
+  const filteredPaymentPage = await fetch(`${BASE_URL}/api/admin/payments?days=30&limit=10&search=test-ref-204&type=promotion&status=paid`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
+  assert.equal(filteredPaymentPage.payment_count, 1);
+  assert.equal(filteredPaymentPage.payments[0].id, 'test-promotion-204');
+  const failedPaymentFilter = await fetch(`${BASE_URL}/api/admin/payments?days=30&status=failed`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
+  assert.equal(failedPaymentFilter.payment_count, 1);
+  assert.equal(failedPaymentFilter.payments[0].status, 'failed');
 
   const duplicateWebhook = await sendWebhook();
   assert.equal(duplicateWebhook.status, 200);

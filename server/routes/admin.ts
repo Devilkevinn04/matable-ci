@@ -57,15 +57,13 @@ export function createAdminRouter(options: AdminRouterOptions) {
       return requireVerification(req, res, next);
     }
     if (isVerificationAdmin(req)) {
-      const allowedRead = req.method === 'GET'
-        && ['/shops', '/orders', '/customers', '/analytics', '/health'].includes(path);
-      const allowedShopAction = req.method === 'PATCH'
-        && /^\/shops\/\d+\/(featured|toggle-active)$/.test(path);
-      const allowedNotification = req.method === 'POST'
+      const allowedModeration = (req.method === 'GET' && path === '/content-moderation')
+        || (req.method === 'PATCH' && /^\/content-moderation\/(reviews|reports)\/\d+$/.test(path));
+      const allowedIdentityReminder = req.method === 'POST'
         && /^\/shops\/\d+\/notification$/.test(path)
-        && ['identity_verification', 'welcome', 'catalog', 'orders', 'support'].includes(String(req.body?.template || ''));
-      if (!allowedRead && !allowedShopAction && !allowedNotification) {
-        return res.status(403).json({ error: 'Cette opération est réservée au super-admin.' });
+        && req.body?.template === 'identity_verification';
+      if (!allowedModeration && !allowedIdentityReminder) {
+        return res.status(403).json({ error: 'Cette opération est réservée au super-admin ou à un rôle autorisé.' });
       }
     }
     if (path === '/payments' || path.startsWith('/subscriptions')
@@ -101,10 +99,87 @@ export function createAdminRouter(options: AdminRouterOptions) {
     }
     return details.days;
   };
-  const logAdminAction = (action: string, shopId: number | null, details: Record<string, unknown>) => dbRun(
+  const safeAuditDetailKeys = new Set([
+    'announcement_id', 'attempted', 'days', 'delivery_mode', 'enabled', 'failed', 'previous_enabled',
+    'previous_status', 'previous_subscription_expires_at', 'previous_trial_end', 'reason', 'recipients', 'review_id',
+    'sent', 'shop_id', 'shop_name', 'shop_slug', 'status', 'subscription_expires_at', 'trial_end',
+    'event_id', 'deleted_products', 'deleted_orders', 'deleted_reviews', 'deleted_reports',
+  ]);
+  const getSafeAuditDetails = (value: unknown): Record<string, string | number | boolean | null> => {
+    const details: unknown = typeof value === 'string' ? JSON.parse(value) : value;
+    if (!details || typeof details !== 'object' || Array.isArray(details)) {
+      throw new Error('Une entrée du journal admin contient des détails invalides.');
+    }
+    return Object.fromEntries(Object.entries(details).flatMap(([key, detail]) => {
+      if (!safeAuditDetailKeys.has(key)) return [];
+      if (detail === null || typeof detail === 'boolean' || typeof detail === 'number') return [[key, detail]];
+      if (typeof detail === 'string') return [[key, detail.slice(0, 500)]];
+      return [];
+    }));
+  };
+  const logAdminAction = (action: string, shopId: number | null, details: Record<string, unknown>, actor = 'super_admin') => dbRun(
     'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
-    ['super_admin', action, shopId, JSON.stringify(details), new Date().toISOString()],
+    [actor, action, shopId, JSON.stringify(details), new Date().toISOString()],
   );
+
+  router.get('/audit-logs', requireSuperAdmin, async (req, res) => {
+    const limitInput = Number(req.query.limit);
+    const offsetInput = Number(req.query.offset);
+    const limit = Number.isInteger(limitInput) ? Math.max(1, Math.min(100, limitInput)) : 50;
+    const offset = Number.isInteger(offsetInput) ? Math.max(0, offsetInput) : 0;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : '';
+    const actor = req.query.actor === 'super_admin' || req.query.actor === 'verification_admin' || req.query.actor === 'didit_webhook'
+      ? req.query.actor
+      : '';
+    const filters: string[] = [];
+    const params: unknown[] = [];
+    if (search) {
+      filters.push("(LOWER(logs.action) LIKE ? OR LOWER(COALESCE(shops.name, '')) LIKE ?)");
+      params.push(`%${search.toLocaleLowerCase('fr')}%`, `%${search.toLocaleLowerCase('fr')}%`);
+    }
+    if (actor) {
+      filters.push('logs.actor = ?');
+      params.push(actor);
+    }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const [rows, count] = await Promise.all([
+      dbAll<{
+        id: number;
+        actor: string;
+        action: string;
+        shop_id: number | null;
+        shop_name: string | null;
+        details: string;
+        created_at: string;
+      }>(`
+        SELECT logs.id, logs.actor, logs.action, logs.shop_id, shops.name AS shop_name,
+          logs.details, logs.created_at
+        FROM admin_audit_logs AS logs
+        LEFT JOIN shops ON shops.id = logs.shop_id
+        ${where}
+        ORDER BY logs.created_at DESC, logs.id DESC
+        LIMIT ? OFFSET ?
+      `, [...params, limit, offset]),
+      dbGet<{ total: number }>(`
+        SELECT COUNT(*) AS total
+        FROM admin_audit_logs AS logs
+        LEFT JOIN shops ON shops.id = logs.shop_id
+        ${where}
+      `, params),
+    ]);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      audit_logs: rows.map((row) => ({
+        ...row,
+        details: getSafeAuditDetails(row.details),
+      })),
+      total: Number(count?.total || 0),
+      limit,
+      offset,
+      search,
+      actor: actor || null,
+    });
+  });
 
   router.get('/push/status', async (_req, res) => {
     const [announcements, subscriptionCount] = await Promise.all([
@@ -123,6 +198,9 @@ export function createAdminRouter(options: AdminRouterOptions) {
   router.post('/push/announcements', requireSuperAdmin, async (req, res) => {
     if (!getVapidConfiguration()) {
       return res.status(503).json({ error: 'Configurez VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY et VAPID_SUBJECT avant de publier une annonce Push.' });
+    }
+    if (await getPushSubscriptionCount() === 0) {
+      return res.status(409).json({ error: 'Aucun appareil marchand n’est abonné aux notifications Push.' });
     }
     const title = normalizePushText(req.body?.title, 100);
     const body = normalizePushText(req.body?.body, 240);
@@ -470,6 +548,13 @@ export function createAdminRouter(options: AdminRouterOptions) {
     const requestedDays = Number(req.query.days);
     const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 365) : 30;
     const since = new Date(Date.now() - days * 86400000).toISOString();
+    const requestedLimit = Number(req.query.limit);
+    const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
+    const requestedOffset = Number(req.query.offset);
+    const offset = Number.isInteger(requestedOffset) ? Math.max(0, requestedOffset) : 0;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : '';
+    const requestedStatus = String(req.query.status || 'all');
+    const requestedType = String(req.query.type || 'all');
     const periodWhere = "((status = 'paid' AND paid_at >= ?) OR (status <> 'paid' AND created_at >= ?))";
     const summary = await dbGet<{
       confirmed_count: number;
@@ -497,7 +582,28 @@ export function createAdminRouter(options: AdminRouterOptions) {
       FROM subscription_payment_intents
       WHERE ${periodWhere}
     `, [since, since]);
-    const payments = await dbAll<{
+    const paymentFilters = [
+      "((intent.status = 'paid' AND intent.paid_at >= ?) OR (intent.status <> 'paid' AND intent.created_at >= ?))",
+    ];
+    const paymentParams: unknown[] = [since, since];
+    if (search) {
+      paymentFilters.push("(LOWER(shops.name) LIKE ? OR LOWER(COALESCE(intent.provider_reference, '')) LIKE ? OR LOWER(intent.id) LIKE ?)");
+      const searchTerm = `%${search.toLocaleLowerCase('fr')}%`;
+      paymentParams.push(searchTerm, searchTerm, searchTerm);
+    }
+    if (requestedStatus === 'failed') {
+      paymentFilters.push("intent.status IN ('failed', 'error')");
+    } else if (['paid', 'pending', 'cancelled', 'error', 'refunded'].includes(requestedStatus)) {
+      paymentFilters.push('intent.status = ?');
+      paymentParams.push(requestedStatus);
+    }
+    if (requestedType === 'subscription' || requestedType === 'promotion') {
+      paymentFilters.push('intent.payment_type = ?');
+      paymentParams.push(requestedType);
+    }
+    const paymentWhere = paymentFilters.join(' AND ');
+    const [payments, paymentCount] = await Promise.all([
+      dbAll<{
       id: string;
       shop_id: number;
       shop_name: string;
@@ -515,11 +621,17 @@ export function createAdminRouter(options: AdminRouterOptions) {
         intent.currency, intent.status, intent.provider_reference, intent.created_at, intent.paid_at
       FROM subscription_payment_intents AS intent
       JOIN shops ON shops.id = intent.shop_id
-      WHERE (intent.status = 'paid' AND intent.paid_at >= ?)
-        OR (intent.status <> 'paid' AND intent.created_at >= ?)
+      WHERE ${paymentWhere}
       ORDER BY COALESCE(intent.paid_at, intent.created_at) DESC
-      LIMIT 200
-    `, [since, since]);
+      LIMIT ? OFFSET ?
+    `, [...paymentParams, limit, offset]),
+      dbGet<{ total: number }>(`
+        SELECT COUNT(*) AS total
+        FROM subscription_payment_intents AS intent
+        JOIN shops ON shops.id = intent.shop_id
+        WHERE ${paymentWhere}
+      `, paymentParams),
+    ]);
     const byTier = await dbAll<{ tier: string; count: number; amount: number }>(`
       SELECT tier, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount
       FROM subscription_payment_intents
@@ -549,6 +661,9 @@ export function createAdminRouter(options: AdminRouterOptions) {
       },
       by_tier: byTier.map((item) => ({ ...item, count: Number(item.count), amount: Number(item.amount) })),
       payments,
+      payment_count: Number(paymentCount?.total || 0),
+      payment_limit: limit,
+      payment_offset: offset,
     });
   });
 
@@ -1121,7 +1236,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       await logAdminAction('trial_reminder_prepared', shop.id, { delivery_mode: 'whatsapp_click_to_chat' });
     }
     if (template === 'identity_verification') {
-      await logAdminAction('identity_verification_request_prepared', shop.id, { delivery_mode: 'whatsapp_click_to_chat' });
+      await logAdminAction('identity_verification_request_prepared', shop.id, { delivery_mode: 'whatsapp_click_to_chat' }, req.adminRole || 'super_admin');
     }
     res.json({ success: true, delivery_mode: 'whatsapp_click_to_chat', template, message, whatsapp_url: `https://wa.me/${phone}?text=${encodeURIComponent(message)}` });
   });

@@ -32,10 +32,12 @@ Les fonctions suivantes ne sont pas encore disponibles dans le dashboard : compt
 
 Le tableau de bord `/admin` propose deux rôles distincts, sélectionnés au moment de la connexion :
 
-- **Super-admin** : accès complet aux outils d’administration, notamment aux paiements et abonnements, aux liens d’accès des boutiques, au mode maintenance, aux annonces Push et à la suppression de boutiques.
-- **Admin de vérification** : accès à la file de vérification d’identité et à la modération de contenu. Il dispose aussi d’un accès limité à certaines données de boutiques, commandes, clients et statistiques, ainsi qu’à des actions opérationnelles autorisées. Il ne peut pas gérer les paiements ou les abonnements, supprimer des boutiques, créer des liens d’accès privés, modifier le mode maintenance ni publier des annonces Push.
+- **Super-admin** : accès complet aux outils d’administration, notamment aux paiements et abonnements, aux liens d’accès des boutiques, au mode maintenance, aux annonces Push, à la suppression de boutiques et au journal d’audit global consultable et filtrable.
+- **Admin de vérification** : espace centré sur la file de vérification Didit et la modération de contenu, avec la possibilité de préparer un rappel WhatsApp de vérification. Il n’accède pas aux vues générales des boutiques, clients, statistiques et opérations, ne peut pas modifier les statuts des commandes, ni gérer les paiements ou abonnements, supprimer des boutiques, créer des liens d’accès privés, modifier le mode maintenance ou publier des annonces Push. Un accès en lecture seule aux commandes d’une boutique reste disponible sur l’API marchand pour les besoins limités.
 
 Les autorisations sont vérifiées côté serveur ; masquer une rubrique dans l’interface n’est pas le mécanisme de contrôle d’accès. Les deux rôles utilisent des clés indépendantes configurées uniquement sur le serveur. En production, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` sont obligatoires et doivent chacune être fortes, uniques, distinctes et comporter au moins 32 caractères. Configurez-les dans l’environnement de déploiement (par exemple les variables du service Render) ; ne les ajoutez pas au dépôt, au frontend, aux journaux ou aux captures d’écran.
+
+La liste Super Admin des boutiques permet de filtrer les statuts de publication, d’identité et d’abonnement. Le journal des paiements est paginé côté serveur et ses filtres couvrent l’ensemble de la période, sans modifier le statut des transactions. Le journal d’audit global enregistre également les transitions de statut acceptées par webhook Didit ; il ne contient ni documents d’identité, ni contenu libre du webhook, ni secrets. Les annonces Push affichent un aperçu des destinataires et du contenu avant confirmation de la diffusion.
 
 ## Démarrage local
 
@@ -54,8 +56,11 @@ En développement, la clé KYC peut rester vide (clé fixe réservée aux donné
 
 ### Variables d’environnement
 
+`HOST` est facultatif. Utilisez `127.0.0.1` pour limiter l’accès à la machine locale ; par défaut, le serveur écoute sur `0.0.0.0`.
+
 ```env
 NODE_ENV="development"
+HOST="127.0.0.1"
 PORT="3000"
 MATABLE_DB_PATH="./data/matable.db"
 DATABASE_URL="postgresql://..."
@@ -160,7 +165,7 @@ Créer le projet Neon puis configurer `DATABASE_URL` dans Render. Le service Ren
 
 ### Renouvellements KadevPay
 
-KadevPay encaisse les abonnements mensuels ou annuels des commerçants ainsi que les boosts. L’annuel facture 10 mensualités pour 12 mois de service. Les commandes des clients restent payées directement aux boutiques. Configurer `KADEVPAY_PUBLIC_KEY` et le secret HMAC `KADEVPAY_WEBHOOK_SECRET` dans Render, puis déclarer l’endpoint `https://<domaine-public>/api/webhooks/kadevpay` dans le tableau de bord KadevPay. Le serveur n’active l’abonnement ou le boost qu’après un webhook signé correspondant à l’intention et au montant attendus. Commencer avec les clés de test; les paiements réels nécessitent un compte KadevPay vérifié et un compte de versement configuré.
+KadevPay encaisse les abonnements mensuels ou annuels des commerçants ainsi que les boosts. L’annuel facture 10 mensualités pour 12 mois de service. Les commandes des clients restent payées directement aux boutiques. Le SDK public KadevPay transmet l’adresse e-mail au checkout Paystack ; la documentation Paystack indique que l’e-mail et le montant sont requis pour initialiser une transaction. Une ancienne boutique sans adresse peut donc la renseigner au moment du paiement ; elle est enregistrée sur la boutique et utilisée pour envoyer le reçu MaTable.ci après confirmation. Ne pas remplacer cette adresse par une valeur fictive. Configurer `KADEVPAY_PUBLIC_KEY` et le secret HMAC `KADEVPAY_WEBHOOK_SECRET` dans Render, puis déclarer l’endpoint `https://<domaine-public>/api/webhooks/kadevpay` dans le tableau de bord KadevPay. Le serveur n’active l’abonnement ou le boost qu’après un webhook signé correspondant à l’intention et au montant attendus. Commencer avec les clés de test; les paiements réels nécessitent un compte KadevPay vérifié et un compte de versement configuré.
 
 Les échéances restent actives jusqu’à la fin de leur date civile en Côte d’Ivoire; l’écran de renouvellement apparaît le lendemain. Le statut effectif passe à `past_due` pendant le délai de grâce, puis `suspended` et la boutique est masquée publiquement. Les données et l’accès marchand sont conservés afin de permettre le renouvellement. Si les secrets WhatsApp Business sont configurés, le serveur envoie les rappels à J−14, J−7, J−3 et J−1 uniquement aux commerçants ayant activé l’opt-in dans « Mon forfait ». Chaque échéance et chaque palier sont enregistrés pour éviter les doublons; un échec fournisseur est journalisé et peut être retenté. Changer le numéro WhatsApp révoque l’accord. Configurer dans Render `WHATSAPP_CLOUD_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_SUBSCRIPTION_REMINDER_TEMPLATE` et `WHATSAPP_GRAPH_API_VERSION`. Le modèle Meta doit être approuvé comme modèle utilitaire et contenir deux paramètres de corps : le nom de la boutique et sa date d’échéance. L’envoi automatique dépend de ces identifiants secrets Meta et de l’approbation du modèle; aucune valeur secrète ne doit être placée dans le dépôt. Le code ne déclenche aucun prélèvement automatique : le commerçant doit toujours ouvrir le checkout KadevPay et confirmer le paiement.
 

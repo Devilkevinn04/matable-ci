@@ -1293,7 +1293,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, process.env.HOST || '0.0.0.0', () => {
     console.log(`Server MaTable.ci running on port ${PORT}`);
     void processSubscriptionAutomation();
   });

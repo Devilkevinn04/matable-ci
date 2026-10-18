@@ -295,6 +295,16 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       await transaction.run(`UPDATE shops SET merchant_verification_status = ?,
         publication_status = CASE WHEN is_active = 0 OR publication_status = 'suspended' THEN 'suspended' WHEN ? = 'verified' THEN 'active' ELSE 'draft' END
         WHERE id = ?`, [merchantStatus, merchantStatus, session.shop_id]);
+      if (currentShop && currentShop.merchant_verification_status !== merchantStatus) {
+        await transaction.run(
+          'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+          ['didit_webhook', 'identity_status_updated', session.shop_id, JSON.stringify({
+            previous_status: currentShop.merchant_verification_status,
+            status: merchantStatus,
+            event_id: event.event_id,
+          }), receivedAt],
+        );
+      }
       return {
         shopId: session.shop_id,
         previousStatus: currentShop?.merchant_verification_status || '',

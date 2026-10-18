@@ -139,6 +139,9 @@ before(async () => {
       APPLE_TEAM_ID: '',
       APPLE_KEY_ID: '',
       APPLE_PRIVATE_KEY: '',
+      VAPID_PUBLIC_KEY: 'A'.repeat(87),
+      VAPID_PRIVATE_KEY: 'B'.repeat(43),
+      VAPID_SUBJECT: 'mailto:assistance@matable.ci',
       NODE_ENV: 'test',
       PORT: String(TEST_PORT),
       MATABLE_DB_PATH: TEST_DB_PATH,
@@ -172,7 +175,7 @@ test('home page and direct merchant plan preview load successfully', async () =>
   assert.match(plansPreview.response.headers.get('content-type') || '', /text\/html/);
 });
 
-test('verification admin can use general non-financial tools but cannot access super-admin finance or destructive actions', async () => {
+test('verification admin is limited to identity follow-up and content moderation', async () => {
   const verificationLogin = await apiFetch('/api/auth/admin-login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -186,6 +189,8 @@ test('verification admin can use general non-financial tools but cannot access s
 
   const identityQueue = await apiFetch('/api/admin/identity-verifications');
   assert.equal(identityQueue.response.status, 200, JSON.stringify(identityQueue.payload));
+  const forbiddenAuditLog = await apiFetch('/api/admin/audit-logs');
+  assert.equal(forbiddenAuditLog.response.status, 403, JSON.stringify(forbiddenAuditLog.payload));
 
   const verificationReminder = await apiFetch('/api/admin/shops/999999/notification', {
     method: 'POST',
@@ -194,36 +199,32 @@ test('verification admin can use general non-financial tools but cannot access s
   });
   assert.equal(verificationReminder.response.status, 404, JSON.stringify(verificationReminder.payload));
 
-  const shops = await apiFetch('/api/admin/shops');
-  assert.equal(shops.response.status, 200, JSON.stringify(shops.payload));
-  assert.ok(shops.payload.length > 0);
-  assert.equal(shops.payload[0].total_sales, 0);
-  assert.equal(Object.hasOwn(shops.payload[0], 'subscription'), false);
-  const shopId = shops.payload[0].id;
-  const initialActive = shops.payload[0].is_active;
-  const shopToggle = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, {
+  for (const path of ['/api/admin/shops', '/api/admin/orders', '/api/admin/customers', '/api/admin/analytics?days=7', '/api/admin/health']) {
+    const forbidden = await apiFetch(path);
+    assert.equal(forbidden.response.status, 403, `${path}: ${JSON.stringify(forbidden.payload)}`);
+  }
+  const forbiddenOrderUpdate = await apiFetch('/api/shops/1/orders/1/status', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ expected_is_active: initialActive, reason: 'Test de droits vérification' }),
+    body: JSON.stringify({ status: 'confirmed' }),
   });
-  assert.equal(shopToggle.response.status, 200, JSON.stringify(shopToggle.payload));
-  assert.equal(shopToggle.payload.is_active, !initialActive);
-  assert.equal(Object.hasOwn(shopToggle.payload.shop, 'subscription'), false);
-  const restoreShop = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ expected_is_active: !initialActive, reason: 'Restauration après test' }),
-  });
-  assert.equal(restoreShop.response.status, 200, JSON.stringify(restoreShop.payload));
+  assert.equal(forbiddenOrderUpdate.response.status, 403, JSON.stringify(forbiddenOrderUpdate.payload));
 
-  const generalNotification = await apiFetch(`/api/admin/shops/${shopId}/notification`, {
+  const generalNotification = await apiFetch('/api/admin/shops/1/notification', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ template: 'welcome' }),
   });
-  assert.equal(generalNotification.response.status, 200, JSON.stringify(generalNotification.payload));
+  assert.equal(generalNotification.response.status, 403, JSON.stringify(generalNotification.payload));
 
-  const forbiddenSubscriptionReminder = await apiFetch(`/api/admin/shops/${shopId}/notification`, {
+  const shopToggle = await apiFetch('/api/admin/shops/1/toggle-active', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expected_is_active: true, reason: 'Test de droits vérification' }),
+  });
+  assert.equal(shopToggle.response.status, 403, JSON.stringify(shopToggle.payload));
+
+  const forbiddenSubscriptionReminder = await apiFetch('/api/admin/shops/1/notification', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ template: 'trial_expiring' }),
@@ -232,22 +233,6 @@ test('verification admin can use general non-financial tools but cannot access s
 
   const moderationQueue = await apiFetch('/api/admin/content-moderation');
   assert.equal(moderationQueue.response.status, 200, JSON.stringify(moderationQueue.payload));
-
-  const orders = await apiFetch('/api/admin/orders');
-  assert.equal(orders.response.status, 200, JSON.stringify(orders.payload));
-  assert.ok(orders.payload.orders.every((order: { total_amount: number }) => order.total_amount === 0));
-  const merchantOrders = await apiFetch(`/api/shops/${shopId}/orders`);
-  assert.equal(merchantOrders.response.status, 200, JSON.stringify(merchantOrders.payload));
-  assert.ok(merchantOrders.payload.every((order: { total_amount: number; items: { unit_price: number }[] }) =>
-    order.total_amount === 0 && order.items.every((item) => item.unit_price === 0)));
-  const customers = await apiFetch('/api/admin/customers');
-  assert.equal(customers.response.status, 200, JSON.stringify(customers.payload));
-  assert.ok(customers.payload.customers.every((customer: { order_value: number }) => customer.order_value === 0));
-  const analytics = await apiFetch('/api/admin/analytics?days=7');
-  assert.equal(analytics.response.status, 200, JSON.stringify(analytics.payload));
-  assert.equal(analytics.payload.totals.sales, 0);
-  assert.ok(analytics.payload.daily.every((day: { sales: number }) => day.sales === 0));
-  assert.equal((await apiFetch('/api/admin/health')).response.status, 200);
 
   for (const path of ['/api/admin/payments', '/api/admin/subscriptions', '/api/admin/maintenance', '/api/admin/push/status']) {
     const forbidden = await apiFetch(path);
@@ -663,6 +648,13 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
     body: JSON.stringify({ key: 'super-admin-demo-key' }),
   });
   assert.equal(adminLogin.response.status, 200, JSON.stringify(adminLogin.payload));
+  const pushWithoutRecipients = await apiFetch('/api/admin/push/announcements', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Annonce de test', body: 'Aucun destinataire', url: '/app' }),
+  });
+  assert.equal(pushWithoutRecipients.response.status, 409, JSON.stringify(pushWithoutRecipients.payload));
+  assert.match(pushWithoutRecipients.payload.error, /Aucun appareil marchand/);
   const verificationQueue = await apiFetch('/api/admin/identity-verifications');
   assert.equal(verificationQueue.response.status, 200, JSON.stringify(verificationQueue.payload));
   const verificationRecord = verificationQueue.payload.verifications.find((record: any) => record.shop_id === shopId);
@@ -1029,6 +1021,14 @@ test('Didit alone controls merchant verification; signed webhooks are fresh and 
   assert.equal(verifiedRecord.status, 'verified');
   assert.equal(verifiedRecord.provider_status, 'Approved');
   assert.equal(verifiedRecord.session_id, sessionId);
+  const diditAudit = await apiFetch('/api/admin/audit-logs?actor=didit_webhook&search=identity_status_updated');
+  assert.equal(diditAudit.response.status, 200, JSON.stringify(diditAudit.payload));
+  const identityAuditEntry = diditAudit.payload.audit_logs.find((entry: any) => entry.shop_id === shopId);
+  assert.ok(identityAuditEntry);
+  assert.equal(identityAuditEntry.actor, 'didit_webhook');
+  assert.equal(identityAuditEntry.details.previous_status, 'pending');
+  assert.equal(identityAuditEntry.details.status, 'verified');
+  assert.equal(identityAuditEntry.details.event_id, eventId);
 
   const adminLogout = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
   assert.equal(adminLogout.response.status, 200, JSON.stringify(adminLogout.payload));
@@ -1432,13 +1432,14 @@ test('existing merchant full flow: login, product management, order lifecycle, b
 
 test('new merchant registration flow is local and immediately usable', async () => {
   const phone = uniquePhone();
+  const merchantEmail = uniqueEmail();
   const registration = await apiFetch('/api/shops', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: 'Boutique Test Premium',
       whatsapp_number: phone,
-      email: uniqueEmail(),
+      email: merchantEmail,
       pin_code: '654321',
       category: 'fashion',
       city: 'Abidjan',
@@ -1474,6 +1475,45 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.ok(registration.payload.owner_access_token);
 
   const newShopId = registration.payload.shop.id;
+  const ownerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`);
+  assert.equal(ownerProfile.response.status, 200, JSON.stringify(ownerProfile.payload));
+  assert.equal(ownerProfile.payload.email, merchantEmail);
+
+  const invalidOwnerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'adresse-invalide' }),
+  });
+  assert.equal(invalidOwnerProfile.response.status, 400, JSON.stringify(invalidOwnerProfile.payload));
+
+  const invalidPinProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: merchantEmail, pin_code: '123' }),
+  });
+  assert.equal(invalidPinProfile.response.status, 400, JSON.stringify(invalidPinProfile.payload));
+
+  const billingEmail = `facturation-${Date.now()}@example.com`;
+  const updatedOwnerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: billingEmail.toUpperCase(), pin_code: '830462' }),
+  });
+  assert.equal(updatedOwnerProfile.response.status, 200, JSON.stringify(updatedOwnerProfile.payload));
+  assert.equal(updatedOwnerProfile.payload.email, billingEmail);
+  assert.equal(updatedOwnerProfile.payload.pin_updated, true);
+  const verifiedOwnerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`);
+  assert.equal(verifiedOwnerProfile.payload.email, billingEmail);
+
+  const profileDb = new Database(TEST_DB_PATH, { readonly: true });
+  try {
+    const savedProfile = profileDb.prepare('SELECT owner_email, pin_code_hash FROM shops WHERE id = ?').get(newShopId) as { owner_email: string; pin_code_hash: string };
+    assert.equal(savedProfile.owner_email, billingEmail);
+    assert.ok(savedProfile.pin_code_hash);
+  } finally {
+    profileDb.close();
+  }
+
   const trialStart = await apiFetch(`/api/shops/${newShopId}/start-trial`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1498,7 +1538,7 @@ test('new merchant registration flow is local and immediately usable', async () 
   const merchantLogin = await apiFetch('/api/auth/merchant-login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, pin: '654321' }),
+    body: JSON.stringify({ phone, pin: '830462' }),
   });
   assert.equal(merchantLogin.response.status, 200, JSON.stringify(merchantLogin.payload));
   assert.equal(merchantLogin.payload.shop.is_active, true);
@@ -1724,6 +1764,23 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   const adminAudit = await apiFetch('/api/admin/subscriptions');
   assert.ok(adminAudit.payload.audit_logs.some((entry: { action: string; shop_id: number }) =>
     entry.action === 'admin_shop_operation' && entry.shop_id === shopId));
+  const auditDb = new Database(TEST_DB_PATH);
+  auditDb.prepare(
+    'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+  ).run('verification_admin', 'test_audit_scrubbing', null, JSON.stringify({ reason: 'Motif visible', secret: 'Ne pas exposer' }), new Date().toISOString());
+  auditDb.close();
+  const filteredAudit = await apiFetch('/api/admin/audit-logs?search=test_audit_scrubbing&actor=verification_admin');
+  assert.equal(filteredAudit.response.status, 200, JSON.stringify(filteredAudit.payload));
+  assert.equal(filteredAudit.payload.audit_logs.length, 1);
+  assert.equal(filteredAudit.payload.audit_logs[0].actor, 'verification_admin');
+  assert.equal(filteredAudit.payload.audit_logs[0].details.reason, 'Motif visible');
+  assert.equal(Object.hasOwn(filteredAudit.payload.audit_logs[0].details, 'secret'), false);
+  const fullAuditLog = await apiFetch('/api/admin/audit-logs?search=shop&limit=1');
+  assert.equal(fullAuditLog.response.status, 200, JSON.stringify(fullAuditLog.payload));
+  assert.equal(fullAuditLog.payload.audit_logs.length, 1);
+  assert.ok(fullAuditLog.payload.total > 1);
+  assert.equal(fullAuditLog.payload.audit_logs[0].actor, 'super_admin');
+  assert.equal(Object.hasOwn(fullAuditLog.payload.audit_logs[0].details, 'reason'), false);
   const enableShop = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

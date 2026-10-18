@@ -53,7 +53,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
   // Active view tab
   const [activeTab, setActiveTab] = useState<'overview' | 'catalog' | 'orders' | 'stats' | 'settings'>('overview');
-  const [settingsSubTab, setSettingsSubTab] = useState<'themes' | 'general' | 'hours' | 'bilan' | 'verification' | 'subscription' | 'analytics' | 'notifications'>('themes');
+  const [settingsSubTab, setSettingsSubTab] = useState<'profile' | 'themes' | 'general' | 'hours' | 'bilan' | 'verification' | 'subscription' | 'analytics' | 'notifications'>('themes');
 
   // Products & Orders data
   const [products, setProducts] = useState<Product[]>([]);
@@ -756,7 +756,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
           is_open: settingsOpen,
           whatsapp_number: settingsPhone.trim(),
           city: settingsCity.trim(),
-          pin_code: settingsNewPin.trim() ? settingsNewPin.trim() : undefined,
           theme_config: {
             social_links: sanitizedSocialLinks,
             delivery_zones: sanitizedDeliveryZones,

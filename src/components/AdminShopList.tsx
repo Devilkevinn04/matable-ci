@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { Clock, Download, Eye, Filter, Search, Star, Trash2 } from 'lucide-react';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
+import { subscriptionStatusLabels } from './adminDashboardTypes';
 import type { AdminShopItem } from './adminDashboardTypes';
 
 interface AdminShopListProps {
@@ -9,6 +10,12 @@ interface AdminShopListProps {
   onSearchChange: (value: string) => void;
   statusFilter: 'all' | 'active' | 'inactive';
   onStatusFilterChange: (filter: 'all' | 'active' | 'inactive') => void;
+  publicationFilter: 'all' | 'draft' | 'active' | 'suspended';
+  onPublicationFilterChange: (filter: 'all' | 'draft' | 'active' | 'suspended') => void;
+  verificationFilter: 'all' | 'pending' | 'submitted' | 'under_review' | 'verified' | 'rejected' | 'not_required';
+  onVerificationFilterChange: (filter: 'all' | 'pending' | 'submitted' | 'under_review' | 'verified' | 'rejected' | 'not_required') => void;
+  subscriptionFilter: 'all' | 'not_started' | 'trialing' | 'active' | 'past_due' | 'cancelled' | 'expired' | 'suspended';
+  onSubscriptionFilterChange: (filter: 'all' | 'not_started' | 'trialing' | 'active' | 'past_due' | 'cancelled' | 'expired' | 'suspended') => void;
   sortBy: 'sales' | 'orders' | 'name';
   onSortChange: (sort: 'sales' | 'orders' | 'name') => void;
   onExport: () => void;
@@ -29,6 +36,12 @@ export function AdminShopList({
   onSearchChange,
   statusFilter,
   onStatusFilterChange,
+  publicationFilter,
+  onPublicationFilterChange,
+  verificationFilter,
+  onVerificationFilterChange,
+  subscriptionFilter,
+  onSubscriptionFilterChange,
   sortBy,
   onSortChange,
   onExport,
@@ -71,6 +84,44 @@ export function AdminShopList({
             <option value="name">Trier par nom</option>
           </select>
         </div>
+        {canSeeFinancials && (
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <label className="grid gap-1 text-[10px] font-bold text-slate-500">
+              Publication
+              <select value={publicationFilter} onChange={(event) => onPublicationFilterChange(event.target.value as typeof publicationFilter)} className="min-h-10 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700">
+                <option value="all">Tous les états</option>
+                <option value="draft">Brouillon</option>
+                <option value="active">Publiée</option>
+                <option value="suspended">Suspendue</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-[10px] font-bold text-slate-500">
+              Vérification d’identité
+              <select value={verificationFilter} onChange={(event) => onVerificationFilterChange(event.target.value as typeof verificationFilter)} className="min-h-10 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700">
+                <option value="all">Tous les statuts</option>
+                <option value="pending">À démarrer</option>
+                <option value="submitted">Soumise</option>
+                <option value="under_review">En revue</option>
+                <option value="verified">Vérifiée</option>
+                <option value="rejected">Refusée</option>
+                <option value="not_required">Non requise</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-[10px] font-bold text-slate-500">
+              Abonnement
+              <select value={subscriptionFilter} onChange={(event) => onSubscriptionFilterChange(event.target.value as typeof subscriptionFilter)} className="min-h-10 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700">
+                <option value="all">Tous les statuts</option>
+                <option value="not_started">Non démarré</option>
+                <option value="trialing">Essai actif</option>
+                <option value="active">Actif</option>
+                <option value="past_due">En période de grâce</option>
+                <option value="cancelled">Annulé</option>
+                <option value="expired">Expiré</option>
+                <option value="suspended">Suspendu</option>
+              </select>
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-[1.7rem] border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.06)]">
@@ -106,6 +157,19 @@ export function AdminShopList({
                         <Eye className="h-3 w-3" /> {shop.merchant_verification_status === 'under_review' ? 'Revue en cours' : 'À examiner'}
                       </button>
                     )}
+                    {['pending', 'verified', 'rejected'].includes(shop.merchant_verification_status || '') && (
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${shop.merchant_verification_status === 'verified' ? 'bg-emerald-100 text-emerald-800' : shop.merchant_verification_status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-900'}`}>
+                        Identité {shop.merchant_verification_status === 'verified' ? 'vérifiée' : shop.merchant_verification_status === 'rejected' ? 'refusée' : 'à vérifier'}
+                      </span>
+                    )}
+                    <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${shop.publication_status === 'active' ? 'bg-emerald-100 text-emerald-800' : shop.publication_status === 'suspended' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'}`}>
+                      {shop.publication_status === 'active' ? 'Publiée' : shop.publication_status === 'suspended' ? 'Publication suspendue' : 'Brouillon'}
+                    </span>
+                    <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${shop.subscription?.status === 'active' ? 'bg-emerald-100 text-emerald-800' : shop.subscription?.status === 'trialing' ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'}`}>
+                      {shop.subscription?.status === 'trialing'
+                        ? `Essai · ${shop.subscription.trialDaysRemaining} j`
+                        : subscriptionStatusLabels[shop.subscription?.status || shop.subscription_status || ''] || 'Abonnement inconnu'}
+                    </span>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
@@ -118,6 +182,7 @@ export function AdminShopList({
 
                   <div className="text-xs text-slate-600 flex flex-wrap items-center gap-4 pt-1">
                     <div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-slate-400" /><span>Dernière commande : <strong>{shop.last_order_at ? new Date(shop.last_order_at).toLocaleDateString('fr-FR') : 'Aucune'}</strong></span></div>
+                    {canSeeFinancials && shop.subscription?.expiresAt && <div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-slate-400" /><span>Échéance : <strong>{new Date(shop.subscription.expiresAt).toLocaleDateString('fr-FR')}</strong></span></div>}
                   </div>
                 </div>
 

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { LoaderCircle, RefreshCw, Send, ShieldCheck } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { LoaderCircle, RefreshCw, Search, Send, ShieldCheck } from 'lucide-react';
 
 interface VerificationItem {
   shop_id: number;
@@ -11,6 +11,8 @@ interface VerificationItem {
   submitted_at: string | null;
   updated_at: string | null;
 }
+
+type VerificationFilter = 'all' | 'pending' | 'submitted' | 'under_review' | 'rejected' | 'verified';
 
 const statusLabels: Record<string, string> = {
   pending: 'À vérifier',
@@ -37,6 +39,8 @@ export function AdminIdentityVerificationPanel({
   const [items, setItems] = useState<VerificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<VerificationFilter>('all');
 
   async function refresh(showLoading = true) {
     if (showLoading) setLoading(true);
@@ -66,19 +70,52 @@ export function AdminIdentityVerificationPanel({
     document.getElementById(`identity-verification-shop-${selectedShopId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [selectedShopId]);
 
+  const filteredItems = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase('fr');
+    return items.filter((item) => {
+      const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
+      const matchesQuery = !query
+        || item.shop_name.toLocaleLowerCase('fr').includes(query)
+        || item.shop_slug.toLocaleLowerCase('fr').includes(query)
+        || String(item.shop_id).includes(query);
+      return matchesStatus && matchesQuery;
+    });
+  }, [items, searchQuery, statusFilter]);
+
   return (
     <section id="identity-verification-queue" className="chart-panel scroll-mt-24 p-4 md:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-emerald-700" />
-          <div><h2 className="text-sm font-black text-slate-900">Vérifications d’identité Didit</h2><p className="text-[11px] text-slate-500">Les décisions proviennent de Didit et sont synchronisées par webhook. Elles ne peuvent pas être modifiées manuellement ici.</p></div>
+          <div><h2 className="text-sm font-black text-slate-900">File de vérification Didit</h2><p className="text-[11px] text-slate-500">Consultez les statuts transmis par Didit. Les décisions sont synchronisées par webhook et ne sont pas modifiables ici.</p></div>
         </div>
         <button type="button" onClick={() => void refresh()} disabled={loading} aria-label="Actualiser les statuts" className="rounded-lg border border-slate-300 bg-white p-2 text-slate-700 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
       </div>
       {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
       {loading ? <p className="mt-4 flex items-center gap-2 text-sm text-slate-500"><LoaderCircle className="h-4 w-4 animate-spin" />Chargement…</p>
         : items.length === 0 ? <p className="mt-4 text-sm text-slate-500">Aucune boutique à vérifier.</p>
-          : <div className="mt-4 divide-y divide-slate-200">{items.map((item) => (
+          : <>
+            <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <label className="relative block">
+                <span className="sr-only">Rechercher une boutique</span>
+                <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Rechercher par boutique ou identifiant" className="min-h-10 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/20" />
+              </label>
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                <span>Statut</span>
+                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as VerificationFilter)} className="min-h-10 min-w-36 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800">
+                  <option value="all">Tous ({items.length})</option>
+                  <option value="pending">À vérifier ({items.filter((item) => item.status === 'pending').length})</option>
+                  <option value="submitted">Démarrée ({items.filter((item) => item.status === 'submitted').length})</option>
+                  <option value="under_review">En revue ({items.filter((item) => item.status === 'under_review').length})</option>
+                  <option value="rejected">Refusée ({items.filter((item) => item.status === 'rejected').length})</option>
+                  <option value="verified">Vérifiée ({items.filter((item) => item.status === 'verified').length})</option>
+                </select>
+              </label>
+            </div>
+            {filteredItems.length === 0
+              ? <p className="mt-4 rounded-lg bg-slate-50 px-3 py-4 text-sm text-slate-600">Aucun dossier ne correspond à ces critères.</p>
+              : <div className="mt-4 divide-y divide-slate-200">{filteredItems.map((item) => (
             <article id={`identity-verification-shop-${item.shop_id}`} key={item.shop_id} className={`py-4 first:pt-0 last:pb-0 ${selectedShopId === item.shop_id ? 'rounded-xl bg-amber-50/50 px-3 ring-2 ring-amber-300' : ''}`}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -103,7 +140,8 @@ export function AdminIdentityVerificationPanel({
                 </button>
               )}
             </article>
-          ))}</div>}
+              ))}</div>}
+          </>}
     </section>
   );
 }

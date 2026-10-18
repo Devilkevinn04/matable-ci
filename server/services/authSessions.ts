@@ -337,8 +337,7 @@ export function createAuthSessionHelpers({
       if (adminRole === 'verification_admin') {
         const path = req.originalUrl.split('?')[0];
         const canReadOrders = req.method === 'GET' && /^\/api\/shops\/\d+\/orders$/.test(path);
-        const canUpdateOrder = req.method === 'PATCH' && /^\/api\/shops\/\d+\/orders\/\d+\/status$/.test(path);
-        if (!canReadOrders && !canUpdateOrder) {
+        if (!canReadOrders) {
           res.status(403).json({ error: 'Cet accès admin ne permet pas cette opération marchand.' });
           return null;
         }

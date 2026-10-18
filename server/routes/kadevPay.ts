@@ -37,6 +37,31 @@ interface SubscriptionPaymentIntent {
 
 export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterOptions) {
   const router = Router();
+  const resolveBillingEmail = async (shopId: number, currentEmail: string | null | undefined, requestedEmail: unknown) => {
+    if (requestedEmail === undefined) {
+      return currentEmail
+        ? { email: currentEmail }
+        : { error: { status: 409, code: 'billing_email_required', message: 'Ajoutez un e-mail à la boutique pour continuer le paiement.' } };
+    }
+    if (typeof requestedEmail !== 'string') {
+      return { error: { status: 400, code: 'invalid_billing_email', message: 'Saisissez une adresse e-mail valide.' } };
+    }
+    const email = requestedEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      return { error: { status: 400, code: 'invalid_billing_email', message: 'Saisissez une adresse e-mail valide.' } };
+    }
+    const duplicate = await dbGet<{ id: number }>(
+      'SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?) AND id <> ?',
+      [email, shopId],
+    );
+    if (duplicate) {
+      return { error: { status: 409, code: 'billing_email_in_use', message: 'Cette adresse e-mail est déjà associée à une autre boutique.' } };
+    }
+    if (email !== currentEmail) {
+      await dbRun('UPDATE shops SET owner_email = ? WHERE id = ?', [email, shopId]);
+    }
+    return { email };
+  };
 
   router.post('/shops/:id/subscription-payments', requireMerchantOwnShop, async (req, res) => {
     const shop = await getShopFromDatabase(Number(req.params.id));
@@ -47,8 +72,6 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
     if (!publicKey || !webhookSecret) {
       return res.status(503).json({ error: 'Le paiement KadevPay n’est pas encore configuré.' });
     }
-    if (!shop.owner_email) return res.status(409).json({ error: 'Ajoutez un e-mail à la boutique avant de renouveler l’abonnement.' });
-
     const requestedTier = String(req.body?.tier || '');
     if (!['standard', 'premium', 'pro'].includes(requestedTier)) {
       return res.status(400).json({ error: 'Choisissez une formule valide.' });
@@ -65,6 +88,10 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
       : '';
     if (clientRequestId && (clientRequestId.length < 1 || clientRequestId.length > 255)) {
       return res.status(400).json({ error: 'Le client_request_id est trop long ou invalide.' });
+    }
+    const billingEmail = await resolveBillingEmail(shop.id, shop.owner_email, req.body?.billing_email);
+    if ('error' in billingEmail) {
+      return res.status(billingEmail.error.status).json({ error: billingEmail.error.message, code: billingEmail.error.code });
     }
     const paymentId = randomUUID();
     const createdAt = new Date().toISOString();
@@ -101,7 +128,7 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
       amount: intent.amount,
       currency: intent.currency,
       is_test: publicKey.startsWith('kdvp_test_'),
-      email: shop.owner_email,
+      email: billingEmail.email,
       name: shop.name,
       phone: shop.whatsapp_number,
       plan_label: getSubscriptionPlanConfig(intent.tier).label,
@@ -118,8 +145,6 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
     if (!publicKey || !webhookSecret) {
       return res.status(503).json({ error: 'Le paiement KadevPay n’est pas encore configuré.' });
     }
-    if (!shop.owner_email) return res.status(409).json({ error: 'Ajoutez un e-mail à la boutique avant de payer un boost.' });
-
     const durationDays = Number(req.body?.duration_days);
     if (!BOOST_DURATIONS_DAYS.some((duration) => duration === durationDays)) {
       return res.status(400).json({ error: 'Choisissez une durée de boost valide.' });
@@ -127,6 +152,10 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
     const placement = req.body?.placement === undefined ? 'category' : req.body.placement;
     if (!BOOST_PLACEMENTS.some((validPlacement) => validPlacement === placement)) {
       return res.status(400).json({ error: 'Choisissez un emplacement de boost valide.' });
+    }
+    const billingEmail = await resolveBillingEmail(shop.id, shop.owner_email, req.body?.billing_email);
+    if ('error' in billingEmail) {
+      return res.status(billingEmail.error.status).json({ error: billingEmail.error.message, code: billingEmail.error.code });
     }
 
     const paymentId = randomUUID();
@@ -189,7 +218,7 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
       amount: reservation.price,
       currency: 'XOF',
       is_test: publicKey.startsWith('kdvp_test_'),
-      email: shop.owner_email,
+      email: billingEmail.email,
       name: shop.name,
       phone: shop.whatsapp_number,
       boost_id: boostId,

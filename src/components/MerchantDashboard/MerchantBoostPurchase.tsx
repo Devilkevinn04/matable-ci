@@ -34,6 +34,8 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
   const [isKadevPayReady, setIsKadevPayReady] = useState(false);
   const [isPaymentStarting, setIsPaymentStarting] = useState(false);
   const [message, setMessage] = useState('');
+  const [needsBillingEmail, setNeedsBillingEmail] = useState(false);
+  const [billingEmail, setBillingEmail] = useState('');
   const eligible = shop.is_active
     && shop.is_open
     && shop.city?.trim()
@@ -132,10 +134,21 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ duration_days: duration, placement }),
+        body: JSON.stringify({
+          duration_days: duration,
+          placement,
+          ...(billingEmail.trim() ? { billing_email: billingEmail.trim() } : {}),
+        }),
       });
       const data = await response.json();
+      if (data.code === 'billing_email_required') {
+        setNeedsBillingEmail(true);
+        setMessage('Un e-mail est nécessaire pour préparer le paiement et vous envoyer le reçu.');
+        setIsPaymentStarting(false);
+        return;
+      }
       if (!response.ok) throw new Error(data.error || 'Impossible de préparer le paiement du boost.');
+      setNeedsBillingEmail(false);
       if (!window.KadevPay) throw new Error('Le module KadevPay n’est pas encore prêt. Réessayez.');
       window.KadevPay.checkout({
         public_key: data.public_key,
@@ -195,6 +208,34 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
             </button>
             <span className="text-xs text-slate-500">Activation après confirmation du paiement sécurisé.</span>
           </div>
+          {needsBillingEmail && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <label htmlFor="merchant-boost-billing-email" className="block text-sm font-bold text-amber-950">E-mail de facturation</label>
+              <p className="mt-1 text-xs leading-5 text-amber-900">KadevPay utilise Paystack, qui exige une adresse e-mail pour initialiser le paiement. MaTable.ci l’utilisera aussi pour vous envoyer le reçu après confirmation.</p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <input
+                  id="merchant-boost-billing-email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  maxLength={254}
+                  value={billingEmail}
+                  onChange={(event) => setBillingEmail(event.target.value)}
+                  placeholder="vous@exemple.ci"
+                  className="min-h-11 min-w-0 flex-1 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => void startPayment()}
+                  disabled={isPaymentStarting || !billingEmail.trim()}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0f4d3d] px-4 py-2 text-xs font-bold text-white disabled:cursor-wait disabled:opacity-60"
+                >
+                  {isPaymentStarting && <LoaderCircle className="h-4 w-4 animate-spin" />}
+                  Continuer vers le paiement
+                </button>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-950">Pour acheter un boost, la boutique doit être vérifiée, ouverte, renseignée dans une ville et présenter au moins {BOOST_MINIMUM_PRODUCT_COUNT} produits.</p>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes, ShieldCheck, Bell } from 'lucide-react';
 import type { Shop } from '../../types';
 import { MerchantState } from './useMerchant';
@@ -25,6 +25,10 @@ interface SettingsTabProps {
 export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const [showPlanChooser, setShowPlanChooser] = useState(false);
   const [merchantDataExporting, setMerchantDataExporting] = useState(false);
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [ownerEmailLoading, setOwnerEmailLoading] = useState(false);
+  const [ownerProfileSaving, setOwnerProfileSaving] = useState(false);
+  const [ownerProfileError, setOwnerProfileError] = useState('');
   const {
     currentShop, products, orders, activeTab, showSettingsPin, setShowSettingsPin, setCurrentShop, settingsSubTab, setSettingsSubTab,
     catalogSearch, setCatalogSearch, catalogFilter, setCatalogFilter,
@@ -65,32 +69,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
     ? TRIAL_CATALOG_LIMIT
     : getSubscriptionProductLimit(currentShop.subscription?.plan);
   const currentPhotoLimit = getSubscriptionProductPhotoLimit(currentShop.subscription?.plan);
-  const settingsGroups = [
-    {
-      label: 'Ma boutique',
-      items: [
-        { id: 'themes', label: 'Apparence', icon: Palette },
-        { id: 'general', label: 'Coordonnées', icon: Store },
-        { id: 'hours', label: 'Horaires', icon: Clock },
-      ],
-    },
-    {
-      label: 'Mon activité',
-      items: [
-        { id: 'bilan', label: 'Flash bilan', icon: Send },
-        { id: 'analytics', label: 'Statistiques Pro', icon: TrendingUp },
-      ],
-    },
-    {
-      label: 'Compte',
-      items: [
-        { id: 'verification', label: 'Vérification', icon: ShieldCheck },
-        { id: 'subscription', label: 'Abonnement', icon: DollarSign },
-        { id: 'notifications', label: 'Notifications', icon: Bell },
-      ],
-    },
-  ] as const;
   const settingsCopy: Record<typeof settingsSubTab, { eyebrow: string; title: string; description: string }> = {
+    profile: { eyebrow: 'Compte', title: 'Profil et sécurité', description: 'Gérez votre e-mail de facturation, votre code PIN et vos données personnelles.' },
     themes: { eyebrow: 'Ma boutique', title: 'Apparence de la vitrine', description: 'Personnalisez les couleurs, les images et la présentation de votre boutique.' },
     general: { eyebrow: 'Ma boutique', title: 'Informations de la boutique', description: 'Gardez vos coordonnées, votre contact et vos informations de livraison à jour.' },
     hours: { eyebrow: 'Ma boutique', title: 'Horaires et disponibilité', description: 'Définissez les jours et heures pendant lesquels vos clients peuvent commander.' },
@@ -101,6 +81,51 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
     notifications: { eyebrow: 'Compte', title: 'Notifications Push', description: 'Choisissez si cet appareil peut recevoir les alertes importantes de votre boutique.' },
   };
   const activeSettingsCopy = settingsCopy[settingsSubTab];
+
+  useEffect(() => {
+    if (settingsSubTab !== 'profile' || !currentShop) return;
+    let cancelled = false;
+    setOwnerEmail('');
+    setOwnerEmailLoading(true);
+    setOwnerProfileError('');
+    fetch(`/api/shops/${currentShop.id}/owner-profile`, { credentials: 'include', cache: 'no-store' })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Impossible de charger le profil.');
+        if (!cancelled) setOwnerEmail(data.email || '');
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setOwnerProfileError(error instanceof Error ? error.message : 'Impossible de charger le profil.');
+      })
+      .finally(() => {
+        if (!cancelled) setOwnerEmailLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [settingsSubTab, currentShop?.id]);
+
+  const saveOwnerProfile = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!currentShop) return;
+    setOwnerProfileSaving(true);
+    setOwnerProfileError('');
+    try {
+      const response = await fetch(`/api/shops/${currentShop.id}/owner-profile`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: ownerEmail.trim(), pin_code: settingsNewPin.trim() || undefined }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible d’enregistrer le profil.');
+      setOwnerEmail(data.email);
+      setSettingsNewPin('');
+      toast.success(data.pin_updated ? 'Profil enregistré et code PIN modifié.' : 'Profil enregistré.');
+    } catch (error) {
+      setOwnerProfileError(error instanceof Error ? error.message : 'Impossible d’enregistrer le profil.');
+    } finally {
+      setOwnerProfileSaving(false);
+    }
+  };
   const exportMerchantData = async () => {
     if (!currentShop) return;
     setMerchantDataExporting(true);
@@ -142,38 +167,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
               </span>
             </header>
 
-            {/* Settings Sub-Tab Navigation */}
-            <nav aria-label="Rubriques des paramètres" className="grid gap-3 md:grid-cols-3">
-              {settingsGroups.map((group) => (
-                <section key={group.label} className="rounded-2xl border border-[#e7dfd3] bg-white p-3">
-                  <h3 className="px-2 pb-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{group.label}</h3>
-                  <div className="grid gap-1">
-                    {group.items.map(({ id, label, icon: Icon }) => {
-                      const isActive = settingsSubTab === id;
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          aria-current={isActive ? 'page' : undefined}
-                          onClick={() => setSettingsSubTab(id)}
-                          className={`flex min-h-10 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold transition-colors ${
-                            isActive
-                              ? 'bg-[#eaf4ef] text-[#155544]'
-                              : 'text-slate-600 hover:bg-[#f7f4ee] hover:text-[#211712]'
-                          }`}
-                        >
-                          <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#1D6B57]' : 'text-slate-400'}`} />
-                          <span className="flex-1">{label}</span>
-                          {isActive && <span className="h-1.5 w-1.5 rounded-full bg-[#1D6B57]" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
-            </nav>
-
-            <section className="flex flex-col gap-4 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+            {settingsSubTab === 'profile' && <section className="flex flex-col gap-4 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
               <div className="max-w-2xl">
                 <h3 className="text-sm font-extrabold text-[#211712]">Mes données</h3>
                 <p className="mt-1 text-xs leading-5 text-slate-600">Téléchargez les données MaTable.ci enregistrées pour cette boutique. Les données conservées directement par des prestataires externes ne sont pas incluses. Pour demander la suppression du compte, contactez l’assistance.</p>
@@ -181,7 +175,56 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
               <button type="button" onClick={exportMerchantData} disabled={merchantDataExporting} className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#d9cfc2] px-4 text-sm font-bold text-[#4a3a30] disabled:opacity-50">
                 {merchantDataExporting ? 'Préparation…' : 'Télécharger mes données'}
               </button>
-            </section>
+            </section>}
+
+            {settingsSubTab === 'profile' && (
+              <form onSubmit={saveOwnerProfile} className="max-w-3xl space-y-5 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
+                <div>
+                  <h3 className="text-base font-extrabold text-[#211712]">Coordonnées du propriétaire</h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">Ces informations restent privées et ne sont pas affichées sur la vitrine publique.</p>
+                </div>
+                {ownerProfileError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">{ownerProfileError}</p>}
+                <label className="block text-sm font-semibold text-slate-800">
+                  E-mail de facturation
+                  <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Requis par le checkout KadevPay/Paystack et utilisé pour vous envoyer le reçu du paiement.</span>
+                  <input
+                    type="email"
+                    autoComplete="email"
+                    required
+                    maxLength={254}
+                    value={ownerEmail}
+                    onChange={(event) => setOwnerEmail(event.target.value)}
+                    disabled={ownerEmailLoading || ownerProfileSaving}
+                    placeholder="vous@exemple.ci"
+                    className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/15 disabled:bg-slate-50"
+                  />
+                </label>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <label className="block text-sm font-bold text-slate-800">Modifier le code PIN</label>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">PIN à 6 chiffres utilisé pour accéder à l’espace commerçant. Laissez vide pour le conserver.</p>
+                  <div className="relative mt-3 max-w-sm">
+                    <input
+                      type={showSettingsPin ? 'text' : 'password'}
+                      inputMode="numeric"
+                      pattern="[0-9]{6}"
+                      minLength={6}
+                      maxLength={6}
+                      autoComplete="new-password"
+                      value={settingsNewPin}
+                      onChange={(event) => setSettingsNewPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="Nouveau PIN à 6 chiffres"
+                      className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-12 text-sm font-mono tracking-widest outline-none focus:border-[#176b55]"
+                    />
+                    <button type="button" onClick={() => setShowSettingsPin((visible) => !visible)} aria-label={showSettingsPin ? 'Masquer le PIN' : 'Afficher le PIN'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
+                      {showSettingsPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+                <button type="submit" disabled={ownerEmailLoading || ownerProfileSaving} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1D6B57] px-5 py-3 text-sm font-extrabold text-white shadow-sm transition-colors hover:bg-[#155544] disabled:cursor-wait disabled:opacity-60">
+                  {ownerProfileSaving ? 'Enregistrement…' : 'Enregistrer le profil'}
+                </button>
+              </form>
+            )}
 
             {/* Sub-Tab 1: THEME CUSTOMIZER */}
             {settingsSubTab === 'themes' && (
@@ -416,30 +459,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       </div>
                     ))
                   )}
-                </div>
-
-                {/* Change PIN Code */}
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                    <Key className="w-4 h-4 text-slate-500" />
-                    <span>Modifier mon code PIN secret à 6 chiffres</span>
-                  </label>
-                  <div className="relative w-full sm:w-64">
-                    <input
-                      type={showSettingsPin ? 'text' : 'password'}
-                      maxLength={6}
-                      placeholder="Laissez vide pour conserver l'actuel"
-                      value={settingsNewPin}
-                      onChange={(e) => setSettingsNewPin(e.target.value)}
-                      className="w-full text-xs p-2.5 pr-12 rounded-lg border border-slate-300 bg-white font-mono tracking-widest text-center"
-                    />
-                    <button type="button" onClick={() => setShowSettingsPin((visible) => !visible)} aria-label={showSettingsPin ? 'Masquer le PIN' : 'Afficher le PIN'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
-                      {showSettingsPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  <span className="block text-[11px] text-slate-400 mt-1">
-                    Le code PIN est indispensable pour accéder à votre espace de gestion.
-                  </span>
                 </div>
 
                 <div className="pt-2">
