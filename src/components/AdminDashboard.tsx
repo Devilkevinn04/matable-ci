@@ -27,6 +27,8 @@ import {
   Flag,
   UserRound,
   Trash2,
+  MoreHorizontal,
+  X,
 } from 'lucide-react';
 import { AdminIdentityVerificationPanel } from './AdminIdentityVerificationPanel';
 import { AdminShopList } from './AdminShopList';
@@ -157,6 +159,7 @@ export const AdminDashboard: React.FC = () => {
     return null;
   };
   const [adminView, setAdminView] = useState<AdminView>('overview');
+  const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(false);
   const [shops, setShops] = useState<AdminShopItem[]>([]);
   const [verificationShops, setVerificationShops] = useState<VerificationShopSummary[]>([]);
   const [verificationShopSearch, setVerificationShopSearch] = useState('');
@@ -1179,17 +1182,17 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         <div className="grid min-w-0 gap-3 sm:gap-4 lg:grid-cols-1 lg:items-start">
-        <nav aria-label={adminRole === 'super_admin' ? 'Navigation super-admin' : 'Navigation administration'} className="admin-sidebar flex max-w-full min-w-0 items-start gap-2 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200 bg-white/90 p-2 backdrop-blur-sm lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:w-64 lg:flex-col lg:gap-3 lg:overflow-x-hidden lg:overflow-y-auto lg:rounded-none lg:border-0 lg:px-4 lg:py-6">
+        <nav aria-label={adminRole === 'super_admin' ? 'Navigation super-admin' : 'Navigation administration'} className="admin-sidebar hidden min-w-0 flex-col gap-1 overflow-y-auto p-4 lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-64 lg:overflow-x-hidden lg:rounded-none lg:border-0 lg:px-4 lg:py-6">
           <div className="mb-3 hidden px-3 pt-2 lg:block">
             <p className="text-2xl font-black tracking-tight text-white">MaTable.ci</p>
             <p className="mt-1 text-sm text-white/70">{adminRole === 'super_admin' ? 'Super-Admin · Tour de contrôle' : 'Espace vérification'}</p>
           </div>
           {adminNavigationGroups.map((group) => (
-            <section key={group.label} className="min-w-max shrink-0 lg:min-w-0 lg:shrink">
+            <section key={group.label} className="mb-2">
               <h2 className="px-2 pb-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">{group.label}</h2>
-              <div className="flex gap-1 lg:flex-col">
+              <div className="space-y-1">
                 {group.items.map(({ id, label, icon: Icon }) => (
-                  <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-10 w-auto min-w-max shrink-0 items-center justify-start gap-2 whitespace-nowrap rounded-lg border px-2 py-2 text-left text-[11px] font-bold transition lg:min-h-11 lg:w-full lg:min-w-0 lg:whitespace-normal lg:px-3 lg:text-sm ${adminView === id ? 'border-transparent bg-[#176b55] text-white shadow-sm' : 'border-transparent bg-transparent text-white/90 hover:bg-[#176b55] hover:text-white'}`}>
+                  <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-10 w-full min-w-0 items-center justify-start gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold transition sm:text-sm ${adminView === id ? 'bg-[#176b55] text-white' : 'text-white/90 hover:bg-[#176b55] hover:text-white'}`}>
                     <Icon className="h-4 w-4 shrink-0" /><span className="min-w-0 break-words">{label}</span>
                   </button>
                 ))}
@@ -2118,8 +2121,82 @@ export const AdminDashboard: React.FC = () => {
         )}
         </div>
         </div>
-
       </main>
+      <nav
+        aria-label={adminRole === 'super_admin' ? 'Navigation rapide super-admin' : 'Navigation rapide administration'}
+        className={`fixed inset-x-0 bottom-0 z-50 grid border-t border-[#e7dfd3] bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] pt-1 shadow-[0_-8px_24px_rgba(33,23,18,0.08)] backdrop-blur lg:hidden ${adminRole === 'super_admin' ? 'grid-cols-5' : 'grid-cols-3'}`}
+      >
+        {(adminRole === 'super_admin'
+          ? adminNavigationGroups.flatMap((group) => group.items).filter((item) => ['overview', 'shops', 'orders', 'identity'].includes(item.id))
+          : adminNavigationGroups.flatMap((group) => group.items)
+        ).map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            aria-current={adminView === id ? 'page' : undefined}
+            onClick={() => { setAdminView(id); setIsAdminMenuOpen(false); }}
+            className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-t-lg px-1 text-[10px] font-bold sm:text-[11px] ${adminView === id ? 'text-[#155544]' : 'text-slate-500'}`}
+          >
+            <Icon className="h-5 w-5 shrink-0" />
+            <span className="max-w-full truncate">{label.replace(/ \(\d+\)$/, '')}</span>
+          </button>
+        ))}
+        {adminRole === 'super_admin' && (
+          <button
+            type="button"
+            aria-label="Plus"
+            aria-expanded={isAdminMenuOpen}
+            aria-controls="admin-menu-drawer"
+            onClick={() => setIsAdminMenuOpen(true)}
+            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-lg text-[10px] font-bold sm:text-[11px] ${isAdminMenuOpen || !['overview', 'shops', 'orders', 'identity'].includes(adminView) ? 'text-[#155544]' : 'text-slate-500'}`}
+          >
+            <MoreHorizontal className="h-5 w-5" />
+            <span>Plus</span>
+          </button>
+        )}
+      </nav>
+      {isAdminMenuOpen && adminRole === 'super_admin' && (
+        <div className="fixed inset-0 z-[70] bg-slate-950/40 lg:hidden" onClick={(event) => {
+          if (event.target === event.currentTarget) setIsAdminMenuOpen(false);
+        }}>
+          <aside id="admin-menu-drawer" role="dialog" aria-modal="true" aria-labelledby="admin-menu-title" className="absolute inset-x-0 bottom-0 max-h-[82dvh] overflow-y-auto rounded-t-3xl bg-[#fffdf8] p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-2xl">
+            <div className="mb-4 flex items-center justify-between border-b border-[#e7dfd3] pb-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1D6B57]">MaTable.ci</p>
+                <h2 id="admin-menu-title" className="text-lg font-black text-[#211712]">Autres rubriques</h2>
+              </div>
+              <button type="button" aria-label="Fermer le menu" onClick={() => setIsAdminMenuOpen(false)} className="rounded-full border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <nav aria-label="Autres rubriques super-admin" className="space-y-4">
+              {adminNavigationGroups.map((group) => {
+                const items = group.items.filter((item) => !['overview', 'shops', 'orders', 'identity'].includes(item.id));
+                if (!items.length) return null;
+                return (
+                  <section key={group.label}>
+                    <h3 className="mb-1 px-3 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">{group.label}</h3>
+                    <div className="space-y-1">
+                      {items.map(({ id, label, icon: Icon }) => (
+                        <button
+                          key={id}
+                          type="button"
+                          aria-current={adminView === id ? 'page' : undefined}
+                          onClick={() => { setAdminView(id); setIsAdminMenuOpen(false); }}
+                          className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold ${adminView === id ? 'bg-[#eaf4ef] text-[#155544]' : 'text-slate-800 hover:bg-emerald-50'}`}
+                        >
+                          <Icon className="h-4 w-4 shrink-0 text-emerald-800" />
+                          <span>{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
+            </nav>
+          </aside>
+        </div>
+      )}
       {deleteShopTarget && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4" onMouseDown={(event) => {
           if (event.target === event.currentTarget && !deleteShopLoading) setDeleteShopTarget(null);
