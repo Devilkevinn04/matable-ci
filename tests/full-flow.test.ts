@@ -1486,6 +1486,8 @@ test('new merchant registration flow is local and immediately usable', async () 
   const newShopId = registration.payload.shop.id;
   const ownerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`);
   assert.equal(ownerProfile.response.status, 200, JSON.stringify(ownerProfile.payload));
+  assert.equal(ownerProfile.payload.name, '');
+  assert.equal(ownerProfile.payload.phone, '');
   assert.equal(ownerProfile.payload.email, merchantEmail);
 
   const invalidOwnerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`, {
@@ -1494,6 +1496,13 @@ test('new merchant registration flow is local and immediately usable', async () 
     body: JSON.stringify({ email: 'adresse-invalide' }),
   });
   assert.equal(invalidOwnerProfile.response.status, 400, JSON.stringify(invalidOwnerProfile.payload));
+
+  const invalidOwnerPhone = await apiFetch(`/api/shops/${newShopId}/owner-profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Responsable test', phone: '00000000', email: merchantEmail }),
+  });
+  assert.equal(invalidOwnerPhone.response.status, 400, JSON.stringify(invalidOwnerPhone.payload));
 
   const invalidPinProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`, {
     method: 'PATCH',
@@ -1506,17 +1515,32 @@ test('new merchant registration flow is local and immediately usable', async () 
   const updatedOwnerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: billingEmail.toUpperCase(), pin_code: '830462' }),
+    body: JSON.stringify({
+      name: 'Responsable test',
+      phone: '+225 07 00 00 00 00',
+      email: billingEmail.toUpperCase(),
+      pin_code: '830462',
+    }),
   });
   assert.equal(updatedOwnerProfile.response.status, 200, JSON.stringify(updatedOwnerProfile.payload));
+  assert.equal(updatedOwnerProfile.payload.name, 'Responsable test');
+  assert.equal(updatedOwnerProfile.payload.phone, '+2250700000000');
   assert.equal(updatedOwnerProfile.payload.email, billingEmail);
   assert.equal(updatedOwnerProfile.payload.pin_updated, true);
   const verifiedOwnerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`);
+  assert.equal(verifiedOwnerProfile.payload.name, 'Responsable test');
+  assert.equal(verifiedOwnerProfile.payload.phone, '+2250700000000');
   assert.equal(verifiedOwnerProfile.payload.email, billingEmail);
+  const updatedMerchantDataExport = await apiFetch('/api/auth/merchant-data-export');
+  assert.equal(updatedMerchantDataExport.response.status, 200, JSON.stringify(updatedMerchantDataExport.payload));
+  assert.equal(updatedMerchantDataExport.payload.shop.owner_name, 'Responsable test');
+  assert.equal(updatedMerchantDataExport.payload.shop.owner_phone, '+2250700000000');
 
   const profileDb = new Database(TEST_DB_PATH, { readonly: true });
   try {
-    const savedProfile = profileDb.prepare('SELECT owner_email, pin_code_hash FROM shops WHERE id = ?').get(newShopId) as { owner_email: string; pin_code_hash: string };
+    const savedProfile = profileDb.prepare('SELECT owner_name, owner_phone, owner_email, pin_code_hash FROM shops WHERE id = ?').get(newShopId) as { owner_name: string; owner_phone: string; owner_email: string; pin_code_hash: string };
+    assert.equal(savedProfile.owner_name, 'Responsable test');
+    assert.equal(savedProfile.owner_phone, '+2250700000000');
     assert.equal(savedProfile.owner_email, billingEmail);
     assert.ok(savedProfile.pin_code_hash);
   } finally {
@@ -1535,11 +1559,13 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.equal(trialStart.payload.shop.subscription.trialDaysRemaining, 7);
   const persistedDatabase = new Database(TEST_DB_PATH, { readonly: true });
   try {
-    const savedPlan = persistedDatabase.prepare('SELECT selected_subscription_tier, subscription_status, trial_start, trial_end, subscription_expires_at FROM shops WHERE id = ?').get(newShopId) as { selected_subscription_tier: string; subscription_status: string; trial_start: string; trial_end: string; subscription_expires_at: string };
+    const savedPlan = persistedDatabase.prepare('SELECT selected_subscription_tier, subscription_status, trial_start, trial_end, subscription_expires_at, owner_name, owner_phone FROM shops WHERE id = ?').get(newShopId) as { selected_subscription_tier: string; subscription_status: string; trial_start: string; trial_end: string; subscription_expires_at: string; owner_name: string; owner_phone: string };
     assert.equal(savedPlan.selected_subscription_tier, 'standard');
     assert.equal(savedPlan.subscription_status, 'trialing');
     assert.ok(savedPlan.trial_start);
     assert.equal(savedPlan.trial_end, savedPlan.subscription_expires_at);
+    assert.equal(savedPlan.owner_name, 'Responsable test');
+    assert.equal(savedPlan.owner_phone, '+2250700000000');
   } finally {
     persistedDatabase.close();
   }

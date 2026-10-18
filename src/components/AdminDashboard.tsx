@@ -1179,17 +1179,17 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         <div className="grid min-w-0 gap-3 sm:gap-4 lg:grid-cols-1 lg:items-start">
-        <nav aria-label={adminRole === 'super_admin' ? 'Navigation super-admin' : 'Navigation administration'} className="admin-sidebar grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white/90 p-2 backdrop-blur-sm sm:grid-cols-2 lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-64 lg:flex-col lg:gap-3 lg:overflow-y-auto lg:rounded-none lg:border-0 lg:px-4 lg:py-6">
+        <nav aria-label={adminRole === 'super_admin' ? 'Navigation super-admin' : 'Navigation administration'} className="admin-sidebar flex max-w-full min-w-0 items-start gap-2 overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200 bg-white/90 p-2 backdrop-blur-sm lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:w-64 lg:flex-col lg:gap-3 lg:overflow-x-hidden lg:overflow-y-auto lg:rounded-none lg:border-0 lg:px-4 lg:py-6">
           <div className="mb-3 hidden px-3 pt-2 lg:block">
             <p className="text-2xl font-black tracking-tight text-white">MaTable.ci</p>
             <p className="mt-1 text-sm text-white/70">{adminRole === 'super_admin' ? 'Super-Admin · Tour de contrôle' : 'Espace vérification'}</p>
           </div>
           {adminNavigationGroups.map((group) => (
-            <section key={group.label} className="min-w-0">
+            <section key={group.label} className="min-w-max shrink-0 lg:min-w-0 lg:shrink">
               <h2 className="px-2 pb-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">{group.label}</h2>
-              <div className="space-y-1">
+              <div className="flex gap-1 lg:flex-col">
                 {group.items.map(({ id, label, icon: Icon }) => (
-                  <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-10 w-full min-w-0 items-center justify-start gap-2 rounded-lg border px-2 py-2 text-left text-[11px] font-bold transition sm:min-h-11 sm:px-3 sm:text-sm ${adminView === id ? 'border-transparent bg-[#176b55] text-white shadow-sm' : 'border-transparent bg-transparent text-white/90 hover:bg-[#176b55] hover:text-white'}`}>
+                  <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-10 w-auto min-w-max shrink-0 items-center justify-start gap-2 whitespace-nowrap rounded-lg border px-2 py-2 text-left text-[11px] font-bold transition lg:min-h-11 lg:w-full lg:min-w-0 lg:whitespace-normal lg:px-3 lg:text-sm ${adminView === id ? 'border-transparent bg-[#176b55] text-white shadow-sm' : 'border-transparent bg-transparent text-white/90 hover:bg-[#176b55] hover:text-white'}`}>
                     <Icon className="h-4 w-4 shrink-0" /><span className="min-w-0 break-words">{label}</span>
                   </button>
                 ))}

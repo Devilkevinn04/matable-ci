@@ -36,7 +36,7 @@ const sqliteSchema = `
     subscription_status TEXT NOT NULL DEFAULT 'active', trial_start TEXT, trial_end TEXT,
     last_notification_sent_at TEXT, whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
     whatsapp_subscription_reminders_consent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
-    city TEXT, owner_email TEXT, subscription_tier TEXT NOT NULL, theme_config TEXT, opening_hours TEXT,
+    city TEXT, owner_name TEXT, owner_phone TEXT, owner_email TEXT, subscription_tier TEXT NOT NULL, theme_config TEXT, opening_hours TEXT,
     owner_access_token_hash TEXT
   );
   CREATE TABLE IF NOT EXISTS merchant_account_consents (
@@ -188,6 +188,8 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'featured_until', 'TEXT');
   addColumn('shops', 'opening_hours', 'TEXT');
   addColumn('shops', 'owner_email', 'TEXT');
+  addColumn('shops', 'owner_name', 'TEXT');
+  addColumn('shops', 'owner_phone', 'TEXT');
   addColumn('shops', 'owner_access_token_hash', 'TEXT');
   addColumn('shops', 'payment_status', "TEXT DEFAULT 'approved'");
   addColumn('shops', 'payment_deadline_at', 'TEXT');
@@ -327,7 +329,7 @@ const postgresMigrations = [
     subscription_status TEXT NOT NULL DEFAULT 'active', trial_start TEXT, trial_end TEXT,
     last_notification_sent_at TEXT, whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
     whatsapp_subscription_reminders_consent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
-    city TEXT, owner_email TEXT, subscription_tier TEXT NOT NULL, theme_config JSONB, opening_hours JSONB,
+    city TEXT, owner_name TEXT, owner_phone TEXT, owner_email TEXT, subscription_tier TEXT NOT NULL, theme_config JSONB, opening_hours JSONB,
     owner_access_token_hash TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS merchant_account_consents (
@@ -485,6 +487,8 @@ const postgresMigrations = [
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS opening_hours JSONB',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_access_token_hash TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_email TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_name TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_phone TEXT',
   'CREATE INDEX IF NOT EXISTS idx_products_shop_id ON products(shop_id)',
   'CREATE INDEX IF NOT EXISTS idx_products_shop_available ON products(shop_id, is_available)',
   'CREATE INDEX IF NOT EXISTS idx_orders_shop_created_at ON orders(shop_id, created_at DESC)',

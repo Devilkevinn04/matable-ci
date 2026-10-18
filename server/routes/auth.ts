@@ -787,7 +787,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
         `SELECT id, name, slug, whatsapp_number, theme_color, welcome_message, is_open, is_active,
           publication_status, featured_until, merchant_verification_status, selected_subscription_tier,
           subscription_expires_at, subscription_status, trial_start, trial_end, created_at, category,
-          city, owner_email, theme_config, opening_hours
+          city, owner_name, owner_phone, owner_email, theme_config, opening_hours
          FROM shops WHERE id = ?`,
         [shopId],
       ),

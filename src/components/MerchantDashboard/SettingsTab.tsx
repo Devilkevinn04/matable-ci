@@ -25,6 +25,8 @@ interface SettingsTabProps {
 export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const [showPlanChooser, setShowPlanChooser] = useState(false);
   const [merchantDataExporting, setMerchantDataExporting] = useState(false);
+  const [ownerName, setOwnerName] = useState('');
+  const [ownerPhone, setOwnerPhone] = useState('');
   const [ownerEmail, setOwnerEmail] = useState('');
   const [ownerEmailLoading, setOwnerEmailLoading] = useState(false);
   const [ownerProfileSaving, setOwnerProfileSaving] = useState(false);
@@ -70,7 +72,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
     : getSubscriptionProductLimit(currentShop.subscription?.plan);
   const currentPhotoLimit = getSubscriptionProductPhotoLimit(currentShop.subscription?.plan);
   const settingsCopy: Record<typeof settingsSubTab, { eyebrow: string; title: string; description: string }> = {
-    profile: { eyebrow: 'Compte', title: 'Profil et sécurité', description: 'Gérez votre e-mail de facturation, votre code PIN et vos données personnelles.' },
+    profile: { eyebrow: 'Compte', title: 'Profil personnel', description: 'Gérez vos coordonnées personnelles, votre e-mail de facturation et la sécurité de votre accès.' },
     themes: { eyebrow: 'Ma boutique', title: 'Apparence de la vitrine', description: 'Personnalisez les couleurs, les images et la présentation de votre boutique.' },
     general: { eyebrow: 'Ma boutique', title: 'Informations de la boutique', description: 'Gardez vos coordonnées, votre contact et vos informations de livraison à jour.' },
     hours: { eyebrow: 'Ma boutique', title: 'Horaires et disponibilité', description: 'Définissez les jours et heures pendant lesquels vos clients peuvent commander.' },
@@ -86,13 +88,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
     if (settingsSubTab !== 'profile' || !currentShop) return;
     let cancelled = false;
     setOwnerEmail('');
+    setOwnerName('');
+    setOwnerPhone('');
     setOwnerEmailLoading(true);
     setOwnerProfileError('');
     fetch(`/api/shops/${currentShop.id}/owner-profile`, { credentials: 'include', cache: 'no-store' })
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Impossible de charger le profil.');
-        if (!cancelled) setOwnerEmail(data.email || '');
+        if (!cancelled) {
+          setOwnerName(data.name || '');
+          setOwnerPhone(data.phone || '');
+          setOwnerEmail(data.email || '');
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled) setOwnerProfileError(error instanceof Error ? error.message : 'Impossible de charger le profil.');
@@ -113,10 +121,17 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: ownerEmail.trim(), pin_code: settingsNewPin.trim() || undefined }),
+        body: JSON.stringify({
+          name: ownerName.trim(),
+          phone: ownerPhone.trim(),
+          email: ownerEmail.trim(),
+          pin_code: settingsNewPin.trim() || undefined,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible d’enregistrer le profil.');
+      setOwnerName(data.name || '');
+      setOwnerPhone(data.phone || '');
       setOwnerEmail(data.email);
       setSettingsNewPin('');
       toast.success(data.pin_updated ? 'Profil enregistré et code PIN modifié.' : 'Profil enregistré.');
@@ -154,7 +169,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
     <>
 {/* TAB 4: SETTINGS & THEMES */}
 
-          <div className="space-y-5">
+          <div className="max-w-5xl space-y-5">
             <header className="flex flex-col gap-4 rounded-3xl border border-[#e7dfd3] bg-white p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1D6B57]">{activeSettingsCopy.eyebrow} · Paramètres</p>
@@ -178,31 +193,60 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
             </section>}
 
             {settingsSubTab === 'profile' && (
-              <form onSubmit={saveOwnerProfile} className="max-w-3xl space-y-5 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
+              <form onSubmit={saveOwnerProfile} className="space-y-5 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
                 <div>
-                  <h3 className="text-base font-extrabold text-[#211712]">Coordonnées du propriétaire</h3>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">Ces informations restent privées et ne sont pas affichées sur la vitrine publique.</p>
+                  <h3 className="text-base font-extrabold text-[#211712]">Mes coordonnées personnelles</h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">Ces informations restent privées et sont distinctes du nom et du WhatsApp affichés sur la vitrine.</p>
                 </div>
                 {ownerProfileError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">{ownerProfileError}</p>}
-                <label className="block text-sm font-semibold text-slate-800">
-                  E-mail de facturation
-                  <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Requis par le checkout KadevPay/Paystack et utilisé pour vous envoyer le reçu du paiement.</span>
-                  <input
-                    type="email"
-                    autoComplete="email"
-                    required
-                    maxLength={254}
-                    value={ownerEmail}
-                    onChange={(event) => setOwnerEmail(event.target.value)}
-                    disabled={ownerEmailLoading || ownerProfileSaving}
-                    placeholder="vous@exemple.ci"
-                    className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/15 disabled:bg-slate-50"
-                  />
-                </label>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <label className="block text-sm font-semibold text-slate-800">
+                    Nom complet
+                    <input
+                      type="text"
+                      autoComplete="name"
+                      maxLength={100}
+                      value={ownerName}
+                      onChange={(event) => setOwnerName(event.target.value)}
+                      disabled={ownerEmailLoading || ownerProfileSaving}
+                      placeholder="Votre nom et prénom"
+                      className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/15 disabled:bg-slate-50"
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-800">
+                    Téléphone personnel
+                    <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Facultatif, format ivoirien. Ne change pas le WhatsApp public ni votre identifiant.</span>
+                    <input
+                      type="tel"
+                      autoComplete="tel"
+                      inputMode="tel"
+                      maxLength={20}
+                      value={ownerPhone}
+                      onChange={(event) => setOwnerPhone(event.target.value)}
+                      disabled={ownerEmailLoading || ownerProfileSaving}
+                      placeholder="+225 07 00 00 00 00"
+                      className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/15 disabled:bg-slate-50"
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-800">
+                    E-mail de facturation
+                    <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Requis pour le paiement et l’envoi des reçus.</span>
+                    <input
+                      type="email"
+                      autoComplete="email"
+                      required
+                      maxLength={254}
+                      value={ownerEmail}
+                      onChange={(event) => setOwnerEmail(event.target.value)}
+                      disabled={ownerEmailLoading || ownerProfileSaving}
+                      placeholder="vous@exemple.ci"
+                      className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/15 disabled:bg-slate-50"
+                    />
+                  </label>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <label className="block text-sm font-bold text-slate-800">Modifier le code PIN</label>
                   <p className="mt-1 text-xs leading-5 text-slate-600">PIN à 6 chiffres utilisé pour accéder à l’espace commerçant. Laissez vide pour le conserver.</p>
-                  <div className="relative mt-3 max-w-sm">
+                  <div className="relative mt-3">
                     <input
                       type={showSettingsPin ? 'text' : 'password'}
                       inputMode="numeric"
@@ -213,12 +257,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       value={settingsNewPin}
                       onChange={(event) => setSettingsNewPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
                       placeholder="Nouveau PIN à 6 chiffres"
+                      disabled={ownerEmailLoading || ownerProfileSaving}
                       className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-12 text-sm font-mono tracking-widest outline-none focus:border-[#176b55]"
                     />
-                    <button type="button" onClick={() => setShowSettingsPin((visible) => !visible)} aria-label={showSettingsPin ? 'Masquer le PIN' : 'Afficher le PIN'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
+                    <button type="button" disabled={ownerEmailLoading || ownerProfileSaving} onClick={() => setShowSettingsPin((visible) => !visible)} aria-label={showSettingsPin ? 'Masquer le PIN' : 'Afficher le PIN'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-50">
                       {showSettingsPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                </div>
                 </div>
                 <button type="submit" disabled={ownerEmailLoading || ownerProfileSaving} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1D6B57] px-5 py-3 text-sm font-extrabold text-white shadow-sm transition-colors hover:bg-[#155544] disabled:cursor-wait disabled:opacity-60">
                   {ownerProfileSaving ? 'Enregistrement…' : 'Enregistrer le profil'}

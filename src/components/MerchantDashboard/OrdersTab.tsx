@@ -44,9 +44,15 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
 {/* TAB 2: ORDERS MANAGEMENT */}
 
           <div className="space-y-4">
+            <header>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-800">Espace de vente</p>
+              <h2 className="mt-1 text-xl font-black text-slate-900">Commandes</h2>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Traitez les demandes clients et suivez leur progression.</p>
+            </header>
+
             {/* Orders Statistics Cards */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4">
+            <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:grid-cols-3">
+              <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4 min-[380px]:col-span-2 sm:col-span-1">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eaf4ef] font-bold text-[#1D6B57]">
                   <DollarSign className="w-5 h-5" />
                 </div>

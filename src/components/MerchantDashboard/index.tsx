@@ -14,6 +14,7 @@ import {
   Send,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
   UserPlus,
   X,
   UtensilsCrossed,
@@ -118,6 +119,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const merchantState = useMerchantDashboard(onOpenStorefront, openRegistration);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
   const [isHeaderCompact, setIsHeaderCompact] = useState(false);
+  const [isSetupChecklistExpanded, setIsSetupChecklistExpanded] = useState(false);
   const [isIdentityGuideOpen, setIsIdentityGuideOpen] = useState(false);
   const [subscriptionReminderDay, setSubscriptionReminderDay] = useState<number | null>(null);
   const [dashboardSearch, setDashboardSearch] = useState('');
@@ -543,7 +545,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     {
       label: 'Compte',
       items: [
-        { id: 'profile', label: 'Profil et sécurité', icon: Key },
+        { id: 'profile', label: 'Profil personnel', icon: Key },
       ],
     },
     {
@@ -873,7 +875,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         <section className="mx-auto max-w-7xl px-4 pt-5 lg:ml-64 lg:max-w-none">
           <form onSubmit={handleDashboardSearch} role="search" className="mb-4">
             <label className="sr-only" htmlFor="merchant-dashboard-search">Rechercher une commande, un produit ou un client</label>
-            <div className="relative flex max-w-4xl items-center">
+            <div className="relative flex max-w-4xl items-center gap-2">
               <Search className="pointer-events-none absolute left-4 h-4 w-4 text-slate-500" />
               <input
                 id="merchant-dashboard-search"
@@ -881,9 +883,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 value={dashboardSearch}
                 onChange={(event) => setDashboardSearch(event.target.value)}
                 placeholder="Rechercher une commande, un produit, un client"
-                className="min-h-12 w-full rounded-full border border-[#e7dfd3] bg-white py-3 pl-11 pr-28 text-sm shadow-sm focus:border-[#176b55] focus:outline-none"
+                className="min-h-12 min-w-0 w-full rounded-full border border-[#e7dfd3] bg-white py-3 pl-11 pr-4 text-sm shadow-sm focus:border-[#176b55] focus:outline-none"
               />
-              <button type="submit" className="absolute right-1.5 min-h-9 rounded-full bg-[#0f4d3d] px-4 text-xs font-bold text-white hover:bg-[#176b55]">Rechercher</button>
+              <button type="submit" className="min-h-10 shrink-0 rounded-full bg-[#0f4d3d] px-3 text-xs font-bold text-white hover:bg-[#176b55] sm:px-4">Rechercher</button>
             </div>
           </form>
           <div className="flex flex-col gap-4 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
@@ -897,7 +899,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         </section>
       )}
 
-      {(identityVerificationRequired || subscriptionNeedsAttention || isAdminSuspended || actionableOrderCount > 0 || outOfStockCount > 0 || lowStockCount > 0) && (
+      {activeTab === 'overview' && (identityVerificationRequired || subscriptionNeedsAttention || isAdminSuspended || actionableOrderCount > 0 || outOfStockCount > 0 || lowStockCount > 0) && (
         <section aria-labelledby="merchant-priority-notifications" aria-live="polite" className="mx-auto w-full max-w-7xl space-y-2 px-4 pt-3 lg:ml-64 lg:w-auto lg:max-w-none">
           <h2 id="merchant-priority-notifications" className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">À faire en priorité</h2>
           {identityVerificationRequired && (
@@ -939,16 +941,28 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Lancement boutique</p>
               <h2 id="setup-checklist-title" className="mt-1 text-xl font-black text-[#211712] sm:text-2xl">Votre vitrine est presque prête</h2>
             </div>
-            <div className="flex items-center gap-2 self-start rounded-full bg-white/80 px-3 py-1.5 shadow-sm ring-1 ring-[#e8e0d6] sm:self-auto">
-              <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Progression</span>
-              <span className="rounded-full bg-[#eaf4ef] px-2.5 py-1 text-xs font-black text-[#155544]">
-                {[Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), Boolean(currentShop.theme_config?.logo_url), products.length > 0, isShopVerified, hasActiveSubscription, isShopPublished].filter(Boolean).length}/6
-              </span>
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <div className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 shadow-sm ring-1 ring-[#e8e0d6]">
+                <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Progression</span>
+                <span className="rounded-full bg-[#eaf4ef] px-2.5 py-1 text-xs font-black text-[#155544]">
+                  {[Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), Boolean(currentShop.theme_config?.logo_url), products.length > 0, isShopVerified, hasActiveSubscription, isShopPublished].filter(Boolean).length}/6
+                </span>
+              </div>
+              <button
+                type="button"
+                aria-expanded={isSetupChecklistExpanded}
+                aria-controls="merchant-setup-steps"
+                onClick={() => setIsSetupChecklistExpanded((expanded) => !expanded)}
+                className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[#155544] lg:hidden"
+              >
+                {isSetupChecklistExpanded ? 'Masquer les étapes' : 'Voir les étapes'}
+                <ChevronDown className={`h-4 w-4 transition-transform ${isSetupChecklistExpanded ? 'rotate-180' : ''}`} />
+              </button>
             </div>
           </div>
 
           <div className="mt-5 grid gap-3 lg:grid-cols-[1.25fr_0.75fr]">
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div id="merchant-setup-steps" className={`grid gap-2 sm:grid-cols-2 ${isSetupChecklistExpanded ? 'max-lg:grid' : 'max-lg:hidden'}`}>
               {[
                 { label: 'Nom et coordonnées', detail: 'Nom, WhatsApp et localisation', done: Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), action: () => { setActiveTab('settings'); setSettingsSubTab('general'); } },
                 { label: 'Logo de la boutique', detail: 'Aidez vos clients à vous reconnaître', done: Boolean(currentShop.theme_config?.logo_url), action: () => { setActiveTab('settings'); setSettingsSubTab('themes'); } },

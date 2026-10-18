@@ -51,7 +51,11 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ email: shop.owner_email || '' });
+    return res.json({
+      name: shop.owner_name || '',
+      phone: shop.owner_phone || '',
+      email: shop.owner_email || '',
+    });
   });
 
   router.patch('/:id/owner-profile', requireMerchantOwnShop, async (req, res) => {
@@ -61,6 +65,22 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
       return res.status(400).json({ error: 'Saisissez une adresse e-mail valide.' });
+    }
+    const name = Object.prototype.hasOwnProperty.call(req.body || {}, 'name')
+      ? sanitizeTextField(typeof req.body.name === 'string' ? req.body.name.trim() : '', 100)
+      : shop.owner_name || '';
+    const rawPhone = Object.prototype.hasOwnProperty.call(req.body || {}, 'phone')
+      ? (typeof req.body.phone === 'string' ? req.body.phone.trim() : '')
+      : shop.owner_phone || '';
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'name') && typeof req.body.name !== 'string') {
+      return res.status(400).json({ error: 'Le nom du responsable est invalide.' });
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'phone') && typeof req.body.phone !== 'string') {
+      return res.status(400).json({ error: 'Le téléphone personnel est invalide.' });
+    }
+    const phone = rawPhone ? normalizeWhatsAppPhone(rawPhone) : null;
+    if (rawPhone && !phone) {
+      return res.status(400).json({ error: 'Saisissez un numéro ivoirien valide au format 01, 05 ou 07.' });
     }
     const duplicateEmail = await dbAll<{ id: number }>(
       'SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?) AND id <> ? LIMIT 1',
@@ -76,12 +96,18 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       return res.status(400).json({ error: 'Le code PIN est trop simple ou invalide. Utilisez un PIN de 6 chiffres fort.' });
     }
     if (hasPinCode) {
-      await dbRun('UPDATE shops SET owner_email = ?, pin_code_hash = ? WHERE id = ?', [email, hashPin(pinCode), shop.id]);
+      await dbRun(
+        'UPDATE shops SET owner_name = ?, owner_phone = ?, owner_email = ?, pin_code_hash = ? WHERE id = ?',
+        [name || null, phone, email, hashPin(pinCode), shop.id],
+      );
     } else {
-      await dbRun('UPDATE shops SET owner_email = ? WHERE id = ?', [email, shop.id]);
+      await dbRun(
+        'UPDATE shops SET owner_name = ?, owner_phone = ?, owner_email = ? WHERE id = ?',
+        [name || null, phone, email, shop.id],
+      );
     }
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ success: true, email, pin_updated: hasPinCode });
+    return res.json({ success: true, name: name || '', phone: phone || '', email, pin_updated: hasPinCode });
   });
 
   router.post('/:id/start-trial', requireMerchantOwnShop, async (req, res) => {

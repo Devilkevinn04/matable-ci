@@ -54,6 +54,8 @@ export interface ShopRecord {
   created_at: string;
   category: ShopCategory;
   city?: string;
+  owner_name?: string | null;
+  owner_phone?: string | null;
   owner_email?: string | null;
   opening_hours?: ShopOpeningHours;
   owner_access_token_hash?: string | null;
