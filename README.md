@@ -14,7 +14,7 @@ Application React + Vite + Express pour la gestion de vitrines locales, de comma
 - Le prix d’une commande est recalculé côté serveur à partir du catalogue et des options sélectionnées.
 - La publication (`publication_status`) est distincte de l’ouverture (`is_open`). Une boutique n’est publique que si elle est publiée, éligible KYC et couverte par un essai ou un abonnement actif, ou encore dans ses deux jours de grâce après échéance. Elle est masquée ensuite sans suppression de ses données ni blocage de l’accès marchand ; `is_open` contrôle uniquement la prise de commandes.
 - Le stockage local et les tests utilisent SQLite (`better-sqlite3`). En production (`NODE_ENV=production`), le serveur utilise PostgreSQL via `DATABASE_URL` (Neon recommandé). Les écritures de commandes et de stock sont transactionnelles.
-- Les sessions marchand et super-admin sont sécurisées via cookies `HttpOnly` et contrôles de sécurité sur les tentatives.
+- Les sessions marchand et administrateur sont sécurisées via cookies `HttpOnly` et contrôles de sécurité sur les tentatives.
 - La gestion de stock est protégée contre les oversells concurrentiels.
 - Les nouvelles boutiques démarrent en `not_started`. Elles peuvent commencer un essai Standard de 7 jours (2 produits maximum), ou payer directement Standard (3 000), Premium (5 000) ou Pro (8 000 FCFA/mois).
 - Pendant l’essai, l’identité est vérifiée avant l’accès au dashboard. Une boutique vérifiée doit ensuite être publiée explicitement ; son ouverture commerciale reste contrôlée séparément.
@@ -28,13 +28,22 @@ Les limites sont vérifiées côté serveur : Standard permet 30 produits et 2 p
 
 Les fonctions suivantes ne sont pas encore disponibles dans le dashboard : comptes d’équipe, import CSV des produits, export CSV des commandes, codes promotionnels, programme de parrainage et téléchargement d’un QR code de boutique. Le partage actuel donne accès aux liens de vitrine et d’accès privé ; il ne génère pas encore de kit visuel personnalisé.
 
+## Administration
+
+Le tableau de bord `/admin` propose deux rôles distincts, sélectionnés au moment de la connexion :
+
+- **Super-admin** : accès complet aux outils d’administration, notamment aux paiements et abonnements, aux liens d’accès des boutiques, au mode maintenance, aux annonces Push et à la suppression de boutiques.
+- **Admin de vérification** : accès à la file de vérification d’identité et à la modération de contenu. Il dispose aussi d’un accès limité à certaines données de boutiques, commandes, clients et statistiques, ainsi qu’à des actions opérationnelles autorisées. Il ne peut pas gérer les paiements ou les abonnements, supprimer des boutiques, créer des liens d’accès privés, modifier le mode maintenance ni publier des annonces Push.
+
+Les autorisations sont vérifiées côté serveur ; masquer une rubrique dans l’interface n’est pas le mécanisme de contrôle d’accès. Les deux rôles utilisent des clés indépendantes configurées uniquement sur le serveur. En production, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` sont obligatoires et doivent chacune être fortes, uniques, distinctes et comporter au moins 32 caractères. Configurez-les dans l’environnement de déploiement (par exemple les variables du service Render) ; ne les ajoutez pas au dépôt, au frontend, aux journaux ou aux captures d’écran.
+
 ## Démarrage local
 
 Prérequis : Node.js 22 LTS recommandé.
 
 1. Installer les dépendances :
    `npm install`
-2. Configurer le fichier `.env` à partir de `.env.example`
+2. Créer un fichier `.env` à partir de la section « Variables d’environnement » ci-dessous.
 3. Démarrer l’application :
    `npm run dev`
 
@@ -53,6 +62,7 @@ DATABASE_URL="postgresql://..."
 APP_URL="http://localhost:3000"
 TRUST_PROXY_HOPS="0"
 ADMIN_ACCESS_KEY="CHANGE_ME_ADMIN_KEY"
+VERIFICATION_ADMIN_ACCESS_KEY="CHANGE_ME_VERIFICATION_ADMIN_KEY"
 DIDIT_API_KEY=""
 DIDIT_WORKFLOW_ID=""
 DIDIT_WEBHOOK_SECRET=""
