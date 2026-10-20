@@ -113,11 +113,11 @@ export function AdminShopList({
                 <option value="all">Tous les statuts</option>
                 <option value="not_started">Non démarré</option>
                 <option value="trialing">Essai actif</option>
-                <option value="active">Actif</option>
+                <option value="active">Payé</option>
                 <option value="past_due">En période de grâce</option>
-                <option value="cancelled">Annulé</option>
+                <option value="cancelled">Résilié</option>
                 <option value="expired">Expiré</option>
-                <option value="suspended">Suspendu</option>
+                <option value="suspended">Accès abonnement suspendu</option>
               </select>
             </label>
           </div>
@@ -165,6 +165,7 @@ export function AdminShopList({
                     <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${shop.publication_status === 'active' ? 'bg-emerald-100 text-emerald-800' : shop.publication_status === 'suspended' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'}`}>
                       {shop.publication_status === 'active' ? 'Publiée' : shop.publication_status === 'suspended' ? 'Publication suspendue' : 'Brouillon'}
                     </span>
+                    {!shop.is_active && <span className="rounded-full bg-rose-100 px-2 py-1 text-[10px] font-bold text-rose-900">Boutique désactivée</span>}
                     <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${shop.subscription?.status === 'active' ? 'bg-emerald-100 text-emerald-800' : shop.subscription?.status === 'trialing' ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'}`}>
                       {shop.subscription?.status === 'trialing'
                         ? `Essai · ${shop.subscription.trialDaysRemaining} j`
@@ -207,8 +208,8 @@ export function AdminShopList({
                     <option value="60">60 jours</option>
                     <option value="90">90 jours</option>
                   </select>
-                  <button onClick={() => onToggleActive(shop.id)} className={`rounded-xl border px-3 py-2 text-xs font-extrabold ${shop.is_active ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
-                    {shop.is_active ? '● ON' : '○ OFF'}
+                  <button type="button" aria-label={`${shop.is_active ? 'Désactiver' : 'Réactiver'} la boutique ${shop.name}`} onClick={() => onToggleActive(shop.id)} className={`min-h-10 rounded-xl border px-3 py-2 text-xs font-extrabold ${shop.is_active ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                    {shop.is_active ? 'Désactiver' : 'Réactiver'}
                   </button>
                   {canDeleteShops && <button type="button" onClick={() => onRequestDelete({ id: shop.id, name: shop.name, slug: shop.slug })} aria-label={`Supprimer définitivement ${shop.name}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-extrabold text-rose-800 hover:bg-rose-50">
                     <Trash2 className="h-4 w-4" />Supprimer

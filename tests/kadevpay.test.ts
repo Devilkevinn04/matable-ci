@@ -296,6 +296,15 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   });
   assert.equal(pendingStatus.status, 200);
   assert.equal((await pendingStatus.json()).status, 'pending');
+  const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'kadevpay-test-admin-key' }),
+  });
+  assert.equal(adminLogin.status, 200);
+  const adminCookie = adminLogin.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(adminCookie);
+  const financeBeforePayment = await fetch(`${BASE_URL}/api/admin/payments?days=30`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
 
   const signature = createHmac('sha512', 'kadevpay-test-webhook-secret').update(webhookPayload).digest('hex');
   const sendWebhook = () => fetch(`${BASE_URL}/api/webhooks/kadevpay`, {
@@ -346,14 +355,6 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
 
   const unauthenticatedPayments = await fetch(`${BASE_URL}/api/admin/payments`);
   assert.equal(unauthenticatedPayments.status, 401);
-  const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key: 'kadevpay-test-admin-key' }),
-  });
-  assert.equal(adminLogin.status, 200);
-  const adminCookie = adminLogin.headers.get('set-cookie')?.split(';')[0];
-  assert.ok(adminCookie);
   const finance = await fetch(`${BASE_URL}/api/admin/payments?days=30`, { headers: { Cookie: adminCookie } });
   assert.equal(finance.status, 200);
   const financeData = await finance.json();
@@ -362,8 +363,10 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   assert.equal(financeData.summary.pending_count, 0);
   assert.equal(financeData.summary.failed_count, 1);
   assert.ok(financeData.summary.active_subscriptions >= 1);
-  assert.ok(financeData.summary.mrr >= 5000);
-  assert.ok(financeData.summary.mrr_by_tier.find((tier: { tier: string }) => tier.tier === 'premium')?.amount >= 5000);
+  assert.equal(financeData.summary.mrr - financeBeforePayment.summary.mrr, Math.round(50000 / 12));
+  const previousPremiumMrr = financeBeforePayment.summary.mrr_by_tier.find((tier: { tier: string }) => tier.tier === 'premium')?.amount || 0;
+  assert.equal(financeData.summary.mrr_by_tier.find((tier: { tier: string }) => tier.tier === 'premium')?.amount - previousPremiumMrr, Math.round(50000 / 12));
+  assert.equal(financeData.summary.mrr_estimated_subscriptions, financeBeforePayment.summary.mrr_estimated_subscriptions);
   assert.equal(financeData.summary.promotions.amount, 0);
   assert.equal(financeData.payments[0].shop_id, createdPayload.shop.id);
   assert.equal(financeData.payments[0].payment_type, 'subscription');
@@ -617,6 +620,27 @@ test('admin can review and extend expiring trials with a durable audit entry', a
     body: JSON.stringify({ days: 1, expected_trial_end: finalExtension.trial_end }),
   });
   assert.equal(extensionAtCap.status, 409);
+
+  testDb = new Database(TEST_DB_PATH);
+  try {
+    testDb.prepare(`INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at)
+      VALUES ('super_admin', 'trial_extended', ?, ?, ?)`)
+      .run(createdPayload.shop.id, JSON.stringify({ days: 5 }), new Date().toISOString());
+  } finally {
+    testDb.close();
+  }
+  const overLimitSubscriptions = await fetch(`${BASE_URL}/api/admin/subscriptions`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
+  const overLimitShop = overLimitSubscriptions.shops.find((shop: { id: number }) => shop.id === createdPayload.shop.id);
+  assert.equal(overLimitShop.trial_extension_days_used, 35);
+  assert.equal(overLimitShop.trial_extension_days_remaining, 0);
+  assert.equal(overLimitShop.trial_extension_over_limit, true);
+  const extensionAboveHistoricalCap = await fetch(`${BASE_URL}/api/admin/subscriptions/${createdPayload.shop.id}/extend-trial`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: JSON.stringify({ days: 1, expected_trial_end: finalExtension.trial_end }),
+  });
+  assert.equal(extensionAboveHistoricalCap.status, 409);
+  assert.match((await extensionAboveHistoricalCap.json()).error, /cumul historique de 35 jours/i);
 
   testDb = new Database(TEST_DB_PATH);
   try {

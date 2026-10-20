@@ -35,6 +35,7 @@ export interface AdminFinance {
     mrr: number;
     active_subscriptions: number;
     mrr_by_tier: { tier: string; count: number; amount: number }[];
+    mrr_estimated_subscriptions: number;
     active_trials: number;
     trials_expiring_7d: number;
     completed_trials: number;
@@ -80,6 +81,8 @@ export interface AdminSubscriptionShop {
   trial_days_remaining: number | null;
   trial_extension_days_used: number;
   trial_extension_days_remaining: number;
+  trial_extension_over_limit: boolean;
+  can_extend_trial: boolean;
   subscription_expires_at: string | null;
   trial_expiry_mismatch: boolean;
   next_renewal_at: string | null;
@@ -94,6 +97,7 @@ export interface AdminSubscriptions {
     mrr: number;
     active_subscriptions: number;
     mrr_by_tier: { tier: string; count: number; amount: number }[];
+    mrr_estimated_subscriptions: number;
     active_trials: number;
     trials_expiring_7d: number;
     completed_trials: number;
@@ -204,8 +208,8 @@ export const subscriptionStatusLabels: Record<string, string> = {
   trialing: 'Essai actif',
   active: 'Payé',
   expired: 'Expiré',
-  past_due: 'À régulariser',
-  suspended: 'Suspendu',
+  past_due: 'En période de grâce',
+  suspended: 'Accès abonnement suspendu',
   cancelled: 'Résilié',
   not_started: 'Non démarré',
 };

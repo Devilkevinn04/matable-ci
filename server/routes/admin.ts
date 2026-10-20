@@ -371,9 +371,35 @@ export function createAdminRouter(options: AdminRouterOptions) {
     const now = new Date();
     const shops = await loadShops();
     const states = shops.map((shop) => ({ shop, state: getSubscriptionState(shop, now) }));
+    const paidSubscriptionPayments = await dbAll<{
+      shop_id: number;
+      tier: string;
+      subscription_term: string;
+      amount: number;
+    }>(`
+      SELECT shop_id, tier, subscription_term, amount
+      FROM subscription_payment_intents
+      WHERE payment_type = 'subscription' AND status = 'paid' AND paid_at IS NOT NULL
+      ORDER BY paid_at DESC, id DESC
+    `);
+    const latestPaymentByShop = new Map<number, typeof paidSubscriptionPayments[number]>();
+    for (const payment of paidSubscriptionPayments) {
+      if (!latestPaymentByShop.has(Number(payment.shop_id))) {
+        latestPaymentByShop.set(Number(payment.shop_id), payment);
+      }
+    }
+    let mrrEstimatedSubscriptions = 0;
     const mrrByTier = (['standard', 'premium', 'pro'] as const).map((tier) => {
-      const count = states.filter(({ state }) => state.status === 'active' && state.plan === tier).length;
-      return { tier, count, amount: count * getSubscriptionPlanConfig(tier).amount };
+      const activeShops = states.filter(({ state }) => state.status === 'active' && state.plan === tier);
+      const amount = activeShops.reduce((total, { shop }) => {
+        const payment = latestPaymentByShop.get(shop.id);
+        if (payment?.tier === tier && (payment.subscription_term === 'monthly' || payment.subscription_term === 'annual')) {
+          return total + Number(payment.amount) / (payment.subscription_term === 'annual' ? 12 : 1);
+        }
+        mrrEstimatedSubscriptions += 1;
+        return total + getSubscriptionPlanConfig(tier).amount;
+      }, 0);
+      return { tier, count: activeShops.length, amount: Math.round(amount) };
     });
     const activeTrials = states.filter(({ state }) => state.status === 'trialing');
     const expiringTrials = activeTrials.filter(({ state }) => state.trialDaysRemaining <= 7);
@@ -393,6 +419,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       mrr,
       active_subscriptions: mrrByTier.reduce((sum, tier) => sum + tier.count, 0),
       mrr_by_tier: mrrByTier,
+      mrr_estimated_subscriptions: mrrEstimatedSubscriptions,
       active_trials: activeTrials.length,
       trials_expiring_7d: expiringTrials.length,
       completed_trials: completedTrials.length,
@@ -695,8 +722,9 @@ export function createAdminRouter(options: AdminRouterOptions) {
        WHERE action = 'trial_extended' AND shop_id IS NOT NULL ORDER BY created_at`,
     );
     const extensionDaysByShopId = new Map<number, number>();
+    const shopsById = new Map(shops.map((shop) => [shop.id, shop]));
     for (const entry of extensionLogs) {
-      const shop = shops.find((candidate) => candidate.id === Number(entry.shop_id));
+      const shop = shopsById.get(Number(entry.shop_id));
       if (!shop?.trial_start || Date.parse(entry.created_at) < Date.parse(shop.trial_start)) continue;
       extensionDaysByShopId.set(
         shop.id,
@@ -736,6 +764,11 @@ export function createAdminRouter(options: AdminRouterOptions) {
         trial_days_remaining: subscription.status === 'trialing' ? subscription.trialDaysRemaining : null,
         trial_extension_days_used: extensionDaysByShopId.get(shop.id) || 0,
         trial_extension_days_remaining: Math.max(0, maxTrialExtensionDays - (extensionDaysByShopId.get(shop.id) || 0)),
+        trial_extension_over_limit: (extensionDaysByShopId.get(shop.id) || 0) > maxTrialExtensionDays,
+        can_extend_trial: Boolean(shop.trial_start && shop.trial_end && (
+          shop.subscription_status === 'trialing'
+          || shop.subscription_status === 'expired' && !shop.subscription_expires_at
+        )),
         subscription_expires_at: subscription.expiresAt,
         trial_expiry_mismatch: trialExpiryMismatch,
         next_renewal_at: subscription.status === 'trialing' ? subscription.trialEnd : subscription.expiresAt,
@@ -823,7 +856,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       );
       const daysUsed = priorExtensions.reduce((total, entry) => total + getTrialExtensionDays(entry.details), 0);
       const daysRemaining = Math.max(0, maxTrialExtensionDays - daysUsed);
-      if (days > daysRemaining) return { status: 'limit' as const, daysRemaining };
+      if (days > daysRemaining) return { status: 'limit' as const, daysRemaining, daysUsed };
 
       const update = await run(
         `UPDATE shops
@@ -848,7 +881,9 @@ export function createAdminRouter(options: AdminRouterOptions) {
       return res.status(409).json({
         error: result.daysRemaining
           ? `Il ne reste que ${result.daysRemaining} jour(s) de prolongation autorisés pour cet essai.`
-          : 'Le plafond de 30 jours de prolongation pour cet essai est atteint.',
+          : result.daysUsed > maxTrialExtensionDays
+            ? `Le cumul historique de ${result.daysUsed} jours dépasse déjà le plafond de 30 jours. Aucune nouvelle prolongation n’est autorisée.`
+            : 'Le plafond de 30 jours de prolongation pour cet essai est atteint.',
         days_remaining: result.daysRemaining,
       });
     }
@@ -1173,8 +1208,8 @@ export function createAdminRouter(options: AdminRouterOptions) {
       || Number.isNaN(Date.parse(`${expiryDate}T00:00:00.000Z`))
       || new Date(`${expiryDate}T00:00:00.000Z`).toISOString().slice(0, 10) !== expiryDate
       || typeof expectedExpiry !== 'string' && expectedExpiry !== null
-      || reason.length < 3) {
-      return res.status(400).json({ error: 'Une date valide, le statut actuel et un motif (au moins 3 caractères) sont requis.' });
+      || reason.length < 10) {
+      return res.status(400).json({ error: 'Une date valide, le statut actuel et un motif explicite (au moins 10 caractères) sont requis.' });
     }
     const shop = await getShop(shopId);
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });

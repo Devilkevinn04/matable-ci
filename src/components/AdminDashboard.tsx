@@ -92,6 +92,7 @@ const adminAuditActionLabels: Record<string, string> = {
   subscription_reminder_failed: 'Échec du rappel d’abonnement',
   subscription_reminder_sent: 'Rappel d’abonnement envoyé',
   trial_expiry_reconciled: 'Échéance d’essai synchronisée',
+  admin_shop_operation: 'Opération sur la boutique',
   trial_extended: 'Essai prolongé',
   trial_reminder_prepared: 'Rappel d’essai préparé',
 };
@@ -629,11 +630,11 @@ export const AdminDashboard: React.FC = () => {
 
   const handleSetSubscriptionExpiry = async (shop: AdminSubscriptionShop) => {
     const draft = expiryDrafts[shop.id];
-    if (!draft?.date || draft.reason.trim().length < 3) {
-      showNotice('Choisissez une date et indiquez un motif d’au moins 3 caractères.');
+    if (!draft?.date || draft.reason.trim().length < 10) {
+      showNotice('Choisissez une date et indiquez un motif explicite d’au moins 10 caractères.');
       return;
     }
-    if (!window.confirm(`Enregistrer le ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(`${draft.date}T12:00:00`))} comme échéance de ${shop.name} ? Vérifiez au préalable le paiement et la période couverte. Cette opération sera journalisée.`)) return;
+    if (!window.confirm(`Enregistrer le ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(`${draft.date}T12:00:00`))} comme date de fin d’accès de ${shop.name} ? Vérifiez au préalable le paiement et la période couverte. Cette action ne crée pas d’encaissement et sera journalisée.`)) return;
     setSubscriptionActionShopId(shop.id);
     try {
       const response = await fetch(`/api/admin/subscriptions/${shop.id}/set-expiry`, {
@@ -763,14 +764,14 @@ export const AdminDashboard: React.FC = () => {
     const shop = shops.find((item) => item.id === shopId);
     if (!shop) return;
     const reason = window.prompt(shop.is_active
-      ? `Motif obligatoire pour suspendre ${shop.name} :`
-      : `Motif obligatoire pour réactiver ${shop.name} :`);
+      ? `Motif obligatoire pour désactiver la boutique ${shop.name} :`
+      : `Motif obligatoire pour réactiver la boutique ${shop.name} :`);
     if (reason === null) return;
     if (reason.trim().length < 3) {
       showNotice('Saisissez un motif d’au moins 3 caractères.');
       return;
     }
-    if (!window.confirm(`${shop.is_active ? 'Suspendre' : 'Réactiver'} la boutique ${shop.name} ? Le motif sera conservé dans le journal admin.`)) return;
+    if (!window.confirm(`${shop.is_active ? 'Désactiver' : 'Réactiver'} la boutique ${shop.name} ? Le motif sera conservé dans le journal admin.`)) return;
     try {
       const res = await fetch(`/api/admin/shops/${shopId}/toggle-active`, {
         method: 'PATCH',
@@ -783,7 +784,7 @@ export const AdminDashboard: React.FC = () => {
           prev.map(s => (s.id === shopId ? { ...s, ...data.shop } : s))
         );
         if (adminRole === 'super_admin') await fetchSubscriptions();
-        showNotice(shop.is_active ? 'Boutique suspendue avec motif enregistré.' : 'Boutique réactivée avec motif enregistré.');
+        showNotice(shop.is_active ? 'Boutique désactivée avec motif enregistré.' : 'Boutique réactivée avec motif enregistré.');
       } else {
         showNotice(data.error || 'Impossible de mettre à jour le statut.');
       }
@@ -1539,7 +1540,7 @@ export const AdminDashboard: React.FC = () => {
         {adminView === 'finance' && adminRole === 'super_admin' && (
           <section aria-labelledby="admin-finance-title" className="space-y-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div><p className="text-xs font-bold uppercase text-emerald-800">Recettes MaTable.ci</p><h2 id="admin-finance-title" className="mt-1 text-xl font-black text-slate-900">Argent</h2><p className="mt-1 text-xs text-slate-500">Le MRR ne compte que les abonnements actifs. Les encaissements suivent les confirmations KadevPay.</p></div>
+              <div><p className="text-xs font-bold uppercase text-emerald-800">Recettes MaTable.ci</p><h2 id="admin-finance-title" className="mt-1 text-xl font-black text-slate-900">Argent</h2><p className="mt-1 text-xs text-slate-500">MRR estimé des abonnements au statut actif : paiement annuel réparti sur 12 mois, tarif catalogue utilisé si aucun paiement n’est enregistré. Les encaissements ne comptent que les confirmations KadevPay.</p></div>
               <select aria-label="Période du journal financier" value={financeDays} onChange={(event) => { setFinanceDays(Number(event.target.value)); setFinancePaymentsPage(0); }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">
                 <option value={30}>30 derniers jours</option>
                 <option value={90}>90 derniers jours</option>
@@ -1549,7 +1550,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
             {!finance ? <p role="status" className="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500">Chargement des données financières…</p> : <>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <article className="rounded-lg border border-emerald-200 bg-emerald-50 p-4"><p className="text-xs font-semibold text-emerald-900">MRR actuel</p><p className="mt-1 text-2xl font-black text-emerald-950">{new Intl.NumberFormat('fr-FR').format(finance.summary.mrr)} FCFA</p><p className="mt-1 text-xs text-emerald-800">{finance.summary.active_subscriptions} abonnement(s) actifs</p></article>
+                <article className="rounded-lg border border-emerald-200 bg-emerald-50 p-4"><p className="text-xs font-semibold text-emerald-900">MRR estimé</p><p className="mt-1 text-2xl font-black text-emerald-950">{new Intl.NumberFormat('fr-FR').format(finance.summary.mrr)} FCFA / mois</p><p className="mt-1 text-xs text-emerald-800">{finance.summary.active_subscriptions} abonnement(s) payants · {finance.summary.mrr_estimated_subscriptions} estimation(s) au tarif catalogue</p></article>
                 <article className="rounded-lg border border-sky-100 bg-sky-50 p-4"><p className="text-xs font-semibold text-sky-900">Encaissements période</p><p className="mt-1 text-2xl font-black text-sky-950">{new Intl.NumberFormat('fr-FR').format(finance.summary.collected_amount)} FCFA</p><p className="mt-1 text-xs text-sky-800">{finance.summary.confirmed_count} paiement(s) confirmé(s)</p></article>
                 <article className="rounded-lg border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-semibold text-amber-900">Revenus promotions</p><p className="mt-1 text-2xl font-black text-amber-950">{new Intl.NumberFormat('fr-FR').format(finance.summary.promotions.amount)} FCFA</p><p className="mt-1 text-xs text-amber-800">{finance.summary.promotions.count} paiement(s)</p></article>
                 <article className="rounded-lg border border-rose-200 bg-rose-50 p-4"><p className="text-xs font-semibold text-rose-900">Paiements à vérifier</p><p className="mt-1 text-2xl font-black text-rose-950">{finance.summary.failed_count + finance.summary.refunded_count + finance.summary.past_due_subscriptions}</p><p className="mt-1 text-xs text-rose-800">{finance.summary.failed_count} échec(s) · {finance.summary.refunded_count} remboursement(s) · {finance.summary.past_due_subscriptions} abonnement(s) en retard</p></article>
@@ -1557,7 +1558,7 @@ export const AdminDashboard: React.FC = () => {
 
               <section className="border-y border-slate-200 py-4" aria-label="MRR par formule">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div><h3 className="text-sm font-black text-slate-900">MRR par formule</h3><p className="mt-1 text-xs text-slate-500">Revenu mensuel théorique des forfaits actifs.</p></div>
+                  <div><h3 className="text-sm font-black text-slate-900">MRR estimé par formule</h3><p className="mt-1 text-xs text-slate-500">Paiements annuels divisés par 12 ; à défaut, prix mensuel catalogue.</p></div>
                   <div className="flex flex-wrap gap-x-6 gap-y-2">
                     {finance.summary.mrr_by_tier.map((tier) => <div key={tier.tier} className="min-w-24"><p className="text-xs font-semibold capitalize text-slate-500">{tier.tier} · {tier.count}</p><p className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(tier.amount)} F</p></div>)}
                   </div>
@@ -1566,7 +1567,7 @@ export const AdminDashboard: React.FC = () => {
                   <div><p className="text-xs text-slate-500">Essais actifs</p><strong className="text-slate-900">{finance.summary.active_trials}</strong></div>
                   <div><p className="text-xs text-slate-500">Fin sous 7 jours</p><strong className="text-slate-900">{finance.summary.trials_expiring_7d}</strong></div>
                   <div><p className="text-xs text-slate-500">Essais terminés</p><strong className="text-slate-900">{finance.summary.completed_trials}</strong></div>
-                  <div><p className="text-xs text-slate-500">Conversion essai → payant</p><strong className="text-slate-900">{finance.summary.converted_trials} · {finance.summary.trial_conversion_rate}%</strong></div>
+                  <div><p className="text-xs text-slate-500">Conversion des essais terminés</p><strong className="text-slate-900">{finance.summary.converted_trials}/{finance.summary.completed_trials} boutiques · {finance.summary.trial_conversion_rate}%</strong></div>
                 </div>
               </section>
 
@@ -1610,22 +1611,22 @@ export const AdminDashboard: React.FC = () => {
               <div>
                 <p className="text-xs font-bold uppercase text-emerald-800">Revenus récurrents</p>
                 <h2 id="admin-subscriptions-title" className="mt-1 text-xl font-black text-slate-900">Abonnements</h2>
-                <p className="mt-1 text-xs text-slate-500">{subscriptions?.summary.whatsapp_reminders_enabled ? `Rappels automatiques à J−14, J−7, J−3 et J−1 · ${subscriptions.summary.whatsapp_reminder_opt_ins} boutique(s) consentante(s).` : 'Configurez WhatsApp Business API pour activer les rappels automatiques ; les relances manuelles restent disponibles.'}</p>
+                <p className="mt-1 text-xs text-slate-500">{subscriptions?.summary.whatsapp_reminders_enabled ? `Rappels automatiques configurés à J−14, J−7, J−3 et J−1 · consentement enregistré pour ${subscriptions.summary.whatsapp_reminder_opt_ins} boutique(s). Les relances ouvertes ici restent à valider dans WhatsApp.` : 'API WhatsApp non configurée : aucun rappel automatique ne part. Une relance manuelle ouvre WhatsApp et nécessite le consentement du commerçant.'}</p>
               </div>
               <button type="button" onClick={() => void fetchSubscriptions()} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">Actualiser</button>
             </header>
 
             {!subscriptions ? <p role="status" className="border-y border-slate-200 py-6 text-sm text-slate-500">Chargement des abonnements…</p> : <>
               <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                <div className="border-l-2 border-emerald-600 pl-3"><p className="text-xs text-slate-500">MRR actif</p><strong className="text-lg font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(subscriptions.summary.mrr)} F</strong></div>
+                <div className="border-l-2 border-emerald-600 pl-3"><p className="text-xs text-slate-500">MRR estimé</p><strong className="text-lg font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(subscriptions.summary.mrr)} F / mois</strong><p className="mt-1 text-[11px] text-slate-500">{subscriptions.summary.mrr_estimated_subscriptions} au tarif catalogue faute de paiement enregistré</p></div>
                 <div className="border-l-2 border-sky-600 pl-3"><p className="text-xs text-slate-500">Abonnements payants</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.active_subscriptions}</strong></div>
                 <div className="border-l-2 border-amber-500 pl-3"><p className="text-xs text-slate-500">Essais actifs · fin sous 7 j</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.active_trials} · {subscriptions.summary.trials_expiring_7d}</strong></div>
-                <div className="border-l-2 border-rose-600 pl-3"><p className="text-xs text-slate-500">Conversion essai → payant</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.converted_trials}/{subscriptions.summary.completed_trials} · {subscriptions.summary.trial_conversion_rate}%</strong></div>
+                <div className="border-l-2 border-rose-600 pl-3"><p className="text-xs text-slate-500">Conversion des essais terminés</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.converted_trials}/{subscriptions.summary.completed_trials} boutiques · {subscriptions.summary.trial_conversion_rate}%</strong><p className="mt-1 text-[11px] text-slate-500">Paiement confirmé après le début de l’essai, parmi les essais échus.</p></div>
               </div>
               <section aria-labelledby="weekly-activity-title" className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="mb-3">
                   <h3 id="weekly-activity-title" className="text-sm font-black text-slate-900">Activité des 7 derniers jours</h3>
-                  <p className="mt-1 text-xs text-slate-500">Visiteurs distincts ayant accepté les statistiques, nouvelles boutiques et clics de suivi WhatsApp.</p>
+                  <p className="mt-1 text-xs text-slate-500">Sur 7 jours : visiteurs distincts mesurés, boutiques créées et clics WhatsApp suivis. Les visiteurs dépendent du consentement statistique.</p>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Visiteurs</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.unique_visitors}</strong></div>
@@ -1678,7 +1679,7 @@ export const AdminDashboard: React.FC = () => {
 
               <section aria-labelledby="trials-expiring-title" className="border-y border-amber-200 py-4">
                 <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div><h3 id="trials-expiring-title" className="text-sm font-black text-slate-900">Essais à relancer</h3><p className="mt-1 text-xs text-slate-500">Échéance dans les 7 prochains jours · l’envoi reste à confirmer dans WhatsApp · prolongation plafonnée à 30 jours par essai.</p></div>
+                  <div><h3 id="trials-expiring-title" className="text-sm font-black text-slate-900">Essais à relancer</h3><p className="mt-1 text-xs text-slate-500">Essais qui finissent dans les 7 jours. Une relance ouvre WhatsApp sans envoyer le message. Chaque essai peut être prolongé de 30 jours maximum au total.</p></div>
                   <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">Prolonger de
                     <select aria-label="Durée de prolongation d’essai" value={trialExtensionDays} onChange={(event) => setTrialExtensionDays(Number(event.target.value))} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-700">
                       {trialExtensionOptions.map((days) => <option key={days} value={days}>{days} jours</option>)}
@@ -1688,10 +1689,10 @@ export const AdminDashboard: React.FC = () => {
                 <div className="mt-3 divide-y divide-amber-100">
                   {expiringTrials.length === 0 ? <p className="py-4 text-sm text-slate-500">Aucun essai n’expire sous 7 jours.</p> : expiringTrials.map((shop) => (
                     <article key={shop.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0"><h4 className="truncate text-sm font-bold text-slate-900">{shop.name}</h4><p className="mt-1 text-xs text-slate-500">{shop.plan} · {shop.trial_days_remaining === 1 ? 'échéance demain' : `${shop.trial_days_remaining} jours restants`} · fin le {shop.trial_end ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.trial_end)) : 'date inconnue'} · prolongation : {shop.trial_extension_days_used}/30 jours</p></div>
+                      <div className="min-w-0"><h4 className="truncate text-sm font-bold text-slate-900">{shop.name}</h4><p className="mt-1 text-xs text-slate-500">{shop.plan} · {shop.trial_days_remaining} jour(s) restant(s) · fin le {shop.trial_end ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.trial_end)) : 'date inconnue'} · prolongation : {shop.trial_extension_days_used}/30 jours{shop.trial_extension_over_limit ? ' — dépassement historique à vérifier' : `, ${shop.trial_extension_days_remaining} jour(s) autorisé(s) restant(s)`}</p></div>
                       <div className="flex shrink-0 flex-wrap gap-2">
-                        {shop.whatsapp_reminders_opt_in ? <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handlePrepareTrialReminder(shop)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-emerald-700 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50"><Send className="h-3.5 w-3.5" />Relancer WhatsApp</button> : <span className="self-center text-xs text-slate-500">Opt-in WhatsApp requis</span>}
-                        <button type="button" disabled={subscriptionActionShopId === shop.id || shop.trial_extension_days_remaining === 0 || trialExtensionDays > shop.trial_extension_days_remaining} onClick={() => void handleExtendTrial(shop)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"><Clock className="h-3.5 w-3.5" />{shop.trial_extension_days_remaining === 0 ? 'Plafond atteint' : `Prolonger (${shop.trial_extension_days_remaining} j restants)`}</button>
+                        {shop.whatsapp_reminders_opt_in ? <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handlePrepareTrialReminder(shop)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-emerald-700 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50"><Send className="h-3.5 w-3.5" />Relancer WhatsApp</button> : <span className="self-center text-xs text-slate-500">Consentement WhatsApp requis</span>}
+                        <button type="button" disabled={subscriptionActionShopId === shop.id || shop.trial_extension_over_limit || shop.trial_extension_days_remaining === 0 || trialExtensionDays > shop.trial_extension_days_remaining} onClick={() => void handleExtendTrial(shop)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"><Clock className="h-3.5 w-3.5" />{shop.trial_extension_over_limit ? 'Dépassement à vérifier' : shop.trial_extension_days_remaining === 0 ? 'Plafond atteint' : trialExtensionDays > shop.trial_extension_days_remaining ? `Maximum ${shop.trial_extension_days_remaining} j` : `Prolonger de ${trialExtensionDays} j`}</button>
                       </div>
                     </article>
                   ))}
@@ -1700,29 +1701,28 @@ export const AdminDashboard: React.FC = () => {
 
               <section aria-labelledby="subscription-list-title" className="space-y-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                  <div><h3 id="subscription-list-title" className="text-sm font-black text-slate-900">Toutes les boutiques</h3><p className="mt-1 text-xs text-slate-500">Formule, état, prochaine échéance et activité.</p></div>
+                  <div><h3 id="subscription-list-title" className="text-sm font-black text-slate-900">Toutes les boutiques</h3><p className="mt-1 text-xs text-slate-500">État de l’abonnement et accès de la boutique sont affichés séparément.</p></div>
                   <div className="grid gap-2 sm:grid-cols-[minmax(180px,1fr)_180px]">
                     <input type="search" value={subscriptionSearch} onChange={(event) => setSubscriptionSearch(event.target.value)} placeholder="Rechercher une boutique…" aria-label="Rechercher un abonnement" className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-700" />
                     <select aria-label="Filtrer les abonnements par statut" value={subscriptionStatusFilter} onChange={(event) => setSubscriptionStatusFilter(event.target.value)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">
-                      <option value="all">Tous les statuts</option><option value="trialing">Essai actif</option><option value="active">Payé</option><option value="expired">Expiré</option><option value="past_due">À régulariser</option><option value="suspended">Suspendu</option><option value="not_started">Non démarré</option>
+                      <option value="all">Tous les statuts</option><option value="trialing">Essai actif</option><option value="active">Payé</option><option value="expired">Expiré</option><option value="past_due">En période de grâce</option><option value="suspended">Accès abonnement suspendu</option><option value="not_started">Non démarré</option>
                     </select>
                   </div>
                 </div>
                 <div className="divide-y divide-slate-200 border-y border-slate-200">
                   {filteredSubscriptions.length === 0 ? <p className="py-6 text-sm text-slate-500">Aucun abonnement ne correspond à ces critères.</p> : filteredSubscriptions.map((shop) => {
-                    const canExtendTrial = shop.status === 'trialing'
-                      || shop.status === 'expired' && Boolean(shop.trial_end) && !shop.subscription_expires_at;
+                    const canExtendTrial = shop.can_extend_trial;
                     const statusTone = shop.status === 'active' ? 'bg-emerald-100 text-emerald-900'
                       : shop.status === 'trialing' ? 'bg-sky-100 text-sky-900'
                         : shop.status === 'past_due' || shop.status === 'expired' ? 'bg-amber-100 text-amber-950'
                           : 'bg-slate-100 text-slate-700';
                     return <article key={shop.id} className="flex flex-col gap-3 py-4 xl:flex-row xl:items-center xl:justify-between">
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-bold text-slate-900">{shop.name}</h4><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-slate-700">{shop.plan}</span><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${statusTone}`}>{subscriptionStatusLabels[shop.status] || shop.status}</span>{!shop.is_active && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-900">Boutique suspendue</span>}</div>
-                        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{shop.whatsapp_number}</span><span>{shop.products_count} article(s)</span><span>{shop.orders_count} commande(s)</span><span>{shop.publication_status === 'active' ? 'Publiée' : 'Non publiée'}</span><span>{shop.whatsapp_reminders_opt_in ? 'Rappel WhatsApp activé' : 'Sans opt-in WhatsApp'}</span><span>Inscrite le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.created_at))}</span></div>
-                        <p className="mt-1 text-xs text-slate-500">{shop.status === 'trialing' ? 'Fin d’essai' : 'Prochain renouvellement'} : {shop.next_renewal_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.next_renewal_at)) : 'Non défini'}{shop.trial_start ? ` · Prolongation cumulée : ${shop.trial_extension_days_used}/30 jours` : ''} · Dernière commande : {shop.last_order_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.last_order_at)) : 'aucune'}</p>
+                        <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-bold text-slate-900">{shop.name}</h4><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-slate-700">{shop.plan}</span><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${statusTone}`}>{subscriptionStatusLabels[shop.status] || shop.status}</span>{!shop.is_active && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-900">Boutique désactivée</span>}</div>
+                        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{shop.whatsapp_number}</span><span>{shop.products_count} article(s)</span><span>{shop.orders_count} commande(s)</span><span>{shop.publication_status === 'active' ? 'Publication active' : shop.publication_status === 'suspended' ? 'Publication suspendue' : 'Brouillon non publié'}</span><span>{shop.whatsapp_reminders_opt_in ? 'Consentement aux rappels WhatsApp donné' : 'Pas de consentement WhatsApp'}</span><span>Inscrite le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.created_at))}</span></div>
+                        <p className="mt-1 text-xs text-slate-500">{shop.status === 'trialing' ? 'Fin d’essai' : shop.status === 'active' ? 'Prochain renouvellement' : 'Échéance de l’abonnement'} : {shop.next_renewal_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.next_renewal_at)) : 'Non définie'}{shop.trial_start ? ` · Prolongation cumulée : ${shop.trial_extension_days_used}/30 jours${shop.trial_extension_over_limit ? ' — dépassement historique à vérifier' : `, ${shop.trial_extension_days_remaining} jour(s) autorisé(s) restant(s)`}` : ''} · Dernière commande : {shop.last_order_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.last_order_at)) : 'aucune'}</p>
                         {shop.status === 'active' && <div className="mt-3 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[minmax(150px,190px)_minmax(180px,1fr)_auto]">
-                          <label className="text-[10px] font-bold text-slate-600">Échéance vérifiée
+                          <label className="text-[10px] font-bold text-slate-600">Nouvelle date de fin d’accès
                             <input
                               type="date"
                               aria-label={`Nouvelle échéance de ${shop.name}`}
@@ -1734,12 +1734,12 @@ export const AdminDashboard: React.FC = () => {
                               className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-800"
                             />
                           </label>
-                          <label className="text-[10px] font-bold text-slate-600">Motif / référence de vérification
+                          <label className="text-[10px] font-bold text-slate-600">Motif et référence du paiement vérifié
                             <input
                               type="text"
                               maxLength={500}
-                              aria-label={`Motif de correction d’échéance pour ${shop.name}`}
-                              placeholder="Ex. reçu vérifié, période payée…"
+                              aria-label={`Motif de correction de la date d’accès pour ${shop.name}`}
+                              placeholder="Ex. reçu vérifié du 20/10, période payée jusqu’au…"
                               value={expiryDrafts[shop.id]?.reason ?? ''}
                               onChange={(event) => setExpiryDrafts((previous) => ({
                                 ...previous,
@@ -1750,18 +1750,18 @@ export const AdminDashboard: React.FC = () => {
                           </label>
                           <button
                             type="button"
-                            disabled={subscriptionActionShopId === shop.id || !expiryDrafts[shop.id]?.date || (expiryDrafts[shop.id]?.reason.trim().length ?? 0) < 3}
+                            disabled={subscriptionActionShopId === shop.id || !expiryDrafts[shop.id]?.date || (expiryDrafts[shop.id]?.reason.trim().length ?? 0) < 10}
                             onClick={() => void handleSetSubscriptionExpiry(shop)}
                             className="self-end min-h-9 rounded-md bg-slate-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
                           >
-                            Enregistrer
+                            Enregistrer la date
                           </button>
                         </div>}
                       </div>
                       <div className="flex shrink-0 flex-wrap gap-2">
-                        {shop.status === 'trialing' && shop.trial_days_remaining !== null && shop.trial_days_remaining <= 7 && shop.whatsapp_reminders_opt_in && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handlePrepareTrialReminder(shop)} className="min-h-9 rounded-lg border border-emerald-700 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50">WhatsApp</button>}
-                        {canExtendTrial && <button type="button" disabled={subscriptionActionShopId === shop.id || shop.trial_extension_days_remaining === 0 || trialExtensionDays > shop.trial_extension_days_remaining} onClick={() => void handleExtendTrial(shop)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{shop.trial_extension_days_remaining === 0 ? 'Plafond atteint' : `Prolonger (${shop.trial_extension_days_remaining} j restants)`}</button>}
-                        <button type="button" onClick={() => void handleToggleActive(shop.id)} className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-bold ${shop.is_active ? 'border-rose-200 text-rose-800 hover:bg-rose-50' : 'border-emerald-200 text-emerald-800 hover:bg-emerald-50'}`}>{shop.is_active ? 'Suspendre' : 'Réactiver'}</button>
+                        {shop.status === 'trialing' && shop.trial_days_remaining !== null && shop.trial_days_remaining <= 7 && shop.whatsapp_reminders_opt_in && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handlePrepareTrialReminder(shop)} className="min-h-9 rounded-lg border border-emerald-700 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50">Ouvrir WhatsApp</button>}
+                        {canExtendTrial && <button type="button" disabled={subscriptionActionShopId === shop.id || shop.trial_extension_over_limit || shop.trial_extension_days_remaining === 0 || trialExtensionDays > shop.trial_extension_days_remaining} onClick={() => void handleExtendTrial(shop)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{shop.trial_extension_over_limit ? 'Dépassement à vérifier' : shop.trial_extension_days_remaining === 0 ? 'Plafond atteint' : trialExtensionDays > shop.trial_extension_days_remaining ? `Maximum ${shop.trial_extension_days_remaining} j` : `Prolonger de ${trialExtensionDays} j`}</button>}
+                        <button type="button" onClick={() => void handleToggleActive(shop.id)} className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-bold ${shop.is_active ? 'border-rose-200 text-rose-800 hover:bg-rose-50' : 'border-emerald-200 text-emerald-800 hover:bg-emerald-50'}`}>{shop.is_active ? 'Désactiver boutique' : 'Réactiver boutique'}</button>
                       </div>
                     </article>;
                   })}
@@ -1769,9 +1769,9 @@ export const AdminDashboard: React.FC = () => {
               </section>
 
               <section aria-labelledby="subscription-audit-title" className="border-t border-slate-200 pt-4">
-                <h3 id="subscription-audit-title" className="text-sm font-black text-slate-900">Actions admin récentes</h3>
-                {subscriptions.audit_logs.length === 0 ? <p className="mt-2 text-xs text-slate-500">Les prolongations, corrections et relances apparaîtront ici.</p> : <div className="mt-2 divide-y divide-slate-200">
-                {subscriptions.audit_logs.slice(0, 8).map((entry) => <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs"><div><span className="font-semibold text-slate-800">{entry.action === 'trial_extended' ? 'Essai prolongé' : entry.action === 'trial_expiry_reconciled' ? 'Échéance d’essai synchronisée' : entry.action === 'subscription_expiry_corrected' ? 'Échéance d’abonnement corrigée' : entry.action === 'trial_reminder_prepared' ? 'Relance WhatsApp préparée' : entry.action === 'subscription_reminder_sent' ? `Rappel WhatsApp envoyé J−${getReminderLeadDays(entry.details) ?? '?'}` : entry.action === 'subscription_reminder_failed' ? `Échec du rappel WhatsApp J−${getReminderLeadDays(entry.details) ?? '?'}` : entry.action === 'shop_suspended' ? 'Boutique suspendue' : entry.action === 'shop_reactivated' ? 'Boutique réactivée' : entry.action === 'admin_order_status_updated' ? 'Statut de commande modifié' : entry.action} · {entry.shop_name || 'Boutique supprimée'}</span>{getAdminAuditReason(entry.details) && <p className="mt-1 text-slate-500">Motif : {getAdminAuditReason(entry.details)}</p>}{entry.action === 'subscription_reminder_failed' && getReminderFailure(entry.details) && <p className="mt-1 text-rose-700">Erreur fournisseur : {getReminderFailure(entry.details)}</p>}</div><time className="text-slate-500">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(entry.created_at))}</time></div>)}
+                <h3 id="subscription-audit-title" className="text-sm font-black text-slate-900">Actions administratives récentes</h3>
+                {subscriptions.audit_logs.length === 0 ? <p className="mt-2 text-xs text-slate-500">Les actions d’administration apparaîtront ici.</p> : <div className="mt-2 divide-y divide-slate-200">
+                {subscriptions.audit_logs.slice(0, 8).map((entry) => <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs"><div><span className="font-semibold text-slate-800">{entry.action === 'subscription_reminder_sent' ? `Rappel WhatsApp envoyé J−${getReminderLeadDays(entry.details) ?? '?'}` : entry.action === 'subscription_reminder_failed' ? `Échec du rappel WhatsApp J−${getReminderLeadDays(entry.details) ?? '?'}` : adminAuditActionLabels[entry.action] || 'Action administrative'} · {entry.shop_name || 'Boutique supprimée'}</span>{getAdminAuditReason(entry.details) && <p className="mt-1 text-slate-500">Motif : {getAdminAuditReason(entry.details)}</p>}{entry.action === 'subscription_reminder_failed' && getReminderFailure(entry.details) && <p className="mt-1 text-rose-700">Erreur fournisseur : {getReminderFailure(entry.details)}</p>}</div><time className="text-slate-500">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(entry.created_at))}</time></div>)}
                 </div>}
               </section>
             </>}
