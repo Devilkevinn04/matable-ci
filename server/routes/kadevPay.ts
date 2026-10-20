@@ -29,7 +29,7 @@ interface SubscriptionPaymentIntent {
   subscription_term: SubscriptionTerm;
   amount: number;
   currency: string;
-  status: 'pending' | 'paid' | 'failed';
+  status: 'pending' | 'paid' | 'failed' | 'expired';
   provider_reference: string | null;
   created_at: string;
   paid_at: string | null;
@@ -37,6 +37,15 @@ interface SubscriptionPaymentIntent {
 
 export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterOptions) {
   const router = Router();
+  const subscriptionIntentLifetimeMs = 24 * 60 * 60 * 1000;
+  const expireStaleSubscriptionIntents = async (shopId?: number) => {
+    const cutoff = new Date(Date.now() - subscriptionIntentLifetimeMs).toISOString();
+    const shopFilter = shopId === undefined ? '' : ' AND shop_id = ?';
+    await dbRun(`UPDATE subscription_payment_intents
+      SET status = 'expired'
+      WHERE payment_type = 'subscription' AND status = 'pending' AND created_at <= ?${shopFilter}`,
+    shopId === undefined ? [cutoff] : [cutoff, shopId]);
+  };
   const resolveBillingEmail = async (shopId: number, currentEmail: string | null | undefined, requestedEmail: unknown) => {
     if (requestedEmail === undefined) {
       return currentEmail
@@ -66,6 +75,7 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
   router.post('/shops/:id/subscription-payments', requireMerchantOwnShop, async (req, res) => {
     const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    await expireStaleSubscriptionIntents(shop.id);
 
     const publicKey = String(process.env.KADEVPAY_PUBLIC_KEY || '').trim();
     const webhookSecret = String(process.env.KADEVPAY_WEBHOOK_SECRET || '').trim();
@@ -120,6 +130,9 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
     if (!intent) throw new Error('Idempotent KadevPay payment intent could not be loaded after insertion.');
     if (intent.tier !== tier || intent.subscription_term !== term) {
       return res.status(409).json({ error: 'Cette clé de requête a déjà été utilisée pour une autre formule ou durée.' });
+    }
+    if (duplicate && intent.status !== 'pending') {
+      return res.status(409).json({ error: 'Cette demande de paiement est déjà terminée ou expirée. Relancez le paiement pour créer une nouvelle demande.' });
     }
 
     res.status(duplicate ? 200 : 201).json({
@@ -234,6 +247,7 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
   router.get('/shops/:id/subscription-payments/:paymentId', requireMerchantOwnShop, async (req, res) => {
     const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    await expireStaleSubscriptionIntents(shop.id);
     const payment = await dbGet<SubscriptionPaymentIntent>(
       'SELECT * FROM subscription_payment_intents WHERE id = ? AND shop_id = ?',
       [String(req.params.paymentId), shop.id],
@@ -286,6 +300,9 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
       return res.status(401).json({ error: 'Signature KadevPay invalide.' });
     }
 
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      return res.status(400).json({ error: 'Corps du webhook KadevPay invalide.' });
+    }
     const event = req.body as {
       event?: string;
       data?: {
@@ -296,11 +313,16 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
         metadata?: { subscription_payment_id?: string };
       };
     };
-    const isSuccessfulPayment = event.event === 'payment.success' && event.data?.status === 'paid';
-    const isFailedPayment = event.event === 'payment.failed' && event.data?.status === 'failed';
-    if (!isSuccessfulPayment && !isFailedPayment) {
+    const isPaymentEvent = event.event === 'payment.success' || event.event === 'payment.failed';
+    if (!isPaymentEvent) {
       return res.status(200).json({ received: true });
     }
+    if (!event.data || typeof event.data !== 'object' || Array.isArray(event.data)) {
+      return res.status(400).json({ error: 'Données de paiement incomplètes.' });
+    }
+    const isSuccessfulPayment = event.event === 'payment.success' && event.data.status === 'paid';
+    const isFailedPayment = event.event === 'payment.failed' && event.data.status === 'failed';
+    if (!isSuccessfulPayment && !isFailedPayment) return res.status(200).json({ received: true });
 
     const paymentId = String(event.data.metadata?.subscription_payment_id || '');
     const providerReference = String(event.data.reference || '');
@@ -308,19 +330,32 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
     if (!paymentId || !providerReference || !Number.isSafeInteger(amount)) {
       return res.status(400).json({ error: 'Données de paiement incomplètes.' });
     }
-    if (event.data.currency && event.data.currency !== 'XOF') {
+    if (event.data.currency !== undefined && event.data.currency !== 'XOF') {
       return res.status(400).json({ error: 'Devise de paiement inattendue.' });
     }
+    await expireStaleSubscriptionIntents();
 
     if (isFailedPayment) {
       const result = await dbTransaction(async (transaction) => {
-        const payment = await transaction.get<{ status: string; amount: number; payment_type: string; shop_id: number }>(
-          'SELECT status, amount, payment_type, shop_id FROM subscription_payment_intents WHERE id = ?',
+        const payment = await transaction.get<{ status: string; amount: number; payment_type: string; shop_id: number; created_at: string }>(
+          'SELECT status, amount, payment_type, shop_id, created_at FROM subscription_payment_intents WHERE id = ?',
           [paymentId],
         );
         if (!payment) return 'not_found' as const;
         if (payment.status === 'failed') return 'duplicate' as const;
+        if (payment.status === 'expired') return 'expired' as const;
+        if (payment.payment_type === 'subscription'
+          && Date.parse(payment.created_at) <= Date.now() - subscriptionIntentLifetimeMs) {
+          await transaction.run(`UPDATE subscription_payment_intents SET status = 'expired'
+            WHERE id = ? AND status = 'pending'`, [paymentId]);
+          return 'expired' as const;
+        }
         if (payment.status !== 'pending' || Number(payment.amount) !== amount) return 'mismatch' as const;
+        const referenceOwner = await transaction.get<{ id: string }>(
+          'SELECT id FROM subscription_payment_intents WHERE provider_reference = ? AND id <> ?',
+          [providerReference, paymentId],
+        );
+        if (referenceOwner) return 'reference_conflict' as const;
         const failed = await transaction.run(`UPDATE subscription_payment_intents
           SET status = 'failed', provider_reference = ?
           WHERE id = ? AND status = 'pending'`, [providerReference, paymentId]);
@@ -347,7 +382,9 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
         return failed.changes === 1 ? 'failed' as const : 'duplicate' as const;
       });
       if (result === 'not_found') return res.status(404).json({ error: 'Intention de paiement introuvable.' });
+      if (result === 'expired') return res.status(409).json({ error: 'Cette intention de paiement a expiré. Créez une nouvelle demande.' });
       if (result === 'mismatch') return res.status(409).json({ error: 'Le paiement échoué ne correspond pas à une intention en attente.' });
+      if (result === 'reference_conflict') return res.status(409).json({ error: 'Cette référence KadevPay est déjà associée à un autre paiement.' });
       return res.json({ received: true, duplicate: result === 'duplicate' });
     }
 
@@ -359,7 +396,19 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
       );
       if (!payment) return { status: 'not_found' as const };
       if (payment.status === 'paid') return { status: 'duplicate' as const };
+      if (payment.status === 'expired') return { status: 'expired' as const };
+      if (payment.payment_type === 'subscription'
+        && Date.parse(payment.created_at) <= now.getTime() - subscriptionIntentLifetimeMs) {
+        await transaction.run(`UPDATE subscription_payment_intents SET status = 'expired'
+          WHERE id = ? AND status = 'pending'`, [paymentId]);
+        return { status: 'expired' as const };
+      }
       if (payment.status !== 'pending' || Number(payment.amount) !== amount) return { status: 'mismatch' as const };
+      const referenceOwner = await transaction.get<{ id: string }>(
+        'SELECT id FROM subscription_payment_intents WHERE provider_reference = ? AND id <> ?',
+        [providerReference, paymentId],
+      );
+      if (referenceOwner) return { status: 'reference_conflict' as const };
 
       if (payment.payment_type === 'promotion') {
         const boost = await transaction.get<{
@@ -443,7 +492,9 @@ export function createKadevPayRouter({ requireMerchantOwnShop }: KadevPayRouterO
     });
 
     if (result.status === 'not_found') return res.status(404).json({ error: 'Intention de paiement introuvable.' });
+    if (result.status === 'expired') return res.status(409).json({ error: 'Cette intention de paiement a expiré. Créez une nouvelle demande.' });
     if (result.status === 'mismatch') return res.status(409).json({ error: 'Le montant payé ne correspond pas au montant attendu.' });
+    if (result.status === 'reference_conflict') return res.status(409).json({ error: 'Cette référence KadevPay est déjà associée à un autre paiement.' });
     if (result.status === 'paid' && result.receipt.ownerEmail) {
       try {
         const emailResult = await sendMerchantSubscriptionReceiptEmail({

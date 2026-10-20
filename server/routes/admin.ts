@@ -592,6 +592,10 @@ export function createAdminRouter(options: AdminRouterOptions) {
   });
 
   router.get('/payments', async (req, res) => {
+    const expiredIntentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    await dbRun(`UPDATE subscription_payment_intents
+      SET status = 'expired'
+      WHERE payment_type = 'subscription' AND status = 'pending' AND created_at <= ?`, [expiredIntentCutoff]);
     const requestedDays = Number(req.query.days);
     const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 365) : 30;
     const since = new Date(Date.now() - days * 86400000).toISOString();
@@ -609,6 +613,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       pending_count: number;
       pending_amount: number;
       failed_count: number;
+      expired_count: number;
       refunded_count: number;
       subscription_count: number;
       subscription_amount: number;
@@ -621,6 +626,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
         COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pending_count,
         COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) AS pending_amount,
         COUNT(CASE WHEN status IN ('failed', 'cancelled', 'error') THEN 1 END) AS failed_count,
+        COUNT(CASE WHEN status = 'expired' THEN 1 END) AS expired_count,
         COUNT(CASE WHEN status = 'refunded' THEN 1 END) AS refunded_count,
         COUNT(CASE WHEN status = 'paid' AND payment_type = 'subscription' THEN 1 END) AS subscription_count,
         COALESCE(SUM(CASE WHEN status = 'paid' AND payment_type = 'subscription' THEN amount ELSE 0 END), 0) AS subscription_amount,
@@ -640,7 +646,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
     }
     if (requestedStatus === 'failed') {
       paymentFilters.push("intent.status IN ('failed', 'error')");
-    } else if (['paid', 'pending', 'cancelled', 'error', 'refunded'].includes(requestedStatus)) {
+    } else if (['paid', 'pending', 'cancelled', 'error', 'refunded', 'expired'].includes(requestedStatus)) {
       paymentFilters.push('intent.status = ?');
       paymentParams.push(requestedStatus);
     }
@@ -695,6 +701,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
         pending_count: Number(summary?.pending_count || 0),
         pending_amount: Number(summary?.pending_amount || 0),
         failed_count: Number(summary?.failed_count || 0),
+        expired_count: Number(summary?.expired_count || 0),
         refunded_count: Number(summary?.refunded_count || 0),
         subscriptions: {
           count: Number(summary?.subscription_count || 0),

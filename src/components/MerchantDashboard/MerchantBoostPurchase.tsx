@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LoaderCircle, Sparkles } from 'lucide-react';
+import { LoaderCircle, RefreshCw, Sparkles } from 'lucide-react';
 import type { Shop } from '../../types';
 import {
   BOOST_PLACEMENTS,
@@ -10,6 +10,7 @@ import {
   type BoostPlacement,
 } from '../../utils/boostPricing';
 import { isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
+import { getKadevPayLoadMessage, loadKadevPayCheckout } from '../../utils/kadevPaySdk';
 
 interface MerchantBoostPurchaseProps {
   shop: Shop;
@@ -32,6 +33,7 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
   const [placement, setPlacement] = useState<BoostPlacement>('category');
   const [boosts, setBoosts] = useState<MerchantBoost[]>([]);
   const [isKadevPayReady, setIsKadevPayReady] = useState(false);
+  const [sdkRetryCount, setSdkRetryCount] = useState(0);
   const [isPaymentStarting, setIsPaymentStarting] = useState(false);
   const [message, setMessage] = useState('');
   const [needsBillingEmail, setNeedsBillingEmail] = useState(false);
@@ -61,33 +63,17 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
 
   useEffect(() => {
     if (!eligible) return;
-    if (window.KadevPay) {
-      setIsKadevPayReady(true);
-      return;
-    }
-    const existingScript = document.querySelector<HTMLScriptElement>('script[data-kadevpay-sdk]');
-    const script = existingScript || document.createElement('script');
     let cancelled = false;
-    const onLoad = () => {
+    setIsKadevPayReady(false);
+    void loadKadevPayCheckout().then(() => {
       if (!cancelled) setIsKadevPayReady(Boolean(window.KadevPay));
-    };
-    const onError = () => {
-      if (!cancelled) setMessage('Impossible de charger KadevPay. Réessayez dans un instant.');
-    };
-    script.addEventListener('load', onLoad);
-    script.addEventListener('error', onError);
-    if (!existingScript) {
-      script.src = 'https://pay.kadev.ci/js/v1/kadev-pay.js';
-      script.async = true;
-      script.dataset.kadevpaySdk = 'true';
-      document.head.appendChild(script);
-    }
+    }).catch((error: unknown) => {
+      if (!cancelled) setMessage(getKadevPayLoadMessage(error));
+    });
     return () => {
       cancelled = true;
-      script.removeEventListener('load', onLoad);
-      script.removeEventListener('error', onError);
     };
-  }, [eligible]);
+  }, [eligible, sdkRetryCount]);
 
   const verifyPayment = async (paymentId: string) => {
     for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -128,6 +114,10 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
 
   const startPayment = async () => {
     setMessage('');
+    if (!isKadevPayReady || !window.KadevPay || !window.PaystackPop) {
+      setMessage('Le paiement n’est pas prêt. Vérifiez votre connexion puis réessayez.');
+      return;
+    }
     setIsPaymentStarting(true);
     try {
       const response = await fetch(`/api/shops/${shop.id}/boost-payments`, {
@@ -204,10 +194,16 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <button type="button" onClick={() => void startPayment()} disabled={!isKadevPayReady || isPaymentStarting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0f4d3d] px-4 py-2 text-xs font-bold text-white hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
               {isPaymentStarting && <LoaderCircle className="h-4 w-4 animate-spin" />}
-              {isPaymentStarting ? 'Vérification du paiement…' : isKadevPayReady ? `Payer ${new Intl.NumberFormat('fr-FR').format(amount)} FCFA` : 'Chargement de KadevPay…'}
+              {isPaymentStarting ? 'Vérification du paiement…' : isKadevPayReady ? `Payer ${new Intl.NumberFormat('fr-FR').format(amount)} FCFA` : 'Chargement des modules de paiement…'}
             </button>
             <span className="text-xs text-slate-500">Activation après confirmation du paiement sécurisé.</span>
           </div>
+          {message && <p role="status" className="mt-2 text-sm text-slate-700">{message}</p>}
+          {!isKadevPayReady && !isPaymentStarting && message && (
+            <button type="button" onClick={() => { setMessage(''); setSdkRetryCount((count) => count + 1); }} className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-800 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-50">
+              <RefreshCw className="h-3.5 w-3.5" /> Réessayer le chargement du paiement
+            </button>
+          )}
           {needsBillingEmail && (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <label htmlFor="merchant-boost-billing-email" className="block text-sm font-bold text-amber-950">E-mail de facturation</label>

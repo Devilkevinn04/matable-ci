@@ -296,6 +296,35 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   });
   assert.equal(pendingStatus.status, 200);
   assert.equal((await pendingStatus.json()).status, 'pending');
+
+  const otherShopResponse = await fetch(`${BASE_URL}/api/shops`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Autre boutique Kadev',
+      whatsapp_number: `+22507${String(Date.now() + 1).slice(-8)}`,
+      email: `kadev-other-${Date.now()}@example.com`,
+      pin_code: '456789',
+      category: 'fashion',
+      city: 'Abidjan',
+      accepted_terms_privacy: true,
+    }),
+  });
+  const otherShop = await otherShopResponse.json();
+  assert.equal(otherShopResponse.status, 200, JSON.stringify(otherShop));
+  const otherShopLogin = await fetch(`${BASE_URL}/api/auth/merchant-access-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: otherShop.owner_access_token }),
+  });
+  assert.equal(otherShopLogin.status, 200);
+  const otherShopCookie = otherShopLogin.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(otherShopCookie);
+  const otherShopPaymentStatus = await fetch(`${BASE_URL}/api/shops/${otherShop.shop.id}/subscription-payments/${intent.payment_id}`, {
+    headers: { Cookie: otherShopCookie },
+  });
+  assert.equal(otherShopPaymentStatus.status, 404);
+
   const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -307,6 +336,47 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   const financeBeforePayment = await fetch(`${BASE_URL}/api/admin/payments?days=30`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
 
   const signature = createHmac('sha512', 'kadevpay-test-webhook-secret').update(webhookPayload).digest('hex');
+  const sendSignedWebhook = (payload: string) => fetch(`${BASE_URL}/api/webhooks/kadevpay`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-kadevpay-signature': createHmac('sha512', 'kadevpay-test-webhook-secret').update(payload).digest('hex'),
+    },
+    body: payload,
+  });
+  const wrongAmountPayload = JSON.stringify({
+    event: 'payment.success',
+    data: {
+      status: 'paid',
+      reference: `KDV-WRONG-AMOUNT-${Date.now()}`,
+      amount: 49999,
+      currency: 'XOF',
+      metadata: { subscription_payment_id: intent.payment_id },
+    },
+  });
+  const wrongAmountResponse = await sendSignedWebhook(wrongAmountPayload);
+  assert.equal(wrongAmountResponse.status, 409);
+
+  const wrongCurrencyPayload = JSON.stringify({
+    event: 'payment.success',
+    data: {
+      status: 'paid',
+      reference: `KDV-WRONG-CURRENCY-${Date.now()}`,
+      amount: 50000,
+      currency: 'USD',
+      metadata: { subscription_payment_id: intent.payment_id },
+    },
+  });
+  assert.equal((await sendSignedWebhook(wrongCurrencyPayload)).status, 400);
+
+  const malformedPayload = JSON.stringify({ event: 'payment.success', data: null });
+  assert.equal((await sendSignedWebhook(malformedPayload)).status, 400);
+
+  const stillPending = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments/${intent.payment_id}`, {
+    headers: { Cookie: merchantCookie },
+  }).then((response) => response.json());
+  assert.equal(stillPending.status, 'pending');
+
   const sendWebhook = () => fetch(`${BASE_URL}/api/webhooks/kadevpay`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-kadevpay-signature': signature },
@@ -352,6 +422,21 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
     headers: { Cookie: merchantCookie },
   });
   assert.equal((await failedStatus.json()).status, 'failed');
+  const lateSuccessAfterFailure = await sendSignedWebhook(JSON.stringify({
+    event: 'payment.success',
+    data: {
+      status: 'paid',
+      reference: `KDV-LATE-SUCCESS-${Date.now()}`,
+      amount: 5000,
+      currency: 'XOF',
+      metadata: { subscription_payment_id: failedIntent.payment_id },
+    },
+  }));
+  assert.equal(lateSuccessAfterFailure.status, 409);
+  const stillFailed = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments/${failedIntent.payment_id}`, {
+    headers: { Cookie: merchantCookie },
+  }).then((response) => response.json());
+  assert.equal(stillFailed.status, 'failed');
 
   const unauthenticatedPayments = await fetch(`${BASE_URL}/api/admin/payments`);
   assert.equal(unauthenticatedPayments.status, 401);
@@ -407,6 +492,96 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   assert.equal(failedPaymentFilter.payment_count, 1);
   assert.equal(failedPaymentFilter.payments[0].status, 'failed');
 
+  const activeRenewalIntentResponse = await fetch(paymentEndpoint, {
+    method: 'POST',
+    headers: paymentHeaders,
+    body: JSON.stringify({ tier: 'premium', term: 'monthly' }),
+  });
+  const activeRenewalIntent = await activeRenewalIntentResponse.json();
+  assert.equal(activeRenewalIntentResponse.status, 201);
+  const expiryBeforeActiveRenewal = paidPayload.subscription.expiresAt;
+  const activeRenewalPayload = JSON.stringify({
+    event: 'payment.success',
+    data: {
+      status: 'paid',
+      reference: `KDV-ACTIVE-RENEWAL-${Date.now()}`,
+      amount: 5000,
+      currency: 'XOF',
+      metadata: { subscription_payment_id: activeRenewalIntent.payment_id },
+    },
+  });
+  assert.equal((await sendSignedWebhook(activeRenewalPayload)).status, 200);
+  const renewedStatus = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments/${activeRenewalIntent.payment_id}`, {
+    headers: { Cookie: merchantCookie },
+  }).then((response) => response.json());
+  const expectedActiveRenewalExpiry = getRenewedSubscriptionExpiry(expiryBeforeActiveRenewal, new Date(), 'monthly');
+  assert.equal(renewedStatus.status, 'paid');
+  assert.equal(renewedStatus.subscription.expiresAt, expectedActiveRenewalExpiry);
+  assert.equal((await sendSignedWebhook(activeRenewalPayload)).status, 200);
+  const renewedStatusAfterReplay = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments/${activeRenewalIntent.payment_id}`, {
+    headers: { Cookie: merchantCookie },
+  }).then((response) => response.json());
+  assert.equal(renewedStatusAfterReplay.subscription.expiresAt, expectedActiveRenewalExpiry);
+
+  const expiredRequestId = `expire-${Date.now()}`;
+  const reusedReferenceIntentResponse = await fetch(paymentEndpoint, {
+    method: 'POST',
+    headers: paymentHeaders,
+    body: JSON.stringify({ tier: 'premium', term: 'monthly', client_request_id: expiredRequestId }),
+  });
+  const reusedReferenceIntent = await reusedReferenceIntentResponse.json();
+  assert.equal(reusedReferenceIntentResponse.status, 201);
+  const reusedReferencePayload = JSON.stringify({
+    event: 'payment.success',
+    data: {
+      status: 'paid',
+      reference: JSON.parse(webhookPayload).data.reference,
+      amount: 5000,
+      currency: 'XOF',
+      metadata: { subscription_payment_id: reusedReferenceIntent.payment_id },
+    },
+  });
+  const reusedReferenceResponse = await sendSignedWebhook(reusedReferencePayload);
+  assert.equal(reusedReferenceResponse.status, 409);
+  const reusedReferenceStatus = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments/${reusedReferenceIntent.payment_id}`, {
+    headers: { Cookie: merchantCookie },
+  });
+  assert.equal((await reusedReferenceStatus.json()).status, 'pending');
+
+  const expireIntentDb = new Database(TEST_DB_PATH);
+  try {
+    expireIntentDb.prepare('UPDATE subscription_payment_intents SET created_at = ? WHERE id = ?')
+      .run(new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), reusedReferenceIntent.payment_id);
+  } finally {
+    expireIntentDb.close();
+  }
+  const expiredIntentStatus = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments/${reusedReferenceIntent.payment_id}`, {
+    headers: { Cookie: merchantCookie },
+  }).then((response) => response.json());
+  assert.equal(expiredIntentStatus.status, 'expired');
+  const latePaymentPayload = JSON.stringify({
+    event: 'payment.success',
+    data: {
+      status: 'paid',
+      reference: `KDV-LATE-${Date.now()}`,
+      amount: 5000,
+      currency: 'XOF',
+      metadata: { subscription_payment_id: reusedReferenceIntent.payment_id },
+    },
+  });
+  assert.equal((await sendSignedWebhook(latePaymentPayload)).status, 409);
+  const retryExpiredIntent = await fetch(paymentEndpoint, {
+    method: 'POST',
+    headers: paymentHeaders,
+    body: JSON.stringify({ tier: 'premium', term: 'monthly', client_request_id: expiredRequestId }),
+  });
+  assert.equal(retryExpiredIntent.status, 409);
+  const expiredFinance = await fetch(`${BASE_URL}/api/admin/payments?days=30&status=expired`, {
+    headers: { Cookie: adminCookie },
+  }).then((response) => response.json());
+  assert.equal(expiredFinance.summary.expired_count, 1);
+  assert.ok(expiredFinance.payments.some((payment: { id: string; status: string }) => payment.id === reusedReferenceIntent.payment_id && payment.status === 'expired'));
+
   const duplicateWebhook = await sendWebhook();
   assert.equal(duplicateWebhook.status, 200);
   assert.equal((await duplicateWebhook.json()).duplicate, true);
@@ -414,7 +589,7 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   try {
     const row = expiryAfterDuplicate.prepare('SELECT subscription_expires_at FROM shops WHERE id = ?')
       .get(createdPayload.shop.id) as { subscription_expires_at: string };
-    assert.equal(row.subscription_expires_at, paidPayload.subscription.expiresAt);
+    assert.equal(row.subscription_expires_at, expectedActiveRenewalExpiry);
   } finally {
     expiryAfterDuplicate.close();
   }

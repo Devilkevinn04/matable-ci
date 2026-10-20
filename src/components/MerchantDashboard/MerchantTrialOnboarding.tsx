@@ -20,26 +20,8 @@ import {
   type SubscriptionTerm,
 } from '../../utils/subscriptionFeatures';
 import { getRenewedSubscriptionExpiry } from '../../utils/subscriptionExpiry';
+import { getKadevPayLoadMessage, loadKadevPayCheckout } from '../../utils/kadevPaySdk';
 import { WhatsAppSubscriptionReminderConsent } from './WhatsAppSubscriptionReminderConsent';
-
-interface KadevPayCheckoutOptions {
-  public_key: string;
-  amount: number;
-  currency: 'XOF';
-  email: string;
-  name: string;
-  phone: string;
-  method: 'momo';
-  metadata: { subscription_payment_id: string };
-  onSuccess: (result: unknown) => void;
-  onClose: () => void;
-}
-
-declare global {
-  interface Window {
-    KadevPay?: { checkout: (options: KadevPayCheckoutOptions) => void };
-  }
-}
 
 interface MerchantTrialOnboardingProps {
   shop: Shop;
@@ -58,6 +40,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
   const [term, setTerm] = useState<SubscriptionTerm>('monthly');
   const [purchaseNow, setPurchaseNow] = useState(false);
   const [isKadevPayReady, setIsKadevPayReady] = useState(false);
+  const [sdkRetryCount, setSdkRetryCount] = useState(0);
   const [isPaymentStarting, setIsPaymentStarting] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState('');
   const [needsBillingEmail, setNeedsBillingEmail] = useState(false);
@@ -95,28 +78,17 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
 
   useEffect(() => {
     if (!paymentFlowActive || previewOnly) return;
-    if (window.KadevPay) {
-      setIsKadevPayReady(true);
-      return;
-    }
-    const existingScript = document.querySelector<HTMLScriptElement>('script[data-kadevpay-sdk]');
-    const script = existingScript || document.createElement('script');
-    const onLoad = () => setIsKadevPayReady(Boolean(window.KadevPay));
-    const onError = () => setPaymentMessage('Impossible de charger KadevPay. Réessayez dans un instant.');
-    script.addEventListener('load', onLoad);
-    script.addEventListener('error', onError);
-    if (!existingScript) {
-      script.src = 'https://pay.kadev.ci/js/v1/kadev-pay.js';
-      script.async = true;
-      script.dataset.kadevpaySdk = 'true';
-      document.head.appendChild(script);
-    }
+    let cancelled = false;
+    setIsKadevPayReady(false);
+    void loadKadevPayCheckout().then(() => {
+      if (!cancelled) setIsKadevPayReady(true);
+    }).catch((error: unknown) => {
+      if (!cancelled) setPaymentMessage(getKadevPayLoadMessage(error));
+    });
     return () => {
-      script.removeEventListener('load', onLoad);
-      script.removeEventListener('error', onError);
+      cancelled = true;
     };
-
-  }, [paymentFlowActive, previewOnly]);
+  }, [paymentFlowActive, previewOnly, sdkRetryCount]);
 
   const verifyPayment = async (paymentId: string) => {
     for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -137,6 +109,12 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
           setIsPaymentStarting(false);
           return;
         }
+        if (data.status === 'expired') {
+          setPaymentIdToVerify(null);
+          setPaymentMessage('Cette demande de paiement a expiré. Relancez le paiement pour en créer une nouvelle.');
+          setIsPaymentStarting(false);
+          return;
+        }
       } catch {
         // Keep checking until the webhook has had time to arrive.
       }
@@ -147,6 +125,10 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
 
   const startSubscriptionPayment = async () => {
     setPaymentMessage('');
+    if (!isKadevPayReady || !window.KadevPay || !window.PaystackPop) {
+      setPaymentMessage('Le paiement n’est pas prêt. Vérifiez votre connexion puis réessayez.');
+      return;
+    }
     setIsPaymentStarting(true);
     didReceivePaymentSuccess.current = false;
     try {
@@ -432,7 +414,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             ) : (
               <button type="button" onClick={() => void startSubscriptionPayment()} disabled={!isKadevPayReady || isPaymentStarting || Boolean(paymentIdToVerify)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
                 {isPaymentStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                {isPaymentStarting ? 'Vérification du paiement…' : isKadevPayReady ? `Payer ${new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(selectedTier, term))} FCFA avec KadevPay` : 'Chargement de KadevPay…'}
+                {isPaymentStarting ? 'Vérification du paiement…' : isKadevPayReady ? `Payer ${new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(selectedTier, term))} FCFA avec KadevPay` : 'Chargement des modules de paiement…'}
               </button>
             )
           ) : (
@@ -448,6 +430,11 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
         {paymentFlowActive && paymentMessage && (
           <div className="mt-3 space-y-2" aria-live="polite">
             <p role="status" className="text-sm text-slate-700">{paymentMessage}</p>
+          {!isKadevPayReady && !isPaymentStarting && (
+            <button type="button" onClick={() => { setPaymentMessage(''); setSdkRetryCount((count) => count + 1); }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-800 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-50">
+              <RefreshCw className="h-3.5 w-3.5" /> Réessayer le chargement du paiement
+            </button>
+          )}
             {paymentIdToVerify && !isPaymentStarting && (
               <div className="flex flex-wrap items-center gap-3">
                 <button type="button" onClick={retryPaymentVerification} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-800 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-50">

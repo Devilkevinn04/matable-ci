@@ -305,6 +305,31 @@ test('Pro subscription exposes consented product stats and activates discounted 
   assert.equal(boostHistory.boosts[0].placement, 'home');
   assert.equal(boostHistory.boosts[0].views, 1);
   assert.equal(boostHistory.boosts[0].whatsapp_clicks, 1);
+
+  const failedBoostIntentResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/boost-payments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ duration_days: 3, placement: 'category' }),
+  });
+  const failedBoostIntent = await failedBoostIntentResponse.json();
+  assert.equal(failedBoostIntentResponse.status, 201, JSON.stringify(failedBoostIntent));
+  const failedBoostWebhook = await signedWebhook(JSON.stringify({
+    event: 'payment.failed',
+    data: {
+      status: 'failed',
+      reference: `KDV-BOOST-FAILED-${Date.now()}`,
+      amount: failedBoostIntent.amount,
+      currency: 'XOF',
+      metadata: { subscription_payment_id: failedBoostIntent.payment_id },
+    },
+  }));
+  assert.equal(failedBoostWebhook.status, 200);
+  const failedBoostStatus = await fetch(`${BASE_URL}/api/shops/${shopId}/subscription-payments/${failedBoostIntent.payment_id}`, {
+    headers: { Cookie: merchantCookie },
+  }).then((response) => response.json());
+  assert.equal(failedBoostStatus.status, 'failed');
+  assert.equal(failedBoostStatus.boost.status, 'cancelled');
+
   const sponsoredDirectory = await fetch(`${BASE_URL}/api/shops`).then((response) => response.json());
   const sponsoredShop = sponsoredDirectory.find((shop: { id: number }) => shop.id === shopId);
   assert.ok(sponsoredShop.boost_placements.includes('home'));
@@ -314,10 +339,50 @@ test('Pro subscription exposes consented product stats and activates discounted 
   const sessionAfterBoost = await fetch(`${BASE_URL}/api/auth/session`, { headers: { Cookie: merchantCookie } }).then((response) => response.json());
   assert.equal(sessionAfterBoost.subscription.expiresAt, subscriptionExpiryBeforeBoost);
 
+  const lateBoostIntentResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/boost-payments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ duration_days: 3, placement: 'home' }),
+  });
+  const lateBoostIntent = await lateBoostIntentResponse.json();
+  assert.equal(lateBoostIntentResponse.status, 201, JSON.stringify(lateBoostIntent));
+  const expiredReservationStart = new Date(Date.now() - 4 * 86400000).toISOString();
+  const expiredReservationEnd = new Date(Date.now() - 86400000).toISOString();
+  const expiredReservationAt = new Date(Date.now() - 60_000).toISOString();
+  const reservationDb = new Database(TEST_DB_PATH);
+  try {
+    reservationDb.prepare(`UPDATE shop_boosts
+      SET starts_at = ?, ends_at = ?, reservation_expires_at = ?
+      WHERE payment_intent_id = ?`)
+      .run(expiredReservationStart, expiredReservationEnd, expiredReservationAt, lateBoostIntent.payment_id);
+  } finally {
+    reservationDb.close();
+  }
+  const lateBoostWebhook = await signedWebhook(JSON.stringify({
+    event: 'payment.success',
+    data: {
+      status: 'paid',
+      reference: `KDV-BOOST-LATE-${Date.now()}`,
+      amount: lateBoostIntent.amount,
+      currency: 'XOF',
+      metadata: { subscription_payment_id: lateBoostIntent.payment_id },
+    },
+  }));
+  assert.equal(lateBoostWebhook.status, 200);
+  const lateBoostStatus = await fetch(`${BASE_URL}/api/shops/${shopId}/subscription-payments/${lateBoostIntent.payment_id}`, {
+    headers: { Cookie: merchantCookie },
+  }).then((response) => response.json());
+  assert.equal(lateBoostStatus.status, 'paid');
+  assert.equal(lateBoostStatus.boost.status, 'active');
+  assert.ok(Date.parse(lateBoostStatus.boost.starts_at) >= Date.now() - 5_000);
+
   const persistedDatabase = new Database(TEST_DB_PATH, { readonly: true });
   try {
     const row = persistedDatabase.prepare('SELECT COUNT(*) AS total FROM shop_boosts WHERE shop_id = ? AND status = ?').get(shopId, 'active') as { total: number };
-    assert.equal(row.total, 1);
+    assert.equal(row.total, 2);
+    const reservation = persistedDatabase.prepare('SELECT reservation_expires_at FROM shop_boosts WHERE payment_intent_id = ?')
+      .get(lateBoostIntent.payment_id) as { reservation_expires_at: string | null };
+    assert.equal(reservation.reservation_expires_at, null);
   } finally {
     persistedDatabase.close();
   }

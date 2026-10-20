@@ -31,6 +31,7 @@ export interface AdminFinance {
     pending_count: number;
     pending_amount: number;
     failed_count: number;
+    expired_count: number;
     refunded_count: number;
     mrr: number;
     active_subscriptions: number;
