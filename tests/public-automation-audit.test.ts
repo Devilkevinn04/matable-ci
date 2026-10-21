@@ -143,7 +143,7 @@ async function payForSubscription(shopId: number, merchantCookie: string, tier: 
   } finally {
     expiryDb.close();
   }
-  const amount = tier === 'premium' ? 5000 : 8000;
+  const amount = tier === 'premium' ? 4000 : 5000;
   const intentResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/subscription-payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
@@ -309,8 +309,8 @@ test('merchant plans page exposes current prices and indexable SEO metadata', as
   assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:43124\/commercants" \/>/);
   assert.match(html, /"@type":"OfferCatalog"/);
   assert.match(html, /"price":3000/);
+  assert.match(html, /"price":4000/);
   assert.match(html, /"price":5000/);
-  assert.match(html, /"price":8000/);
   assert.match(html, /Essai gratuit de 7 jours/);
   assert.match(html, /href="http:\/\/127\.0\.0\.1:43124\/app\/creer-boutique"/);
   assert.equal((html.match(/property="og:title"/g) || []).length, 1);

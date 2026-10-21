@@ -29,6 +29,14 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
     handleLogin,
     setIsRegisterModalOpen, isRegisterModalOpen, handleRegisterShop, regName, setRegName, regCategory, setRegCategory, regCity, setRegCity, regCityOther, setRegCityOther, regPhone, setRegPhone, showRegPin, regPin, setRegPin, setShowRegPin, regEmail, setRegEmail, regLoading
   } = state;
+  const missingLoginFields = authError?.includes('Numéro de téléphone et code PIN requis.') === true;
+  const phoneFieldError = missingLoginFields
+    ? 'Saisissez le numéro WhatsApp utilisé lors de la création de la boutique.'
+    : authError?.includes('Aucune boutique associée') ? authError : '';
+  const pinFieldError = missingLoginFields
+    ? 'Saisissez le code PIN à 6 chiffres choisi lors de la création.'
+    : authError?.includes('Code PIN incorrect') ? authError : '';
+  const generalAuthError = authError && !phoneFieldError && !pinFieldError ? authError : '';
 
   // 0. SESSION LOADING — prevent flash of login form while checking cookie / access token
   if (isSessionLoading) {
@@ -70,10 +78,10 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
             </p>
           </div>
 
-          {authError && (
-            <div className="relative mb-4 p-3 rounded-xl bg-[#fdf1ee] border-[2px] border-[#b93712] text-[#b93712] text-xs font-medium flex items-center gap-2">
+          {generalAuthError && (
+            <div role="alert" className="relative mb-4 p-3 rounded-xl bg-[#fdf1ee] border-[2px] border-[#b93712] text-[#b93712] text-xs font-medium flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0 text-[#b93712]" />
-              <span>{authError}</span>
+              <span>{generalAuthError}</span>
             </div>
           )}
 
@@ -87,12 +95,15 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                   <input
                     type="tel"
                     required
+                    aria-invalid={Boolean(phoneFieldError)}
+                    aria-describedby={phoneFieldError ? 'merchant-phone-error' : undefined}
                     placeholder="+225 07 00 11 22 33"
                     value={phoneInput}
                     onChange={(e) => setPhoneInput(e.target.value)}
                     className="w-full text-xs py-3 pl-10 pr-3 rounded-xl border-[2px] border-[#211712] bg-[#fff] text-[#211712] focus:outline-none focus:border-[#1b3a63]"
                   />
                 </div>
+                {phoneFieldError && <p id="merchant-phone-error" role="alert" className="mt-1.5 text-xs font-semibold text-[#b93712]">{phoneFieldError}</p>}
               </div>
 
               <div>
@@ -108,6 +119,8 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                     pattern="[0-9]*"
                     minLength={6}
                     maxLength={6}
+                    aria-invalid={Boolean(pinFieldError)}
+                    aria-describedby={pinFieldError ? 'merchant-pin-error' : undefined}
                     placeholder="••••••"
                     value={pinInput}
                     onChange={(e) => setPinInput(e.target.value)}
@@ -117,6 +130,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                     {showPinInput ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
+                {pinFieldError && <p id="merchant-pin-error" role="alert" className="mt-1.5 text-xs font-semibold text-[#b93712]">{pinFieldError}</p>}
               </div>
 
               <button

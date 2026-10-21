@@ -261,8 +261,8 @@ test('exposes the documented monthly subscription plan catalog', () => {
     label: 'Standard',
     description: 'Les essentiels pour présenter vos produits et recevoir des demandes.',
   });
-  assert.equal(getSubscriptionPlanConfig('premium').amount, 5000);
-  assert.equal(getSubscriptionPlanConfig('pro').amount, 8000);
+  assert.equal(getSubscriptionPlanConfig('premium').amount, 4000);
+  assert.equal(getSubscriptionPlanConfig('pro').amount, 5000);
 });
 
 test('normalizes unknown subscription tiers to standard', () => {

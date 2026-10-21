@@ -6,8 +6,10 @@ import { once } from 'node:events';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import express from 'express';
 import { setTimeout as delay } from 'node:timers/promises';
 import Database from 'better-sqlite3';
+import { createAdminRouter } from '../server/routes/admin.ts';
 
 const TEST_PORT = 43123;
 const TEST_DB_PATH = path.join(tmpdir(), `matable-test-${Date.now()}.db`);
@@ -28,6 +30,37 @@ async function waitForServer() {
   }
   throw new Error('Server did not become ready in time.');
 }
+
+test('admin router denies requests when role guards are not configured', async () => {
+  const app = express();
+  app.use('/api/admin', createAdminRouter({
+    shops: [],
+    products: [],
+    orders: [],
+    databaseMode: 'sqlite',
+    dbAll: async <T,>() => [] as T[],
+    dbGet: async <T,>() => undefined as T | undefined,
+    dbRun: async () => ({ changes: 0 }),
+    dbTransaction: (() => Promise.reject(new Error('Unexpected transaction.'))) as Parameters<typeof createAdminRouter>[0]['dbTransaction'],
+    refreshRuntimeDataFromDatabase: async () => undefined,
+    persistShop: async () => undefined,
+    toSafeShop: (shop) => shop,
+    rotateMerchantAccessTokenForShop: async () => '',
+  }));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => server.once('listening', resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  try {
+    for (const route of ['/shops', '/payments', '/content-moderation']) {
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/admin${route}`);
+      assert.equal(response.status, 503, `${route} should fail closed`);
+      assert.deepEqual(await response.json(), { error: 'Protection administrative non configurée.' });
+    }
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
 
 function updateCookieJar(headers: Headers) {
   const rawSetCookie = headers.get('set-cookie');

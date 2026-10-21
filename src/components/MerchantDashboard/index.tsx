@@ -30,6 +30,7 @@ import {
   BarChart3,
   MoreHorizontal,
   Bell,
+  BookOpen,
 } from 'lucide-react';
 import { OrderStatus } from '../../types';
 import { formatFCFA } from '../../utils/format';
@@ -886,6 +887,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <h2 id="setup-checklist-title" className="mt-1 text-xl font-black text-[#211712] sm:text-2xl">Votre vitrine est presque prête</h2>
             </div>
             <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              <a href="/comment-ca-marche" className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[#155544] hover:bg-[#f3faf6]">
+                <BookOpen className="h-4 w-4" aria-hidden="true" /> Tutoriel
+              </a>
               <div className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 shadow-sm ring-1 ring-[#e8e0d6]">
                 <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Progression</span>
                 <span className="rounded-full bg-[#eaf4ef] px-2.5 py-1 text-xs font-black text-[#155544]">

@@ -10,11 +10,12 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_ENV_TEMPLATES = {".env.example", ".env.production.example"}
+SENSITIVE_SUFFIXES = (".dump", ".dump.sha256", ".backup", ".pem", ".p12", ".pfx", ".jks", ".keystore")
 
 
 def should_exclude(path: str) -> bool:
     parts = Path(path).parts
-    if not parts or parts[0] in {".git", "archives"}:
+    if not parts or parts[0] in {".git", "archives", "backups"}:
         return True
     if any(part in {"node_modules", "dist", "build"} for part in parts):
         return True
@@ -22,7 +23,11 @@ def should_exclude(path: str) -> bool:
         name = parts[-1].lower()
         if name.endswith((".db", ".db-wal", ".db-shm", ".db-journal", ".sqlite", ".sqlite3", ".sqlite-wal", ".sqlite-shm", ".sqlite-journal")):
             return True
-    if len(parts) == 1 and parts[0].startswith(".env") and parts[0] not in ALLOWED_ENV_TEMPLATES:
+    name = parts[-1].lower()
+    relative_path = Path(*parts).as_posix()
+    if name.startswith(".env") and relative_path not in ALLOWED_ENV_TEMPLATES:
+        return True
+    if name.endswith(SENSITIVE_SUFFIXES) or name.endswith(".log"):
         return True
     return False
 

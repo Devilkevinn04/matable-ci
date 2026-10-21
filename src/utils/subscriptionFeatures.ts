@@ -3,8 +3,8 @@ export type SubscriptionFeature = 'custom_branding' | 'event_mode' | 'social_lin
 export type SubscriptionTerm = 'monthly' | 'annual';
 
 export const SUBSCRIPTION_PRODUCT_LIMITS: Record<SubscriptionTier, number> = {
-  standard: 30,
-  premium: 100,
+  standard: 20,
+  premium: Number.POSITIVE_INFINITY,
   pro: Number.POSITIVE_INFINITY,
 };
 
@@ -49,7 +49,8 @@ export const SUBSCRIPTION_PLANS = {
     headline: 'Lancez votre boutique en ligne',
     description: 'Les essentiels pour présenter vos produits et recevoir des demandes.',
     benefits: [
-      'Jusqu’à 30 articles et 2 photos par article',
+      'Jusqu’à 20 articles et 2 photos par article',
+      'Un QR code général pour partager votre vitrine',
       'Commandes directes sur WhatsApp',
       'Présence dans l’annuaire MaTable.ci',
       'Statistiques de base sur 7 jours',
@@ -58,14 +59,14 @@ export const SUBSCRIPTION_PLANS = {
   premium: {
     tier: 'premium',
     label: 'Premium',
-    price: 5000,
+    price: 4000,
     headline: 'Faites-vous remarquer',
     description: 'Personnalisez votre vitrine et mettez en valeur votre marque.',
     benefits: [
       'Tout Standard',
       'Couleurs, polices, logo et bannière personnalisés',
       'Réseaux sociaux et bandeau événementiel',
-      'Jusqu’à 100 articles et 5 photos par article',
+      'Catalogue illimité et jusqu’à 5 photos par article',
       'Statistiques sur 30 jours et produits les plus consultés',
       'Meilleure visibilité dans l’annuaire',
     ],
@@ -73,7 +74,7 @@ export const SUBSCRIPTION_PLANS = {
   pro: {
     tier: 'pro',
     label: 'Pro',
-    price: 8000,
+    price: 5000,
     headline: 'Pilotez votre croissance',
     description: 'Visibilité maximale et statistiques détaillées de la vitrine.',
     benefits: [

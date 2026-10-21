@@ -34,9 +34,12 @@ const tourSteps = [
 ];
 
 const shopSteps = [
-  'Créez votre compte et présentez votre commerce.',
-  'Ajoutez vos produits, leurs prix et des photos.',
-  'Partagez votre vitrine et répondez aux clients directement.',
+  'Créez la boutique avec son nom, son numéro WhatsApp, sa commune et sa catégorie. Gardez le PIN choisi pour vous reconnecter.',
+  'Complétez la vitrine : coordonnées, horaires, présentation et identité visuelle.',
+  'Ajoutez vos produits, leurs prix, leur disponibilité et des photos à jour.',
+  'Soumettez la vérification d’identité du responsable. Elle est nécessaire avant la publication.',
+  'Choisissez une formule et réglez-la avec GeniusPay. Aucun prélèvement automatique n’est effectué.',
+  'Publiez la boutique après les étapes requises, puis gérez les demandes des clients depuis votre espace et échangez avec eux sur WhatsApp.',
 ];
 
 const hotspotPositions: React.CSSProperties[] = [

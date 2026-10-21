@@ -433,7 +433,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
   });
   const intent = await intentResponse.json();
   assert.equal(intentResponse.status, 201, JSON.stringify(intent));
-  assert.equal(intent.amount, 50000);
+  assert.equal(intent.amount, 40000);
   assert.equal(intent.currency, 'XOF');
   assert.match(intent.checkout_url, /^https:\/\/checkout\.geniuspay\.ci\/\d+$/);
   assert.equal('is_test' in intent, false);
@@ -454,7 +454,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: { transaction: {
       status: 'completed',
       reference: `GNP-${intent.payment_id}`,
-      amount: 50000,
+      amount: 40000,
       currency: 'XOF',
       metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
     },
@@ -524,7 +524,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'completed',
       reference: `GNP-${intent.payment_id}`,
-      amount: 49999,
+      amount: 39999,
       currency: 'XOF',
       metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
     },
@@ -537,7 +537,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'completed',
       reference: `GNP-${intent.payment_id}`,
-      amount: 50000,
+      amount: 40000,
       currency: 'USD',
       metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
     },
@@ -549,7 +549,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'completed',
       reference: 'GNP-UNRELATED-TRANSACTION',
-      amount: 50000,
+      amount: 40000,
       currency: 'XOF',
       metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
     },
@@ -608,7 +608,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'failed',
       reference: `GNP-${failedIntent.payment_id}`,
-      amount: 5000,
+      amount: 4000,
       currency: 'XOF',
       metadata: { subscription_payment_id: failedIntent.payment_id, payment_type: 'subscription' },
     },
@@ -628,7 +628,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'completed',
       reference: `GNP-${failedIntent.payment_id}`,
-      amount: 5000,
+      amount: 4000,
       currency: 'XOF',
       metadata: { subscription_payment_id: failedIntent.payment_id, payment_type: 'subscription' },
     },
@@ -652,7 +652,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'cancelled',
       reference: `GNP-${cancelledIntent.payment_id}`,
-      amount: 5000,
+      amount: 4000,
       currency: 'XOF',
       metadata: { subscription_payment_id: cancelledIntent.payment_id, payment_type: 'subscription' },
     },
@@ -669,13 +669,13 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
   assert.equal(finance.status, 200);
   const financeData = await finance.json();
   assert.equal(financeData.summary.confirmed_count, 1);
-  assert.equal(financeData.summary.collected_amount, 50000);
+  assert.equal(financeData.summary.collected_amount, 40000);
   assert.equal(financeData.summary.pending_count, 0);
   assert.equal(financeData.summary.failed_count, 2);
   assert.ok(financeData.summary.active_subscriptions >= 1);
-  assert.equal(financeData.summary.mrr - financeBeforePayment.summary.mrr, Math.round(50000 / 12));
+  assert.equal(financeData.summary.mrr - financeBeforePayment.summary.mrr, Math.round(40000 / 12));
   const previousPremiumMrr = financeBeforePayment.summary.mrr_by_tier.find((tier: { tier: string }) => tier.tier === 'premium')?.amount || 0;
-  assert.equal(financeData.summary.mrr_by_tier.find((tier: { tier: string }) => tier.tier === 'premium')?.amount - previousPremiumMrr, Math.round(50000 / 12));
+  assert.equal(financeData.summary.mrr_by_tier.find((tier: { tier: string }) => tier.tier === 'premium')?.amount - previousPremiumMrr, Math.round(40000 / 12));
   assert.equal(financeData.summary.mrr_estimated_subscriptions, financeBeforePayment.summary.mrr_estimated_subscriptions);
   assert.equal(financeData.summary.promotions.amount, 0);
   assert.equal(financeData.payments[0].shop_id, createdPayload.shop.id);
@@ -702,7 +702,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
   assert.equal(financeAfterMorePayments.payment_limit, 100);
   assert.equal(financeAfterMorePayments.payment_offset, 0);
   assert.equal(financeAfterMorePayments.summary.confirmed_count, 206);
-  assert.equal(financeAfterMorePayments.summary.collected_amount, 70500);
+  assert.equal(financeAfterMorePayments.summary.collected_amount, 60500);
   assert.equal(financeAfterMorePayments.summary.promotions.count, 205);
   assert.equal(financeAfterMorePayments.summary.promotions.amount, 20500);
   assert.equal(financeAfterMorePayments.summary.failed_count, 2);
@@ -730,7 +730,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'completed',
       reference: `GNP-${activeRenewalIntent.payment_id}`,
-      amount: 5000,
+      amount: 4000,
       currency: 'XOF',
       metadata: { subscription_payment_id: activeRenewalIntent.payment_id, payment_type: 'subscription' },
     },
@@ -761,7 +761,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'completed',
       reference: `GNP-${intent.payment_id}`,
-      amount: 5000,
+      amount: 4000,
       currency: 'XOF',
       metadata: { subscription_payment_id: reusedReferenceIntent.payment_id, payment_type: 'subscription' },
     },
@@ -792,7 +792,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'completed',
       reference: `GNP-${reusedReferenceIntent.payment_id}`,
-      amount: 5000,
+      amount: 4000,
       currency: 'XOF',
       metadata: { subscription_payment_id: reusedReferenceIntent.payment_id, payment_type: 'subscription' },
     },
@@ -859,7 +859,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'refunded',
       reference: `GNP-${intent.payment_id}`,
-      amount: 50000,
+      amount: 40000,
       currency: 'XOF',
       metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
     },
@@ -880,7 +880,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: { transaction: {
       status: 'refunded',
       reference: `GNP-${activeRenewalIntent.payment_id}`,
-      amount: 5000,
+      amount: 4000,
       amount_refunded: 1200,
       currency: 'XOF',
       metadata: { subscription_payment_id: activeRenewalIntent.payment_id, payment_type: 'subscription' },

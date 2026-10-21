@@ -138,7 +138,7 @@ test('Pro subscription exposes consented product stats and activates discounted 
   });
   assert.equal(earlyPaymentResponse.status, 201);
   const earlyPayment = await earlyPaymentResponse.json();
-  assert.equal(earlyPayment.amount, 80000);
+  assert.equal(earlyPayment.amount, 50000);
   assert.equal(earlyPayment.currency, 'XOF');
   const unverifiedBoost = await fetch(`${BASE_URL}/api/shops/${shopId}/boost-payments`, {
     method: 'POST',
@@ -222,13 +222,13 @@ test('Pro subscription exposes consented product stats and activates discounted 
   });
   const subscriptionIntent = await subscriptionIntentResponse.json();
   assert.equal(subscriptionIntentResponse.status, 201, JSON.stringify(subscriptionIntent));
-  assert.equal(subscriptionIntent.amount, 80000);
+  assert.equal(subscriptionIntent.amount, 50000);
   const subscriptionPaymentBody = JSON.stringify({
     event: 'payment.success',
     data: {
       status: 'completed',
       reference: `GNP-${subscriptionIntent.payment_id}`,
-      amount: 80000,
+      amount: 50000,
       currency: 'XOF',
       metadata: { subscription_payment_id: subscriptionIntent.payment_id, payment_type: 'subscription' },
     },

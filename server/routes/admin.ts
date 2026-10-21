@@ -46,9 +46,12 @@ export function createAdminRouter(options: AdminRouterOptions) {
   } = options;
   const router = Router();
   const maxTrialExtensionDays = 30;
-  const requireAdmin = requireAdminAccess ?? ((_req, _res, next) => next());
-  const requireSuperAdmin = requireSuperAdminAccess ?? ((req: any, res: any, next: any) => next());
-  const requireVerification = requireVerificationAdminAccess ?? ((req: any, res: any, next: any) => next());
+  const rejectUnconfiguredAccess: RequestHandler = (_req, res) => {
+    res.status(503).json({ error: 'Protection administrative non configurée.' });
+  };
+  const requireAdmin = requireAdminAccess ?? rejectUnconfiguredAccess;
+  const requireSuperAdmin = requireSuperAdminAccess ?? rejectUnconfiguredAccess;
+  const requireVerification = requireVerificationAdminAccess ?? rejectUnconfiguredAccess;
   const isVerificationAdmin = (req: { adminRole?: string }) => req.adminRole === 'verification_admin';
   router.use((req, res, next) => {
     const path = String(req.path || '');

@@ -26,6 +26,7 @@ import {
   UserRound,
   Trash2,
   MoreHorizontal,
+  ChevronRight,
   X,
 } from 'lucide-react';
 import { AdminIdentityVerificationPanel } from './AdminIdentityVerificationPanel';
@@ -715,7 +716,7 @@ export const AdminDashboard: React.FC = () => {
               <ShieldCheck className="w-4 h-4" />
               {loginRole === 'verification_admin' ? 'Espace de vérification' : 'Espace de contrôle central'}
             </div>
-            <p className="mt-2 text-sm text-[#4a3a30]">
+            <p id="admin-login-instructions" className="mt-2 text-sm text-[#4a3a30]">
               {loginRole === 'verification_admin'
                 ? 'Entrez la clé de vérification configurée côté serveur. Cet accès est limité aux vérifications et à la modération.'
                 : 'Entrez la clé configurée côté serveur pour piloter les boutiques et les alertes.'}
@@ -736,11 +737,15 @@ export const AdminDashboard: React.FC = () => {
             <option value="verification_admin">Admin de vérification</option>
           </select>
           <div className="relative">
+            <label htmlFor="admin-access-key" className="mb-1.5 block text-xs font-bold text-slate-700">Clé d’accès</label>
             <input
+              id="admin-access-key"
               type={showAdminKey ? 'text' : 'password'}
               value={adminKey}
               onChange={(event) => setAdminKey(event.target.value)}
               placeholder={loginRole === 'verification_admin' ? 'Clé admin de vérification' : 'Clé super-admin'}
+              aria-invalid={Boolean(authError)}
+              aria-describedby={authError ? 'admin-key-error' : 'admin-login-instructions'}
               required
               className="w-full rounded-2xl border-[2px] border-[#211712] bg-[#fffaf2] px-3 py-3 pr-12 text-sm font-medium text-[#211712] outline-none transition focus:border-[#1b3a63] focus:bg-white"
             />
@@ -748,7 +753,7 @@ export const AdminDashboard: React.FC = () => {
               {showAdminKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-          {authError && <p className="mt-3 text-sm text-[#b93712]">{authError}</p>}
+          {authError && <p id="admin-key-error" role="alert" className="mt-3 text-sm text-[#b93712]">{authError}</p>}
           <button type="submit" className="mt-5 w-full rounded-2xl bg-[#1b3a63] px-4 py-3 text-sm font-black text-white shadow-[4px_4px_0_rgba(33,23,18,0.95)] border-2 border-[#211712] transition hover:translate-y-[-1px]">
             Se connecter
           </button>
@@ -1178,6 +1183,35 @@ export const AdminDashboard: React.FC = () => {
               Consulter les statuts
             </button>
           </motion.div>
+        )}
+
+        {adminRole === 'super_admin' && adminView === 'overview' && (
+          <section aria-label="Raccourcis super-admin" className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-black text-slate-900">Accès rapides plateforme</h2>
+              <p className="mt-1 text-xs text-slate-600">Finance, abonnements et état des opérations.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[['finance', 'Finances'], ['subscriptions', 'Abonnements'], ['operations', 'Opérations']].map(([view, label]) => (
+                <button key={view} type="button" onClick={() => setAdminView(view as AdminView)} className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 hover:bg-slate-50">
+                  {label}<ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {adminRole === 'verification_admin' && adminView === 'identity' && (
+          <section aria-label="Périmètre admin de vérification" className="flex flex-col gap-3 rounded-xl border border-sky-200 bg-sky-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-black text-sky-950">Espace vérification · lecture seule</h2>
+              <p className="mt-1 text-xs leading-5 text-sky-900">Consultez les statuts Didit et les signalements. Les décisions d’identité sont transmises par le fournisseur; les outils plateforme restent réservés au super-admin.</p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <button type="button" onClick={() => setAdminView('verification-shops')} className="min-h-9 rounded-lg border border-sky-300 bg-white px-3 text-xs font-bold text-sky-950 hover:bg-sky-100">Boutiques</button>
+              <button type="button" onClick={() => setAdminView('moderation')} className="min-h-9 rounded-lg bg-sky-900 px-3 text-xs font-bold text-white hover:bg-sky-800">Avis & signalements</button>
+            </div>
+          </section>
         )}
 
         <div className="grid min-w-0 gap-3 sm:gap-4 lg:grid-cols-1 lg:items-start">

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { ArrowRight, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MapPin, Menu, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, UserRound, X } from 'lucide-react';
+import { ArrowRight, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MapPin, Menu, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, UserRound, X } from 'lucide-react';
 import { AuthAudienceSwitcher, AuthExperienceLayout } from './AuthExperienceLayout';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
 import { CustomerMerchantRegistrationForm } from './CustomerMerchantRegistrationForm';
@@ -45,6 +45,18 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingOAuthProfile, setPendingOAuthProfile] = useState<PendingOAuthProfile | null>(null);
   const [acceptedTermsPrivacy, setAcceptedTermsPrivacy] = useState(false);
+  const normalizedError = error.toLocaleLowerCase();
+  const duplicateAccountError = normalizedError.includes('compte existe déjà');
+  const invalidCredentialsError = normalizedError.includes('identifiants invalides');
+  const phoneFieldError = error && (normalizedError.includes('téléphone') || duplicateAccountError || (mode === 'login' && normalizedError.includes('requis')))
+    ? duplicateAccountError ? 'Un compte utilise déjà cet e-mail ou ce téléphone.' : invalidCredentialsError ? 'Vérifiez le numéro de téléphone puis réessayez.' : error
+    : '';
+  const emailFieldError = error && (normalizedError.includes('email') || normalizedError.includes('e-mail') || duplicateAccountError || (mode === 'login' && normalizedError.includes('requis')))
+    ? duplicateAccountError ? 'Un compte utilise déjà cet e-mail ou ce téléphone.' : invalidCredentialsError ? 'Vérifiez l’adresse e-mail puis réessayez.' : error
+    : '';
+  const passwordFieldError = error && (normalizedError.includes('mot de passe') || invalidCredentialsError || (mode === 'login' && normalizedError.includes('requis')))
+    ? invalidCredentialsError ? 'Vérifiez le mot de passe puis réessayez.' : error
+    : '';
 
   useEffect(() => setMode(initialMode), [initialMode]);
 
@@ -158,9 +170,9 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
         <form onSubmit={submit} className="space-y-4">
           {!pendingOAuthProfile && <CustomerOAuthButtons returnTo="/compte" />}
           {mode === 'register' && <div className="grid gap-3 min-[390px]:grid-cols-2 sm:gap-4"><label className="block text-sm font-semibold text-[#34463d]">Prénom<input value={firstName} onChange={(event) => setFirstName(event.target.value)} required autoComplete="given-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="Votre prénom" /></label><label className="block text-sm font-semibold text-[#34463d]">Nom<input value={lastName} onChange={(event) => setLastName(event.target.value)} required autoComplete="family-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="Votre nom" /></label></div>}
-          {mode === 'register' && <label className="block text-sm font-semibold text-[#34463d]">Numéro de téléphone<input type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="tel" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="+225 07 00 00 00 00" /></label>}
-          {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#34463d]">Adresse e-mail<div className="relative mt-1.5"><Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#869188]" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-11 pr-4 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="vous@exemple.ci" /></div></label>}
-          {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#34463d]">Mot de passe<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="8 caractères minimum" /></label>}
+          {mode === 'register' && <label className="block text-sm font-semibold text-[#34463d]">Numéro de téléphone<input type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="tel" aria-invalid={Boolean(phoneFieldError)} aria-describedby={phoneFieldError ? 'customer-phone-error' : undefined} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="+225 07 00 00 00 00" />{phoneFieldError && <span id="customer-phone-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{phoneFieldError}</span>}</label>}
+          {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#34463d]">Adresse e-mail<div className="relative mt-1.5"><Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#869188]" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" aria-invalid={Boolean(emailFieldError)} aria-describedby={emailFieldError ? 'customer-email-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-11 pr-4 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="vous@exemple.ci" /></div>{emailFieldError && <span id="customer-email-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{emailFieldError}</span>}</label>}
+          {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#34463d]">Mot de passe<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} aria-invalid={Boolean(passwordFieldError)} aria-describedby={passwordFieldError ? 'customer-password-error' : undefined} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#25231f] outline-none transition focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/10" placeholder="8 caractères minimum" />{passwordFieldError && <span id="customer-password-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{passwordFieldError}</span>}</label>}
           {(pendingOAuthProfile || mode === 'register') && (
             <TermsPrivacyConsent id="customer-account-terms-privacy" checked={acceptedTermsPrivacy} onChange={setAcceptedTermsPrivacy} />
           )}
@@ -603,9 +615,14 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                 <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Votre compte, en un coup d’œil</h2>
                 <p className="mt-2 text-sm leading-6 text-[#6f6a61]">Suivez vos achats et retrouvez rapidement vos informations utiles.</p>
               </div>
-              <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#0f4d3d] px-5 text-sm font-bold text-white transition hover:bg-[#176b55]">
-                Découvrir les boutiques <ArrowRight className="h-4 w-4" />
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <a href="/comment-ca-marche" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[#0f4d3d] transition hover:bg-[#e4f1ec]">
+                  <BookOpen className="h-4 w-4" /> Guide d’utilisation
+                </a>
+                <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#0f4d3d] px-5 text-sm font-bold text-white transition hover:bg-[#176b55]">
+                  Découvrir les boutiques <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
