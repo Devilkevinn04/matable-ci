@@ -13,14 +13,15 @@ import type { MerchantState } from './components/MerchantDashboard/useMerchant';
 import type { Shop } from './types';
 import { findPublicDiscoveryPage } from './utils/discoverySeo';
 import { getCanonicalOrigin } from './utils/seoCanonical';
-import { ANALYTICS_CAMPAIGN_SESSION_KEY, getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from './utils/analyticsAttribution';
 
 const CustomerStorefront = React.lazy(() => import('./components/CustomerStorefront').then((module) => ({ default: module.CustomerStorefront })));
 const MerchantDashboard = React.lazy(() => import('./components/MerchantDashboard/index').then((module) => ({ default: module.MerchantDashboard })));
 const AdminDashboard = React.lazy(() => import('./components/AdminDashboard').then((module) => ({ default: module.AdminDashboard })));
 const PublicDirectory = React.lazy(() => import('./components/PublicDirectory').then((module) => ({ default: module.PublicDirectory })));
 const HowItWorksPage = React.lazy(() => import('./components/HowItWorksPage'));
+const MerchantPlansPage = React.lazy(() => import('./components/MerchantPlansPage').then((module) => ({ default: module.MerchantPlansPage })));
 const MerchantTrialOnboarding = React.lazy(() => import('./components/MerchantDashboard/MerchantTrialOnboarding').then((module) => ({ default: module.MerchantTrialOnboarding })));
+const MobileDashboardPreview = React.lazy(() => import('./components/MobileDashboardPreview'));
 
 const legalPageMap: Record<string, LegalPageKey> = {
   'mentions-legales': 'mentions-legales',
@@ -264,10 +265,12 @@ export default function App() {
   const [openMerchantRegistration, setOpenMerchantRegistration] = useState(false);
   const discoveryPage = useMemo(() => findPublicDiscoveryPage(path, availableShops), [path, availableShops]);
   const isDiscoveryRoute = path.startsWith('/boutiques/');
+  const isMerchantPlansPage = path.replace(/\/+$/, '') === '/commercants';
   const isProductModalPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/article-form';
   const isMerchantPlansPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/merchant-plans';
-  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isRecoveryPage || isProductModalPreview || isMerchantPlansPreview;
-  const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !isShopDirectoryRoute && !isHowItWorksRoute && !isDiscoveryRoute && !legalPage && !isFaqPage && customerView === 'none';
+  const isMobileDashboardPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/mobile';
+  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isRecoveryPage || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview;
+  const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !isShopDirectoryRoute && !isHowItWorksRoute && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && customerView === 'none';
   const isUnknownStorefront = isCustomerStorefront && !isLoadingShops && !availableShops.some((shop) => shop.slug === normalizedPath);
 
   useEffect(() => {
@@ -289,7 +292,7 @@ export default function App() {
       const isPrivateRoute = path === '/app' || path.startsWith('/app/')
         || path === '/admin' || path.startsWith('/admin/')
         || path === '/compte' || path === '/connexion' || path === '/inscription'
-        || isRecoveryPage || hasMerchantAccessToken || hasAdminShopSession;
+        || isRecoveryPage || isMobileDashboardPreview || hasMerchantAccessToken || hasAdminShopSession;
       if (isPrivateRoute || isUnknownStorefront || !hasAnalyticsConsent()) return;
 
       const sessionStorageKey = 'matable_analytics_session';
@@ -327,6 +330,10 @@ export default function App() {
   }, [path, location.search, isRecoveryPage, hasMerchantAccessToken, hasAdminShopSession, isUnknownStorefront]);
 
   useEffect(() => {
+    if (isMobileDashboardPreview) {
+      setIsLoadingShops(false);
+      return;
+    }
     let isCurrentRequest = true;
     setIsLoadingShops(true);
     setShopsLoadError(false);
@@ -346,30 +353,35 @@ export default function App() {
         if (isCurrentRequest) setIsLoadingShops(false);
       });
     return () => { isCurrentRequest = false; };
-  }, [shopsRetryKey]);
+  }, [shopsRetryKey, isMobileDashboardPreview]);
 
   useEffect(() => {
+    if (isMobileDashboardPreview) return;
     fetch('/api/auth/customer-session', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (data.authenticated && data.user) setCustomerUser(data.user);
       })
       .catch(() => undefined);
-  }, []);
+  }, [isMobileDashboardPreview]);
 
   useEffect(() => {
     const isPrivateRoute = path === '/app' || path.startsWith('/app/') || path === '/admin' || path.startsWith('/admin/')
       || path === '/compte' || path === '/connexion' || path === '/inscription' || isRecoveryPage;
-    const isInvalidNestedRoute = (!legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && !isMerchantPlansPreview && !isShopDirectoryRoute && !isHowItWorksRoute && !discoveryPage && path.split('/').filter(Boolean).length > 1)
+    const isInvalidNestedRoute = (!legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && !isMerchantPlansPreview && !isMobileDashboardPreview && !isShopDirectoryRoute && !isHowItWorksRoute && !isMerchantPlansPage && !discoveryPage && path.split('/').filter(Boolean).length > 1)
       || isUnknownStorefront;
     const metadata = isProductModalPreview
       ? { title: 'Aperçu du formulaire article | MaTable.ci', description: 'Prévisualisation locale du formulaire de création d’article.' }
+      : isMobileDashboardPreview
+       ? { title: 'Aperçus mobiles | MaTable.ci', description: 'Aperçus de test des espaces commerçant et administration MaTable.ci.' }
       : isMerchantPlansPreview
        ? { title: 'Aperçu des formules commerçants | MaTable.ci', description: 'Comparaison des formules Standard, Premium et Pro pour les commerçants MaTable.ci.' }
       : legalPage
       ? legalMetadata[legalPage]
       : isShopDirectoryRoute
         ? shopDirectoryMetadata
+      : isMerchantPlansPage
+        ? { title: 'Formules commerçants et tarifs | MaTable.ci', description: 'Comparez les formules Standard, Premium et Pro de MaTable.ci. Créez votre vitrine avec un essai gratuit de 7 jours, sans paiement pour démarrer.' }
       : isHowItWorksRoute
         ? howItWorksMetadata
       : discoveryPage
@@ -389,7 +401,7 @@ export default function App() {
     const canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (canonical) canonical.href = canonicalUrl;
     const robots = document.head.querySelector<HTMLMetaElement>('meta[name="robots"]');
-    if (robots) robots.content = isPrivateRoute || isInvalidNestedRoute || isProductModalPreview || isMerchantPlansPreview ? 'noindex, nofollow' : 'index, follow, max-image-preview:large';
+    if (robots) robots.content = isPrivateRoute || isInvalidNestedRoute || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview ? 'noindex, nofollow' : 'index, follow, max-image-preview:large';
     const openGraphTitle = document.head.querySelector<HTMLMetaElement>('meta[property="og:title"]');
     if (openGraphTitle) openGraphTitle.content = metadata.title;
     const openGraphDescription = document.head.querySelector<HTMLMetaElement>('meta[property="og:description"]');
@@ -400,7 +412,7 @@ export default function App() {
     if (twitterTitle) twitterTitle.content = metadata.title;
     const twitterDescription = document.head.querySelector<HTMLMetaElement>('meta[name="twitter:description"]');
     if (twitterDescription) twitterDescription.content = metadata.description;
-  }, [path, legalPage, isFaqPage, isRecoveryPage, discoveryPage, isShopDirectoryRoute, isHowItWorksRoute, isUnknownStorefront]);
+  }, [path, legalPage, isFaqPage, isRecoveryPage, discoveryPage, isShopDirectoryRoute, isHowItWorksRoute, isMerchantPlansPage, isUnknownStorefront]);
 
   const renderCustomerAuth = (initialMode: 'login' | 'register') => (
     <CustomerAuth
@@ -427,7 +439,7 @@ export default function App() {
               <div className="min-h-screen">
                 {!hasStandaloneAccountFlow && currentRole !== 'admin' && !isCustomerStorefront && <Navigation
                   currentRole={currentRole}
-                  onChangeRole={(role) => navigate(role === 'admin' ? '/admin' : role === 'merchant' ? '/app' : '/')}
+                  onChangeRole={(role) => navigate(role === 'admin' ? '/admin' : role === 'merchant' ? '/commercants' : '/')}
                   onOpenDirectory={() => navigate('/boutiques')}
                   isDirectory={path === '/' || isShopDirectoryRoute}
                   isLegalPage={Boolean(legalPage)}
@@ -445,9 +457,11 @@ export default function App() {
                         ? <React.Suspense fallback={<p role="status" className="p-6 text-center text-sm font-semibold text-slate-600">Chargement de la page…</p>}><MerchantTrialOnboarding shop={merchantPlanPreviewShop} isStarting={false} mode="plans" previewOnly onBack={() => navigate('/boutiques')} /></React.Suspense>
                         : <NotFoundPage />
                       } />
+                      <Route path="/__preview/mobile" element={isMobileDashboardPreview ? <MobileDashboardPreview /> : <NotFoundPage />} />
                       <Route path="/" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app/creer-boutique'); }} />} />
                       <Route path="/boutiques" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app/creer-boutique'); }} isShopDirectoryPage />} />
                       <Route path="/comment-ca-marche" element={<HowItWorksPage />} />
+                      <Route path="/commercants" element={<MerchantPlansPage />} />
                       <Route path="/faq" element={<FaqPage />} />
                       <Route path="/recuperation-acces" element={<AccountRecoveryPage initialAccountType={new URLSearchParams(location.search).get('type') === 'merchant' ? 'merchant' : 'customer'} onBack={() => navigate(new URLSearchParams(location.search).get('type') === 'merchant' ? '/app' : '/connexion')} />} />
                       <Route path="/mentions-legales" element={<LegalPages page="mentions-legales" />} />
@@ -479,7 +493,7 @@ export default function App() {
                 {!hasStandaloneAccountFlow && currentRole !== 'admin' && <Footer compact={Boolean(legalPage)} />}
               </div>
             </div>
-            <CookieBanner />
+            {!isMobileDashboardPreview && <CookieBanner />}
       </div>
     </ToastProvider>
   );

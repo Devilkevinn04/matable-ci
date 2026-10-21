@@ -6,6 +6,7 @@ interface CategoryProductImageProps {
   category?: unknown;
   title: string;
   className?: string;
+  imageFit?: 'cover' | 'contain';
   loading?: 'eager' | 'lazy';
   children?: React.ReactNode;
 }
@@ -15,6 +16,7 @@ export const CategoryProductImage: React.FC<CategoryProductImageProps> = ({
   category,
   title,
   className = '',
+  imageFit = 'cover',
   loading = 'lazy',
   children,
 }) => {
@@ -29,7 +31,7 @@ export const CategoryProductImage: React.FC<CategoryProductImageProps> = ({
         <span className="line-clamp-2 max-w-full text-sm font-black">{title}</span>
         {isPlaceholder && <span className="text-[10px] font-bold uppercase">Photo à venir · {defaults.label}</span>}
       </div>
-      {normalizedImage && <img src={normalizedImage} alt={title} loading={loading} referrerPolicy="no-referrer" className="relative z-10 h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />}
+      {normalizedImage && <img src={normalizedImage} alt={title} loading={loading} referrerPolicy="no-referrer" className={`relative z-10 h-full w-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} onError={(event) => { event.currentTarget.hidden = true; }} />}
       {children}
     </div>
   );

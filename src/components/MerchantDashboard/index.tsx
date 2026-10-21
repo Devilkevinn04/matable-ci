@@ -5,10 +5,6 @@ import {
   ShoppingBag,
   Package,
   Plus,
-  Edit3,
-  Trash2,
-  Phone,
-  Lock,
   Clock,
   Check,
   Send,
@@ -17,23 +13,15 @@ import {
   ChevronDown,
   UserPlus,
   X,
-  UtensilsCrossed,
-  Shirt,
   Search,
-  Eye,
-  EyeOff,
-  Minus,
   TrendingUp,
   DollarSign,
-  MapPin,
   Palette,
   Key,
   AlertTriangle,
   Copy,
+  QrCode,
   RotateCcw,
-  Calendar,
-  Upload,
-  Boxes,
   LayoutDashboard,
   ShieldCheck,
   CreditCard,
@@ -43,11 +31,9 @@ import {
   MoreHorizontal,
   Bell,
 } from 'lucide-react';
-import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks } from '../../types';
-import { formatFCFA, compressImageClientSide, cleanPhoneForWhatsApp } from '../../utils/format';
-import { ThemeCustomizer } from '../ThemeCustomizer';
-import { useToast } from '../Toast';
-import { CATEGORY_DEFAULTS, getCategoryDefaults, SHOP_CATEGORIES } from '../../utils/categoryDefaults';
+import { OrderStatus } from '../../types';
+import { formatFCFA } from '../../utils/format';
+import { getCategoryDefaults } from '../../utils/categoryDefaults';
 import { getSubscriptionAccessCutoff, getSubscriptionProductLimit, TRIAL_CATALOG_LIMIT } from '../../utils/subscriptionFeatures';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 
@@ -73,6 +59,12 @@ interface MerchantReviewsResponse {
   review_count: number;
 }
 
+interface PaymentReturnNotice {
+  paymentId: string;
+  status: 'checking' | 'success' | 'error' | 'pending';
+  message: string;
+}
+
 function isMerchantReview(value: unknown): value is MerchantReview {
   if (!value || typeof value !== 'object') return false;
   const review = value as Record<string, unknown>;
@@ -92,27 +84,15 @@ function isMerchantReviewsResponse(value: unknown): value is MerchantReviewsResp
     && typeof payload.review_count === 'number';
 }
 
-const shopCategoryOptions: { value: ShopCategory; label: string; icon: string }[] = SHOP_CATEGORIES.map((value) => ({
-  value,
-  label: CATEGORY_DEFAULTS[value].label,
-  icon: CATEGORY_DEFAULTS[value].icon,
-}));
-
-const abidjanCommunes = [
-  'Abobo', 'Adjamé', 'Anyama', 'Attécoubé', 'Bingerville', 'Cocody',
-  'Koumassi', 'Marcory', 'Plateau', 'Port-Bouët', 'Songon', 'Treichville',
-  'Yopougon', 'Autre ville / commune',
-];
-
 import { useMerchantDashboard } from './useMerchant';
 import { AuthScreens } from './AuthScreens';
 import { CatalogTab } from './CatalogTab';
 import { OrdersTab } from './OrdersTab';
 import { SettingsTab } from './SettingsTab';
 import { ProductModal } from './ProductModal';
-import { MerchantIdentityVerification } from './lazyMerchantIdentityVerification';
 import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
 import { ProAnalyticsPanel } from './ProAnalyticsPanel';
+import { MerchantQrShareKit } from './MerchantQrShareKit';
 
 export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStorefront, onBackToDirectory, onCustomerLogin, openRegistration = false }) => {
 
@@ -121,7 +101,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const [isHeaderCompact, setIsHeaderCompact] = useState(false);
   const [isSetupChecklistExpanded, setIsSetupChecklistExpanded] = useState(false);
   const [isIdentityGuideOpen, setIsIdentityGuideOpen] = useState(false);
+  const [isQrKitOpen, setIsQrKitOpen] = useState(false);
   const [subscriptionReminderDay, setSubscriptionReminderDay] = useState<number | null>(null);
+  const [paymentIdToCheck, setPaymentIdToCheck] = useState<string | null>(null);
+  const [paymentReturnNonce, setPaymentReturnNonce] = useState(0);
+  const [paymentReturnNotice, setPaymentReturnNotice] = useState<PaymentReturnNotice | null>(null);
   const [dashboardSearch, setDashboardSearch] = useState('');
   const [shopReviews, setShopReviews] = useState<MerchantReview[]>([]);
   const [shopReviewSummary, setShopReviewSummary] = useState<{ average: number | null; count: number }>({ average: null, count: 0 });
@@ -202,169 +186,124 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     }
   }, [merchantState.currentShop?.id, merchantState.currentShop?.admin_mode, merchantState.currentShop?.merchant_verification_status]);
   const {
-    addDeliveryZone,
-    updateDeliveryZone,
-    removeDeliveryZone,
     currentShop,
-    isSessionLoading,
     confirmModal,
-    phoneInput,
-    pinInput,
-    accessCodeInput,
-    showAccessCode,
-    showPinInput,
-    showRegPin,
-    showSettingsPin,
-    authMode,
-    authError,
-    authLoading,
-    isRegisterModalOpen,
-    regName,
-    regPhone,
-    regPin,
-    regCity,
-    regCityOther,
-    regEmail,
-    regCategory,
-    regLoading,
     trialStarting,
     activeTab,
     settingsSubTab,
     products,
     orders,
-    flashBilan,
-    dataLoading,
     catalogSearch,
     catalogFilter,
     orderSearch,
     orderPaymentFilter,
     orderStatusFilter,
-    isProductModalOpen,
-    editingProduct,
-    prodTitle,
-    prodCategory,
-    prodDescription,
-    prodPrice,
-    prodStock,
-    prodImage,
-    prodLookbookImage,
-    prodSizes,
-    prodColors,
-    prodPrepTime,
-    prodIsAvailable,
-    imageCompressing,
-    compressedSizeKB,
-    originalImageSizeKB,
-    settingsName,
-    settingsWelcome,
-    settingsOpen,
-    settingsPhone,
-    settingsCity,
-    settingsNewPin,
-    settingsSocialLinks,
-    settingsDeliveryZones,
-    settingsSaved,
     hoursEnabled,
-    openTime,
-    closeTime,
-    activeDays,
     manualOverride,
-    hoursSaved,
-    cronRunning,
-    cronResult,
-    copiedBilan,
-    setCurrentShop,
-    setIsSessionLoading,
     setConfirmModal,
-    setPhoneInput,
-    setPinInput,
-    setAccessCodeInput,
-    setShowAccessCode,
-    setShowPinInput,
-    setShowRegPin,
-    setShowSettingsPin,
-    setAuthMode,
-    setAuthError,
-    setAuthLoading,
-    setIsRegisterModalOpen,
-    setRegName,
-    setRegPhone,
-    setRegPin,
-    setRegCity,
-    setRegCityOther,
-    setRegEmail,
-    setRegCategory,
-    setRegLoading,
-    setRegistrationLinks,
     setActiveTab,
     setSettingsSubTab,
-    setProducts,
-    setOrders,
-    setFlashBilan,
-    setDataLoading,
     setCatalogSearch,
     setCatalogFilter,
     setOrderSearch,
     setOrderPaymentFilter,
     setOrderStatusFilter,
-    setIsProductModalOpen,
-    setEditingProduct,
-    setProdTitle,
-    setProdCategory,
-    setProdDescription,
-    setProdPrice,
-    setProdStock,
-    setProdImage,
-    setProdLookbookImage,
-    setProdSizes,
-    setProdColors,
-    setProdPrepTime,
-    setProdIsAvailable,
-    setImageCompressing,
-    setCompressedSizeKB,
-    setOriginalImageSizeKB,
-    setSettingsName,
-    setSettingsWelcome,
-    setSettingsOpen,
-    setSettingsPhone,
-    setSettingsCity,
-    setSettingsNewPin,
-    setSettingsSocialLinks,
-    setSettingsDeliveryZones,
-    setSettingsSaved,
-    setHoursEnabled,
-    setOpenTime,
-    setCloseTime,
-    setActiveDays,
-    setManualOverride,
-    setHoursSaved,
-    setCronRunning,
-    setCronResult,
-    setCopiedBilan,
-    handlePrivateAccessLogin,
-    handleLogin,
-    handleRegisterShop,
-      handleStartTrial,
+    handleStartTrial,
     handleLogout,
     handleToggleShopStatus,
     handlePublicationStatusChange,
-    handleSaveOpeningHours,
     handleResetManualOverride,
-    handleTriggerCronBilan,
-    handleQuickStockChange,
-    handleQuickToggleVisibility,
     handleOpenAddModal,
-    handleOpenEditModal,
-    handleUpdateOrderStatus,
-    handleImageUpload,
-    handleSaveProduct,
-    handleDeleteProduct,
-    handleSaveGeneralSettings,
     toast,
-    loadShopData,
-    syncShopSettings,
     copyOwnerLink
   } = merchantState;
+
+  useEffect(() => {
+    const returnUrl = new URL(window.location.href);
+    const returnedPaymentId = returnUrl.searchParams.get('payment_id');
+    if (!returnedPaymentId) return;
+    returnUrl.searchParams.delete('payment_id');
+    window.history.replaceState(window.history.state, '', `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`);
+    setPaymentIdToCheck(returnedPaymentId);
+  }, []);
+
+  useEffect(() => {
+    if (!paymentIdToCheck || !currentShop || currentShop.admin_mode) return;
+    let cancelled = false;
+    setPaymentReturnNotice({ paymentId: paymentIdToCheck, status: 'checking', message: 'Retour de GeniusPay. Vérification sécurisée en cours…' });
+    const checkReturnedPayment = async () => {
+      for (let attempt = 0; attempt < 30 && !cancelled; attempt += 1) {
+        try {
+          const response = await fetch(`/api/shops/${currentShop.id}/subscription-payments/${encodeURIComponent(paymentIdToCheck)}`, { credentials: 'include' });
+          if ([401, 403, 404].includes(response.status)) {
+            if (!cancelled) setPaymentReturnNotice({ paymentId: paymentIdToCheck, status: 'error', message: 'Impossible de retrouver ce paiement pour cette session boutique.' });
+            return;
+          }
+          if (!response.ok) throw new Error('Payment status request failed.');
+          const payment = await response.json();
+          if (payment.status === 'paid') {
+            if (payment.payment_type === 'subscription' && payment.subscription) {
+              merchantState.setCurrentShop((previousShop) => previousShop
+                ? { ...previousShop, subscription: payment.subscription }
+                : previousShop);
+            }
+            const boostStart = payment.boost?.starts_at ? new Date(payment.boost.starts_at) : null;
+            const message = payment.payment_type === 'promotion'
+              ? boostStart && boostStart.getTime() > Date.now()
+                ? `Paiement confirmé. Votre boost commencera le ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(boostStart)}.`
+                : 'Paiement confirmé. Votre boost est activé.'
+              : 'Paiement confirmé. Votre abonnement est actif.';
+            if (!cancelled) setPaymentReturnNotice({ paymentId: paymentIdToCheck, status: 'success', message });
+            return;
+          }
+          if (payment.status === 'refunded') {
+            if (!cancelled) setPaymentReturnNotice({
+              paymentId: paymentIdToCheck,
+              status: 'error',
+              message: 'GeniusPay signale un remboursement. L’équipe va vérifier le dossier ; l’accès n’est pas automatiquement désactivé.',
+            });
+            return;
+          }
+          if (['failed', 'cancelled', 'expired'].includes(payment.status)) {
+            const message = payment.status === 'expired'
+              ? 'Cette demande de paiement a expiré. Vous pouvez en créer une nouvelle.'
+              : payment.status === 'cancelled'
+                ? 'Le paiement a été interrompu. Aucun service n’a été activé.'
+                : 'Le paiement a été refusé. Aucun service n’a été activé.';
+            if (!cancelled) setPaymentReturnNotice({ paymentId: paymentIdToCheck, status: 'error', message });
+            return;
+          }
+        } catch {
+          // Keep checking while GeniusPay delivers the signed webhook.
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      }
+      if (!cancelled) {
+        setPaymentReturnNotice({
+          paymentId: paymentIdToCheck,
+          status: 'pending',
+          message: 'Le paiement attend encore la confirmation de GeniusPay. Vous pouvez vérifier à nouveau dans quelques instants.',
+        });
+      }
+    };
+    void checkReturnedPayment();
+    return () => { cancelled = true; };
+  }, [paymentIdToCheck, paymentReturnNonce, currentShop?.id, currentShop?.admin_mode]);
+
+  const paymentReturnBanner = paymentReturnNotice && (
+    <div
+      role={paymentReturnNotice.status === 'error' ? 'alert' : 'status'}
+      aria-live="polite"
+      className={`mx-auto mt-3 flex max-w-7xl flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${paymentReturnNotice.status === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : paymentReturnNotice.status === 'error' ? 'border-rose-200 bg-rose-50 text-rose-950' : 'border-amber-200 bg-amber-50 text-amber-950'}`}
+    >
+      <span>{paymentReturnNotice.message}</span>
+      {paymentReturnNotice.status === 'pending' && (
+        <button type="button" onClick={() => setPaymentReturnNonce((nonce) => nonce + 1)} className="min-h-9 rounded-md border border-current px-3 text-xs font-bold">
+          Vérifier à nouveau
+        </button>
+      )}
+    </div>
+  );
 
   useEffect(() => {
     const subscription = currentShop?.subscription;
@@ -483,6 +422,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           <button type="button" onClick={onBackToDirectory} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Annuaire</button>
           <button type="button" onClick={handleLogout} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Déconnexion</button>
         </div>
+        {paymentReturnBanner}
         <MerchantTrialOnboarding shop={merchantState.currentShop} isStarting={trialStarting} onStart={handleStartTrial} />
       </>
     );
@@ -490,7 +430,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   if (!merchantState.currentShop.admin_mode
     && !identityVerificationRequired
     && ['expired', 'past_due', 'suspended', 'cancelled'].includes(merchantState.currentShop.subscription?.status || '')) {
-    return <MerchantTrialOnboarding shop={merchantState.currentShop} isStarting={false} onStart={handleStartTrial} mode="expired" />;
+    return <>
+      {paymentReturnBanner}
+      <MerchantTrialOnboarding shop={merchantState.currentShop} isStarting={false} onStart={handleStartTrial} mode="expired" />
+    </>;
   }
   // 2. AUTHENTICATED -> MERCHANT DASHBOARD
   const activeOrders = orders.filter((order) => !['cancelled', 'expired'].includes(order.status || 'pending'));
@@ -737,6 +680,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   return (
     <div className="merchant-dashboard min-h-screen pb-20 bg-[#fffaf2]">
+      {paymentReturnBanner}
       {currentShop.admin_mode && (
         <div role="status" className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 px-4 py-2 text-xs font-bold text-white">
           <span>Mode super-admin · Gestion complète de {currentShop.name}</span>
@@ -1096,6 +1040,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             ))}
             <p className="px-3 pb-1 pt-1 text-[10px] font-black uppercase tracking-[0.14em] text-white/70">Partage</p>
             <button type="button" disabled={!isShopPublished} onClick={() => void copyOwnerLink('public')} className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-[#176b55] disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"><Copy className="h-4 w-4 shrink-0" />Lien vitrine</button>
+            <button type="button" disabled={!isShopPublished} onClick={() => setIsQrKitOpen(true)} className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-[#176b55] disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"><QrCode className="h-4 w-4 shrink-0" />QR code et affiche</button>
             <button type="button" onClick={() => void copyOwnerLink('private')} className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-[#176b55] sm:text-sm"><Key className="h-4 w-4 shrink-0" />Lien d’accès privé</button>
             {dashboardSupportUrl && <a href={dashboardSupportUrl} target="_blank" rel="noreferrer" className="flex min-h-10 items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-white/90 hover:bg-[#176b55] sm:text-sm"><MessageCircle className="h-4 w-4 shrink-0" />Centre d’aide</a>}
             <button type="button" onClick={handleLogout} className="mt-2 inline-flex min-h-11 min-w-max items-center justify-start gap-3 rounded-xl border-t border-white/15 px-3 py-2.5 text-left text-xs font-bold text-white/80 transition hover:bg-[#176b55] hover:text-white sm:text-sm lg:w-full">
@@ -1292,54 +1237,67 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       )}
 
       {isSettingsDrawerOpen && (
-        <div className="fixed inset-0 z-[70]">
+        <div className="fixed inset-0 z-40 bg-[#fffaf2] lg:hidden">
           <button type="button" aria-label="Fermer le menu" onClick={() => setIsSettingsDrawerOpen(false)} className="absolute inset-0 bg-[#211712]/55" />
-          <aside id="merchant-menu-drawer" role="dialog" aria-modal="true" aria-labelledby="merchant-menu-title" className="absolute inset-y-0 right-0 flex h-dvh w-full max-w-md flex-col overflow-y-auto border-l border-[#ded8ce] bg-[#fffaf2] p-4 shadow-2xl sm:p-5">
+          <aside id="merchant-menu-drawer" aria-labelledby="merchant-menu-title" className="absolute inset-x-0 top-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] flex h-auto w-full flex-col overflow-y-auto bg-[#fffaf2] p-4 sm:p-5">
             <header className="flex items-start justify-between gap-3 border-b border-[#ded8ce] pb-4">
-              <div><p className="text-[10px] font-black uppercase text-[#e6572b]">MaTable.ci</p><h2 id="merchant-menu-title" className="mt-1 text-xl font-black text-[#211712]">Ma boutique</h2></div>
+              <div><p className="text-[10px] font-black uppercase text-[#e6572b]">MaTable.ci</p><h2 id="merchant-menu-title" className="mt-1 text-xl font-black text-[#211712]">Plus</h2></div>
               <button type="button" onClick={() => setIsSettingsDrawerOpen(false)} aria-label="Fermer le menu" className="rounded-lg border border-slate-300 bg-white p-2 text-slate-700"><X className="h-4 w-4" /></button>
             </header>
-            <nav className="mt-5 space-y-5" aria-label="Navigation et réglages commerçant">
-              <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">À suivre</p><div className="space-y-1">
-                <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><CreditCard className="h-4 w-4 text-emerald-800" /><span className="flex-1">Abonnement</span>{subscriptionNeedsAttention && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-black text-orange-900">Échéance</span>}</button>
-                <button type="button" onClick={() => { setSettingsSubTab('verification'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><ShieldCheck className="h-4 w-4 text-emerald-800" /><span className="flex-1">{identityStatus === 'verified' ? 'Identité vérifiée' : identityStatus === 'rejected' ? 'Reprendre la vérification' : 'Vérifier mon identité'}</span>{identityVerificationRequired && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-900">À faire</span>}</button>
-              </div></div>
-              <div>
-                <p className="mb-2 text-[10px] font-black uppercase text-slate-500">Paramètres</p>
-                <div className="space-y-4">
-                  {settingsNavigationGroups.map((group) => (
-                    <section key={group.label}>
-                      <h3 className="px-3 pb-1 text-[10px] font-black uppercase tracking-wide text-slate-400">{group.label}</h3>
-                      <div className="space-y-1">
-                        {group.items.map(({ id, label, icon: Icon, badge }) => {
-                          const isActive = activeTab === 'settings' && settingsSubTab === id;
-                          return (
-                            <button
-                              key={id}
-                              type="button"
-                              aria-current={isActive ? 'page' : undefined}
-                              onClick={() => {
-                                setSettingsSubTab(id);
-                                setActiveTab('settings');
-                                setIsSettingsDrawerOpen(false);
-                              }}
-                              className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold ${
-                                isActive ? 'bg-[#eaf4ef] text-[#155544]' : 'text-slate-800 hover:bg-emerald-50'
-                              }`}
-                            >
-                              <Icon className="h-4 w-4 shrink-0 text-emerald-800" />
-                              <span className="flex-1">{label}</span>
-                              {badge && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-900">{badge}</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </section>
+            <nav className="mt-4 space-y-4" aria-label="Navigation et réglages commerçant">
+              <section>
+                <h3 className="mb-1 px-3 text-[10px] font-black uppercase tracking-wide text-slate-500">Ma boutique</h3>
+                <div className="overflow-hidden rounded-xl border border-[#e9e5dc] bg-white">
+                  {[
+                    { id: 'themes' as const, label: 'Apparence de la vitrine', icon: Palette },
+                    { id: 'hours' as const, label: 'Horaires et disponibilité', icon: Clock },
+                    { id: 'general' as const, label: 'Informations publiques', icon: Store },
+                  ].map(({ id, label, icon: Icon }) => (
+                    <button key={id} type="button" onClick={() => { setSettingsSubTab(id); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-12 w-full items-center gap-3 border-b border-[#eee9e1] px-3 text-left text-sm font-semibold text-slate-800 last:border-0 hover:bg-emerald-50">
+                      <Icon className="h-4 w-4 shrink-0 text-emerald-800" /><span className="flex-1">{label}</span><ChevronRight className="h-4 w-4 text-slate-400" />
+                    </button>
                   ))}
                 </div>
-              </div>
+              </section>
+              <section>
+                <h3 className="mb-1 px-3 text-[10px] font-black uppercase tracking-wide text-slate-500">Visibilité</h3>
+                <div className="overflow-hidden rounded-xl border border-[#e9e5dc] bg-white">
+                  <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-12 w-full items-center gap-3 px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50">
+                    <TrendingUp className="h-4 w-4 shrink-0 text-emerald-800" /><span className="flex-1">Promotion et boost</span><ChevronRight className="h-4 w-4 text-slate-400" />
+                  </button>
+                </div>
+              </section>
+              <section>
+                <h3 className="mb-1 px-3 text-[10px] font-black uppercase tracking-wide text-slate-500">Mon activité</h3>
+                <div className="overflow-hidden rounded-xl border border-[#e9e5dc] bg-white">
+                  {[
+                    { id: 'bilan' as const, label: 'Flash bilan', icon: Send },
+                    { id: 'analytics' as const, label: 'Statistiques Pro', icon: BarChart3 },
+                  ].map(({ id, label, icon: Icon }) => (
+                    <button key={id} type="button" onClick={() => { setSettingsSubTab(id); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-12 w-full items-center gap-3 border-b border-[#eee9e1] px-3 text-left text-sm font-semibold text-slate-800 last:border-0 hover:bg-emerald-50">
+                      <Icon className="h-4 w-4 shrink-0 text-emerald-800" /><span className="flex-1">{label}</span><ChevronRight className="h-4 w-4 text-slate-400" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+              <section>
+                <h3 className="mb-1 px-3 text-[10px] font-black uppercase tracking-wide text-slate-500">Mon compte</h3>
+                <div className="overflow-hidden rounded-xl border border-[#e9e5dc] bg-white">
+                  {[
+                    { id: 'subscription' as const, label: 'Mon abonnement', icon: CreditCard, badge: subscriptionNeedsAttention ? 'Échéance' : currentShop.subscription?.plan || '' },
+                    { id: 'verification' as const, label: identityStatus === 'verified' ? 'Identité vérifiée' : 'Vérification d’identité', icon: ShieldCheck, badge: identityVerificationRequired ? 'À faire' : '' },
+                    { id: 'notifications' as const, label: 'Notifications', icon: Bell, badge: '' },
+                    { id: 'profile' as const, label: 'Profil et mes données', icon: Key, badge: '' },
+                  ].map(({ id, label, icon: Icon, badge }) => (
+                    <button key={id} type="button" onClick={() => { setSettingsSubTab(id); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-12 w-full items-center gap-3 border-b border-[#eee9e1] px-3 text-left text-sm font-semibold text-slate-800 last:border-0 hover:bg-emerald-50">
+                      <Icon className="h-4 w-4 shrink-0 text-emerald-800" /><span className="flex-1">{label}</span>{badge && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black capitalize text-amber-900">{badge}</span>}<ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                    </button>
+                  ))}
+                </div>
+              </section>
               <div><p className="mb-2 text-[10px] font-black uppercase text-slate-500">Partage</p>
                 <button type="button" disabled={!isShopPublished} onClick={() => void copyOwnerLink('public')} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-45"><Copy className="h-4 w-4 text-emerald-800" />Lien vitrine</button>
+                <button type="button" disabled={!isShopPublished} onClick={() => { setIsQrKitOpen(true); setIsSettingsDrawerOpen(false); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-45"><QrCode className="h-4 w-4 text-emerald-800" />QR code et affiche</button>
                 <button type="button" onClick={() => void copyOwnerLink('private')} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50"><Key className="h-4 w-4 text-emerald-800" />Lien d’accès privé</button>
                 {!isShopPublished && <p className="px-3 text-[11px] leading-5 text-slate-500">Le lien public sera disponible après publication.</p>}
               </div>
@@ -1361,6 +1319,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           </section>
         </div>
       )}
+      {isQrKitOpen && <MerchantQrShareKit shop={currentShop} onClose={() => setIsQrKitOpen(false)} />}
       <ProductModal state={merchantState} />
     </div>
   );

@@ -2,9 +2,11 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHmac } from 'node:crypto';
+import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import Database from 'better-sqlite3';
@@ -15,6 +17,14 @@ const TEST_PORT = 43124;
 const TEST_DB_PATH = path.join(tmpdir(), `matable-public-audit-${Date.now()}.db`);
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 let serverProcess: ReturnType<typeof spawn> | null = null;
+let providerServer: ReturnType<typeof createServer> | null = null;
+let providerReference = 0;
+
+function signedWebhookHeaders(payload: string) {
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = createHmac('sha256', 'public-audit-test-secret').update(`${timestamp}.${payload}`).digest('hex');
+  return { 'x-webhook-signature': signature, 'x-webhook-timestamp': timestamp };
+}
 
 async function waitForServer() {
   for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -30,6 +40,28 @@ async function waitForServer() {
 }
 
 before(async () => {
+  providerServer = createServer((request, response) => {
+    if (request.method === 'GET') {
+      response.writeHead(404, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ success: false, error: { code: 'TRANSACTION_NOT_FOUND' } }));
+      return;
+    }
+    providerReference += 1;
+    let rawBody = '';
+    request.setEncoding('utf8');
+    request.on('data', (chunk: string) => { rawBody += chunk; });
+    request.on('end', () => {
+      const body = JSON.parse(rawBody) as { metadata?: { subscription_payment_id?: string } };
+      const paymentId = body.metadata?.subscription_payment_id || String(providerReference);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ success: true, data: { reference: `GNP-${paymentId}`, checkout_url: `https://checkout.geniuspay.ci/${providerReference}` } }));
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    providerServer?.once('error', reject);
+    providerServer?.listen(0, '127.0.0.1', resolve);
+  });
+  const providerPort = (providerServer.address() as AddressInfo).port;
   serverProcess = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
     cwd: process.cwd(),
     env: {
@@ -39,8 +71,10 @@ before(async () => {
       PORT: String(TEST_PORT),
       MATABLE_DB_PATH: TEST_DB_PATH,
       APP_URL: BASE_URL,
-      KADEVPAY_PUBLIC_KEY: 'kdvp_test_public_key',
-      KADEVPAY_WEBHOOK_SECRET: 'public-audit-test-secret',
+      GENIUSPAY_API_KEY: 'pk_sandbox_public_audit_test',
+      GENIUSPAY_API_SECRET: 'public-audit-test-api-secret',
+      GENIUSPAY_API_URL: `http://127.0.0.1:${providerPort}/api/v1/merchant/payments`,
+      GENIUSPAY_WEBHOOK_SECRET: 'public-audit-test-secret',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -56,6 +90,7 @@ after(async () => {
     serverProcess.kill('SIGTERM');
     await serverExit;
   }
+  if (providerServer?.listening) await new Promise<void>((resolve, reject) => providerServer?.close((error) => error ? reject(error) : resolve()));
   await Promise.all(['', '-wal', '-shm'].map((suffix) => rm(`${TEST_DB_PATH}${suffix}`, { force: true })));
 });
 
@@ -119,17 +154,16 @@ async function payForSubscription(shopId: number, merchantCookie: string, tier: 
   const payload = JSON.stringify({
     event: 'payment.success',
     data: {
-      status: 'paid',
-      reference: `KDV-${Date.now()}`,
+      status: 'completed',
+      reference: `GNP-${intent.payment_id}`,
       amount,
       currency: 'XOF',
-      metadata: { subscription_payment_id: intent.payment_id },
+      metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
     },
   });
-  const signature = createHmac('sha512', 'public-audit-test-secret').update(payload).digest('hex');
-  const payment = await fetch(`${BASE_URL}/api/webhooks/kadevpay`, {
+  const payment = await fetch(`${BASE_URL}/api/webhooks/geniuspay`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-kadevpay-signature': signature },
+    headers: { 'Content-Type': 'application/json', ...signedWebhookHeaders(payload) },
     body: payload,
   });
   assert.equal(payment.status, 200, await payment.text());
@@ -230,6 +264,7 @@ test('robots and sitemap routes are served by the SEO router', async () => {
   assert.match(sitemapXml, /<urlset/);
   assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/faq<\/loc>/);
   assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/boutiques<\/loc>/);
+  assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/commercants<\/loc>/);
   assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/comment-ca-marche<\/loc>/);
   assert.match(sitemapXml, /\/boutiques\/categorie\/fashion/);
   assert.match(sitemapXml, /\/boutiques\/ville\/abidjan/);
@@ -261,6 +296,23 @@ test('how-it-works guide exposes indexable metadata and crawlable tutorial steps
   assert.match(html, /"@type":"HowToStep"/);
   assert.match(html, /<noscript><main><h1>Comment ça marche sur MaTable\.ci \?<\/h1>/);
   assert.match(html, /Trouvez une boutique ou un produit/);
+  assert.equal((html.match(/property="og:title"/g) || []).length, 1);
+});
+
+test('merchant plans page exposes current prices and indexable SEO metadata', async () => {
+  const response = await fetch(`${BASE_URL}/commercants`, {
+    headers: { 'User-Agent': 'Googlebot', Accept: 'text/html' },
+  });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<title>Formules commerçants et tarifs \| MaTable\.ci<\/title>/);
+  assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:43124\/commercants" \/>/);
+  assert.match(html, /"@type":"OfferCatalog"/);
+  assert.match(html, /"price":3000/);
+  assert.match(html, /"price":5000/);
+  assert.match(html, /"price":8000/);
+  assert.match(html, /Essai gratuit de 7 jours/);
+  assert.match(html, /href="http:\/\/127\.0\.0\.1:43124\/app\/creer-boutique"/);
   assert.equal((html.match(/property="og:title"/g) || []).length, 1);
 });
 

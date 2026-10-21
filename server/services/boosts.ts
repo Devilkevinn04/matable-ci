@@ -1,6 +1,4 @@
 import {
-  BOOST_DURATIONS_DAYS,
-  BOOST_MINIMUM_PRODUCT_COUNT,
   MAX_SIMULTANEOUS_BOOSTS_PER_PLACEMENT_SCOPE,
   type BoostPlacement,
 } from '../../src/utils/boostPricing.ts';

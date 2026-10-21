@@ -241,11 +241,11 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         </div>
         {isLoading ? <div className="flex gap-3 overflow-hidden pb-2" role="status" aria-label="Chargement des catégories">
           {[0, 1, 2, 3, 4].map((item) => <div key={item} className="h-[88px] min-w-[190px] animate-pulse rounded-2xl bg-[#e9e4da]" />)}
-        </div> : <div className="flex gap-3 overflow-x-auto pb-2">
+        </div> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {categories.map((item) => {
             const count = shops.filter((shop) => shop.category === item).length;
             const selected = category === item;
-            const className = `group flex min-h-[88px] min-w-[190px] flex-col items-start justify-center rounded-2xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selected ? 'border-[#0f4d3d] ring-2 ring-[#0f4d3d]/15' : 'border-transparent'}`;
+            const className = `group flex min-h-[88px] min-w-0 flex-col items-start justify-center rounded-2xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selected ? 'border-[#0f4d3d] ring-2 ring-[#0f4d3d]/15' : 'border-transparent'}`;
             const contents = <>
                 <span className="font-display text-base font-bold text-[#25231f] sm:text-lg">{categoryLabel(item)} <span className="inline-block transition-transform group-hover:translate-x-1" aria-hidden="true">→</span></span>
                 <span className="mt-1 text-xs text-[#4a3a30]">{count} boutique{count === 1 ? '' : 's'}</span>

@@ -1,10 +1,12 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import Database from 'better-sqlite3';
@@ -14,6 +16,8 @@ const TEST_DB_PATH = path.join(tmpdir(), `matable-commerce-${Date.now()}.db`);
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 const WEBHOOK_SECRET = 'subscription-commerce-test-secret';
 let serverProcess: ReturnType<typeof spawn> | null = null;
+let providerServer: ReturnType<typeof createServer> | null = null;
+let providerReference = 0;
 
 async function waitForServer() {
   for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -28,13 +32,37 @@ async function waitForServer() {
 }
 
 before(async () => {
+  providerServer = createServer((request, response) => {
+    if (request.method === 'GET') {
+      response.writeHead(404, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ success: false, error: { code: 'TRANSACTION_NOT_FOUND' } }));
+      return;
+    }
+    providerReference += 1;
+    let rawBody = '';
+    request.setEncoding('utf8');
+    request.on('data', (chunk: string) => { rawBody += chunk; });
+    request.on('end', () => {
+      const body = JSON.parse(rawBody) as { metadata?: { subscription_payment_id?: string } };
+      const paymentId = body.metadata?.subscription_payment_id || String(providerReference);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ success: true, data: { reference: `GNP-${paymentId}`, checkout_url: `https://checkout.geniuspay.ci/${providerReference}` } }));
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    providerServer?.once('error', reject);
+    providerServer?.listen(0, '127.0.0.1', resolve);
+  });
+  const providerPort = (providerServer.address() as AddressInfo).port;
   serverProcess = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
     cwd: process.cwd(),
     env: {
       ...process.env,
       ADMIN_ACCESS_KEY: 'subscription-commerce-test-admin-key',
-      KADEVPAY_PUBLIC_KEY: 'kdvp_test_public_key',
-      KADEVPAY_WEBHOOK_SECRET: WEBHOOK_SECRET,
+      GENIUSPAY_API_KEY: 'pk_sandbox_subscription_commerce_test',
+      GENIUSPAY_API_SECRET: 'subscription-commerce-api-secret',
+      GENIUSPAY_API_URL: `http://127.0.0.1:${providerPort}/api/v1/merchant/payments`,
+      GENIUSPAY_WEBHOOK_SECRET: WEBHOOK_SECRET,
       NODE_ENV: 'test',
       PORT: String(TEST_PORT),
       MATABLE_DB_PATH: TEST_DB_PATH,
@@ -53,14 +81,16 @@ after(async () => {
     serverProcess.kill('SIGTERM');
     await serverExit;
   }
+  if (providerServer?.listening) await new Promise<void>((resolve, reject) => providerServer?.close((error) => error ? reject(error) : resolve()));
   await Promise.all(['', '-wal', '-shm'].map((suffix) => rm(`${TEST_DB_PATH}${suffix}`, { force: true })));
 });
 
 async function signedWebhook(payload: string) {
-  const signature = createHmac('sha512', WEBHOOK_SECRET).update(payload).digest('hex');
-  return fetch(`${BASE_URL}/api/webhooks/kadevpay`, {
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = createHmac('sha256', WEBHOOK_SECRET).update(`${timestamp}.${payload}`).digest('hex');
+  return fetch(`${BASE_URL}/api/webhooks/geniuspay`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-kadevpay-signature': signature },
+    headers: { 'Content-Type': 'application/json', 'x-webhook-signature': signature, 'x-webhook-timestamp': timestamp },
     body: payload,
   });
 }
@@ -196,11 +226,11 @@ test('Pro subscription exposes consented product stats and activates discounted 
   const subscriptionPaymentBody = JSON.stringify({
     event: 'payment.success',
     data: {
-      status: 'paid',
-      reference: `KDV-PRO-${Date.now()}`,
+      status: 'completed',
+      reference: `GNP-${subscriptionIntent.payment_id}`,
       amount: 80000,
       currency: 'XOF',
-      metadata: { subscription_payment_id: subscriptionIntent.payment_id },
+      metadata: { subscription_payment_id: subscriptionIntent.payment_id, payment_type: 'subscription' },
     },
   });
   assert.equal((await signedWebhook(subscriptionPaymentBody)).status, 200);
@@ -251,11 +281,11 @@ test('Pro subscription exposes consented product stats and activates discounted 
   const boostPaymentBody = JSON.stringify({
     event: 'payment.success',
     data: {
-      status: 'paid',
-      reference: `KDV-BOOST-${Date.now()}`,
+      status: 'completed',
+      reference: `GNP-${boostIntent.payment_id}`,
       amount: boostIntent.amount,
       currency: 'XOF',
-      metadata: { subscription_payment_id: boostIntent.payment_id },
+      metadata: { subscription_payment_id: boostIntent.payment_id, payment_type: 'promotion' },
     },
   });
   assert.equal((await signedWebhook(boostPaymentBody)).status, 200);
@@ -317,10 +347,10 @@ test('Pro subscription exposes consented product stats and activates discounted 
     event: 'payment.failed',
     data: {
       status: 'failed',
-      reference: `KDV-BOOST-FAILED-${Date.now()}`,
+      reference: `GNP-${failedBoostIntent.payment_id}`,
       amount: failedBoostIntent.amount,
       currency: 'XOF',
-      metadata: { subscription_payment_id: failedBoostIntent.payment_id },
+      metadata: { subscription_payment_id: failedBoostIntent.payment_id, payment_type: 'promotion' },
     },
   }));
   assert.equal(failedBoostWebhook.status, 200);
@@ -361,11 +391,11 @@ test('Pro subscription exposes consented product stats and activates discounted 
   const lateBoostWebhook = await signedWebhook(JSON.stringify({
     event: 'payment.success',
     data: {
-      status: 'paid',
-      reference: `KDV-BOOST-LATE-${Date.now()}`,
+      status: 'completed',
+      reference: `GNP-${lateBoostIntent.payment_id}`,
       amount: lateBoostIntent.amount,
       currency: 'XOF',
-      metadata: { subscription_payment_id: lateBoostIntent.payment_id },
+      metadata: { subscription_payment_id: lateBoostIntent.payment_id, payment_type: 'promotion' },
     },
   }));
   assert.equal(lateBoostWebhook.status, 200);

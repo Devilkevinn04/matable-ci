@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { ArrowRight, CheckCircle2, MessageCircleMore, ShieldCheck, Sparkles, Store } from 'lucide-react';
 import { ShopCategory } from '../../types';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../../utils/categoryDefaults';
+import { ABIDJAN_COMMUNES } from '../../utils/abidjanCommunes';
 import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from '../../utils/subscriptionFeatures';
 import { AuthExperienceLayout } from '../AuthExperienceLayout';
 import { MerchantState } from './useMerchant';
@@ -11,12 +12,6 @@ interface MerchantRegistrationScreenProps {
   state: MerchantState;
   onBackToDirectory: () => void;
 }
-
-const communes = [
-  'Abobo', 'Adjamé', 'Anyama', 'Attécoubé', 'Bingerville', 'Cocody',
-  'Koumassi', 'Marcory', 'Plateau', 'Port-Bouët', 'Songon', 'Treichville',
-  'Yopougon', 'Autre ville / commune',
-];
 
 export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProps> = ({ state, onBackToDirectory }) => {
   const [step, setStep] = useState<1 | 2>(1);
@@ -100,7 +95,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
                 Ville / commune
                 <select value={regCity} onChange={(event) => setRegCity(event.target.value)} required className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 py-3 text-sm font-normal text-[#25231f] outline-none focus:border-[#176b55]">
                   <option value="Abidjan">Abidjan</option>
-                  {communes.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
+                  {ABIDJAN_COMMUNES.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
                 </select>
               </label>
             </div>

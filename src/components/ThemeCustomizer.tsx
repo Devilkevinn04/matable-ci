@@ -7,8 +7,7 @@ import {
   Image as ImageIcon, 
   Sliders, 
   Megaphone, 
-  RefreshCw, 
-  ChevronDown,
+  RefreshCw
 } from 'lucide-react';
 import { BrandDirection, Shop, ThemeConfig } from '../types';
 import { SAFE_THEME_COLORS, estimateDominantColorFromPixels, getContrastTextColor, mixHexColors, normalizeHex } from '../utils/color';

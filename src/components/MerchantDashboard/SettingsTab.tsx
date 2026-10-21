@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes, ShieldCheck, Bell } from 'lucide-react';
+import { Store, Clock, Check, Send, Eye, EyeOff, TrendingUp, AlertTriangle, Copy, RotateCcw, Calendar } from 'lucide-react';
 import type { Shop } from '../../types';
 import { MerchantState } from './useMerchant';
 import { ThemeCustomizer } from '../ThemeCustomizer';
@@ -32,22 +32,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const [ownerProfileSaving, setOwnerProfileSaving] = useState(false);
   const [ownerProfileError, setOwnerProfileError] = useState('');
   const {
-    currentShop, products, orders, activeTab, showSettingsPin, setShowSettingsPin, setCurrentShop, settingsSubTab, setSettingsSubTab,
-    catalogSearch, setCatalogSearch, catalogFilter, setCatalogFilter,
-    orderSearch, setOrderSearch, orderPaymentFilter, setOrderPaymentFilter, orderStatusFilter, setOrderStatusFilter,
-    settingsName, setSettingsName, settingsWelcome, setSettingsWelcome, settingsOpen, setSettingsOpen,
-    settingsPhone, setSettingsPhone, settingsCity, setSettingsCity, settingsNewPin, setSettingsNewPin,
-    settingsSocialLinks, setSettingsSocialLinks, settingsDeliveryZones, setSettingsDeliveryZones, settingsSaved,
+    currentShop, products, showSettingsPin, setShowSettingsPin, setCurrentShop, settingsSubTab, settingsName, setSettingsName, settingsWelcome, setSettingsWelcome, settingsPhone, setSettingsPhone, settingsCity, setSettingsCity, settingsNewPin, setSettingsNewPin,
+    settingsSocialLinks, setSettingsSocialLinks, settingsDeliveryZones, settingsSaved,
     hoursEnabled, setHoursEnabled, openTime, setOpenTime, closeTime, setCloseTime, activeDays, setActiveDays,
-    manualOverride, hoursSaved, cronRunning, cronResult, copiedBilan, setCopiedBilan,
-    isProductModalOpen, setIsProductModalOpen, editingProduct, prodTitle, setProdTitle, prodCategory, setProdCategory,
-    prodDescription, setProdDescription, prodPrice, setProdPrice, prodStock, setProdStock, prodImage, setProdImage,
-    prodLookbookImage, setProdLookbookImage, prodSizes, setProdSizes, prodColors, setProdColors, prodPrepTime, setProdPrepTime,
-    prodIsAvailable, setProdIsAvailable,
-    imageCompressing, compressedSizeKB, originalImageSizeKB, flashBilan,
-    handleSaveOpeningHours, handleResetManualOverride, handleTriggerCronBilan, handleQuickStockChange, handleQuickToggleVisibility,
-    handleOpenAddModal, handleOpenEditModal, handleUpdateOrderStatus, handleImageUpload, handleSaveProduct, handleDeleteProduct,
-    handleSaveGeneralSettings, addDeliveryZone, updateDeliveryZone, removeDeliveryZone, toast, copyOwnerLink, copyRegistrationLinks
+    manualOverride, hoursSaved, cronResult, copiedBilan, setCopiedBilan,
+    flashBilan,
+    handleSaveOpeningHours, handleResetManualOverride, handleSaveGeneralSettings, addDeliveryZone, updateDeliveryZone, removeDeliveryZone, toast
   } = state;
   const lowStockCount = products.filter((product) => product.stock > 0 && product.stock <= 3).length;
   const outOfStockCount = products.filter((product) => product.stock === 0).length;
@@ -319,7 +309,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                   <div><span className="text-xs text-slate-500">Capacité du catalogue</span><strong className="mt-1 block text-slate-900">{Number.isFinite(currentProductLimit) ? `${products.filter((product) => product.shop_id === currentShop.id).length} / ${currentProductLimit} produits` : `${products.filter((product) => product.shop_id === currentShop.id).length} produits · illimité`}</strong></div>
                   <div><span className="text-xs text-slate-500">Photos par produit</span><strong className="mt-1 block text-slate-900">Jusqu’à {currentPhotoLimit}</strong></div>
                 </div>
-                <p className="text-xs leading-5 text-slate-600">Le paiement est ponctuel, sans prélèvement automatique. KadevPay confirme le règlement au serveur avant toute activation. Le paiement des commandes clients reste directement convenu avec la boutique.</p>
+                <p className="text-xs leading-5 text-slate-600">Le paiement est ponctuel, sans prélèvement automatique. GeniusPay confirme le règlement au serveur avant toute activation. Le paiement des commandes clients reste directement convenu avec la boutique.</p>
                 <WhatsAppSubscriptionReminderConsent shop={currentShop} />
                 <div className="flex flex-col gap-3 rounded-xl border border-[#e3d9cc] bg-[#f7f3ee] p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>

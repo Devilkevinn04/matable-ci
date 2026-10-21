@@ -65,7 +65,8 @@ const sqliteSchema = `
   CREATE TABLE IF NOT EXISTS subscription_payment_intents (
     id TEXT PRIMARY KEY, shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
     payment_type TEXT NOT NULL DEFAULT 'subscription', tier TEXT NOT NULL, amount INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'XOF',
-    client_request_id TEXT, status TEXT NOT NULL DEFAULT 'pending', provider_reference TEXT UNIQUE,
+    client_request_id TEXT, status TEXT NOT NULL DEFAULT 'pending', provider_reference TEXT UNIQUE, provider_checkout_url TEXT,
+    provider_checked_at TEXT, provider_check_attempts INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL, paid_at TEXT
   );
   CREATE TABLE IF NOT EXISTS analytics_events (
@@ -158,6 +159,14 @@ const sqliteSchema = `
   CREATE TABLE IF NOT EXISTS didit_webhook_events (
     event_id TEXT PRIMARY KEY, received_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS geniuspay_webhook_events (
+    event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, payment_intent_id TEXT,
+    provider_reference TEXT, payload_sha256 TEXT NOT NULL,
+    processing_status TEXT NOT NULL DEFAULT 'received', result_code TEXT,
+    received_at TEXT NOT NULL, processed_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_geniuspay_webhook_events_intent_received
+    ON geniuspay_webhook_events(payment_intent_id, received_at DESC);
   CREATE TABLE IF NOT EXISTS didit_schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS id_allocators (name TEXT PRIMARY KEY, last_id INTEGER NOT NULL);
   CREATE INDEX IF NOT EXISTS idx_products_shop_id ON products(shop_id);
@@ -242,6 +251,9 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('subscription_payment_intents', 'payment_type', "TEXT NOT NULL DEFAULT 'subscription'");
   addColumn('subscription_payment_intents', 'subscription_term', "TEXT NOT NULL DEFAULT 'monthly'");
   addColumn('subscription_payment_intents', 'client_request_id', 'TEXT');
+  addColumn('subscription_payment_intents', 'provider_checkout_url', 'TEXT');
+  addColumn('subscription_payment_intents', 'provider_checked_at', 'TEXT');
+  addColumn('subscription_payment_intents', 'provider_check_attempts', 'INTEGER NOT NULL DEFAULT 0');
   connection.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_subscription_payment_intents_client_request_id ON subscription_payment_intents(shop_id, client_request_id) WHERE client_request_id IS NOT NULL AND client_request_id <> ''");
   connection.exec(`CREATE TABLE IF NOT EXISTS shop_boosts (
     id TEXT PRIMARY KEY,
@@ -285,6 +297,9 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('orders', 'attribution_campaign', 'TEXT');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_shop_created ON subscription_payment_intents(shop_id, created_at DESC)');
+  connection.exec(`CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_reconcile
+    ON subscription_payment_intents(status, provider_checked_at, created_at)
+    WHERE provider_reference IS NOT NULL AND status IN ('pending', 'expired')`);
   addColumn('products', 'category', 'TEXT');
   addColumn('products', 'created_at', 'TEXT');
   addColumn('products', 'is_visible', 'INTEGER NOT NULL DEFAULT 1');
@@ -360,10 +375,14 @@ const postgresMigrations = [
   `CREATE TABLE IF NOT EXISTS subscription_payment_intents (
     id TEXT PRIMARY KEY, shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
     payment_type TEXT NOT NULL DEFAULT 'subscription', tier TEXT NOT NULL, amount INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'XOF',
-    client_request_id TEXT, status TEXT NOT NULL DEFAULT 'pending', provider_reference TEXT UNIQUE,
+    client_request_id TEXT, status TEXT NOT NULL DEFAULT 'pending', provider_reference TEXT UNIQUE, provider_checkout_url TEXT,
+    provider_checked_at TEXT, provider_check_attempts INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL, paid_at TEXT
   )`,
   'ALTER TABLE subscription_payment_intents ADD COLUMN IF NOT EXISTS client_request_id TEXT',
+  'ALTER TABLE subscription_payment_intents ADD COLUMN IF NOT EXISTS provider_checkout_url TEXT',
+  'ALTER TABLE subscription_payment_intents ADD COLUMN IF NOT EXISTS provider_checked_at TEXT',
+  'ALTER TABLE subscription_payment_intents ADD COLUMN IF NOT EXISTS provider_check_attempts INTEGER NOT NULL DEFAULT 0',
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_subscription_payment_intents_client_request_id ON subscription_payment_intents(shop_id, client_request_id) WHERE client_request_id IS NOT NULL AND client_request_id <> ''",
   "ALTER TABLE subscription_payment_intents ADD COLUMN IF NOT EXISTS payment_type TEXT NOT NULL DEFAULT 'subscription'",
   "ALTER TABLE subscription_payment_intents ADD COLUMN IF NOT EXISTS subscription_term TEXT NOT NULL DEFAULT 'monthly'",
@@ -484,6 +503,9 @@ const postgresMigrations = [
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS whatsapp_subscription_reminders_consent_at TEXT',
   'CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_shop_created ON subscription_payment_intents(shop_id, created_at DESC)',
+  `CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_reconcile
+    ON subscription_payment_intents(status, provider_checked_at, created_at)
+    WHERE provider_reference IS NOT NULL AND status IN ('pending', 'expired')`,
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS opening_hours JSONB',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_access_token_hash TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_email TEXT',
@@ -581,6 +603,13 @@ const postgresMigrations = [
   'ALTER TABLE didit_verification_sessions ADD COLUMN IF NOT EXISTS last_webhook_at TEXT',
   'CREATE INDEX IF NOT EXISTS idx_didit_sessions_shop_created ON didit_verification_sessions(shop_id, created_at DESC)',
   'CREATE TABLE IF NOT EXISTS didit_webhook_events (event_id TEXT PRIMARY KEY, received_at TEXT NOT NULL)',
+  `CREATE TABLE IF NOT EXISTS geniuspay_webhook_events (
+    event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, payment_intent_id TEXT,
+    provider_reference TEXT, payload_sha256 TEXT NOT NULL,
+    processing_status TEXT NOT NULL DEFAULT 'received', result_code TEXT,
+    received_at TEXT NOT NULL, processed_at TEXT
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_geniuspay_webhook_events_intent_received ON geniuspay_webhook_events(payment_intent_id, received_at DESC)',
   'CREATE TABLE IF NOT EXISTS didit_schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)',
 ];
 

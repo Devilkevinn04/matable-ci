@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowRight, CheckCircle2, MessageCircleMore, ShieldCheck, Sparkles, Store } from 'lucide-react';
 import { ShopCategory } from '../types';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../utils/categoryDefaults';
+import { ABIDJAN_COMMUNES } from '../utils/abidjanCommunes';
 import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from '../utils/subscriptionFeatures';
 import { TermsPrivacyConsent } from './TermsPrivacyConsent';
 
@@ -15,12 +16,6 @@ interface ShopRegistrationResponse {
   shop?: { id: number; slug: string };
   error?: string;
 }
-
-const communes = [
-  'Abobo', 'Adjamé', 'Anyama', 'Attécoubé', 'Bingerville', 'Cocody',
-  'Koumassi', 'Marcory', 'Plateau', 'Port-Bouët', 'Songon', 'Treichville',
-  'Yopougon', 'Autre ville / commune',
-];
 
 export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistrationFormProps> = ({ onCreated, onLogin }) => {
   const [name, setName] = useState('');
@@ -116,7 +111,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
                 Ville / commune
                 <select value={city} onChange={(event) => setCity(event.target.value)} className={fieldClass}>
                   <option value="Abidjan">Abidjan</option>
-                  {communes.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
+                  {ABIDJAN_COMMUNES.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
                 </select>
               </label>
             </div>

@@ -10,7 +10,7 @@ export function isMaintenanceExemptRequest(req: Pick<Request, 'path' | 'method'>
   const requestPath = req.path;
   if (requestPath === '/admin' || requestPath.startsWith('/admin/')) return true;
   if (requestPath.startsWith('/api/admin/')) return true;
-  if (requestPath === '/api/health' || requestPath === '/api/webhooks/kadevpay') return true;
+  if (requestPath === '/api/health' || requestPath === '/api/webhooks/geniuspay') return true;
   if (requestPath === '/api/auth/session' || requestPath === '/api/auth/admin-login' || requestPath === '/api/auth/admin-logout') return true;
   if (requestPath.startsWith('/assets/') || requestPath.startsWith('/src/') || requestPath.startsWith('/node_modules/')) return true;
   if (['/manifest.json', '/sw.js', '/favicon.svg', '/vite.svg'].includes(requestPath)) return true;

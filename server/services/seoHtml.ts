@@ -5,6 +5,7 @@ import { getCategoryDefaults } from '../../src/utils/categoryDefaults.ts';
 import { findPublicDiscoveryPage, toDiscoveryCitySlug } from '../../src/utils/discoverySeo.ts';
 import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
 import { FAQ_SECTIONS } from '../../src/utils/faqContent.ts';
+import { getSubscriptionPrice, SUBSCRIPTION_PLANS, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from '../../src/utils/subscriptionFeatures.ts';
 
 interface SeoHtmlHelperOptions {
   shops: ShopRecord[];
@@ -125,6 +126,61 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField }: Seo
       .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
       .replace('</head>', `  ${tags}\n  </head>`)
       .replace('</body>', `${crawlableGuide}\n  </body>`);
+  };
+
+  const injectMerchantPlansSeo = (html: string, req: Request) => {
+    const origin = getPublicOrigin(req);
+    const canonical = `${origin}/commercants`;
+    const title = 'Formules commerçants et tarifs | MaTable.ci';
+    const description = 'Comparez les formules Standard, Premium et Pro de MaTable.ci. Créez votre vitrine avec un essai gratuit de 7 jours, sans paiement pour démarrer.';
+    const plans = Object.values(SUBSCRIPTION_PLANS);
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: title,
+      description,
+      url: canonical,
+      inLanguage: 'fr-CI',
+      mainEntity: {
+        '@type': 'OfferCatalog',
+        name: 'Formules commerçants MaTable.ci',
+        itemListElement: plans.map((plan) => ({
+          '@type': 'Offer',
+          name: plan.label,
+          price: getSubscriptionPrice(plan.tier),
+          priceCurrency: 'XOF',
+          description: plan.description,
+          url: canonical,
+        })),
+      },
+    };
+    const jsonLd = JSON.stringify(structuredData).replace(/</g, '\\u003c');
+    const tags = [
+      `<title>${escapeHtml(title)}</title>`,
+      `<meta name="description" content="${escapeHtml(description)}" />`,
+      '<meta name="robots" content="index, follow, max-image-preview:large" />',
+      `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
+      `<meta property="og:title" content="${escapeHtml(title)}" />`,
+      `<meta property="og:description" content="${escapeHtml(description)}" />`,
+      '<meta property="og:type" content="website" />',
+      `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
+      `<meta property="og:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      '<meta property="og:locale" content="fr_CI" />',
+      '<meta name="twitter:card" content="summary_large_image" />',
+      `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
+      `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
+      `<meta name="twitter:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      `<script type="application/ld+json">${jsonLd}</script>`,
+    ].join('\n  ');
+    const crawlablePlans = `<noscript><main><h1>Vendre sur MaTable.ci</h1><p>${escapeHtml(description)}</p><p>Essai gratuit de ${TRIAL_DURATION_DAYS} jours, jusqu’à ${TRIAL_CATALOG_LIMIT} produits, sans paiement pour démarrer.</p><h2>Formules commerçants</h2><ul>${plans.map((plan) => `<li><h3>${escapeHtml(plan.label)} — ${escapeHtml(new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(plan.tier)))} FCFA par mois</h3><p>${escapeHtml(plan.description)}</p><ul>${plan.benefits.map((benefit) => `<li>${escapeHtml(benefit)}</li>`).join('')}</ul></li>`).join('')}</ul><p><a href="${escapeHtml(`${origin}/app/creer-boutique`)}">Créer ma boutique</a></p></main></noscript>`;
+    return html
+      .replace(/<title>.*?<\/title>/, '')
+      .replace(/<meta name="description" content=".*?" \/>/, '')
+      .replace(/<meta name="robots" content=".*?" \/>/, '')
+      .replace(/<link rel="canonical" href=".*?" \/>/, '')
+      .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
+      .replace('</head>', `  ${tags}\n  </head>`)
+      .replace('</body>', `${crawlablePlans}\n  </body>`);
   };
 
   const injectShopOpenGraph = (html: string, targetShop: ShopRecord, req: Request) => {
@@ -336,6 +392,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField }: Seo
     injectNoIndexSeo,
     injectFaqSeo,
     injectHowItWorksSeo,
+    injectMerchantPlansSeo,
     injectShopOpenGraph,
     injectLegalSeo,
     injectDiscoverySeo,

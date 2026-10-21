@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Shop } from '../../types';
 import { getSubscriptionAnalyticsDayLimit } from '../../utils/subscriptionFeatures';
 

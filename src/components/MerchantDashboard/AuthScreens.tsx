@@ -1,9 +1,10 @@
 import React from 'react';
-import { Store, Phone, Lock, ChevronRight, UserPlus, Key, Eye, EyeOff, AlertTriangle, Check, ExternalLink, X } from 'lucide-react';
+import { Store, Phone, Lock, ChevronRight, UserPlus, Eye, EyeOff, AlertTriangle, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { ShopCategory } from '../../types';
 import { MerchantState } from './useMerchant';
 import { CATEGORY_DEFAULTS, SHOP_CATEGORIES } from '../../utils/categoryDefaults';
+import { ABIDJAN_COMMUNES } from '../../utils/abidjanCommunes';
 import { AuthAudienceSwitcher, AuthExperienceLayout } from '../AuthExperienceLayout';
 import { MerchantRegistrationScreen } from './MerchantRegistrationScreen';
 
@@ -20,19 +21,13 @@ const shopCategoryOptions: { value: ShopCategory; label: string; icon: string }[
   icon: CATEGORY_DEFAULTS[value].icon,
 }));
 
-const abidjanCommunes = [
-  'Abobo', 'Adjamé', 'Anyama', 'Attécoubé', 'Bingerville', 'Cocody',
-  'Koumassi', 'Marcory', 'Plateau', 'Port-Bouët', 'Songon', 'Treichville',
-  'Yopougon', 'Autre ville / commune',
-];
-
 export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirectory, onCustomerLogin }) => {
   const {
     isSessionLoading, currentShop, phoneInput, setPhoneInput, pinInput, setPinInput,
-    accessCodeInput, setAccessCodeInput, showAccessCode, setShowAccessCode, showPinInput,
-    setShowPinInput, authMode, setAuthMode, authError, authLoading,
-    handlePrivateAccessLogin, handleLogin,
-    setIsRegisterModalOpen, setAuthError, isRegisterModalOpen, handleRegisterShop, regName, setRegName, regCategory, setRegCategory, regCity, setRegCity, regCityOther, setRegCityOther, regPhone, setRegPhone, showRegPin, regPin, setRegPin, setShowRegPin, regEmail, setRegEmail, regLoading
+    showPinInput,
+    setShowPinInput, authError, authLoading,
+    handleLogin,
+    setIsRegisterModalOpen, isRegisterModalOpen, handleRegisterShop, regName, setRegName, regCategory, setRegCategory, regCity, setRegCity, regCityOther, setRegCityOther, regPhone, setRegPhone, showRegPin, regPin, setRegPin, setShowRegPin, regEmail, setRegEmail, regLoading
   } = state;
 
   // 0. SESSION LOADING — prevent flash of login form while checking cookie / access token
@@ -232,7 +227,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                         className="w-full rounded-xl border border-[#ded8ce] bg-white p-3 text-sm text-[#211712] outline-none focus:border-[#1d6b57]"
                       >
                         <option value="Abidjan">Abidjan</option>
-                        {abidjanCommunes.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
+                        {ABIDJAN_COMMUNES.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
                       </select>
                       {regCity === 'Autre ville / commune' && (
                         <input
@@ -312,7 +307,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                     <p className="mt-1 text-xs leading-5 text-[#6b5548]">Catalogue, horaires, zones de service et commandes WhatsApp sont inclus. Premium et Pro ajoutent personnalisation, réseaux sociaux, événements, visibilité et statistiques.</p>
                   </div>
                   <div className="rounded-xl bg-white p-3 text-xs leading-5 text-[#155c3d]">
-                    Après la création, votre essai Standard gratuit de 7 jours commence immédiatement. À son échéance, choisissez une formule et réglez-la avec KadevPay pour continuer.
+                    Après la création, votre essai Standard gratuit de 7 jours commence immédiatement. À son échéance, choisissez une formule et réglez-la avec GeniusPay pour continuer.
                   </div>
                 </section>
 

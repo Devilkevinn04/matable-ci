@@ -1,5 +1,5 @@
 import { Router, type RequestHandler } from 'express';
-import { dbAll, dbRun } from '../../db.ts';
+import { dbRun } from '../../db.ts';
 import { getSubscriptionAnalyticsDayLimit } from '../../src/utils/subscriptionFeatures.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
 import { canUseSubscriptionFeature, getShopPublicationBlockReason, getSubscriptionPlanConfig, getSubscriptionState } from '../services/businessRules.ts';

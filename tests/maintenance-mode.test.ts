@@ -11,7 +11,7 @@ test('keeps super-admin, health checks, webhooks and admin assets available duri
     '/api/auth/admin-logout',
     '/api/auth/session',
     '/api/health',
-    '/api/webhooks/kadevpay',
+    '/api/webhooks/geniuspay',
     '/assets/admin.js',
   ]) {
     assert.equal(isMaintenanceExemptRequest({ path, method: 'GET' }), true, path);

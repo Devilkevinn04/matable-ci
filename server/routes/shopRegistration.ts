@@ -41,7 +41,6 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     hashAccessToken,
     isShopCategory,
     getCategoryDefaults,
-    normalizeCustomBannerImage,
     normalizeWelcomeMessage,
     sanitizeTextField,
     addDays,
@@ -208,7 +207,7 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       success: true,
       shop: toSafeShop(newShop),
       owner_access_token: ownerAccessToken,
-      message: `Boutique créée. Votre essai Standard gratuit de ${trialDurationDays} jours commence maintenant. Choisissez ensuite une formule et réglez-la avec KadevPay pour poursuivre. Les commandes clients vous sont transmises via un reçu WhatsApp à ouvrir manuellement.`,
+      message: `Boutique créée. Votre essai Standard gratuit de ${trialDurationDays} jours commence maintenant. Choisissez ensuite une formule et réglez-la avec GeniusPay pour poursuivre. Les commandes clients vous sont transmises via un reçu WhatsApp à ouvrir manuellement.`,
     });
   });
 

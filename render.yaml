@@ -51,7 +51,11 @@ services:
         sync: false
       - key: WHATSAPP_TEMPLATE_LANGUAGE
         value: fr
-      - key: KADEVPAY_PUBLIC_KEY
+      - key: GENIUSPAY_API_KEY
         sync: false
-      - key: KADEVPAY_WEBHOOK_SECRET
+      - key: GENIUSPAY_API_SECRET
         sync: false
+      - key: GENIUSPAY_WEBHOOK_SECRET
+        sync: false
+      - key: GENIUSPAY_API_URL
+        value: https://geniuspay.ci/api/v1/merchant/payments

@@ -22,6 +22,7 @@ interface CustomerTrustPanelProps {
   targetType: TargetType;
   targetId: number;
   targetName: string;
+  isAuthenticated: boolean;
   onClose: () => void;
 }
 
@@ -33,11 +34,14 @@ const reportReasons = [
   { value: 'other', label: 'Autre' },
 ];
 
-export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetType, targetId, targetName, onClose }) => {
+export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetType, targetId, targetName, isAuthenticated, onClose }) => {
   const [reviews, setReviews] = useState<TrustReview[]>([]);
   const [averageRating, setAverageRating] = useState<number | null>(null);
   const [reviewCount, setReviewCount] = useState(0);
   const [orders, setOrders] = useState<TrustOrder[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersAuthenticated, setOrdersAuthenticated] = useState(isAuthenticated);
+  const [ordersError, setOrdersError] = useState('');
   const [rating, setRating] = useState(5);
   const [orderId, setOrderId] = useState('');
   const [comment, setComment] = useState('');
@@ -68,9 +72,28 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
         if (active) setError(caught instanceof Error ? caught.message : 'Impossible de charger les avis.');
       });
     fetch('/api/auth/customer-orders', { credentials: 'include' })
-      .then(async (response) => response.ok ? response.json() : null)
-      .then((data) => { if (active && data) setOrders(data.orders || []); })
-      .catch(() => { if (active) setOrders([]); });
+      .then(async (response) => {
+        const data = await response.json();
+        if (response.status === 401) return { unauthenticated: true };
+        if (!response.ok) throw new Error(data.error || 'Impossible de charger vos commandes.');
+        return data;
+      })
+      .then((data) => {
+        if (!active) return;
+        if (data?.unauthenticated) {
+          setOrdersAuthenticated(false);
+          setOrders([]);
+          return;
+        }
+        setOrdersAuthenticated(true);
+        setOrders(data?.orders || []);
+      })
+      .catch((caught: unknown) => {
+        if (active) setOrdersError(caught instanceof Error ? caught.message : 'Impossible de charger vos commandes.');
+      })
+      .finally(() => {
+        if (active) setOrdersLoading(false);
+      });
     return () => { active = false; };
   }, [targetId, targetType]);
 
@@ -144,16 +167,18 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
           <form onSubmit={submitReview} className="space-y-3">
             <h3 className="flex items-center gap-2 text-sm font-black text-slate-900"><Star className="h-4 w-4 text-amber-500" />Donner un avis vérifié</h3>
             <p className="text-xs leading-5 text-slate-600">Seules les commandes clôturées peuvent donner lieu à un avis.</p>
-            <select aria-label="Commande terminée" value={orderId} onChange={(event) => setOrderId(event.target.value)} required className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
-              <option value="">Choisir une commande terminée</option>
+            <select aria-label="Commande terminée" value={orderId} onChange={(event) => setOrderId(event.target.value)} required disabled={ordersLoading || eligibleOrders.length === 0} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100">
+              <option value="">{ordersLoading ? 'Chargement de vos commandes…' : 'Choisir une commande terminée'}</option>
               {eligibleOrders.map((order) => <option key={order.id} value={order.id}>Commande #{order.id}</option>)}
             </select>
+            {ordersError && <p role="alert" className="text-xs text-rose-800">{ordersError}</p>}
+            {!ordersLoading && !ordersError && !ordersAuthenticated && <p className="text-xs text-slate-600">Connectez-vous à votre compte client pour déposer un avis vérifié. <a href="/connexion" onClick={onClose} className="font-bold text-[#0f4d3d] underline underline-offset-2">Se connecter</a></p>}
+            {!ordersLoading && !ordersError && ordersAuthenticated && eligibleOrders.length === 0 && <p className="text-xs text-slate-600">{orders.length === 0 ? 'Aucune commande n’est associée à votre compte pour le moment.' : 'Une commande livrée de cette boutique ou contenant ce produit est nécessaire pour laisser un avis.'}</p>}
             <div className="flex gap-1" aria-label="Note sur cinq">
               {[1, 2, 3, 4, 5].map((value) => <button key={value} type="button" onClick={() => setRating(value)} aria-label={`${value} étoile${value > 1 ? 's' : ''}`} aria-pressed={rating === value} className={`rounded p-1 text-2xl ${rating >= value ? 'text-amber-500' : 'text-slate-300'}`}>★</button>)}
             </div>
             <textarea value={comment} onChange={(event) => setComment(event.target.value)} maxLength={1000} rows={3} placeholder="Votre expérience (facultatif)" className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm" />
-            <button type="submit" disabled={saving || eligibleOrders.length === 0} className="min-h-10 rounded-full bg-[#0f4d3d] px-4 text-xs font-bold text-white disabled:opacity-50">Envoyer mon avis</button>
-            {orders.length === 0 && <p className="text-xs text-slate-500">Connectez-vous et terminez une commande pour laisser un avis.</p>}
+            <button type="submit" disabled={saving || ordersLoading || eligibleOrders.length === 0} className="min-h-10 rounded-full bg-[#0f4d3d] px-4 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Envoi…' : 'Envoyer mon avis'}</button>
           </form>
 
           <form onSubmit={submitReport} className="space-y-3">
@@ -161,8 +186,8 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
             <p className="text-xs leading-5 text-slate-600">Un signalement est transmis à l’équipe de modération, pas au livreur ni à la boutique.</p>
             <select value={reportReason} onChange={(event) => setReportReason(event.target.value)} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">{reportReasons.map((reason) => <option key={reason.value} value={reason.value}>{reason.label}</option>)}</select>
             <textarea value={reportDetails} onChange={(event) => setReportDetails(event.target.value)} maxLength={1000} rows={3} placeholder="Expliquez brièvement (facultatif)" className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm" />
-            <button type="submit" disabled={saving} className="min-h-10 rounded-full border border-rose-300 px-4 text-xs font-bold text-rose-800 disabled:opacity-50">Envoyer le signalement</button>
-            <p className="text-xs text-slate-500">Connectez-vous à votre compte client pour envoyer un avis ou un signalement.</p>
+            <button type="submit" disabled={saving || !ordersAuthenticated} className="min-h-10 rounded-full border border-rose-300 px-4 text-xs font-bold text-rose-800 disabled:opacity-50">{saving ? 'Envoi…' : 'Envoyer le signalement'}</button>
+            {!ordersAuthenticated && <p className="text-xs text-slate-500">Connectez-vous à votre compte client pour envoyer un signalement. <a href="/connexion" onClick={onClose} className="font-bold text-[#0f4d3d] underline underline-offset-2">Se connecter</a></p>}
           </form>
         </div>
       </section>

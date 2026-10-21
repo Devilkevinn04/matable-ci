@@ -1,7 +1,6 @@
 import React from 'react';
-import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Sparkles, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes, MessageCircle } from 'lucide-react';
+import { ShoppingBag, Check, ExternalLink, Search, TrendingUp, DollarSign, MapPin, MessageCircle } from 'lucide-react';
 import type { MerchantOrderFilter, MerchantState } from './useMerchant';
-import { ThemeCustomizer } from '../ThemeCustomizer';
 import { cleanPhoneForWhatsApp, formatFCFA } from '../../utils/format';
 
 interface OrdersTabProps {
@@ -11,32 +10,18 @@ interface OrdersTabProps {
 
 export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, orderValue, averageOrderValue }) => {
   const {
-    currentShop, products, orders, activeTab, settingsSubTab, setSettingsSubTab,
-    catalogSearch, setCatalogSearch, catalogFilter, setCatalogFilter,
-    orderSearch, setOrderSearch, orderPaymentFilter, setOrderPaymentFilter, orderStatusFilter, setOrderStatusFilter,
-    settingsName, setSettingsName, settingsWelcome, setSettingsWelcome, settingsOpen, setSettingsOpen,
-    settingsPhone, setSettingsPhone, settingsCity, setSettingsCity, settingsNewPin, setSettingsNewPin,
-    settingsSocialLinks, setSettingsSocialLinks, settingsDeliveryZones, setSettingsDeliveryZones, settingsSaved,
-    hoursEnabled, setHoursEnabled, openTime, setOpenTime, closeTime, setCloseTime, activeDays, setActiveDays,
-    manualOverride, hoursSaved, cronRunning, cronResult, copiedBilan, setCopiedBilan,
-    isProductModalOpen, setIsProductModalOpen, editingProduct, prodTitle, setProdTitle, prodCategory, setProdCategory,
-    prodDescription, setProdDescription, prodPrice, setProdPrice, prodStock, setProdStock, prodImage, setProdImage,
-    prodLookbookImage, setProdLookbookImage, prodSizes, setProdSizes, prodColors, setProdColors, prodPrepTime, setProdPrepTime,
-    prodIsAvailable, setProdIsAvailable,
-    imageCompressing, compressedSizeKB, originalImageSizeKB, flashBilan,
-    handleSaveOpeningHours, handleResetManualOverride, handleTriggerCronBilan, handleQuickStockChange, handleQuickToggleVisibility,
-    handleOpenAddModal, handleOpenEditModal, handleUpdateOrderStatus, handleImageUpload, handleSaveProduct, handleDeleteProduct,
-    handleSaveGeneralSettings, addDeliveryZone, updateDeliveryZone, removeDeliveryZone, toast, copyOwnerLink, copyRegistrationLinks
+    orders, orderSearch, setOrderSearch, orderPaymentFilter, setOrderPaymentFilter, orderStatusFilter, setOrderStatusFilter,
+    handleUpdateOrderStatus, copyOwnerLink
   } = state;
   const orderStatusOptions: { id: MerchantOrderFilter; label: string; count: number }[] = [
     { id: 'all', label: 'Toutes', count: orders.length },
     { id: 'actionable', label: 'À traiter', count: orders.filter(o => !['delivered', 'cancelled', 'expired'].includes(o.status || 'pending')).length },
-    { id: 'pending', label: '⏳ En attente', count: orders.filter(o => (o.status || 'pending') === 'pending').length },
-    { id: 'confirmed', label: '✓ Acceptées', count: orders.filter(o => o.status === 'confirmed').length },
-    { id: 'preparing', label: '🍳 En préparation', count: orders.filter(o => o.status === 'preparing').length },
-    { id: 'ready', label: '📦 Prêtes', count: orders.filter(o => o.status === 'ready').length },
-    { id: 'delivered', label: '✨ Livrées', count: orders.filter(o => o.status === 'delivered').length },
-    { id: 'cancelled', label: '✕ Annulées', count: orders.filter(o => o.status === 'cancelled').length },
+    { id: 'pending', label: 'En attente', count: orders.filter(o => (o.status || 'pending') === 'pending').length },
+    { id: 'confirmed', label: 'Acceptées', count: orders.filter(o => o.status === 'confirmed').length },
+    { id: 'preparing', label: 'En préparation', count: orders.filter(o => o.status === 'preparing').length },
+    { id: 'ready', label: 'Prêtes', count: orders.filter(o => o.status === 'ready').length },
+    { id: 'delivered', label: 'Livrées', count: orders.filter(o => o.status === 'delivered').length },
+    { id: 'cancelled', label: 'Annulées', count: orders.filter(o => o.status === 'cancelled').length },
   ];
 
   return (
@@ -126,24 +111,20 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                 </label>
               </div>
 
-              {/* Status filter bar */}
-              <div className="flex items-center gap-1.5 overflow-x-auto border-t border-[#f0ebe2] pt-3">
-                <span className="mr-1 shrink-0 text-[10px] font-black uppercase tracking-wider text-slate-400">Statut</span>
-                {orderStatusOptions.map(st => (
-                  <button
-                    key={st.id}
-                    type="button"
-                    aria-pressed={orderStatusFilter === st.id}
-                    onClick={() => setOrderStatusFilter(st.id)}
-                    className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors ${
-                      orderStatusFilter === st.id
-                        ? 'bg-[#1D6B57] text-white'
-                        : 'border border-transparent bg-[#f7f4ee] text-slate-600 hover:bg-[#eee8dc]'
-                    }`}
+              <div className="border-t border-[#f0ebe2] pt-3">
+                <label className="flex min-h-10 w-full items-center gap-3 rounded-xl border border-slate-200 bg-[#fffdf8] px-3 text-xs font-bold text-slate-600 sm:w-auto">
+                  <span className="shrink-0">Statut</span>
+                  <select
+                    aria-label="Filtrer les commandes par statut"
+                    value={orderStatusFilter}
+                    onChange={(event) => setOrderStatusFilter(event.target.value as MerchantOrderFilter)}
+                    className="min-w-0 flex-1 bg-transparent py-2 text-slate-800 outline-none sm:w-56 sm:flex-none"
                   >
-                    {st.label} ({st.count})
-                  </button>
-                ))}
+                    {orderStatusOptions.map((status) => (
+                      <option key={status.id} value={status.id}>{status.label} ({status.count})</option>
+                    ))}
+                  </select>
+                </label>
               </div>
             </div>
 

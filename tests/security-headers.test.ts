@@ -32,12 +32,11 @@ test('allows Google Fonts through the production content security policy', async
     assert.equal(directives.get('object-src')?.join(' '), "'none'");
     assert.ok(scriptSources);
     assert.ok(scriptSources.includes("'self'"));
-    assert.ok(scriptSources.includes('https://pay.kadev.ci'));
     assert.ok(!scriptSources.some((source) => ["'unsafe-inline'", 'data:', 'https:', 'https://*'].includes(source)));
     assert.match(policy ?? '', /style-src[^;]*https:\/\/fonts\.googleapis\.com/);
     assert.match(policy ?? '', /font-src[^;]*https:\/\/fonts\.gstatic\.com/);
-    assert.match(policy ?? '', /connect-src[^;]*https:\/\/pay\.kadev\.ci/);
-    assert.match(policy ?? '', /frame-src[^;]*https:\/\/pay\.kadev\.ci/);
+    assert.match(policy ?? '', /connect-src 'self'/);
+    assert.doesNotMatch(policy ?? '', /kadev\.ci|paystack\.co/);
   } finally {
     if (server.listening) {
       await new Promise<void>((resolve, reject) => {

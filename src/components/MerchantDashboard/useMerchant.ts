@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useToast } from '../Toast';
 import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks, SubscriptionTier } from '../../types';
-import { formatFCFA, cleanPhoneForWhatsApp } from '../../utils/format';
 import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
 import { TRIAL_DURATION_DAYS } from '../../utils/subscriptionFeatures';
 import { useMerchantProductEditor } from './useMerchantProductEditor';

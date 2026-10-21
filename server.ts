@@ -18,7 +18,7 @@ import { createShopManagementRouter } from './server/routes/shopManagement.ts';
 import { createShopRegistrationRouter } from './server/routes/shopRegistration.ts';
 import { createMerchantVerificationRouter } from './server/routes/merchantVerification.ts';
 import { createTelemetryRouter } from './server/routes/telemetry.ts';
-import { createKadevPayRouter } from './server/routes/kadevPay.ts';
+import { createGeniusPayRouter } from './server/routes/geniusPay.ts';
 import { createPublicRateLimitMiddleware } from './server/services/rateLimits.ts';
 import { buildSessionFingerprint, createAuthSessionHelpers, isRequestFingerprintMatch } from './server/services/authSessions.ts';
 import { createSeoHtmlHelpers } from './server/services/seoHtml.ts';
@@ -27,10 +27,10 @@ import { retryPendingMerchantPushes, sendMerchantPush } from './server/services/
 import { seedDemoDatabaseIfEmpty } from './server/services/demoSeed.ts';
 import { applySecurityHeaders } from './server/middleware/securityHeaders.ts';
 import { createMaintenanceModeMiddleware } from './server/middleware/maintenanceMode.ts';
-import type { OrderRecord, ProductRecord, ShopOpeningHours, ShopRecord, SubscriptionPlanConfig, SubscriptionState, SubscriptionStatus, SubscriptionTier } from './server/types.ts';
+import type { OrderRecord, ProductRecord, ShopRecord, SubscriptionState } from './server/types.ts';
 import { loadProductsFromDatabase, persistProduct } from './server/repositories/products.ts';
 import { getShopFromDatabase, loadShopsFromDatabase, persistShop } from './server/repositories/shops.ts';
-import { loadOrdersFromDatabase, persistOrder } from './server/repositories/orders.ts';
+import { loadOrdersFromDatabase } from './server/repositories/orders.ts';
 import { allocateRecordId } from './server/repositories/ids.ts';
 import {
   deleteAdminSessionRecord,
@@ -39,7 +39,6 @@ import {
   migrateExistingSessionTokens,
   saveAdminSessionRecord,
   saveCustomerSessionRecord,
-  saveMerchantSessionRecord,
 } from './server/repositories/sessions.ts';
 import {
   computeIsShopOpen,
@@ -663,12 +662,10 @@ const {
   getAdminSession,
   getAdminSessionRole,
   getSessionStateForResponse,
-  requireCustomerAccess,
   getCustomerSessionState,
   requireAdminAccess,
   requireSuperAdminAccess,
   requireVerificationAdminAccess,
-  requireMerchantOwner,
   requireMerchantAccess,
   requireMerchantOwnShop,
   requireMerchantIdentityOwnShop,
@@ -788,19 +785,6 @@ const verifyPin = (inputPin: string, storedHash: string) => {
   }
 };
 
-const findShopByPhone = (phone: string) => {
-  const cleanInputPhone = phone.replace(/[^0-9]/g, '');
-  return shops.find((s) => {
-    const cleanShopPhone = s.whatsapp_number.replace(/[^0-9]/g, '');
-    return (
-      cleanShopPhone === cleanInputPhone ||
-      cleanShopPhone.includes(cleanInputPhone) ||
-      cleanInputPhone.includes(cleanShopPhone) ||
-      cleanShopPhone.slice(-8) === cleanInputPhone.slice(-8)
-    );
-  });
-};
-
 function sanitizeProductAttributes(attributes: unknown, category: ShopCategory): Record<string, string> | undefined {
   if (!attributes || typeof attributes !== 'object' || Array.isArray(attributes)) return undefined;
   const allowedFields = new Set(getCategoryDefaults(category).productAttributes.map((field) => field.key));
@@ -840,6 +824,12 @@ async function startServer() {
   });
 
   app.use('/api/webhooks/didit', express.raw({ type: 'application/json', limit: '64kb' }), verificationRouters.webhookRouter);
+  app.use('/api/webhooks/geniuspay', express.json({
+    limit: '64kb',
+    verify: (req, _res, buffer) => {
+      (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+    },
+  }));
 
   app.use('/api/shops/:id', async (req: Request, res: Response, next: express.NextFunction) => {
     const shopId = Number(req.params.id);
@@ -861,14 +851,7 @@ async function startServer() {
     next();
   });
 
-  app.use(express.json({
-    limit: '2mb',
-    verify: (req, _res, buffer) => {
-      if (req.url?.split('?')[0] === '/api/webhooks/kadevpay') {
-        (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
-      }
-    },
-  }));
+  app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: false, limit: '16kb' }));
   app.use('/api/admin', requireAdminAccess);
   app.use('/api/admin', createAdminRouter({
@@ -920,7 +903,21 @@ async function startServer() {
   // --- API ROUTES ---
 
   app.use('/api', createTelemetryRouter({ shops, rateLimitPublicRequest, dbGet, dbRun }));
-  app.use('/api', createKadevPayRouter({ shops, requireMerchantOwnShop }));
+  const geniusPayRouter = createGeniusPayRouter({
+    shops,
+    requireMerchantOwnShop,
+    rateLimitPaymentCreation: rateLimitPublicRequest(20),
+    rateLimitWebhook: rateLimitPublicRequest(300),
+  });
+  app.use('/api', geniusPayRouter);
+  void geniusPayRouter.reconcilePendingPayments().catch((error: unknown) => {
+    console.warn('Initial GeniusPay payment reconciliation failed.', error);
+  });
+  setInterval(() => {
+    void geniusPayRouter.reconcilePendingPayments().catch((error: unknown) => {
+      console.warn('Scheduled GeniusPay payment reconciliation failed.', error);
+    });
+  }, 5 * 60 * 1000).unref();
 
   app.get('/health', async (_req, res) => {
     try {
@@ -1061,10 +1058,7 @@ async function startServer() {
     injectNoIndexSeo,
     injectFaqSeo,
     injectHowItWorksSeo,
-    injectShopOpenGraph,
-    injectLegalSeo,
-    injectDiscoverySeo,
-    injectShopDirectorySeo,
+    injectMerchantPlansSeo,
   } = createSeoHtmlHelpers({ shops, products, sanitizeTextField });
 
   const shouldServePublicHtml = (req: Request) => {
@@ -1119,6 +1113,17 @@ async function startServer() {
         }
       }
 
+      if (req.path === '/__preview/mobile' && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Aperçus mobiles | MaTable.ci'));
+        } catch (error) {
+          return next(error);
+        }
+      }
+
       const seoShops = await loadShopsFromDatabase();
       const seoProducts = await loadProductsFromDatabase();
       const {
@@ -1138,6 +1143,16 @@ async function startServer() {
       const legalPage = matchSlug && ['mentions-legales', 'confidentialite', 'cgu', 'cookies'].includes(matchSlug) ? matchSlug : null;
       const discoveryPage = findPublicDiscoveryPage(url, seoShops.filter((shop) => isShopPubliclyVisible(shop)));
 
+      if (req.path.replace(/\/+$/, '') === '/commercants' && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectMerchantPlansSeo(transformed, req));
+        } catch (error) {
+          return next(error);
+        }
+      }
       if (req.path.replace(/\/+$/, '') === '/comment-ca-marche' && shouldServePublicHtml(req)) {
         try {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
@@ -1250,6 +1265,7 @@ async function startServer() {
         injectLegalSeo: injectCurrentLegalSeo,
         injectDiscoverySeo: injectCurrentDiscoverySeo,
         injectShopDirectorySeo: injectCurrentShopDirectorySeo,
+        injectMerchantPlansSeo: injectCurrentMerchantPlansSeo,
         injectShopOpenGraph: injectCurrentShopOpenGraph,
       } = createSeoHtmlHelpers({ shops: seoShops, products: seoProducts, sanitizeTextField });
       const url = req.originalUrl.split('?')[0];
@@ -1261,6 +1277,9 @@ async function startServer() {
       const legalPage = matchSlug && ['mentions-legales', 'confidentialite', 'cgu', 'cookies'].includes(matchSlug) ? matchSlug : null;
       const discoveryPage = findPublicDiscoveryPage(req.path, seoShops.filter((shop) => isShopPubliclyVisible(shop)));
 
+      if (req.path.replace(/\/+$/, '') === '/commercants' && baseHtml && shouldServePublicHtml(req)) {
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectCurrentMerchantPlansSeo(baseHtml, req));
+      }
       if (req.path.replace(/\/+$/, '') === '/comment-ca-marche' && baseHtml && shouldServePublicHtml(req)) {
         return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectHowItWorksSeo(baseHtml, req));
       }

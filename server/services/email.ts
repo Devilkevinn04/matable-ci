@@ -127,7 +127,7 @@ export async function sendMerchantSubscriptionReceiptEmail(
     `Formule : ${params.tierLabel} (${termLabel})`,
     `Montant : ${amount} ${params.currency}`,
     `Date : ${paidDate} (heure de Côte d’Ivoire)`,
-    `Référence KadevPay : ${params.providerReference}`,
+    `Référence de paiement : ${params.providerReference}`,
     `Numéro de reçu : ${receiptNumber}`,
   ].join('\n');
   const html = `
@@ -139,7 +139,7 @@ export async function sendMerchantSubscriptionReceiptEmail(
         <tr><th align="left">Formule</th><td>${escapeHtml(params.tierLabel)} (${termLabel})</td></tr>
         <tr><th align="left">Montant</th><td>${escapeHtml(amount)} ${escapeHtml(params.currency)}</td></tr>
         <tr><th align="left">Date</th><td>${escapeHtml(paidDate)} (heure de Côte d’Ivoire)</td></tr>
-        <tr><th align="left">Référence KadevPay</th><td>${escapeHtml(params.providerReference)}</td></tr>
+        <tr><th align="left">Référence de paiement</th><td>${escapeHtml(params.providerReference)}</td></tr>
         <tr><th align="left">Numéro de reçu</th><td>${escapeHtml(receiptNumber)}</td></tr>
       </table>
     </div>

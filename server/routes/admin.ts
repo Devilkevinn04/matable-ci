@@ -1272,7 +1272,6 @@ export function createAdminRouter(options: AdminRouterOptions) {
       trial_expiring: `Bonjour ${shop.name}, votre essai MaTable.ci arrive à échéance. Connectez-vous à votre espace commerçant pour choisir une formule et garder votre vitrine visible. L’équipe MaTable.ci reste disponible si besoin.`,
     };
     if (template === 'identity_verification') {
-      const origin = String(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
       const messageTemplate = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
       if (req.body?.message !== undefined && (!messageTemplate || messageTemplate.length > 2000)) {
         return res.status(400).json({ error: 'Le message doit contenir entre 1 et 2 000 caractères.' });

@@ -22,6 +22,7 @@ export function createSeoRouter({ getPublicOrigin, escapeHtml }: SeoRouterOption
     const urls = [
       `${origin}/`,
       `${origin}/boutiques`,
+      `${origin}/commercants`,
       `${origin}/comment-ca-marche`,
       `${origin}/faq`,
       ...publicShops.map((shop) => `${origin}/${encodeURIComponent(shop.slug)}`),

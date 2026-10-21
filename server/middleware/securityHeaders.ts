@@ -20,10 +20,9 @@ export function applySecurityHeaders(app: Express) {
         "img-src 'self' data: blob: https:",
         "font-src 'self' data: https://fonts.gstatic.com",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "script-src 'self' https://pay.kadev.ci",
+        "script-src 'self'",
         "worker-src 'self' blob:",
-        "connect-src 'self' https://pay.kadev.ci https://*.kadev.ci",
-        "frame-src 'self' https://pay.kadev.ci https://*.kadev.ci",
+        "connect-src 'self'",
         'upgrade-insecure-requests',
       ].join('; '));
     }

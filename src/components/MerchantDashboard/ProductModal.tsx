@@ -1,10 +1,8 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Sparkles, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes } from 'lucide-react';
+import { Plus, Trash2, X, Upload, Boxes } from 'lucide-react';
 import { MerchantState } from './useMerchant';
 import type { ProductModifierGroupDraft } from './productForm';
-import { ThemeCustomizer } from '../ThemeCustomizer';
-import { formatFCFA } from '../../utils/format';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
 import { CategoryProductImage } from '../CategoryProductImage';
 import { getSubscriptionProductPhotoLimit } from '../../utils/subscriptionFeatures';
@@ -16,23 +14,11 @@ interface ProductModalProps {
 
 export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
   const {
-    currentShop, products, orders, activeTab, settingsSubTab, setSettingsSubTab,
-    catalogSearch, setCatalogSearch, catalogFilter, setCatalogFilter,
-    orderSearch, setOrderSearch, orderPaymentFilter, setOrderPaymentFilter, orderStatusFilter, setOrderStatusFilter,
-    settingsName, setSettingsName, settingsWelcome, setSettingsWelcome, settingsOpen, setSettingsOpen,
-    settingsPhone, setSettingsPhone, settingsCity, setSettingsCity, settingsNewPin, setSettingsNewPin,
-    settingsSocialLinks, setSettingsSocialLinks, settingsDeliveryZones, setSettingsDeliveryZones, settingsSaved,
-    hoursEnabled, setHoursEnabled, openTime, setOpenTime, closeTime, setCloseTime, activeDays, setActiveDays,
-    manualOverride, hoursSaved, cronRunning, cronResult, copiedBilan, setCopiedBilan,
-    isProductModalOpen, setIsProductModalOpen, editingProduct, prodTitle, setProdTitle, prodCategory, setProdCategory,
-    prodDescription, setProdDescription, prodPrice, setProdPrice, prodStock, setProdStock, prodImage, setProdImage,
-    prodLookbookImage, setProdLookbookImage, prodSizes, setProdSizes, prodColors, setProdColors, prodPrepTime, setProdPrepTime,
+    currentShop, isProductModalOpen, setIsProductModalOpen, editingProduct, prodTitle, setProdTitle, prodCategory, setProdCategory,
+    prodDescription, setProdDescription, prodPrice, setProdPrice, prodStock, setProdStock, prodImage, prodLookbookImage, setProdLookbookImage, prodSizes, setProdSizes, prodColors, setProdColors, prodPrepTime, setProdPrepTime,
     prodModifierGroups, setProdModifierGroups, prodAttributes, setProdAttributes, prodIsAvailable, setProdIsAvailable,
-    imageCompressing, compressedSizeKB, originalImageSizeKB, flashBilan,
-    handleSaveOpeningHours, handleResetManualOverride, handleTriggerCronBilan, handleQuickStockChange, handleQuickToggleVisibility,
-    handleOpenAddModal, handleOpenEditModal, handleUpdateOrderStatus, handleImageUpload, handleLookbookImageUpload,
-    prodGalleryImages, handleGalleryImageUpload, handleRemoveGalleryImage, handleSaveProduct, handleDeleteProduct,
-    handleSaveGeneralSettings, addDeliveryZone, updateDeliveryZone, removeDeliveryZone, toast, copyOwnerLink, copyRegistrationLinks
+    imageCompressing, compressedSizeKB, originalImageSizeKB, handleImageUpload, handleLookbookImageUpload,
+    prodGalleryImages, handleGalleryImageUpload, handleRemoveGalleryImage, handleSaveProduct
   } = state;
   const [modifierOptionDrafts, setModifierOptionDrafts] = React.useState<Record<number, string>>({});
 

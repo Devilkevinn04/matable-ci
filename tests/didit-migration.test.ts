@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import Database from 'better-sqlite3';
-
 const dbPath = path.join(tmpdir(), `matable-didit-migration-${Date.now()}.db`);
 
 function loadDatabaseModule(instance: string) {

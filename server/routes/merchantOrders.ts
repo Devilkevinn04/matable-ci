@@ -1,5 +1,5 @@
 import { Router, type RequestHandler } from 'express';
-import { databaseMode, dbAll, dbGet, dbTransaction } from '../../db.ts';
+import { databaseMode, dbAll, dbTransaction } from '../../db.ts';
 import { mapProductRow } from '../repositories/products.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';

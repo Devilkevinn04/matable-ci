@@ -1,4 +1,4 @@
-import { CartItem, Order, Product, Shop } from '../types';
+import { Order, Product, Shop } from '../types';
 import { getCategoryDefaults } from './categoryDefaults';
 
 export function getProductUnitPrice(product: Product, selectedModifiers?: string[]): number {

@@ -489,7 +489,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
         }
       }
 
-      const profile = await createCustomerSession(req, res, user);
+      await createCustomerSession(req, res, user);
       return res.redirect(303, transaction.returnTo || '/compte');
     } catch {
       return res.redirect(303, oauthError.toString());

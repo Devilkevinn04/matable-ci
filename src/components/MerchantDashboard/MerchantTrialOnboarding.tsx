@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, BarChart3, Check, CircleCheck, LoaderCircle, LockKeyhole, MessageCircle, Palette, RefreshCw, ShieldCheck, Sparkles, Store } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowRight, BarChart3, Check, CircleCheck, LoaderCircle, LockKeyhole, MessageCircle, Palette, ShieldCheck, Sparkles, Store } from 'lucide-react';
 import type { Shop, SubscriptionTier } from '../../types';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 import { MerchantBoostPurchase } from './MerchantBoostPurchase';
@@ -20,7 +20,6 @@ import {
   type SubscriptionTerm,
 } from '../../utils/subscriptionFeatures';
 import { getRenewedSubscriptionExpiry } from '../../utils/subscriptionExpiry';
-import { getKadevPayLoadMessage, loadKadevPayCheckout } from '../../utils/kadevPaySdk';
 import { WhatsAppSubscriptionReminderConsent } from './WhatsAppSubscriptionReminderConsent';
 
 interface MerchantTrialOnboardingProps {
@@ -39,14 +38,10 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(shop.subscription?.plan || 'standard');
   const [term, setTerm] = useState<SubscriptionTerm>('monthly');
   const [purchaseNow, setPurchaseNow] = useState(false);
-  const [isKadevPayReady, setIsKadevPayReady] = useState(false);
-  const [sdkRetryCount, setSdkRetryCount] = useState(0);
   const [isPaymentStarting, setIsPaymentStarting] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState('');
   const [needsBillingEmail, setNeedsBillingEmail] = useState(false);
   const [billingEmail, setBillingEmail] = useState('');
-  const [paymentIdToVerify, setPaymentIdToVerify] = useState<string | null>(null);
-  const didReceivePaymentSuccess = useRef(false);
   const selectedPlan = plans.find((plan) => plan.tier === selectedTier) || plans[0];
   const paymentFlowActive = previewOnly || mode !== 'start' || purchaseNow;
   const isTrialActive = shop.subscription?.status === 'trialing';
@@ -71,66 +66,14 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
           ? 'Votre abonnement est résilié'
           : 'Votre abonnement est arrivé à échéance';
   const expiredDescription = isTrialExpired
-    ? 'Choisissez une formule mensuelle ou annuelle et réglez-la avec KadevPay. Votre vitrine redeviendra accessible après confirmation sécurisée du paiement.'
+    ? 'Choisissez une formule mensuelle ou annuelle et réglez-la avec GeniusPay. Votre vitrine redeviendra accessible après confirmation sécurisée du paiement.'
     : shop.subscription?.status === 'past_due'
-      ? 'Le dernier paiement n’a pas été confirmé. Choisissez une formule mensuelle ou annuelle et réglez-la avec KadevPay pour réactiver votre vitrine.'
-      : 'Choisissez une formule et sa durée, puis réglez-la avec KadevPay. Votre accès sera réactivé après confirmation sécurisée du paiement.';
-
-  useEffect(() => {
-    if (!paymentFlowActive || previewOnly) return;
-    let cancelled = false;
-    setIsKadevPayReady(false);
-    void loadKadevPayCheckout().then(() => {
-      if (!cancelled) setIsKadevPayReady(true);
-    }).catch((error: unknown) => {
-      if (!cancelled) setPaymentMessage(getKadevPayLoadMessage(error));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [paymentFlowActive, previewOnly, sdkRetryCount]);
-
-  const verifyPayment = async (paymentId: string) => {
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, 2000));
-      try {
-        const response = await fetch(`/api/shops/${shop.id}/subscription-payments/${paymentId}`, { credentials: 'include' });
-        if (!response.ok) continue;
-        const data = await response.json();
-        if (data.status === 'paid') {
-          setPaymentIdToVerify(null);
-          setPaymentMessage('Paiement confirmé. Actualisation de votre espace…');
-          window.location.reload();
-          return;
-        }
-        if (data.status === 'failed') {
-          setPaymentIdToVerify(null);
-          setPaymentMessage('Le paiement a été refusé. Aucun abonnement n’a été activé. Vous pouvez réessayer.');
-          setIsPaymentStarting(false);
-          return;
-        }
-        if (data.status === 'expired') {
-          setPaymentIdToVerify(null);
-          setPaymentMessage('Cette demande de paiement a expiré. Relancez le paiement pour en créer une nouvelle.');
-          setIsPaymentStarting(false);
-          return;
-        }
-      } catch {
-        // Keep checking until the webhook has had time to arrive.
-      }
-    }
-    setPaymentMessage('Paiement en attente de confirmation. Vous pourrez actualiser cette page dans quelques instants.');
-    setIsPaymentStarting(false);
-  };
+      ? 'Le dernier paiement n’a pas été confirmé. Choisissez une formule mensuelle ou annuelle et réglez-la avec GeniusPay pour réactiver votre vitrine.'
+      : 'Choisissez une formule et sa durée, puis réglez-la avec GeniusPay. Votre accès sera réactivé après confirmation sécurisée du paiement.';
 
   const startSubscriptionPayment = async () => {
     setPaymentMessage('');
-    if (!isKadevPayReady || !window.KadevPay || !window.PaystackPop) {
-      setPaymentMessage('Le paiement n’est pas prêt. Vérifiez votre connexion puis réessayez.');
-      return;
-    }
     setIsPaymentStarting(true);
-    didReceivePaymentSuccess.current = false;
     try {
       const clientRequestId = crypto.randomUUID();
       const response = await fetch(`/api/shops/${shop.id}/subscription-payments`, {
@@ -151,43 +94,13 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
         setIsPaymentStarting(false);
         return;
       }
-      if (!response.ok) throw new Error(data.error || 'Impossible de préparer le paiement KadevPay.');
+      if (!response.ok) throw new Error(data.error || 'Impossible de préparer le paiement GeniusPay.');
       setNeedsBillingEmail(false);
-      if (!window.KadevPay) throw new Error('Le module KadevPay n’est pas encore prêt. Réessayez.');
-      if (data.is_test) setPaymentMessage('Mode test actif : aucun paiement réel ne sera débité.');
-      setPaymentIdToVerify(data.payment_id);
-      window.KadevPay.checkout({
-        public_key: data.public_key,
-        amount: data.amount,
-        currency: 'XOF',
-        email: data.email,
-        name: data.name,
-        phone: data.phone,
-        method: 'momo',
-        metadata: { subscription_payment_id: data.payment_id },
-        onSuccess: () => {
-          didReceivePaymentSuccess.current = true;
-          setPaymentMessage('Paiement reçu. Vérification sécurisée en cours…');
-          void verifyPayment(data.payment_id);
-        },
-        onClose: () => {
-          if (!didReceivePaymentSuccess.current) {
-            setPaymentMessage('Fenêtre KadevPay fermée. Si vous avez validé le paiement, vérifiez son statut avant de recommencer.');
-            setIsPaymentStarting(false);
-          }
-        },
-      });
+      window.location.assign(data.checkout_url);
     } catch (error) {
       setPaymentMessage(error instanceof Error ? error.message : 'Impossible de démarrer le paiement.');
       setIsPaymentStarting(false);
     }
-  };
-
-  const retryPaymentVerification = () => {
-    if (!paymentIdToVerify || isPaymentStarting) return;
-    setIsPaymentStarting(true);
-    setPaymentMessage('Vérification sécurisée du paiement en cours…');
-    void verifyPayment(paymentIdToVerify);
   };
 
   return (
@@ -281,7 +194,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                   <span className="text-sm font-extrabold text-[#183b31]">Choisir une formule payante</span>
                   <span className="rounded-full bg-[#f9f0e6] px-2.5 py-1 text-[10px] font-black text-[#93602e]">Dès 3 000 FCFA/mois</span>
                 </span>
-                <span className="mt-2 block text-xs leading-5 text-slate-600">Choisissez Standard, Premium ou Pro ; le forfait démarre après confirmation KadevPay.</span>
+                <span className="mt-2 block text-xs leading-5 text-slate-600">Choisissez Standard, Premium ou Pro ; le forfait démarre après confirmation GeniusPay.</span>
               </button>
             </div>
           </section>
@@ -340,7 +253,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             </div>
             {!previewOnly && (
               <div className="mt-4 rounded-xl border border-[#dbe8dc] bg-white p-4 text-sm text-slate-700" aria-live="polite">
-                <p><strong>À payer aujourd’hui :</strong> {new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(selectedTier, term))} FCFA avec KadevPay.</p>
+                <p><strong>À payer aujourd’hui :</strong> {new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(selectedTier, term))} FCFA avec GeniusPay.</p>
                 {isTrialActive ? (
                   <p className="mt-1">Dès confirmation, le forfait {selectedPlan.label} sera actif. Votre essai se termine le {shop.subscription?.trialEnd ? formatSubscriptionDate(shop.subscription.trialEnd) : 'à la date prévue'} ; cette période est conservée et votre forfait arrivera à échéance le {formatSubscriptionDate(projectedExpiry)}.</p>
                 ) : Number.isFinite(subscriptionExpiryTime) && subscriptionExpiryTime > Date.now() ? (
@@ -402,7 +315,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
 
         <aside className={`mt-5 flex items-start gap-3 rounded-2xl border p-4 text-sm ${mode === 'plans' ? 'border-[#dbe8dc] bg-white text-[#345448] sm:mt-7 sm:px-5' : 'border-sky-200 bg-sky-50 text-sky-950'}`}>
           {mode === 'plans' ? <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-[#176b55]" /> : <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-sky-800" />}
-          <p>{previewOnly ? 'Aperçu de démonstration : comparez les formules librement. Aucun paiement ne sera lancé.' : paymentFlowActive ? isTrialActive ? 'Vous pouvez payer dès maintenant. Après confirmation, votre formule payante sera active immédiatement ; la durée restante de l’essai est conservée avant la nouvelle échéance.' : 'Vous gardez la main : le paiement est lancé uniquement après votre validation et votre formule est activée après confirmation sécurisée de KadevPay.' : 'Votre essai gratuit de 7 jours commence lorsque vous le démarrez.'}</p>
+          <p>{previewOnly ? 'Aperçu de démonstration : comparez les formules librement. Aucun paiement ne sera lancé.' : paymentFlowActive ? isTrialActive ? 'Vous pouvez payer dès maintenant. Après confirmation, votre formule payante sera active immédiatement ; la durée restante de l’essai est conservée avant la nouvelle échéance.' : 'Vous gardez la main : le paiement est lancé uniquement après votre validation et votre formule est activée après confirmation sécurisée de GeniusPay.' : 'Votre essai gratuit de 7 jours commence lorsque vous le démarrez.'}</p>
         </aside>
 
         {mode === 'expired' && <div className="mt-5 rounded-xl border border-slate-200 bg-white px-4"><WhatsAppSubscriptionReminderConsent shop={shop} /></div>}
@@ -412,9 +325,9 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             previewOnly ? (
               <button type="button" disabled className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-300 px-5 py-3 text-sm font-bold text-slate-600">Aperçu · paiement désactivé</button>
             ) : (
-              <button type="button" onClick={() => void startSubscriptionPayment()} disabled={!isKadevPayReady || isPaymentStarting || Boolean(paymentIdToVerify)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
+              <button type="button" onClick={() => void startSubscriptionPayment()} disabled={isPaymentStarting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
                 {isPaymentStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                {isPaymentStarting ? 'Vérification du paiement…' : isKadevPayReady ? `Payer ${new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(selectedTier, term))} FCFA avec KadevPay` : 'Chargement des modules de paiement…'}
+                {isPaymentStarting ? 'Préparation du paiement…' : `Payer ${new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(selectedTier, term))} FCFA avec GeniusPay`}
               </button>
             )
           ) : (
@@ -430,23 +343,10 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
         {paymentFlowActive && paymentMessage && (
           <div className="mt-3 space-y-2" aria-live="polite">
             <p role="status" className="text-sm text-slate-700">{paymentMessage}</p>
-          {!isKadevPayReady && !isPaymentStarting && (
-            <button type="button" onClick={() => { setPaymentMessage(''); setSdkRetryCount((count) => count + 1); }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-800 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-50">
-              <RefreshCw className="h-3.5 w-3.5" /> Réessayer le chargement du paiement
-            </button>
-          )}
-            {paymentIdToVerify && !isPaymentStarting && (
-              <div className="flex flex-wrap items-center gap-3">
-                <button type="button" onClick={retryPaymentVerification} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-800 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-50">
-                  <RefreshCw className="h-3.5 w-3.5" /> Vérifier à nouveau
-                </button>
-                {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center text-xs font-bold text-emerald-800 underline underline-offset-2">Contacter l’assistance</a>}
-              </div>
-            )}
             {paymentFlowActive && needsBillingEmail && (
               <div className="mt-4 max-w-xl rounded-2xl border border-amber-200 bg-amber-50 p-4">
                 <label htmlFor="merchant-billing-email" className="block text-sm font-bold text-amber-950">E-mail de facturation</label>
-                <p className="mt-1 text-xs leading-5 text-amber-900">KadevPay utilise Paystack, qui exige une adresse e-mail pour initialiser le paiement. MaTable.ci l’utilisera aussi pour vous envoyer le reçu après confirmation.</p>
+                <p className="mt-1 text-xs leading-5 text-amber-900">GeniusPay utilise cet e-mail pour préparer le paiement. MaTable.ci l’utilisera aussi pour vous envoyer le reçu après confirmation.</p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <input
                     id="merchant-billing-email"

@@ -1,7 +1,6 @@
 import React from 'react';
-import { Store, ShoppingBag, Package, Plus, Edit3, Trash2, Sparkles, Phone, Lock, Clock, Check, Send, ExternalLink, ChevronRight, UserPlus, X, UtensilsCrossed, Shirt, Search, Eye, EyeOff, Minus, TrendingUp, DollarSign, MapPin, Palette, Key, AlertTriangle, Copy, RotateCcw, Calendar, Upload, Boxes } from 'lucide-react';
+import { Package, Plus, Edit3, Trash2, Clock, Search, Eye, EyeOff, Minus } from 'lucide-react';
 import { MerchantState } from './useMerchant';
-import { ThemeCustomizer } from '../ThemeCustomizer';
 import { formatFCFA } from '../../utils/format';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
 import { CategoryProductImage } from '../CategoryProductImage';
@@ -14,22 +13,20 @@ interface CatalogTabProps {
 
 export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts }) => {
   const {
-    currentShop, products, orders, dataLoading, activeTab, setActiveTab, settingsSubTab, setSettingsSubTab,
-    catalogSearch, setCatalogSearch, catalogFilter, setCatalogFilter,
-    orderSearch, setOrderSearch, orderPaymentFilter, setOrderPaymentFilter, orderStatusFilter, setOrderStatusFilter,
-    settingsName, setSettingsName, settingsWelcome, setSettingsWelcome, settingsOpen, setSettingsOpen,
-    settingsPhone, setSettingsPhone, settingsCity, setSettingsCity, settingsNewPin, setSettingsNewPin,
-    settingsSocialLinks, setSettingsSocialLinks, settingsDeliveryZones, setSettingsDeliveryZones, settingsSaved,
-    hoursEnabled, setHoursEnabled, openTime, setOpenTime, closeTime, setCloseTime, activeDays, setActiveDays,
-    manualOverride, hoursSaved, cronRunning, cronResult, copiedBilan, setCopiedBilan,
-    isProductModalOpen, setIsProductModalOpen, editingProduct, prodTitle, setProdTitle, prodCategory, setProdCategory,
-    prodDescription, setProdDescription, prodPrice, setProdPrice, prodStock, setProdStock, prodImage, setProdImage,
-    prodLookbookImage, setProdLookbookImage, prodSizes, setProdSizes, prodColors, setProdColors, prodPrepTime, setProdPrepTime,
-    prodIsAvailable, setProdIsAvailable,
-    imageCompressing, compressedSizeKB, originalImageSizeKB, flashBilan,
-    handleSaveOpeningHours, handleResetManualOverride, handleTriggerCronBilan, handleQuickStockChange, handleQuickToggleVisibility,
-    handleOpenAddModal, handleOpenEditModal, handleUpdateOrderStatus, handleImageUpload, handleSaveProduct, handleDeleteProduct,
-    handleSaveGeneralSettings, addDeliveryZone, updateDeliveryZone, removeDeliveryZone, toast, copyOwnerLink, copyRegistrationLinks
+    currentShop,
+    products,
+    dataLoading,
+    setActiveTab,
+    setSettingsSubTab,
+    catalogSearch,
+    setCatalogSearch,
+    catalogFilter,
+    setCatalogFilter,
+    handleQuickStockChange,
+    handleQuickToggleVisibility,
+    handleOpenAddModal,
+    handleOpenEditModal,
+    handleDeleteProduct,
   } = state;
   const lowStockCount = products.filter((product) => product.stock > 0 && product.stock <= 3).length;
   const outOfStockCount = products.filter((product) => product.stock === 0).length;
@@ -37,6 +34,13 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
   const productLimit = trialCatalogLimited ? TRIAL_CATALOG_LIMIT : getSubscriptionProductLimit(currentShop.subscription?.plan);
   const catalogFull = !currentShop.admin_mode && Number.isFinite(productLimit) && products.length >= productLimit;
   const productLimitLabel = Number.isFinite(productLimit) ? productLimit : 'illimité';
+  const catalogFilterOptions = [
+    { id: 'all' as const, label: 'Tous les articles', count: products.length },
+    { id: 'in_stock' as const, label: 'En stock', count: products.filter(product => product.stock > 0 && product.is_available !== false).length },
+    { id: 'low_stock' as const, label: 'Stock bas', count: lowStockCount },
+    { id: 'out_of_stock' as const, label: 'Épuisés', count: outOfStockCount },
+    { id: 'hidden' as const, label: 'Masqués', count: products.filter(product => product.is_available === false).length },
+  ];
 
   return (
     <>
@@ -95,68 +99,19 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                 />
               </div>
 
-              <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-                <button
-                  type="button"
-                  aria-pressed={catalogFilter === 'all'}
-                  onClick={() => setCatalogFilter('all')}
-                  className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 border-[2px] ${
-                    catalogFilter === 'all'
-                      ? 'bg-[#1D6B57] text-white border-[#211712] shadow-[2px_2px_0_rgba(33,23,18,0.94)]'
-                      : 'bg-white text-[#211712] border-[#211712] hover:bg-[#f7f0e7]'
-                  }`}
+              <label className="flex min-h-10 w-full items-center gap-2 rounded-xl border-[2px] border-[#211712] bg-white px-3 text-xs font-bold text-[#211712] sm:w-auto">
+                <span className="shrink-0">Afficher</span>
+                <select
+                  aria-label="Filtrer les articles du catalogue"
+                  value={catalogFilter}
+                  onChange={(event) => setCatalogFilter(event.target.value as typeof catalogFilter)}
+                  className="min-w-0 flex-1 bg-transparent py-2 outline-none sm:w-48 sm:flex-none"
                 >
-                  Tous ({products.length})
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={catalogFilter === 'in_stock'}
-                  onClick={() => setCatalogFilter('in_stock')}
-                  className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 border-[2px] ${
-                    catalogFilter === 'in_stock'
-                      ? 'bg-[#155c3d] text-white border-[#211712] shadow-[2px_2px_0_rgba(33,23,18,0.94)]'
-                      : 'bg-[#edf7f2] text-[#155c3d] border-[#211712] hover:bg-[#e3f3ea]'
-                  }`}
-                >
-                  En stock ({products.filter(p => p.stock > 0 && p.is_available !== false).length})
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={catalogFilter === 'low_stock'}
-                  onClick={() => setCatalogFilter('low_stock')}
-                  className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 border-[2px] ${
-                    catalogFilter === 'low_stock'
-                      ? 'bg-[#b93712] text-white border-[#211712] shadow-[2px_2px_0_rgba(33,23,18,0.94)]'
-                      : 'bg-[#f9e7d6] text-[#b93712] border-[#211712] hover:bg-[#f4d9c0]'
-                  }`}
-                >
-                  Stock bas ({lowStockCount})
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={catalogFilter === 'out_of_stock'}
-                  onClick={() => setCatalogFilter('out_of_stock')}
-                  className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 border-[2px] ${
-                    catalogFilter === 'out_of_stock'
-                      ? 'bg-[#b93712] text-white border-[#211712] shadow-[2px_2px_0_rgba(33,23,18,0.94)]'
-                      : 'bg-[#fdf1ee] text-[#b93712] border-[#211712] hover:bg-[#fbe5df]'
-                  }`}
-                >
-                  Épuisé ({outOfStockCount})
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={catalogFilter === 'hidden'}
-                  onClick={() => setCatalogFilter('hidden')}
-                  className={`text-xs font-bold py-1.5 px-3 rounded-lg transition-colors shrink-0 border-[2px] ${
-                    catalogFilter === 'hidden'
-                      ? 'bg-[#211712] text-white border-[#211712] shadow-[2px_2px_0_rgba(33,23,18,0.94)]'
-                      : 'bg-[#f3f4f6] text-[#211712] border-[#211712] hover:bg-[#eceef1]'
-                  }`}
-                >
-                  Masqués ({products.filter(p => p.is_available === false).length})
-                </button>
-              </div>
+                  {catalogFilterOptions.map(({ id, label, count }) => (
+                    <option key={id} value={id}>{label} ({count})</option>
+                  ))}
+                </select>
+              </label>
             </div>
 
             {/* Product Cards Grid */}

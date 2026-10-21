@@ -2,6 +2,8 @@ import test from 'node:test';
 import { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { rm } from 'node:fs/promises';
@@ -9,13 +11,31 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import Database from 'better-sqlite3';
-import { getRenewedSubscriptionExpiry, isValidKadevPaySignature } from '../server/services/kadevPay';
+import { createGeniusPayCheckout, GeniusPayApiError, getGeniusPayPayment, getRenewedSubscriptionExpiry, isValidGeniusPaySignature } from '../server/services/geniusPay';
 import { getSubscriptionState } from '../server/services/businessRules';
 
 const TEST_PORT = 43125;
-const TEST_DB_PATH = path.join(tmpdir(), `matable-kadevpay-${Date.now()}.db`);
+const TEST_DB_PATH = path.join(tmpdir(), `matable-geniuspay-${Date.now()}.db`);
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 let serverProcess: ReturnType<typeof spawn> | null = null;
+let providerServer: ReturnType<typeof createServer> | null = null;
+let providerReference = 0;
+let failNextProviderResponse = false;
+const providerPayments = new Map<string, {
+  reference: string;
+  amount: number;
+  currency: string;
+  status: string;
+  metadata: { subscription_payment_id: string; payment_type: string };
+}>();
+
+function getSignedWebhookHeaders(payload: string) {
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = createHmac('sha256', 'geniuspay-test-webhook-secret')
+    .update(`${timestamp}.${payload}`)
+    .digest('hex');
+  return { 'x-webhook-signature': signature, 'x-webhook-timestamp': timestamp };
+}
 
 async function waitForServer() {
   for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -26,17 +46,71 @@ async function waitForServer() {
     }
     await delay(250);
   }
-  throw new Error('KadevPay test server did not become ready in time.');
+  throw new Error('GeniusPay test server did not become ready in time.');
 }
 
 before(async () => {
+  providerServer = createServer((request, response) => {
+    if (request.method === 'GET') {
+      const reference = decodeURIComponent(new URL(request.url || '/', 'http://localhost').pathname.split('/').at(-1) || '');
+      const payment = providerPayments.get(reference);
+      response.writeHead(payment ? 200 : 404, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify(payment
+        ? { success: true, data: { transaction: payment } }
+        : { success: false, error: { code: 'TRANSACTION_NOT_FOUND' } }));
+      return;
+    }
+    providerReference += 1;
+    let rawBody = '';
+    request.setEncoding('utf8');
+    request.on('data', (chunk: string) => { rawBody += chunk; });
+    request.on('end', () => {
+      const body = JSON.parse(rawBody) as {
+        amount: number;
+        currency: string;
+        metadata: { subscription_payment_id: string; payment_type: string };
+      };
+      const paymentId = body.metadata.subscription_payment_id;
+      const reference = `GNP-${paymentId}`;
+      if (!providerPayments.has(reference)) {
+        providerPayments.set(reference, {
+          reference,
+          amount: body.amount,
+          currency: body.currency,
+          status: 'pending',
+          metadata: body.metadata,
+        });
+      }
+      if (failNextProviderResponse) {
+        failNextProviderResponse = false;
+        response.writeHead(500, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ success: false, error: { message: 'simulated response loss after create' } }));
+        return;
+      }
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({
+        success: true,
+        data: {
+          reference,
+          checkout_url: `https://checkout.geniuspay.ci/${providerReference}`,
+        },
+      }));
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    providerServer?.once('error', reject);
+    providerServer?.listen(0, '127.0.0.1', resolve);
+  });
+  const providerPort = (providerServer.address() as AddressInfo).port;
   serverProcess = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
     cwd: process.cwd(),
     env: {
       ...process.env,
-      ADMIN_ACCESS_KEY: 'kadevpay-test-admin-key',
-      KADEVPAY_PUBLIC_KEY: 'kdvp_test_public_key',
-      KADEVPAY_WEBHOOK_SECRET: 'kadevpay-test-webhook-secret',
+      ADMIN_ACCESS_KEY: 'geniuspay-test-admin-key',
+      GENIUSPAY_API_KEY: 'pk_sandbox_test_public_key',
+      GENIUSPAY_API_SECRET: 'geniuspay-test-api-secret',
+      GENIUSPAY_API_URL: `http://127.0.0.1:${providerPort}/api/v1/merchant/payments`,
+      GENIUSPAY_WEBHOOK_SECRET: 'geniuspay-test-webhook-secret',
       NODE_ENV: 'test',
       PORT: String(TEST_PORT),
       MATABLE_DB_PATH: TEST_DB_PATH,
@@ -55,18 +129,93 @@ after(async () => {
     serverProcess.kill('SIGTERM');
     await serverExit;
   }
+  if (providerServer?.listening) await new Promise<void>((resolve, reject) => providerServer?.close((error) => error ? reject(error) : resolve()));
   await Promise.all(['', '-wal', '-shm'].map((suffix) => rm(`${TEST_DB_PATH}${suffix}`, { force: true })));
 });
 
-test('KadevPay webhook signatures are checked against the exact raw body', () => {
+test('GeniusPay webhook signatures are time-limited and bound to the exact raw body', () => {
   const secret = 'test-webhook-secret';
   const rawBody = Buffer.from('{"event":"payment.success","data":{"status":"paid"}}');
-  const signature = createHmac('sha512', secret).update(rawBody).digest('hex');
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = createHmac('sha256', secret).update(`${timestamp}.${rawBody.toString('utf8')}`).digest('hex');
 
-  assert.equal(isValidKadevPaySignature(rawBody, signature, secret), true);
-  assert.equal(isValidKadevPaySignature(Buffer.from(`${rawBody.toString()} `), signature, secret), false);
-  assert.equal(isValidKadevPaySignature(rawBody, signature, ''), false);
-  assert.equal(isValidKadevPaySignature(rawBody, 'invalid', secret), false);
+  assert.equal(isValidGeniusPaySignature(rawBody, signature, timestamp, secret), true);
+  assert.equal(isValidGeniusPaySignature(Buffer.from(`${rawBody.toString()} `), signature, timestamp, secret), false);
+  assert.equal(isValidGeniusPaySignature(rawBody, signature, timestamp, ''), false);
+  assert.equal(isValidGeniusPaySignature(rawBody, 'invalid', timestamp, secret), false);
+  assert.equal(isValidGeniusPaySignature(rawBody, signature, '0', secret), false);
+});
+
+test('GeniusPay checkout rejects HTTPS URLs outside the provider domain', async () => {
+  const originalApiKey = process.env.GENIUSPAY_API_KEY;
+  const originalApiSecret = process.env.GENIUSPAY_API_SECRET;
+  process.env.GENIUSPAY_API_KEY = 'test-api-key';
+  process.env.GENIUSPAY_API_SECRET = 'test-api-secret';
+  try {
+    await assert.rejects(createGeniusPayCheckout({
+      amount: 3000,
+      description: 'Test payment',
+      customer: { name: 'Test Shop', email: 'shop@example.com', phone: '+2250700000000', country: 'CI' },
+      success_url: 'https://matable.ci/app',
+      error_url: 'https://matable.ci/app',
+      metadata: { subscription_payment_id: 'payment-id', payment_type: 'subscription' },
+    }, async () => new Response(JSON.stringify({
+      success: true,
+      data: { reference: 'GNP-TEST', checkout_url: 'https://checkout.attacker.example/pay' },
+    }), { status: 200 })), GeniusPayApiError);
+  } finally {
+    if (originalApiKey === undefined) delete process.env.GENIUSPAY_API_KEY;
+    else process.env.GENIUSPAY_API_KEY = originalApiKey;
+    if (originalApiSecret === undefined) delete process.env.GENIUSPAY_API_SECRET;
+    else process.env.GENIUSPAY_API_SECRET = originalApiSecret;
+  }
+});
+
+test('GeniusPay creation sends documented idempotency fields and parses the nested payment response', async () => {
+  const originalApiKey = process.env.GENIUSPAY_API_KEY;
+  const originalApiSecret = process.env.GENIUSPAY_API_SECRET;
+  process.env.GENIUSPAY_API_KEY = 'pk_sandbox_contract_test';
+  process.env.GENIUSPAY_API_SECRET = 'sk_sandbox_contract_test';
+  const paymentId = 'intent-contract-test';
+  try {
+    let checkoutRequest: Record<string, unknown> | null = null;
+    const checkout = await createGeniusPayCheckout({
+      amount: 5000,
+      description: 'Abonnement MaTable.ci',
+      customer: { name: 'Boutique test', email: 'shop@example.ci', phone: '+2250700000001', country: 'CI' },
+      success_url: 'https://matable.ci/app?payment_id=intent-contract-test',
+      error_url: 'https://matable.ci/app?payment_id=intent-contract-test',
+      metadata: { subscription_payment_id: paymentId, payment_type: 'subscription' },
+    }, async (_input, init) => {
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get('idempotency-key'), paymentId);
+      checkoutRequest = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ success: true, data: {
+        reference: 'MTX-CONTRACT-1',
+        checkout_url: 'https://geniuspay.ci/checkout/MTX-CONTRACT-1',
+      } }), { status: 201 });
+    });
+    assert.equal(checkout.reference, 'MTX-CONTRACT-1');
+    assert.ok(checkoutRequest);
+    assert.equal('external_reference' in checkoutRequest, false);
+
+    const payment = await getGeniusPayPayment('MTX-CONTRACT-1', async () => new Response(JSON.stringify({
+      success: true,
+      data: { transaction: {
+        reference: 'MTX-CONTRACT-1', amount: 5000, currency: 'XOF', status: 'completed',
+        metadata: { subscription_payment_id: paymentId, payment_type: 'subscription' },
+      } },
+    }), { status: 200 }));
+    assert.deepEqual(payment, {
+      reference: 'MTX-CONTRACT-1', amount: 5000, currency: 'XOF', status: 'completed',
+      metadata: { subscription_payment_id: paymentId, payment_type: 'subscription' },
+    });
+  } finally {
+    if (originalApiKey === undefined) delete process.env.GENIUSPAY_API_KEY;
+    else process.env.GENIUSPAY_API_KEY = originalApiKey;
+    if (originalApiSecret === undefined) delete process.env.GENIUSPAY_API_SECRET;
+    else process.env.GENIUSPAY_API_SECRET = originalApiSecret;
+  }
 });
 
 test('subscription renewal adds a calendar month or year after the later of now or current expiry', () => {
@@ -160,7 +309,33 @@ test('active subscriptions can be renewed repeatedly and retries stay idempotent
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
     body: JSON.stringify({ tier: 'premium', term: 'monthly', client_request_id: clientRequestId }),
   });
-  const [firstPayment, repeatedPayment] = await Promise.all([createPayment(), createPayment()]);
+  const lostResponseRequestId = `lost-response-${Date.now()}`;
+  const providerPaymentCountBeforeRetry = providerPayments.size;
+  failNextProviderResponse = true;
+  const lostProviderResponse = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier: 'premium', term: 'monthly', client_request_id: lostResponseRequestId }),
+  });
+  assert.equal(lostProviderResponse.status, 502);
+  const recoveredResponse = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier: 'premium', term: 'monthly', client_request_id: lostResponseRequestId }),
+  });
+  const recoveredPayload = await recoveredResponse.json();
+  assert.equal(recoveredResponse.status, 200, JSON.stringify(recoveredPayload));
+  assert.match(recoveredPayload.checkout_url, /^https:\/\/checkout\.geniuspay\.ci\/\d+$/);
+  assert.equal(providerPayments.size, providerPaymentCountBeforeRetry + 1);
+  const recoveredCount = new Database(TEST_DB_PATH);
+  try {
+    assert.equal((recoveredCount.prepare('SELECT COUNT(*) AS count FROM subscription_payment_intents WHERE shop_id = ? AND client_request_id = ?').get(createdPayload.shop.id, lostResponseRequestId) as { count: number }).count, 1);
+  } finally {
+    recoveredCount.close();
+  }
+
+  const firstPayment = await createPayment();
+  const repeatedPayment = await createPayment();
   const firstPayload = await firstPayment.json();
   const repeatedPayload = await repeatedPayment.json();
   assert.deepEqual([firstPayment.status, repeatedPayment.status].sort(), [200, 201]);
@@ -192,14 +367,14 @@ test('active subscriptions can be renewed repeatedly and retries stay idempotent
   }
 });
 
-test('KadevPay renewals require a signed webhook and apply exactly once', async () => {
+test('GeniusPay renewals require a signed webhook and apply exactly once', async () => {
   const created = await fetch(`${BASE_URL}/api/shops`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      name: 'Boutique renouvellement Kadev',
+      name: 'Boutique renouvellement GeniusPay',
       whatsapp_number: `+22507${String(Date.now()).slice(-8)}`,
-      email: `kadev-${Date.now()}@example.com`,
+      email: `geniuspay-${Date.now()}@example.com`,
       pin_code: '456789',
       category: 'fashion',
       city: 'Abidjan',
@@ -260,9 +435,8 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   assert.equal(intentResponse.status, 201, JSON.stringify(intent));
   assert.equal(intent.amount, 50000);
   assert.equal(intent.currency, 'XOF');
-  assert.equal(intent.public_key, 'kdvp_test_public_key');
-  assert.equal(intent.is_test, true);
-  assert.equal(intent.email, 'facturation@example.com');
+  assert.match(intent.checkout_url, /^https:\/\/checkout\.geniuspay\.ci\/\d+$/);
+  assert.equal('is_test' in intent, false);
   assert.equal('secret_key' in intent, false);
   const savedBillingEmail = new Database(TEST_DB_PATH);
   try {
@@ -275,18 +449,20 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   }
 
   const webhookPayload = JSON.stringify({
+    id: `event-${Date.now()}`,
     event: 'payment.success',
-    data: {
-      status: 'paid',
-      reference: `KDV-${Date.now()}`,
+    data: { transaction: {
+      status: 'completed',
+      reference: `GNP-${intent.payment_id}`,
       amount: 50000,
       currency: 'XOF',
-      metadata: { subscription_payment_id: intent.payment_id },
+      metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
+    },
     },
   });
-  const invalidWebhook = await fetch(`${BASE_URL}/api/webhooks/kadevpay`, {
+  const invalidWebhook = await fetch(`${BASE_URL}/api/webhooks/geniuspay`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-kadevpay-signature': '0'.repeat(128) },
+    headers: { 'Content-Type': 'application/json', 'x-webhook-signature': '0'.repeat(64), 'x-webhook-timestamp': String(Math.floor(Date.now() / 1000)) },
     body: webhookPayload,
   });
   assert.equal(invalidWebhook.status, 401);
@@ -301,9 +477,9 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      name: 'Autre boutique Kadev',
+      name: 'Autre boutique GeniusPay',
       whatsapp_number: `+22507${String(Date.now() + 1).slice(-8)}`,
-      email: `kadev-other-${Date.now()}@example.com`,
+      email: `geniuspay-other-${Date.now()}@example.com`,
       pin_code: '456789',
       category: 'fashion',
       city: 'Abidjan',
@@ -328,60 +504,86 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key: 'kadevpay-test-admin-key' }),
+    body: JSON.stringify({ key: 'geniuspay-test-admin-key' }),
   });
   assert.equal(adminLogin.status, 200);
   const adminCookie = adminLogin.headers.get('set-cookie')?.split(';')[0];
   assert.ok(adminCookie);
   const financeBeforePayment = await fetch(`${BASE_URL}/api/admin/payments?days=30`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
 
-  const signature = createHmac('sha512', 'kadevpay-test-webhook-secret').update(webhookPayload).digest('hex');
-  const sendSignedWebhook = (payload: string) => fetch(`${BASE_URL}/api/webhooks/kadevpay`, {
+  const sendSignedWebhook = (payload: string) => fetch(`${BASE_URL}/api/webhooks/geniuspay`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-kadevpay-signature': createHmac('sha512', 'kadevpay-test-webhook-secret').update(payload).digest('hex'),
+      ...getSignedWebhookHeaders(payload),
     },
     body: payload,
   });
   const wrongAmountPayload = JSON.stringify({
     event: 'payment.success',
     data: {
-      status: 'paid',
-      reference: `KDV-WRONG-AMOUNT-${Date.now()}`,
+      status: 'completed',
+      reference: `GNP-${intent.payment_id}`,
       amount: 49999,
       currency: 'XOF',
-      metadata: { subscription_payment_id: intent.payment_id },
+      metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
     },
   });
   const wrongAmountResponse = await sendSignedWebhook(wrongAmountPayload);
-  assert.equal(wrongAmountResponse.status, 409);
+  assert.equal(wrongAmountResponse.status, 200);
 
   const wrongCurrencyPayload = JSON.stringify({
     event: 'payment.success',
     data: {
-      status: 'paid',
-      reference: `KDV-WRONG-CURRENCY-${Date.now()}`,
+      status: 'completed',
+      reference: `GNP-${intent.payment_id}`,
       amount: 50000,
       currency: 'USD',
-      metadata: { subscription_payment_id: intent.payment_id },
+      metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
     },
   });
-  assert.equal((await sendSignedWebhook(wrongCurrencyPayload)).status, 400);
+  assert.equal((await sendSignedWebhook(wrongCurrencyPayload)).status, 200);
+
+  const wrongReferencePayload = JSON.stringify({
+    event: 'payment.success',
+    data: {
+      status: 'completed',
+      reference: 'GNP-UNRELATED-TRANSACTION',
+      amount: 50000,
+      currency: 'XOF',
+      metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
+    },
+  });
+  assert.equal((await sendSignedWebhook(wrongReferencePayload)).status, 200);
+  const webhookJournal = new Database(TEST_DB_PATH);
+  try {
+    const rejectedEvent = webhookJournal.prepare(`SELECT processing_status, result_code, LENGTH(payload_sha256) AS hash_length
+      FROM geniuspay_webhook_events WHERE result_code = 'reference_mismatch' ORDER BY received_at DESC LIMIT 1`).get() as {
+      processing_status: string;
+      result_code: string;
+      hash_length: number;
+    };
+    assert.deepEqual(rejectedEvent, { processing_status: 'rejected', result_code: 'reference_mismatch', hash_length: 64 });
+  } finally {
+    webhookJournal.close();
+  }
 
   const malformedPayload = JSON.stringify({ event: 'payment.success', data: null });
-  assert.equal((await sendSignedWebhook(malformedPayload)).status, 400);
+  assert.equal((await sendSignedWebhook(malformedPayload)).status, 200);
 
   const stillPending = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments/${intent.payment_id}`, {
     headers: { Cookie: merchantCookie },
   }).then((response) => response.json());
   assert.equal(stillPending.status, 'pending');
 
-  const sendWebhook = () => fetch(`${BASE_URL}/api/webhooks/kadevpay`, {
+  const sendWebhook = (payload = webhookPayload) => fetch(`${BASE_URL}/api/webhooks/geniuspay`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-kadevpay-signature': signature },
-    body: webhookPayload,
+    headers: { 'Content-Type': 'application/json', ...getSignedWebhookHeaders(payload) },
+    body: payload,
   });
+  const confirmedProviderPayment = providerPayments.get(`GNP-${intent.payment_id}`);
+  assert.ok(confirmedProviderPayment);
+  providerPayments.set(`GNP-${intent.payment_id}`, { ...confirmedProviderPayment, status: 'completed' });
   const acceptedWebhook = await sendWebhook();
   assert.equal(acceptedWebhook.status, 200, await acceptedWebhook.text());
 
@@ -405,16 +607,15 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
     event: 'payment.failed',
     data: {
       status: 'failed',
-      reference: `KDV-FAILED-${Date.now()}`,
+      reference: `GNP-${failedIntent.payment_id}`,
       amount: 5000,
       currency: 'XOF',
-      metadata: { subscription_payment_id: failedIntent.payment_id },
+      metadata: { subscription_payment_id: failedIntent.payment_id, payment_type: 'subscription' },
     },
   });
-  const failedWebhookSignature = createHmac('sha512', 'kadevpay-test-webhook-secret').update(failedWebhookPayload).digest('hex');
-  const failedWebhook = await fetch(`${BASE_URL}/api/webhooks/kadevpay`, {
+  const failedWebhook = await fetch(`${BASE_URL}/api/webhooks/geniuspay`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-kadevpay-signature': failedWebhookSignature },
+    headers: { 'Content-Type': 'application/json', ...getSignedWebhookHeaders(failedWebhookPayload) },
     body: failedWebhookPayload,
   });
   assert.equal(failedWebhook.status, 200, await failedWebhook.text());
@@ -425,18 +626,42 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   const lateSuccessAfterFailure = await sendSignedWebhook(JSON.stringify({
     event: 'payment.success',
     data: {
-      status: 'paid',
-      reference: `KDV-LATE-SUCCESS-${Date.now()}`,
+      status: 'completed',
+      reference: `GNP-${failedIntent.payment_id}`,
       amount: 5000,
       currency: 'XOF',
-      metadata: { subscription_payment_id: failedIntent.payment_id },
+      metadata: { subscription_payment_id: failedIntent.payment_id, payment_type: 'subscription' },
     },
   }));
-  assert.equal(lateSuccessAfterFailure.status, 409);
+  assert.equal(lateSuccessAfterFailure.status, 200);
   const stillFailed = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments/${failedIntent.payment_id}`, {
     headers: { Cookie: merchantCookie },
   }).then((response) => response.json());
   assert.equal(stillFailed.status, 'failed');
+
+  const cancelledIntentResponse = await fetch(paymentEndpoint, {
+    method: 'POST',
+    headers: paymentHeaders,
+    body: JSON.stringify({ tier: 'premium' }),
+  });
+  const cancelledIntent = await cancelledIntentResponse.json();
+  assert.equal(cancelledIntentResponse.status, 201);
+  const cancelledWebhookPayload = JSON.stringify({
+    id: `cancel-event-${Date.now()}`,
+    event: 'payment.cancelled',
+    data: {
+      status: 'cancelled',
+      reference: `GNP-${cancelledIntent.payment_id}`,
+      amount: 5000,
+      currency: 'XOF',
+      metadata: { subscription_payment_id: cancelledIntent.payment_id, payment_type: 'subscription' },
+    },
+  });
+  assert.equal((await sendSignedWebhook(cancelledWebhookPayload)).status, 200);
+  const cancelledStatus = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments/${cancelledIntent.payment_id}`, {
+    headers: { Cookie: merchantCookie },
+  }).then((response) => response.json());
+  assert.equal(cancelledStatus.status, 'cancelled');
 
   const unauthenticatedPayments = await fetch(`${BASE_URL}/api/admin/payments`);
   assert.equal(unauthenticatedPayments.status, 401);
@@ -446,7 +671,7 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   assert.equal(financeData.summary.confirmed_count, 1);
   assert.equal(financeData.summary.collected_amount, 50000);
   assert.equal(financeData.summary.pending_count, 0);
-  assert.equal(financeData.summary.failed_count, 1);
+  assert.equal(financeData.summary.failed_count, 2);
   assert.ok(financeData.summary.active_subscriptions >= 1);
   assert.equal(financeData.summary.mrr - financeBeforePayment.summary.mrr, Math.round(50000 / 12));
   const previousPremiumMrr = financeBeforePayment.summary.mrr_by_tier.find((tier: { tier: string }) => tier.tier === 'premium')?.amount || 0;
@@ -473,18 +698,18 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   }
   const financeAfterMorePayments = await fetch(`${BASE_URL}/api/admin/payments?days=30&limit=100`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
   assert.equal(financeAfterMorePayments.payments.length, 100);
-  assert.equal(financeAfterMorePayments.payment_count, 207);
+  assert.equal(financeAfterMorePayments.payment_count, 208);
   assert.equal(financeAfterMorePayments.payment_limit, 100);
   assert.equal(financeAfterMorePayments.payment_offset, 0);
   assert.equal(financeAfterMorePayments.summary.confirmed_count, 206);
   assert.equal(financeAfterMorePayments.summary.collected_amount, 70500);
   assert.equal(financeAfterMorePayments.summary.promotions.count, 205);
   assert.equal(financeAfterMorePayments.summary.promotions.amount, 20500);
-  assert.equal(financeAfterMorePayments.summary.failed_count, 1);
+  assert.equal(financeAfterMorePayments.summary.failed_count, 2);
   const secondPaymentPage = await fetch(`${BASE_URL}/api/admin/payments?days=30&limit=100&offset=100`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
   const lastPaymentPage = await fetch(`${BASE_URL}/api/admin/payments?days=30&limit=100&offset=200`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
   assert.equal(secondPaymentPage.payments.length, 100);
-  assert.equal(lastPaymentPage.payments.length, 7);
+  assert.equal(lastPaymentPage.payments.length, 8);
   const filteredPaymentPage = await fetch(`${BASE_URL}/api/admin/payments?days=30&limit=10&search=test-ref-204&type=promotion&status=paid`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
   assert.equal(filteredPaymentPage.payment_count, 1);
   assert.equal(filteredPaymentPage.payments[0].id, 'test-promotion-204');
@@ -503,11 +728,11 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   const activeRenewalPayload = JSON.stringify({
     event: 'payment.success',
     data: {
-      status: 'paid',
-      reference: `KDV-ACTIVE-RENEWAL-${Date.now()}`,
+      status: 'completed',
+      reference: `GNP-${activeRenewalIntent.payment_id}`,
       amount: 5000,
       currency: 'XOF',
-      metadata: { subscription_payment_id: activeRenewalIntent.payment_id },
+      metadata: { subscription_payment_id: activeRenewalIntent.payment_id, payment_type: 'subscription' },
     },
   });
   assert.equal((await sendSignedWebhook(activeRenewalPayload)).status, 200);
@@ -534,23 +759,26 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   const reusedReferencePayload = JSON.stringify({
     event: 'payment.success',
     data: {
-      status: 'paid',
-      reference: JSON.parse(webhookPayload).data.reference,
+      status: 'completed',
+      reference: `GNP-${intent.payment_id}`,
       amount: 5000,
       currency: 'XOF',
-      metadata: { subscription_payment_id: reusedReferenceIntent.payment_id },
+      metadata: { subscription_payment_id: reusedReferenceIntent.payment_id, payment_type: 'subscription' },
     },
   });
   const reusedReferenceResponse = await sendSignedWebhook(reusedReferencePayload);
-  assert.equal(reusedReferenceResponse.status, 409);
+  assert.equal(reusedReferenceResponse.status, 200);
   const reusedReferenceStatus = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments/${reusedReferenceIntent.payment_id}`, {
     headers: { Cookie: merchantCookie },
   });
   assert.equal((await reusedReferenceStatus.json()).status, 'pending');
 
   const expireIntentDb = new Database(TEST_DB_PATH);
+  const lateProviderPayment = providerPayments.get(`GNP-${reusedReferenceIntent.payment_id}`);
+  assert.ok(lateProviderPayment);
+  providerPayments.set(`GNP-${reusedReferenceIntent.payment_id}`, { ...lateProviderPayment, status: 'completed' });
   try {
-    expireIntentDb.prepare('UPDATE subscription_payment_intents SET created_at = ? WHERE id = ?')
+    expireIntentDb.prepare('UPDATE subscription_payment_intents SET created_at = ?, provider_checked_at = NULL WHERE id = ?')
       .run(new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), reusedReferenceIntent.payment_id);
   } finally {
     expireIntentDb.close();
@@ -558,38 +786,47 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   const expiredIntentStatus = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments/${reusedReferenceIntent.payment_id}`, {
     headers: { Cookie: merchantCookie },
   }).then((response) => response.json());
-  assert.equal(expiredIntentStatus.status, 'expired');
+  assert.equal(expiredIntentStatus.status, 'paid');
   const latePaymentPayload = JSON.stringify({
     event: 'payment.success',
     data: {
-      status: 'paid',
-      reference: `KDV-LATE-${Date.now()}`,
+      status: 'completed',
+      reference: `GNP-${reusedReferenceIntent.payment_id}`,
       amount: 5000,
       currency: 'XOF',
-      metadata: { subscription_payment_id: reusedReferenceIntent.payment_id },
+      metadata: { subscription_payment_id: reusedReferenceIntent.payment_id, payment_type: 'subscription' },
     },
   });
-  assert.equal((await sendSignedWebhook(latePaymentPayload)).status, 409);
+  assert.equal((await sendSignedWebhook(latePaymentPayload)).status, 200);
   const retryExpiredIntent = await fetch(paymentEndpoint, {
     method: 'POST',
     headers: paymentHeaders,
     body: JSON.stringify({ tier: 'premium', term: 'monthly', client_request_id: expiredRequestId }),
   });
   assert.equal(retryExpiredIntent.status, 409);
-  const expiredFinance = await fetch(`${BASE_URL}/api/admin/payments?days=30&status=expired`, {
+  const reconciledFinance = await fetch(`${BASE_URL}/api/admin/payments?days=30&status=paid`, {
     headers: { Cookie: adminCookie },
   }).then((response) => response.json());
-  assert.equal(expiredFinance.summary.expired_count, 1);
-  assert.ok(expiredFinance.payments.some((payment: { id: string; status: string }) => payment.id === reusedReferenceIntent.payment_id && payment.status === 'expired'));
+  assert.ok(reconciledFinance.payments.some((payment: { id: string; status: string }) => payment.id === reusedReferenceIntent.payment_id && payment.status === 'paid'));
+
+  const reusedEvent = JSON.parse(webhookPayload);
+  const conflictingEventPayload = JSON.stringify({
+    ...reusedEvent,
+    data: { ...reusedEvent.data, amount: reusedEvent.data.amount - 1 },
+  });
+  const conflictingEventResponse = await sendWebhook(conflictingEventPayload);
+  assert.equal(conflictingEventResponse.status, 200);
+  assert.equal((await conflictingEventResponse.json()).rejected, true);
 
   const duplicateWebhook = await sendWebhook();
-  assert.equal(duplicateWebhook.status, 200);
-  assert.equal((await duplicateWebhook.json()).duplicate, true);
+  const duplicateWebhookPayload = await duplicateWebhook.json();
+  assert.equal(duplicateWebhook.status, 200, JSON.stringify(duplicateWebhookPayload));
+  assert.equal(duplicateWebhookPayload.duplicate, true, JSON.stringify(duplicateWebhookPayload));
   const expiryAfterDuplicate = new Database(TEST_DB_PATH);
   try {
     const row = expiryAfterDuplicate.prepare('SELECT subscription_expires_at FROM shops WHERE id = ?')
       .get(createdPayload.shop.id) as { subscription_expires_at: string };
-    assert.equal(row.subscription_expires_at, expectedActiveRenewalExpiry);
+    assert.equal(row.subscription_expires_at, getRenewedSubscriptionExpiry(expectedActiveRenewalExpiry, new Date(), 'monthly'));
   } finally {
     expiryAfterDuplicate.close();
   }
@@ -616,6 +853,60 @@ test('KadevPay renewals require a signed webhook and apply exactly once', async 
   } finally {
     persistedExpiry.close();
   }
+
+  const refundPayload = JSON.stringify({
+    event: 'payment.refunded',
+    data: {
+      status: 'refunded',
+      reference: `GNP-${intent.payment_id}`,
+      amount: 50000,
+      currency: 'XOF',
+      metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
+    },
+  });
+  assert.equal((await sendSignedWebhook(refundPayload)).status, 200);
+  const refundDb = new Database(TEST_DB_PATH);
+  try {
+    assert.equal((refundDb.prepare('SELECT status FROM subscription_payment_intents WHERE id = ?').get(intent.payment_id) as { status: string }).status, 'refunded');
+    assert.ok(refundDb.prepare(`SELECT id FROM admin_audit_logs WHERE action = 'geniuspay_refund_review'
+      AND details LIKE ?`).get(`%${intent.payment_id}%`));
+  } finally {
+    refundDb.close();
+  }
+
+  const partialRefundPayload = JSON.stringify({
+    id: `partial-refund-${Date.now()}`,
+    event: 'payment.refunded',
+    data: { transaction: {
+      status: 'refunded',
+      reference: `GNP-${activeRenewalIntent.payment_id}`,
+      amount: 5000,
+      amount_refunded: 1200,
+      currency: 'XOF',
+      metadata: { subscription_payment_id: activeRenewalIntent.payment_id, payment_type: 'subscription' },
+    } },
+  });
+  assert.equal((await sendSignedWebhook(partialRefundPayload)).status, 200);
+  const partialRefundDb = new Database(TEST_DB_PATH);
+  try {
+    assert.equal((partialRefundDb.prepare('SELECT status FROM subscription_payment_intents WHERE id = ?').get(activeRenewalIntent.payment_id) as { status: string }).status, 'paid');
+    assert.ok(partialRefundDb.prepare(`SELECT id FROM admin_audit_logs WHERE action = 'geniuspay_partial_refund_review'
+      AND details LIKE ?`).get(`%${activeRenewalIntent.payment_id}%`));
+  } finally {
+    partialRefundDb.close();
+  }
+});
+
+test('GeniusPay payment intent creation is rate-limited before merchant authentication', async () => {
+  const endpoint = `${BASE_URL}/api/shops/987654321/subscription-payments`;
+  const requestPayment = () => fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tier: 'standard' }),
+  });
+  const responses = await Promise.all(Array.from({ length: 21 }, requestPayment));
+  assert.equal(responses.filter((response) => response.status === 429).length, 1);
+  assert.ok(responses.filter((response) => response.status === 401).length >= 1);
 });
 
 test('merchant trial provides basic analytics limited to seven days', async () => {
@@ -717,7 +1008,7 @@ test('admin can review and extend expiring trials with a durable audit entry', a
   const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key: 'kadevpay-test-admin-key' }),
+    body: JSON.stringify({ key: 'geniuspay-test-admin-key' }),
   });
   const adminCookie = adminLogin.headers.get('set-cookie')?.split(';')[0];
   assert.equal(adminLogin.status, 200);

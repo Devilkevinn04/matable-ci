@@ -1,4 +1,4 @@
-import test, { before, after, beforeEach } from 'node:test';
+import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -611,6 +611,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
       customer_name: 'Client invité',
       customer_phone: uniquePhone(),
       delivery_location: 'Cocody Angré',
+      payment_method_preference: 'to_confirm',
       total_amount: 1,
       status: 'confirmed',
       items: [{ product_id: productId, quantity: 2 }],
@@ -715,6 +716,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   assert.equal(guestOrder.payload.order.customer_user_id, undefined);
   assert.equal(guestOrder.payload.order.attribution_campaign, 'launch_tiktok_1');
   assert.equal(guestOrder.payload.order.total_amount, 2500);
+  assert.equal(guestOrder.payload.order.payment_method_preference, 'to_confirm');
   const guestWhatsappClick = await apiFetch(`/api/orders/${guestOrder.payload.order.id}/whatsapp-click`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -731,12 +733,14 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
       customer_name: 'Nom du formulaire',
       customer_phone: uniquePhone(),
       delivery_location: 'Marcory Résidentiel',
+      payment_method_preference: 'mobile_money',
       items: [{ product_id: productId, quantity: 3 }],
     }),
   });
   assert.equal(accountOrder.response.status, 200, JSON.stringify(accountOrder.payload));
   assert.equal(accountOrder.payload.order.customer_user_id, customerRegistration.payload.user.id);
   assert.equal(accountOrder.payload.order.status, 'confirmed');
+  assert.equal(accountOrder.payload.order.payment_method_preference, 'mobile_money');
 
   const invalidTrackingClick = await apiFetch(`/api/orders/${accountOrder.payload.order.id}/whatsapp-click`, {
     method: 'POST',
@@ -767,6 +771,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   const trackedOrder = merchantOrders.payload.find((order: any) => order.id === accountOrder.payload.order.id);
   assert.equal(trackedOrder.whatsapp_tracking_available, true);
   assert.equal(trackedOrder.whatsapp_clicked_at, trackingClick.payload.clicked_at);
+  assert.equal(trackedOrder.payment_method_preference, 'mobile_money');
   assert.equal(JSON.stringify(merchantOrders.payload).includes(accountOrder.payload.whatsapp_tracking_token), false);
   assert.equal(merchantOrders.payload.find((order: any) => order.id === accountOrder.payload.order.id).customer_user_id, customerRegistration.payload.user.id);
 

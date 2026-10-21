@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LoaderCircle, RefreshCw, Sparkles } from 'lucide-react';
+import { LoaderCircle, Sparkles } from 'lucide-react';
 import type { Shop } from '../../types';
 import {
   BOOST_PLACEMENTS,
@@ -10,7 +10,6 @@ import {
   type BoostPlacement,
 } from '../../utils/boostPricing';
 import { isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
-import { getKadevPayLoadMessage, loadKadevPayCheckout } from '../../utils/kadevPaySdk';
 
 interface MerchantBoostPurchaseProps {
   shop: Shop;
@@ -32,8 +31,6 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
   const [duration, setDuration] = useState<(typeof BOOST_DURATIONS_DAYS)[number]>(7);
   const [placement, setPlacement] = useState<BoostPlacement>('category');
   const [boosts, setBoosts] = useState<MerchantBoost[]>([]);
-  const [isKadevPayReady, setIsKadevPayReady] = useState(false);
-  const [sdkRetryCount, setSdkRetryCount] = useState(0);
   const [isPaymentStarting, setIsPaymentStarting] = useState(false);
   const [message, setMessage] = useState('');
   const [needsBillingEmail, setNeedsBillingEmail] = useState(false);
@@ -61,63 +58,8 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
     return () => { cancelled = true; };
   }, [shop.id]);
 
-  useEffect(() => {
-    if (!eligible) return;
-    let cancelled = false;
-    setIsKadevPayReady(false);
-    void loadKadevPayCheckout().then(() => {
-      if (!cancelled) setIsKadevPayReady(Boolean(window.KadevPay));
-    }).catch((error: unknown) => {
-      if (!cancelled) setMessage(getKadevPayLoadMessage(error));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [eligible, sdkRetryCount]);
-
-  const verifyPayment = async (paymentId: string) => {
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, 2000));
-      try {
-        const response = await fetch(`/api/shops/${shop.id}/subscription-payments/${paymentId}`, { credentials: 'include' });
-        if (!response.ok) continue;
-        const data = await response.json();
-        if (data.status === 'paid') {
-          const startsAt = data.boost?.starts_at ? new Date(data.boost.starts_at) : null;
-          const activePlacement = data.boost?.placement || placement;
-          const placementLabel = activePlacement === 'home' ? 'sur l’accueil'
-            : activePlacement === 'city' ? 'dans les boutiques de votre ville'
-              : 'en haut de sa catégorie';
-          setMessage(startsAt && startsAt.getTime() > Date.now()
-            ? `Boost payé et réservé ${placementLabel}. Il commencera le ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(startsAt)}.`
-            : `Boost payé et activé ${placementLabel}.`);
-          const boostsResponse = await fetch(`/api/shops/${shop.id}/boosts`, { credentials: 'include' });
-          if (boostsResponse.ok) {
-            const boostData = await boostsResponse.json();
-            setBoosts(boostData.boosts);
-          }
-          setIsPaymentStarting(false);
-          return;
-        }
-        if (data.status === 'failed') {
-          setMessage('Le paiement a échoué. Aucun boost n’a été activé.');
-          setIsPaymentStarting(false);
-          return;
-        }
-      } catch {
-        // Keep checking while the signed provider webhook is being processed.
-      }
-    }
-    setMessage('Le paiement attend la confirmation KadevPay. Actualisez cette page dans quelques instants.');
-    setIsPaymentStarting(false);
-  };
-
   const startPayment = async () => {
     setMessage('');
-    if (!isKadevPayReady || !window.KadevPay || !window.PaystackPop) {
-      setMessage('Le paiement n’est pas prêt. Vérifiez votre connexion puis réessayez.');
-      return;
-    }
     setIsPaymentStarting(true);
     try {
       const response = await fetch(`/api/shops/${shop.id}/boost-payments`, {
@@ -139,24 +81,7 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
       }
       if (!response.ok) throw new Error(data.error || 'Impossible de préparer le paiement du boost.');
       setNeedsBillingEmail(false);
-      if (!window.KadevPay) throw new Error('Le module KadevPay n’est pas encore prêt. Réessayez.');
-      window.KadevPay.checkout({
-        public_key: data.public_key,
-        amount: data.amount,
-        currency: 'XOF',
-        email: data.email,
-        name: data.name,
-        phone: data.phone,
-        method: 'momo',
-        metadata: { subscription_payment_id: data.payment_id },
-        onSuccess: () => {
-          setMessage('Paiement reçu. Vérification sécurisée en cours…');
-          void verifyPayment(data.payment_id);
-        },
-        onClose: () => {
-          setIsPaymentStarting(false);
-        },
-      });
+      window.location.assign(data.checkout_url);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Impossible de démarrer le paiement.');
       setIsPaymentStarting(false);
@@ -192,22 +117,17 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
             })}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={() => void startPayment()} disabled={!isKadevPayReady || isPaymentStarting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0f4d3d] px-4 py-2 text-xs font-bold text-white hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
+            <button type="button" onClick={() => void startPayment()} disabled={isPaymentStarting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0f4d3d] px-4 py-2 text-xs font-bold text-white hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
               {isPaymentStarting && <LoaderCircle className="h-4 w-4 animate-spin" />}
-              {isPaymentStarting ? 'Vérification du paiement…' : isKadevPayReady ? `Payer ${new Intl.NumberFormat('fr-FR').format(amount)} FCFA` : 'Chargement des modules de paiement…'}
+              {isPaymentStarting ? 'Préparation du paiement…' : `Payer ${new Intl.NumberFormat('fr-FR').format(amount)} FCFA avec GeniusPay`}
             </button>
             <span className="text-xs text-slate-500">Activation après confirmation du paiement sécurisé.</span>
           </div>
           {message && <p role="status" className="mt-2 text-sm text-slate-700">{message}</p>}
-          {!isKadevPayReady && !isPaymentStarting && message && (
-            <button type="button" onClick={() => { setMessage(''); setSdkRetryCount((count) => count + 1); }} className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-800 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-50">
-              <RefreshCw className="h-3.5 w-3.5" /> Réessayer le chargement du paiement
-            </button>
-          )}
           {needsBillingEmail && (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <label htmlFor="merchant-boost-billing-email" className="block text-sm font-bold text-amber-950">E-mail de facturation</label>
-              <p className="mt-1 text-xs leading-5 text-amber-900">KadevPay utilise Paystack, qui exige une adresse e-mail pour initialiser le paiement. MaTable.ci l’utilisera aussi pour vous envoyer le reçu après confirmation.</p>
+              <p className="mt-1 text-xs leading-5 text-amber-900">GeniusPay utilise cet e-mail pour préparer le paiement. MaTable.ci l’utilisera aussi pour vous envoyer le reçu après confirmation.</p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <input
                   id="merchant-boost-billing-email"

@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   RefreshCw,
-  Phone,
   Send,
   DollarSign,
   CreditCard,
@@ -16,7 +15,6 @@ import {
   BarChart3,
   ClipboardList,
   Download,
-  Package,
   TrendingUp,
   Eye,
   EyeOff,
@@ -92,9 +90,9 @@ const adminAuditActionLabels: Record<string, string> = {
   subscription_reminder_failed: 'Échec du rappel d’abonnement',
   subscription_reminder_sent: 'Rappel d’abonnement envoyé',
   trial_expiry_reconciled: 'Échéance d’essai synchronisée',
-  admin_shop_operation: 'Opération sur la boutique',
   trial_extended: 'Essai prolongé',
   trial_reminder_prepared: 'Rappel d’essai préparé',
+  admin_shop_operation: 'Opération sur la boutique',
 };
 
 const adminAuditDetailLabels: Record<string, string> = {
@@ -1220,7 +1218,22 @@ export const AdminDashboard: React.FC = () => {
                 <button type="button" onClick={() => void fetchAnalytics(analyticsDays)} className="min-h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Actualiser les chiffres</button>
               </div>
             </div>
-            <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${adminRole === 'super_admin' ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
+            {adminRole === 'super_admin' && (
+              <div className="grid grid-cols-2 gap-2.5 sm:hidden">
+                {[
+                  { label: 'Boutiques actives', value: `${activeShopsCount} / ${shops.length}` },
+                  { label: 'Commandes', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.orders) : '—' },
+                  { label: 'Montant commandé', value: analytics ? `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F` : '—' },
+                  { label: 'Commandes / sessions', value: analytics ? `${analytics.totals.conversion_rate.toLocaleString('fr-FR')}%` : '—' },
+                ].map((item) => (
+                  <article key={item.label} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3">
+                    <span className="block min-h-8 text-[10px] font-bold uppercase leading-4 tracking-[0.06em] text-slate-500">{item.label}</span>
+                    <strong className="mt-1 block break-words text-lg font-black text-slate-900">{item.value}</strong>
+                  </article>
+                ))}
+              </div>
+            )}
+            <div className={`hidden grid-cols-2 gap-3 sm:grid ${adminRole === 'super_admin' ? 'sm:grid-cols-3 xl:grid-cols-5' : 'sm:grid-cols-3 xl:grid-cols-4'}`}>
               {[
                 { label: 'Boutiques actives', value: `${activeShopsCount}/${shops.length}`, comparison: `${shops.length ? Math.round((activeShopsCount / shops.length) * 100) : 0}% du réseau`, tone: 'border-emerald-100 bg-emerald-50' },
                 ...(adminRole === 'super_admin' ? [{ label: 'Montant des commandes', value: analytics ? `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F` : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.sales, analytics.previous.sales)} vs période précédente` : 'Chargement…', tone: 'border-sky-100 bg-sky-50' }] : []),
@@ -1241,6 +1254,38 @@ export const AdminDashboard: React.FC = () => {
                 </motion.div>
               ))}
             </div>
+            {adminRole === 'super_admin' && (
+              <section aria-labelledby="admin-mobile-follow-up-title" className="space-y-3 sm:hidden">
+                <h3 id="admin-mobile-follow-up-title" className="text-sm font-black text-slate-900">À traiter</h3>
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  <button type="button" onClick={() => setAdminView('identity')} className="flex min-h-14 w-full items-center gap-3 border-b border-slate-200 px-3 py-2.5 text-left">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-800"><ShieldCheck className="h-4 w-4" /></span>
+                    <span className="min-w-0 flex-1 text-xs font-bold text-slate-800">{pendingVerificationCount} identité{pendingVerificationCount === 1 ? '' : 's'} en attente</span>
+                    <span aria-hidden="true" className="text-lg text-slate-400">›</span>
+                  </button>
+                  <button type="button" onClick={() => setAdminView('moderation')} className="flex min-h-14 w-full items-center gap-3 border-b border-slate-200 px-3 py-2.5 text-left">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-50 text-violet-800"><Flag className="h-4 w-4" /></span>
+                    <span className="min-w-0 flex-1 text-xs font-bold text-slate-800">{contentModeration.reviews.length + contentModeration.reports.length} avis et signalements à modérer</span>
+                    <span aria-hidden="true" className="text-lg text-slate-400">›</span>
+                  </button>
+                  <button type="button" onClick={() => setAdminView('finance')} className="flex min-h-14 w-full items-center gap-3 px-3 py-2.5 text-left">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-800"><CreditCard className="h-4 w-4" /></span>
+                    <span className="min-w-0 flex-1 text-xs font-bold text-slate-800">{finance ? `${finance.summary.failed_count} paiement${finance.summary.failed_count === 1 ? '' : 's'} échoué${finance.summary.failed_count === 1 ? '' : 's'} · ${finance.days} j` : 'Ouvrir le suivi des paiements'}</span>
+                    <span aria-hidden="true" className="text-lg text-slate-400">›</span>
+                  </button>
+                </div>
+                {finance && (
+                  <button type="button" onClick={() => setAdminView('finance')} className="flex min-h-24 w-full flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left">
+                    <span>
+                      <span className="block text-xs font-semibold text-slate-500">Encaissements confirmés · {finance.days} jours</span>
+                      <strong className="mt-1 block text-2xl font-black text-[#0f4d3d]">{new Intl.NumberFormat('fr-FR').format(finance.summary.collected_amount)} FCFA</strong>
+                      <span className="mt-1 block text-[11px] text-slate-500">{finance.summary.confirmed_count} paiement{finance.summary.confirmed_count === 1 ? '' : 's'} confirmé{finance.summary.confirmed_count === 1 ? '' : 's'}</span>
+                    </span>
+                    <span className="text-xs font-bold text-emerald-800 underline underline-offset-2">Journal</span>
+                  </button>
+                )}
+              </section>
+            )}
             {adminRole === 'super_admin' && (
               <section aria-label="Taux de conversion des visites en commandes" className="chart-panel px-4 py-3">
                 <p className="text-xs font-semibold text-slate-500">Visites vers commandes</p>
@@ -1540,7 +1585,7 @@ export const AdminDashboard: React.FC = () => {
         {adminView === 'finance' && adminRole === 'super_admin' && (
           <section aria-labelledby="admin-finance-title" className="space-y-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div><p className="text-xs font-bold uppercase text-emerald-800">Recettes MaTable.ci</p><h2 id="admin-finance-title" className="mt-1 text-xl font-black text-slate-900">Argent</h2><p className="mt-1 text-xs text-slate-500">MRR estimé des abonnements au statut actif : paiement annuel réparti sur 12 mois, tarif catalogue utilisé si aucun paiement n’est enregistré. Les encaissements ne comptent que les confirmations KadevPay.</p></div>
+              <div><p className="text-xs font-bold uppercase text-emerald-800">Recettes MaTable.ci</p><h2 id="admin-finance-title" className="mt-1 text-xl font-black text-slate-900">Argent</h2><p className="mt-1 text-xs text-slate-500">MRR estimé des abonnements au statut actif : paiement annuel réparti sur 12 mois, tarif catalogue utilisé si aucun paiement n’est enregistré. Les encaissements ne comptent que les confirmations GeniusPay.</p></div>
               <select aria-label="Période du journal financier" value={financeDays} onChange={(event) => { setFinanceDays(Number(event.target.value)); setFinancePaymentsPage(0); }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">
                 <option value={30}>30 derniers jours</option>
                 <option value={90}>90 derniers jours</option>
@@ -1599,7 +1644,7 @@ export const AdminDashboard: React.FC = () => {
                     <button type="button" onClick={() => setFinancePaymentsPage((page) => page + 1)} disabled={(financePaymentsPage + 1) * finance.payment_limit >= finance.payment_count} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700 disabled:opacity-40">Suivant</button>
                   </div>
                 </div>
-                <p className="text-xs text-slate-500">Les promotions restent à zéro tant que leur tarif et leur parcours de paiement ne sont pas activés. Les remboursements ne sont comptés que si leur statut est remonté au journal.</p>
+                <p className="text-xs text-slate-500">Les promotions correspondent aux boosts confirmés par GeniusPay. Les remboursements signalés par le fournisseur apparaissent ici et nécessitent une revue des droits d’abonnement.</p>
               </section>
             </>}
           </section>
@@ -1725,7 +1770,7 @@ export const AdminDashboard: React.FC = () => {
                           <label className="text-[10px] font-bold text-slate-600">Nouvelle date de fin d’accès
                             <input
                               type="date"
-                              aria-label={`Nouvelle échéance de ${shop.name}`}
+                              aria-label={`Nouvelle date de fin d’accès de ${shop.name}`}
                               value={expiryDrafts[shop.id]?.date ?? shop.subscription_expires_at?.slice(0, 10) ?? ''}
                               onChange={(event) => setExpiryDrafts((previous) => ({
                                 ...previous,
@@ -2127,7 +2172,7 @@ export const AdminDashboard: React.FC = () => {
         className={`fixed inset-x-0 bottom-0 z-50 grid border-t border-[#e7dfd3] bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] pt-1 shadow-[0_-8px_24px_rgba(33,23,18,0.08)] backdrop-blur lg:hidden ${adminRole === 'super_admin' ? 'grid-cols-5' : 'grid-cols-3'}`}
       >
         {(adminRole === 'super_admin'
-          ? adminNavigationGroups.flatMap((group) => group.items).filter((item) => ['overview', 'shops', 'orders', 'identity'].includes(item.id))
+          ? adminNavigationGroups.flatMap((group) => group.items).filter((item) => ['overview', 'shops', 'identity', 'finance'].includes(item.id))
           : adminNavigationGroups.flatMap((group) => group.items)
         ).map(({ id, label, icon: Icon }) => (
           <button
@@ -2148,7 +2193,7 @@ export const AdminDashboard: React.FC = () => {
             aria-expanded={isAdminMenuOpen}
             aria-controls="admin-menu-drawer"
             onClick={() => setIsAdminMenuOpen(true)}
-            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-lg text-[10px] font-bold sm:text-[11px] ${isAdminMenuOpen || !['overview', 'shops', 'orders', 'identity'].includes(adminView) ? 'text-[#155544]' : 'text-slate-500'}`}
+            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-lg text-[10px] font-bold sm:text-[11px] ${isAdminMenuOpen || !['overview', 'shops', 'identity', 'finance'].includes(adminView) ? 'text-[#155544]' : 'text-slate-500'}`}
           >
             <MoreHorizontal className="h-5 w-5" />
             <span>Plus</span>
@@ -2171,7 +2216,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
             <nav aria-label="Autres rubriques super-admin" className="space-y-4">
               {adminNavigationGroups.map((group) => {
-                const items = group.items.filter((item) => !['overview', 'shops', 'orders', 'identity'].includes(item.id));
+                const items = group.items.filter((item) => !['overview', 'shops', 'identity', 'finance'].includes(item.id));
                 if (!items.length) return null;
                 return (
                   <section key={group.label}>
