@@ -1311,7 +1311,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
         }
         nextCancellationAt = shop.subscription_expires_at;
         auditAction = 'subscription_cancellation_scheduled';
-        resultMessage = 'Résiliation programmée à l’échéance.';
+        resultMessage = 'Arrêt des droits programmé à l’échéance. Le commerçant peut encore renouveler manuellement avant cette date.';
       } else if (action === 'undo_cancellation') {
         const cancellationCutoff = shop.subscription_cancel_at
           ? getSubscriptionAccessCutoff(shop.subscription_cancel_at)
@@ -1322,7 +1322,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
         }
         nextCancellationAt = null;
         auditAction = 'subscription_cancellation_revoked';
-        resultMessage = 'Résiliation programmée annulée.';
+        resultMessage = 'Arrêt des droits programmé annulé.';
       } else if (action === 'suspend') {
         if ((subscription.status !== 'active' && subscription.status !== 'trialing')
           || shop.subscription_admin_suspended_at || shop.subscription_cancel_at) {

@@ -14,7 +14,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
     questions: [
       {
         question: 'Comment passer une commande ?',
-        answer: 'Ouvrez une boutique, choisissez vos articles et options, puis indiquez les informations demandées. La commande est acceptée automatiquement et le stock est réservé. Vous pouvez ensuite contacter le commerçant sur WhatsApp pour convenir de la livraison et du paiement. Le commerçant peut annuler la commande depuis son dashboard.',
+        answer: 'Ouvrez une boutique, choisissez vos articles et options, puis indiquez les informations demandées. MaTable.ci enregistre automatiquement la commande et réserve le stock disponible. Cela confirme l’enregistrement de votre demande, pas le paiement ni les modalités de livraison : contactez le commerçant sur WhatsApp pour les convenir ensemble. Le commerçant peut annuler la commande depuis son dashboard.',
       },
       {
         question: 'Les options avec un supplément changent-elles le prix ?',

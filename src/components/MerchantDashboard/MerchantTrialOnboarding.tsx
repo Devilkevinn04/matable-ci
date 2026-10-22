@@ -50,6 +50,9 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
     : monthlyPrice * (term === 'annual' ? 10 : 1);
   const paymentFlowActive = previewOnly || mode !== 'start' || purchaseNow;
   const isTrialActive = shop.subscription?.status === 'trialing';
+  const isManualSubscriptionSuspension = Boolean(
+    shop.subscription?.manualOverrideActive && shop.subscription.status === 'suspended',
+  );
   const supportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour l’espace commerçant de ${shop.name}.`);
   const trialEndTime = shop.subscription?.trialEnd ? Date.parse(shop.subscription.trialEnd) : NaN;
   const subscriptionExpiryTime = shop.subscription?.expiresAt ? Date.parse(shop.subscription.expiresAt) : NaN;
@@ -70,13 +73,19 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
         : shop.subscription?.status === 'cancelled'
           ? 'Votre abonnement est résilié'
           : 'Votre abonnement est arrivé à échéance';
-  const expiredDescription = isTrialExpired
-    ? 'Choisissez une formule mensuelle ou annuelle et réglez-la avec GeniusPay. Votre vitrine redeviendra accessible après confirmation sécurisée du paiement.'
+  const expiredDescription = isManualSubscriptionSuspension
+    ? 'Les droits de cette boutique sont suspendus temporairement par l’administration. Aucun paiement GeniusPay ne peut être lancé pendant cette suspension. Contactez l’équipe si vous avez besoin d’aide.'
+    : isTrialExpired
+    ? 'Choisissez une formule mensuelle ou annuelle et réglez-la avec GeniusPay. Votre abonnement sera réactivé après confirmation sécurisée ; la visibilité dépend aussi de la publication et de la vérification de la boutique.'
     : shop.subscription?.status === 'past_due'
-      ? 'Le dernier paiement n’a pas été confirmé. Choisissez une formule mensuelle ou annuelle et réglez-la avec GeniusPay pour réactiver votre vitrine.'
-      : 'Choisissez une formule et sa durée, puis réglez-la avec GeniusPay. Votre accès sera réactivé après confirmation sécurisée du paiement.';
+      ? 'Le dernier paiement n’a pas été confirmé. Choisissez une formule mensuelle ou annuelle et réglez-la avec GeniusPay pour réactiver votre abonnement. La visibilité dépend aussi de la publication et de la vérification de la boutique.'
+      : 'Choisissez une formule et sa durée, puis réglez-la avec GeniusPay. Votre abonnement sera réactivé après confirmation sécurisée ; la visibilité dépend aussi de la publication et de la vérification de la boutique.';
 
   const startSubscriptionPayment = async () => {
+    if (isManualSubscriptionSuspension) {
+      setPaymentMessage('Les droits sont suspendus temporairement par l’administration. Aucun paiement ne sera lancé pendant cette suspension.');
+      return;
+    }
     if (!subscriptionPrices || paymentPrice === null) {
       setPaymentMessage(subscriptionPricesError || 'Les tarifs sont en cours de chargement. Réessayez dans un instant.');
       return;
@@ -229,7 +238,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             )}
             {shop.subscription?.cancellationAt && (
               <p className="mb-4 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-950">
-                La résiliation de votre abonnement est programmée au {formatSubscriptionDate(shop.subscription.cancellationAt)}. Vos droits restent actifs jusque-là. Contactez l’administration pour annuler cette résiliation avant l’échéance.
+                L’accès à votre boutique prendra fin le {formatSubscriptionDate(shop.subscription.cancellationAt)}. Vous pouvez payer votre renouvellement ici avant cette date : MaTable.ci ne prélève jamais automatiquement et la période restante sera conservée.
               </p>
             )}
             <div className={`grid gap-4 md:grid-cols-3 ${mode === 'plans' ? 'items-stretch' : 'mt-4'}`} role="radiogroup" aria-label="Formule d’abonnement">
@@ -245,7 +254,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    disabled={Boolean(shop.subscription?.cancellationAt || shop.subscription?.upcomingPlan && plan.tier !== shop.subscription.upcomingPlan)}
+                    disabled={Boolean(shop.subscription?.upcomingPlan && plan.tier !== shop.subscription.upcomingPlan)}
                     onClick={() => setSelectedTier(plan.tier)}
                     className={`relative flex min-h-[360px] flex-col items-start rounded-[1.5rem] border p-5 text-left transition duration-200 hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 sm:p-6 ${mode === 'plans' ? planColors.card : `min-h-56 rounded-xl p-4 ${selected ? 'border-[#176b55] bg-white ring-2 ring-[#176b55]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[#176b55]'}`}`}
                   >
@@ -340,7 +349,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
 
         <aside className={`mt-5 flex items-start gap-3 rounded-2xl border p-4 text-sm ${mode === 'plans' ? 'border-[#dbe8dc] bg-white text-[#345448] sm:mt-7 sm:px-5' : 'border-sky-200 bg-sky-50 text-sky-950'}`}>
           {mode === 'plans' ? <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-[#176b55]" /> : <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-sky-800" />}
-          <p>{previewOnly ? 'Aperçu de démonstration : comparez les formules librement. Aucun paiement ne sera lancé.' : paymentFlowActive ? isTrialActive ? 'Vous pouvez payer dès maintenant. Après confirmation, votre formule payante sera active immédiatement ; la durée restante de l’essai est conservée avant la nouvelle échéance.' : 'Vous gardez la main : le paiement est lancé uniquement après votre validation et votre formule est activée après confirmation sécurisée de GeniusPay.' : 'Votre essai gratuit de 7 jours commence lorsque vous le démarrez.'}</p>
+          <p>{previewOnly ? 'Aperçu de démonstration : comparez les formules librement. Aucun paiement ne sera lancé.' : isManualSubscriptionSuspension ? 'La suspension manuelle est prioritaire. Le paiement sera indisponible jusqu’à sa levée ou son expiration.' : paymentFlowActive ? isTrialActive ? 'Vous pouvez payer dès maintenant. Après confirmation, votre formule payante sera active immédiatement ; la durée restante de l’essai est conservée avant la nouvelle échéance.' : 'Vous gardez la main : le paiement est lancé uniquement après votre validation et votre formule est activée après confirmation sécurisée de GeniusPay. La publication de la boutique et sa vérification restent des étapes distinctes.' : 'Votre essai gratuit de 7 jours commence lorsque vous le démarrez.'}</p>
         </aside>
 
         {mode === 'expired' && <div className="mt-5 rounded-xl border border-slate-200 bg-white px-4"><WhatsAppSubscriptionReminderConsent shop={shop} /></div>}
@@ -350,7 +359,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             previewOnly ? (
               <button type="button" disabled className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-300 px-5 py-3 text-sm font-bold text-slate-600">Aperçu · paiement désactivé</button>
             ) : (
-              <button type="button" onClick={() => void startSubscriptionPayment()} disabled={isPaymentStarting || !subscriptionPrices} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
+              <button type="button" onClick={() => void startSubscriptionPayment()} disabled={isPaymentStarting || !subscriptionPrices || isManualSubscriptionSuspension} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
                 {isPaymentStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                 {isPaymentStarting ? 'Préparation du paiement…' : paymentPrice === null ? 'Tarifs indisponibles' : `Payer ${new Intl.NumberFormat('fr-FR').format(paymentPrice)} FCFA avec GeniusPay`}
               </button>
@@ -387,7 +396,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                   <button
                     type="button"
                     onClick={() => void startSubscriptionPayment()}
-                    disabled={isPaymentStarting || !billingEmail.trim() || Boolean(shop.subscription?.cancellationAt)}
+                    disabled={isPaymentStarting || !billingEmail.trim() || isManualSubscriptionSuspension}
                     className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-4 py-2 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"
                   >
                     {isPaymentStarting && <LoaderCircle className="h-4 w-4 animate-spin" />}

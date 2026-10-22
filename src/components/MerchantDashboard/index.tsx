@@ -36,6 +36,7 @@ import { OrderStatus } from '../../types';
 import { formatFCFA } from '../../utils/format';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
 import { getSubscriptionAccessCutoff, getSubscriptionProductLimit, TRIAL_CATALOG_LIMIT } from '../../utils/subscriptionFeatures';
+import { hasShopPublicationSubscriptionAccess, isShopPubliclyVisible } from '../../utils/shopPublication';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 import { Link } from 'react-router-dom';
 
@@ -116,13 +117,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewsError, setReviewsError] = useState('');
   const reviewShop = merchantState.currentShop;
-  const reviewShopIsPublished = Boolean(reviewShop
-    && !(!reviewShop.is_active || reviewShop.publication_status === 'suspended')
-    && (reviewShop.merchant_verification_status === 'verified'
-      || reviewShop.subscription?.isActive !== false && (reviewShop.publication_status
-        ? reviewShop.publication_status === 'active'
-        : reviewShop.is_active && (!reviewShop.merchant_verification_status
-          || ['not_required', 'verified'].includes(reviewShop.merchant_verification_status)))));
+  const reviewShopIsPublished = Boolean(reviewShop && isShopPubliclyVisible(reviewShop));
 
   useEffect(() => {
     const updateHeader = () => setIsHeaderCompact(window.innerWidth < 768 && window.scrollY > 56);
@@ -252,11 +247,23 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 : previousShop);
             }
             const boostStart = payment.boost?.starts_at ? new Date(payment.boost.starts_at) : null;
+            const publicationStatus = currentShop.publication_status ?? (currentShop.is_active ? 'active' : 'suspended');
             const message = payment.payment_type === 'promotion'
               ? boostStart && boostStart.getTime() > Date.now()
                 ? `Paiement confirmé. Votre boost commencera le ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(boostStart)}.`
                 : 'Paiement confirmé. Votre boost est activé.'
-              : 'Paiement confirmé. Votre abonnement est actif.';
+              : !payment.subscription?.isActive
+                ? 'Paiement confirmé, mais les droits de la boutique restent suspendus par une intervention administrative. Contactez l’équipe pour vérifier l’accès.'
+                : !currentShop.is_active
+                  ? 'Paiement confirmé. Votre abonnement est actif, mais la boutique reste désactivée. Réactivez-la depuis votre espace commerçant ou contactez l’équipe.'
+                  : publicationStatus !== 'active'
+                    ? publicationStatus === 'draft'
+                      ? 'Paiement confirmé. Votre abonnement est actif. Publiez la boutique depuis votre espace commerçant pour la rendre visible.'
+                      : 'Paiement confirmé. Votre abonnement est actif, mais la publication de la boutique est suspendue. Réactivez-la depuis votre espace commerçant.'
+                    : currentShop.merchant_verification_status
+                      && !['verified', 'not_required'].includes(currentShop.merchant_verification_status)
+                      ? 'Paiement confirmé. Votre abonnement est actif, mais la boutique restera masquée jusqu’à la validation de son identité.'
+                      : 'Paiement confirmé. Votre abonnement est actif et votre boutique peut être visible.';
             if (!cancelled) setPaymentReturnNotice({ paymentId: paymentIdToCheck, status: 'success', message });
             return;
           }
@@ -440,22 +447,19 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     </>;
   }
   // 2. AUTHENTICATED -> MERCHANT DASHBOARD
-  const activeOrders = orders.filter((order) => !['cancelled', 'expired'].includes(order.status || 'pending'));
-  const orderValue = activeOrders.reduce((sum, order) => sum + order.total_amount, 0);
+  const valuedOrders = orders.filter((order) => !['cancelled', 'expired'].includes(order.status || 'pending'));
+  const orderValue = valuedOrders.reduce((sum, order) => sum + order.total_amount, 0);
   const dashboardSupportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour la boutique ${currentShop.name}.`);
-  const avgBasket = activeOrders.length > 0 ? Math.round(orderValue / activeOrders.length) : 0;
+  const avgBasket = valuedOrders.length > 0 ? Math.round(orderValue / valuedOrders.length) : 0;
   const lowStockCount = products.filter(p => p.stock > 0 && p.stock <= 3).length;
   const outOfStockCount = products.filter(p => p.stock === 0).length;
   const actionableOrderCount = orders.filter((order) =>
     !['delivered', 'cancelled', 'expired'].includes(order.status || 'pending'),
   ).length;
   const isShopVerified = !currentShop.merchant_verification_status || ['not_required', 'verified'].includes(currentShop.merchant_verification_status);
-  const isDiditVerified = currentShop.merchant_verification_status === 'verified';
-  const hasActiveSubscription = currentShop.subscription?.isActive !== false;
+  const hasPublicationSubscriptionAccess = hasShopPublicationSubscriptionAccess(currentShop.subscription);
   const isAdminSuspended = !currentShop.is_active || currentShop.publication_status === 'suspended';
-  const isShopPublished = !isAdminSuspended && (isDiditVerified || hasActiveSubscription && (currentShop.publication_status
-    ? currentShop.publication_status === 'active'
-    : currentShop.is_active && isShopVerified));
+  const isShopPublished = isShopPubliclyVisible(currentShop);
   const trialCatalogLimited = !currentShop.admin_mode
     && currentShop.subscription?.status === 'trialing'
     && currentShop.subscription.trialDaysRemaining > 0;
@@ -740,7 +744,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 <span className="max-w-16 truncate text-[9px] font-bold text-rose-700" title="Suspendue par l’administration">Suspendue</span>
               ) : !isShopVerified ? (
                 <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('verification'); }} className="max-w-16 truncate text-[9px] font-bold text-amber-800">Vérifier</button>
-              ) : !hasActiveSubscription ? (
+              ) : !hasPublicationSubscriptionAccess ? (
                 <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="max-w-16 truncate text-[9px] font-bold text-amber-800">Forfait</button>
               ) : !isShopPublished ? (
                 <button type="button" onClick={() => void handlePublicationStatusChange('active')} className="max-w-16 truncate text-[9px] font-bold text-emerald-800">Publier</button>
@@ -779,7 +783,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 <span className="truncate">Voir ma vitrine</span>
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               </button>
-            ) : !hasActiveSubscription ? (
+            ) : !hasPublicationSubscriptionAccess ? (
               <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="flex min-h-10 min-w-0 flex-1 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-[11px] font-bold text-amber-950 transition-colors hover:bg-amber-100 sm:text-xs md:flex-none">
                 Abonnement requis
               </button>
@@ -894,9 +898,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 <BookOpen className="h-4 w-4" aria-hidden="true" /> Tutoriel
               </Link>
               <div className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 shadow-sm ring-1 ring-[#e8e0d6]">
-                <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Progression</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Étapes requises</span>
                 <span className="rounded-full bg-[#eaf4ef] px-2.5 py-1 text-xs font-black text-[#155544]">
-                  {[Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), Boolean(currentShop.theme_config?.logo_url), products.length > 0, isShopVerified, hasActiveSubscription, isShopPublished].filter(Boolean).length}/6
+                  {[Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), products.length > 0, isShopVerified, hasPublicationSubscriptionAccess, isShopPublished].filter(Boolean).length}/5
                 </span>
               </div>
               <button
@@ -916,14 +920,14 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             <div id="merchant-setup-steps" className={`grid gap-2 sm:grid-cols-2 ${isSetupChecklistExpanded ? 'max-lg:grid' : 'max-lg:hidden'}`}>
               {[
                 { label: 'Nom et coordonnées', detail: 'Nom, WhatsApp et localisation', done: Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), action: () => { setActiveTab('settings'); setSettingsSubTab('general'); } },
-                { label: 'Logo de la boutique', detail: 'Aidez vos clients à vous reconnaître', done: Boolean(currentShop.theme_config?.logo_url), action: () => { setActiveTab('settings'); setSettingsSubTab('themes'); } },
+                { label: 'Ajouter un logo (facultatif)', detail: 'Aidez vos clients à vous reconnaître', done: Boolean(currentShop.theme_config?.logo_url), action: () => { setActiveTab('settings'); setSettingsSubTab('themes'); } },
                 { label: 'Ajouter vos premiers produits', detail: `${products.length} article${products.length === 1 ? '' : 's'} · limite du forfait : ${Number.isFinite(dashboardProductLimit) ? dashboardProductLimit : 'illimitée'}`, done: products.length > 0, action: () => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); } },
                 { label: 'Vérifier votre identité', detail: isShopVerified ? 'Identité confirmée' : 'Requis avant la publication', done: isShopVerified, action: () => { setActiveTab('settings'); setSettingsSubTab('verification'); } },
-                { label: 'Essai ou abonnement actif', detail: hasActiveSubscription ? 'Votre accès est actif' : 'Choisissez une formule pour publier', done: hasActiveSubscription, action: () => { setActiveTab('settings'); setSettingsSubTab('subscription'); } },
+                { label: 'Essai ou abonnement actif', detail: hasPublicationSubscriptionAccess ? 'Votre accès est actif' : 'Choisissez une formule pour publier', done: hasPublicationSubscriptionAccess, action: () => { setActiveTab('settings'); setSettingsSubTab('subscription'); } },
                 { label: 'Publier votre boutique', detail: isShopPublished ? 'Votre vitrine est visible' : 'Activez la publication après les étapes requises', done: isShopPublished, action: () => {
                   if (isShopPublished) onOpenStorefront(currentShop.slug);
                   else if (!isShopVerified) { setActiveTab('settings'); setSettingsSubTab('verification'); }
-                  else if (!hasActiveSubscription) { setActiveTab('settings'); setSettingsSubTab('subscription'); }
+                  else if (!hasPublicationSubscriptionAccess) { setActiveTab('settings'); setSettingsSubTab('subscription'); }
                   else void handlePublicationStatusChange('active');
                 } },
               ].map((step, index) => (
@@ -950,13 +954,13 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                         ? 'Suspension administrative'
                         : isShopPublished
                           ? 'Boutique publiée'
-                          : !hasActiveSubscription
+                          : !hasPublicationSubscriptionAccess
                             ? 'Abonnement requis'
                             : 'Publier ma boutique'}
                   </h3>
                 </div>
-                <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isShopPublished ? 'bg-[#0f4d3d] text-white' : 'bg-white text-[#0f4d3d] ring-1 ring-[#dfe8dd]'}`}>
-                  <Check className="h-4 w-4" />
+                <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isShopPublished ? 'bg-[#0f4d3d] text-white' : 'bg-white text-amber-700 ring-1 ring-[#dfe8dd]'}`}>
+                  {isShopPublished ? <Check className="h-4 w-4" aria-hidden="true" /> : <AlertTriangle className="h-4 w-4" aria-hidden="true" />}
                 </span>
               </div>
 
@@ -967,7 +971,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                     ? 'Votre boutique a une restriction administrative. Contactez l’assistance pour la réactiver.'
                     : isShopPublished
                       ? 'Votre boutique est prête à recevoir des commandes et à être partagée.'
-                      : !hasActiveSubscription
+                      : !hasPublicationSubscriptionAccess
                         ? 'Un abonnement est nécessaire pour activer la publication et les commandes commerciales.'
                         : 'Activez immédiatement votre boutique pour qu’elle soit visible et commandeable.'}
               </p>
@@ -981,7 +985,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                       ? () => toast.error('Contactez l’administration pour faire réexaminer la suspension.')
                     : isShopPublished
                       ? () => onOpenStorefront(currentShop.slug)
-                      : !hasActiveSubscription
+                      : !hasPublicationSubscriptionAccess
                         ? () => { setSettingsSubTab('subscription'); setActiveTab('settings'); }
                         : () => void handlePublicationStatusChange('active')}
                   className="inline-flex min-h-10 items-center justify-center rounded-full bg-[#0f4d3d] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#155544]"
@@ -1066,7 +1070,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {[
                   { label: 'Commandes', value: orders.length, hint: `${actionableOrderCount} à traiter`, tone: 'text-[#b94c24]', icon: ShoppingBag },
-                  { label: 'Valeur des commandes', value: formatFCFA(orderValue), hint: 'Hors annulation et expiration', tone: 'text-[#1D6B57]', icon: DollarSign },
+                  { label: 'Montant des commandes', value: formatFCFA(orderValue), hint: 'Paiements non suivis par MaTable.ci', tone: 'text-[#1D6B57]', icon: DollarSign },
                   { label: 'Clients', value: uniqueCustomerCount, hint: 'Clients ayant commandé', tone: 'text-[#1D6B57]', icon: UserPlus },
                   { label: 'Articles', value: `${products.length} / ${Number.isFinite(dashboardProductLimit) ? dashboardProductLimit : '∞'}`, hint: 'Dans votre catalogue', tone: 'text-[#1D6B57]', icon: Package },
                 ].map((metric) => <div key={metric.label} className="flex min-h-[104px] items-start gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4"><span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f7f4ee] ${metric.tone}`}><metric.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="text-xs font-semibold text-slate-500">{metric.label}</p><strong className="mt-1 block truncate text-xl font-black text-[#211712]">{metric.value}</strong><p className="mt-1 truncate text-[11px] text-slate-500">{metric.hint}</p></div></div>)}

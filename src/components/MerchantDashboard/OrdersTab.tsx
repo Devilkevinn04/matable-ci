@@ -43,7 +43,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                 </div>
                 <div>
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Valeur des commandes actives
+                    Montant des commandes
                   </span>
                   <span className="font-black text-slate-900 text-lg">
                     {formatFCFA(orderValue)}
@@ -71,7 +71,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                 </div>
                 <div>
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Panier moyen actif
+                    Montant moyen par commande
                   </span>
                   <span className="font-black text-slate-900 text-lg">
                     {formatFCFA(averageOrderValue)}
@@ -129,7 +129,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
             </div>
 
             <p className="-mt-2 rounded-xl border border-slate-200 bg-[#fffdf8] px-3 py-2 text-[11px] leading-5 text-slate-600">
-              Cette liste regroupe les commandes enregistrées sur MaTable.ci. Le mode de règlement choisi n’est pas une confirmation de paiement ; un clic WhatsApp ne confirme ni l’envoi du message ni le paiement.
+              Les montants ci-dessus sont calculés à partir des commandes hors annulation et expiration, y compris les commandes livrées. MaTable.ci ne suit pas les encaissements : vérifiez directement le règlement auprès de vos clients. Le mode choisi ou un clic WhatsApp ne confirme pas le paiement.
             </p>
 
             {/* Orders List */}

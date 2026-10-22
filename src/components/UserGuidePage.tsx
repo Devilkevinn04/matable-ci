@@ -55,7 +55,7 @@ const roleGuides: Record<GuideRole, RoleGuide> = {
     steps: [
       { id: 'admin-directory', title: 'Examiner les boutiques et les comptes', description: 'Recherchez l’enregistrement concerné et utilisez uniquement les informations nécessaires à l’opération.', href: '/admin', linkLabel: 'Ouvrir l’administration' },
       { id: 'admin-subscriptions', title: 'Gérer les tarifs et formules', description: 'Les tarifs et limites numériques Pro sont auditables. Les changements d’avantages pour les abonnés Pro existants s’appliquent au prochain renouvellement.' },
-      { id: 'admin-lifecycle', title: 'Contrôler les changements d’abonnement', description: 'Vérifiez la date d’échéance et les paiements en attente avant toute programmation, résiliation ou suspension; indiquez un motif lorsque l’interface le demande.' },
+      { id: 'admin-lifecycle', title: 'Contrôler les changements d’abonnement', description: 'Les abonnements sont renouvelés par paiement GeniusPay manuel, sans prélèvement automatique. Vérifiez l’échéance et les paiements en attente avant de programmer l’arrêt des droits ou une suspension; indiquez un motif lorsque l’interface le demande.' },
       { id: 'admin-audit', title: 'Vérifier le journal d’audit', description: 'Après une opération sensible, contrôlez l’acteur, le motif, l’objet et le résultat dans le journal.' },
       { id: 'admin-roles', title: 'Respecter le périmètre de chaque rôle', description: 'Réservez la gestion globale au Super-admin. Ne demandez jamais de PIN, mot de passe ou code de vérification.' },
     ],

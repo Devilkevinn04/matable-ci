@@ -766,10 +766,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 {/* Recap Highlights */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Valeur des commandes actives aujourd’hui</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Montant des commandes enregistrées aujourd’hui</span>
                     <span className="text-base font-black text-slate-900">
                       {flashBilan ? formatFCFA(flashBilan.total_sales) : '—'}
                     </span>
+                    <span className="mt-1 block text-[10px] text-slate-500">Montant commandé, pas un paiement confirmé.</span>
                   </div>
                   <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">Commandes</span>

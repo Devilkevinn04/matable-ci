@@ -481,6 +481,12 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
     }
     const tier = normalizeSubscriptionTier(requestedTier);
     const subscriptionState = getSubscriptionState(shop);
+    if (subscriptionState.manualOverrideActive && subscriptionState.status === 'suspended') {
+      return res.status(409).json({
+        error: 'Les droits de cette boutique sont suspendus temporairement par l’administration. Aucun paiement ne peut être lancé pendant cette suspension.',
+        code: 'subscription_access_manually_suspended',
+      });
+    }
     if (shop.subscription_admin_suspended_at) {
       return res.status(409).json({
         error: 'L’accès à l’abonnement est suspendu par l’administration. Contactez le support avant de payer.',
@@ -491,12 +497,6 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       return res.status(409).json({
         error: `Un changement vers la formule ${getSubscriptionPlanConfig(subscriptionState.upcomingPlan).label} est programmé pour la prochaine échéance.`,
         code: 'scheduled_subscription_tier_mismatch',
-      });
-    }
-    if (subscriptionState.cancellationAt) {
-      return res.status(409).json({
-        error: `La résiliation est programmée au ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(subscriptionState.cancellationAt))}. Contactez l’administration pour l’annuler avant un renouvellement.`,
-        code: 'subscription_cancellation_scheduled',
       });
     }
     const requestedTerm = req.body?.term;

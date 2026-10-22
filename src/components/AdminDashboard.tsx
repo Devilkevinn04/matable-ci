@@ -94,8 +94,8 @@ const adminAuditActionLabels: Record<string, string> = {
   subscription_plan_features_updated: 'Avantages et limites Pro modifiés',
   subscription_plan_change_scheduled: 'Changement de formule programmé',
   subscription_plan_change_cancelled: 'Changement de formule annulé',
-  subscription_cancellation_scheduled: 'Résiliation à l’échéance programmée',
-  subscription_cancellation_revoked: 'Résiliation à l’échéance annulée',
+  subscription_cancellation_scheduled: 'Arrêt des droits à échéance programmé',
+  subscription_cancellation_revoked: 'Arrêt des droits programmé annulé',
   subscription_access_suspended: 'Accès à l’abonnement suspendu',
   subscription_access_reactivated: 'Accès à l’abonnement réactivé',
   subscription_manual_access_granted: 'Accès manuel accordé',
@@ -843,7 +843,7 @@ export const AdminDashboard: React.FC = () => {
     setManualOverrideDrafts((previous) => ({
       ...previous,
       [shop.id]: {
-        action: previous[shop.id]?.action ?? 'grant',
+        action: previous[shop.id]?.action ?? (shop.subscription_admin_override_active ? 'clear' : 'grant'),
         tier: previous[shop.id]?.tier ?? shop.plan as SubscriptionTier,
         untilDate: previous[shop.id]?.untilDate ?? '',
         reason: previous[shop.id]?.reason ?? '',
@@ -905,8 +905,8 @@ export const AdminDashboard: React.FC = () => {
     action: 'cancel_at_period_end' | 'undo_cancellation' | 'suspend' | 'reactivate',
   ) => {
     const descriptions = {
-      cancel_at_period_end: 'programmer la résiliation à l’échéance',
-      undo_cancellation: 'annuler la résiliation programmée',
+      cancel_at_period_end: 'programmer l’arrêt des droits à l’échéance',
+      undo_cancellation: 'annuler l’arrêt des droits programmé',
       suspend: 'suspendre immédiatement les droits de l’abonnement',
       reactivate: 'réactiver les droits de l’abonnement',
     };
@@ -917,7 +917,7 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
     const confirmation = action === 'cancel_at_period_end'
-      ? `Les droits payés resteront actifs jusqu’au ${shop.subscription_expires_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(shop.subscription_expires_at)) : 'terme de l’abonnement'}.`
+      ? `Les droits resteront actifs jusqu’au ${shop.subscription_expires_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(shop.subscription_expires_at)) : 'terme de l’abonnement'}. MaTable.ci ne prélève pas automatiquement : le commerçant pourra encore payer un renouvellement GeniusPay avant cette date pour conserver son accès.`
       : action === 'suspend'
         ? 'Les droits et la publication liés à l’abonnement seront suspendus immédiatement. Cela ne désactivera pas la boutique ni ne modifiera les paiements.'
         : action === 'reactivate'
@@ -1223,7 +1223,7 @@ export const AdminDashboard: React.FC = () => {
 
   const exportShopsCsv = () => {
     const headers = adminRole === 'super_admin'
-      ? ['Boutique', 'Slug', 'Statut', 'Valeur commandes FCFA', 'Commandes', 'Panier moyen', 'Produits']
+      ? ['Boutique', 'Slug', 'Statut du compte', 'Montant des commandes FCFA (paiements non suivis)', 'Commandes', 'Panier moyen', 'Produits']
       : ['Boutique', 'Slug', 'Statut', 'Commandes', 'Produits'];
     const rows = filteredShops.map(shop => adminRole === 'super_admin'
       ? [shop.name, shop.slug, shop.is_active ? 'active' : 'inactive', shop.total_sales, shop.orders_count, shop.average_order_value, shop.products_count]
@@ -1555,7 +1555,7 @@ export const AdminDashboard: React.FC = () => {
             {adminRole === 'super_admin' && (
               <div className="grid grid-cols-2 gap-2.5 sm:hidden">
                 {[
-                  { label: 'Boutiques actives', value: `${activeShopsCount} / ${shops.length}` },
+                  { label: 'Comptes boutiques actifs', value: `${activeShopsCount} / ${shops.length}` },
                   { label: 'Commandes', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.orders) : '—' },
                   { label: 'Montant commandé', value: analytics ? `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F` : '—' },
                   { label: 'Commandes / sessions', value: analytics ? `${analytics.totals.conversion_rate.toLocaleString('fr-FR')}%` : '—' },
@@ -1569,7 +1569,7 @@ export const AdminDashboard: React.FC = () => {
             )}
             <div className={`hidden grid-cols-2 gap-3 sm:grid ${adminRole === 'super_admin' ? 'sm:grid-cols-3 xl:grid-cols-5' : 'sm:grid-cols-3 xl:grid-cols-4'}`}>
               {[
-                { label: 'Boutiques actives', value: `${activeShopsCount}/${shops.length}`, comparison: `${shops.length ? Math.round((activeShopsCount / shops.length) * 100) : 0}% du réseau`, tone: 'border-emerald-100 bg-emerald-50' },
+                { label: 'Comptes boutiques actifs', value: `${activeShopsCount}/${shops.length}`, comparison: `${shops.length ? Math.round((activeShopsCount / shops.length) * 100) : 0}% du réseau`, tone: 'border-emerald-100 bg-emerald-50' },
                 ...(adminRole === 'super_admin' ? [{ label: 'Montant des commandes', value: analytics ? `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F` : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.sales, analytics.previous.sales)} vs période précédente` : 'Chargement…', tone: 'border-sky-100 bg-sky-50' }] : []),
                 { label: 'Commandes', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.orders) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.orders, analytics.previous.orders)} vs période précédente` : 'Chargement…', tone: 'border-slate-200 bg-slate-50' },
                 { label: 'Visites consenties', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.page_views) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.page_views, analytics.previous.page_views)} vs période précédente` : 'Chargement…', tone: 'border-violet-100 bg-violet-50' },
@@ -1627,7 +1627,7 @@ export const AdminDashboard: React.FC = () => {
                 <p className="mt-1 text-xs text-slate-500">{analytics ? `${formatAudienceChange(analytics.totals.conversion_rate, analytics.previous.conversion_rate, true)} par rapport à la période précédente` : 'Chargement des données…'}</p>
               </section>
             )}
-            {adminRole === 'super_admin' && <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-600">Les montants agrègent les commandes hors annulation et expiration : ce n’est pas un relevé des paiements réellement encaissés. Les visites ne comptent que les sessions ayant accepté les statistiques.</p>}
+            {adminRole === 'super_admin' && <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-600">« Compte boutique actif » ne signifie pas que sa vitrine est publiquement visible. Les montants agrègent les commandes hors annulation et expiration : les paiements des ventes ne sont pas suivis par MaTable.ci. Les visites ne comptent que les sessions ayant accepté les statistiques.</p>}
             {analytics && adminRole === 'super_admin' && (
               <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]">
                 <section aria-labelledby="admin-sales-chart-title" className="min-w-0 chart-panel p-4 md:p-5">
@@ -1696,8 +1696,8 @@ export const AdminDashboard: React.FC = () => {
         {adminView === 'orders' && (
           <section aria-labelledby="admin-orders-title" className="chart-panel p-4 md:p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div><h2 id="admin-orders-title" className="text-sm font-black text-slate-900">Gestion des commandes</h2><p className="mt-1 text-xs text-slate-500">{orderTotal} commande(s) correspondante(s), affichage par pages de 100.</p></div>
-              <button type="button" onClick={() => exportOperationsCsv(`matable-commandes-${new Date().toISOString().slice(0, 10)}.csv`, adminRole === 'super_admin' ? ['ID', 'Boutique', 'Client', 'Téléphone', 'Montant', 'Statut', 'Date'] : ['ID', 'Boutique', 'Client', 'Téléphone', 'Statut', 'Date'], filteredAdminOrders.map(order => adminRole === 'super_admin' ? [order.id, order.shop_name, order.customer_name, order.customer_phone, order.total_amount, order.status, order.created_at] : [order.id, order.shop_name, order.customer_name, order.customer_phone, order.status, order.created_at]))} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
+              <div><h2 id="admin-orders-title" className="text-sm font-black text-slate-900">Gestion des commandes</h2><p className="mt-1 text-xs text-slate-500">{orderTotal} commande(s) correspondante(s), affichage par pages de 100.</p>{adminRole === 'super_admin' && <p className="mt-1 text-xs text-slate-500">Les montants affichés sont les montants demandés dans les commandes ; les règlements entre clients et commerçants ne sont pas suivis ici.</p>}</div>
+              <button type="button" onClick={() => exportOperationsCsv(`matable-commandes-${new Date().toISOString().slice(0, 10)}.csv`, adminRole === 'super_admin' ? ['ID', 'Boutique', 'Client', 'Téléphone', 'Montant demandé (paiement non suivi)', 'Statut', 'Date'] : ['ID', 'Boutique', 'Client', 'Téléphone', 'Statut', 'Date'], filteredAdminOrders.map(order => adminRole === 'super_admin' ? [order.id, order.shop_name, order.customer_name, order.customer_phone, order.total_amount, order.status, order.created_at] : [order.id, order.shop_name, order.customer_name, order.customer_phone, order.status, order.created_at]))} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
               <label className="relative block"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input type="search" value={orderSearch} onChange={(event) => { setOrderSearch(event.target.value); setOrderPage(0); }} placeholder="Rechercher boutique, client, téléphone ou numéro" className="min-h-10 w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-sky-700" /></label>
@@ -2029,25 +2029,36 @@ export const AdminDashboard: React.FC = () => {
               <button type="button" onClick={() => void fetchSubscriptions()} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">Actualiser</button>
             </header>
 
-            <AdminSubscriptionPlanPricing />
-            <AdminSubscriptionPlanFeatures />
-            {!subscriptions ? <p role="status" className="border-y border-slate-200 py-6 text-sm text-slate-500">Chargement des abonnements…</p> : <>
-              <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                <div className="border-l-2 border-emerald-600 pl-3"><p className="text-xs text-slate-500">MRR estimé</p><strong className="text-lg font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(subscriptions.summary.mrr)} F / mois</strong><p className="mt-1 text-[11px] text-slate-500">{subscriptions.summary.mrr_estimated_subscriptions} au tarif catalogue faute de paiement enregistré</p></div>
-                <div className="border-l-2 border-sky-600 pl-3"><p className="text-xs text-slate-500">Abonnements payants</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.active_subscriptions}</strong></div>
-                <div className="border-l-2 border-amber-500 pl-3"><p className="text-xs text-slate-500">Essais actifs · fin sous 7 j</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.active_trials} · {subscriptions.summary.trials_expiring_7d}</strong></div>
-                <div className="border-l-2 border-rose-600 pl-3"><p className="text-xs text-slate-500">Conversion des essais terminés</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.converted_trials}/{subscriptions.summary.completed_trials} boutiques · {subscriptions.summary.trial_conversion_rate}%</strong><p className="mt-1 text-[11px] text-slate-500">Paiement confirmé après le début de l’essai, parmi les essais échus.</p></div>
+            <details className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <summary className="cursor-pointer text-sm font-black text-slate-900">
+                Configuration globale · tarifs et avantages des formules
+              </summary>
+              <p className="mt-2 text-xs leading-5 text-slate-600">
+                Ces paramètres s’appliquent aux offres de toutes les boutiques. Les changements ne modifient pas les paiements déjà effectués.
+              </p>
+              <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                <AdminSubscriptionPlanPricing />
+                <AdminSubscriptionPlanFeatures />
               </div>
-              <section aria-labelledby="weekly-activity-title" className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-3">
-                  <h3 id="weekly-activity-title" className="text-sm font-black text-slate-900">Activité des 7 derniers jours</h3>
-                  <p className="mt-1 text-xs text-slate-500">Sur 7 jours : visiteurs distincts mesurés, boutiques créées et clics WhatsApp suivis. Les visiteurs dépendent du consentement statistique.</p>
+            </details>
+            {!subscriptions ? <p role="status" className="border-y border-slate-200 py-6 text-sm text-slate-500">Chargement des abonnements…</p> : <>
+              <section aria-labelledby="subscription-overview-title" className="space-y-3">
+                <h3 id="subscription-overview-title" className="text-sm font-black text-slate-900">Vue d’ensemble</h3>
+                <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 xl:grid-cols-4">
+                  <div className="border-l-2 border-emerald-600 pl-3"><p className="text-xs text-slate-500">MRR estimé</p><strong className="text-lg font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(subscriptions.summary.mrr)} F / mois</strong><p className="mt-1 text-[11px] text-slate-500">{subscriptions.summary.mrr_estimated_subscriptions} au tarif catalogue faute de paiement enregistré</p></div>
+                  <div className="border-l-2 border-sky-600 pl-3"><p className="text-xs text-slate-500">Abonnements payants</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.active_subscriptions}</strong></div>
+                  <div className="border-l-2 border-amber-500 pl-3"><p className="text-xs text-slate-500">Essais actifs · fin sous 7 j</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.active_trials} · {subscriptions.summary.trials_expiring_7d}</strong></div>
+                  <div className="border-l-2 border-rose-600 pl-3"><p className="text-xs text-slate-500">Conversion des essais terminés</p><strong className="text-lg font-black text-slate-900">{subscriptions.summary.converted_trials}/{subscriptions.summary.completed_trials} boutiques · {subscriptions.summary.trial_conversion_rate}%</strong><p className="mt-1 text-[11px] text-slate-500">Paiement confirmé après le début de l’essai, parmi les essais échus.</p></div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Visiteurs</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.unique_visitors}</strong></div>
-                  <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Boutiques créées</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.shops_created}</strong></div>
-                  <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Clics WhatsApp</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.whatsapp_clicks}</strong></div>
-                </div>
+                <details className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <summary className="cursor-pointer text-xs font-bold text-slate-700">Activité de la plateforme sur 7 jours</summary>
+                  <p className="mt-2 text-xs text-slate-500">Visiteurs distincts mesurés, boutiques créées et clics WhatsApp suivis. Les visiteurs dépendent du consentement statistique.</p>
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Visiteurs</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.unique_visitors}</strong></div>
+                    <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Boutiques créées</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.shops_created}</strong></div>
+                    <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Clics WhatsApp</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.whatsapp_clicks}</strong></div>
+                  </div>
+                </details>
               </section>
 
               {inconsistentTrialExpiries.length > 0 && <section aria-labelledby="trial-expiry-integrity-title" className="rounded-xl border border-amber-300 bg-amber-50 p-4">
@@ -2092,16 +2103,16 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </section>}
 
-              <section aria-labelledby="trials-expiring-title" className="border-y border-amber-200 py-4">
+              <section aria-labelledby="trials-expiring-title" className="rounded-xl border border-amber-200 bg-amber-50/40 p-4">
                 <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div><h3 id="trials-expiring-title" className="text-sm font-black text-slate-900">Essais à relancer</h3><p className="mt-1 text-xs text-slate-500">Essais qui finissent dans les 7 jours. Une relance ouvre WhatsApp sans envoyer le message. Chaque essai peut être prolongé de 30 jours maximum au total.</p></div>
+                  <div><h3 id="trials-expiring-title" className="text-sm font-black text-amber-950">Essais à suivre</h3><p className="mt-1 text-xs text-amber-900">Essais qui finissent dans les 7 jours. Une relance ouvre WhatsApp sans envoyer le message. Chaque essai peut être prolongé de 30 jours maximum au total.</p></div>
                   <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">Prolonger de
                     <select aria-label="Durée de prolongation d’essai" value={trialExtensionDays} onChange={(event) => setTrialExtensionDays(Number(event.target.value))} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-700">
                       {trialExtensionOptions.map((days) => <option key={days} value={days}>{days} jours</option>)}
                     </select>
                   </label>
                 </div>
-                <div className="mt-3 divide-y divide-amber-100">
+                <div className="mt-3 divide-y divide-amber-200">
                   {expiringTrials.length === 0 ? <p className="py-4 text-sm text-slate-500">Aucun essai n’expire sous 7 jours.</p> : expiringTrials.map((shop) => (
                     <article key={shop.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0"><h4 className="truncate text-sm font-bold text-slate-900">{shop.name}</h4><p className="mt-1 text-xs text-slate-500">{shop.plan} · {shop.trial_days_remaining} jour(s) restant(s) · fin le {shop.trial_end ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.trial_end)) : 'date inconnue'} · prolongation : {shop.trial_extension_days_used}/30 jours{shop.trial_extension_over_limit ? ' — dépassement historique à vérifier' : `, ${shop.trial_extension_days_remaining} jour(s) autorisé(s) restant(s)`}</p></div>
@@ -2116,7 +2127,7 @@ export const AdminDashboard: React.FC = () => {
 
               <section aria-labelledby="subscription-list-title" className="space-y-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                  <div><h3 id="subscription-list-title" className="text-sm font-black text-slate-900">Toutes les boutiques</h3><p className="mt-1 text-xs text-slate-500">État de l’abonnement et accès de la boutique sont affichés séparément.</p></div>
+                  <div><h3 id="subscription-list-title" className="text-sm font-black text-slate-900">Gestion des abonnements par boutique</h3><p className="mt-1 text-xs text-slate-500">L’état de l’abonnement, les droits et la publication de la boutique sont distincts. {filteredSubscriptions.length} boutique(s) affichée(s) sur {subscriptions.shops.length}.</p></div>
                   <div className="grid gap-2 sm:grid-cols-[minmax(180px,1fr)_180px]">
                     <input type="search" value={subscriptionSearch} onChange={(event) => setSubscriptionSearch(event.target.value)} placeholder="Rechercher une boutique…" aria-label="Rechercher un abonnement" className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-700" />
                     <select aria-label="Filtrer les abonnements par statut" value={subscriptionStatusFilter} onChange={(event) => setSubscriptionStatusFilter(event.target.value)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">
@@ -2124,11 +2135,11 @@ export const AdminDashboard: React.FC = () => {
                     </select>
                   </div>
                 </div>
-                <div className="divide-y divide-slate-200 border-y border-slate-200">
+                <div className="space-y-3">
                   {filteredSubscriptions.length === 0 ? <p className="py-6 text-sm text-slate-500">Aucun abonnement ne correspond à ces critères.</p> : filteredSubscriptions.map((shop) => {
                     const canExtendTrial = shop.can_extend_trial;
                     const manualDraft = manualOverrideDrafts[shop.id];
-                    const manualAction = manualDraft?.action ?? 'grant';
+                    const manualAction = manualDraft?.action ?? (shop.subscription_admin_override_active ? 'clear' : 'grant');
                     const manualTier = manualDraft?.tier ?? shop.plan as SubscriptionTier;
                     const manualUntilDate = manualDraft?.untilDate ?? '';
                     const manualReason = manualDraft?.reason ?? '';
@@ -2136,20 +2147,28 @@ export const AdminDashboard: React.FC = () => {
                       : shop.status === 'trialing' ? 'bg-sky-100 text-sky-900'
                         : shop.status === 'past_due' || shop.status === 'expired' ? 'bg-amber-100 text-amber-950'
                           : 'bg-slate-100 text-slate-700';
-                    return <article key={shop.id} className="flex flex-col gap-3 py-4 xl:flex-row xl:items-center xl:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-bold text-slate-900">{shop.name}</h4><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-slate-700">{shop.plan}</span><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${shop.subscription_admin_override_active ? 'bg-violet-100 text-violet-950' : statusTone}`}>{shop.subscription_admin_override_active ? shop.subscription_admin_override_status === 'active' ? 'Accès manuel' : 'Droits suspendus manuellement' : subscriptionStatusLabels[shop.status] || shop.status}</span>{!shop.is_active && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-900">Boutique désactivée</span>}</div>
+                    return <article key={shop.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                      <div className="min-w-0 space-y-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-bold text-slate-900">{shop.name}</h4><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-slate-700">{shop.plan}</span><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${shop.subscription_admin_override_active ? 'bg-violet-100 text-violet-950' : statusTone}`}>{shop.subscription_admin_override_active ? shop.subscription_admin_override_status === 'active' ? 'Accès manuel' : 'Droits suspendus manuellement' : subscriptionStatusLabels[shop.status] || shop.status}</span>{!shop.is_active && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-900">Boutique désactivée</span>}</div>
                         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{shop.whatsapp_number}</span><span>{shop.products_count} article(s)</span><span>{shop.orders_count} commande(s)</span><span>{shop.publication_status === 'active' ? 'Publication active' : shop.publication_status === 'suspended' ? 'Publication suspendue' : 'Brouillon non publié'}</span><span>{shop.whatsapp_reminders_opt_in ? 'Consentement aux rappels WhatsApp donné' : 'Pas de consentement WhatsApp'}</span><span>Inscrite le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.created_at))}</span></div>
                         <p className="mt-1 text-xs text-slate-500">{shop.subscription_admin_override_active ? 'Fin de l’accès manuel' : shop.status === 'trialing' ? 'Fin d’essai' : shop.status === 'active' ? 'Prochain renouvellement' : 'Échéance de l’abonnement'} : {shop.next_renewal_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.next_renewal_at)) : 'Non définie'}{shop.trial_start ? ` · Prolongation cumulée : ${shop.trial_extension_days_used}/30 jours${shop.trial_extension_over_limit ? ' — dépassement historique à vérifier' : `, ${shop.trial_extension_days_remaining} jour(s) autorisé(s) restant(s)`}` : ''} · Dernière commande : {shop.last_order_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.last_order_at)) : 'aucune'}</p>
+                          </div>
                         {shop.pending_subscription_tier && shop.pending_subscription_effective_at && <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">Formule {shop.pending_subscription_tier} programmée au {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.pending_subscription_effective_at))}. {shop.subscription_admin_override_active ? 'Elle sera prise en compte lorsque l’automatisation reprendra.' : 'La formule actuelle reste active jusque-là.'}</p>}
-                        {shop.subscription_cancel_at && <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-950">Résiliation programmée au {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.subscription_cancel_at))}. {shop.subscription_admin_override_active ? 'Elle sera prise en compte lorsque l’automatisation reprendra.' : 'Les droits payés restent actifs jusque-là.'}</p>}
+                                        {shop.subscription_cancel_at && <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-950">Arrêt des droits programmé au {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.subscription_cancel_at))}. {shop.subscription_admin_override_active ? 'Il sera pris en compte lorsque l’automatisation reprendra.' : 'Les droits restent actifs jusque-là. Un renouvellement GeniusPay manuel avant cette date rétablira l’accès.'}</p>}
                         {shop.subscription_admin_suspended_at && <p className="mt-2 rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-950">Accès à l’abonnement suspendu par l’administration le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.subscription_admin_suspended_at))}. {shop.subscription_admin_override_active && shop.subscription_admin_override_status === 'active' ? 'La dérogation accorde temporairement les droits jusqu’à sa date de fin.' : 'La boutique n’est pas désactivée par cette action.'}</p>}
                         {shop.subscription_admin_override_status && <p className={`mt-2 rounded-md border px-3 py-2 text-xs font-semibold ${shop.subscription_admin_override_active ? 'border-violet-300 bg-violet-50 text-violet-950' : 'border-slate-300 bg-slate-50 text-slate-700'}`}>
                           {shop.subscription_admin_override_active
                             ? `${shop.subscription_admin_override_status === 'active' ? 'Accès manuel accordé' : 'Droits manuellement suspendus'}${shop.subscription_admin_override_tier ? ` · formule ${shop.subscription_admin_override_tier}` : ''} jusqu’au ${shop.subscription_admin_override_until ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(shop.subscription_admin_override_until)) : 'terme non défini'}. L’automatisation reprendra ensuite.`
                             : `Dérogation manuelle terminée le ${shop.subscription_admin_override_until ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(shop.subscription_admin_override_until)) : 'à une date inconnue'}; l’état automatique est rétabli.`}
                         </p>}
-                        <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50/60 p-3">
+                        <details className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <summary className="cursor-pointer text-xs font-black text-slate-900">
+                            Gérer l’abonnement
+                            {shop.subscription_admin_override_active ? ' · dérogation à suivre' : ' · accès, échéance et formule'}
+                          </summary>
+                          <div className="mt-3 space-y-3">
+                        <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3">
                           <h5 className="text-xs font-black text-violet-950">Intervention manuelle · cette boutique uniquement</h5>
                           <p className="mt-1 text-[11px] leading-5 text-violet-900">Accordez ou suspendez temporairement les droits sans modifier les paiements. À la date choisie, l’état calculé automatiquement reprend le dessus. La publication et l’activation générale de la boutique restent indépendantes.</p>
                           <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -2212,6 +2231,7 @@ export const AdminDashboard: React.FC = () => {
                           </div>
                         </div>
                         {shop.status === 'active' && !shop.subscription_admin_override_active && <div className="mt-3 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[minmax(150px,190px)_minmax(180px,1fr)_auto]">
+                          <h5 className="text-xs font-black text-slate-800 sm:col-span-3">Corriger l’échéance après vérification du paiement</h5>
                           <label className="text-[10px] font-bold text-slate-600">Nouvelle date de fin d’accès
                             <input
                               type="date"
@@ -2247,7 +2267,8 @@ export const AdminDashboard: React.FC = () => {
                             Enregistrer la date
                           </button>
                         </div>}
-                        {shop.status === 'active' && shop.subscription_expires_at && !shop.subscription_admin_override_active && !shop.subscription_cancel_at && !shop.subscription_admin_suspended_at && <div className="mt-3 grid gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 sm:grid-cols-[minmax(150px,190px)_minmax(180px,1fr)_auto]">
+                        {shop.status === 'active' && shop.subscription_expires_at && !shop.subscription_admin_override_active && !shop.subscription_cancel_at && !shop.subscription_admin_suspended_at && <div className="grid gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 sm:grid-cols-[minmax(150px,190px)_minmax(180px,1fr)_auto]">
+                          <h5 className="text-xs font-black text-amber-950 sm:col-span-3">Programmer une formule pour le prochain renouvellement</h5>
                           <label className="text-[10px] font-bold text-slate-700">Formule au prochain renouvellement
                             <select
                               aria-label={`Formule au prochain renouvellement de ${shop.name}`}
@@ -2297,17 +2318,22 @@ export const AdminDashboard: React.FC = () => {
                               : 'Programmer'}
                           </button>
                         </div>}
-                      </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        {!shop.subscription_admin_override_active && shop.subscription_admin_suspended_at
-                          ? <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleSubscriptionLifecycleAction(shop, 'reactivate')} className="min-h-9 rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50">Réactiver les droits</button>
-                          : !shop.subscription_admin_override_active && (shop.status === 'active' || shop.status === 'trialing') && <button type="button" disabled={subscriptionActionShopId === shop.id || Boolean(shop.subscription_cancel_at)} onClick={() => void handleSubscriptionLifecycleAction(shop, 'suspend')} className="min-h-9 rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-bold text-rose-900 hover:bg-rose-50 disabled:opacity-50">Suspendre les droits</button>}
-                        {!shop.subscription_admin_override_active && shop.subscription_cancel_at
-                          ? <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleSubscriptionLifecycleAction(shop, 'undo_cancellation')} className="min-h-9 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-bold text-amber-950 hover:bg-amber-50 disabled:opacity-50">Annuler la résiliation</button>
-                          : !shop.subscription_admin_override_active && shop.status === 'active' && shop.subscription_expires_at && !shop.subscription_admin_suspended_at && !shop.pending_subscription_tier && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleSubscriptionLifecycleAction(shop, 'cancel_at_period_end')} className="min-h-9 rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-bold text-rose-900 hover:bg-rose-50 disabled:opacity-50">Résilier à l’échéance</button>}
-                        {shop.status === 'trialing' && shop.trial_days_remaining !== null && shop.trial_days_remaining <= 7 && shop.whatsapp_reminders_opt_in && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handlePrepareTrialReminder(shop)} className="min-h-9 rounded-lg border border-emerald-700 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50">Ouvrir WhatsApp</button>}
-                        {!shop.subscription_admin_override_active && canExtendTrial && <button type="button" disabled={subscriptionActionShopId === shop.id || shop.trial_extension_over_limit || shop.trial_extension_days_remaining === 0 || trialExtensionDays > shop.trial_extension_days_remaining} onClick={() => void handleExtendTrial(shop)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{shop.trial_extension_over_limit ? 'Dépassement à vérifier' : shop.trial_extension_days_remaining === 0 ? 'Plafond atteint' : trialExtensionDays > shop.trial_extension_days_remaining ? `Maximum ${shop.trial_extension_days_remaining} j` : `Prolonger de ${trialExtensionDays} j`}</button>}
-                        <button type="button" onClick={() => void handleToggleActive(shop.id)} className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-bold ${shop.is_active ? 'border-rose-200 text-rose-800 hover:bg-rose-50' : 'border-emerald-200 text-emerald-800 hover:bg-emerald-50'}`}>{shop.is_active ? 'Désactiver boutique' : 'Réactiver boutique'}</button>
+                        <div className="border-t border-slate-200 pt-3">
+                          <h5 className="text-xs font-black text-slate-800">Actions de cycle de vie et de boutique</h5>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                          {!shop.subscription_admin_override_active && shop.subscription_admin_suspended_at
+                            ? <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleSubscriptionLifecycleAction(shop, 'reactivate')} className="min-h-9 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50">Réactiver les droits</button>
+                            : !shop.subscription_admin_override_active && (shop.status === 'active' || shop.status === 'trialing') && <button type="button" disabled={subscriptionActionShopId === shop.id || Boolean(shop.subscription_cancel_at)} onClick={() => void handleSubscriptionLifecycleAction(shop, 'suspend')} className="min-h-9 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-bold text-rose-900 hover:bg-rose-50 disabled:opacity-50">Suspendre les droits</button>}
+                          {!shop.subscription_admin_override_active && shop.subscription_cancel_at
+                            ? <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleSubscriptionLifecycleAction(shop, 'undo_cancellation')} className="min-h-9 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-950 hover:bg-amber-50 disabled:opacity-50">Annuler l’arrêt programmé</button>
+                            : !shop.subscription_admin_override_active && shop.status === 'active' && shop.subscription_expires_at && !shop.subscription_admin_suspended_at && !shop.pending_subscription_tier && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleSubscriptionLifecycleAction(shop, 'cancel_at_period_end')} className="min-h-9 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-bold text-rose-900 hover:bg-rose-50 disabled:opacity-50">Arrêter l’accès à l’échéance</button>}
+                          {shop.status === 'trialing' && shop.trial_days_remaining !== null && shop.trial_days_remaining <= 7 && shop.whatsapp_reminders_opt_in && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handlePrepareTrialReminder(shop)} className="min-h-9 rounded-lg border border-emerald-700 bg-white px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50">Ouvrir WhatsApp</button>}
+                          {!shop.subscription_admin_override_active && canExtendTrial && <button type="button" disabled={subscriptionActionShopId === shop.id || shop.trial_extension_over_limit || shop.trial_extension_days_remaining === 0 || trialExtensionDays > shop.trial_extension_days_remaining} onClick={() => void handleExtendTrial(shop)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{shop.trial_extension_over_limit ? 'Dépassement à vérifier' : shop.trial_extension_days_remaining === 0 ? 'Plafond atteint' : trialExtensionDays > shop.trial_extension_days_remaining ? `Maximum ${shop.trial_extension_days_remaining} j` : `Prolonger de ${trialExtensionDays} j`}</button>}
+                          <button type="button" onClick={() => void handleToggleActive(shop.id)} className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-bold ${shop.is_active ? 'border-rose-200 bg-white text-rose-800 hover:bg-rose-50' : 'border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-50'}`}>{shop.is_active ? 'Désactiver boutique' : 'Réactiver boutique'}</button>
+                          </div>
+                        </div>
+                          </div>
+                        </details>
                       </div>
                     </article>;
                   })}

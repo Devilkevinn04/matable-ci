@@ -146,6 +146,99 @@ test('GeniusPay webhook signatures are time-limited and bound to the exact raw b
   assert.equal(isValidGeniusPaySignature(rawBody, signature, '0', secret), false);
 });
 
+test('GeniusPay blocks new payments during manual suspension and preserves it if a pending checkout settles', async () => {
+  const created = await fetch(`${BASE_URL}/api/shops`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Boutique suspension manuelle GeniusPay',
+      whatsapp_number: `+22507${String(Date.now() + Math.floor(Math.random() * 100000)).slice(-8)}`,
+      email: `manual-suspension-${Date.now()}@example.com`,
+      pin_code: '456789',
+      category: 'fashion',
+      city: 'Abidjan',
+      accepted_terms_privacy: true,
+    }),
+  });
+  const createdPayload = await created.json();
+  assert.equal(created.status, 200, JSON.stringify(createdPayload));
+
+  const login = await fetch(`${BASE_URL}/api/auth/merchant-access-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: createdPayload.owner_access_token }),
+  });
+  assert.equal(login.status, 200);
+  const merchantCookie = login.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(merchantCookie);
+
+  const database = new Database(TEST_DB_PATH);
+  const shopId = Number(createdPayload.shop.id);
+  try {
+    const overrideUntil = `${new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)}T23:59:59.999Z`;
+    database.prepare(`UPDATE shops SET subscription_admin_override_status = 'suspended',
+      subscription_admin_override_tier = 'standard', subscription_admin_override_until = ?
+      WHERE id = ?`).run(overrideUntil, shopId);
+
+    const paymentEndpoint = `${BASE_URL}/api/shops/${shopId}/subscription-payments`;
+    const paymentHeaders = { 'Content-Type': 'application/json', Cookie: merchantCookie };
+    const blockedPayment = await fetch(paymentEndpoint, {
+      method: 'POST',
+      headers: paymentHeaders,
+      body: JSON.stringify({ tier: 'standard', term: 'monthly' }),
+    });
+    assert.equal(blockedPayment.status, 409);
+    assert.equal((await blockedPayment.json()).code, 'subscription_access_manually_suspended');
+    assert.equal((database.prepare('SELECT COUNT(*) AS count FROM subscription_payment_intents WHERE shop_id = ?').get(shopId) as { count: number }).count, 0);
+
+    database.prepare(`UPDATE shops SET subscription_admin_override_status = NULL,
+      subscription_admin_override_tier = NULL, subscription_admin_override_until = NULL
+      WHERE id = ?`).run(shopId);
+    const pendingResponse = await fetch(paymentEndpoint, {
+      method: 'POST',
+      headers: paymentHeaders,
+      body: JSON.stringify({ tier: 'standard', term: 'monthly' }),
+    });
+    const pending = await pendingResponse.json();
+    assert.equal(pendingResponse.status, 201, JSON.stringify(pending));
+
+    database.prepare(`UPDATE shops SET subscription_admin_override_status = 'suspended',
+      subscription_admin_override_tier = 'standard', subscription_admin_override_until = ?
+      WHERE id = ?`).run(overrideUntil, shopId);
+    const providerReference = `GNP-${pending.payment_id}`;
+    const providerPayment = providerPayments.get(providerReference);
+    assert.ok(providerPayment);
+    providerPayment.status = 'completed';
+    const webhookPayload = JSON.stringify({
+      id: `manual-suspension-settlement-${Date.now()}`,
+      event: 'payment.success',
+      data: { transaction: {
+        status: 'completed',
+        reference: providerReference,
+        amount: 3000,
+        currency: 'XOF',
+        metadata: { subscription_payment_id: pending.payment_id, payment_type: 'subscription' },
+      } },
+    });
+    const webhook = await fetch(`${BASE_URL}/api/webhooks/geniuspay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getSignedWebhookHeaders(webhookPayload) },
+      body: webhookPayload,
+    });
+    assert.equal(webhook.status, 200);
+
+    const paymentStatus = await fetch(`${paymentEndpoint}/${pending.payment_id}`, {
+      headers: { Cookie: merchantCookie },
+    }).then((response) => response.json());
+    assert.equal(paymentStatus.status, 'paid');
+    assert.equal(paymentStatus.subscription.status, 'suspended');
+    assert.equal(paymentStatus.subscription.isActive, false);
+  } finally {
+    database.prepare('DELETE FROM shops WHERE id = ?').run(shopId);
+    database.close();
+  }
+});
+
 test('GeniusPay checkout rejects HTTPS URLs outside the provider domain', async () => {
   const originalApiKey = process.env.GENIUSPAY_API_KEY;
   const originalApiSecret = process.env.GENIUSPAY_API_SECRET;
@@ -1044,13 +1137,41 @@ test('scheduled tier checkout preserves the paid plan until the scheduled date',
   stateDb.prepare('UPDATE shops SET subscription_cancel_at = ? WHERE id = ?')
     .run(renewedExpiry, createdPayload.shop.id);
   stateDb.close();
-  const cancellationBlockedCheckout = await fetch(paymentEndpoint, {
+  const cancellationRenewalCheckout = await fetch(paymentEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
     body: JSON.stringify({ tier: 'pro' }),
   });
-  assert.equal(cancellationBlockedCheckout.status, 409);
-  assert.equal((await cancellationBlockedCheckout.json()).code, 'subscription_cancellation_scheduled');
+  const cancellationRenewalPayload = await cancellationRenewalCheckout.json();
+  assert.equal(cancellationRenewalCheckout.status, 201, JSON.stringify(cancellationRenewalPayload));
+
+  const cancellationRenewalWebhookPayload = JSON.stringify({
+    event: 'payment.success',
+    data: {
+      status: 'completed',
+      reference: `GNP-${cancellationRenewalPayload.payment_id}`,
+      amount: cancellationRenewalPayload.amount,
+      currency: 'XOF',
+      metadata: {
+        subscription_payment_id: cancellationRenewalPayload.payment_id,
+        payment_type: 'subscription',
+      },
+    },
+  });
+  const cancellationRenewalWebhook = await fetch(`${BASE_URL}/api/webhooks/geniuspay`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getSignedWebhookHeaders(cancellationRenewalWebhookPayload) },
+    body: cancellationRenewalWebhookPayload,
+  });
+  assert.equal(cancellationRenewalWebhook.status, 200, await cancellationRenewalWebhook.text());
+
+  const renewedDb = new Database(TEST_DB_PATH, { readonly: true });
+  const renewedSubscription = renewedDb.prepare(
+    'SELECT subscription_status, subscription_cancel_at FROM shops WHERE id = ?',
+  ).get(createdPayload.shop.id) as { subscription_status: string; subscription_cancel_at: string | null };
+  renewedDb.close();
+  assert.equal(renewedSubscription.subscription_status, 'active');
+  assert.equal(renewedSubscription.subscription_cancel_at, null);
 
   const suspensionDb = new Database(TEST_DB_PATH);
   suspensionDb.prepare(`UPDATE shops SET subscription_cancel_at = NULL, subscription_status = 'suspended',

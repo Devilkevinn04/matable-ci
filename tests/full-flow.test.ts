@@ -482,6 +482,7 @@ test('super-admin schedules subscription cancellation and manages reversible acc
     });
     assert.equal(cancellation.response.status, 200, JSON.stringify(cancellation.payload));
     assert.equal(cancellation.payload.subscription_cancel_at, currentExpiry);
+    assert.match(cancellation.payload.message, /renouveler manuellement/i);
 
     const canceledCheckoutState = await apiFetch('/api/admin/subscriptions');
     assert.equal(canceledCheckoutState.response.status, 200);

@@ -75,11 +75,11 @@ export function AdminShopList({
           <Filter className="w-3.5 h-3.5 text-slate-400" />
           {(['all', 'active', 'inactive'] as const).map((filter) => (
             <button key={filter} onClick={() => onStatusFilterChange(filter)} className={`rounded-xl px-2.5 py-1.5 text-[11px] font-bold ${statusFilter === filter ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>
-              {filter === 'all' ? 'Toutes' : filter === 'active' ? 'Actives' : 'Inactives'}
+              {filter === 'all' ? 'Toutes' : filter === 'active' ? 'Comptes actifs' : 'Comptes désactivés'}
             </button>
           ))}
           <select value={sortBy} onChange={(event) => onSortChange(event.target.value as typeof sortBy)} className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 outline-none">
-            {canSeeFinancials && <option value="sales">Trier par valeur des commandes</option>}
+            {canSeeFinancials && <option value="sales">Trier par montant des commandes</option>}
             <option value="orders">Trier par commandes</option>
             <option value="name">Trier par nom</option>
           </select>
@@ -126,7 +126,10 @@ export function AdminShopList({
 
       <div className="overflow-hidden rounded-[1.7rem] border border-slate-200 bg-white shadow-[0_20px_45px_rgba(15,23,42,0.06)]">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 p-4">
-          <h2 className="font-black text-slate-900 text-sm">Liste des commerçants</h2>
+          <div>
+            <h2 className="font-black text-slate-900 text-sm">Liste des commerçants</h2>
+            {canSeeFinancials && <p className="mt-1 text-xs text-slate-500">Les montants correspondent aux commandes enregistrées ; les paiements des ventes ne sont pas suivis par MaTable.ci.</p>}
+          </div>
           <button type="button" onClick={onExport} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
         </div>
 
@@ -163,7 +166,7 @@ export function AdminShopList({
                       </span>
                     )}
                     <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${shop.publication_status === 'active' ? 'bg-emerald-100 text-emerald-800' : shop.publication_status === 'suspended' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'}`}>
-                      {shop.publication_status === 'active' ? 'Publiée' : shop.publication_status === 'suspended' ? 'Publication suspendue' : 'Brouillon'}
+                      {shop.publication_status === 'active' ? 'Publication activée' : shop.publication_status === 'suspended' ? 'Publication suspendue' : 'Brouillon'}
                     </span>
                     {!shop.is_active && <span className="rounded-full bg-rose-100 px-2 py-1 text-[10px] font-bold text-rose-900">Boutique désactivée</span>}
                     <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${shop.subscription?.status === 'active' ? 'bg-emerald-100 text-emerald-800' : shop.subscription?.status === 'trialing' ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'}`}>
@@ -178,7 +181,7 @@ export function AdminShopList({
                     <span>📍 {shop.city || 'Abidjan'}</span>
                     <span>📦 {shop.products_count} articles</span>
                     <span>🛒 {shop.orders_count} commandes</span>
-                    {canSeeFinancials && <span>💰 {new Intl.NumberFormat('fr-FR').format(shop.total_sales)} FCFA</span>}
+                    {canSeeFinancials && <span>💰 Commandes : {new Intl.NumberFormat('fr-FR').format(shop.total_sales)} FCFA</span>}
                   </div>
 
                   <div className="text-xs text-slate-600 flex flex-wrap items-center gap-4 pt-1">
