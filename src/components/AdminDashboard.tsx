@@ -27,11 +27,16 @@ import {
   Trash2,
   MoreHorizontal,
   ChevronRight,
+  BookOpen,
   X,
 } from 'lucide-react';
 import { AdminIdentityVerificationPanel } from './AdminIdentityVerificationPanel';
 import { AdminShopList } from './AdminShopList';
 import { AdminPushAnnouncements } from './AdminPushAnnouncements';
+import { AdminSubscriptionPlanPricing } from './AdminSubscriptionPlanPricing';
+import { AdminSubscriptionPlanFeatures } from './AdminSubscriptionPlanFeatures';
+import { Link } from 'react-router-dom';
+const GuideChecklist = React.lazy(() => import('./UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
 import {
   audienceSourceLabels,
   formatAudienceChange,
@@ -42,6 +47,7 @@ import type {
   AdminAnalytics,
   AdminAuditLog,
   AdminCustomer,
+  AdminCustomerDetail,
   AdminContentModeration,
   AdminFinance,
   AdminHealth,
@@ -51,6 +57,7 @@ import type {
   AdminSubscriptionShop,
   AdminSubscriptions,
 } from './adminDashboardTypes';
+import type { SubscriptionTier } from '../types';
 
 const adminOrderTransitions: Record<AdminOrder['status'], AdminOrder['status'][]> = {
   pending: ['confirmed', 'cancelled'],
@@ -83,10 +90,20 @@ const adminAuditActionLabels: Record<string, string> = {
   identity_verification_request_prepared: 'Rappel de vérification préparé',
   identity_status_updated: 'Statut Didit mis à jour',
   maintenance_updated: 'Mode maintenance modifié',
+  subscription_plan_prices_updated: 'Tarifs des formules modifiés',
+  subscription_plan_features_updated: 'Avantages et limites Pro modifiés',
+  subscription_plan_change_scheduled: 'Changement de formule programmé',
+  subscription_plan_change_cancelled: 'Changement de formule annulé',
+  subscription_cancellation_scheduled: 'Résiliation à l’échéance programmée',
+  subscription_cancellation_revoked: 'Résiliation à l’échéance annulée',
+  subscription_access_suspended: 'Accès à l’abonnement suspendu',
+  subscription_access_reactivated: 'Accès à l’abonnement réactivé',
   platform_push_announcement_sent: 'Annonce Push envoyée',
   shop_permanently_deleted: 'Boutique supprimée',
   shop_reactivated: 'Boutique réactivée',
   shop_suspended: 'Boutique suspendue',
+  customer_reactivated: 'Compte client réactivé',
+  customer_suspended: 'Compte client suspendu',
   subscription_expiry_corrected: 'Échéance d’abonnement corrigée',
   subscription_reminder_failed: 'Échec du rappel d’abonnement',
   subscription_reminder_sent: 'Rappel d’abonnement envoyé',
@@ -104,7 +121,19 @@ const adminAuditDetailLabels: Record<string, string> = {
   enabled: 'Activé',
   failed: 'Échecs',
   previous_enabled: 'État précédent',
+  previous_standard_price: 'Ancien tarif Standard',
+  previous_premium_price: 'Ancien tarif Premium',
+  previous_pro_price: 'Ancien tarif Pro',
+  standard_price: 'Nouveau tarif Standard',
+  premium_price: 'Nouveau tarif Premium',
+  pro_price: 'Nouveau tarif Pro',
   previous_subscription_expires_at: 'Échéance précédente',
+  previous_cancellation_at: 'Ancienne date de résiliation',
+  current_tier: 'Formule actuelle',
+  previous_pending_tier: 'Formule programmée précédente',
+  pending_tier: 'Formule programmée',
+  effective_at: 'Prise d’effet',
+  cancellation_at: 'Date de résiliation',
   previous_trial_end: 'Fin d’essai précédente',
   previous_status: 'Statut précédent',
   reason: 'Motif',
@@ -178,6 +207,10 @@ export const AdminDashboard: React.FC = () => {
   const [subscriptionFilter, setSubscriptionFilter] = useState<'all' | 'not_started' | 'trialing' | 'active' | 'past_due' | 'cancelled' | 'expired' | 'suspended'>('all');
   const [sortBy, setSortBy] = useState<'sales' | 'orders' | 'name'>('sales');
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const showNotice = (msg: string) => {
+    setActionNotice(msg);
+    setTimeout(() => setActionNotice(null), 3500);
+  };
   const [deleteShopTarget, setDeleteShopTarget] = useState<Pick<AdminShopItem, 'id' | 'name' | 'slug'> | null>(null);
   const [deleteShopConfirmation, setDeleteShopConfirmation] = useState('');
   const [deleteShopReason, setDeleteShopReason] = useState('');
@@ -200,6 +233,7 @@ export const AdminDashboard: React.FC = () => {
   const [trialExtensionDays, setTrialExtensionDays] = useState(7);
   const [subscriptionActionShopId, setSubscriptionActionShopId] = useState<number | null>(null);
   const [expiryDrafts, setExpiryDrafts] = useState<Record<number, { date: string; reason: string }>>({});
+  const [planChangeDrafts, setPlanChangeDrafts] = useState<Record<number, { tier: SubscriptionTier; reason: string }>>({});
   const [adminOrders, setAdminOrders] = useState<AdminOrder[]>([]);
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [orderTotal, setOrderTotal] = useState(0);
@@ -207,9 +241,15 @@ export const AdminDashboard: React.FC = () => {
   const [orderActionLoadingId, setOrderActionLoadingId] = useState<number | null>(null);
   const [adminCustomers, setAdminCustomers] = useState<AdminCustomer[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
+  const [customerStatusFilter, setCustomerStatusFilter] = useState<'all' | 'active' | 'suspended'>('all');
   const [customerTotal, setCustomerTotal] = useState(0);
   const [customerPage, setCustomerPage] = useState(0);
   const [customerLoading, setCustomerLoading] = useState(false);
+  const [customerActionLoadingId, setCustomerActionLoadingId] = useState<number | null>(null);
+  const [customerDetailId, setCustomerDetailId] = useState<number | null>(null);
+  const [customerDetail, setCustomerDetail] = useState<AdminCustomerDetail | null>(null);
+  const [customerDetailLoading, setCustomerDetailLoading] = useState(false);
+  const [customerDetailError, setCustomerDetailError] = useState('');
   const [adminHealth, setAdminHealth] = useState<AdminHealth | null>(null);
   const [maintenanceMode, setMaintenanceMode] = useState<AdminMaintenance | null>(null);
   const [maintenanceEnabledDraft, setMaintenanceEnabledDraft] = useState(false);
@@ -339,7 +379,12 @@ export const AdminDashboard: React.FC = () => {
   const fetchAdminCustomers = async () => {
     try {
       setCustomerLoading(true);
-      const params = new URLSearchParams({ limit: '100', offset: String(customerPage * 100), search: customerSearch });
+      const params = new URLSearchParams({
+        limit: '100',
+        offset: String(customerPage * 100),
+        search: customerSearch,
+        status: customerStatusFilter,
+      });
       const response = await fetch(`/api/admin/customers?${params}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de charger les clients.');
@@ -349,6 +394,65 @@ export const AdminDashboard: React.FC = () => {
       showNotice(error instanceof Error ? error.message : 'Impossible de charger les clients.');
     } finally {
       setCustomerLoading(false);
+    }
+  };
+
+  const toggleCustomerDetails = async (customerId: number) => {
+    if (customerDetailId === customerId) {
+      setCustomerDetailId(null);
+      setCustomerDetail(null);
+      setCustomerDetailError('');
+      return;
+    }
+    setCustomerDetailId(customerId);
+    setCustomerDetail(null);
+    setCustomerDetailError('');
+    setCustomerDetailLoading(true);
+    try {
+      const response = await fetch(`/api/admin/customers/${customerId}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de charger le détail du client.');
+      setCustomerDetail(data as AdminCustomerDetail);
+    } catch (error) {
+      setCustomerDetailError(error instanceof Error ? error.message : 'Impossible de charger le détail du client.');
+    } finally {
+      setCustomerDetailLoading(false);
+    }
+  };
+
+  const handleToggleCustomerActive = async (customer: AdminCustomer) => {
+    const nextAction = customer.is_active ? 'suspendre' : 'réactiver';
+    const reason = window.prompt(`Motif obligatoire pour ${nextAction} le compte client ${customer.email || `#${customer.id}`} :`);
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      showNotice('Saisissez un motif d’au moins 3 caractères.');
+      return;
+    }
+    if (!window.confirm(`Confirmer la demande de ${nextAction} ce compte client ? Le motif sera conservé dans le journal admin.`)) return;
+
+    setCustomerActionLoadingId(customer.id);
+    try {
+      const response = await fetch(`/api/admin/customers/${customer.id}/toggle-active`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expected_is_active: customer.is_active, reason }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Impossible de modifier le statut du compte client.');
+      const isActive = Boolean(data.is_active);
+      setAdminCustomers((current) => current.map((item) => item.id === customer.id
+        ? { ...item, is_active: isActive }
+        : item));
+      setCustomerDetail((current) => current?.customer.id === customer.id
+        ? { ...current, customer: { ...current.customer, is_active: isActive } }
+        : current);
+      showNotice(data.is_active
+        ? 'Compte client réactivé. Les anciennes sessions restent révoquées.'
+        : 'Compte client suspendu et sessions révoquées.');
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Impossible de modifier le statut du compte client.');
+    } finally {
+      setCustomerActionLoadingId(null);
     }
   };
 
@@ -540,7 +644,7 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     if (isAuthenticated && adminView === 'customers') void fetchAdminCustomers();
-  }, [isAuthenticated, adminView, customerSearch, customerPage]);
+  }, [isAuthenticated, adminView, customerSearch, customerStatusFilter, customerPage]);
 
   useEffect(() => {
     if (!isAuthenticated || adminView !== 'orders') return;
@@ -589,15 +693,21 @@ export const AdminDashboard: React.FC = () => {
       showNotice(`Il ne reste que ${shop.trial_extension_days_remaining} jour(s) de prolongation autorisés pour ${shop.name}.`);
       return;
     }
+    const reason = window.prompt(`Motif obligatoire (au moins 10 caractères) pour prolonger l’essai de ${shop.name} :`);
+    if (reason === null) return;
+    if (reason.trim().length < 10) {
+      showNotice('Saisissez un motif explicite d’au moins 10 caractères.');
+      return;
+    }
     const nextTrialEnd = new Date(Math.max(currentTrialEnd, Date.now()) + trialExtensionDays * 86400000);
     const formattedNextEnd = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(nextTrialEnd);
-    if (!window.confirm(`Prolonger l’essai de ${shop.name} de ${trialExtensionDays} jours (${shop.trial_extension_days_used + trialExtensionDays}/30 au total) ? Nouvelle échéance : ${formattedNextEnd}.`)) return;
+    if (!window.confirm(`Prolonger l’essai de ${shop.name} de ${trialExtensionDays} jours (${shop.trial_extension_days_used + trialExtensionDays}/30 au total) ? Nouvelle échéance : ${formattedNextEnd}. Le motif sera conservé dans le journal admin.`)) return;
     setSubscriptionActionShopId(shop.id);
     try {
       const response = await fetch(`/api/admin/subscriptions/${shop.id}/extend-trial`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days: trialExtensionDays, expected_trial_end: shop.trial_end }),
+        body: JSON.stringify({ days: trialExtensionDays, expected_trial_end: shop.trial_end, reason }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de prolonger l’essai.');
@@ -652,6 +762,103 @@ export const AdminDashboard: React.FC = () => {
       await fetchSubscriptions();
     } catch (error) {
       showNotice(error instanceof Error ? error.message : 'Impossible de corriger l’échéance.');
+    } finally {
+      setSubscriptionActionShopId(null);
+    }
+  };
+
+  const handleScheduleSubscriptionPlan = async (shop: AdminSubscriptionShop) => {
+    const draft = planChangeDrafts[shop.id];
+    const nextTier = shop.pending_subscription_tier && draft?.tier === shop.plan
+      ? null
+      : draft?.tier;
+    if (nextTier !== null && nextTier === undefined) {
+      showNotice('Choisissez la formule à appliquer au prochain renouvellement.');
+      return;
+    }
+    const reason = draft?.reason.trim() || '';
+    if (reason.length < 10) {
+      showNotice('Saisissez un motif explicite d’au moins 10 caractères.');
+      return;
+    }
+    const action = nextTier === null ? 'annuler le changement programmé' : `programmer la formule ${nextTier}`;
+    if (!window.confirm(`Confirmer l’action « ${action} » pour ${shop.name} ? La formule actuelle reste active jusqu’à l’échéance du ${shop.subscription_expires_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(shop.subscription_expires_at)) : 'contrat'}. Un motif sera conservé dans le journal.`)) return;
+
+    setSubscriptionActionShopId(shop.id);
+    try {
+      const response = await fetch(`/api/admin/subscriptions/${shop.id}/schedule-plan`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          next_tier: nextTier,
+          expected_tier: shop.plan,
+          expected_pending_tier: shop.pending_subscription_tier,
+          expected_subscription_expires_at: shop.subscription_expires_at,
+          reason,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de programmer le changement de formule.');
+      setPlanChangeDrafts((previous) => {
+        const next = { ...previous };
+        delete next[shop.id];
+        return next;
+      });
+      showNotice(nextTier === null
+        ? `Changement de formule annulé pour ${shop.name}.`
+        : `Formule ${nextTier} programmée à l’échéance pour ${shop.name}.`);
+      await fetchSubscriptions();
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Impossible de programmer le changement de formule.');
+    } finally {
+      setSubscriptionActionShopId(null);
+    }
+  };
+
+  const handleSubscriptionLifecycleAction = async (
+    shop: AdminSubscriptionShop,
+    action: 'cancel_at_period_end' | 'undo_cancellation' | 'suspend' | 'reactivate',
+  ) => {
+    const descriptions = {
+      cancel_at_period_end: 'programmer la résiliation à l’échéance',
+      undo_cancellation: 'annuler la résiliation programmée',
+      suspend: 'suspendre immédiatement les droits de l’abonnement',
+      reactivate: 'réactiver les droits de l’abonnement',
+    };
+    const reason = window.prompt(`Motif obligatoire pour ${descriptions[action]} de ${shop.name} :`);
+    if (reason === null) return;
+    if (reason.trim().length < 10) {
+      showNotice('Saisissez un motif explicite d’au moins 10 caractères.');
+      return;
+    }
+    const confirmation = action === 'cancel_at_period_end'
+      ? `Les droits payés resteront actifs jusqu’au ${shop.subscription_expires_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(shop.subscription_expires_at)) : 'terme de l’abonnement'}.`
+      : action === 'suspend'
+        ? 'Les droits et la publication liés à l’abonnement seront suspendus immédiatement. Cela ne désactivera pas la boutique ni ne modifiera les paiements.'
+        : action === 'reactivate'
+          ? 'Les droits seront rétablis uniquement si la période payée ou d’essai est toujours valide.'
+          : 'Le renouvellement pourra de nouveau être payé.';
+    if (!window.confirm(`Confirmer : ${descriptions[action]} pour ${shop.name} ? ${confirmation} Le motif sera audité.`)) return;
+
+    setSubscriptionActionShopId(shop.id);
+    try {
+      const response = await fetch(`/api/admin/subscriptions/${shop.id}/lifecycle`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          expected_status: shop.status,
+          expected_subscription_expires_at: shop.subscription_expires_at,
+          expected_cancellation_at: shop.subscription_cancel_at,
+          reason,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de modifier le cycle de vie de l’abonnement.');
+      showNotice(data.message || 'Abonnement mis à jour.');
+      await fetchSubscriptions();
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Impossible de modifier le cycle de vie de l’abonnement.');
     } finally {
       setSubscriptionActionShopId(null);
     }
@@ -858,11 +1065,6 @@ export const AdminDashboard: React.FC = () => {
     newTab.document.close();
     newTab.location.href = `/app?admin_shop_id=${shopId}`;
     showNotice('Espace boutique ouvert en mode super-admin.');
-  };
-
-  const showNotice = (msg: string) => {
-    setActionNotice(msg);
-    setTimeout(() => setActionNotice(null), 3500);
   };
 
   const filteredShops = shops.filter(s =>
@@ -1186,30 +1388,43 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         {adminRole === 'super_admin' && adminView === 'overview' && (
-          <section aria-label="Raccourcis super-admin" className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+          <section aria-label="Guide de travail super-admin" className="rounded-xl border border-slate-200 bg-white p-4">
             <div>
-              <h2 className="text-sm font-black text-slate-900">Accès rapides plateforme</h2>
-              <p className="mt-1 text-xs text-slate-600">Finance, abonnements et état des opérations.</p>
+              <h2 className="text-sm font-black text-slate-900">Repères Super-admin</h2>
+              <p className="mt-1 text-xs text-slate-600">Choisissez un espace selon l’opération à effectuer. Les actions sensibles sont journalisées et doivent être justifiées.</p>
+              <Link to={`/guide?role=${adminRole === 'super_admin' ? 'super-admin' : 'verification'}`} state={{ guideAccountId: adminRole }} className="mt-2 inline-flex min-h-9 items-center gap-2 text-xs font-bold text-emerald-800 hover:text-emerald-950"><BookOpen className="h-4 w-4" />Guide {adminRole === 'super_admin' ? 'Super-admin' : 'vérification'}</Link>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {[['finance', 'Finances'], ['subscriptions', 'Abonnements'], ['operations', 'Opérations']].map(([view, label]) => (
-                <button key={view} type="button" onClick={() => setAdminView(view as AdminView)} className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 hover:bg-slate-50">
-                  {label}<ChevronRight className="h-3.5 w-3.5" />
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {([
+                { view: 'shops', label: 'Boutiques et comptes', detail: 'Accès, visibilité et répertoire clients' },
+                { view: 'finance', label: 'Finances et abonnements', detail: 'Paiements, échéances et formules' },
+                { view: 'audit', label: 'Audit et opérations', detail: 'Historique des actions et état du service' },
+              ] as const).map(({ view, label, detail }) => (
+                <button key={view} type="button" onClick={() => setAdminView(view)} className="flex min-h-16 items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left hover:bg-emerald-50">
+                  <span><strong className="block text-xs font-bold text-slate-900">{label}</strong><span className="mt-1 block text-[11px] leading-4 text-slate-600">{detail}</span></span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-emerald-800" />
                 </button>
               ))}
+            </div>
+            <div className="mt-4">
+              <React.Suspense fallback={<p role="status" className="text-sm text-slate-500">Chargement du guide…</p>}>
+                <GuideChecklist role={adminRole === 'super_admin' ? 'super-admin' : 'verification'} accountId={adminRole} collapsible />
+              </React.Suspense>
             </div>
           </section>
         )}
 
-        {adminRole === 'verification_admin' && adminView === 'identity' && (
-          <section aria-label="Périmètre admin de vérification" className="flex flex-col gap-3 rounded-xl border border-sky-200 bg-sky-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-sm font-black text-sky-950">Espace vérification · lecture seule</h2>
-              <p className="mt-1 text-xs leading-5 text-sky-900">Consultez les statuts Didit et les signalements. Les décisions d’identité sont transmises par le fournisseur; les outils plateforme restent réservés au super-admin.</p>
-            </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
-              <button type="button" onClick={() => setAdminView('verification-shops')} className="min-h-9 rounded-lg border border-sky-300 bg-white px-3 text-xs font-bold text-sky-950 hover:bg-sky-100">Boutiques</button>
-              <button type="button" onClick={() => setAdminView('moderation')} className="min-h-9 rounded-lg bg-sky-900 px-3 text-xs font-bold text-white hover:bg-sky-800">Avis & signalements</button>
+        {adminRole === 'verification_admin' && ['identity', 'verification-shops', 'moderation'].includes(adminView) && (
+          <section aria-label="Guide de traitement · vérification" className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <React.Suspense fallback={<p role="status" className="text-sm text-sky-900">Chargement du guide…</p>}>
+                <GuideChecklist role="verification" accountId={adminRole} collapsible />
+              </React.Suspense>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <button type="button" onClick={() => setAdminView('identity')} className="min-h-9 rounded-lg border border-sky-300 bg-white px-3 text-xs font-bold text-sky-950 hover:bg-sky-100">File Identité</button>
+                <button type="button" onClick={() => setAdminView('verification-shops')} className="min-h-9 rounded-lg border border-sky-300 bg-white px-3 text-xs font-bold text-sky-950 hover:bg-sky-100">Boutiques</button>
+                <button type="button" onClick={() => setAdminView('moderation')} className="min-h-9 rounded-lg bg-sky-900 px-3 text-xs font-bold text-white hover:bg-sky-800">Avis & signalements</button>
+              </div>
             </div>
           </section>
         )}
@@ -1436,14 +1651,48 @@ export const AdminDashboard: React.FC = () => {
           <section aria-labelledby="admin-customers-title" className="chart-panel p-4 md:p-5">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div><h2 id="admin-customers-title" className="text-sm font-black text-slate-900">Répertoire clients</h2><p className="mt-1 text-xs text-slate-500">{customerTotal} compte(s) · les commandes invités peuvent ne pas être liées à un compte.</p></div>
-              <label className="relative block w-full sm:max-w-md"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input type="search" value={customerSearch} onChange={(event) => { setCustomerSearch(event.target.value); setCustomerPage(0); }} placeholder="Rechercher nom, téléphone ou e-mail" className="min-h-10 w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-sky-700" /></label>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <label className="relative block w-full sm:min-w-[280px]"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input type="search" value={customerSearch} onChange={(event) => { setCustomerSearch(event.target.value); setCustomerPage(0); }} placeholder="Rechercher nom, téléphone ou e-mail" className="min-h-10 w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-sky-700" /></label>
+                <label className="sr-only" htmlFor="admin-customer-status">Filtrer les comptes clients</label>
+                <select id="admin-customer-status" value={customerStatusFilter} onChange={(event) => { setCustomerStatusFilter(event.target.value as typeof customerStatusFilter); setCustomerPage(0); }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700">
+                  <option value="all">Tous les comptes</option>
+                  <option value="active">Comptes actifs</option>
+                  <option value="suspended">Comptes suspendus</option>
+                </select>
+              </div>
             </div>
             {customerLoading ? <p className="py-6 text-center text-sm text-slate-500">Chargement des clients…</p> : (
               <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
                 {adminCustomers.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucun compte client correspondant.</p> : adminCustomers.map((customer) => (
                   <article key={customer.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0"><h3 className="truncate text-sm font-bold text-slate-900">{[customer.first_name, customer.last_name].filter(Boolean).join(' ') || customer.name || `Client #${customer.id}`}</h3><p className="mt-1 truncate text-xs text-slate-600">{customer.phone}{customer.email ? ` · ${customer.email}` : ''}</p><p className="mt-1 text-xs text-slate-500">Inscrit le {new Date(customer.created_at).toLocaleDateString('fr-FR')} · {customer.is_active ? 'Compte actif' : 'Compte désactivé'}</p></div>
-                    <div className="shrink-0 text-left sm:text-right"><strong className="block text-sm text-slate-900">{customer.orders_count} commande(s) liée(s)</strong>{adminRole === 'super_admin' && <span className="text-xs text-slate-500">Montant des commandes non annulées (non encaissé) : {new Intl.NumberFormat('fr-FR').format(customer.order_value)} FCFA</span>}</div>
+                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 sm:justify-end"><div className="text-left sm:text-right"><strong className="block text-sm text-slate-900">{customer.orders_count} commande(s) liée(s)</strong>{adminRole === 'super_admin' && <span className="text-xs text-slate-500">Montant des commandes non annulées (non encaissé) : {new Intl.NumberFormat('fr-FR').format(customer.order_value)} FCFA</span>}</div>{adminRole === 'super_admin' && <><button type="button" disabled={customerDetailLoading} onClick={() => void toggleCustomerDetails(customer.id)} aria-expanded={customerDetailId === customer.id} className="min-h-9 rounded-lg border border-slate-300 px-3 py-1 text-xs font-bold text-slate-700 disabled:opacity-50">{customerDetailId === customer.id ? 'Masquer le détail' : 'Détail'}</button><button type="button" disabled={customerActionLoadingId === customer.id} onClick={() => void handleToggleCustomerActive(customer)} className={`min-h-9 rounded-lg border px-3 py-1 text-xs font-bold disabled:opacity-50 ${customer.is_active ? 'border-rose-200 text-rose-700 hover:bg-rose-50' : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'}`}>{customerActionLoadingId === customer.id ? 'Mise à jour…' : customer.is_active ? 'Suspendre' : 'Réactiver'}</button></>}</div>
+                    {customerDetailId === customer.id && (
+                      <div className="w-full basis-full rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <h4 className="text-xs font-black text-slate-800">Détail du compte · {customer.email || `Client #${customer.id}`}</h4>
+                        {customerDetailLoading ? <p className="py-3 text-xs text-slate-500">Chargement du détail…</p>
+                          : customerDetailError ? <p role="alert" className="py-3 text-xs font-semibold text-rose-700">{customerDetailError}</p>
+                            : customerDetail?.customer.id === customer.id ? (
+                              <>
+                                <p className="mt-1 text-xs text-slate-600">Inscription le {new Date(customerDetail.customer.created_at).toLocaleDateString('fr-FR')} · {customerDetail.customer.is_active ? 'Compte actif' : 'Compte désactivé'} · {customerDetail.total_orders} commande(s) liée(s)</p>
+                                <div className="mt-3">
+                                  <h5 className="text-xs font-bold text-slate-700">Historique récent des commandes</h5>
+                                  {customerDetail.orders.length === 0 ? <p className="py-3 text-xs text-slate-500">Aucune commande liée à ce compte.</p> : (
+                                    <ul className="mt-2 divide-y divide-slate-200 border-y border-slate-200">
+                                      {customerDetail.orders.map((order) => (
+                                        <li key={order.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
+                                          <span className="font-semibold text-slate-700">#{order.id} · {order.shop_name} · {new Date(order.created_at).toLocaleDateString('fr-FR')}</span>
+                                          <span className="text-slate-600">{order.items_count} article(s) · {order.status} · {new Intl.NumberFormat('fr-FR').format(order.total_amount)} FCFA (montant demandé, non encaissé)</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                  {customerDetail.total_orders > customerDetail.orders_limit && <p className="mt-2 text-xs text-slate-500">Affichage des {customerDetail.orders_limit} commandes les plus récentes.</p>}
+                                </div>
+                              </>
+                            ) : null}
+                      </div>
+                    )}
                   </article>
                 ))}
               </div>
@@ -1695,6 +1944,8 @@ export const AdminDashboard: React.FC = () => {
               <button type="button" onClick={() => void fetchSubscriptions()} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">Actualiser</button>
             </header>
 
+            <AdminSubscriptionPlanPricing />
+            <AdminSubscriptionPlanFeatures />
             {!subscriptions ? <p role="status" className="border-y border-slate-200 py-6 text-sm text-slate-500">Chargement des abonnements…</p> : <>
               <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
                 <div className="border-l-2 border-emerald-600 pl-3"><p className="text-xs text-slate-500">MRR estimé</p><strong className="text-lg font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(subscriptions.summary.mrr)} F / mois</strong><p className="mt-1 text-[11px] text-slate-500">{subscriptions.summary.mrr_estimated_subscriptions} au tarif catalogue faute de paiement enregistré</p></div>
@@ -1800,6 +2051,9 @@ export const AdminDashboard: React.FC = () => {
                         <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-bold text-slate-900">{shop.name}</h4><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-slate-700">{shop.plan}</span><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${statusTone}`}>{subscriptionStatusLabels[shop.status] || shop.status}</span>{!shop.is_active && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-900">Boutique désactivée</span>}</div>
                         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{shop.whatsapp_number}</span><span>{shop.products_count} article(s)</span><span>{shop.orders_count} commande(s)</span><span>{shop.publication_status === 'active' ? 'Publication active' : shop.publication_status === 'suspended' ? 'Publication suspendue' : 'Brouillon non publié'}</span><span>{shop.whatsapp_reminders_opt_in ? 'Consentement aux rappels WhatsApp donné' : 'Pas de consentement WhatsApp'}</span><span>Inscrite le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.created_at))}</span></div>
                         <p className="mt-1 text-xs text-slate-500">{shop.status === 'trialing' ? 'Fin d’essai' : shop.status === 'active' ? 'Prochain renouvellement' : 'Échéance de l’abonnement'} : {shop.next_renewal_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.next_renewal_at)) : 'Non définie'}{shop.trial_start ? ` · Prolongation cumulée : ${shop.trial_extension_days_used}/30 jours${shop.trial_extension_over_limit ? ' — dépassement historique à vérifier' : `, ${shop.trial_extension_days_remaining} jour(s) autorisé(s) restant(s)`}` : ''} · Dernière commande : {shop.last_order_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.last_order_at)) : 'aucune'}</p>
+                        {shop.pending_subscription_tier && shop.pending_subscription_effective_at && <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">Formule {shop.pending_subscription_tier} programmée au {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.pending_subscription_effective_at))}. La formule actuelle reste active jusque-là.</p>}
+                        {shop.subscription_cancel_at && <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-950">Résiliation programmée au {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.subscription_cancel_at))}. Les droits payés restent actifs jusque-là.</p>}
+                        {shop.subscription_admin_suspended_at && <p className="mt-2 rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-950">Accès à l’abonnement suspendu par l’administration le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.subscription_admin_suspended_at))}. La boutique n’est pas désactivée par cette action.</p>}
                         {shop.status === 'active' && <div className="mt-3 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[minmax(150px,190px)_minmax(180px,1fr)_auto]">
                           <label className="text-[10px] font-bold text-slate-600">Nouvelle date de fin d’accès
                             <input
@@ -1836,8 +2090,64 @@ export const AdminDashboard: React.FC = () => {
                             Enregistrer la date
                           </button>
                         </div>}
+                        {shop.status === 'active' && shop.subscription_expires_at && !shop.subscription_cancel_at && !shop.subscription_admin_suspended_at && <div className="mt-3 grid gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 sm:grid-cols-[minmax(150px,190px)_minmax(180px,1fr)_auto]">
+                          <label className="text-[10px] font-bold text-slate-700">Formule au prochain renouvellement
+                            <select
+                              aria-label={`Formule au prochain renouvellement de ${shop.name}`}
+                              value={planChangeDrafts[shop.id]?.tier ?? shop.pending_subscription_tier ?? shop.plan as SubscriptionTier}
+                              onChange={(event) => setPlanChangeDrafts((previous) => ({
+                                ...previous,
+                                [shop.id]: {
+                                  tier: event.target.value as SubscriptionTier,
+                                  reason: previous[shop.id]?.reason ?? '',
+                                },
+                              }))}
+                              className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-800"
+                            >
+                              <option value="standard">Standard</option>
+                              <option value="premium">Premium</option>
+                              <option value="pro">Pro</option>
+                            </select>
+                          </label>
+                          <label className="text-[10px] font-bold text-slate-700">Motif obligatoire (min. 10 caractères)
+                            <input
+                              type="text"
+                              maxLength={500}
+                              aria-label={`Motif du changement de formule pour ${shop.name}`}
+                              placeholder="Ex. demande du commerçant..."
+                              value={planChangeDrafts[shop.id]?.reason ?? ''}
+                              onChange={(event) => setPlanChangeDrafts((previous) => ({
+                                ...previous,
+                                [shop.id]: {
+                                  tier: previous[shop.id]?.tier ?? shop.pending_subscription_tier ?? shop.plan as SubscriptionTier,
+                                  reason: event.target.value,
+                                },
+                              }))}
+                              className="mt-1 min-h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-800"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            disabled={subscriptionActionShopId === shop.id
+                              || (planChangeDrafts[shop.id]?.reason.trim().length ?? 0) < 10
+                              || (!shop.pending_subscription_tier && (planChangeDrafts[shop.id]?.tier ?? shop.plan) === shop.plan)}
+                            onClick={() => void handleScheduleSubscriptionPlan(shop)}
+                            className="self-end min-h-9 rounded-md bg-amber-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                          >
+                            {shop.pending_subscription_tier
+                              && planChangeDrafts[shop.id]?.tier === shop.plan
+                              ? 'Annuler le changement'
+                              : 'Programmer'}
+                          </button>
+                        </div>}
                       </div>
                       <div className="flex shrink-0 flex-wrap gap-2">
+                        {shop.subscription_admin_suspended_at
+                          ? <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleSubscriptionLifecycleAction(shop, 'reactivate')} className="min-h-9 rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50">Réactiver les droits</button>
+                          : (shop.status === 'active' || shop.status === 'trialing') && <button type="button" disabled={subscriptionActionShopId === shop.id || Boolean(shop.subscription_cancel_at)} onClick={() => void handleSubscriptionLifecycleAction(shop, 'suspend')} className="min-h-9 rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-bold text-rose-900 hover:bg-rose-50 disabled:opacity-50">Suspendre les droits</button>}
+                        {shop.subscription_cancel_at
+                          ? <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleSubscriptionLifecycleAction(shop, 'undo_cancellation')} className="min-h-9 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-bold text-amber-950 hover:bg-amber-50 disabled:opacity-50">Annuler la résiliation</button>
+                          : shop.status === 'active' && shop.subscription_expires_at && !shop.subscription_admin_suspended_at && !shop.pending_subscription_tier && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleSubscriptionLifecycleAction(shop, 'cancel_at_period_end')} className="min-h-9 rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-bold text-rose-900 hover:bg-rose-50 disabled:opacity-50">Résilier à l’échéance</button>}
                         {shop.status === 'trialing' && shop.trial_days_remaining !== null && shop.trial_days_remaining <= 7 && shop.whatsapp_reminders_opt_in && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handlePrepareTrialReminder(shop)} className="min-h-9 rounded-lg border border-emerald-700 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50">Ouvrir WhatsApp</button>}
                         {canExtendTrial && <button type="button" disabled={subscriptionActionShopId === shop.id || shop.trial_extension_over_limit || shop.trial_extension_days_remaining === 0 || trialExtensionDays > shop.trial_extension_days_remaining} onClick={() => void handleExtendTrial(shop)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{shop.trial_extension_over_limit ? 'Dépassement à vérifier' : shop.trial_extension_days_remaining === 0 ? 'Plafond atteint' : trialExtensionDays > shop.trial_extension_days_remaining ? `Maximum ${shop.trial_extension_days_remaining} j` : `Prolonger de ${trialExtensionDays} j`}</button>}
                         <button type="button" onClick={() => void handleToggleActive(shop.id)} className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-bold ${shop.is_active ? 'border-rose-200 text-rose-800 hover:bg-rose-50' : 'border-emerald-200 text-emerald-800 hover:bg-emerald-50'}`}>{shop.is_active ? 'Désactiver boutique' : 'Réactiver boutique'}</button>

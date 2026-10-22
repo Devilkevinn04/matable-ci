@@ -2,18 +2,25 @@ import { useState } from 'react';
 import { ArrowRight, Check, Clock3, MessageCircle, Store } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
-  getSubscriptionPrice,
+  DEFAULT_SUBSCRIPTION_PRO_FEATURES,
+  getSubscriptionPlanBenefits,
   SUBSCRIPTION_PLANS,
   TRIAL_CATALOG_LIMIT,
   TRIAL_DURATION_DAYS,
   type SubscriptionTerm,
 } from '../utils/subscriptionFeatures';
+import { useSubscriptionPrices } from '../utils/useSubscriptionPrices';
 
 const formatPrice = (price: number) => new Intl.NumberFormat('fr-FR').format(price);
 
 export function MerchantPlansPage() {
   const [term, setTerm] = useState<SubscriptionTerm>('monthly');
+  const { prices, proFeatures, error } = useSubscriptionPrices();
   const plans = Object.values(SUBSCRIPTION_PLANS);
+  const formatTermPrice = (tier: keyof typeof SUBSCRIPTION_PLANS) => {
+    if (!prices) return '—';
+    return formatPrice(prices[tier] * (term === 'annual' ? 10 : 1));
+  };
 
   return (
     <main className="min-h-screen bg-[#f4f6f1] px-4 py-8 text-slate-900 sm:px-6 sm:py-12">
@@ -72,12 +79,12 @@ export function MerchantPlansPage() {
                 <h3 className="mt-3 text-xl font-black text-[#202d28]">{plan.headline}</h3>
                 <p className="mt-2 min-h-10 text-sm leading-5 text-slate-600">{plan.description}</p>
                 <p className="mt-5 border-b border-[#e8ebe5] pb-4">
-                  <strong className="text-3xl font-black tracking-tight text-[#183b31]">{formatPrice(getSubscriptionPrice(plan.tier, term))}</strong>
+                  <strong className="text-3xl font-black tracking-tight text-[#183b31]">{formatTermPrice(plan.tier)}</strong>
                   <span className="ml-1 text-sm font-bold text-slate-600">FCFA/{term === 'annual' ? 'an' : 'mois'}</span>
-                  {term === 'annual' && <span className="mt-1 block text-xs text-slate-500">{formatPrice(plan.price)} FCFA/mois · 2 mois offerts</span>}
+                  {term === 'annual' && <span className="mt-1 block text-xs text-slate-500">{prices ? formatPrice(prices[plan.tier]) : '—'} FCFA/mois · 2 mois offerts</span>}
                 </p>
                 <ul className="mt-5 flex-1 space-y-3 text-xs leading-5 text-slate-700">
-                  {plan.benefits.map((benefit) => (
+                  {getSubscriptionPlanBenefits(plan.tier, proFeatures || DEFAULT_SUBSCRIPTION_PRO_FEATURES).map((benefit) => (
                     <li key={benefit} className="flex items-start gap-2.5">
                       <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#176b55]" aria-hidden="true" />
                       <span>{benefit}</span>
@@ -90,6 +97,7 @@ export function MerchantPlansPage() {
               </article>
             ))}
           </div>
+          {error && <p role="alert" className="mt-4 text-sm font-semibold text-rose-800">Tarifs indisponibles : {error}</p>}
           <p className="mt-4 text-xs leading-5 text-slate-500">
             L’essai gratuit donne accès aux fonctions Standard avec une limite de {TRIAL_CATALOG_LIMIT} produits. Aucun abonnement payant ni paiement n’est activé sans votre choix dans l’espace commerçant.
           </p>

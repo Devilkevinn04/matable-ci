@@ -1,4 +1,5 @@
 import type { ShopCategory } from '../src/utils/categoryDefaults.ts';
+import type { SubscriptionProFeatures } from '../src/utils/subscriptionFeatures.ts';
 
 export interface ShopOpeningHours {
   enabled: boolean;
@@ -22,6 +23,10 @@ export interface SubscriptionPlanConfig {
 
 export interface SubscriptionState {
   plan: SubscriptionTier;
+  planFeatures: SubscriptionProFeatures;
+  upcomingPlan: SubscriptionTier | null;
+  upcomingPlanAt: string | null;
+  cancellationAt: string | null;
   status: SubscriptionStatus;
   trialStart: string | null;
   trialEnd: string | null;
@@ -44,6 +49,14 @@ export interface ShopRecord {
   featured_until?: string | null;
   merchant_verification_status?: MerchantVerificationStatus;
   selected_subscription_tier?: SubscriptionTier;
+  pending_subscription_tier?: SubscriptionTier | null;
+  pending_subscription_effective_at?: string | null;
+  subscription_cancel_at?: string | null;
+  subscription_admin_suspended_at?: string | null;
+  subscription_admin_suspended_status?: 'active' | 'trialing' | null;
+  subscription_plan_features?: SubscriptionProFeatures;
+  subscription_features_snapshot?: SubscriptionProFeatures | null;
+  subscription_features_effective_at?: string | null;
   subscription_status?: SubscriptionStatus | string;
   trial_start?: string | null;
   trial_end?: string | null;

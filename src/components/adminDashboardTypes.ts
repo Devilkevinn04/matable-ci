@@ -73,6 +73,10 @@ export interface AdminSubscriptionShop {
   owner_email: string | null;
   whatsapp_reminders_opt_in: boolean;
   plan: string;
+  pending_subscription_tier: 'standard' | 'premium' | 'pro' | null;
+  pending_subscription_effective_at: string | null;
+  subscription_cancel_at: string | null;
+  subscription_admin_suspended_at: string | null;
   status: string;
   is_active: boolean;
   publication_status: string | null;
@@ -152,6 +156,20 @@ export interface AdminCustomer {
   orders_count: number;
   order_value: number;
   last_order_at: string | null;
+}
+
+export interface AdminCustomerDetail {
+  customer: Pick<AdminCustomer, 'id' | 'first_name' | 'last_name' | 'name' | 'email' | 'phone' | 'created_at' | 'is_active'>;
+  orders: Array<{
+    id: number;
+    shop_name: string;
+    total_amount: number;
+    status: string;
+    created_at: string;
+    items_count: number;
+  }>;
+  total_orders: number;
+  orders_limit: number;
 }
 
 export interface AdminHealth {

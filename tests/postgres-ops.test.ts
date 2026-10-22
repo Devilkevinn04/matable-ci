@@ -69,6 +69,20 @@ test('PostgreSQL URL and inspection validation rejects unsafe inputs', () => {
   assert.throws(() => parseDatabaseInspection('not-valid'), /Could not validate/);
 });
 
+test('every versioned SQL migration is registered with the PostgreSQL migration runner', async () => {
+  const migrationDirectory = path.resolve('migrations');
+  const migrationFiles = (await fs.readdir(migrationDirectory))
+    .filter((file) => file.endsWith('.sql'))
+    .map((file) => file.slice(0, -'.sql'.length))
+    .sort();
+  const migrationRunner = await fs.readFile(path.resolve('scripts/migrate-neon.ts'), 'utf8');
+  const registeredMigrations = [...migrationRunner.matchAll(/^\s*'(\d{3}_[^']+)',?$/gm)]
+    .map((match) => match[1])
+    .sort();
+
+  assert.deepEqual(registeredMigrations, migrationFiles);
+});
+
 test('backup output is validated, checksummed, and never overwrites existing files', async (t) => {
   const directory = path.resolve('tests', `.postgres-ops-${randomUUID()}`);
   await fs.mkdir(directory, { recursive: true });

@@ -9,7 +9,7 @@ import {
   getBoostPrice,
   type BoostPlacement,
 } from '../../utils/boostPricing';
-import { isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
+import { DEFAULT_SUBSCRIPTION_PRO_FEATURES } from '../../utils/subscriptionFeatures';
 
 interface MerchantBoostPurchaseProps {
   shop: Shop;
@@ -40,9 +40,10 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
     && shop.city?.trim()
     && shop.merchant_verification_status === 'verified'
     && productCount >= BOOST_MINIMUM_PRODUCT_COUNT;
-  const isPro = shop.subscription?.isActive === true
-    && isSubscriptionFeatureIncluded(shop.subscription.plan, 'boost_discount');
-  const amount = getBoostPrice(duration, isPro) ?? BOOST_PRICES[duration];
+  const discountPercent = shop.subscription?.isActive === true && shop.subscription.plan === 'pro'
+    ? shop.subscription.planFeatures?.boostDiscountPercent ?? DEFAULT_SUBSCRIPTION_PRO_FEATURES.boostDiscountPercent
+    : 0;
+  const amount = getBoostPrice(duration, discountPercent) ?? BOOST_PRICES[duration];
 
   useEffect(() => {
     let cancelled = false;
@@ -95,7 +96,7 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
           <h4 id="boost-purchase-title" className="flex items-center gap-2 text-sm font-extrabold text-slate-900"><Sparkles className="h-4 w-4 text-amber-600" />Boost sponsorisé</h4>
           <p className="mt-1 max-w-xl text-xs leading-5 text-slate-600">Choisissez un emplacement et une durée. Les créneaux complets sont réservés au prochain créneau libre.</p>
         </div>
-        {isPro && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-900">−15 % Pro</span>}
+        {discountPercent > 0 && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-900">−{discountPercent} % Pro</span>}
       </div>
       {eligible ? (
         <>
@@ -108,7 +109,7 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
           </div>
           <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Durée du boost">
             {BOOST_DURATIONS_DAYS.map((days) => {
-              const price = getBoostPrice(days, isPro) ?? BOOST_PRICES[days];
+              const price = getBoostPrice(days, discountPercent) ?? BOOST_PRICES[days];
               return (
                 <button key={days} type="button" aria-pressed={duration === days} onClick={() => setDuration(days)} className={`min-h-11 rounded-lg border px-3 py-2 text-xs font-bold ${duration === days ? 'border-emerald-800 bg-emerald-50 text-emerald-950' : 'border-slate-300 bg-white text-slate-700'}`}>
                   {days === 1 ? '24 h' : `${days} jours`} · {new Intl.NumberFormat('fr-FR').format(price)} F

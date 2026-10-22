@@ -433,7 +433,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
   });
   const intent = await intentResponse.json();
   assert.equal(intentResponse.status, 201, JSON.stringify(intent));
-  assert.equal(intent.amount, 40000);
+  assert.equal(intent.amount, 50000);
   assert.equal(intent.currency, 'XOF');
   assert.match(intent.checkout_url, /^https:\/\/checkout\.geniuspay\.ci\/\d+$/);
   assert.equal('is_test' in intent, false);
@@ -454,7 +454,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: { transaction: {
       status: 'completed',
       reference: `GNP-${intent.payment_id}`,
-      amount: 40000,
+      amount: 50000,
       currency: 'XOF',
       metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
     },
@@ -537,7 +537,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'completed',
       reference: `GNP-${intent.payment_id}`,
-      amount: 40000,
+      amount: 50000,
       currency: 'USD',
       metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
     },
@@ -549,7 +549,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'completed',
       reference: 'GNP-UNRELATED-TRANSACTION',
-      amount: 40000,
+      amount: 50000,
       currency: 'XOF',
       metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
     },
@@ -608,7 +608,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'failed',
       reference: `GNP-${failedIntent.payment_id}`,
-      amount: 4000,
+      amount: 5000,
       currency: 'XOF',
       metadata: { subscription_payment_id: failedIntent.payment_id, payment_type: 'subscription' },
     },
@@ -628,7 +628,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'completed',
       reference: `GNP-${failedIntent.payment_id}`,
-      amount: 4000,
+      amount: 5000,
       currency: 'XOF',
       metadata: { subscription_payment_id: failedIntent.payment_id, payment_type: 'subscription' },
     },
@@ -652,7 +652,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'cancelled',
       reference: `GNP-${cancelledIntent.payment_id}`,
-      amount: 4000,
+      amount: 5000,
       currency: 'XOF',
       metadata: { subscription_payment_id: cancelledIntent.payment_id, payment_type: 'subscription' },
     },
@@ -669,13 +669,13 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
   assert.equal(finance.status, 200);
   const financeData = await finance.json();
   assert.equal(financeData.summary.confirmed_count, 1);
-  assert.equal(financeData.summary.collected_amount, 40000);
+  assert.equal(financeData.summary.collected_amount, 50000);
   assert.equal(financeData.summary.pending_count, 0);
   assert.equal(financeData.summary.failed_count, 2);
   assert.ok(financeData.summary.active_subscriptions >= 1);
-  assert.equal(financeData.summary.mrr - financeBeforePayment.summary.mrr, Math.round(40000 / 12));
+  assert.equal(financeData.summary.mrr - financeBeforePayment.summary.mrr, Math.round(50000 / 12));
   const previousPremiumMrr = financeBeforePayment.summary.mrr_by_tier.find((tier: { tier: string }) => tier.tier === 'premium')?.amount || 0;
-  assert.equal(financeData.summary.mrr_by_tier.find((tier: { tier: string }) => tier.tier === 'premium')?.amount - previousPremiumMrr, Math.round(40000 / 12));
+  assert.equal(financeData.summary.mrr_by_tier.find((tier: { tier: string }) => tier.tier === 'premium')?.amount - previousPremiumMrr, Math.round(50000 / 12));
   assert.equal(financeData.summary.mrr_estimated_subscriptions, financeBeforePayment.summary.mrr_estimated_subscriptions);
   assert.equal(financeData.summary.promotions.amount, 0);
   assert.equal(financeData.payments[0].shop_id, createdPayload.shop.id);
@@ -702,7 +702,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
   assert.equal(financeAfterMorePayments.payment_limit, 100);
   assert.equal(financeAfterMorePayments.payment_offset, 0);
   assert.equal(financeAfterMorePayments.summary.confirmed_count, 206);
-  assert.equal(financeAfterMorePayments.summary.collected_amount, 60500);
+  assert.equal(financeAfterMorePayments.summary.collected_amount, 70500);
   assert.equal(financeAfterMorePayments.summary.promotions.count, 205);
   assert.equal(financeAfterMorePayments.summary.promotions.amount, 20500);
   assert.equal(financeAfterMorePayments.summary.failed_count, 2);
@@ -730,7 +730,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'completed',
       reference: `GNP-${activeRenewalIntent.payment_id}`,
-      amount: 4000,
+      amount: 5000,
       currency: 'XOF',
       metadata: { subscription_payment_id: activeRenewalIntent.payment_id, payment_type: 'subscription' },
     },
@@ -761,7 +761,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'completed',
       reference: `GNP-${intent.payment_id}`,
-      amount: 4000,
+      amount: 5000,
       currency: 'XOF',
       metadata: { subscription_payment_id: reusedReferenceIntent.payment_id, payment_type: 'subscription' },
     },
@@ -792,7 +792,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'completed',
       reference: `GNP-${reusedReferenceIntent.payment_id}`,
-      amount: 4000,
+      amount: 5000,
       currency: 'XOF',
       metadata: { subscription_payment_id: reusedReferenceIntent.payment_id, payment_type: 'subscription' },
     },
@@ -859,7 +859,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: {
       status: 'refunded',
       reference: `GNP-${intent.payment_id}`,
-      amount: 40000,
+      amount: 50000,
       currency: 'XOF',
       metadata: { subscription_payment_id: intent.payment_id, payment_type: 'subscription' },
     },
@@ -880,7 +880,7 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
     data: { transaction: {
       status: 'refunded',
       reference: `GNP-${activeRenewalIntent.payment_id}`,
-      amount: 4000,
+      amount: 5000,
       amount_refunded: 1200,
       currency: 'XOF',
       metadata: { subscription_payment_id: activeRenewalIntent.payment_id, payment_type: 'subscription' },
@@ -895,6 +895,175 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
   } finally {
     partialRefundDb.close();
   }
+
+  const configuredPricesResponse = await fetch(`${BASE_URL}/api/admin/subscription-plans`, {
+    headers: { Cookie: adminCookie },
+  });
+  assert.equal(configuredPricesResponse.status, 200);
+  const originalPrices = (await configuredPricesResponse.json()).prices;
+  const updatedPrices = { standard: 3300, premium: 6200, pro: 9500 };
+  try {
+    const updatePrices = await fetch(`${BASE_URL}/api/admin/subscription-plans`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ prices: updatedPrices, expected_prices: originalPrices }),
+    });
+    assert.equal(updatePrices.status, 200, await updatePrices.text());
+
+    const configuredIntentResponse = await fetch(paymentEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+      body: JSON.stringify({ tier: 'premium', term: 'annual' }),
+    });
+    const configuredIntent = await configuredIntentResponse.json();
+    assert.equal(configuredIntentResponse.status, 201, JSON.stringify(configuredIntent));
+    assert.equal(configuredIntent.amount, 62000);
+
+    const originalPaidIntent = new Database(TEST_DB_PATH, { readonly: true });
+    try {
+      const originalAmount = originalPaidIntent.prepare(
+        'SELECT amount FROM subscription_payment_intents WHERE id = ?',
+      ).get(intent.payment_id) as { amount: number };
+      assert.equal(originalAmount.amount, 50000);
+    } finally {
+      originalPaidIntent.close();
+    }
+  } finally {
+    const restorePrices = await fetch(`${BASE_URL}/api/admin/subscription-plans`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ prices: originalPrices, expected_prices: updatedPrices }),
+    });
+    assert.equal(restorePrices.status, 200, await restorePrices.text());
+  }
+});
+
+test('scheduled tier checkout preserves the paid plan until the scheduled date', async () => {
+  const created = await fetch(`${BASE_URL}/api/shops`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Boutique changement programmé GeniusPay',
+      whatsapp_number: `+22507${String(Date.now() + 2).slice(-8)}`,
+      email: `scheduled-plan-${Date.now()}@example.com`,
+      pin_code: '456789',
+      category: 'fashion',
+      city: 'Abidjan',
+      accepted_terms_privacy: true,
+    }),
+  });
+  const createdPayload = await created.json();
+  assert.equal(created.status, 200, JSON.stringify(createdPayload));
+
+  const login = await fetch(`${BASE_URL}/api/auth/merchant-access-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: createdPayload.owner_access_token }),
+  });
+  assert.equal(login.status, 200);
+  const merchantCookie = login.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(merchantCookie);
+
+  const effectiveAt = `${new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)}T23:59:59.999Z`;
+  const activeDb = new Database(TEST_DB_PATH);
+  try {
+    activeDb.prepare(`UPDATE shops
+      SET subscription_status = 'active', selected_subscription_tier = 'premium',
+        subscription_expires_at = ?, pending_subscription_tier = 'pro',
+        pending_subscription_effective_at = ?
+      WHERE id = ?`).run(effectiveAt, effectiveAt, createdPayload.shop.id);
+  } finally {
+    activeDb.close();
+  }
+
+  const paymentEndpoint = `${BASE_URL}/api/shops/${createdPayload.shop.id}/subscription-payments`;
+  const rejectedCheckout = await fetch(paymentEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier: 'premium' }),
+  });
+  assert.equal(rejectedCheckout.status, 409);
+  assert.equal((await rejectedCheckout.json()).code, 'scheduled_subscription_tier_mismatch');
+
+  const checkout = await fetch(paymentEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier: 'pro' }),
+  });
+  const checkoutPayload = await checkout.json();
+  assert.equal(checkout.status, 201, JSON.stringify(checkoutPayload));
+  assert.equal(checkoutPayload.amount, 8000);
+
+  const webhookPayload = JSON.stringify({
+    event: 'payment.success',
+    data: {
+      status: 'completed',
+      reference: `GNP-${checkoutPayload.payment_id}`,
+      amount: 8000,
+      currency: 'XOF',
+      metadata: { subscription_payment_id: checkoutPayload.payment_id, payment_type: 'subscription' },
+    },
+  });
+  const webhook = await fetch(`${BASE_URL}/api/webhooks/geniuspay`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getSignedWebhookHeaders(webhookPayload) },
+    body: webhookPayload,
+  });
+  assert.equal(webhook.status, 200, await webhook.text());
+
+  const persistedDb = new Database(TEST_DB_PATH, { readonly: true });
+  let savedSubscription: {
+    subscription_status: 'active';
+    selected_subscription_tier: 'premium';
+    subscription_expires_at: string;
+    pending_subscription_tier: 'pro';
+    pending_subscription_effective_at: string | null;
+  };
+  try {
+    savedSubscription = persistedDb.prepare(`SELECT subscription_status, selected_subscription_tier,
+      subscription_expires_at, pending_subscription_tier, pending_subscription_effective_at
+      FROM shops WHERE id = ?`).get(createdPayload.shop.id) as typeof savedSubscription;
+  } finally {
+    persistedDb.close();
+  }
+  assert.equal(savedSubscription.selected_subscription_tier, 'premium');
+  assert.equal(savedSubscription.pending_subscription_tier, 'pro');
+  assert.equal(savedSubscription.pending_subscription_effective_at, effectiveAt);
+
+  const beforeChange = getSubscriptionState(savedSubscription, new Date(Date.parse(effectiveAt) - 86400000));
+  assert.equal(beforeChange.plan, 'premium');
+  assert.equal(beforeChange.upcomingPlan, 'pro');
+  const afterChange = getSubscriptionState(savedSubscription, new Date(Date.parse(effectiveAt) + 1000));
+  assert.equal(afterChange.plan, 'pro');
+  assert.equal(afterChange.upcomingPlan, null);
+  assert.equal(afterChange.isActive, true);
+
+  const stateDb = new Database(TEST_DB_PATH);
+  const renewedExpiry = (stateDb.prepare('SELECT subscription_expires_at FROM shops WHERE id = ?')
+    .get(createdPayload.shop.id) as { subscription_expires_at: string }).subscription_expires_at;
+  stateDb.prepare('UPDATE shops SET subscription_cancel_at = ? WHERE id = ?')
+    .run(renewedExpiry, createdPayload.shop.id);
+  stateDb.close();
+  const cancellationBlockedCheckout = await fetch(paymentEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier: 'pro' }),
+  });
+  assert.equal(cancellationBlockedCheckout.status, 409);
+  assert.equal((await cancellationBlockedCheckout.json()).code, 'subscription_cancellation_scheduled');
+
+  const suspensionDb = new Database(TEST_DB_PATH);
+  suspensionDb.prepare(`UPDATE shops SET subscription_cancel_at = NULL, subscription_status = 'suspended',
+    subscription_admin_suspended_at = ?, subscription_admin_suspended_status = 'active' WHERE id = ?`)
+    .run(new Date().toISOString(), createdPayload.shop.id);
+  suspensionDb.close();
+  const suspendedCheckout = await fetch(paymentEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier: 'premium' }),
+  });
+  assert.equal(suspendedCheckout.status, 409);
+  assert.equal((await suspendedCheckout.json()).code, 'subscription_access_suspended');
 });
 
 test('GeniusPay payment intent creation is rate-limited before merchant authentication', async () => {
@@ -1036,6 +1205,14 @@ test('admin can review and extend expiring trials with a durable audit entry', a
   assert.equal(reconciledShop.trial_expiry_mismatch, false);
   assert.equal(Date.parse(reconciledShop.subscription_expires_at), Date.parse(upcomingTrialEnd));
 
+  const extensionWithoutReason = await fetch(`${BASE_URL}/api/admin/subscriptions/${createdPayload.shop.id}/extend-trial`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: JSON.stringify({ days: 7, expected_trial_end: upcomingTrialEnd }),
+  });
+  assert.equal(extensionWithoutReason.status, 400);
+  assert.match((await extensionWithoutReason.json()).error, /motif explicite d’au moins 10 caractères/i);
+
   testDb = new Database(TEST_DB_PATH);
   try {
     testDb.prepare('UPDATE shops SET subscription_expires_at = ? WHERE id = ?')
@@ -1047,7 +1224,11 @@ test('admin can review and extend expiring trials with a durable audit entry', a
   const extensionResponse = await fetch(`${BASE_URL}/api/admin/subscriptions/${createdPayload.shop.id}/extend-trial`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
-    body: JSON.stringify({ days: 7, expected_trial_end: upcomingTrialEnd }),
+    body: JSON.stringify({
+      days: 7,
+      expected_trial_end: upcomingTrialEnd,
+      reason: 'Incident de paiement documenté',
+    }),
   });
   const extension = await extensionResponse.json();
   assert.equal(extensionResponse.status, 200, JSON.stringify(extension));
@@ -1055,7 +1236,10 @@ test('admin can review and extend expiring trials with a durable audit entry', a
   assert.equal(Date.parse(extension.shop.subscription_expires_at), Date.parse(extension.trial_end));
 
   const refreshedSubscriptions = await fetch(`${BASE_URL}/api/admin/subscriptions`, { headers: { Cookie: adminCookie } }).then((response) => response.json());
-  assert.ok(refreshedSubscriptions.audit_logs.some((entry: { action: string; shop_id: number }) => entry.action === 'trial_extended' && entry.shop_id === createdPayload.shop.id));
+  assert.ok(refreshedSubscriptions.audit_logs.some((entry: { action: string; shop_id: number; details: string }) =>
+    entry.action === 'trial_extended'
+    && entry.shop_id === createdPayload.shop.id
+    && entry.details.includes('Incident de paiement documenté')));
   assert.ok(refreshedSubscriptions.audit_logs.some((entry: { action: string; shop_id: number }) => entry.action === 'trial_expiry_reconciled' && entry.shop_id === createdPayload.shop.id));
   const afterFirstExtension = refreshedSubscriptions.shops.find((shop: { id: number }) => shop.id === createdPayload.shop.id);
   assert.equal(afterFirstExtension.trial_extension_days_used, 7);
@@ -1064,7 +1248,7 @@ test('admin can review and extend expiring trials with a durable audit entry', a
   const overLimitExtension = await fetch(`${BASE_URL}/api/admin/subscriptions/${createdPayload.shop.id}/extend-trial`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
-    body: JSON.stringify({ days: 30, expected_trial_end: extension.trial_end }),
+    body: JSON.stringify({ days: 30, expected_trial_end: extension.trial_end, reason: 'Prolongation exceptionnelle demandée' }),
   });
   assert.equal(overLimitExtension.status, 409);
   assert.equal((await overLimitExtension.json()).days_remaining, 23);
@@ -1072,7 +1256,7 @@ test('admin can review and extend expiring trials with a durable audit entry', a
   const finalAllowedExtension = await fetch(`${BASE_URL}/api/admin/subscriptions/${createdPayload.shop.id}/extend-trial`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
-    body: JSON.stringify({ days: 23, expected_trial_end: extension.trial_end }),
+    body: JSON.stringify({ days: 23, expected_trial_end: extension.trial_end, reason: 'Finalisation de la période accordée' }),
   });
   assert.equal(finalAllowedExtension.status, 200);
   const finalExtension = await finalAllowedExtension.json();
@@ -1083,7 +1267,7 @@ test('admin can review and extend expiring trials with a durable audit entry', a
   const extensionAtCap = await fetch(`${BASE_URL}/api/admin/subscriptions/${createdPayload.shop.id}/extend-trial`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
-    body: JSON.stringify({ days: 1, expected_trial_end: finalExtension.trial_end }),
+    body: JSON.stringify({ days: 1, expected_trial_end: finalExtension.trial_end, reason: 'Prolongation au-delà du plafond' }),
   });
   assert.equal(extensionAtCap.status, 409);
 
@@ -1103,7 +1287,7 @@ test('admin can review and extend expiring trials with a durable audit entry', a
   const extensionAboveHistoricalCap = await fetch(`${BASE_URL}/api/admin/subscriptions/${createdPayload.shop.id}/extend-trial`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
-    body: JSON.stringify({ days: 1, expected_trial_end: finalExtension.trial_end }),
+    body: JSON.stringify({ days: 1, expected_trial_end: finalExtension.trial_end, reason: 'Dépassement historique constaté' }),
   });
   assert.equal(extensionAboveHistoricalCap.status, 409);
   assert.match((await extensionAboveHistoricalCap.json()).error, /cumul historique de 35 jours/i);

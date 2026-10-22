@@ -23,6 +23,11 @@ import { createPublicRateLimitMiddleware } from './server/services/rateLimits.ts
 import { buildSessionFingerprint, createAuthSessionHelpers, isRequestFingerprintMatch } from './server/services/authSessions.ts';
 import { createSeoHtmlHelpers } from './server/services/seoHtml.ts';
 import { getWhatsAppSubscriptionReminderConfig, sendWhatsAppSubscriptionReminder } from './server/services/whatsappNotifications.ts';
+import { getDefaultSubscriptionPrices, parseSubscriptionPrices } from './server/services/subscriptionPricing.ts';
+import {
+  DEFAULT_SUBSCRIPTION_PRO_FEATURES,
+  parseSubscriptionProFeatures,
+} from './src/utils/subscriptionFeatures.ts';
 import { retryPendingMerchantPushes, sendMerchantPush } from './server/services/pushNotifications.ts';
 import { seedDemoDatabaseIfEmpty } from './server/services/demoSeed.ts';
 import { applySecurityHeaders } from './server/middleware/securityHeaders.ts';
@@ -669,6 +674,7 @@ const {
   requireMerchantAccess,
   requireMerchantOwnShop,
   requireMerchantIdentityOwnShop,
+  clearMerchantSessionsForShop,
   cleanupExpiredSessions,
 } = createAuthSessionHelpers({ shops, refreshSubscriptionState });
 
@@ -699,6 +705,9 @@ export function validateRuntimeConfig(): void {
   const verificationAdminAccessKey = String(process.env.VERIFICATION_ADMIN_ACCESS_KEY || '').trim();
   if (verificationAdminAccessKey.length < 32 || /change_me|demo|example|legacy/i.test(verificationAdminAccessKey)) {
     throw new Error('VERIFICATION_ADMIN_ACCESS_KEY doit être une clé forte, unique et longue d’au moins 32 caractères en production.');
+  }
+  if (adminAccessKey === verificationAdminAccessKey) {
+    throw new Error('ADMIN_ACCESS_KEY et VERIFICATION_ADMIN_ACCESS_KEY doivent être distinctes en production.');
   }
 
   if (DEMO_MODE) {
@@ -771,6 +780,9 @@ const toSafeShop = (shop: ShopRecord) => {
     pin_code_hash: _pinCodeHash,
     owner_access_token_hash: _ownerAccessTokenHash,
     owner_email: _ownerEmail,
+    subscription_plan_features: _subscriptionPlanFeatures,
+    subscription_features_snapshot: _subscriptionFeaturesSnapshot,
+    subscription_features_effective_at: _subscriptionFeaturesEffectiveAt,
     ...safeShop
   } = shop;
   return { ...safeShop, subscription };
@@ -870,6 +882,7 @@ async function startServer() {
     requireAdminAccess,
     requireSuperAdminAccess,
     requireVerificationAdminAccess,
+    clearMerchantSessionsForShop,
   }));
   app.use('/api/admin/identity-verifications', requireVerificationAdminAccess, verificationRouters.adminRouter);
   const maintenanceHtmlPath = path.join(process.cwd(), process.env.NODE_ENV === 'production' ? 'dist' : 'public', 'maintenance.html');
@@ -903,6 +916,19 @@ async function startServer() {
   // --- API ROUTES ---
 
   app.use('/api', createTelemetryRouter({ shops, rateLimitPublicRequest, dbGet, dbRun }));
+  app.get('/api/subscription-plans', async (_req, res) => {
+    const settings = await dbGet<{ subscription_plan_prices: string; subscription_plan_features: string }>(
+      'SELECT subscription_plan_prices, subscription_plan_features FROM platform_settings WHERE id = 1',
+    );
+    const prices = settings?.subscription_plan_prices
+      ? parseSubscriptionPrices(settings.subscription_plan_prices)
+      : getDefaultSubscriptionPrices();
+    const proFeatures = settings?.subscription_plan_features
+      ? parseSubscriptionProFeatures(settings.subscription_plan_features)
+      : DEFAULT_SUBSCRIPTION_PRO_FEATURES;
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ prices, pro_features: proFeatures });
+  });
   const geniusPayRouter = createGeniusPayRouter({
     shops,
     requireMerchantOwnShop,
@@ -1059,7 +1085,19 @@ async function startServer() {
     injectFaqSeo,
     injectHowItWorksSeo,
     injectMerchantPlansSeo,
-  } = createSeoHtmlHelpers({ shops, products, sanitizeTextField });
+  } = createSeoHtmlHelpers({
+    shops,
+    products,
+    sanitizeTextField,
+    getSubscriptionPrices: async () => {
+      const settings = await dbGet<{ subscription_plan_prices: string }>(
+        'SELECT subscription_plan_prices FROM platform_settings WHERE id = 1',
+      );
+      return settings?.subscription_plan_prices
+        ? parseSubscriptionPrices(settings.subscription_plan_prices)
+        : getDefaultSubscriptionPrices();
+    },
+  });
 
   const shouldServePublicHtml = (req: Request) => {
     const accept = String(req.headers.accept || '');
@@ -1131,7 +1169,19 @@ async function startServer() {
         injectDiscoverySeo: injectCurrentDiscoverySeo,
         injectShopDirectorySeo: injectCurrentShopDirectorySeo,
         injectShopOpenGraph: injectCurrentShopOpenGraph,
-      } = createSeoHtmlHelpers({ shops: seoShops, products: seoProducts, sanitizeTextField });
+      } = createSeoHtmlHelpers({
+        shops: seoShops,
+        products: seoProducts,
+        sanitizeTextField,
+        getSubscriptionPrices: async () => {
+          const settings = await dbGet<{ subscription_plan_prices: string }>(
+            'SELECT subscription_plan_prices FROM platform_settings WHERE id = 1',
+          );
+          return settings?.subscription_plan_prices
+            ? parseSubscriptionPrices(settings.subscription_plan_prices)
+            : getDefaultSubscriptionPrices();
+        },
+      });
       const url = req.originalUrl.split('?')[0];
       const pathSegments = url.split('/').filter(Boolean);
       const matchSlug = pathSegments.length === 1 && !url.startsWith('/api') && !url.startsWith('/@') && !url.includes('.')
@@ -1148,7 +1198,7 @@ async function startServer() {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectMerchantPlansSeo(transformed, req));
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(await injectMerchantPlansSeo(transformed, req));
         } catch (error) {
           return next(error);
         }
@@ -1267,7 +1317,19 @@ async function startServer() {
         injectShopDirectorySeo: injectCurrentShopDirectorySeo,
         injectMerchantPlansSeo: injectCurrentMerchantPlansSeo,
         injectShopOpenGraph: injectCurrentShopOpenGraph,
-      } = createSeoHtmlHelpers({ shops: seoShops, products: seoProducts, sanitizeTextField });
+      } = createSeoHtmlHelpers({
+        shops: seoShops,
+        products: seoProducts,
+        sanitizeTextField,
+        getSubscriptionPrices: async () => {
+          const settings = await dbGet<{ subscription_plan_prices: string }>(
+            'SELECT subscription_plan_prices FROM platform_settings WHERE id = 1',
+          );
+          return settings?.subscription_plan_prices
+            ? parseSubscriptionPrices(settings.subscription_plan_prices)
+            : getDefaultSubscriptionPrices();
+        },
+      });
       const url = req.originalUrl.split('?')[0];
       const pathSegments = url.split('/').filter(Boolean);
       const matchSlug = pathSegments.length === 1 && !url.startsWith('/api') && !url.includes('.') ? pathSegments[0] : null;
@@ -1278,7 +1340,7 @@ async function startServer() {
       const discoveryPage = findPublicDiscoveryPage(req.path, seoShops.filter((shop) => isShopPubliclyVisible(shop)));
 
       if (req.path.replace(/\/+$/, '') === '/commercants' && baseHtml && shouldServePublicHtml(req)) {
-        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectCurrentMerchantPlansSeo(baseHtml, req));
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(await injectCurrentMerchantPlansSeo(baseHtml, req));
       }
       if (req.path.replace(/\/+$/, '') === '/comment-ca-marche' && baseHtml && shouldServePublicHtml(req)) {
         return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectHowItWorksSeo(baseHtml, req));

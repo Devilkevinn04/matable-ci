@@ -19,6 +19,7 @@ const MerchantDashboard = React.lazy(() => import('./components/MerchantDashboar
 const AdminDashboard = React.lazy(() => import('./components/AdminDashboard').then((module) => ({ default: module.AdminDashboard })));
 const PublicDirectory = React.lazy(() => import('./components/PublicDirectory').then((module) => ({ default: module.PublicDirectory })));
 const HowItWorksPage = React.lazy(() => import('./components/HowItWorksPage'));
+const UserGuidePage = React.lazy(() => import('./components/UserGuidePage').then((module) => ({ default: module.UserGuidePage })));
 const MerchantPlansPage = React.lazy(() => import('./components/MerchantPlansPage').then((module) => ({ default: module.MerchantPlansPage })));
 const MerchantTrialOnboarding = React.lazy(() => import('./components/MerchantDashboard/MerchantTrialOnboarding').then((module) => ({ default: module.MerchantTrialOnboarding })));
 const MobileDashboardPreview = React.lazy(() => import('./components/MobileDashboardPreview'));
@@ -59,6 +60,10 @@ const howItWorksMetadata = {
   title: 'Comment ça marche ? | MaTable.ci',
   description: 'Le guide pour découvrir une boutique locale, consulter sa vitrine, commander directement auprès du commerçant et convenir du retrait ou de la livraison.',
 };
+const userGuideMetadata = {
+  title: 'Guide personnel | MaTable.ci',
+  description: 'Votre guide pratique MaTable.ci, adapté à votre espace client, marchand ou administration.',
+};
 const faqMetadata = {
   title: 'Questions fréquentes | MaTable.ci',
   description: 'Réponses aux questions fréquentes sur les commandes, les comptes clients et les boutiques MaTable.ci.',
@@ -83,6 +88,9 @@ const merchantPlanPreviewShop: Shop = {
   city: 'Abidjan',
   subscription: {
     plan: 'premium',
+    upcomingPlan: null,
+    upcomingPlanAt: null,
+    cancellationAt: null,
     status: 'trialing',
     trialStart: null,
     trialEnd: null,
@@ -239,6 +247,7 @@ export default function App() {
   const normalizedPath = path.replace(/^\//, '').replace(/\/$/, '');
   const isShopDirectoryRoute = path.replace(/\/+$/, '') === '/boutiques';
   const isHowItWorksRoute = path.replace(/\/+$/, '') === '/comment-ca-marche';
+  const isUserGuideRoute = path.replace(/\/+$/, '') === '/guide';
   const appSearchParams = new URLSearchParams(location.search);
   const hasMerchantAccessToken = appSearchParams.has('access');
   const hasAdminShopSession = appSearchParams.has('admin_shop_id');
@@ -270,7 +279,7 @@ export default function App() {
   const isMerchantPlansPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/merchant-plans';
   const isMobileDashboardPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/mobile';
   const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isRecoveryPage || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview;
-  const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !isShopDirectoryRoute && !isHowItWorksRoute && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && customerView === 'none';
+  const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !isShopDirectoryRoute && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && customerView === 'none';
   const isUnknownStorefront = isCustomerStorefront && !isLoadingShops && !availableShops.some((shop) => shop.slug === normalizedPath);
 
   useEffect(() => {
@@ -368,7 +377,7 @@ export default function App() {
   useEffect(() => {
     const isPrivateRoute = path === '/app' || path.startsWith('/app/') || path === '/admin' || path.startsWith('/admin/')
       || path === '/compte' || path === '/connexion' || path === '/inscription' || isRecoveryPage;
-    const isInvalidNestedRoute = (!legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && !isMerchantPlansPreview && !isMobileDashboardPreview && !isShopDirectoryRoute && !isHowItWorksRoute && !isMerchantPlansPage && !discoveryPage && path.split('/').filter(Boolean).length > 1)
+    const isInvalidNestedRoute = (!legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && !isMerchantPlansPreview && !isMobileDashboardPreview && !isShopDirectoryRoute && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !discoveryPage && path.split('/').filter(Boolean).length > 1)
       || isUnknownStorefront;
     const metadata = isProductModalPreview
       ? { title: 'Aperçu du formulaire article | MaTable.ci', description: 'Prévisualisation locale du formulaire de création d’article.' }
@@ -384,6 +393,8 @@ export default function App() {
         ? { title: 'Formules commerçants et tarifs | MaTable.ci', description: 'Comparez les formules Standard, Premium et Pro de MaTable.ci. Créez votre vitrine avec un essai gratuit de 7 jours, sans paiement pour démarrer.' }
       : isHowItWorksRoute
         ? howItWorksMetadata
+      : isUserGuideRoute
+        ? userGuideMetadata
       : discoveryPage
         ? { title: discoveryPage.title, description: discoveryPage.description }
       : isFaqPage
@@ -412,7 +423,7 @@ export default function App() {
     if (twitterTitle) twitterTitle.content = metadata.title;
     const twitterDescription = document.head.querySelector<HTMLMetaElement>('meta[name="twitter:description"]');
     if (twitterDescription) twitterDescription.content = metadata.description;
-  }, [path, legalPage, isFaqPage, isRecoveryPage, discoveryPage, isShopDirectoryRoute, isHowItWorksRoute, isMerchantPlansPage, isUnknownStorefront]);
+  }, [path, legalPage, isFaqPage, isRecoveryPage, discoveryPage, isShopDirectoryRoute, isHowItWorksRoute, isUserGuideRoute, isMerchantPlansPage, isUnknownStorefront]);
 
   const renderCustomerAuth = (initialMode: 'login' | 'register') => (
     <CustomerAuth
@@ -461,6 +472,7 @@ export default function App() {
                       <Route path="/" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app/creer-boutique'); }} />} />
                       <Route path="/boutiques" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} onCreateShop={() => { setOpenMerchantRegistration(true); navigate('/app/creer-boutique'); }} isShopDirectoryPage />} />
                       <Route path="/comment-ca-marche" element={<HowItWorksPage />} />
+                      <Route path="/guide" element={<UserGuidePage />} />
                       <Route path="/commercants" element={<MerchantPlansPage />} />
                       <Route path="/faq" element={<FaqPage />} />
                       <Route path="/recuperation-acces" element={<AccountRecoveryPage initialAccountType={new URLSearchParams(location.search).get('type') === 'merchant' ? 'merchant' : 'customer'} onBack={() => navigate(new URLSearchParams(location.search).get('type') === 'merchant' ? '/app' : '/connexion')} />} />

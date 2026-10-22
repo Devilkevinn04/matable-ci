@@ -30,6 +30,10 @@ const migrationVersions = [
   '025_boost_placements_and_reminders',
   '026_merchant_push_notifications',
   '027_geniuspay_webhook_events',
+  '028_subscription_plan_prices',
+  '029_scheduled_subscription_tier',
+  '030_subscription_lifecycle_controls',
+  '031_subscription_plan_features',
 ];
 const connectionString = process.env.DATABASE_URL;
 

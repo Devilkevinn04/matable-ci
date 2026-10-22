@@ -1,4 +1,5 @@
 import type { ShopCategory } from './utils/categoryDefaults';
+import type { SubscriptionProFeatures } from './utils/subscriptionFeatures';
 export type { ShopCategory } from './utils/categoryDefaults';
 // Legacy tier identifiers remain accepted for compatibility with older records,
 // while the V2 product experience stays free and not gated by tiers.
@@ -73,6 +74,10 @@ export interface Shop {
   city?: string;
   subscription?: {
     plan: SubscriptionTier;
+    planFeatures?: SubscriptionProFeatures;
+    upcomingPlan: SubscriptionTier | null;
+    upcomingPlanAt: string | null;
+    cancellationAt: string | null;
     status: SubscriptionStatus;
     trialStart: string | null;
     trialEnd: string | null;

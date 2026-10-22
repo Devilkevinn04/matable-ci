@@ -1322,7 +1322,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsCartOpen(false)}
+                aria-label="Fermer le récapitulatif de commande"
                 className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors"
               >
                 <X className="w-4 h-4" />
@@ -1438,15 +1440,19 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
                         <div className="flex items-center gap-1">
                           <button
+                            type="button"
                             onClick={() => updateQuantity(idx, -1)}
+                            aria-label={`Diminuer la quantité de ${item.product.title}`}
                             className="w-7 h-7 rounded-md bg-white border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-100"
                           >
                             <Minus className="w-3 h-3" />
                           </button>
                           <span className="font-extrabold text-xs px-2 text-slate-900">{item.quantity}</span>
                           <button
+                            type="button"
                             onClick={() => updateQuantity(idx, 1)}
                             disabled={item.quantity >= item.product.stock}
+                            aria-label={`Augmenter la quantité de ${item.product.title}`}
                             className="w-7 h-7 rounded-md bg-white border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30"
                           >
                             <Plus className="w-3 h-3" />
@@ -1517,10 +1523,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
                     {/* Customer Name */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label htmlFor="checkout-customer-name" className="block text-xs font-bold text-slate-700 mb-1">
                         Votre Nom complet *
                       </label>
                       <input 
+                        id="checkout-customer-name"
                         type="text"
                         required
                         placeholder="Ex: Kouassi Ange, Fatou Traoré..."
@@ -1532,7 +1539,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
                     {/* Customer Phone */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label htmlFor="checkout-customer-phone" className="block text-xs font-bold text-slate-700 mb-1">
                         Numéro de Téléphone (WhatsApp) *
                       </label>
                       <div className="relative">
@@ -1540,6 +1547,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                           🇨🇮 +225
                         </span>
                         <input 
+                          id="checkout-customer-phone"
                           type="tel"
                           required
                           placeholder="07 00 11 22 33"
@@ -1552,10 +1560,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
                     {/* Delivery Location / Commune */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <p id="checkout-delivery-location-label" className="block text-xs font-bold text-slate-700 mb-1">
                         Commune / lieu souhaité *
-                      </label>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
+                      </p>
+                      <div role="group" aria-labelledby="checkout-delivery-location-label" className="grid grid-cols-2 gap-2 text-xs">
                         {[
                           'Cocody Angré',
                           'Cocody Riviera',
@@ -1583,14 +1591,18 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       </div>
 
                       {deliveryLocation === 'Autre' && (
-                        <input
-                          type="text"
-                          required
-                          placeholder="Précisez la ville / quartier (ex: Bingerville, Bouaké, San Pedro...)"
-                          value={customLocation}
-                          onChange={(e) => setCustomLocation(e.target.value)}
-                          className="w-full mt-2 text-sm px-3.5 py-2.5 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[#E6572B] bg-white"
-                        />
+                        <label htmlFor="checkout-custom-location" className="mt-2 block">
+                          <span className="sr-only">Précisez la ville ou le quartier</span>
+                          <input
+                            id="checkout-custom-location"
+                            type="text"
+                            required
+                            placeholder="Précisez la ville / quartier (ex: Bingerville, Bouaké, San Pedro...)"
+                            value={customLocation}
+                            onChange={(e) => setCustomLocation(e.target.value)}
+                            className="w-full text-sm px-3.5 py-2.5 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[#E6572B] bg-white"
+                          />
+                        </label>
                       )}
 
                       <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 flex items-start gap-2">
@@ -1604,10 +1616,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     {/* Food Delivery Slot */}
                     {shop.category === 'food' && (
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                        <label htmlFor="checkout-delivery-slot" className="block text-xs font-bold text-slate-700 mb-1">
                           Créneau souhaité pour vos plats
                         </label>
                         <select
+                          id="checkout-delivery-slot"
                           value={deliverySlot}
                           onChange={(e) => setDeliverySlot(e.target.value)}
                           className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#E4D9C8] bg-white font-bold text-[#211712]"
@@ -1622,10 +1635,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
                     {/* Delivery Note */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label htmlFor="checkout-delivery-note" className="block text-xs font-bold text-slate-700 mb-1">
                         Repère ou précision pour la boutique (optionnel)
                       </label>
                       <input 
+                        id="checkout-delivery-note"
                         type="text"
                         placeholder="Ex. : retrait sur place ou repère de quartier..."
                         value={deliveryNote}

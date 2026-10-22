@@ -4,7 +4,8 @@ import { databaseMode, dbAll, dbGet, dbRun, dbTransaction } from '../../db.ts';
 import { computeIsShopOpen, getSubscriptionPlanConfig, getSubscriptionState, normalizeSubscriptionTier, normalizeWhatsAppPhone } from '../services/businessRules.ts';
 import { createGeniusPayCheckout, getGeniusPayPayment, getRenewedSubscriptionExpiry, GeniusPayApiError, isValidGeniusPaySignature } from '../services/geniusPay.ts';
 import type { ShopRecord, SubscriptionTier } from '../types.ts';
-import { getSubscriptionPrice, type SubscriptionTerm } from '../../src/utils/subscriptionFeatures.ts';
+import { type SubscriptionTerm } from '../../src/utils/subscriptionFeatures.ts';
+import { getDefaultSubscriptionPrices, getSubscriptionPriceForTerm, parseSubscriptionPrices } from '../services/subscriptionPricing.ts';
 import { getShopFromDatabase, mapShopRow } from '../repositories/shops.ts';
 import { sendMerchantSubscriptionReceiptEmail } from '../services/email.ts';
 import {
@@ -149,20 +150,60 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
         name: string;
         owner_email: string | null;
         subscription_expires_at: string | null;
+        subscription_status: string | null;
+        selected_subscription_tier: string | null;
+        trial_start: string | null;
+        trial_end: string | null;
+        pending_subscription_tier: string | null;
+        pending_subscription_effective_at: string | null;
+        subscription_cancel_at: string | null;
+        subscription_admin_suspended_at: string | null;
+        subscription_admin_suspended_status: 'active' | 'trialing' | null;
       }>(
-        'SELECT name, owner_email, subscription_expires_at FROM shops WHERE id = ?',
+        `SELECT name, owner_email, subscription_expires_at, subscription_status,
+          selected_subscription_tier, trial_start, trial_end, pending_subscription_tier,
+          pending_subscription_effective_at, subscription_cancel_at,
+          subscription_admin_suspended_at, subscription_admin_suspended_status
+        FROM shops WHERE id = ?`,
         [payment.shop_id],
       );
       if (!shopRecord) return { status: 'not_found' as const };
       const expiresAt = getRenewedSubscriptionExpiry(shopRecord.subscription_expires_at, now, payment.subscription_term);
+      const currentSubscription = getSubscriptionState({
+        ...shopRecord,
+        subscription_status: shopRecord.subscription_admin_suspended_at
+          ? shopRecord.subscription_admin_suspended_status || shopRecord.subscription_status
+          : shopRecord.subscription_status,
+        selected_subscription_tier: normalizeSubscriptionTier(shopRecord.selected_subscription_tier),
+        pending_subscription_tier: shopRecord.pending_subscription_tier as SubscriptionTier | null,
+      }, now);
+      const preserveCurrentPlan = currentSubscription.status === 'active'
+        && Boolean(shopRecord.subscription_expires_at);
+      const pendingTier = preserveCurrentPlan
+        && payment.tier !== currentSubscription.plan
+        ? payment.tier
+        : null;
+      const pendingEffectiveAt = pendingTier
+        ? shopRecord.pending_subscription_tier === pendingTier && currentSubscription.upcomingPlan
+          ? shopRecord.pending_subscription_effective_at || shopRecord.subscription_expires_at
+          : shopRecord.subscription_expires_at
+        : null;
+      const effectiveTier = preserveCurrentPlan ? currentSubscription.plan : payment.tier;
       const paidAt = now.toISOString();
       const paid = await transaction.run(`UPDATE subscription_payment_intents
         SET status = 'paid', provider_reference = ?, paid_at = ?
         WHERE id = ? AND status IN ('pending', 'expired')`, [input.providerReference, paidAt, payment.id]);
       if (paid.changes !== 1) return { status: 'duplicate' as const };
       const updatedShop = await transaction.run(`UPDATE shops
-        SET subscription_status = 'active', selected_subscription_tier = ?, subscription_tier = ?, subscription_expires_at = ?, last_notification_sent_at = NULL
-        WHERE id = ?`, [payment.tier, payment.tier, expiresAt, payment.shop_id]);
+        SET subscription_status = CASE WHEN subscription_admin_suspended_at IS NOT NULL THEN 'suspended' ELSE 'active' END,
+          selected_subscription_tier = ?, subscription_tier = ?,
+          subscription_expires_at = ?, pending_subscription_tier = ?, pending_subscription_effective_at = ?,
+          subscription_admin_suspended_status = CASE
+            WHEN subscription_admin_suspended_at IS NOT NULL THEN 'active'
+            ELSE subscription_admin_suspended_status END,
+          subscription_cancel_at = NULL,
+          last_notification_sent_at = NULL
+        WHERE id = ?`, [effectiveTier, effectiveTier, expiresAt, pendingTier, pendingEffectiveAt, payment.shop_id]);
       if (updatedShop.changes !== 1) throw new Error('Shop disappeared while applying a GeniusPay payment.');
       return {
         status: 'paid' as const,
@@ -439,12 +480,37 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       return res.status(400).json({ error: 'Choisissez une formule valide.' });
     }
     const tier = normalizeSubscriptionTier(requestedTier);
+    const subscriptionState = getSubscriptionState(shop);
+    if (shop.subscription_admin_suspended_at) {
+      return res.status(409).json({
+        error: 'L’accès à l’abonnement est suspendu par l’administration. Contactez le support avant de payer.',
+        code: 'subscription_access_suspended',
+      });
+    }
+    if (subscriptionState.upcomingPlan && tier !== subscriptionState.upcomingPlan) {
+      return res.status(409).json({
+        error: `Un changement vers la formule ${getSubscriptionPlanConfig(subscriptionState.upcomingPlan).label} est programmé pour la prochaine échéance.`,
+        code: 'scheduled_subscription_tier_mismatch',
+      });
+    }
+    if (subscriptionState.cancellationAt) {
+      return res.status(409).json({
+        error: `La résiliation est programmée au ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(subscriptionState.cancellationAt))}. Contactez l’administration pour l’annuler avant un renouvellement.`,
+        code: 'subscription_cancellation_scheduled',
+      });
+    }
     const requestedTerm = req.body?.term;
     if (requestedTerm !== undefined && requestedTerm !== 'monthly' && requestedTerm !== 'annual') {
       return res.status(400).json({ error: 'Choisissez une durée valide.' });
     }
     const term: SubscriptionTerm = requestedTerm === 'annual' ? 'annual' : 'monthly';
-    const amount = getSubscriptionPrice(tier, term);
+    const settings = await dbGet<{ subscription_plan_prices: string }>(
+      'SELECT subscription_plan_prices FROM platform_settings WHERE id = 1',
+    );
+    const prices = settings?.subscription_plan_prices
+      ? parseSubscriptionPrices(settings.subscription_plan_prices)
+      : getDefaultSubscriptionPrices();
+    const amount = getSubscriptionPriceForTerm(prices, tier, term);
     const clientRequestId = typeof req.body?.client_request_id === 'string'
       ? req.body.client_request_id.trim()
       : '';
@@ -551,7 +617,8 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
     const createdAt = now.toISOString();
     const reserveUntil = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
     const reservation = await dbTransaction(async (transaction) => {
-      const shopRow = await transaction.get<Record<string, unknown>>('SELECT * FROM shops WHERE id = ?', [shop.id]);
+      const shopRow = await transaction.get<Record<string, unknown>>(`SELECT shops.*, platform_settings.subscription_plan_features
+        FROM shops LEFT JOIN platform_settings ON platform_settings.id = 1 WHERE shops.id = ?`, [shop.id]);
       if (!shopRow) return { error: 'Boutique introuvable.' } as const;
       const transactionShop = mapShopRow(shopRow);
       if (!transactionShop.is_active || !transactionShop.is_open || !computeIsShopOpen(transactionShop)) {
@@ -574,7 +641,10 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       }
 
       const currentSubscription = getSubscriptionState(transactionShop, now);
-      const price = getBoostPrice(durationDays, currentSubscription.isActive && currentSubscription.plan === 'pro');
+      const discountPercent = currentSubscription.isActive && currentSubscription.plan === 'pro'
+        ? currentSubscription.planFeatures.boostDiscountPercent
+        : 0;
+      const price = getBoostPrice(durationDays, discountPercent);
       if (price === null) return { error: 'Choisissez une durée de boost valide.' } as const;
       const intervals = await transaction.all<{ starts_at: string; ends_at: string }>(
         `SELECT starts_at, ends_at FROM shop_boosts

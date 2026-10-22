@@ -139,11 +139,11 @@ test('trial limits and annual subscription prices match the published offer', ()
   assert.equal(getSubscriptionAnalyticsDayLimit('premium'), 30);
   assert.equal(getSubscriptionAnalyticsDayLimit('pro'), 90);
   assert.equal(getSubscriptionPrice('standard'), 3000);
-  assert.equal(getSubscriptionPrice('premium'), 4000);
-  assert.equal(getSubscriptionPrice('pro'), 5000);
+  assert.equal(getSubscriptionPrice('premium'), 5000);
+  assert.equal(getSubscriptionPrice('pro'), 8000);
   assert.equal(getSubscriptionPrice('standard', 'annual'), 30000);
-  assert.equal(getSubscriptionPrice('premium', 'annual'), 40000);
-  assert.equal(getSubscriptionPrice('pro', 'annual'), 50000);
+  assert.equal(getSubscriptionPrice('premium', 'annual'), 50000);
+  assert.equal(getSubscriptionPrice('pro', 'annual'), 80000);
 });
 
 test('shops remain public through the grace period, then become suspended and hidden', () => {

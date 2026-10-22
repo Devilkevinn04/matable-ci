@@ -7,6 +7,9 @@ import { CustomerMerchantRegistrationForm } from './CustomerMerchantRegistration
 import { TermsPrivacyConsent } from './TermsPrivacyConsent';
 import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
 import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
+import { Link } from 'react-router-dom';
+
+const GuideChecklist = React.lazy(() => import('./UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
 
 export interface CustomerUser {
   id: number;
@@ -493,11 +496,11 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
       <section className="relative isolate overflow-hidden bg-[#123b31] text-white">
         <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-36 -z-10 h-96 w-96 rounded-full border border-white/10 sm:right-8 sm:top-[-17rem] sm:h-[34rem] sm:w-[34rem]" />
         <div className="mx-auto flex max-w-[1184px] flex-col justify-between gap-7 px-5 py-8 sm:px-8 sm:py-11 md:flex-row md:items-end">
-          <div className="flex items-start gap-4">
+          <div className="flex min-w-0 items-start gap-4">
             <span aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 font-display text-xl font-extrabold text-[#f0ba80] sm:h-16 sm:w-16 sm:text-2xl">
               {(user.first_name || user.name).trim().charAt(0).toLocaleUpperCase()}
             </span>
-            <div className="max-w-2xl">
+            <div className="min-w-0 max-w-2xl">
               <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#f0ba80]">Votre espace client</p>
               <h1 className="mt-2 font-display text-3xl font-extrabold leading-tight tracking-[-0.04em] sm:text-5xl">Bonjour {user.first_name || user.name}.</h1>
               <p className="mt-3 max-w-xl text-sm leading-6 text-white/75 sm:text-base">Vos commandes et les informations de votre compte, réunies au même endroit.</p>
@@ -616,13 +619,19 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                 <p className="mt-2 text-sm leading-6 text-[#6f6a61]">Suivez vos achats et retrouvez rapidement vos informations utiles.</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <a href="/comment-ca-marche" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[#0f4d3d] transition hover:bg-[#e4f1ec]">
+                <Link to="/guide?role=customer" state={{ guideAccountId: user.id }} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[#0f4d3d] transition hover:bg-[#e4f1ec]">
                   <BookOpen className="h-4 w-4" /> Guide d’utilisation
-                </a>
+                </Link>
                 <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#0f4d3d] px-5 text-sm font-bold text-white transition hover:bg-[#176b55]">
                   Découvrir les boutiques <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
+            </div>
+
+            <div className="mt-5">
+              <React.Suspense fallback={<p role="status" className="text-sm text-slate-500">Chargement de votre guide…</p>}>
+                <GuideChecklist role="customer" accountId={user.id} collapsible />
+              </React.Suspense>
             </div>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -651,7 +660,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
               </div>
             </div>
 
-            <div className="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(260px,.8fr)]">
+            <div className="mt-7 grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(260px,.8fr)]">
               <div className="min-w-0">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -686,7 +695,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                 </div>}
               </div>
 
-              <aside className="rounded-2xl bg-[#f5f2eb] p-5">
+              <aside className="min-w-0 rounded-2xl bg-[#f5f2eb] p-5">
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#81796f]">Vos informations</p>
                 <div className="mt-4 flex items-center gap-3">
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#123b31] font-display font-extrabold text-[#f0ba80]">

@@ -1,4 +1,8 @@
 import { dbAll, dbGet, dbRun } from '../../db.ts';
+import {
+  DEFAULT_SUBSCRIPTION_PRO_FEATURES,
+  parseSubscriptionProFeatures,
+} from '../../src/utils/subscriptionFeatures.ts';
 import type { ShopRecord, SubscriptionStatus } from '../types.ts';
 
 export function mapShopRow(row: Record<string, unknown>): ShopRecord {
@@ -28,6 +32,22 @@ export function mapShopRow(row: Record<string, unknown>): ShopRecord {
     owner_phone: row.owner_phone == null ? null : String(row.owner_phone),
     owner_email: row.owner_email == null ? null : String(row.owner_email),
     selected_subscription_tier: row.selected_subscription_tier == null ? undefined : String(row.selected_subscription_tier) as ShopRecord['selected_subscription_tier'],
+    pending_subscription_tier: row.pending_subscription_tier == null ? null : String(row.pending_subscription_tier) as ShopRecord['pending_subscription_tier'],
+    pending_subscription_effective_at: row.pending_subscription_effective_at == null ? null : String(row.pending_subscription_effective_at),
+    subscription_cancel_at: row.subscription_cancel_at == null ? null : String(row.subscription_cancel_at),
+    subscription_admin_suspended_at: row.subscription_admin_suspended_at == null ? null : String(row.subscription_admin_suspended_at),
+    subscription_admin_suspended_status: row.subscription_admin_suspended_status == null
+      ? null
+      : String(row.subscription_admin_suspended_status) as ShopRecord['subscription_admin_suspended_status'],
+    subscription_plan_features: row.subscription_plan_features == null
+      ? DEFAULT_SUBSCRIPTION_PRO_FEATURES
+      : parseSubscriptionProFeatures(row.subscription_plan_features),
+    subscription_features_snapshot: row.subscription_features_snapshot == null
+      ? null
+      : parseSubscriptionProFeatures(row.subscription_features_snapshot),
+    subscription_features_effective_at: row.subscription_features_effective_at == null
+      ? null
+      : String(row.subscription_features_effective_at),
     merchant_verification_status: String(row.merchant_verification_status || 'not_required') as ShopRecord['merchant_verification_status'],
     theme_config: row.theme_config ? (typeof row.theme_config === 'string' ? JSON.parse(row.theme_config) : row.theme_config) : {},
     opening_hours: row.opening_hours ? (typeof row.opening_hours === 'string' ? JSON.parse(row.opening_hours) : row.opening_hours) : undefined,
@@ -36,12 +56,14 @@ export function mapShopRow(row: Record<string, unknown>): ShopRecord {
 }
 
 export async function loadShopsFromDatabase(): Promise<ShopRecord[]> {
-  const rows = await dbAll<Record<string, unknown>>('SELECT shops.* FROM shops ORDER BY shops.id');
+  const rows = await dbAll<Record<string, unknown>>(`SELECT shops.*, platform_settings.subscription_plan_features
+    FROM shops LEFT JOIN platform_settings ON platform_settings.id = 1 ORDER BY shops.id`);
   return rows.map(mapShopRow);
 }
 
 export async function getShopFromDatabase(shopId: number): Promise<ShopRecord | undefined> {
-  const row = await dbGet<Record<string, unknown>>('SELECT shops.* FROM shops WHERE id = ?', [shopId]);
+  const row = await dbGet<Record<string, unknown>>(`SELECT shops.*, platform_settings.subscription_plan_features
+    FROM shops LEFT JOIN platform_settings ON platform_settings.id = 1 WHERE shops.id = ?`, [shopId]);
   return row ? mapShopRow(row) : undefined;
 }
 
@@ -61,13 +83,20 @@ async function persistShopWith(
   run: (sql: string, params?: unknown[]) => Promise<{ changes: number }>,
 ): Promise<void> {
   await run(`
-    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, publication_status, featured_until, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, subscription_status, trial_start, trial_end, last_notification_sent_at, whatsapp_subscription_reminders_enabled, whatsapp_subscription_reminders_consent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash, owner_name, owner_phone, owner_email)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, publication_status, featured_until, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, pending_subscription_tier, pending_subscription_effective_at, subscription_cancel_at, subscription_admin_suspended_at, subscription_admin_suspended_status, subscription_features_snapshot, subscription_features_effective_at, subscription_status, trial_start, trial_end, last_notification_sent_at, whatsapp_subscription_reminders_enabled, whatsapp_subscription_reminders_consent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash, owner_name, owner_phone, owner_email)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET name=excluded.name, slug=excluded.slug, whatsapp_number=excluded.whatsapp_number,
       pin_code_hash=excluded.pin_code_hash, theme_color=excluded.theme_color, welcome_message=excluded.welcome_message,
       is_open=excluded.is_open, is_active=excluded.is_active, publication_status=excluded.publication_status, featured_until=excluded.featured_until, payment_status=excluded.payment_status,
       merchant_verification_status=excluded.merchant_verification_status,
       payment_deadline_at=excluded.payment_deadline_at, selected_subscription_tier=excluded.selected_subscription_tier,
+      pending_subscription_tier=excluded.pending_subscription_tier,
+      pending_subscription_effective_at=excluded.pending_subscription_effective_at,
+      subscription_cancel_at=excluded.subscription_cancel_at,
+      subscription_admin_suspended_at=excluded.subscription_admin_suspended_at,
+      subscription_admin_suspended_status=excluded.subscription_admin_suspended_status,
+      subscription_features_snapshot=excluded.subscription_features_snapshot,
+      subscription_features_effective_at=excluded.subscription_features_effective_at,
       subscription_expires_at=excluded.subscription_expires_at, last_notification_sent_at=excluded.last_notification_sent_at,
       whatsapp_subscription_reminders_enabled=excluded.whatsapp_subscription_reminders_enabled,
       whatsapp_subscription_reminders_consent_at=excluded.whatsapp_subscription_reminders_consent_at,
@@ -79,7 +108,13 @@ async function persistShopWith(
     shop.id, shop.name, shop.slug, shop.whatsapp_number, shop.pin_code_hash, shop.theme_color, shop.welcome_message,
     shop.is_open ? 1 : 0, shop.is_active ? 1 : 0, shop.publication_status || (shop.is_active ? 'active' : 'suspended'), shop.featured_until ?? null,
     shop.merchant_verification_status || 'not_required', 'approved', null,
-    shop.selected_subscription_tier || 'standard', shop.subscription_expires_at ?? null, shop.subscription_status || 'active', shop.trial_start ?? null, shop.trial_end ?? null, shop.last_notification_sent_at,
+    shop.selected_subscription_tier || 'standard', shop.subscription_expires_at ?? null,
+    shop.pending_subscription_tier ?? null, shop.pending_subscription_effective_at ?? null,
+    shop.subscription_cancel_at ?? null, shop.subscription_admin_suspended_at ?? null,
+    shop.subscription_admin_suspended_status ?? null,
+    shop.subscription_features_snapshot ? JSON.stringify(shop.subscription_features_snapshot) : null,
+    shop.subscription_features_effective_at ?? null,
+    shop.subscription_status || 'active', shop.trial_start ?? null, shop.trial_end ?? null, shop.last_notification_sent_at,
     shop.whatsapp_subscription_reminders_enabled ? 1 : 0, shop.whatsapp_subscription_reminders_consent_at ?? null,
     shop.created_at, shop.category, shop.city ?? null, shop.selected_subscription_tier || 'standard', JSON.stringify(shop.theme_config),
     shop.opening_hours ? JSON.stringify(shop.opening_hours) : null, shop.owner_access_token_hash ?? null,

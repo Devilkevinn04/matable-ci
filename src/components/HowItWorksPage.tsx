@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { ArrowDown, ArrowRight, BadgeCheck, ChevronLeft, ChevronRight, Heart, MapPin, MessageCircle, Search, ShoppingBag, Store, Truck } from 'lucide-react';
+import { ArrowDown, ArrowRight, BadgeCheck, ChevronLeft, ChevronRight, Heart, MapPin, MessageCircle, Pause, Play, Search, ShoppingBag, Store, Truck } from 'lucide-react';
 
 const tourSteps = [
   {
@@ -57,16 +57,18 @@ const reveal = {
 const HowItWorksPage: React.FC = () => {
   const reduceMotion = useReducedMotion();
   const [activeStep, setActiveStep] = useState(0);
+  const [isTourPaused, setIsTourPaused] = useState(false);
   const active = tourSteps[activeStep];
   const ActiveIcon = active.icon;
   const selectStep = (nextStep: number) => setActiveStep((nextStep + tourSteps.length) % tourSteps.length);
 
   useEffect(() => {
+    if (reduceMotion || isTourPaused) return;
     const timer = window.setInterval(() => {
       setActiveStep((step) => (step + 1) % tourSteps.length);
     }, 5200);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [activeStep, isTourPaused, reduceMotion]);
 
   return (
     <main className="min-h-screen bg-[#f7f3ee] text-[#25231f]">
@@ -116,9 +118,9 @@ const HowItWorksPage: React.FC = () => {
 
       <section id="visite-guidee" className="mx-auto max-w-[1184px] px-5 py-14 sm:px-8 sm:py-20">
         <header className="mb-8 max-w-2xl sm:mb-10">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#b9441f]">Visite guidée animée</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#b9441f]">{reduceMotion ? 'Visite guidée' : 'Visite guidée animée'}</p>
           <h2 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-4xl">Découvrez MaTable en quelques étapes.</h2>
-          <p className="mt-3 text-sm leading-6 text-[#6f6a61] sm:text-base">La visite avance automatiquement. Vous pouvez aussi choisir un repère pour explorer une étape.</p>
+          <p className="mt-3 text-sm leading-6 text-[#6f6a61] sm:text-base">{reduceMotion ? 'Choisissez un repère ou une étape pour explorer la plateforme à votre rythme.' : 'La visite avance automatiquement. Vous pouvez aussi choisir un repère pour explorer une étape.'}</p>
         </header>
 
         <div className="grid gap-5 lg:grid-cols-[1.35fr_.85fr] lg:items-stretch">
@@ -195,11 +197,17 @@ const HowItWorksPage: React.FC = () => {
 
           <div className="relative flex flex-col rounded-[28px] border border-[#e5d9ca] bg-[#fffdf9] p-5 shadow-[0_12px_35px_rgba(36,28,22,.06)] sm:p-7" aria-live="off" aria-atomic="true">
             <span aria-hidden="true" className="absolute -left-2 top-12 hidden h-4 w-4 rotate-45 border-b border-l border-[#e5d9ca] bg-[#fffdf9] lg:block" />
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#b9441f]">
-                Visite automatique · {active.label}
+                {reduceMotion ? 'Visite manuelle · ' : isTourPaused ? 'Visite en pause · ' : 'Visite automatique · '}{active.label}
               </p>
-              <span className="text-xs font-bold tabular-nums text-[#8a8176]">0{activeStep + 1} / 04</span>
+              <div className="flex items-center gap-2">
+                {!reduceMotion && <button type="button" onClick={() => setIsTourPaused((paused) => !paused)} aria-pressed={isTourPaused} aria-label={isTourPaused ? 'Reprendre la visite automatique' : 'Mettre en pause la visite automatique'} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[#ded6ca] px-3 text-xs font-bold text-[#4a3a30] transition hover:bg-[#f5f0e9]">
+                  {isTourPaused ? <Play className="h-3.5 w-3.5" aria-hidden="true" /> : <Pause className="h-3.5 w-3.5" aria-hidden="true" />}
+                  {isTourPaused ? 'Reprendre' : 'Pause'}
+                </button>}
+                <span className="text-xs font-bold tabular-nums text-[#8a8176]">0{activeStep + 1} / 04</span>
+              </div>
             </div>
             <div className="mt-4 flex gap-2" role="group" aria-label="Choisir une étape">
               {tourSteps.map(({ label }, index) => (
@@ -260,6 +268,9 @@ const HowItWorksPage: React.FC = () => {
             <p className="mt-3 text-sm leading-6 text-[#6f6a61]">Présentez votre activité et restez en contact direct avec vos clients.</p>
             <a href="/app/creer-boutique" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#0f4d3d] px-5 text-sm font-bold text-white transition hover:bg-[#176b55]">
               Créer ma boutique <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </a>
+            <a href="/app" className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full border border-[#c8dbd0] bg-[#fffdf9] px-5 text-sm font-bold text-[#0f4d3d] transition hover:bg-[#e4f1ec]">
+              Déjà commerçant ? Ouvrir mon espace et sa checklist <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </a>
           </div>
           <ol className="space-y-3">

@@ -107,7 +107,7 @@ export function useMerchantProductEditor(
     const photoLimit = currentShop?.admin_mode ? 6
       : currentShop?.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0
         ? getSubscriptionProductPhotoLimit('standard')
-        : getSubscriptionProductPhotoLimit(currentShop?.subscription?.plan);
+        : getSubscriptionProductPhotoLimit(currentShop?.subscription?.plan, currentShop?.subscription?.planFeatures);
     const currentPhotoCount = (prodImage ? 1 : 0) + (prodLookbookImage ? 1 : 0) + prodGalleryImages.length;
     if (!prodLookbookImage && currentPhotoCount >= photoLimit) {
       toast.error(`Votre formule permet jusqu’à ${photoLimit} photos par article.`);
@@ -135,7 +135,7 @@ export function useMerchantProductEditor(
     const photoLimit = currentShop?.admin_mode ? 6
       : currentShop?.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0
         ? getSubscriptionProductPhotoLimit('standard')
-        : getSubscriptionProductPhotoLimit(currentShop?.subscription?.plan);
+        : getSubscriptionProductPhotoLimit(currentShop?.subscription?.plan, currentShop?.subscription?.planFeatures);
     const occupiedNonGallerySlots = (prodImage ? 1 : 0) + (prodLookbookImage ? 1 : 0);
     const remainingSlots = Math.min(MAX_GALLERY_IMAGES - prodGalleryImages.length, photoLimit - occupiedNonGallerySlots - prodGalleryImages.length);
     if (remainingSlots <= 0) {

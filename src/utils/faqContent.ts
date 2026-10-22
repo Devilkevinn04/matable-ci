@@ -72,7 +72,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         question: 'Quelles sont les formules et les tarifs ?',
-        answer: 'Standard coûte 3 000 FCFA par mois, Premium 5 000 FCFA et Pro 8 000 FCFA. Le paiement annuel correspond à 10 mensualités pour 12 mois de service. Un essai Standard gratuit de 7 jours est proposé, avec un maximum de 2 produits; vous pouvez aussi payer directement une formule.',
+        answer: 'Standard permet jusqu’à 20 articles, Premium et Pro un catalogue illimité. Consultez les tarifs mensuels et annuels à jour sur la page Formules commerçants; le tarif affiché au moment du paiement est appliqué. Le paiement annuel correspond à 10 mensualités pour 12 mois de service. Un essai Standard gratuit de 7 jours est proposé, avec un maximum de 2 produits; vous pouvez aussi payer directement une formule.',
       },
       {
         question: 'Comment fonctionne la mise en avant payante ?',

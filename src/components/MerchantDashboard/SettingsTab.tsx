@@ -59,8 +59,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
     && subscriptionStatus === 'trialing'
     && (currentShop.subscription?.trialDaysRemaining ?? 0) > 0
     ? TRIAL_CATALOG_LIMIT
-    : getSubscriptionProductLimit(currentShop.subscription?.plan);
-  const currentPhotoLimit = getSubscriptionProductPhotoLimit(currentShop.subscription?.plan);
+    : getSubscriptionProductLimit(currentShop.subscription?.plan, currentShop.subscription?.planFeatures);
+  const currentPhotoLimit = getSubscriptionProductPhotoLimit(currentShop.subscription?.plan, currentShop.subscription?.planFeatures);
   const settingsCopy: Record<typeof settingsSubTab, { eyebrow: string; title: string; description: string }> = {
     profile: { eyebrow: 'Compte', title: 'Profil personnel', description: 'Gérez vos coordonnées personnelles, votre e-mail de facturation et la sécurité de votre accès.' },
     themes: { eyebrow: 'Ma boutique', title: 'Apparence de la vitrine', description: 'Personnalisez les couleurs, les images et la présentation de votre boutique.' },

@@ -171,10 +171,12 @@ export function createAuthSessionHelpers({
     const merchantToken = getCookie(req, 'matable_session');
     const customerToken = getCookie(req, 'matable_customer_session');
     if (customerToken && !merchantToken) {
-      let customerSession = customerSessions.get(customerToken) ?? (await getCustomerSessionRecord(customerToken)) ?? undefined;
+      const customerSession = (await getCustomerSessionRecord(customerToken)) ?? undefined;
       if (!customerSession) {
+        customerSessions.delete(customerToken);
         return { authenticated: false, userType: null, shopId: null, user: null };
       }
+      customerSessions.set(customerToken, customerSession);
       if (customerSession.expiresAt <= Date.now()) {
         customerSessions.delete(customerToken);
         await deleteCustomerSessionRecord(customerToken);
@@ -201,10 +203,12 @@ export function createAuthSessionHelpers({
     }
 
     if (merchantToken) {
-      let merchantSession = merchantSessions.get(merchantToken) ?? (await getMerchantSessionRecord(merchantToken)) ?? undefined;
+      const merchantSession = (await getMerchantSessionRecord(merchantToken)) ?? undefined;
       if (!merchantSession) {
+        merchantSessions.delete(merchantToken);
         return { authenticated: false, userType: null, shopId: null };
       }
+      merchantSessions.set(merchantToken, merchantSession);
       if (merchantSession.expiresAt <= Date.now()) {
         merchantSessions.delete(merchantToken);
         await deleteMerchantSessionRecord(merchantToken);
@@ -230,12 +234,9 @@ export function createAuthSessionHelpers({
 
   async function requireCustomerAccess(req: Request, res: Response, next: express.NextFunction) {
     const token = getCookie(req, 'matable_customer_session');
-    let session = token ? customerSessions.get(token) : undefined;
-
-    if (!session && token) {
-      session = (await getCustomerSessionRecord(token)) ?? undefined;
-      if (session) customerSessions.set(token, session);
-    }
+    const session = token ? (await getCustomerSessionRecord(token)) ?? undefined : undefined;
+    if (token && session) customerSessions.set(token, session);
+    else if (token) customerSessions.delete(token);
 
     if (!token || !session || session.expiresAt <= Date.now()) {
       if (token) {
@@ -275,9 +276,13 @@ export function createAuthSessionHelpers({
   async function getCustomerSessionState(req: Request, res?: Response) {
     const token = getCookie(req, 'matable_customer_session');
     if (!token) return { authenticated: false, userType: null, user: null };
-    let session = customerSessions.get(token) ?? (await getCustomerSessionRecord(token)) ?? undefined;
+    let session = (await getCustomerSessionRecord(token)) ?? undefined;
 
-    if (!session) return { authenticated: false, userType: null, user: null };
+    if (!session) {
+      customerSessions.delete(token);
+      return { authenticated: false, userType: null, user: null };
+    }
+    customerSessions.set(token, session);
     if (session.expiresAt <= Date.now()) {
       customerSessions.delete(token);
       await deleteCustomerSessionRecord(token);
@@ -353,14 +358,9 @@ export function createAuthSessionHelpers({
     }
 
     const token = getCookie(req, 'matable_session');
-    let session = token ? merchantSessions.get(token) : undefined;
-
-    if (!session && token) {
-      session = (await getMerchantSessionRecord(token)) ?? undefined;
-      if (session) {
-        merchantSessions.set(token, session);
-      }
-    }
+    const session = token ? (await getMerchantSessionRecord(token)) ?? undefined : undefined;
+    if (token && session) merchantSessions.set(token, session);
+    else if (token) merchantSessions.delete(token);
 
     if (!session || session.expiresAt <= Date.now() || session.shopId !== Number(req.params.id)) {
       if (token) {
@@ -438,6 +438,12 @@ export function createAuthSessionHelpers({
     await dbRun('DELETE FROM admin_sessions WHERE expires_at <= ?', [now]);
   }
 
+  function clearMerchantSessionsForShop(shopId: number) {
+    for (const [token, session] of merchantSessions) {
+      if (session.shopId === shopId) merchantSessions.delete(token);
+    }
+  }
+
   return {
     merchantSessions,
     customerSessions,
@@ -465,6 +471,7 @@ export function createAuthSessionHelpers({
     requireMerchantAccess,
     requireMerchantOwnShop,
     requireMerchantIdentityOwnShop,
+    clearMerchantSessionsForShop,
     cleanupExpiredSessions,
   };
 }

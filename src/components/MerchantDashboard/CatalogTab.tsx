@@ -31,7 +31,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
   const lowStockCount = products.filter((product) => product.stock > 0 && product.stock <= 3).length;
   const outOfStockCount = products.filter((product) => product.stock === 0).length;
   const trialCatalogLimited = !currentShop.admin_mode && currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0;
-  const productLimit = trialCatalogLimited ? TRIAL_CATALOG_LIMIT : getSubscriptionProductLimit(currentShop.subscription?.plan);
+  const productLimit = trialCatalogLimited ? TRIAL_CATALOG_LIMIT : getSubscriptionProductLimit(currentShop.subscription?.plan, currentShop.subscription?.planFeatures);
   const catalogFull = !currentShop.admin_mode && Number.isFinite(productLimit) && products.length >= productLimit;
   const productLimitLabel = Number.isFinite(productLimit) ? productLimit : 'illimité';
   const catalogFilterOptions = [

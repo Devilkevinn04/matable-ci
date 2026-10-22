@@ -5,15 +5,17 @@ import { getCategoryDefaults } from '../../src/utils/categoryDefaults.ts';
 import { findPublicDiscoveryPage, toDiscoveryCitySlug } from '../../src/utils/discoverySeo.ts';
 import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
 import { FAQ_SECTIONS } from '../../src/utils/faqContent.ts';
-import { getSubscriptionPrice, SUBSCRIPTION_PLANS, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from '../../src/utils/subscriptionFeatures.ts';
+import { SUBSCRIPTION_PLANS, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from '../../src/utils/subscriptionFeatures.ts';
+import type { SubscriptionPrices } from './subscriptionPricing.ts';
 
 interface SeoHtmlHelperOptions {
   shops: ShopRecord[];
   products: ProductRecord[];
   sanitizeTextField: (value: string | null | undefined, maxLength?: number) => string;
+  getSubscriptionPrices: () => Promise<SubscriptionPrices>;
 }
 
-export function createSeoHtmlHelpers({ shops, products, sanitizeTextField }: SeoHtmlHelperOptions) {
+export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSubscriptionPrices }: SeoHtmlHelperOptions) {
   const getPublicOrigin = (req: Request) => String(process.env.APP_URL || `${req.protocol || 'https'}://${req.get('host') || 'matable.ci'}`).replace(/\/$/, '');
 
   const injectNoIndexSeo = (html: string, title: string) => html
@@ -128,12 +130,13 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField }: Seo
       .replace('</body>', `${crawlableGuide}\n  </body>`);
   };
 
-  const injectMerchantPlansSeo = (html: string, req: Request) => {
+  const injectMerchantPlansSeo = async (html: string, req: Request) => {
     const origin = getPublicOrigin(req);
     const canonical = `${origin}/commercants`;
     const title = 'Formules commerçants et tarifs | MaTable.ci';
     const description = 'Comparez les formules Standard, Premium et Pro de MaTable.ci. Créez votre vitrine avec un essai gratuit de 7 jours, sans paiement pour démarrer.';
     const plans = Object.values(SUBSCRIPTION_PLANS);
+    const prices = await getSubscriptionPrices();
     const structuredData = {
       '@context': 'https://schema.org',
       '@type': 'WebPage',
@@ -147,7 +150,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField }: Seo
         itemListElement: plans.map((plan) => ({
           '@type': 'Offer',
           name: plan.label,
-          price: getSubscriptionPrice(plan.tier),
+          price: prices[plan.tier],
           priceCurrency: 'XOF',
           description: plan.description,
           url: canonical,
@@ -172,7 +175,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField }: Seo
       `<meta name="twitter:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
       `<script type="application/ld+json">${jsonLd}</script>`,
     ].join('\n  ');
-    const crawlablePlans = `<noscript><main><h1>Vendre sur MaTable.ci</h1><p>${escapeHtml(description)}</p><p>Essai gratuit de ${TRIAL_DURATION_DAYS} jours, jusqu’à ${TRIAL_CATALOG_LIMIT} produits, sans paiement pour démarrer.</p><h2>Formules commerçants</h2><ul>${plans.map((plan) => `<li><h3>${escapeHtml(plan.label)} — ${escapeHtml(new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(plan.tier)))} FCFA par mois</h3><p>${escapeHtml(plan.description)}</p><ul>${plan.benefits.map((benefit) => `<li>${escapeHtml(benefit)}</li>`).join('')}</ul></li>`).join('')}</ul><p><a href="${escapeHtml(`${origin}/app/creer-boutique`)}">Créer ma boutique</a></p></main></noscript>`;
+    const crawlablePlans = `<noscript><main><h1>Vendre sur MaTable.ci</h1><p>${escapeHtml(description)}</p><p>Essai gratuit de ${TRIAL_DURATION_DAYS} jours, jusqu’à ${TRIAL_CATALOG_LIMIT} produits, sans paiement pour démarrer.</p><h2>Formules commerçants</h2><ul>${plans.map((plan) => `<li><h3>${escapeHtml(plan.label)} — ${escapeHtml(new Intl.NumberFormat('fr-FR').format(prices[plan.tier]))} FCFA par mois</h3><p>${escapeHtml(plan.description)}</p><ul>${plan.benefits.map((benefit) => `<li>${escapeHtml(benefit)}</li>`).join('')}</ul></li>`).join('')}</ul><p><a href="${escapeHtml(`${origin}/app/creer-boutique`)}">Créer ma boutique</a></p></main></noscript>`;
     return html
       .replace(/<title>.*?<\/title>/, '')
       .replace(/<meta name="description" content=".*?" \/>/, '')

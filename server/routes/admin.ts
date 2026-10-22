@@ -1,7 +1,14 @@
 import { Router, type RequestHandler } from 'express';
 import type { dbTransaction } from '../../db.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
-import { getSubscriptionPlanConfig, getSubscriptionState } from '../services/businessRules.ts';
+import { getSubscriptionState, normalizeSubscriptionTier } from '../services/businessRules.ts';
+import {
+  DEFAULT_SUBSCRIPTION_PRO_FEATURES,
+  getSubscriptionAccessCutoff,
+  parseSubscriptionProFeatures,
+  type SubscriptionProFeatures,
+} from '../../src/utils/subscriptionFeatures.ts';
+import { parseSubscriptionPrices, getDefaultSubscriptionPrices } from '../services/subscriptionPricing.ts';
 import { getWhatsAppSubscriptionReminderConfig } from '../services/whatsappNotifications.ts';
 import { mapShopRow } from '../repositories/shops.ts';
 import {
@@ -28,6 +35,7 @@ interface AdminRouterOptions {
   requireAdminAccess?: RequestHandler;
   requireSuperAdminAccess?: RequestHandler;
   requireVerificationAdminAccess?: RequestHandler;
+  clearMerchantSessionsForShop: (shopId: number) => void;
 }
 
 export function createAdminRouter(options: AdminRouterOptions) {
@@ -43,6 +51,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
     requireAdminAccess,
     requireSuperAdminAccess,
     requireVerificationAdminAccess,
+    clearMerchantSessionsForShop,
   } = options;
   const router = Router();
   const maxTrialExtensionDays = 30;
@@ -71,6 +80,8 @@ export function createAdminRouter(options: AdminRouterOptions) {
       }
     }
     if (path === '/payments' || path.startsWith('/subscriptions')
+      || path === '/subscription-plans'
+      || path === '/subscription-plan-features'
       || (req.method === 'DELETE' && /^\/shops\/\d+$/.test(path))
       || (req.method === 'POST' && /^\/shops\/\d+\/access-link$/.test(path))
       || (req.method === 'PATCH' && path === '/maintenance')
@@ -94,6 +105,14 @@ export function createAdminRouter(options: AdminRouterOptions) {
   const getShop = async (shopId: number) => {
     const row = await dbGet<Record<string, unknown>>('SELECT * FROM shops WHERE id = ?', [shopId]);
     return row ? mapShopRow(row) : undefined;
+  };
+  const getCurrentSubscriptionPrices = async () => {
+    const settings = await dbGet<{ subscription_plan_prices: string }>(
+      'SELECT subscription_plan_prices FROM platform_settings WHERE id = 1',
+    );
+    return settings?.subscription_plan_prices
+      ? parseSubscriptionPrices(settings.subscription_plan_prices)
+      : getDefaultSubscriptionPrices();
   };
 
   router.get('/shops/verification-readonly', requireVerification, async (_req, res) => {
@@ -126,7 +145,11 @@ export function createAdminRouter(options: AdminRouterOptions) {
     'announcement_id', 'attempted', 'days', 'delivery_mode', 'enabled', 'failed', 'previous_enabled',
     'previous_status', 'previous_subscription_expires_at', 'previous_trial_end', 'reason', 'recipients', 'review_id',
     'sent', 'shop_id', 'shop_name', 'shop_slug', 'status', 'subscription_expires_at', 'trial_end',
-    'event_id', 'deleted_products', 'deleted_orders', 'deleted_reviews', 'deleted_reports',
+    'event_id', 'deleted_products', 'deleted_orders', 'deleted_reviews', 'deleted_reports', 'user_id', 'is_active',
+    'revoked_sessions', 'previous_standard_price', 'previous_premium_price',
+    'previous_pro_price', 'standard_price', 'premium_price', 'pro_price',
+    'current_tier', 'previous_pending_tier', 'pending_tier', 'effective_at',
+    'cancellation_at', 'previous_cancellation_at',
   ]);
   const getSafeAuditDetails = (value: unknown): Record<string, string | number | boolean | null> => {
     const details: unknown = typeof value === 'string' ? JSON.parse(value) : value;
@@ -339,6 +362,151 @@ export function createAdminRouter(options: AdminRouterOptions) {
     });
   });
 
+  router.get('/subscription-plans', async (_req, res) => {
+    const settings = await dbGet<{ subscription_plan_prices: string }>(
+      'SELECT subscription_plan_prices FROM platform_settings WHERE id = 1',
+    );
+    const prices = settings?.subscription_plan_prices
+      ? parseSubscriptionPrices(settings.subscription_plan_prices)
+      : getDefaultSubscriptionPrices();
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ prices });
+  });
+
+  router.patch('/subscription-plans', async (req, res) => {
+    let prices;
+    let expectedPrices;
+    try {
+      prices = parseSubscriptionPrices(req.body?.prices);
+      expectedPrices = parseSubscriptionPrices(req.body?.expected_prices);
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : 'Les tarifs fournis sont invalides.' });
+    }
+    const updatedAt = new Date().toISOString();
+    const result = await dbTransaction(async ({ get, run }) => {
+      const settings = await get<{ subscription_plan_prices: string }>(
+        'SELECT subscription_plan_prices FROM platform_settings WHERE id = 1',
+      );
+      const previousPrices = settings?.subscription_plan_prices
+        ? parseSubscriptionPrices(settings.subscription_plan_prices)
+        : getDefaultSubscriptionPrices();
+      if (Object.keys(expectedPrices).some((tier) =>
+        previousPrices[tier as keyof typeof previousPrices] !== expectedPrices[tier as keyof typeof expectedPrices])) {
+        return { conflict: true as const };
+      }
+      await run(`INSERT INTO platform_settings (id, subscription_plan_prices, updated_at, updated_by)
+        VALUES (1, ?, ?, ?)
+        ON CONFLICT (id) DO UPDATE SET subscription_plan_prices = excluded.subscription_plan_prices,
+          updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+      [JSON.stringify(prices), updatedAt, req.adminRole || 'super_admin']);
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        [req.adminRole || 'super_admin', 'subscription_plan_prices_updated', null, JSON.stringify({
+          previous_standard_price: previousPrices.standard,
+          previous_premium_price: previousPrices.premium,
+          previous_pro_price: previousPrices.pro,
+          standard_price: prices.standard,
+          premium_price: prices.premium,
+          pro_price: prices.pro,
+        }), updatedAt],
+      );
+      return { conflict: false as const, previousPrices };
+    });
+    if (result.conflict) {
+      return res.status(409).json({ error: 'Les tarifs ont changé depuis leur chargement. Actualisez avant de réessayer.' });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, prices, previous_prices: result.previousPrices, updated_at: updatedAt });
+  });
+
+  router.get('/subscription-plan-features', async (_req, res) => {
+    const settings = await dbGet<{ subscription_plan_features: string }>(
+      'SELECT subscription_plan_features FROM platform_settings WHERE id = 1',
+    );
+    const proFeatures = settings?.subscription_plan_features
+      ? parseSubscriptionProFeatures(settings.subscription_plan_features)
+      : DEFAULT_SUBSCRIPTION_PRO_FEATURES;
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ pro_features: proFeatures });
+  });
+
+  router.patch('/subscription-plan-features', async (req, res) => {
+    let proFeatures: SubscriptionProFeatures;
+    let expectedFeatures: SubscriptionProFeatures;
+    try {
+      proFeatures = parseSubscriptionProFeatures(req.body?.pro_features);
+      expectedFeatures = parseSubscriptionProFeatures(req.body?.expected_pro_features);
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : 'Les avantages Pro fournis sont invalides.' });
+    }
+    const updatedAt = new Date().toISOString();
+    const result = await dbTransaction(async ({ all, get, run }) => {
+      const settings = await get<{ subscription_plan_features: string }>(
+        'SELECT subscription_plan_features FROM platform_settings WHERE id = 1',
+      );
+      const previousFeatures = settings?.subscription_plan_features
+        ? parseSubscriptionProFeatures(settings.subscription_plan_features)
+        : DEFAULT_SUBSCRIPTION_PRO_FEATURES;
+      if (Object.keys(expectedFeatures).some((key) =>
+        previousFeatures[key as keyof SubscriptionProFeatures] !== expectedFeatures[key as keyof SubscriptionProFeatures])) {
+        return { conflict: true as const };
+      }
+      const shops = await all<{
+        id: number;
+        subscription_expires_at: string | null;
+        subscription_features_snapshot: string | null;
+        subscription_features_effective_at: string | null;
+      }>(`SELECT id, subscription_expires_at, subscription_features_snapshot,
+          subscription_features_effective_at
+        FROM shops
+          WHERE selected_subscription_tier = 'pro' AND subscription_expires_at IS NOT NULL
+            AND COALESCE(subscription_status, 'active') <> 'trialing'`);
+      const now = Date.parse(updatedAt);
+      for (const shop of shops) {
+        const expiresAt = getSubscriptionAccessCutoff(shop.subscription_expires_at || '');
+        if (expiresAt === null || expiresAt <= now) continue;
+        const scheduledAt = shop.subscription_features_effective_at
+          ? getSubscriptionAccessCutoff(shop.subscription_features_effective_at)
+          : null;
+        const preserveScheduledSnapshot = Boolean(shop.subscription_features_snapshot)
+          && scheduledAt !== null
+          && scheduledAt > now;
+        const snapshot = preserveScheduledSnapshot && shop.subscription_features_snapshot
+          ? parseSubscriptionProFeatures(shop.subscription_features_snapshot)
+          : previousFeatures;
+        const effectiveAt = preserveScheduledSnapshot
+          ? shop.subscription_features_effective_at
+          : shop.subscription_expires_at;
+        await run(`UPDATE shops SET subscription_features_snapshot = ?,
+          subscription_features_effective_at = ? WHERE id = ?`,
+        [JSON.stringify(snapshot), effectiveAt, shop.id]);
+      }
+      await run(`INSERT INTO platform_settings (id, subscription_plan_features, updated_at, updated_by)
+        VALUES (1, ?, ?, ?)
+        ON CONFLICT (id) DO UPDATE SET subscription_plan_features = excluded.subscription_plan_features,
+          updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+      [JSON.stringify(proFeatures), updatedAt, req.adminRole || 'super_admin']);
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        [req.adminRole || 'super_admin', 'subscription_plan_features_updated', null, JSON.stringify({
+          previous_pro_features: previousFeatures,
+          pro_features: proFeatures,
+        }), updatedAt],
+      );
+      return { conflict: false as const, previousFeatures };
+    });
+    if (result.conflict) {
+      return res.status(409).json({ error: 'Les avantages Pro ont changé depuis leur chargement. Actualisez avant de réessayer.' });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      success: true,
+      pro_features: proFeatures,
+      previous_pro_features: result.previousFeatures,
+      updated_at: updatedAt,
+    });
+  });
+
   router.patch('/maintenance', async (req, res) => {
     if (typeof req.body?.enabled !== 'boolean') {
       return res.status(400).json({ error: 'Le statut du mode maintenance est invalide.' });
@@ -392,6 +560,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       }
     }
     let mrrEstimatedSubscriptions = 0;
+    const currentSubscriptionPrices = await getCurrentSubscriptionPrices();
     const mrrByTier = (['standard', 'premium', 'pro'] as const).map((tier) => {
       const activeShops = states.filter(({ state }) => state.status === 'active' && state.plan === tier);
       const amount = activeShops.reduce((total, { shop }) => {
@@ -400,7 +569,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
           return total + Number(payment.amount) / (payment.subscription_term === 'annual' ? 12 : 1);
         }
         mrrEstimatedSubscriptions += 1;
-        return total + getSubscriptionPlanConfig(tier).amount;
+        return total + currentSubscriptionPrices[tier];
       }, 0);
       return { tier, count: activeShops.length, amount: Math.round(amount) };
     });
@@ -765,6 +934,10 @@ export function createAdminRouter(options: AdminRouterOptions) {
         owner_email: shop.owner_email ?? null,
         whatsapp_reminders_opt_in: Boolean(shop.whatsapp_subscription_reminders_enabled),
         plan: subscription.plan,
+        pending_subscription_tier: subscription.upcomingPlan,
+        pending_subscription_effective_at: subscription.upcomingPlanAt,
+        subscription_cancel_at: subscription.cancellationAt,
+        subscription_admin_suspended_at: shop.subscription_admin_suspended_at ?? null,
         status: subscription.status,
         is_active: shop.is_active,
         publication_status: shop.publication_status,
@@ -835,12 +1008,306 @@ export function createAdminRouter(options: AdminRouterOptions) {
     });
   });
 
+  router.patch('/subscriptions/:id/schedule-plan', async (req, res) => {
+    const shopId = Number(req.params.id);
+    if (!Number.isSafeInteger(shopId) || shopId <= 0) {
+      return res.status(400).json({ error: 'Identifiant de boutique invalide.' });
+    }
+    const requestedTier = req.body?.next_tier;
+    if (requestedTier !== null && !['standard', 'premium', 'pro'].includes(requestedTier)) {
+      return res.status(400).json({ error: 'Choisissez une formule valide ou null pour annuler le changement programmé.' });
+    }
+    const expectedTier = req.body?.expected_tier;
+    if (!['standard', 'premium', 'pro'].includes(expectedTier)) {
+      return res.status(400).json({ error: 'La formule actuelle attendue est invalide.' });
+    }
+    const expectedPendingTier = req.body?.expected_pending_tier;
+    if (expectedPendingTier !== null && !['standard', 'premium', 'pro'].includes(expectedPendingTier)) {
+      return res.status(400).json({ error: 'La formule programmée actuelle est invalide.' });
+    }
+    const expectedExpiry = req.body?.expected_subscription_expires_at;
+    if (typeof expectedExpiry !== 'string' || !Number.isFinite(Date.parse(expectedExpiry))) {
+      return res.status(400).json({ error: 'Une échéance valide est requise pour programmer un changement.' });
+    }
+    const reason = typeof req.body?.reason === 'string'
+      ? req.body.reason.trim().replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 500)
+      : '';
+    if (reason.length < 10) {
+      return res.status(400).json({ error: 'Un motif explicite d’au moins 10 caractères est requis.' });
+    }
+    if (requestedTier === expectedTier) {
+      return res.status(400).json({ error: 'La nouvelle formule doit être différente de la formule actuelle.' });
+    }
+
+    const actionAt = new Date().toISOString();
+    const result = await dbTransaction(async ({ get, run }) => {
+      const shop = await get<{
+        selected_subscription_tier: string | null;
+        subscription_status: string | null;
+        subscription_expires_at: string | null;
+        pending_subscription_tier: string | null;
+        pending_subscription_effective_at: string | null;
+        subscription_cancel_at: string | null;
+        subscription_admin_suspended_at: string | null;
+        subscription_admin_suspended_status: 'active' | 'trialing' | null;
+      }>(`SELECT selected_subscription_tier, subscription_status, subscription_expires_at,
+          pending_subscription_tier, pending_subscription_effective_at,
+          subscription_cancel_at, subscription_admin_suspended_at, subscription_admin_suspended_status
+        FROM shops WHERE id = ?`, [shopId]);
+      if (!shop) return { status: 'missing' as const };
+      const subscription = getSubscriptionState({
+        ...shop,
+        trial_start: null,
+        trial_end: null,
+        selected_subscription_tier: normalizeSubscriptionTier(shop.selected_subscription_tier),
+        pending_subscription_tier: shop.pending_subscription_tier as 'standard' | 'premium' | 'pro' | null,
+        subscription_cancel_at: shop.subscription_cancel_at,
+      }, new Date(actionAt));
+      if (subscription.plan !== expectedTier
+        || (subscription.upcomingPlan ?? null) !== expectedPendingTier
+        || shop.subscription_expires_at !== expectedExpiry) {
+        return { status: 'stale' as const };
+      }
+      if (subscription.status !== 'active' || !shop.subscription_expires_at
+        || shop.subscription_admin_suspended_at || subscription.cancellationAt) {
+        return { status: 'ineligible' as const };
+      }
+      if (requestedTier !== null && requestedTier === subscription.plan) {
+        return { status: 'same' as const };
+      }
+      if (requestedTier === null && !subscription.upcomingPlan) {
+        return { status: 'same' as const };
+      }
+      const unresolvedPayment = await get<{ id: string }>(`
+        SELECT id FROM subscription_payment_intents
+        WHERE shop_id = ? AND payment_type = 'subscription'
+          AND (status = 'pending' OR (status = 'expired' AND provider_reference IS NOT NULL))
+        LIMIT 1
+      `, [shopId]);
+      if (unresolvedPayment) return { status: 'payment_pending' as const };
+
+      const update = await run(`UPDATE shops
+        SET selected_subscription_tier = ?, subscription_tier = ?,
+          pending_subscription_tier = ?, pending_subscription_effective_at = ?
+        WHERE id = ? AND COALESCE(selected_subscription_tier, 'standard') = ?
+          AND COALESCE(subscription_expires_at, '') = ?
+          AND COALESCE(pending_subscription_tier, '') = ?
+          AND COALESCE(subscription_cancel_at, '') = ?
+          AND COALESCE(subscription_admin_suspended_at, '') = ?`,
+      [subscription.plan, subscription.plan, requestedTier, requestedTier === null ? null : shop.subscription_expires_at,
+        shopId, normalizeSubscriptionTier(shop.selected_subscription_tier), expectedExpiry,
+        shop.pending_subscription_tier ?? '', shop.subscription_cancel_at ?? '',
+        shop.subscription_admin_suspended_at ?? '']);
+      if (update.changes !== 1) return { status: 'stale' as const };
+      const action = requestedTier === null ? 'subscription_plan_change_cancelled' : 'subscription_plan_change_scheduled';
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        [req.adminRole || 'super_admin', action, shopId, JSON.stringify({
+          current_tier: expectedTier,
+          previous_pending_tier: expectedPendingTier,
+          pending_tier: requestedTier,
+          effective_at: requestedTier === null ? null : shop.subscription_expires_at,
+          reason,
+        }), actionAt],
+      );
+      return {
+        status: 'success' as const,
+        pendingTier: requestedTier as 'standard' | 'premium' | 'pro' | null,
+        effectiveAt: requestedTier === null ? null : shop.subscription_expires_at,
+      };
+    });
+    if (result.status === 'missing') return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (result.status === 'stale') return res.status(409).json({ error: 'L’abonnement a changé. Actualisez la liste avant de réessayer.' });
+    if (result.status === 'ineligible') return res.status(409).json({ error: 'Seul un abonnement payé actif avec une échéance future peut être modifié.' });
+    if (result.status === 'same') return res.status(400).json({ error: 'La formule programmée est déjà celle de l’abonnement actif.' });
+    if (result.status === 'payment_pending') return res.status(409).json({ error: 'Un paiement d’abonnement est en attente. Résolvez-le avant de programmer un changement de formule.' });
+    await refreshRuntimeDataFromDatabase();
+    return res.json({
+      success: true,
+      pending_subscription_tier: result.pendingTier,
+      pending_subscription_effective_at: result.effectiveAt,
+    });
+  });
+
+  router.patch('/subscriptions/:id/lifecycle', async (req, res) => {
+    const shopId = Number(req.params.id);
+    const action = req.body?.action;
+    const expectedStatus = req.body?.expected_status;
+    const expectedExpiry = req.body?.expected_subscription_expires_at;
+    const expectedCancellationAt = req.body?.expected_cancellation_at;
+    const reason = typeof req.body?.reason === 'string'
+      ? req.body.reason.trim().replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 500)
+      : '';
+    if (!Number.isSafeInteger(shopId) || shopId <= 0
+      || !['cancel_at_period_end', 'undo_cancellation', 'suspend', 'reactivate'].includes(action)
+      || !['not_started', 'trialing', 'active', 'past_due', 'cancelled', 'expired', 'suspended'].includes(expectedStatus)
+      || typeof expectedExpiry !== 'string' && expectedExpiry !== null
+      || typeof expectedCancellationAt !== 'string' && expectedCancellationAt !== null
+      || reason.length < 10) {
+      return res.status(400).json({ error: 'Action, état attendu et motif explicite (au moins 10 caractères) requis.' });
+    }
+
+    const actionAt = new Date().toISOString();
+    const result = await dbTransaction(async ({ get, run }) => {
+      const shop = await get<{
+        subscription_status: string;
+        subscription_expires_at: string | null;
+        trial_start: string | null;
+        trial_end: string | null;
+        selected_subscription_tier: string | null;
+        pending_subscription_tier: string | null;
+        pending_subscription_effective_at: string | null;
+        subscription_cancel_at: string | null;
+        subscription_admin_suspended_at: string | null;
+        subscription_admin_suspended_status: 'active' | 'trialing' | null;
+      }>(`SELECT subscription_status, subscription_expires_at, trial_start, trial_end,
+          selected_subscription_tier, pending_subscription_tier, pending_subscription_effective_at,
+          subscription_cancel_at, subscription_admin_suspended_at, subscription_admin_suspended_status
+        FROM shops WHERE id = ?`, [shopId]);
+      if (!shop) return { status: 'missing' as const };
+      const subscription = getSubscriptionState({
+        ...shop,
+        selected_subscription_tier: normalizeSubscriptionTier(shop.selected_subscription_tier),
+        pending_subscription_tier: shop.pending_subscription_tier as 'standard' | 'premium' | 'pro' | null,
+      }, new Date(actionAt));
+      if (subscription.status !== expectedStatus
+        || shop.subscription_expires_at !== expectedExpiry
+        || subscription.cancellationAt !== expectedCancellationAt) {
+        return { status: 'stale' as const };
+      }
+
+      let nextStatus = shop.subscription_status;
+      let nextCancellationAt = shop.subscription_cancel_at;
+      let nextSuspendedAt = shop.subscription_admin_suspended_at;
+      let nextSuspendedStatus = shop.subscription_admin_suspended_status;
+      let auditAction: string;
+      let resultMessage: string;
+      if (action === 'cancel_at_period_end') {
+        const expiryCutoff = shop.subscription_expires_at
+          ? getSubscriptionAccessCutoff(shop.subscription_expires_at)
+          : null;
+        if (subscription.status !== 'active' || !shop.subscription_expires_at
+          || expiryCutoff === null || expiryCutoff <= Date.parse(actionAt)
+          || shop.subscription_cancel_at || shop.subscription_admin_suspended_at
+          || subscription.upcomingPlan) {
+          return { status: 'ineligible' as const };
+        }
+        nextCancellationAt = shop.subscription_expires_at;
+        auditAction = 'subscription_cancellation_scheduled';
+        resultMessage = 'Résiliation programmée à l’échéance.';
+      } else if (action === 'undo_cancellation') {
+        const cancellationCutoff = shop.subscription_cancel_at
+          ? getSubscriptionAccessCutoff(shop.subscription_cancel_at)
+          : null;
+        if (subscription.status !== 'active' || !shop.subscription_cancel_at
+          || cancellationCutoff === null || cancellationCutoff <= Date.parse(actionAt)) {
+          return { status: 'ineligible' as const };
+        }
+        nextCancellationAt = null;
+        auditAction = 'subscription_cancellation_revoked';
+        resultMessage = 'Résiliation programmée annulée.';
+      } else if (action === 'suspend') {
+        if ((subscription.status !== 'active' && subscription.status !== 'trialing')
+          || shop.subscription_admin_suspended_at || shop.subscription_cancel_at) {
+          return { status: 'ineligible' as const };
+        }
+        nextStatus = 'suspended';
+        nextSuspendedAt = actionAt;
+        nextSuspendedStatus = subscription.status;
+        auditAction = 'subscription_access_suspended';
+        resultMessage = 'Accès à l’abonnement suspendu.';
+      } else {
+        if (!shop.subscription_admin_suspended_at
+          || !shop.subscription_admin_suspended_status) {
+          return { status: 'not_admin_suspended' as const };
+        }
+        const restored = getSubscriptionState({
+          ...shop,
+          subscription_status: shop.subscription_admin_suspended_status,
+          selected_subscription_tier: normalizeSubscriptionTier(shop.selected_subscription_tier),
+          pending_subscription_tier: shop.pending_subscription_tier as 'standard' | 'premium' | 'pro' | null,
+        }, new Date(actionAt));
+        if (!restored.isActive || restored.status !== shop.subscription_admin_suspended_status) {
+          return { status: 'not_restorable' as const };
+        }
+        nextStatus = restored.status;
+        nextSuspendedAt = null;
+        nextSuspendedStatus = null;
+        auditAction = 'subscription_access_reactivated';
+        resultMessage = 'Accès à l’abonnement réactivé.';
+      }
+
+      if (action === 'cancel_at_period_end' || action === 'suspend') {
+        const unresolvedPayment = await get<{ id: string }>(`
+          SELECT id FROM subscription_payment_intents
+          WHERE shop_id = ? AND payment_type = 'subscription'
+            AND (status = 'pending' OR (status = 'expired' AND provider_reference IS NOT NULL))
+          LIMIT 1
+        `, [shopId]);
+        if (unresolvedPayment) return { status: 'payment_pending' as const };
+      }
+
+      const updated = await run(`UPDATE shops SET subscription_status = ?,
+          subscription_cancel_at = ?,
+          subscription_admin_suspended_at = ?,
+          subscription_admin_suspended_status = ?
+        WHERE id = ? AND subscription_status = ? AND COALESCE(subscription_expires_at, '') = ?
+          AND COALESCE(subscription_cancel_at, '') = ?
+          AND COALESCE(subscription_admin_suspended_at, '') = ?
+          AND COALESCE(subscription_admin_suspended_status, '') = ?`,
+      [nextStatus, nextCancellationAt, nextSuspendedAt, nextSuspendedStatus, shopId,
+        shop.subscription_status, shop.subscription_expires_at ?? '',
+        shop.subscription_cancel_at ?? '', shop.subscription_admin_suspended_at ?? '',
+        shop.subscription_admin_suspended_status ?? '']);
+      if (updated.changes !== 1) return { status: 'stale' as const };
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        [req.adminRole || 'super_admin', auditAction, shopId, JSON.stringify({
+          previous_status: subscription.status,
+          status: nextStatus,
+          previous_cancellation_at: shop.subscription_cancel_at,
+          cancellation_at: nextCancellationAt,
+          effective_at: action === 'cancel_at_period_end' ? nextCancellationAt : action === 'suspend' ? actionAt : null,
+          reason,
+        }), actionAt],
+      );
+      return {
+        status: 'success' as const,
+        message: resultMessage,
+        subscription_status: nextStatus,
+        subscription_cancel_at: nextCancellationAt,
+        subscription_admin_suspended_at: nextSuspendedAt,
+      };
+    });
+
+    if (result.status === 'missing') return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (result.status === 'stale') return res.status(409).json({ error: 'L’abonnement a changé. Actualisez la liste avant de réessayer.' });
+    if (result.status === 'ineligible') return res.status(409).json({ error: 'Cette action ne s’applique pas à l’état actuel de l’abonnement.' });
+    if (result.status === 'not_admin_suspended') return res.status(409).json({ error: 'Cette suspension n’a pas été effectuée par une action administrative réversible.' });
+    if (result.status === 'not_restorable') return res.status(409).json({ error: 'La période payée ou d’essai est terminée; un nouveau paiement est nécessaire avant de réactiver les droits.' });
+    if (result.status === 'payment_pending') return res.status(409).json({ error: 'Un paiement d’abonnement est en attente. Résolvez-le avant de modifier l’accès.' });
+    await refreshRuntimeDataFromDatabase();
+    return res.json({
+      success: true,
+      message: result.message,
+      subscription_status: result.subscription_status,
+      subscription_cancel_at: result.subscription_cancel_at,
+      subscription_admin_suspended_at: result.subscription_admin_suspended_at,
+    });
+  });
+
   router.patch('/subscriptions/:id/extend-trial', async (req, res) => {
     const shop = await getShop(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const days = Number(req.body?.days);
     if (!Number.isInteger(days) || days < 1 || days > 30) {
       return res.status(400).json({ error: 'La prolongation doit être comprise entre 1 et 30 jours.' });
+    }
+    const reason = typeof req.body?.reason === 'string'
+      ? req.body.reason.trim().replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 500)
+      : '';
+    if (reason.length < 10) {
+      return res.status(400).json({ error: 'Un motif explicite d’au moins 10 caractères est requis pour prolonger un essai.' });
     }
     const isTrial = shop.subscription_status === 'trialing'
       || shop.subscription_status === 'expired' && Boolean(shop.trial_end) && !shop.subscription_expires_at;
@@ -879,6 +1346,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
         'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
         ['super_admin', 'trial_extended', shop.id, JSON.stringify({
           days,
+          reason,
           previous_trial_end: previousTrialEnd,
           previous_subscription_expires_at: previousExpiry,
           trial_end: nextTrialEnd,
@@ -1061,11 +1529,22 @@ export function createAdminRouter(options: AdminRouterOptions) {
     const requestedOffset = Number(req.query.offset);
     const offset = Number.isInteger(requestedOffset) ? Math.max(0, requestedOffset) : 0;
     const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : '';
-    const searchFilter = search
-      ? `WHERE LOWER(users.first_name) LIKE LOWER(?) OR LOWER(users.last_name) LIKE LOWER(?)
-        OR LOWER(users.email) LIKE LOWER(?) OR users.phone LIKE ?`
-      : '';
-    const searchParams = search ? [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`] : [];
+    const requestedStatus = typeof req.query.status === 'string' ? req.query.status : 'all';
+    if (!['all', 'active', 'suspended'].includes(requestedStatus)) {
+      return res.status(400).json({ error: 'Filtre de statut client invalide.' });
+    }
+    const filters: string[] = [];
+    const filterParams: unknown[] = [];
+    if (search) {
+      filters.push(`(LOWER(users.first_name) LIKE LOWER(?) OR LOWER(users.last_name) LIKE LOWER(?)
+        OR LOWER(users.email) LIKE LOWER(?) OR users.phone LIKE ?)`);
+      filterParams.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    if (requestedStatus !== 'all') {
+      filters.push('users.is_active = ?');
+      filterParams.push(requestedStatus === 'active' ? 1 : 0);
+    }
+    const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     const [customers, count] = await Promise.all([
       dbAll<Record<string, unknown>>(`
         SELECT users.id, users.first_name, users.last_name, users.name, users.email, users.phone,
@@ -1075,12 +1554,12 @@ export function createAdminRouter(options: AdminRouterOptions) {
             THEN orders.total_amount ELSE 0 END), 0) AS order_value,
           MAX(orders.created_at) AS last_order_at
         FROM users LEFT JOIN orders ON orders.customer_user_id = users.id
-        ${searchFilter}
+        ${whereClause}
         GROUP BY users.id
         ORDER BY users.created_at DESC, users.id DESC
         LIMIT ? OFFSET ?
-      `, [...searchParams, limit, offset]),
-      dbGet<{ total: number }>(`SELECT COUNT(*) AS total FROM users ${searchFilter}`, searchParams),
+      `, [...filterParams, limit, offset]),
+      dbGet<{ total: number }>(`SELECT COUNT(*) AS total FROM users ${whereClause}`, filterParams),
     ]);
     res.json({
       customers: customers.map((customer) => ({
@@ -1100,7 +1579,129 @@ export function createAdminRouter(options: AdminRouterOptions) {
       limit,
       offset,
       search,
+      status: requestedStatus,
     });
+  });
+
+  router.get('/customers/:id', requireSuperAdmin, async (req, res) => {
+    const userId = Number(req.params.id);
+    if (!Number.isSafeInteger(userId) || userId <= 0) {
+      return res.status(400).json({ error: 'Identifiant client invalide.' });
+    }
+    const customer = await dbGet<{
+      id: number;
+      first_name: string | null;
+      last_name: string | null;
+      name: string;
+      email: string;
+      phone: string;
+      created_at: string;
+      is_active: number | boolean;
+    }>(`SELECT id, first_name, last_name, name, email, phone, created_at, is_active
+      FROM users WHERE id = ?`, [userId]);
+    if (!customer) return res.status(404).json({ error: 'Compte client introuvable.' });
+
+    const orders = await dbAll<{
+      id: number;
+      shop_name: string | null;
+      total_amount: number;
+      status: string | null;
+      created_at: string;
+      items: unknown;
+    }>(`SELECT orders.id, shops.name AS shop_name, orders.total_amount, orders.status,
+        orders.created_at, orders.items
+      FROM orders LEFT JOIN shops ON shops.id = orders.shop_id
+      WHERE orders.customer_user_id = ?
+      ORDER BY orders.created_at DESC, orders.id DESC
+      LIMIT 50`, [userId]);
+    const totalOrders = await dbGet<{ total: number }>(
+      'SELECT COUNT(*) AS total FROM orders WHERE customer_user_id = ?',
+      [userId],
+    );
+
+    return res.json({
+      customer: {
+        id: Number(customer.id),
+        first_name: String(customer.first_name || ''),
+        last_name: String(customer.last_name || ''),
+        name: String(customer.name || ''),
+        email: String(customer.email || ''),
+        phone: String(customer.phone || ''),
+        created_at: String(customer.created_at),
+        is_active: Boolean(customer.is_active),
+      },
+      orders: orders.map((order) => {
+        const items: unknown = typeof order.items === 'string'
+          ? JSON.parse(order.items)
+          : order.items ?? [];
+        if (!Array.isArray(items)) throw new Error(`Customer order ${order.id} has invalid item data.`);
+        const itemsCount = items.reduce((sum: number, item: unknown) => {
+          if (!item || typeof item !== 'object' || !('quantity' in item)) {
+            throw new Error(`Customer order ${order.id} has an invalid item entry.`);
+          }
+          const quantity = Number(item.quantity);
+          if (!Number.isFinite(quantity) || quantity < 0) {
+            throw new Error(`Customer order ${order.id} has an invalid item quantity.`);
+          }
+          return sum + quantity;
+        }, 0);
+        return {
+          id: Number(order.id),
+          shop_name: order.shop_name == null ? 'Boutique supprimée' : String(order.shop_name),
+          total_amount: Number(order.total_amount),
+          status: String(order.status || 'pending'),
+          created_at: String(order.created_at),
+          items_count: itemsCount,
+        };
+      }),
+      total_orders: Number(totalOrders?.total || 0),
+      orders_limit: 50,
+    });
+  });
+
+  router.patch('/customers/:id/toggle-active', requireSuperAdmin, async (req, res) => {
+    const userId = Number(req.params.id);
+    const expectedIsActive = req.body?.expected_is_active;
+    const reason = typeof req.body?.reason === 'string'
+      ? req.body.reason.trim().replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 500)
+      : '';
+    if (!Number.isSafeInteger(userId) || userId <= 0
+      || typeof expectedIsActive !== 'boolean'
+      || reason.length < 3) {
+      return res.status(400).json({ error: 'Un motif (au moins 3 caractères) et le statut actuel sont requis.' });
+    }
+
+    const result = await dbTransaction(async ({ get, run }) => {
+      const user = await get<{ id: number; is_active: number | boolean }>(
+        'SELECT id, is_active FROM users WHERE id = ?',
+        [userId],
+      );
+      if (!user) return 'missing' as const;
+      if (Boolean(user.is_active) !== expectedIsActive) return 'stale' as const;
+
+      const isActive = !expectedIsActive;
+      const update = await run(
+        'UPDATE users SET is_active = ? WHERE id = ? AND is_active = ?',
+        [isActive ? 1 : 0, userId, expectedIsActive ? 1 : 0],
+      );
+      if (update.changes !== 1) return 'stale' as const;
+      if (!isActive) await run('DELETE FROM user_sessions WHERE user_id = ?', [userId]);
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        [
+          req.adminRole || 'super_admin',
+          isActive ? 'customer_reactivated' : 'customer_suspended',
+          null,
+          JSON.stringify({ user_id: userId, is_active: isActive, reason }),
+          new Date().toISOString(),
+        ],
+      );
+      return isActive ? 'reactivated' as const : 'suspended' as const;
+    });
+
+    if (result === 'missing') return res.status(404).json({ error: 'Compte client introuvable.' });
+    if (result === 'stale') return res.status(409).json({ error: 'Le statut du compte a changé. Actualisez la liste avant de réessayer.' });
+    return res.json({ success: true, is_active: result === 'reactivated' });
   });
 
   router.patch('/shops/:id/toggle-active', async (req, res) => {
@@ -1126,21 +1727,29 @@ export function createAdminRouter(options: AdminRouterOptions) {
       const update = await run('UPDATE shops SET is_active = ?, publication_status = ? WHERE id = ? AND is_active = ?', [
         isActive ? 1 : 0, publicationStatus, shopId, expectedIsActive ? 1 : 0,
       ]);
-      if (update.changes !== 1) return undefined;
+      if (update.changes !== 1) return null;
+      const revokedSessions = isActive
+        ? 0
+        : (await run('DELETE FROM merchant_sessions WHERE shop_id = ?', [shopId])).changes;
       await run(
         'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
-        [req.adminRole || 'super_admin', isActive ? 'shop_reactivated' : 'shop_suspended', shopId, JSON.stringify({ is_active: isActive, reason }), new Date().toISOString()],
+        [req.adminRole || 'super_admin', isActive ? 'shop_reactivated' : 'shop_suspended', shopId, JSON.stringify({
+          is_active: isActive,
+          reason,
+          revoked_sessions: revokedSessions,
+        }), new Date().toISOString()],
       );
-      return isActive;
+      return { isActive, revokedSessions };
     });
     if (result === null) return res.status(409).json({ error: 'Le statut de la boutique a changé. Actualisez la liste avant de réessayer.' });
     if (result === undefined) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (!result.isActive) clearMerchantSessionsForShop(shopId);
     await refreshRuntimeDataFromDatabase();
     const updatedShop = await getShop(shopId);
     const shopResponse = isVerificationAdmin(req)
       ? { id: updatedShop!.id, is_active: updatedShop!.is_active, publication_status: updatedShop!.publication_status }
       : toSafeShop(updatedShop!);
-    res.json({ success: true, is_active: result, shop: shopResponse });
+    res.json({ success: true, is_active: result.isActive, revoked_sessions: result.revokedSessions, shop: shopResponse });
   });
 
   router.delete('/shops/:id', async (req, res) => {
@@ -1231,18 +1840,59 @@ export function createAdminRouter(options: AdminRouterOptions) {
     }
     const nextExpiry = `${expiryDate}T23:59:59.999Z`;
     const actionAt = new Date().toISOString();
+    const subscription = getSubscriptionState(shop, new Date(actionAt));
+    if (subscription.status !== 'active') {
+      return res.status(409).json({ error: 'Seul un abonnement actif peut recevoir une échéance manuelle.' });
+    }
+    const pendingWasEffective = Boolean(shop.pending_subscription_tier && !subscription.upcomingPlan);
+    const pendingIsUpcoming = Boolean(subscription.upcomingPlan);
+    const cancellationIsUpcoming = Boolean(shop.subscription_cancel_at && subscription.cancellationAt);
+    const subscriptionUpdateValues = [
+      nextExpiry,
+      cancellationIsUpcoming ? 1 : 0,
+      nextExpiry,
+      pendingWasEffective ? 1 : 0,
+      subscription.plan,
+      pendingWasEffective ? 1 : 0,
+      subscription.plan,
+      pendingWasEffective ? 1 : 0,
+      pendingWasEffective ? 1 : 0,
+      pendingIsUpcoming ? 1 : 0,
+      nextExpiry,
+    ];
+    const subscriptionUpdate = `SET subscription_expires_at = ?,
+      subscription_cancel_at = CASE WHEN ? = 1 THEN ? ELSE subscription_cancel_at END,
+      selected_subscription_tier = CASE WHEN ? = 1 THEN ? ELSE selected_subscription_tier END,
+      subscription_tier = CASE WHEN ? = 1 THEN ? ELSE subscription_tier END,
+      pending_subscription_tier = CASE WHEN ? = 1 THEN NULL ELSE pending_subscription_tier END,
+      pending_subscription_effective_at = CASE
+        WHEN ? = 1 THEN NULL
+        WHEN ? = 1 THEN ?
+        ELSE pending_subscription_effective_at END`;
     const updated = await dbTransaction(async ({ run }) => {
       const result = expectedExpiry === null
-        ? await run(`UPDATE shops SET subscription_expires_at = ? WHERE id = ?
-          AND subscription_status = 'active' AND subscription_expires_at IS NULL`, [nextExpiry, shopId])
-        : await run(`UPDATE shops SET subscription_expires_at = ? WHERE id = ?
-          AND subscription_status = 'active' AND subscription_expires_at = ?`, [nextExpiry, shopId, expectedExpiry]);
+        ? await run(`UPDATE shops ${subscriptionUpdate} WHERE id = ?
+          AND subscription_status = 'active' AND subscription_expires_at IS NULL
+          AND COALESCE(subscription_cancel_at, '') = ?
+          AND COALESCE(pending_subscription_tier, '') = ?
+          AND COALESCE(pending_subscription_effective_at, '') = ?`,
+        [...subscriptionUpdateValues, shopId, shop.subscription_cancel_at ?? '',
+          shop.pending_subscription_tier ?? '', shop.pending_subscription_effective_at ?? ''])
+        : await run(`UPDATE shops ${subscriptionUpdate} WHERE id = ?
+          AND subscription_status = 'active' AND subscription_expires_at = ?
+          AND COALESCE(subscription_cancel_at, '') = ?
+          AND COALESCE(pending_subscription_tier, '') = ?
+          AND COALESCE(pending_subscription_effective_at, '') = ?`,
+        [...subscriptionUpdateValues, shopId, expectedExpiry, shop.subscription_cancel_at ?? '',
+          shop.pending_subscription_tier ?? '', shop.pending_subscription_effective_at ?? '']);
       if (result.changes !== 1) return false;
       await run(
         'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
         ['super_admin', 'subscription_expiry_corrected', shopId, JSON.stringify({
           previous_subscription_expires_at: expectedExpiry,
           subscription_expires_at: nextExpiry,
+          previous_cancellation_at: shop.subscription_cancel_at,
+          cancellation_at: cancellationIsUpcoming ? nextExpiry : shop.subscription_cancel_at,
           reason,
         }), actionAt],
       );

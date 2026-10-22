@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { Store, ShieldCheck, ShoppingBag, ArrowLeft, Compass, CircleHelp, Newspaper, Menu, X, Sparkles, ArrowUpRight } from 'lucide-react';
+import { Store, ShieldCheck, ShoppingBag, ArrowLeft, Compass, CircleHelp, Newspaper, BookOpen, Menu, X, Sparkles, ArrowUpRight } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { CustomerUser } from './CustomerAuth';
 
@@ -100,7 +100,15 @@ export const Navigation: React.FC<NavigationProps> = ({
               <Link to="/comment-ca-marche" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
                 <CircleHelp className="h-4 w-4" aria-hidden="true" />Comment ça marche
               </Link>
+              <Link to="/guide" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-bold text-[#31584c] transition hover:bg-white hover:text-[#0f4d3d] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
+                <BookOpen className="h-4 w-4" aria-hidden="true" />Guide personnalisé
+              </Link>
             </div>
+          )}
+          {!isDirectory && currentRole !== 'admin' && (
+            <Link to="/guide" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-bold text-[#31584c] transition hover:bg-[#f0f7f2] hover:text-[#0f4d3d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176b55] focus-visible:ring-offset-2">
+              <BookOpen className="h-4 w-4" aria-hidden="true" />Guides
+            </Link>
           )}
           {currentRole === 'storefront' && !isDirectory && (
             <button onClick={onOpenDirectory} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[#e4d9ca] bg-white px-3.5 py-2 text-sm font-semibold text-[#332d2a] transition hover:border-[#1d6b57] hover:text-[#0f4d3d]">
@@ -170,7 +178,15 @@ export const Navigation: React.FC<NavigationProps> = ({
                   <Link to="/comment-ca-marche" onClick={() => setMobileMenuOpen(false)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-[#31584c] hover:bg-white">
                     <CircleHelp className="h-4 w-4" aria-hidden="true" />Comment ça marche
                   </Link>
+                  <Link to="/guide" onClick={() => setMobileMenuOpen(false)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-[#31584c] hover:bg-white">
+                    <BookOpen className="h-4 w-4" aria-hidden="true" />Guide personnalisé
+                  </Link>
                 </motion.div>
+              )}
+              {!isDirectory && currentRole !== 'admin' && (
+                <Link to="/guide" onClick={() => setMobileMenuOpen(false)} className="flex min-h-11 items-center gap-3 rounded-xl border border-[#e4d9ca] bg-white px-3 text-sm font-semibold text-[#31584c]">
+                  <BookOpen className="h-4 w-4" aria-hidden="true" />Guide personnalisé
+                </Link>
               )}
               {currentRole === 'storefront' && !isDirectory && (
                 <motion.button variants={menuItemVariants} onClick={() => { setMobileMenuOpen(false); onOpenDirectory(); }} className="flex min-h-11 items-center gap-3 rounded-xl border border-[#e4d9ca] bg-white px-3 text-left text-sm font-semibold text-[#332d2a]">

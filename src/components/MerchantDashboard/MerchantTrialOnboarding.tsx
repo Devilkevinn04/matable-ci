@@ -11,14 +11,14 @@ import {
   getBoostPrice,
 } from '../../utils/boostPricing';
 import {
-  getSubscriptionDailyPrice,
-  getSubscriptionPrice,
-  PRO_BOOST_DISCOUNT_PERCENT,
+  DEFAULT_SUBSCRIPTION_PRO_FEATURES,
+  getSubscriptionPlanBenefits,
   SUBSCRIPTION_PLANS,
   TRIAL_CATALOG_LIMIT,
   TRIAL_DURATION_DAYS,
   type SubscriptionTerm,
 } from '../../utils/subscriptionFeatures';
+import { useSubscriptionPrices } from '../../utils/useSubscriptionPrices';
 import { getRenewedSubscriptionExpiry } from '../../utils/subscriptionExpiry';
 import { WhatsAppSubscriptionReminderConsent } from './WhatsAppSubscriptionReminderConsent';
 
@@ -35,14 +35,19 @@ interface MerchantTrialOnboardingProps {
 const plans = Object.values(SUBSCRIPTION_PLANS);
 
 export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, onStart, mode = 'start', previewOnly = false, onBack }: MerchantTrialOnboardingProps) {
-  const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(shop.subscription?.plan || 'standard');
+  const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(shop.subscription?.upcomingPlan || shop.subscription?.plan || 'standard');
   const [term, setTerm] = useState<SubscriptionTerm>('monthly');
   const [purchaseNow, setPurchaseNow] = useState(false);
   const [isPaymentStarting, setIsPaymentStarting] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState('');
   const [needsBillingEmail, setNeedsBillingEmail] = useState(false);
   const [billingEmail, setBillingEmail] = useState('');
+  const { prices: subscriptionPrices, proFeatures, error: subscriptionPricesError } = useSubscriptionPrices();
   const selectedPlan = plans.find((plan) => plan.tier === selectedTier) || plans[0];
+  const monthlyPrice = subscriptionPrices?.[selectedTier];
+  const paymentPrice = monthlyPrice === undefined
+    ? null
+    : monthlyPrice * (term === 'annual' ? 10 : 1);
   const paymentFlowActive = previewOnly || mode !== 'start' || purchaseNow;
   const isTrialActive = shop.subscription?.status === 'trialing';
   const supportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour l’espace commerçant de ${shop.name}.`);
@@ -72,6 +77,10 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
       : 'Choisissez une formule et sa durée, puis réglez-la avec GeniusPay. Votre accès sera réactivé après confirmation sécurisée du paiement.';
 
   const startSubscriptionPayment = async () => {
+    if (!subscriptionPrices || paymentPrice === null) {
+      setPaymentMessage(subscriptionPricesError || 'Les tarifs sont en cours de chargement. Réessayez dans un instant.');
+      return;
+    }
     setPaymentMessage('');
     setIsPaymentStarting(true);
     try {
@@ -213,6 +222,16 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                 <button type="button" onClick={() => setTerm('annual')} aria-pressed={term === 'annual'} className={`rounded-full px-4 py-2.5 text-xs font-extrabold transition ${term === 'annual' ? 'bg-[#174f40] text-white shadow-sm' : 'text-slate-600 hover:text-[#174f40]'}`}>Annuel <span className="ml-1 text-[#c47c36]">−2 mois</span></button>
               </div>
             </div>
+            {shop.subscription?.upcomingPlan && shop.subscription.upcomingPlanAt && (
+              <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
+                La formule {shop.subscription.upcomingPlan} est programmée pour le {formatSubscriptionDate(shop.subscription.upcomingPlanAt)}. Vos droits actuels restent inchangés jusque-là; le renouvellement devra utiliser cette formule.
+              </p>
+            )}
+            {shop.subscription?.cancellationAt && (
+              <p className="mb-4 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-950">
+                La résiliation de votre abonnement est programmée au {formatSubscriptionDate(shop.subscription.cancellationAt)}. Vos droits restent actifs jusque-là. Contactez l’administration pour annuler cette résiliation avant l’échéance.
+              </p>
+            )}
             <div className={`grid gap-4 md:grid-cols-3 ${mode === 'plans' ? 'items-stretch' : 'mt-4'}`} role="radiogroup" aria-label="Formule d’abonnement">
               {plans.map((plan) => {
                 const selected = selectedTier === plan.tier;
@@ -226,8 +245,9 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     type="button"
                     role="radio"
                     aria-checked={selected}
+                    disabled={Boolean(shop.subscription?.cancellationAt || shop.subscription?.upcomingPlan && plan.tier !== shop.subscription.upcomingPlan)}
                     onClick={() => setSelectedTier(plan.tier)}
-                    className={`relative flex min-h-[360px] flex-col items-start rounded-[1.5rem] border p-5 text-left transition duration-200 hover:-translate-y-1 sm:p-6 ${mode === 'plans' ? planColors.card : `min-h-56 rounded-xl p-4 ${selected ? 'border-[#176b55] bg-white ring-2 ring-[#176b55]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[#176b55]'}`}`}
+                    className={`relative flex min-h-[360px] flex-col items-start rounded-[1.5rem] border p-5 text-left transition duration-200 hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 sm:p-6 ${mode === 'plans' ? planColors.card : `min-h-56 rounded-xl p-4 ${selected ? 'border-[#176b55] bg-white ring-2 ring-[#176b55]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[#176b55]'}`}`}
                   >
                     {featured && <span className="absolute -top-3 left-5 rounded-full bg-[#e8b85f] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#3f301b] shadow-sm">Le meilleur équilibre</span>}
                     <span className="flex w-full items-center justify-between gap-2">
@@ -237,12 +257,12 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     <h3 className={`mt-4 text-xl font-black leading-tight ${mode === 'plans' && plan.tier === 'pro' && selected ? 'text-white' : 'text-[#202d28]'}`}>{plan.headline}</h3>
                     <p className={`mt-2 min-h-10 text-xs leading-5 ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{plan.description}</p>
                     <div className={`mt-5 border-b pb-5 ${mode === 'plans' ? selected && plan.tier === 'pro' ? 'border-white/15' : 'border-[#e8ebe5]' : 'border-[#e8ebe5]'}`}>
-                      <strong className="text-3xl font-black tracking-tight">{new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(plan.tier, term))}<span className="ml-1 text-sm font-bold">FCFA</span></strong>
+                      <strong className="text-3xl font-black tracking-tight">{subscriptionPrices ? new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier] * (term === 'annual' ? 10 : 1)) : '—'}<span className="ml-1 text-sm font-bold">FCFA</span></strong>
                       <span className={`ml-1 text-xs font-semibold ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>/{term === 'annual' ? 'an' : 'mois'}</span>
-                      <span className={`mt-1.5 block text-xs ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{term === 'annual' ? `${new Intl.NumberFormat('fr-FR').format(plan.price)} FCFA/mois · 2 mois offerts` : `${new Intl.NumberFormat('fr-FR').format(getSubscriptionDailyPrice(plan.tier))} FCFA par jour`}</span>
+                      <span className={`mt-1.5 block text-xs ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{subscriptionPrices ? term === 'annual' ? `${new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier])} FCFA/mois · 2 mois offerts` : `${new Intl.NumberFormat('fr-FR').format(Math.ceil(subscriptionPrices[plan.tier] / 30))} FCFA par jour` : 'Tarif indisponible'}</span>
                     </div>
                     <ul className={`mt-5 flex-1 space-y-3 text-left text-xs leading-5 ${mode === 'plans' ? planColors.subdued : 'text-slate-700'}`}>
-                      {plan.benefits.map((benefit) => <li key={benefit} className="flex items-start gap-2.5"><Check className={`mt-0.5 h-4 w-4 shrink-0 ${mode === 'plans' ? planColors.check : 'text-emerald-700'}`} /><span>{benefit}</span></li>)}
+                      {getSubscriptionPlanBenefits(plan.tier, proFeatures || DEFAULT_SUBSCRIPTION_PRO_FEATURES).map((benefit) => <li key={benefit} className="flex items-start gap-2.5"><Check className={`mt-0.5 h-4 w-4 shrink-0 ${mode === 'plans' ? planColors.check : 'text-emerald-700'}`} /><span>{benefit}</span></li>)}
                     </ul>
                     {mode === 'plans' && <span className={`mt-6 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 text-xs font-extrabold transition ${selected ? plan.tier === 'pro' ? 'bg-[#f1ca7a] text-[#3f301b]' : 'bg-[#174f40] text-white' : plan.tier === 'pro' && selected ? 'bg-white/10 text-white' : 'bg-[#eef3ed] text-[#31584c]'}`}>
                       {selected ? 'Formule sélectionnée' : `Choisir ${plan.label}`} <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -253,7 +273,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             </div>
             {!previewOnly && (
               <div className="mt-4 rounded-xl border border-[#dbe8dc] bg-white p-4 text-sm text-slate-700" aria-live="polite">
-                <p><strong>À payer aujourd’hui :</strong> {new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(selectedTier, term))} FCFA avec GeniusPay.</p>
+                <p><strong>À payer aujourd’hui :</strong> {paymentPrice === null ? 'Tarif indisponible' : `${new Intl.NumberFormat('fr-FR').format(paymentPrice)} FCFA avec GeniusPay.`}</p>
                 {isTrialActive ? (
                   <p className="mt-1">Dès confirmation, le forfait {selectedPlan.label} sera actif. Votre essai se termine le {shop.subscription?.trialEnd ? formatSubscriptionDate(shop.subscription.trialEnd) : 'à la date prévue'} ; cette période est conservée et votre forfait arrivera à échéance le {formatSubscriptionDate(projectedExpiry)}.</p>
                 ) : Number.isFinite(subscriptionExpiryTime) && subscriptionExpiryTime > Date.now() ? (
@@ -261,6 +281,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                 ) : (
                   <p className="mt-1">Après confirmation du paiement, votre formule {selectedPlan.label} sera active jusqu’au {formatSubscriptionDate(projectedExpiry)}.</p>
                 )}
+                {subscriptionPricesError && <p role="alert" className="mt-3 text-sm font-semibold text-rose-800">Impossible de charger les tarifs : {subscriptionPricesError}</p>}
               </div>
             )}
             {mode === 'plans' && (
@@ -280,7 +301,11 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                       <p className="mt-1 text-sm font-extrabold text-slate-900">{days === 1 ? '24 h' : `${days} jours`}</p>
                       <p className="mt-3 text-xs font-bold text-slate-500">Tarif standard</p>
                       <p className="mt-1 text-lg font-black text-[#183b31]">{new Intl.NumberFormat('fr-FR').format(BOOST_PRICES[days])} FCFA</p>
-                      <p className="mt-2 text-xs font-bold text-emerald-800">Pro : {new Intl.NumberFormat('fr-FR').format(getBoostPrice(days, true))} FCFA (−{PRO_BOOST_DISCOUNT_PERCENT} %)</p>
+                      {(proFeatures || DEFAULT_SUBSCRIPTION_PRO_FEATURES).boostDiscountPercent > 0 && (
+                        <p className="mt-2 text-xs font-bold text-emerald-800">
+                          Pro : {new Intl.NumberFormat('fr-FR').format(getBoostPrice(days, (proFeatures || DEFAULT_SUBSCRIPTION_PRO_FEATURES).boostDiscountPercent) || BOOST_PRICES[days])} FCFA (−{(proFeatures || DEFAULT_SUBSCRIPTION_PRO_FEATURES).boostDiscountPercent} %)
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -325,9 +350,9 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             previewOnly ? (
               <button type="button" disabled className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-300 px-5 py-3 text-sm font-bold text-slate-600">Aperçu · paiement désactivé</button>
             ) : (
-              <button type="button" onClick={() => void startSubscriptionPayment()} disabled={isPaymentStarting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
+              <button type="button" onClick={() => void startSubscriptionPayment()} disabled={isPaymentStarting || !subscriptionPrices} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
                 {isPaymentStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                {isPaymentStarting ? 'Préparation du paiement…' : `Payer ${new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(selectedTier, term))} FCFA avec GeniusPay`}
+                {isPaymentStarting ? 'Préparation du paiement…' : paymentPrice === null ? 'Tarifs indisponibles' : `Payer ${new Intl.NumberFormat('fr-FR').format(paymentPrice)} FCFA avec GeniusPay`}
               </button>
             )
           ) : (
@@ -337,7 +362,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             </button>
           )}
           {!paymentFlowActive && <button type="button" onClick={() => setPurchaseNow(true)} className="min-h-11 rounded-lg px-3 text-sm font-bold text-[#176b55] underline underline-offset-2">Voir les formules et payer maintenant</button>}
-          {paymentFlowActive && <span className="text-xs text-slate-600">{selectedPlan.label} · {new Intl.NumberFormat('fr-FR').format(getSubscriptionPrice(selectedTier, term))} FCFA/{term === 'annual' ? 'an' : 'mois'}</span>}
+          {paymentFlowActive && <span className="text-xs text-slate-600">{selectedPlan.label} · {paymentPrice === null ? 'Tarif indisponible' : `${new Intl.NumberFormat('fr-FR').format(paymentPrice)} FCFA/${term === 'annual' ? 'an' : 'mois'}`}</span>}
           {mode === 'start' && paymentFlowActive && <button type="button" onClick={() => setPurchaseNow(false)} className="min-h-11 rounded-lg px-3 text-sm font-bold text-[#176b55] underline underline-offset-2">Commencer plutôt par l’essai gratuit</button>}
         </div>
         {paymentFlowActive && paymentMessage && (
@@ -362,7 +387,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                   <button
                     type="button"
                     onClick={() => void startSubscriptionPayment()}
-                    disabled={isPaymentStarting || !billingEmail.trim()}
+                    disabled={isPaymentStarting || !billingEmail.trim() || Boolean(shop.subscription?.cancellationAt)}
                     className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-4 py-2 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"
                   >
                     {isPaymentStarting && <LoaderCircle className="h-4 w-4 animate-spin" />}

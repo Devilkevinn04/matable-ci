@@ -27,7 +27,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
   const productPhotoLimit = currentShop.admin_mode ? 6
     : currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0
       ? getSubscriptionProductPhotoLimit('standard')
-      : getSubscriptionProductPhotoLimit(currentShop.subscription?.plan);
+      : getSubscriptionProductPhotoLimit(currentShop.subscription?.plan, currentShop.subscription?.planFeatures);
   const productPhotoCount = (prodImage ? 1 : 0) + (prodLookbookImage ? 1 : 0) + prodGalleryImages.length;
   const canAddLookbookPhoto = Boolean(prodLookbookImage) || productPhotoCount < productPhotoLimit;
   const modifierGroups = prodModifierGroups;

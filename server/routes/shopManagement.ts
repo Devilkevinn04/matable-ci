@@ -1,10 +1,11 @@
 import { Router, type RequestHandler } from 'express';
-import { dbRun } from '../../db.ts';
+import { dbGet, dbRun } from '../../db.ts';
 import { getSubscriptionAnalyticsDayLimit } from '../../src/utils/subscriptionFeatures.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
 import { canUseSubscriptionFeature, getShopPublicationBlockReason, getSubscriptionPlanConfig, getSubscriptionState } from '../services/businessRules.ts';
 import { getVapidConfiguration, isAllowedPushEndpoint } from '../services/pushNotifications.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
+import { getDefaultSubscriptionPrices, parseSubscriptionPrices } from '../services/subscriptionPricing.ts';
 import type { ShopRecord } from '../types.ts';
 
 interface ShopManagementOptions {
@@ -125,7 +126,18 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     shop.trial_end = addDays(startedAt, trialDurationDays);
     shop.subscription_expires_at = shop.trial_end;
     await persistShop(shop);
-    res.json({ success: true, shop: toSafeShop(shop), trial_days: trialDurationDays, plan: getSubscriptionPlanConfig(tier) });
+    const settings = await dbGet<{ subscription_plan_prices: string }>(
+      'SELECT subscription_plan_prices FROM platform_settings WHERE id = 1',
+    );
+    const prices = settings?.subscription_plan_prices
+      ? parseSubscriptionPrices(settings.subscription_plan_prices)
+      : getDefaultSubscriptionPrices();
+    res.json({
+      success: true,
+      shop: toSafeShop(shop),
+      trial_days: trialDurationDays,
+      plan: { ...getSubscriptionPlanConfig(tier), amount: prices.standard },
+    });
   });
 
   router.patch('/:id/subscription-reminder-consent', requireMerchantOwnShop, async (req, res) => {
@@ -205,7 +217,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     }
 
     const requestedDays = Number(req.query.days);
-    const planDayLimit = req.adminShopAccess ? 90 : getSubscriptionAnalyticsDayLimit(subscription.plan);
+    const planDayLimit = req.adminShopAccess ? 90 : getSubscriptionAnalyticsDayLimit(subscription.plan, subscription.planFeatures);
     const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), planDayLimit) : planDayLimit;
     const since = new Date(Date.now() - days * 86400000).toISOString();
     const totals = await dbAll<{ page_views: number; unique_visitors: number }>(`

@@ -33,6 +33,10 @@ const sqliteSchema = `
     payment_status TEXT NOT NULL DEFAULT 'approved', payment_deadline_at TEXT,
     merchant_verification_status TEXT NOT NULL DEFAULT 'not_required',
     selected_subscription_tier TEXT, subscription_expires_at TEXT,
+    pending_subscription_tier TEXT, pending_subscription_effective_at TEXT,
+    subscription_cancel_at TEXT, subscription_admin_suspended_at TEXT,
+    subscription_admin_suspended_status TEXT,
+    subscription_features_snapshot TEXT, subscription_features_effective_at TEXT,
     subscription_status TEXT NOT NULL DEFAULT 'active', trial_start TEXT, trial_end TEXT,
     last_notification_sent_at TEXT, whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
     whatsapp_subscription_reminders_consent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
@@ -76,6 +80,8 @@ const sqliteSchema = `
   CREATE TABLE IF NOT EXISTS platform_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1), maintenance_enabled INTEGER NOT NULL DEFAULT 0,
     maintenance_message TEXT NOT NULL DEFAULT 'Le service revient bientôt. Merci de votre patience.',
+    subscription_plan_prices TEXT NOT NULL DEFAULT '{"standard":3000,"premium":5000,"pro":8000}',
+    subscription_plan_features TEXT NOT NULL DEFAULT '{"productLimit":null,"productPhotoLimit":6,"analyticsDayLimit":90,"boostDiscountPercent":15}',
     updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT 'system'
   );
   INSERT OR IGNORE INTO platform_settings (id, maintenance_enabled, maintenance_message, updated_at)
@@ -146,6 +152,7 @@ const sqliteSchema = `
   );
   CREATE INDEX IF NOT EXISTS idx_customer_favorites_user_created ON customer_favorites(user_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_customer_product_likes_product ON customer_product_likes(product_id);
+  CREATE INDEX IF NOT EXISTS idx_customer_oauth_user_id ON customer_oauth_identities(user_id);
   CREATE INDEX IF NOT EXISTS idx_customer_reviews_public ON customer_reviews(target_type, target_id, status, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_customer_reports_moderation ON customer_reports(status, created_at DESC);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_reports_one_open_per_target
@@ -208,6 +215,11 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'trial_start', 'TEXT');
   addColumn('shops', 'trial_end', 'TEXT');
   addColumn('shops', 'subscription_expires_at', 'TEXT');
+  addColumn('shops', 'pending_subscription_tier', 'TEXT');
+  addColumn('shops', 'pending_subscription_effective_at', 'TEXT');
+  addColumn('shops', 'subscription_cancel_at', 'TEXT');
+  addColumn('shops', 'subscription_admin_suspended_at', 'TEXT');
+  addColumn('shops', 'subscription_admin_suspended_status', 'TEXT');
   addColumn('shops', 'whatsapp_subscription_reminders_enabled', 'INTEGER NOT NULL DEFAULT 0');
   addColumn('shops', 'whatsapp_subscription_reminders_consent_at', 'TEXT');
   connection.exec(`CREATE TABLE IF NOT EXISTS merchant_push_subscriptions (
@@ -313,6 +325,10 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('users', 'is_active', 'INTEGER DEFAULT 1');
   addColumn('user_sessions', 'fingerprint', 'TEXT');
   addColumn('admin_sessions', 'role', "TEXT NOT NULL DEFAULT 'super_admin'");
+  addColumn('platform_settings', 'subscription_plan_prices', `TEXT NOT NULL DEFAULT '{"standard":3000,"premium":5000,"pro":8000}'`);
+  addColumn('platform_settings', 'subscription_plan_features', `TEXT NOT NULL DEFAULT '{"productLimit":null,"productPhotoLimit":6,"analyticsDayLimit":90,"boostDiscountPercent":15}'`);
+  addColumn('shops', 'subscription_features_snapshot', 'TEXT');
+  addColumn('shops', 'subscription_features_effective_at', 'TEXT');
   addColumn('didit_verification_sessions', 'consent_at', "TEXT NOT NULL DEFAULT ''");
   addColumn('didit_verification_sessions', 'consent_version', "TEXT NOT NULL DEFAULT ''");
   addColumn('didit_verification_sessions', 'last_webhook_at', 'TEXT');
@@ -332,7 +348,7 @@ function migrateLegacyKyc(connection: Database.Database) {
   })();
 }
 
-const postgresMigrations = [
+export const postgresMigrations = [
   `CREATE TABLE IF NOT EXISTS shops (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE,
     whatsapp_number TEXT NOT NULL, pin_code_hash TEXT NOT NULL, theme_color TEXT,
@@ -341,6 +357,9 @@ const postgresMigrations = [
     payment_status TEXT NOT NULL DEFAULT 'approved', payment_deadline_at TEXT,
     merchant_verification_status TEXT NOT NULL DEFAULT 'not_required',
     selected_subscription_tier TEXT, subscription_expires_at TEXT,
+    pending_subscription_tier TEXT, pending_subscription_effective_at TEXT,
+    subscription_cancel_at TEXT, subscription_admin_suspended_at TEXT,
+    subscription_admin_suspended_status TEXT,
     subscription_status TEXT NOT NULL DEFAULT 'active', trial_start TEXT, trial_end TEXT,
     last_notification_sent_at TEXT, whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
     whatsapp_subscription_reminders_consent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
@@ -457,12 +476,17 @@ const postgresMigrations = [
   )`,
   'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS source TEXT',
   'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS campaign TEXT',
-  'ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT \'super_admin\'',
   `CREATE TABLE IF NOT EXISTS platform_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1), maintenance_enabled INTEGER NOT NULL DEFAULT 0,
     maintenance_message TEXT NOT NULL DEFAULT 'Le service revient bientôt. Merci de votre patience.',
+    subscription_plan_prices TEXT NOT NULL DEFAULT '{"standard":3000,"premium":5000,"pro":8000}',
+    subscription_plan_features TEXT NOT NULL DEFAULT '{"productLimit":null,"productPhotoLimit":6,"analyticsDayLimit":90,"boostDiscountPercent":15}',
     updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT 'system'
   )`,
+  `ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS subscription_plan_prices TEXT NOT NULL DEFAULT '{"standard":3000,"premium":5000,"pro":8000}'`,
+  `ALTER TABLE platform_settings ADD COLUMN IF NOT EXISTS subscription_plan_features TEXT NOT NULL DEFAULT '{"productLimit":null,"productPhotoLimit":6,"analyticsDayLimit":90,"boostDiscountPercent":15}'`,
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_features_snapshot TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_features_effective_at TEXT',
   `INSERT INTO platform_settings (id, maintenance_enabled, maintenance_message, updated_at)
     VALUES (1, 0, 'Le service revient bientôt. Merci de votre patience.', CURRENT_TIMESTAMP)
     ON CONFLICT (id) DO NOTHING`,
@@ -474,6 +498,7 @@ const postgresMigrations = [
     token TEXT PRIMARY KEY, expires_at BIGINT NOT NULL,
     fingerprint TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'super_admin', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  'ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT \'super_admin\'',
   `CREATE TABLE IF NOT EXISTS request_rate_limits (
     key_hash TEXT PRIMARY KEY, request_count INTEGER NOT NULL, reset_at BIGINT NOT NULL
   )`,
@@ -500,6 +525,11 @@ const postgresMigrations = [
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS trial_start TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS trial_end TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_expires_at TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS pending_subscription_tier TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS pending_subscription_effective_at TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_cancel_at TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_admin_suspended_at TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_admin_suspended_status TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS whatsapp_subscription_reminders_consent_at TEXT',
   'CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_shop_created ON subscription_payment_intents(shop_id, created_at DESC)',

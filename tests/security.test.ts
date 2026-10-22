@@ -73,6 +73,54 @@ test('subscriptions enter grace after expiry and schedule reminders at J-14, J-7
   assert.equal(getSubscriptionState(paid, new Date('2026-10-06T00:00:00.000Z')).status, 'suspended');
 });
 
+test('scheduled cancellations keep paid access through expiry and then stop renewal access', () => {
+  const subscription = {
+    subscription_status: 'active',
+    selected_subscription_tier: 'premium',
+    subscription_expires_at: '2026-10-31T23:59:59.999Z',
+    subscription_cancel_at: '2026-10-31T23:59:59.999Z',
+  } as const;
+  const beforeExpiry = getSubscriptionState(subscription, new Date('2026-10-31T12:00:00.000Z'));
+  assert.equal(beforeExpiry.status, 'active');
+  assert.equal(beforeExpiry.cancellationAt, subscription.subscription_cancel_at);
+  assert.equal(beforeExpiry.isActive, true);
+
+  const afterExpiry = getSubscriptionState(subscription, new Date('2026-11-01T00:00:00.000Z'));
+  assert.equal(afterExpiry.status, 'cancelled');
+  assert.equal(afterExpiry.cancellationAt, null);
+  assert.equal(afterExpiry.isActive, false);
+});
+
+test('scheduled subscription tiers preserve paid access until their effective date', () => {
+  const subscription = {
+    subscription_status: 'active',
+    selected_subscription_tier: 'premium',
+    subscription_expires_at: '2026-10-31T23:59:59.999Z',
+    pending_subscription_tier: 'pro',
+    pending_subscription_effective_at: '2026-10-31T23:59:59.999Z',
+  } as const;
+
+  const beforeExpiry = getSubscriptionState(subscription, new Date('2026-10-31T12:00:00.000Z'));
+  assert.equal(beforeExpiry.plan, 'premium');
+  assert.equal(beforeExpiry.upcomingPlan, 'pro');
+  assert.equal(beforeExpiry.upcomingPlanAt, subscription.pending_subscription_effective_at);
+  assert.equal(beforeExpiry.isActive, true);
+
+  const afterExpiry = getSubscriptionState(subscription, new Date('2026-11-01T00:00:00.000Z'));
+  assert.equal(afterExpiry.plan, 'pro');
+  assert.equal(afterExpiry.upcomingPlan, null);
+  assert.equal(afterExpiry.upcomingPlanAt, null);
+  assert.equal(afterExpiry.isActive, false);
+
+  const withoutPendingChange = getSubscriptionState({
+    ...subscription,
+    pending_subscription_tier: null,
+    pending_subscription_effective_at: null,
+  }, new Date('2026-10-31T12:00:00.000Z'));
+  assert.equal(withoutPendingChange.plan, 'premium');
+  assert.equal(withoutPendingChange.upcomingPlan, null);
+});
+
 test('publication eligibility is independent from the shop opening toggle', () => {
   const currentDate = new Date('2026-10-01T12:00:00.000Z');
   const shop = {
@@ -261,8 +309,8 @@ test('exposes the documented monthly subscription plan catalog', () => {
     label: 'Standard',
     description: 'Les essentiels pour présenter vos produits et recevoir des demandes.',
   });
-  assert.equal(getSubscriptionPlanConfig('premium').amount, 4000);
-  assert.equal(getSubscriptionPlanConfig('pro').amount, 5000);
+  assert.equal(getSubscriptionPlanConfig('premium').amount, 5000);
+  assert.equal(getSubscriptionPlanConfig('pro').amount, 8000);
 });
 
 test('normalizes unknown subscription tiers to standard', () => {
@@ -368,6 +416,11 @@ test('rejects unsafe production configuration', () => {
     process.env.APP_URL = 'https://matable.ci';
     process.env.PORT = '3000';
     process.env.MATABLE_DB_PATH = './data/matable.db';
+
+    process.env.VERIFICATION_ADMIN_ACCESS_KEY = process.env.ADMIN_ACCESS_KEY;
+    assert.throws(() => validateRuntimeConfig(), /ADMIN_ACCESS_KEY et VERIFICATION_ADMIN_ACCESS_KEY doivent être distinctes/i);
+    process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
+
     process.env.ADMIN_ACCESS_KEY = 'legacy-admin-key';
     assert.throws(() => validateRuntimeConfig(), /ADMIN_ACCESS_KEY.*32 caractères/i);
 

@@ -46,19 +46,593 @@ test('admin router denies requests when role guards are not configured', async (
     persistShop: async () => undefined,
     toSafeShop: (shop) => shop,
     rotateMerchantAccessTokenForShop: async () => '',
+    clearMerchantSessionsForShop: () => undefined,
   }));
   const server = app.listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
   assert.ok(address && typeof address === 'object');
   try {
-    for (const route of ['/shops', '/payments', '/content-moderation']) {
+    for (const route of ['/shops', '/payments', '/content-moderation', '/subscription-plan-features']) {
       const response = await fetch(`http://127.0.0.1:${address.port}/api/admin${route}`);
       assert.equal(response.status, 503, `${route} should fail closed`);
       assert.deepEqual(await response.json(), { error: 'Protection administrative non configurée.' });
     }
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test('super-admin subscription prices are validated, persisted, audited, and used publicly', async () => {
+  const previousCookieJar = cookieJar;
+  cookieJar = '';
+  const login = await apiFetch('/api/auth/admin-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'super-admin-demo-key', role: 'super_admin' }),
+  });
+  assert.equal(login.response.status, 200);
+  const superAdminCookies = cookieJar;
+  const originalResponse = await apiFetch('/api/admin/subscription-plans');
+  assert.equal(originalResponse.response.status, 200, JSON.stringify(originalResponse.payload));
+  const originalPrices = originalResponse.payload.prices;
+  const updatedPrices = { standard: 3500, premium: 5500, pro: 8500 };
+  try {
+    cookieJar = '';
+    const anonymousRead = await apiFetch('/api/admin/subscription-plans');
+    assert.equal(anonymousRead.response.status, 401);
+    cookieJar = superAdminCookies;
+
+    const invalidPrices = await apiFetch('/api/admin/subscription-plans', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prices: { standard: 0, premium: 5000, pro: 8000 },
+        expected_prices: originalPrices,
+      }),
+    });
+    assert.equal(invalidPrices.response.status, 400);
+
+    const update = await apiFetch('/api/admin/subscription-plans', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prices: updatedPrices, expected_prices: originalPrices }),
+    });
+    assert.equal(update.response.status, 200, JSON.stringify(update.payload));
+    assert.deepEqual(update.payload.previous_prices, originalPrices);
+    assert.deepEqual(update.payload.prices, updatedPrices);
+
+    const staleUpdate = await apiFetch('/api/admin/subscription-plans', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prices: originalPrices, expected_prices: originalPrices }),
+    });
+    assert.equal(staleUpdate.response.status, 409);
+
+    const publicPrices = await apiFetch('/api/subscription-plans');
+    assert.equal(publicPrices.response.status, 200);
+    assert.deepEqual(publicPrices.payload.prices, updatedPrices);
+    const publicPlansPage = await fetch(`${BASE_URL}/commercants`, {
+      headers: { Accept: 'text/html' },
+    });
+    assert.equal(publicPlansPage.status, 200);
+    const publicPlansHtml = await publicPlansPage.text();
+    for (const price of Object.values(updatedPrices)) {
+      assert.ok(publicPlansHtml.includes(`"price":${price}`));
+    }
+
+    const auditDb = new Database(TEST_DB_PATH, { readonly: true });
+    try {
+      const audit = auditDb.prepare(`SELECT actor, action, details FROM admin_audit_logs
+        WHERE action = 'subscription_plan_prices_updated' ORDER BY id DESC LIMIT 1`)
+        .get() as { actor: string; action: string; details: string };
+      assert.equal(audit.actor, 'super_admin');
+      assert.equal(audit.action, 'subscription_plan_prices_updated');
+      assert.deepEqual(JSON.parse(audit.details), {
+        previous_standard_price: originalPrices.standard,
+        previous_premium_price: originalPrices.premium,
+        previous_pro_price: originalPrices.pro,
+        standard_price: updatedPrices.standard,
+        premium_price: updatedPrices.premium,
+        pro_price: updatedPrices.pro,
+      });
+    } finally {
+      auditDb.close();
+    }
+
+    cookieJar = '';
+    const verificationLogin = await apiFetch('/api/auth/admin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'verification-admin-demo-key', role: 'verification_admin' }),
+    });
+    assert.equal(verificationLogin.response.status, 200);
+    const verificationMutation = await apiFetch('/api/admin/subscription-plans', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prices: { standard: 1, premium: 1, pro: 1 } }),
+    });
+    assert.equal(verificationMutation.response.status, 403);
+  } finally {
+    cookieJar = superAdminCookies;
+    await apiFetch('/api/admin/subscription-plans', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prices: originalPrices, expected_prices: updatedPrices }),
+    });
+    await apiFetch('/api/auth/admin-logout', { method: 'POST' });
+    cookieJar = previousCookieJar;
+  }
+});
+
+test('super-admin Pro feature changes are validated and deferred to current subscribers renewal', async () => {
+  const previousCookieJar = cookieJar;
+  cookieJar = '';
+  const testDb = new Database(TEST_DB_PATH);
+  const expiry = `${new Date(Date.now() + 35 * 86400000).toISOString().slice(0, 10)}T23:59:59.999Z`;
+  const insertedShop = testDb.prepare(`INSERT INTO shops (
+    name, slug, whatsapp_number, pin_code_hash, created_at, category,
+    selected_subscription_tier, subscription_tier, subscription_status,
+    subscription_expires_at, publication_status
+  ) VALUES (?, ?, ?, ?, ?, ?, 'pro', 'pro', 'active', ?, 'active')`)
+    .run('Boutique Avantages Pro', `avantages-pro-${randomUUID()}`, uniquePhone(),
+      'test-pin-hash', new Date().toISOString(), 'food', expiry);
+  const shopId = Number(insertedShop.lastInsertRowid);
+  testDb.close();
+
+  try {
+    const adminLogin = await apiFetch('/api/auth/admin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'super-admin-demo-key', role: 'super_admin' }),
+    });
+    assert.equal(adminLogin.response.status, 200);
+    const adminCookies = cookieJar;
+    const original = await apiFetch('/api/admin/subscription-plan-features');
+    assert.equal(original.response.status, 200);
+    const originalFeatures = original.payload.pro_features;
+    const updatedFeatures = {
+      productLimit: 120,
+      productPhotoLimit: 8,
+      analyticsDayLimit: 180,
+      boostDiscountPercent: 20,
+    };
+
+    cookieJar = '';
+    const anonymousRead = await apiFetch('/api/admin/subscription-plan-features');
+    assert.equal(anonymousRead.response.status, 401);
+    cookieJar = adminCookies;
+    const invalid = await apiFetch('/api/admin/subscription-plan-features', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pro_features: { ...updatedFeatures, productPhotoLimit: 21 },
+        expected_pro_features: originalFeatures,
+      }),
+    });
+    assert.equal(invalid.response.status, 400);
+
+    const update = await apiFetch('/api/admin/subscription-plan-features', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pro_features: updatedFeatures, expected_pro_features: originalFeatures }),
+    });
+    assert.equal(update.response.status, 200, JSON.stringify(update.payload));
+    assert.deepEqual(update.payload.pro_features, updatedFeatures);
+
+    const nextFeatures = { ...updatedFeatures, productPhotoLimit: 9 };
+    const secondUpdate = await apiFetch('/api/admin/subscription-plan-features', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pro_features: nextFeatures, expected_pro_features: updatedFeatures }),
+    });
+    assert.equal(secondUpdate.response.status, 200, JSON.stringify(secondUpdate.payload));
+
+    const staleUpdate = await apiFetch('/api/admin/subscription-plan-features', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pro_features: originalFeatures, expected_pro_features: originalFeatures }),
+    });
+    assert.equal(staleUpdate.response.status, 409);
+
+    const persistedDb = new Database(TEST_DB_PATH, { readonly: true });
+    try {
+      const snapshot = persistedDb.prepare(`SELECT subscription_features_snapshot,
+        subscription_features_effective_at FROM shops WHERE id = ?`)
+        .get(shopId) as { subscription_features_snapshot: string; subscription_features_effective_at: string };
+      assert.deepEqual(JSON.parse(snapshot.subscription_features_snapshot), originalFeatures);
+      assert.equal(snapshot.subscription_features_effective_at, expiry);
+      const audit = persistedDb.prepare(`SELECT action FROM admin_audit_logs
+        WHERE action = 'subscription_plan_features_updated' ORDER BY id DESC LIMIT 1`).get() as { action: string };
+      assert.equal(audit.action, 'subscription_plan_features_updated');
+    } finally {
+      persistedDb.close();
+    }
+    const publicPlans = await apiFetch('/api/subscription-plans');
+    assert.deepEqual(publicPlans.payload.pro_features, nextFeatures);
+
+    cookieJar = '';
+    const verificationLogin = await apiFetch('/api/auth/admin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'verification-admin-demo-key', role: 'verification_admin' }),
+    });
+    assert.equal(verificationLogin.response.status, 200);
+    const verificationMutation = await apiFetch('/api/admin/subscription-plan-features', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pro_features: originalFeatures, expected_pro_features: updatedFeatures }),
+    });
+    assert.equal(verificationMutation.response.status, 403);
+  } finally {
+    cookieJar = '';
+    await apiFetch('/api/auth/admin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'super-admin-demo-key', role: 'super_admin' }),
+    });
+    const current = await apiFetch('/api/admin/subscription-plan-features');
+    if (current.response.ok) {
+      await apiFetch('/api/admin/subscription-plan-features', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pro_features: current.payload.pro_features,
+          expected_pro_features: current.payload.pro_features,
+        }),
+      });
+    }
+    await apiFetch('/api/auth/admin-logout', { method: 'POST' });
+    const cleanupDb = new Database(TEST_DB_PATH);
+    cleanupDb.prepare('DELETE FROM shops WHERE id = ?').run(shopId);
+    cleanupDb.close();
+    cookieJar = previousCookieJar;
+  }
+});
+
+test('super-admin schedules subscription tier changes through expiry and can cancel them', async () => {
+  const previousCookieJar = cookieJar;
+  cookieJar = '';
+  const testDb = new Database(TEST_DB_PATH);
+  const insertedShop = testDb.prepare(`INSERT INTO shops (
+    name, slug, whatsapp_number, pin_code_hash, created_at, category,
+    selected_subscription_tier, subscription_tier, subscription_status,
+    publication_status
+  ) VALUES (?, ?, ?, ?, ?, ?, 'premium', 'premium', 'active', 'active')`)
+    .run('Boutique Changement Formule', `changement-formule-${randomUUID()}`, uniquePhone(),
+      'test-pin-hash', new Date().toISOString(), 'food');
+  const shopId = Number(insertedShop.lastInsertRowid);
+  const currentExpiry = `${new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)}T23:59:59.999Z`;
+  testDb.prepare(`UPDATE shops
+    SET selected_subscription_tier = 'premium', subscription_status = 'active',
+      trial_start = NULL, trial_end = NULL, subscription_expires_at = ?
+    WHERE id = ?`).run(currentExpiry, shopId);
+  testDb.close();
+
+  try {
+    const adminLogin = await apiFetch('/api/auth/admin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'super-admin-demo-key', role: 'super_admin' }),
+    });
+    assert.equal(adminLogin.response.status, 200);
+    const adminCookies = cookieJar;
+    const route = `/api/admin/subscriptions/${shopId}/schedule-plan`;
+    const basePayload = {
+      expected_tier: 'premium',
+      expected_pending_tier: null,
+      expected_subscription_expires_at: currentExpiry,
+    };
+
+    const missingReason = await apiFetch(route, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...basePayload, next_tier: 'pro', reason: 'short' }),
+    });
+    assert.equal(missingReason.response.status, 400);
+
+    cookieJar = '';
+    const verificationLogin = await apiFetch('/api/auth/admin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'verification-admin-demo-key', role: 'verification_admin' }),
+    });
+    assert.equal(verificationLogin.response.status, 200);
+    const forbiddenMutation = await apiFetch(route, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...basePayload, next_tier: 'pro', reason: 'Changement demandé par le marchand' }),
+    });
+    assert.equal(forbiddenMutation.response.status, 403);
+    cookieJar = adminCookies;
+
+    const scheduled = await apiFetch(route, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...basePayload, next_tier: 'pro', reason: 'Changement demandé par le marchand' }),
+    });
+    assert.equal(scheduled.response.status, 200, JSON.stringify(scheduled.payload));
+    assert.equal(scheduled.payload.pending_subscription_tier, 'pro');
+    assert.equal(scheduled.payload.pending_subscription_effective_at, currentExpiry);
+
+    const staleSchedule = await apiFetch(route, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...basePayload, next_tier: 'standard', reason: 'Changement de formule demandé' }),
+    });
+    assert.equal(staleSchedule.response.status, 409);
+
+    const correctedExpiry = `${new Date(Date.now() + 45 * 86400000).toISOString().slice(0, 10)}T23:59:59.999Z`;
+    const expiryCorrection = await apiFetch(`/api/admin/subscriptions/${shopId}/set-expiry`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expiry_date: correctedExpiry.slice(0, 10),
+        expected_subscription_expires_at: currentExpiry,
+        reason: 'Correction de la date de renouvellement',
+      }),
+    });
+    assert.equal(expiryCorrection.response.status, 200, JSON.stringify(expiryCorrection.payload));
+    const persistedDb = new Database(TEST_DB_PATH, { readonly: true });
+    const savedSchedule = persistedDb.prepare(`SELECT subscription_expires_at,
+      pending_subscription_tier, pending_subscription_effective_at
+      FROM shops WHERE id = ?`).get(shopId) as {
+        subscription_expires_at: string;
+        pending_subscription_tier: string | null;
+        pending_subscription_effective_at: string | null;
+      };
+    persistedDb.close();
+    assert.equal(savedSchedule.subscription_expires_at, correctedExpiry);
+    assert.equal(savedSchedule.pending_subscription_tier, 'pro');
+    assert.equal(savedSchedule.pending_subscription_effective_at, correctedExpiry);
+
+    const expiredScheduleDb = new Database(TEST_DB_PATH);
+    expiredScheduleDb.prepare('UPDATE shops SET pending_subscription_effective_at = ? WHERE id = ?')
+      .run(new Date(Date.now() - 86400000).toISOString(), shopId);
+    expiredScheduleDb.close();
+    const subscriptionList = await apiFetch('/api/admin/subscriptions');
+    assert.equal(subscriptionList.response.status, 200);
+    const listedShop = subscriptionList.payload.shops.find((item: { id: number }) => item.id === shopId);
+    assert.equal(listedShop.plan, 'pro');
+    assert.equal(listedShop.pending_subscription_tier, null);
+
+    const nextChange = await apiFetch(route, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expected_tier: 'pro',
+        expected_pending_tier: null,
+        expected_subscription_expires_at: correctedExpiry,
+        next_tier: 'standard',
+        reason: 'Nouvelle formule demandée par le marchand',
+      }),
+    });
+    assert.equal(nextChange.response.status, 200, JSON.stringify(nextChange.payload));
+
+    const cancelled = await apiFetch(route, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expected_tier: 'pro',
+        expected_pending_tier: 'standard',
+        expected_subscription_expires_at: correctedExpiry,
+        next_tier: null,
+        reason: 'Annulation demandée par le marchand',
+      }),
+    });
+    assert.equal(cancelled.response.status, 200, JSON.stringify(cancelled.payload));
+    assert.equal(cancelled.payload.pending_subscription_tier, null);
+    assert.equal(cancelled.payload.pending_subscription_effective_at, null);
+
+    const auditDb = new Database(TEST_DB_PATH, { readonly: true });
+    const audit = auditDb.prepare(`SELECT action, details FROM admin_audit_logs
+      WHERE shop_id = ? AND action IN ('subscription_plan_change_scheduled', 'subscription_plan_change_cancelled')
+      ORDER BY id`).all(shopId) as Array<{ action: string; details: string }>;
+    auditDb.close();
+    assert.deepEqual(audit.map(({ action }) => action), [
+      'subscription_plan_change_scheduled',
+      'subscription_plan_change_scheduled',
+      'subscription_plan_change_cancelled',
+    ]);
+    assert.equal(JSON.parse(audit[0].details).effective_at, currentExpiry);
+    assert.equal(JSON.parse(audit[2].details).reason, 'Annulation demandée par le marchand');
+  } finally {
+    cookieJar = previousCookieJar;
+  }
+});
+
+test('super-admin schedules subscription cancellation and manages reversible access suspension', async () => {
+  const previousCookieJar = cookieJar;
+  cookieJar = '';
+  const testDb = new Database(TEST_DB_PATH);
+  const insertedShop = testDb.prepare(`INSERT INTO shops (
+    name, slug, whatsapp_number, pin_code_hash, created_at, category,
+    selected_subscription_tier, subscription_tier, subscription_status,
+    publication_status, is_active
+  ) VALUES (?, ?, ?, ?, ?, ?, 'premium', 'premium', 'active', 'active', 1)`)
+    .run('Boutique Cycle de Vie', `cycle-vie-${randomUUID()}`, uniquePhone(),
+      'test-pin-hash', new Date().toISOString(), 'food');
+  const shopId = Number(insertedShop.lastInsertRowid);
+  const currentExpiry = `${new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)}T23:59:59.999Z`;
+  testDb.prepare('UPDATE shops SET subscription_expires_at = ? WHERE id = ?').run(currentExpiry, shopId);
+  testDb.close();
+
+  try {
+    const adminLogin = await apiFetch('/api/auth/admin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'super-admin-demo-key', role: 'super_admin' }),
+    });
+    assert.equal(adminLogin.response.status, 200);
+    const basePath = `/api/admin/subscriptions/${shopId}/lifecycle`;
+    const basePayload = {
+      expected_status: 'active',
+      expected_subscription_expires_at: currentExpiry,
+      expected_cancellation_at: null,
+    };
+
+    const cancellation = await apiFetch(basePath, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...basePayload,
+        action: 'cancel_at_period_end',
+        reason: 'Résiliation demandée par le marchand',
+      }),
+    });
+    assert.equal(cancellation.response.status, 200, JSON.stringify(cancellation.payload));
+    assert.equal(cancellation.payload.subscription_cancel_at, currentExpiry);
+
+    const canceledCheckoutState = await apiFetch('/api/admin/subscriptions');
+    assert.equal(canceledCheckoutState.response.status, 200);
+    const cancellationRow = canceledCheckoutState.payload.shops.find((item: { id: number }) => item.id === shopId);
+    assert.equal(cancellationRow.status, 'active');
+    assert.equal(cancellationRow.subscription_cancel_at, currentExpiry);
+
+    const correctedExpiry = `${new Date(Date.now() + 45 * 86400000).toISOString().slice(0, 10)}T23:59:59.999Z`;
+    const corrected = await apiFetch(`/api/admin/subscriptions/${shopId}/set-expiry`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expiry_date: correctedExpiry.slice(0, 10),
+        expected_subscription_expires_at: currentExpiry,
+        reason: 'Prolongation confirmée avec justificatif',
+      }),
+    });
+    assert.equal(corrected.response.status, 200, JSON.stringify(corrected.payload));
+    const correctedRow = await apiFetch('/api/admin/subscriptions');
+    const updatedShop = correctedRow.payload.shops.find((item: { id: number }) => item.id === shopId);
+    assert.equal(updatedShop.subscription_cancel_at, correctedExpiry);
+
+    const undo = await apiFetch(basePath, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expected_status: 'active',
+        expected_subscription_expires_at: correctedExpiry,
+        expected_cancellation_at: correctedExpiry,
+        action: 'undo_cancellation',
+        reason: 'Le marchand souhaite conserver son abonnement',
+      }),
+    });
+    assert.equal(undo.response.status, 200, JSON.stringify(undo.payload));
+    assert.equal(undo.payload.subscription_cancel_at, null);
+
+    const testDbForPayment = new Database(TEST_DB_PATH);
+    testDbForPayment.prepare(`INSERT INTO subscription_payment_intents (
+      id, shop_id, payment_type, tier, subscription_term, amount, currency, status, created_at
+    ) VALUES (?, ?, 'subscription', 'premium', 'monthly', 5000, 'XOF', 'pending', ?)`)
+      .run(randomUUID(), shopId, new Date().toISOString());
+    testDbForPayment.close();
+    const paymentConflict = await apiFetch(basePath, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expected_status: 'active',
+        expected_subscription_expires_at: correctedExpiry,
+        expected_cancellation_at: null,
+        action: 'suspend',
+        reason: 'Suspension administrative vérifiée',
+      }),
+    });
+    assert.equal(paymentConflict.response.status, 409);
+
+    const cleanupIntentDb = new Database(TEST_DB_PATH);
+    cleanupIntentDb.prepare('DELETE FROM subscription_payment_intents WHERE shop_id = ? AND status = ?')
+      .run(shopId, 'pending');
+    cleanupIntentDb.close();
+    const suspension = await apiFetch(basePath, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expected_status: 'active',
+        expected_subscription_expires_at: correctedExpiry,
+        expected_cancellation_at: null,
+        action: 'suspend',
+        reason: 'Suspension administrative vérifiée',
+      }),
+    });
+    assert.equal(suspension.response.status, 200, JSON.stringify(suspension.payload));
+    assert.equal(suspension.payload.subscription_status, 'suspended');
+    const suspendedDb = new Database(TEST_DB_PATH, { readonly: true });
+    const suspendedShop = suspendedDb.prepare(`SELECT is_active, subscription_admin_suspended_at,
+      subscription_admin_suspended_status, subscription_expires_at FROM shops WHERE id = ?`)
+      .get(shopId) as {
+        is_active: number;
+        subscription_admin_suspended_at: string | null;
+        subscription_admin_suspended_status: string | null;
+        subscription_expires_at: string;
+      };
+    suspendedDb.close();
+    assert.equal(suspendedShop.is_active, 1);
+    assert.ok(suspendedShop.subscription_admin_suspended_at);
+    assert.equal(suspendedShop.subscription_admin_suspended_status, 'active');
+
+    const reactivated = await apiFetch(basePath, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expected_status: 'suspended',
+        expected_subscription_expires_at: correctedExpiry,
+        expected_cancellation_at: null,
+        action: 'reactivate',
+        reason: 'Réactivation validée par le support',
+      }),
+    });
+    assert.equal(reactivated.response.status, 200, JSON.stringify(reactivated.payload));
+    assert.equal(reactivated.payload.subscription_status, 'active');
+    assert.equal(reactivated.payload.subscription_admin_suspended_at, null);
+
+    const secondSuspension = await apiFetch(basePath, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expected_status: 'active',
+        expected_subscription_expires_at: correctedExpiry,
+        expected_cancellation_at: null,
+        action: 'suspend',
+        reason: 'Suspension avant contrôle de fin',
+      }),
+    });
+    assert.equal(secondSuspension.response.status, 200);
+    const expireForTestDb = new Database(TEST_DB_PATH);
+    const pastExpiry = `${new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10)}T23:59:59.999Z`;
+    expireForTestDb.prepare('UPDATE shops SET subscription_expires_at = ? WHERE id = ?').run(pastExpiry, shopId);
+    expireForTestDb.close();
+    const expiredReactivation = await apiFetch(basePath, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expected_status: 'suspended',
+        expected_subscription_expires_at: pastExpiry,
+        expected_cancellation_at: null,
+        action: 'reactivate',
+        reason: 'Demande de réactivation après expiration',
+      }),
+    });
+    assert.equal(expiredReactivation.response.status, 409);
+    assert.match(expiredReactivation.payload.error, /nouveau paiement/);
+
+    const auditDb = new Database(TEST_DB_PATH, { readonly: true });
+    const actions = auditDb.prepare(`SELECT action FROM admin_audit_logs WHERE shop_id = ?
+      AND action LIKE 'subscription_%' ORDER BY id`).all(shopId) as Array<{ action: string }>;
+    auditDb.close();
+    assert.deepEqual(actions.map(({ action }) => action), [
+      'subscription_cancellation_scheduled',
+      'subscription_expiry_corrected',
+      'subscription_cancellation_revoked',
+      'subscription_access_suspended',
+      'subscription_access_reactivated',
+      'subscription_access_suspended',
+    ]);
+    const history = await apiFetch('/api/admin/audit-logs?search=subscription_cancellation_scheduled&limit=10');
+    assert.equal(history.response.status, 200);
+    const cancellationHistory = history.payload.audit_logs.find((entry: { shop_id: number; action: string }) =>
+      entry.shop_id === shopId && entry.action === 'subscription_cancellation_scheduled');
+    assert.equal(cancellationHistory.details.cancellation_at, currentExpiry);
+    assert.equal(cancellationHistory.details.reason, 'Résiliation demandée par le marchand');
+  } finally {
+    cookieJar = previousCookieJar;
   }
 });
 
@@ -416,6 +990,139 @@ test('customer registration and login are supported with email, phone, and passw
   const logout = await apiFetch('/api/auth/customer-logout', { method: 'POST' });
   assert.equal(logout.response.status, 200, `Unexpected logout response: ${JSON.stringify(logout.payload)}`);
   assert.equal(logout.payload.success, true);
+});
+
+test('super-admin customer suspension is audited, revokes sessions permanently, and denies verification admins', async () => {
+  const customer = await registerCustomer('Compte', 'Administration');
+  const customerSessionCookies = cookieJar;
+  cookieJar = '';
+
+  const unauthorized = await apiFetch(`/api/admin/customers/${customer.id}/toggle-active`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expected_is_active: true, reason: 'Test de suspension' }),
+  });
+  assert.equal(unauthorized.response.status, 401);
+  const unauthorizedDetail = await apiFetch(`/api/admin/customers/${customer.id}`);
+  assert.equal(unauthorizedDetail.response.status, 401);
+
+  const superAdminLogin = await apiFetch('/api/auth/admin-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'super-admin-demo-key', role: 'super_admin' }),
+  });
+  assert.equal(superAdminLogin.response.status, 200);
+  const superAdminCookies = cookieJar;
+  const activeCustomers = await apiFetch(`/api/admin/customers?search=${encodeURIComponent(customer.email)}&status=active`);
+  assert.equal(activeCustomers.response.status, 200);
+  assert.equal(activeCustomers.payload.total, 1);
+  assert.equal(activeCustomers.payload.customers[0].id, customer.id);
+
+  const detailDb = new Database(TEST_DB_PATH);
+  detailDb.prepare(`INSERT INTO orders (
+    shop_id, customer_name, customer_phone, delivery_location, total_amount,
+    created_at, status, items, customer_user_id
+  ) VALUES (1, ?, ?, 'Abidjan', 12500, ?, 'delivered', ?, ?)`)
+    .run('Compte Administration', '+2250700000000', new Date().toISOString(),
+      JSON.stringify([{ product_id: 1, quantity: 2, unit_price: 6250 }]), customer.id);
+  detailDb.close();
+  const customerDetail = await apiFetch(`/api/admin/customers/${customer.id}`);
+  assert.equal(customerDetail.response.status, 200, JSON.stringify(customerDetail.payload));
+  assert.equal(customerDetail.payload.customer.id, customer.id);
+  assert.equal(customerDetail.payload.customer.email, customer.email);
+  assert.equal(customerDetail.payload.total_orders, 1);
+  assert.equal(customerDetail.payload.orders.length, 1);
+  assert.equal(customerDetail.payload.orders[0].total_amount, 12500);
+  assert.equal(customerDetail.payload.orders[0].items_count, 2);
+  assert.equal('password_hash' in customerDetail.payload.customer, false);
+  assert.equal('delivery_location' in customerDetail.payload.orders[0], false);
+  assert.equal('items' in customerDetail.payload.orders[0], false);
+  const invalidCustomerDetail = await apiFetch('/api/admin/customers/invalid');
+  assert.equal(invalidCustomerDetail.response.status, 400);
+  const missingCustomerDetail = await apiFetch('/api/admin/customers/2147483647');
+  assert.equal(missingCustomerDetail.response.status, 404);
+
+  const invalidCustomerStatus = await apiFetch('/api/admin/customers?status=deleted');
+  assert.equal(invalidCustomerStatus.response.status, 400);
+
+  const missingReason = await apiFetch(`/api/admin/customers/${customer.id}/toggle-active`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expected_is_active: true, reason: '  ' }),
+  });
+  assert.equal(missingReason.response.status, 400);
+
+  const suspended = await apiFetch(`/api/admin/customers/${customer.id}/toggle-active`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expected_is_active: true, reason: 'Signalement vérifié par assistance' }),
+  });
+  assert.equal(suspended.response.status, 200, JSON.stringify(suspended.payload));
+  assert.equal(suspended.payload.is_active, false);
+
+  const suspendedCustomers = await apiFetch(`/api/admin/customers?search=${encodeURIComponent(customer.email)}&status=suspended`);
+  assert.equal(suspendedCustomers.response.status, 200);
+  assert.equal(suspendedCustomers.payload.total, 1);
+  assert.equal(suspendedCustomers.payload.customers[0].is_active, false);
+  const activeCustomersAfterSuspension = await apiFetch(`/api/admin/customers?search=${encodeURIComponent(customer.email)}&status=active`);
+  assert.equal(activeCustomersAfterSuspension.payload.total, 0);
+
+  const testDb = new Database(TEST_DB_PATH);
+  try {
+    const account = testDb.prepare('SELECT is_active FROM users WHERE id = ?').get(customer.id) as { is_active: number };
+    const sessions = testDb.prepare('SELECT COUNT(*) AS count FROM user_sessions WHERE user_id = ?').get(customer.id) as { count: number };
+    const audit = testDb.prepare(`SELECT actor, action, details FROM admin_audit_logs
+      WHERE action = 'customer_suspended' AND details LIKE ? ORDER BY id DESC LIMIT 1`)
+      .get(`%"user_id":${customer.id}%`) as { actor: string; action: string; details: string };
+    assert.equal(account.is_active, 0);
+    assert.equal(sessions.count, 0);
+    assert.equal(audit.actor, 'super_admin');
+    assert.equal(audit.action, 'customer_suspended');
+    assert.equal(JSON.parse(audit.details).reason, 'Signalement vérifié par assistance');
+  } finally {
+    testDb.close();
+  }
+
+  cookieJar = customerSessionCookies;
+  const revokedCustomerSession = await apiFetch('/api/auth/customer-orders');
+  assert.equal(revokedCustomerSession.response.status, 401);
+  cookieJar = superAdminCookies;
+
+  const staleStatus = await apiFetch(`/api/admin/customers/${customer.id}/toggle-active`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expected_is_active: true, reason: 'Ancien statut client' }),
+  });
+  assert.equal(staleStatus.response.status, 409);
+
+  const reactivated = await apiFetch(`/api/admin/customers/${customer.id}/toggle-active`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expected_is_active: false, reason: 'Examen terminé' }),
+  });
+  assert.equal(reactivated.response.status, 200);
+  assert.equal(reactivated.payload.is_active, true);
+
+  const reactivationLogin = await apiFetch('/api/auth/admin-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'verification-admin-demo-key', role: 'verification_admin' }),
+  });
+  assert.equal(reactivationLogin.response.status, 200);
+  const forbidden = await apiFetch(`/api/admin/customers/${customer.id}/toggle-active`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expected_is_active: true, reason: 'Non autorisé' }),
+  });
+  assert.equal(forbidden.response.status, 403);
+  const forbiddenDetail = await apiFetch(`/api/admin/customers/${customer.id}`);
+  assert.equal(forbiddenDetail.response.status, 403);
+
+  cookieJar = customerSessionCookies;
+  const remainsRevoked = await apiFetch('/api/auth/customer-orders');
+  assert.equal(remainsRevoked.response.status, 401);
+  cookieJar = '';
+  await apiFetch('/api/auth/admin-logout', { method: 'POST' });
 });
 
 test('customer can update their profile and password while revoking other sessions', async () => {
@@ -1683,6 +2390,15 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   const unauthenticatedAdminShopSession = await apiFetch(`/api/auth/session?admin_shop_id=${shopId}`);
   assert.equal(unauthenticatedAdminShopSession.payload.authenticated, false);
 
+  const merchantLoginForRevocation = await apiFetch('/api/auth/merchant-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, pin: '111111' }),
+  });
+  assert.equal(merchantLoginForRevocation.response.status, 200, JSON.stringify(merchantLoginForRevocation.payload));
+  const merchantCookies = cookieJar;
+  cookieJar = '';
+
   const adminHealthBeforeLogin = await apiFetch('/api/admin/health');
   assert.equal(adminHealthBeforeLogin.response.status, 401);
 
@@ -1699,6 +2415,7 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
     body: JSON.stringify({ key: 'super-admin-demo-key' }),
   });
   assert.equal(adminLogin.response.status, 200);
+  const superAdminCookies = cookieJar;
 
   const adminSessionState = await apiFetch('/api/auth/session');
   assert.equal(adminSessionState.response.status, 200, JSON.stringify(adminSessionState.payload));
@@ -1788,6 +2505,15 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   assert.equal(rejectedShop.is_active, true);
   const publicationStatusBeforeToggle = rejectedShop.publication_status;
 
+  cookieJar = merchantCookies;
+  const createdShopMerchantSession = await apiFetch(`/api/shops/${shopId}/toggle-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_open: false }),
+  });
+  assert.equal(createdShopMerchantSession.response.status, 200, JSON.stringify(createdShopMerchantSession.payload));
+  cookieJar = superAdminCookies;
+
   const disableShop = await apiFetch(`/api/admin/shops/${shopId}/toggle-active`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -1795,7 +2521,27 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   });
   assert.equal(disableShop.response.status, 200, JSON.stringify(disableShop.payload));
   assert.equal(disableShop.payload.is_active, false);
+  assert.ok(disableShop.payload.revoked_sessions >= 1);
   assert.equal(disableShop.payload.shop.publication_status, publicationStatusBeforeToggle);
+  const revokedMerchantSessionsDb = new Database(TEST_DB_PATH, { readonly: true });
+  try {
+    const activeMerchantSessions = revokedMerchantSessionsDb.prepare(
+      'SELECT COUNT(*) AS count FROM merchant_sessions WHERE shop_id = ?',
+    ).get(shopId) as { count: number };
+    assert.equal(activeMerchantSessions.count, 0);
+  } finally {
+    revokedMerchantSessionsDb.close();
+  }
+  cookieJar = merchantCookies;
+  const suspendedMerchantSession = await apiFetch(`/api/shops/${shopId}/toggle-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_open: true }),
+  });
+  assert.equal(suspendedMerchantSession.response.status, 401);
+  const suspendedMerchantSessionState = await apiFetch('/api/auth/session');
+  assert.equal(suspendedMerchantSessionState.payload.authenticated, false);
+  cookieJar = superAdminCookies;
   const inactiveShopForAdmin = await apiFetch(`/api/shops/${shopId}`);
   assert.equal(inactiveShopForAdmin.response.status, 200, JSON.stringify(inactiveShopForAdmin.payload));
   assert.equal(inactiveShopForAdmin.payload.shop.admin_mode, true);
@@ -1862,6 +2608,16 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   assert.equal(enableShop.response.status, 200, JSON.stringify(enableShop.payload));
   assert.equal(enableShop.payload.is_active, true);
   assert.equal(enableShop.payload.shop.publication_status, publicationStatusBeforeToggle);
+  cookieJar = merchantCookies;
+  const merchantSessionAfterReactivation = await apiFetch('/api/auth/session');
+  assert.equal(merchantSessionAfterReactivation.payload.authenticated, false);
+  const merchantAfterReactivation = await apiFetch(`/api/shops/${shopId}/toggle-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_open: true }),
+  });
+  assert.equal(merchantAfterReactivation.response.status, 401);
+  cookieJar = superAdminCookies;
 
   const maintenanceBefore = await apiFetch('/api/admin/maintenance');
   assert.equal(maintenanceBefore.response.status, 200);

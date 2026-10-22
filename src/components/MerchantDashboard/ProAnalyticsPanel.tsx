@@ -10,7 +10,7 @@ type ProAnalytics = {
 };
 
 export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compact?: boolean }) {
-  const maxDays = shop.admin_mode ? 90 : getSubscriptionAnalyticsDayLimit(shop.subscription?.plan);
+  const maxDays = shop.admin_mode ? 90 : getSubscriptionAnalyticsDayLimit(shop.subscription?.plan, shop.subscription?.planFeatures);
   const [days, setDays] = useState(compact ? Math.min(7, maxDays) : maxDays);
   const [analytics, setAnalytics] = useState<ProAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
@@ -121,7 +121,7 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
         <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
           Période
           <select value={days} onChange={(event) => setDays(Number(event.target.value))} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2">
-            {[7, 30, 90].filter((period) => period <= maxDays).map((period) => <option key={period} value={period}>{period} jours</option>)}
+            {Array.from(new Set([7, 30, 90, maxDays])).filter((period) => period <= maxDays).map((period) => <option key={period} value={period}>{period} jours</option>)}
           </select>
         </label>
       </div>

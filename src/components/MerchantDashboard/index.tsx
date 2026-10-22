@@ -37,6 +37,9 @@ import { formatFCFA } from '../../utils/format';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
 import { getSubscriptionAccessCutoff, getSubscriptionProductLimit, TRIAL_CATALOG_LIMIT } from '../../utils/subscriptionFeatures';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
+import { Link } from 'react-router-dom';
+
+const GuideChecklist = React.lazy(() => import('../UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
 
 interface MerchantDashboardProps {
   currentShopSlug?: string;
@@ -456,7 +459,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const trialCatalogLimited = !currentShop.admin_mode
     && currentShop.subscription?.status === 'trialing'
     && currentShop.subscription.trialDaysRemaining > 0;
-  const dashboardProductLimit = trialCatalogLimited ? TRIAL_CATALOG_LIMIT : getSubscriptionProductLimit(currentShop.subscription?.plan);
+  const dashboardProductLimit = trialCatalogLimited ? TRIAL_CATALOG_LIMIT : getSubscriptionProductLimit(currentShop.subscription?.plan, currentShop.subscription?.planFeatures);
   const dashboardCatalogFull = !currentShop.admin_mode
     && Number.isFinite(dashboardProductLimit)
     && products.length >= dashboardProductLimit;
@@ -887,9 +890,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <h2 id="setup-checklist-title" className="mt-1 text-xl font-black text-[#211712] sm:text-2xl">Votre vitrine est presque prête</h2>
             </div>
             <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-              <a href="/comment-ca-marche" className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[#155544] hover:bg-[#f3faf6]">
+              <Link to="/guide?role=merchant" state={{ guideAccountId: currentShop.id }} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[#155544] hover:bg-[#f3faf6]">
                 <BookOpen className="h-4 w-4" aria-hidden="true" /> Tutoriel
-              </a>
+              </Link>
               <div className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 shadow-sm ring-1 ring-[#e8e0d6]">
                 <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Progression</span>
                 <span className="rounded-full bg-[#eaf4ef] px-2.5 py-1 text-xs font-black text-[#155544]">
@@ -996,6 +999,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             </div>
           </div>
         </section>
+        <div className="mt-4">
+          <React.Suspense fallback={<p role="status" className="text-sm text-slate-500">Chargement de votre guide…</p>}>
+            <GuideChecklist role="merchant" accountId={currentShop.id} collapsible />
+          </React.Suspense>
+        </div>
       </div>
       )}
 
@@ -1306,6 +1314,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 {!isShopPublished && <p className="px-3 text-[11px] leading-5 text-slate-500">Le lien public sera disponible après publication.</p>}
               </div>
             </nav>
+            <Link to="/guide?role=merchant" state={{ guideAccountId: currentShop.id }} className="mt-2 flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"><BookOpen className="h-4 w-4" />Guide marchand</Link>
             {dashboardSupportUrl && <a href={dashboardSupportUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"><MessageCircle className="h-4 w-4" />Aide et assistance</a>}
             <button type="button" onClick={handleLogout} className="mt-auto flex min-h-11 items-center gap-3 border-t border-[#ded8ce] pt-4 text-sm font-bold text-rose-800"><X className="h-4 w-4" />Déconnexion</button>
           </aside>
