@@ -801,6 +801,12 @@ test('super-admin can grant, revoke, and clear a temporary subscription override
       body: JSON.stringify({ key: 'super-admin-demo-key', role: 'super_admin' }),
     });
     assert.equal(login.response.status, 200);
+    const slug = testDb.prepare('SELECT slug FROM shops WHERE id = ?').get(shopId) as { slug: string };
+    const hiddenDirectory = await apiFetch('/api/shops');
+    assert.equal(hiddenDirectory.response.status, 200);
+    assert.equal(hiddenDirectory.payload.some((shop: { id: number }) => shop.id === shopId), false);
+    const hiddenStorefront = await apiFetch(`/api/shops/${slug.slug}`);
+    assert.equal(hiddenStorefront.response.status, 404);
 
     const sourceBefore = testDb.prepare(`SELECT subscription_status, selected_subscription_tier,
       subscription_expires_at FROM shops WHERE id = ?`).get(shopId) as {
@@ -830,6 +836,12 @@ test('super-admin can grant, revoke, and clear a temporary subscription override
     assert.equal(grantedShop.status, 'active');
     assert.equal(grantedShop.plan, 'pro');
     assert.equal(grantedShop.subscription_admin_override_active, true);
+    const visibleDirectory = await apiFetch('/api/shops');
+    assert.equal(visibleDirectory.response.status, 200);
+    assert.equal(visibleDirectory.payload.some((shop: { id: number }) => shop.id === shopId), true);
+    const visibleStorefront = await apiFetch(`/api/shops/${slug.slug}`);
+    assert.equal(visibleStorefront.response.status, 200, JSON.stringify(visibleStorefront.payload));
+    assert.equal(visibleStorefront.payload.shop.slug, slug.slug);
 
     const staleGrant = await apiFetch(`/api/admin/subscriptions/${shopId}/manual-override`, {
       method: 'PATCH',

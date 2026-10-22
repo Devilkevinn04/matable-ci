@@ -11,8 +11,9 @@ import { mapShopRow } from '../repositories/shops.ts';
 
 const publicShopColumns = `id, name, slug, theme_color, welcome_message, is_open, is_active,
   publication_status, featured_until, merchant_verification_status, selected_subscription_tier,
-  subscription_status, trial_start, trial_end, subscription_expires_at, created_at, category, city,
-  theme_config, opening_hours`;
+  subscription_status, trial_start, trial_end, subscription_expires_at,
+  subscription_admin_override_status, subscription_admin_override_tier, subscription_admin_override_until,
+  created_at, category, city, theme_config, opening_hours`;
 const FEED_QUERY_BATCH_SIZE = 48;
 
 interface MerchantSession {
@@ -280,8 +281,9 @@ export function createPublicShopsRouter({
     const shopRow = await dbGet<Record<string, unknown>>(
       `SELECT id, name, slug, whatsapp_number, theme_color, welcome_message, is_open, is_active,
         publication_status, featured_until, merchant_verification_status, selected_subscription_tier,
-        subscription_status, trial_start, trial_end, subscription_expires_at, created_at, category, city,
-        theme_config, opening_hours
+        subscription_status, trial_start, trial_end, subscription_expires_at,
+        subscription_admin_override_status, subscription_admin_override_tier, subscription_admin_override_until,
+        created_at, category, city, theme_config, opening_hours
        FROM shops WHERE slug = ? OR CAST(id AS TEXT) = ? LIMIT 1`,
       [slug, slug],
     );
