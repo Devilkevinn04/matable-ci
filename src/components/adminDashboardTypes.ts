@@ -77,6 +77,10 @@ export interface AdminSubscriptionShop {
   pending_subscription_effective_at: string | null;
   subscription_cancel_at: string | null;
   subscription_admin_suspended_at: string | null;
+  subscription_admin_override_status: 'active' | 'suspended' | null;
+  subscription_admin_override_tier: 'standard' | 'premium' | 'pro' | null;
+  subscription_admin_override_until: string | null;
+  subscription_admin_override_active: boolean;
   status: string;
   is_active: boolean;
   publication_status: string | null;

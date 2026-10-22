@@ -84,6 +84,7 @@ export interface Shop {
     expiresAt: string | null;
     trialDaysRemaining: number;
     isActive: boolean;
+    manualOverrideActive?: boolean;
   };
   theme_config: ThemeConfig;
   opening_hours?: ShopOpeningHours;

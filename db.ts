@@ -36,6 +36,9 @@ const sqliteSchema = `
     pending_subscription_tier TEXT, pending_subscription_effective_at TEXT,
     subscription_cancel_at TEXT, subscription_admin_suspended_at TEXT,
     subscription_admin_suspended_status TEXT,
+    subscription_admin_override_status TEXT,
+    subscription_admin_override_tier TEXT,
+    subscription_admin_override_until TEXT,
     subscription_features_snapshot TEXT, subscription_features_effective_at TEXT,
     subscription_status TEXT NOT NULL DEFAULT 'active', trial_start TEXT, trial_end TEXT,
     last_notification_sent_at TEXT, whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
@@ -220,6 +223,9 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'subscription_cancel_at', 'TEXT');
   addColumn('shops', 'subscription_admin_suspended_at', 'TEXT');
   addColumn('shops', 'subscription_admin_suspended_status', 'TEXT');
+  addColumn('shops', 'subscription_admin_override_status', 'TEXT');
+  addColumn('shops', 'subscription_admin_override_tier', 'TEXT');
+  addColumn('shops', 'subscription_admin_override_until', 'TEXT');
   addColumn('shops', 'whatsapp_subscription_reminders_enabled', 'INTEGER NOT NULL DEFAULT 0');
   addColumn('shops', 'whatsapp_subscription_reminders_consent_at', 'TEXT');
   connection.exec(`CREATE TABLE IF NOT EXISTS merchant_push_subscriptions (
@@ -360,6 +366,9 @@ export const postgresMigrations = [
     pending_subscription_tier TEXT, pending_subscription_effective_at TEXT,
     subscription_cancel_at TEXT, subscription_admin_suspended_at TEXT,
     subscription_admin_suspended_status TEXT,
+    subscription_admin_override_status TEXT,
+    subscription_admin_override_tier TEXT,
+    subscription_admin_override_until TEXT,
     subscription_status TEXT NOT NULL DEFAULT 'active', trial_start TEXT, trial_end TEXT,
     last_notification_sent_at TEXT, whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
     whatsapp_subscription_reminders_consent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
@@ -530,6 +539,9 @@ export const postgresMigrations = [
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_cancel_at TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_admin_suspended_at TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_admin_suspended_status TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_admin_override_status TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_admin_override_tier TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS subscription_admin_override_until TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS whatsapp_subscription_reminders_consent_at TEXT',
   'CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_shop_created ON subscription_payment_intents(shop_id, created_at DESC)',

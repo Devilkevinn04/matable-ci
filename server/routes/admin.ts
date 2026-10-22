@@ -1,7 +1,7 @@
 import { Router, type RequestHandler } from 'express';
 import type { dbTransaction } from '../../db.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
-import { getSubscriptionState, normalizeSubscriptionTier } from '../services/businessRules.ts';
+import { getSubscriptionState, isSubscriptionManualOverrideActive, normalizeSubscriptionTier } from '../services/businessRules.ts';
 import {
   DEFAULT_SUBSCRIPTION_PRO_FEATURES,
   getSubscriptionAccessCutoff,
@@ -541,7 +541,16 @@ export function createAdminRouter(options: AdminRouterOptions) {
   const getSubscriptionMetrics = async () => {
     const now = new Date();
     const shops = await loadShops();
-    const states = shops.map((shop) => ({ shop, state: getSubscriptionState(shop, now) }));
+    const states = shops.map((shop) => ({
+      shop,
+      state: getSubscriptionState(shop, now),
+      billingState: getSubscriptionState({
+        ...shop,
+        subscription_admin_override_status: null,
+        subscription_admin_override_tier: null,
+        subscription_admin_override_until: null,
+      }, now),
+    }));
     const paidSubscriptionPayments = await dbAll<{
       shop_id: number;
       tier: string;
@@ -562,7 +571,8 @@ export function createAdminRouter(options: AdminRouterOptions) {
     let mrrEstimatedSubscriptions = 0;
     const currentSubscriptionPrices = await getCurrentSubscriptionPrices();
     const mrrByTier = (['standard', 'premium', 'pro'] as const).map((tier) => {
-      const activeShops = states.filter(({ state }) => state.status === 'active' && state.plan === tier);
+      const activeShops = states.filter(({ state, billingState }) =>
+        state.status === 'active' && billingState.status === 'active' && billingState.plan === tier);
       const amount = activeShops.reduce((total, { shop }) => {
         const payment = latestPaymentByShop.get(shop.id);
         if (payment?.tier === tier && (payment.subscription_term === 'monthly' || payment.subscription_term === 'annual')) {
@@ -921,10 +931,18 @@ export function createAdminRouter(options: AdminRouterOptions) {
     const orderStatsByShop = new Map(orderStats.map((row) => [Number(row.shop_id), row]));
     const subscriptionShops = shops.map((shop) => {
       const subscription = getSubscriptionState(shop, now);
+      const billingSubscription = subscription.manualOverrideActive
+        ? getSubscriptionState({
+          ...shop,
+          subscription_admin_override_status: null,
+          subscription_admin_override_tier: null,
+          subscription_admin_override_until: null,
+        }, now)
+        : subscription;
       const trialExpiryMismatch = shop.subscription_status === 'trialing'
-        && subscription.trialEnd !== null
-        && subscription.expiresAt !== null
-        && Date.parse(subscription.trialEnd) !== Date.parse(subscription.expiresAt);
+        && billingSubscription.trialEnd !== null
+        && billingSubscription.expiresAt !== null
+        && Date.parse(billingSubscription.trialEnd) !== Date.parse(billingSubscription.expiresAt);
       const shopOrderStats = orderStatsByShop.get(shop.id);
       return {
         id: shop.id,
@@ -934,10 +952,14 @@ export function createAdminRouter(options: AdminRouterOptions) {
         owner_email: shop.owner_email ?? null,
         whatsapp_reminders_opt_in: Boolean(shop.whatsapp_subscription_reminders_enabled),
         plan: subscription.plan,
-        pending_subscription_tier: subscription.upcomingPlan,
-        pending_subscription_effective_at: subscription.upcomingPlanAt,
-        subscription_cancel_at: subscription.cancellationAt,
+        pending_subscription_tier: billingSubscription.upcomingPlan,
+        pending_subscription_effective_at: billingSubscription.upcomingPlanAt,
+        subscription_cancel_at: billingSubscription.cancellationAt,
         subscription_admin_suspended_at: shop.subscription_admin_suspended_at ?? null,
+        subscription_admin_override_status: shop.subscription_admin_override_status ?? null,
+        subscription_admin_override_tier: shop.subscription_admin_override_tier ?? null,
+        subscription_admin_override_until: shop.subscription_admin_override_until ?? null,
+        subscription_admin_override_active: isSubscriptionManualOverrideActive(shop, now),
         status: subscription.status,
         is_active: shop.is_active,
         publication_status: shop.publication_status,
@@ -948,7 +970,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
         trial_extension_days_used: extensionDaysByShopId.get(shop.id) || 0,
         trial_extension_days_remaining: Math.max(0, maxTrialExtensionDays - (extensionDaysByShopId.get(shop.id) || 0)),
         trial_extension_over_limit: (extensionDaysByShopId.get(shop.id) || 0) > maxTrialExtensionDays,
-        can_extend_trial: Boolean(shop.trial_start && shop.trial_end && (
+        can_extend_trial: !subscription.manualOverrideActive && Boolean(shop.trial_start && shop.trial_end && (
           shop.subscription_status === 'trialing'
           || shop.subscription_status === 'expired' && !shop.subscription_expires_at
         )),
@@ -1050,9 +1072,13 @@ export function createAdminRouter(options: AdminRouterOptions) {
         subscription_cancel_at: string | null;
         subscription_admin_suspended_at: string | null;
         subscription_admin_suspended_status: 'active' | 'trialing' | null;
+        subscription_admin_override_status: 'active' | 'suspended' | null;
+        subscription_admin_override_tier: 'standard' | 'premium' | 'pro' | null;
+        subscription_admin_override_until: string | null;
       }>(`SELECT selected_subscription_tier, subscription_status, subscription_expires_at,
           pending_subscription_tier, pending_subscription_effective_at,
-          subscription_cancel_at, subscription_admin_suspended_at, subscription_admin_suspended_status
+          subscription_cancel_at, subscription_admin_suspended_at, subscription_admin_suspended_status,
+          subscription_admin_override_status, subscription_admin_override_tier, subscription_admin_override_until
         FROM shops WHERE id = ?`, [shopId]);
       if (!shop) return { status: 'missing' as const };
       const subscription = getSubscriptionState({
@@ -1068,6 +1094,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
         || shop.subscription_expires_at !== expectedExpiry) {
         return { status: 'stale' as const };
       }
+      if (subscription.manualOverrideActive) return { status: 'manual_override' as const };
       if (subscription.status !== 'active' || !shop.subscription_expires_at
         || shop.subscription_admin_suspended_at || subscription.cancellationAt) {
         return { status: 'ineligible' as const };
@@ -1119,6 +1146,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
     if (result.status === 'missing') return res.status(404).json({ error: 'Boutique introuvable.' });
     if (result.status === 'stale') return res.status(409).json({ error: 'L’abonnement a changé. Actualisez la liste avant de réessayer.' });
     if (result.status === 'ineligible') return res.status(409).json({ error: 'Seul un abonnement payé actif avec une échéance future peut être modifié.' });
+    if (result.status === 'manual_override') return res.status(409).json({ error: 'Une dérogation manuelle est active. Rétablissez d’abord l’automatisation pour programmer une formule.' });
     if (result.status === 'same') return res.status(400).json({ error: 'La formule programmée est déjà celle de l’abonnement actif.' });
     if (result.status === 'payment_pending') return res.status(409).json({ error: 'Un paiement d’abonnement est en attente. Résolvez-le avant de programmer un changement de formule.' });
     await refreshRuntimeDataFromDatabase();
@@ -1126,6 +1154,90 @@ export function createAdminRouter(options: AdminRouterOptions) {
       success: true,
       pending_subscription_tier: result.pendingTier,
       pending_subscription_effective_at: result.effectiveAt,
+    });
+  });
+
+  router.patch('/subscriptions/:id/manual-override', async (req, res) => {
+    const shopId = Number(req.params.id);
+    const action = req.body?.action;
+    const status = req.body?.expected_override_status;
+    const tier = req.body?.expected_override_tier;
+    const until = req.body?.expected_override_until;
+    const reason = typeof req.body?.reason === 'string'
+      ? req.body.reason.trim().replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 500)
+      : '';
+    if (!Number.isSafeInteger(shopId) || shopId <= 0
+      || !['grant', 'revoke', 'clear'].includes(action)
+      || status !== null && status !== 'active' && status !== 'suspended'
+      || tier !== null && !['standard', 'premium', 'pro'].includes(tier)
+      || typeof until !== 'string' && until !== null
+      || reason.length < 10) {
+      return res.status(400).json({ error: 'Action, état manuel attendu et motif explicite (au moins 10 caractères) requis.' });
+    }
+    const nextTier = req.body?.tier;
+    if (action !== 'clear' && !['standard', 'premium', 'pro'].includes(nextTier)) {
+      return res.status(400).json({ error: 'Choisissez une formule valide pour la dérogation.' });
+    }
+    const expiryDate = typeof req.body?.until_date === 'string' ? req.body.until_date : '';
+    if (action !== 'clear'
+      && (!/^\d{4}-\d{2}-\d{2}$/.test(expiryDate)
+        || Number.isNaN(Date.parse(`${expiryDate}T00:00:00.000Z`))
+        || new Date(`${expiryDate}T00:00:00.000Z`).toISOString().slice(0, 10) !== expiryDate
+        || (getSubscriptionAccessCutoff(expiryDate) ?? 0) <= Date.now())) {
+      return res.status(400).json({ error: 'Choisissez une date de fin valide, égale ou postérieure à aujourd’hui.' });
+    }
+
+    const actionAt = new Date().toISOString();
+    const nextUntil = action === 'clear' ? null : `${expiryDate}T23:59:59.999Z`;
+    const nextStatus = action === 'grant' ? 'active' : action === 'revoke' ? 'suspended' : null;
+    const nextPlan = action === 'clear' ? null : normalizeSubscriptionTier(nextTier);
+    const result = await dbTransaction(async ({ get, run }) => {
+      const current = await get<{
+        subscription_admin_override_status: 'active' | 'suspended' | null;
+        subscription_admin_override_tier: string | null;
+        subscription_admin_override_until: string | null;
+      }>(`SELECT subscription_admin_override_status, subscription_admin_override_tier,
+          subscription_admin_override_until FROM shops WHERE id = ?`, [shopId]);
+      if (!current) return 'missing' as const;
+      if ((current.subscription_admin_override_status ?? null) !== status
+        || (current.subscription_admin_override_tier ?? null) !== tier
+        || (current.subscription_admin_override_until ?? null) !== until) return 'stale' as const;
+      if (action === 'clear' && !current.subscription_admin_override_status) return 'no_override' as const;
+      const updated = await run(`UPDATE shops SET subscription_admin_override_status = ?,
+          subscription_admin_override_tier = ?, subscription_admin_override_until = ?
+        WHERE id = ? AND COALESCE(subscription_admin_override_status, '') = ?
+          AND COALESCE(subscription_admin_override_tier, '') = ?
+          AND COALESCE(subscription_admin_override_until, '') = ?`,
+      [nextStatus, nextPlan, nextUntil, shopId, status ?? '', tier ?? '', until ?? '']);
+      if (updated.changes !== 1) return 'stale' as const;
+      const auditAction = action === 'grant'
+        ? 'subscription_manual_access_granted'
+        : action === 'revoke'
+          ? 'subscription_manual_access_revoked'
+          : 'subscription_manual_override_cleared';
+      await run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        [req.adminRole || 'super_admin', auditAction, shopId, JSON.stringify({
+          previous_override_status: current.subscription_admin_override_status,
+          previous_override_tier: current.subscription_admin_override_tier,
+          previous_override_until: current.subscription_admin_override_until,
+          override_status: nextStatus,
+          override_tier: nextPlan,
+          override_until: nextUntil,
+          reason,
+        }), actionAt],
+      );
+      return 'success' as const;
+    });
+    if (result === 'missing') return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (result === 'stale') return res.status(409).json({ error: 'La dérogation a changé. Actualisez la liste avant de réessayer.' });
+    if (result === 'no_override') return res.status(409).json({ error: 'Aucune dérogation à rétablir pour cette boutique.' });
+    await refreshRuntimeDataFromDatabase();
+    return res.json({
+      success: true,
+      subscription_admin_override_status: nextStatus,
+      subscription_admin_override_tier: nextPlan,
+      subscription_admin_override_until: nextUntil,
     });
   });
 
@@ -1160,9 +1272,13 @@ export function createAdminRouter(options: AdminRouterOptions) {
         subscription_cancel_at: string | null;
         subscription_admin_suspended_at: string | null;
         subscription_admin_suspended_status: 'active' | 'trialing' | null;
+        subscription_admin_override_status: 'active' | 'suspended' | null;
+        subscription_admin_override_tier: 'standard' | 'premium' | 'pro' | null;
+        subscription_admin_override_until: string | null;
       }>(`SELECT subscription_status, subscription_expires_at, trial_start, trial_end,
           selected_subscription_tier, pending_subscription_tier, pending_subscription_effective_at,
-          subscription_cancel_at, subscription_admin_suspended_at, subscription_admin_suspended_status
+          subscription_cancel_at, subscription_admin_suspended_at, subscription_admin_suspended_status,
+          subscription_admin_override_status, subscription_admin_override_tier, subscription_admin_override_until
         FROM shops WHERE id = ?`, [shopId]);
       if (!shop) return { status: 'missing' as const };
       const subscription = getSubscriptionState({
@@ -1175,6 +1291,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
         || subscription.cancellationAt !== expectedCancellationAt) {
         return { status: 'stale' as const };
       }
+      if (subscription.manualOverrideActive) return { status: 'manual_override' as const };
 
       let nextStatus = shop.subscription_status;
       let nextCancellationAt = shop.subscription_cancel_at;
@@ -1285,6 +1402,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
     if (result.status === 'ineligible') return res.status(409).json({ error: 'Cette action ne s’applique pas à l’état actuel de l’abonnement.' });
     if (result.status === 'not_admin_suspended') return res.status(409).json({ error: 'Cette suspension n’a pas été effectuée par une action administrative réversible.' });
     if (result.status === 'not_restorable') return res.status(409).json({ error: 'La période payée ou d’essai est terminée; un nouveau paiement est nécessaire avant de réactiver les droits.' });
+    if (result.status === 'manual_override') return res.status(409).json({ error: 'Une dérogation manuelle est active. Rétablissez d’abord l’automatisation pour utiliser ces commandes.' });
     if (result.status === 'payment_pending') return res.status(409).json({ error: 'Un paiement d’abonnement est en attente. Résolvez-le avant de modifier l’accès.' });
     await refreshRuntimeDataFromDatabase();
     return res.json({
@@ -1299,6 +1417,9 @@ export function createAdminRouter(options: AdminRouterOptions) {
   router.patch('/subscriptions/:id/extend-trial', async (req, res) => {
     const shop = await getShop(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (isSubscriptionManualOverrideActive(shop)) {
+      return res.status(409).json({ error: 'Une dérogation manuelle est active. Rétablissez l’automatisation avant de prolonger l’essai.' });
+    }
     const days = Number(req.body?.days);
     if (!Number.isInteger(days) || days < 1 || days > 30) {
       return res.status(400).json({ error: 'La prolongation doit être comprise entre 1 et 30 jours.' });
@@ -1374,6 +1495,9 @@ export function createAdminRouter(options: AdminRouterOptions) {
   router.patch('/subscriptions/:id/reconcile-trial-expiry', async (req, res) => {
     const shop = await getShop(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (isSubscriptionManualOverrideActive(shop)) {
+      return res.status(409).json({ error: 'Une dérogation manuelle est active. Rétablissez l’automatisation avant de synchroniser l’essai.' });
+    }
     if (shop.subscription_status !== 'trialing' || !shop.trial_end) {
       return res.status(409).json({ error: 'Seul un essai actif avec une échéance définie peut être synchronisé.' });
     }
@@ -1832,6 +1956,9 @@ export function createAdminRouter(options: AdminRouterOptions) {
     }
     const shop = await getShop(shopId);
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (isSubscriptionManualOverrideActive(shop)) {
+      return res.status(409).json({ error: 'Une dérogation manuelle est active. Rétablissez l’automatisation avant de corriger l’échéance payée.' });
+    }
     if (shop.subscription_status !== 'active') {
       return res.status(409).json({ error: 'Seul un abonnement actif peut recevoir une échéance manuelle.' });
     }

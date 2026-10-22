@@ -102,7 +102,7 @@ const addDays = (d: Date, days: number) => {
 
 async function refreshSubscriptionState(shop: ShopRecord): Promise<SubscriptionState> {
   const state = getSubscriptionState(shop);
-  if ((state.status === 'past_due' || state.status === 'suspended')
+  if (!state.manualOverrideActive && (state.status === 'past_due' || state.status === 'suspended')
     && shop.subscription_status !== state.status) {
     const update = await dbRun(
       'UPDATE shops SET subscription_status = ? WHERE id = ? AND COALESCE(subscription_status, ?) = ?',
@@ -126,6 +126,7 @@ async function processSubscriptionAutomation() {
     try {
       await refreshSubscriptionState(shop);
       const subscription = getSubscriptionState(shop, now);
+      if (subscription.manualOverrideActive) continue;
       const expiresAt = subscription.status === 'trialing' ? subscription.trialEnd : subscription.expiresAt;
       const daysBefore = getSubscriptionReminderDaysBefore(shop, now);
       if (!subscription.isActive || !daysBefore || !expiresAt) continue;

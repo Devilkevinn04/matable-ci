@@ -782,6 +782,122 @@ test('home page and direct merchant plan preview load successfully', async () =>
   assert.match(plansPreview.response.headers.get('content-type') || '', /text\/html/);
 });
 
+test('super-admin can grant, revoke, and clear a temporary subscription override per shop', async () => {
+  const previousCookieJar = cookieJar;
+  cookieJar = '';
+  const testDb = new Database(TEST_DB_PATH);
+  const insertedShop = testDb.prepare(`INSERT INTO shops (
+    name, slug, whatsapp_number, pin_code_hash, created_at, category,
+    selected_subscription_tier, subscription_tier, subscription_status,
+    subscription_expires_at, publication_status
+  ) VALUES (?, ?, ?, ?, ?, ?, 'standard', 'standard', 'expired', '2020-01-01T23:59:59.999Z', 'active')`)
+    .run('Boutique Dérogation', `derogation-${randomUUID()}`, uniquePhone(),
+      'test-pin-hash', new Date().toISOString(), 'food');
+  const shopId = Number(insertedShop.lastInsertRowid);
+  try {
+    const login = await apiFetch('/api/auth/admin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'super-admin-demo-key', role: 'super_admin' }),
+    });
+    assert.equal(login.response.status, 200);
+
+    const sourceBefore = testDb.prepare(`SELECT subscription_status, selected_subscription_tier,
+      subscription_expires_at FROM shops WHERE id = ?`).get(shopId) as {
+      subscription_status: string;
+      selected_subscription_tier: string;
+      subscription_expires_at: string;
+    };
+    const untilDate = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    const grant = await apiFetch(`/api/admin/subscriptions/${shopId}/manual-override`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'grant',
+        tier: 'pro',
+        until_date: untilDate,
+        expected_override_status: null,
+        expected_override_tier: null,
+        expected_override_until: null,
+        reason: 'Geste commercial validé',
+      }),
+    });
+    assert.equal(grant.response.status, 200, JSON.stringify(grant.payload));
+    const grantedUntil = grant.payload.subscription_admin_override_until as string;
+    const subscriptions = await apiFetch('/api/admin/subscriptions');
+    assert.equal(subscriptions.response.status, 200);
+    const grantedShop = subscriptions.payload.shops.find((shop: { id: number }) => shop.id === shopId);
+    assert.equal(grantedShop.status, 'active');
+    assert.equal(grantedShop.plan, 'pro');
+    assert.equal(grantedShop.subscription_admin_override_active, true);
+
+    const staleGrant = await apiFetch(`/api/admin/subscriptions/${shopId}/manual-override`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'clear',
+        expected_override_status: null,
+        expected_override_tier: null,
+        expected_override_until: null,
+        reason: 'Tentative de retrait obsolète',
+      }),
+    });
+    assert.equal(staleGrant.response.status, 409);
+
+    const revoke = await apiFetch(`/api/admin/subscriptions/${shopId}/manual-override`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'revoke',
+        tier: 'pro',
+        until_date: untilDate,
+        expected_override_status: 'active',
+        expected_override_tier: 'pro',
+        expected_override_until: grantedUntil,
+        reason: 'Suspension temporaire validée',
+      }),
+    });
+    assert.equal(revoke.response.status, 200, JSON.stringify(revoke.payload));
+    const suspendedSubscriptions = await apiFetch('/api/admin/subscriptions');
+    const suspendedShop = suspendedSubscriptions.payload.shops.find((shop: { id: number }) => shop.id === shopId);
+    assert.equal(suspendedShop.status, 'suspended');
+    assert.equal(suspendedShop.subscription_admin_override_active, true);
+
+    const clear = await apiFetch(`/api/admin/subscriptions/${shopId}/manual-override`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'clear',
+        expected_override_status: 'suspended',
+        expected_override_tier: 'pro',
+        expected_override_until: grantedUntil,
+        reason: 'Rétablissement de la facturation',
+      }),
+    });
+    assert.equal(clear.response.status, 200, JSON.stringify(clear.payload));
+    const restoredSubscriptions = await apiFetch('/api/admin/subscriptions');
+    const restoredShop = restoredSubscriptions.payload.shops.find((shop: { id: number }) => shop.id === shopId);
+    assert.equal(restoredShop.subscription_admin_override_active, false);
+    assert.equal(restoredShop.status, 'suspended');
+
+    const sourceAfter = testDb.prepare(`SELECT subscription_status, selected_subscription_tier,
+      subscription_expires_at FROM shops WHERE id = ?`).get(shopId);
+    assert.deepEqual(sourceAfter, sourceBefore);
+    const auditActions = testDb.prepare(`SELECT action FROM admin_audit_logs
+      WHERE shop_id = ? ORDER BY id`).all(shopId) as { action: string }[];
+    assert.deepEqual(auditActions.map(({ action }) => action), [
+      'subscription_manual_access_granted',
+      'subscription_manual_access_revoked',
+      'subscription_manual_override_cleared',
+    ]);
+  } finally {
+    testDb.prepare('DELETE FROM shops WHERE id = ?').run(shopId);
+    testDb.close();
+    await apiFetch('/api/auth/admin-logout', { method: 'POST' });
+    cookieJar = previousCookieJar;
+  }
+});
+
 test('verification admin is limited to identity follow-up and content moderation', async () => {
   const verificationLogin = await apiFetch('/api/auth/admin-login', {
     method: 'POST',

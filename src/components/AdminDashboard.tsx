@@ -98,6 +98,9 @@ const adminAuditActionLabels: Record<string, string> = {
   subscription_cancellation_revoked: 'Résiliation à l’échéance annulée',
   subscription_access_suspended: 'Accès à l’abonnement suspendu',
   subscription_access_reactivated: 'Accès à l’abonnement réactivé',
+  subscription_manual_access_granted: 'Accès manuel accordé',
+  subscription_manual_access_revoked: 'Accès manuel suspendu',
+  subscription_manual_override_cleared: 'Dérogation manuelle retirée',
   platform_push_announcement_sent: 'Annonce Push envoyée',
   shop_permanently_deleted: 'Boutique supprimée',
   shop_reactivated: 'Boutique réactivée',
@@ -146,6 +149,12 @@ const adminAuditDetailLabels: Record<string, string> = {
   status: 'Statut',
   event_id: 'Événement Didit',
   subscription_expires_at: 'Nouvelle échéance',
+  override_status: 'État manuel',
+  override_tier: 'Formule manuelle',
+  override_until: 'Fin de la dérogation',
+  previous_override_status: 'État manuel précédent',
+  previous_override_tier: 'Formule manuelle précédente',
+  previous_override_until: 'Fin précédente de la dérogation',
   trial_end: 'Nouvelle fin d’essai',
   deleted_products: 'Produits supprimés',
   deleted_orders: 'Commandes supprimées',
@@ -234,6 +243,12 @@ export const AdminDashboard: React.FC = () => {
   const [subscriptionActionShopId, setSubscriptionActionShopId] = useState<number | null>(null);
   const [expiryDrafts, setExpiryDrafts] = useState<Record<number, { date: string; reason: string }>>({});
   const [planChangeDrafts, setPlanChangeDrafts] = useState<Record<number, { tier: SubscriptionTier; reason: string }>>({});
+  const [manualOverrideDrafts, setManualOverrideDrafts] = useState<Record<number, {
+    action: 'grant' | 'revoke' | 'clear';
+    tier: SubscriptionTier;
+    untilDate: string;
+    reason: string;
+  }>>({});
   const [adminOrders, setAdminOrders] = useState<AdminOrder[]>([]);
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [orderTotal, setOrderTotal] = useState(0);
@@ -765,6 +780,76 @@ export const AdminDashboard: React.FC = () => {
     } finally {
       setSubscriptionActionShopId(null);
     }
+  };
+
+  const handleManualSubscriptionOverride = async (shop: AdminSubscriptionShop) => {
+    const draft = manualOverrideDrafts[shop.id];
+    const action = draft?.action ?? 'grant';
+    const reason = draft?.reason.trim() || '';
+    if (reason.length < 10 || (action !== 'clear' && !draft?.untilDate)) {
+      showNotice(action === 'clear'
+        ? 'Saisissez un motif explicite d’au moins 10 caractères.'
+        : 'Choisissez une formule, une date de fin et un motif d’au moins 10 caractères.');
+      return;
+    }
+    const untilLabel = draft?.untilDate
+      ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(`${draft.untilDate}T12:00:00`))
+      : '';
+    const confirmation = action === 'grant'
+      ? `Accorder immédiatement la formule ${draft?.tier} jusqu’au ${untilLabel} à ${shop.name}. Aucun paiement ne sera créé; l’automatisation reprendra ensuite.`
+      : action === 'revoke'
+        ? `Suspendre immédiatement les droits d’abonnement de ${shop.name} jusqu’au ${untilLabel}. Cela ne désactive pas la boutique et ne rembourse/annule aucun paiement. L’automatisation reprendra ensuite.`
+        : `Retirer la dérogation manuelle pour ${shop.name} et rétablir immédiatement l’état calculé par l’abonnement et les paiements.`;
+    if (!window.confirm(`${confirmation} Le motif sera inscrit au journal d’audit.`)) return;
+    setSubscriptionActionShopId(shop.id);
+    try {
+      const response = await fetch(`/api/admin/subscriptions/${shop.id}/manual-override`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          tier: draft?.tier ?? shop.plan,
+          until_date: draft?.untilDate,
+          expected_override_status: shop.subscription_admin_override_status,
+          expected_override_tier: shop.subscription_admin_override_tier,
+          expected_override_until: shop.subscription_admin_override_until,
+          reason,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de modifier les droits manuels.');
+      setManualOverrideDrafts((previous) => {
+        const next = { ...previous };
+        delete next[shop.id];
+        return next;
+      });
+      showNotice(action === 'grant'
+        ? `Accès ${draft?.tier} accordé à ${shop.name} jusqu’au ${untilLabel}.`
+        : action === 'revoke'
+          ? `Droits suspendus pour ${shop.name} jusqu’au ${untilLabel}.`
+          : `Automatisation rétablie pour ${shop.name}.`);
+      await fetchSubscriptions();
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Impossible de modifier les droits manuels.');
+    } finally {
+      setSubscriptionActionShopId(null);
+    }
+  };
+
+  const updateManualOverrideDraft = (
+    shop: AdminSubscriptionShop,
+    patch: Partial<NonNullable<typeof manualOverrideDrafts[number]>>,
+  ) => {
+    setManualOverrideDrafts((previous) => ({
+      ...previous,
+      [shop.id]: {
+        action: previous[shop.id]?.action ?? 'grant',
+        tier: previous[shop.id]?.tier ?? shop.plan as SubscriptionTier,
+        untilDate: previous[shop.id]?.untilDate ?? '',
+        reason: previous[shop.id]?.reason ?? '',
+        ...patch,
+      },
+    }));
   };
 
   const handleScheduleSubscriptionPlan = async (shop: AdminSubscriptionShop) => {
@@ -2042,19 +2127,91 @@ export const AdminDashboard: React.FC = () => {
                 <div className="divide-y divide-slate-200 border-y border-slate-200">
                   {filteredSubscriptions.length === 0 ? <p className="py-6 text-sm text-slate-500">Aucun abonnement ne correspond à ces critères.</p> : filteredSubscriptions.map((shop) => {
                     const canExtendTrial = shop.can_extend_trial;
+                    const manualDraft = manualOverrideDrafts[shop.id];
+                    const manualAction = manualDraft?.action ?? 'grant';
+                    const manualTier = manualDraft?.tier ?? shop.plan as SubscriptionTier;
+                    const manualUntilDate = manualDraft?.untilDate ?? '';
+                    const manualReason = manualDraft?.reason ?? '';
                     const statusTone = shop.status === 'active' ? 'bg-emerald-100 text-emerald-900'
                       : shop.status === 'trialing' ? 'bg-sky-100 text-sky-900'
                         : shop.status === 'past_due' || shop.status === 'expired' ? 'bg-amber-100 text-amber-950'
                           : 'bg-slate-100 text-slate-700';
                     return <article key={shop.id} className="flex flex-col gap-3 py-4 xl:flex-row xl:items-center xl:justify-between">
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-bold text-slate-900">{shop.name}</h4><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-slate-700">{shop.plan}</span><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${statusTone}`}>{subscriptionStatusLabels[shop.status] || shop.status}</span>{!shop.is_active && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-900">Boutique désactivée</span>}</div>
+                        <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-bold text-slate-900">{shop.name}</h4><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-slate-700">{shop.plan}</span><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${shop.subscription_admin_override_active ? 'bg-violet-100 text-violet-950' : statusTone}`}>{shop.subscription_admin_override_active ? shop.subscription_admin_override_status === 'active' ? 'Accès manuel' : 'Droits suspendus manuellement' : subscriptionStatusLabels[shop.status] || shop.status}</span>{!shop.is_active && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-900">Boutique désactivée</span>}</div>
                         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>{shop.whatsapp_number}</span><span>{shop.products_count} article(s)</span><span>{shop.orders_count} commande(s)</span><span>{shop.publication_status === 'active' ? 'Publication active' : shop.publication_status === 'suspended' ? 'Publication suspendue' : 'Brouillon non publié'}</span><span>{shop.whatsapp_reminders_opt_in ? 'Consentement aux rappels WhatsApp donné' : 'Pas de consentement WhatsApp'}</span><span>Inscrite le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.created_at))}</span></div>
-                        <p className="mt-1 text-xs text-slate-500">{shop.status === 'trialing' ? 'Fin d’essai' : shop.status === 'active' ? 'Prochain renouvellement' : 'Échéance de l’abonnement'} : {shop.next_renewal_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.next_renewal_at)) : 'Non définie'}{shop.trial_start ? ` · Prolongation cumulée : ${shop.trial_extension_days_used}/30 jours${shop.trial_extension_over_limit ? ' — dépassement historique à vérifier' : `, ${shop.trial_extension_days_remaining} jour(s) autorisé(s) restant(s)`}` : ''} · Dernière commande : {shop.last_order_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.last_order_at)) : 'aucune'}</p>
-                        {shop.pending_subscription_tier && shop.pending_subscription_effective_at && <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">Formule {shop.pending_subscription_tier} programmée au {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.pending_subscription_effective_at))}. La formule actuelle reste active jusque-là.</p>}
-                        {shop.subscription_cancel_at && <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-950">Résiliation programmée au {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.subscription_cancel_at))}. Les droits payés restent actifs jusque-là.</p>}
-                        {shop.subscription_admin_suspended_at && <p className="mt-2 rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-950">Accès à l’abonnement suspendu par l’administration le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.subscription_admin_suspended_at))}. La boutique n’est pas désactivée par cette action.</p>}
-                        {shop.status === 'active' && <div className="mt-3 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[minmax(150px,190px)_minmax(180px,1fr)_auto]">
+                        <p className="mt-1 text-xs text-slate-500">{shop.subscription_admin_override_active ? 'Fin de l’accès manuel' : shop.status === 'trialing' ? 'Fin d’essai' : shop.status === 'active' ? 'Prochain renouvellement' : 'Échéance de l’abonnement'} : {shop.next_renewal_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.next_renewal_at)) : 'Non définie'}{shop.trial_start ? ` · Prolongation cumulée : ${shop.trial_extension_days_used}/30 jours${shop.trial_extension_over_limit ? ' — dépassement historique à vérifier' : `, ${shop.trial_extension_days_remaining} jour(s) autorisé(s) restant(s)`}` : ''} · Dernière commande : {shop.last_order_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.last_order_at)) : 'aucune'}</p>
+                        {shop.pending_subscription_tier && shop.pending_subscription_effective_at && <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">Formule {shop.pending_subscription_tier} programmée au {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.pending_subscription_effective_at))}. {shop.subscription_admin_override_active ? 'Elle sera prise en compte lorsque l’automatisation reprendra.' : 'La formule actuelle reste active jusque-là.'}</p>}
+                        {shop.subscription_cancel_at && <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-950">Résiliation programmée au {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.subscription_cancel_at))}. {shop.subscription_admin_override_active ? 'Elle sera prise en compte lorsque l’automatisation reprendra.' : 'Les droits payés restent actifs jusque-là.'}</p>}
+                        {shop.subscription_admin_suspended_at && <p className="mt-2 rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-950">Accès à l’abonnement suspendu par l’administration le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.subscription_admin_suspended_at))}. {shop.subscription_admin_override_active && shop.subscription_admin_override_status === 'active' ? 'La dérogation accorde temporairement les droits jusqu’à sa date de fin.' : 'La boutique n’est pas désactivée par cette action.'}</p>}
+                        {shop.subscription_admin_override_status && <p className={`mt-2 rounded-md border px-3 py-2 text-xs font-semibold ${shop.subscription_admin_override_active ? 'border-violet-300 bg-violet-50 text-violet-950' : 'border-slate-300 bg-slate-50 text-slate-700'}`}>
+                          {shop.subscription_admin_override_active
+                            ? `${shop.subscription_admin_override_status === 'active' ? 'Accès manuel accordé' : 'Droits manuellement suspendus'}${shop.subscription_admin_override_tier ? ` · formule ${shop.subscription_admin_override_tier}` : ''} jusqu’au ${shop.subscription_admin_override_until ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(shop.subscription_admin_override_until)) : 'terme non défini'}. L’automatisation reprendra ensuite.`
+                            : `Dérogation manuelle terminée le ${shop.subscription_admin_override_until ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(shop.subscription_admin_override_until)) : 'à une date inconnue'}; l’état automatique est rétabli.`}
+                        </p>}
+                        <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50/60 p-3">
+                          <h5 className="text-xs font-black text-violet-950">Intervention manuelle · cette boutique uniquement</h5>
+                          <p className="mt-1 text-[11px] leading-5 text-violet-900">Accordez ou suspendez temporairement les droits sans modifier les paiements. À la date choisie, l’état calculé automatiquement reprend le dessus. La publication et l’activation générale de la boutique restent indépendantes.</p>
+                          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                            <label className="text-[10px] font-bold text-violet-950">Action
+                              <select
+                                aria-label={`Action manuelle d’abonnement pour ${shop.name}`}
+                                value={manualAction}
+                                onChange={(event) => updateManualOverrideDraft(shop, { action: event.target.value as 'grant' | 'revoke' | 'clear' })}
+                                className="mt-1 min-h-9 w-full rounded-md border border-violet-300 bg-white px-2 text-xs text-slate-800"
+                              >
+                                <option value="grant">Accorder un accès temporaire</option>
+                                <option value="revoke">Suspendre temporairement les droits</option>
+                                <option value="clear" disabled={!shop.subscription_admin_override_status}>Rétablir l’automatisation</option>
+                              </select>
+                            </label>
+                            {manualAction === 'grant' && <label className="text-[10px] font-bold text-violet-950">Formule accordée
+                              <select
+                                aria-label={`Formule manuelle pour ${shop.name}`}
+                                value={manualTier}
+                                onChange={(event) => updateManualOverrideDraft(shop, { tier: event.target.value as SubscriptionTier })}
+                                className="mt-1 min-h-9 w-full rounded-md border border-violet-300 bg-white px-2 text-xs text-slate-800"
+                              >
+                                <option value="standard">Standard</option>
+                                <option value="premium">Premium</option>
+                                <option value="pro">Pro</option>
+                              </select>
+                            </label>}
+                            {manualAction !== 'clear' && <label className="text-[10px] font-bold text-violet-950">Droits jusqu’au
+                              <input
+                                type="date"
+                                aria-label={`Date de fin des droits manuels pour ${shop.name}`}
+                                min={new Date().toISOString().slice(0, 10)}
+                                value={manualUntilDate}
+                                onChange={(event) => updateManualOverrideDraft(shop, { untilDate: event.target.value })}
+                                className="mt-1 min-h-9 w-full rounded-md border border-violet-300 bg-white px-2 text-xs text-slate-800"
+                              />
+                            </label>}
+                            <label className="text-[10px] font-bold text-violet-950 md:col-span-2">Motif obligatoire (min. 10 caractères)
+                              <input
+                                type="text"
+                                maxLength={500}
+                                aria-label={`Motif de l’intervention manuelle pour ${shop.name}`}
+                                placeholder="Ex. geste commercial approuvé, incident de paiement vérifié…"
+                                value={manualReason}
+                                onChange={(event) => updateManualOverrideDraft(shop, { reason: event.target.value })}
+                                className="mt-1 min-h-9 w-full rounded-md border border-violet-300 bg-white px-2 text-xs text-slate-800"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              disabled={subscriptionActionShopId === shop.id
+                                || manualReason.trim().length < 10
+                                || (manualAction !== 'clear' && !manualUntilDate)
+                                || (manualAction === 'clear' && !shop.subscription_admin_override_status)}
+                              onClick={() => void handleManualSubscriptionOverride(shop)}
+                              className="self-end min-h-9 rounded-md bg-violet-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                            >
+                              {manualAction === 'grant' ? 'Accorder les droits' : manualAction === 'revoke' ? 'Suspendre les droits' : 'Rétablir l’automatisation'}
+                            </button>
+                          </div>
+                        </div>
+                        {shop.status === 'active' && !shop.subscription_admin_override_active && <div className="mt-3 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[minmax(150px,190px)_minmax(180px,1fr)_auto]">
                           <label className="text-[10px] font-bold text-slate-600">Nouvelle date de fin d’accès
                             <input
                               type="date"
@@ -2090,7 +2247,7 @@ export const AdminDashboard: React.FC = () => {
                             Enregistrer la date
                           </button>
                         </div>}
-                        {shop.status === 'active' && shop.subscription_expires_at && !shop.subscription_cancel_at && !shop.subscription_admin_suspended_at && <div className="mt-3 grid gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 sm:grid-cols-[minmax(150px,190px)_minmax(180px,1fr)_auto]">
+                        {shop.status === 'active' && shop.subscription_expires_at && !shop.subscription_admin_override_active && !shop.subscription_cancel_at && !shop.subscription_admin_suspended_at && <div className="mt-3 grid gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 sm:grid-cols-[minmax(150px,190px)_minmax(180px,1fr)_auto]">
                           <label className="text-[10px] font-bold text-slate-700">Formule au prochain renouvellement
                             <select
                               aria-label={`Formule au prochain renouvellement de ${shop.name}`}
@@ -2142,14 +2299,14 @@ export const AdminDashboard: React.FC = () => {
                         </div>}
                       </div>
                       <div className="flex shrink-0 flex-wrap gap-2">
-                        {shop.subscription_admin_suspended_at
+                        {!shop.subscription_admin_override_active && shop.subscription_admin_suspended_at
                           ? <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleSubscriptionLifecycleAction(shop, 'reactivate')} className="min-h-9 rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50">Réactiver les droits</button>
-                          : (shop.status === 'active' || shop.status === 'trialing') && <button type="button" disabled={subscriptionActionShopId === shop.id || Boolean(shop.subscription_cancel_at)} onClick={() => void handleSubscriptionLifecycleAction(shop, 'suspend')} className="min-h-9 rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-bold text-rose-900 hover:bg-rose-50 disabled:opacity-50">Suspendre les droits</button>}
-                        {shop.subscription_cancel_at
+                          : !shop.subscription_admin_override_active && (shop.status === 'active' || shop.status === 'trialing') && <button type="button" disabled={subscriptionActionShopId === shop.id || Boolean(shop.subscription_cancel_at)} onClick={() => void handleSubscriptionLifecycleAction(shop, 'suspend')} className="min-h-9 rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-bold text-rose-900 hover:bg-rose-50 disabled:opacity-50">Suspendre les droits</button>}
+                        {!shop.subscription_admin_override_active && shop.subscription_cancel_at
                           ? <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleSubscriptionLifecycleAction(shop, 'undo_cancellation')} className="min-h-9 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-bold text-amber-950 hover:bg-amber-50 disabled:opacity-50">Annuler la résiliation</button>
-                          : shop.status === 'active' && shop.subscription_expires_at && !shop.subscription_admin_suspended_at && !shop.pending_subscription_tier && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleSubscriptionLifecycleAction(shop, 'cancel_at_period_end')} className="min-h-9 rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-bold text-rose-900 hover:bg-rose-50 disabled:opacity-50">Résilier à l’échéance</button>}
+                          : !shop.subscription_admin_override_active && shop.status === 'active' && shop.subscription_expires_at && !shop.subscription_admin_suspended_at && !shop.pending_subscription_tier && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handleSubscriptionLifecycleAction(shop, 'cancel_at_period_end')} className="min-h-9 rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-bold text-rose-900 hover:bg-rose-50 disabled:opacity-50">Résilier à l’échéance</button>}
                         {shop.status === 'trialing' && shop.trial_days_remaining !== null && shop.trial_days_remaining <= 7 && shop.whatsapp_reminders_opt_in && <button type="button" disabled={subscriptionActionShopId === shop.id} onClick={() => void handlePrepareTrialReminder(shop)} className="min-h-9 rounded-lg border border-emerald-700 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-50">Ouvrir WhatsApp</button>}
-                        {canExtendTrial && <button type="button" disabled={subscriptionActionShopId === shop.id || shop.trial_extension_over_limit || shop.trial_extension_days_remaining === 0 || trialExtensionDays > shop.trial_extension_days_remaining} onClick={() => void handleExtendTrial(shop)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{shop.trial_extension_over_limit ? 'Dépassement à vérifier' : shop.trial_extension_days_remaining === 0 ? 'Plafond atteint' : trialExtensionDays > shop.trial_extension_days_remaining ? `Maximum ${shop.trial_extension_days_remaining} j` : `Prolonger de ${trialExtensionDays} j`}</button>}
+                        {!shop.subscription_admin_override_active && canExtendTrial && <button type="button" disabled={subscriptionActionShopId === shop.id || shop.trial_extension_over_limit || shop.trial_extension_days_remaining === 0 || trialExtensionDays > shop.trial_extension_days_remaining} onClick={() => void handleExtendTrial(shop)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{shop.trial_extension_over_limit ? 'Dépassement à vérifier' : shop.trial_extension_days_remaining === 0 ? 'Plafond atteint' : trialExtensionDays > shop.trial_extension_days_remaining ? `Maximum ${shop.trial_extension_days_remaining} j` : `Prolonger de ${trialExtensionDays} j`}</button>}
                         <button type="button" onClick={() => void handleToggleActive(shop.id)} className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-bold ${shop.is_active ? 'border-rose-200 text-rose-800 hover:bg-rose-50' : 'border-emerald-200 text-emerald-800 hover:bg-emerald-50'}`}>{shop.is_active ? 'Désactiver boutique' : 'Réactiver boutique'}</button>
                       </div>
                     </article>;

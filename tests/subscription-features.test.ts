@@ -56,3 +56,59 @@ test('existing Pro features remain unchanged until their subscription renewal bo
   assert.equal(atRenewal.planFeatures.productPhotoLimit, 8);
   assert.equal(atRenewal.planFeatures.boostDiscountPercent, 20);
 });
+
+test('temporary manual subscription access overrides billing and expires back to the source state', () => {
+  const shop = {
+    subscription_status: 'expired',
+    trial_start: null,
+    trial_end: null,
+    subscription_expires_at: '2025-01-01T23:59:59.999Z',
+    selected_subscription_tier: 'standard',
+    pending_subscription_tier: 'premium',
+    pending_subscription_effective_at: '2025-01-01T23:59:59.999Z',
+    subscription_cancel_at: null,
+    subscription_admin_override_status: 'active',
+    subscription_admin_override_tier: 'pro',
+    subscription_admin_override_until: '2026-09-15T23:59:59.999Z',
+  } as const;
+
+  const duringOverride = getSubscriptionState(shop, new Date('2026-09-10T12:00:00.000Z'));
+  assert.equal(duringOverride.manualOverrideActive, true);
+  assert.equal(duringOverride.status, 'active');
+  assert.equal(duringOverride.plan, 'pro');
+  assert.equal(duringOverride.isActive, true);
+  assert.equal(duringOverride.upcomingPlan, null);
+
+  const afterOverride = getSubscriptionState(shop, new Date('2026-09-16T00:00:00.000Z'));
+  assert.equal(afterOverride.manualOverrideActive, false);
+  assert.equal(afterOverride.status, 'suspended');
+  assert.equal(afterOverride.plan, 'premium');
+  assert.equal(afterOverride.upcomingPlan, null);
+});
+
+test('temporary manual subscription suspension blocks entitlements until its end', () => {
+  const shop = {
+    subscription_status: 'active',
+    trial_start: null,
+    trial_end: null,
+    subscription_expires_at: '2026-12-01T23:59:59.999Z',
+    selected_subscription_tier: 'premium',
+    pending_subscription_tier: null,
+    pending_subscription_effective_at: null,
+    subscription_cancel_at: null,
+    subscription_admin_override_status: 'suspended',
+    subscription_admin_override_tier: 'premium',
+    subscription_admin_override_until: '2026-09-15T23:59:59.999Z',
+  } as const;
+
+  const duringOverride = getSubscriptionState(shop, new Date('2026-09-10T12:00:00.000Z'));
+  assert.equal(duringOverride.manualOverrideActive, true);
+  assert.equal(duringOverride.status, 'suspended');
+  assert.equal(duringOverride.isActive, false);
+
+  const afterOverride = getSubscriptionState(shop, new Date('2026-09-16T00:00:00.000Z'));
+  assert.equal(afterOverride.manualOverrideActive, false);
+  assert.equal(afterOverride.status, 'active');
+  assert.equal(afterOverride.plan, 'premium');
+  assert.equal(afterOverride.isActive, true);
+});

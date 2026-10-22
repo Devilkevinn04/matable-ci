@@ -124,6 +124,18 @@ function subscriptionExpiryCutoff(value: string): number {
   return getSubscriptionAccessCutoff(value) ?? NaN;
 }
 
+export function isSubscriptionManualOverrideActive(
+  shop: Pick<ShopRecord, 'subscription_admin_override_status' | 'subscription_admin_override_until'>,
+  currentDate = new Date(),
+): boolean {
+  const cutoff = shop.subscription_admin_override_until
+    ? getSubscriptionAccessCutoff(shop.subscription_admin_override_until)
+    : null;
+  return (shop.subscription_admin_override_status === 'active' || shop.subscription_admin_override_status === 'suspended')
+    && cutoff !== null
+    && currentDate.getTime() < cutoff;
+}
+
 export function canUseSubscriptionFeature(
   shop: Pick<ShopRecord, 'subscription_status' | 'trial_start' | 'trial_end' | 'subscription_expires_at' | 'selected_subscription_tier'>,
   feature: SubscriptionFeature,
@@ -136,12 +148,31 @@ export function canUseSubscriptionFeature(
 
 export function getSubscriptionState(
   shop: Pick<ShopRecord, 'subscription_status' | 'trial_start' | 'trial_end' | 'subscription_expires_at' | 'selected_subscription_tier' | 'pending_subscription_tier' | 'pending_subscription_effective_at' | 'subscription_cancel_at'>
-    & Partial<Pick<ShopRecord, 'subscription_plan_features' | 'subscription_features_snapshot' | 'subscription_features_effective_at'>>,
+    & Partial<Pick<ShopRecord,
+      'subscription_plan_features' | 'subscription_features_snapshot' | 'subscription_features_effective_at'
+      | 'subscription_admin_override_status' | 'subscription_admin_override_tier' | 'subscription_admin_override_until'
+    >>,
   currentDate = new Date(),
 ): SubscriptionState {
-  const trialStart = shop.trial_start || null;
-  const trialEnd = shop.trial_end || null;
-  const expiresAt = shop.subscription_expires_at || null;
+  const manualOverrideActive = isSubscriptionManualOverrideActive(shop, currentDate);
+  const effectiveShop = manualOverrideActive
+    ? {
+      ...shop,
+      subscription_status: shop.subscription_admin_override_status,
+      trial_start: null,
+      trial_end: null,
+      subscription_expires_at: shop.subscription_admin_override_until,
+      selected_subscription_tier: shop.subscription_admin_override_tier || shop.selected_subscription_tier,
+      pending_subscription_tier: null,
+      pending_subscription_effective_at: null,
+      subscription_cancel_at: null,
+      subscription_features_snapshot: null,
+      subscription_features_effective_at: null,
+    }
+    : shop;
+  const trialStart = effectiveShop.trial_start || null;
+  const trialEnd = effectiveShop.trial_end || null;
+  const expiresAt = effectiveShop.subscription_expires_at || null;
   const trialEndTime = trialEnd ? Date.parse(trialEnd) : NaN;
   const trialCutoff = trialEnd ? subscriptionExpiryCutoff(trialEnd) : NaN;
   const rawTrialDaysRemaining = Number.isFinite(trialEndTime)
@@ -150,7 +181,7 @@ export function getSubscriptionState(
   const trialDaysRemaining = Number.isFinite(trialCutoff) && trialCutoff > currentDate.getTime()
     ? Math.max(1, rawTrialDaysRemaining)
     : 0;
-  const rawConfiguredStatus = shop.subscription_status || (trialDaysRemaining > 0 ? 'trialing' : 'active');
+  const rawConfiguredStatus = effectiveShop.subscription_status || (trialDaysRemaining > 0 ? 'trialing' : 'active');
   const configuredStatus: SubscriptionStatus = ['not_started', 'trialing', 'active', 'past_due', 'cancelled', 'expired', 'suspended'].includes(rawConfiguredStatus)
     ? (rawConfiguredStatus as SubscriptionStatus)
     : (trialDaysRemaining > 0 ? 'trialing' : 'active');
@@ -164,12 +195,12 @@ export function getSubscriptionState(
     && currentDate.getTime() >= expirationCutoff) {
     status = graceCutoff !== null && currentDate.getTime() < graceCutoff ? 'past_due' : 'suspended';
   }
-  const pendingPlanIsUpcoming = Boolean(shop.pending_subscription_tier
-    && shop.pending_subscription_effective_at
-    && currentDate.getTime() < (subscriptionExpiryCutoff(shop.pending_subscription_effective_at) ?? Number.NEGATIVE_INFINITY));
-  const upcomingPlanAt = pendingPlanIsUpcoming ? shop.pending_subscription_effective_at : null;
-  const cancellationCutoff = shop.subscription_cancel_at
-    ? subscriptionExpiryCutoff(shop.subscription_cancel_at)
+  const pendingPlanIsUpcoming = Boolean(effectiveShop.pending_subscription_tier
+    && effectiveShop.pending_subscription_effective_at
+    && currentDate.getTime() < (subscriptionExpiryCutoff(effectiveShop.pending_subscription_effective_at) ?? Number.NEGATIVE_INFINITY));
+  const upcomingPlanAt = pendingPlanIsUpcoming ? effectiveShop.pending_subscription_effective_at : null;
+  const cancellationCutoff = effectiveShop.subscription_cancel_at
+    ? subscriptionExpiryCutoff(effectiveShop.subscription_cancel_at)
     : NaN;
   const cancellationIsUpcoming = Number.isFinite(cancellationCutoff)
     && currentDate.getTime() < cancellationCutoff;
@@ -178,22 +209,24 @@ export function getSubscriptionState(
     && currentDate.getTime() >= cancellationCutoff) {
     status = 'cancelled';
   }
-  const plan = status === 'trialing'
+  const plan = manualOverrideActive
+      ? normalizeSubscriptionTier(effectiveShop.selected_subscription_tier)
+      : status === 'trialing'
       ? 'standard'
-      : shop.pending_subscription_tier
-        && shop.pending_subscription_effective_at
-        && currentDate.getTime() >= (subscriptionExpiryCutoff(shop.pending_subscription_effective_at) ?? Number.POSITIVE_INFINITY)
-        ? normalizeSubscriptionTier(shop.pending_subscription_tier)
-        : normalizeSubscriptionTier(shop.selected_subscription_tier),
-    featureEffectiveCutoff = shop.subscription_features_effective_at
-      ? subscriptionExpiryCutoff(shop.subscription_features_effective_at)
+      : effectiveShop.pending_subscription_tier
+        && effectiveShop.pending_subscription_effective_at
+        && currentDate.getTime() >= (subscriptionExpiryCutoff(effectiveShop.pending_subscription_effective_at) ?? Number.POSITIVE_INFINITY)
+        ? normalizeSubscriptionTier(effectiveShop.pending_subscription_tier)
+        : normalizeSubscriptionTier(effectiveShop.selected_subscription_tier),
+    featureEffectiveCutoff = effectiveShop.subscription_features_effective_at
+      ? subscriptionExpiryCutoff(effectiveShop.subscription_features_effective_at)
       : NaN;
-  const snapshotIsCurrent = plan === 'pro'
-    && Boolean(shop.subscription_features_snapshot)
+  const snapshotIsCurrent = !manualOverrideActive && plan === 'pro'
+    && Boolean(effectiveShop.subscription_features_snapshot)
     && (!Number.isFinite(featureEffectiveCutoff) || currentDate.getTime() < featureEffectiveCutoff);
   const currentProFeatures: SubscriptionProFeatures = snapshotIsCurrent
-    ? shop.subscription_features_snapshot || DEFAULT_SUBSCRIPTION_PRO_FEATURES
-    : shop.subscription_plan_features || DEFAULT_SUBSCRIPTION_PRO_FEATURES;
+    ? effectiveShop.subscription_features_snapshot || DEFAULT_SUBSCRIPTION_PRO_FEATURES
+    : effectiveShop.subscription_plan_features || DEFAULT_SUBSCRIPTION_PRO_FEATURES;
   return {
     plan,
     planFeatures: getSubscriptionPlanFeatures(plan, currentProFeatures),
@@ -206,6 +239,7 @@ export function getSubscriptionState(
     expiresAt,
     trialDaysRemaining,
     isActive: status === 'trialing' || status === 'active',
+    manualOverrideActive,
   };
 }
 

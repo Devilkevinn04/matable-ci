@@ -33,6 +33,7 @@ export interface SubscriptionState {
   expiresAt: string | null;
   trialDaysRemaining: number;
   isActive: boolean;
+  manualOverrideActive: boolean;
 }
 
 export interface ShopRecord {
@@ -54,6 +55,9 @@ export interface ShopRecord {
   subscription_cancel_at?: string | null;
   subscription_admin_suspended_at?: string | null;
   subscription_admin_suspended_status?: 'active' | 'trialing' | null;
+  subscription_admin_override_status?: 'active' | 'suspended' | null;
+  subscription_admin_override_tier?: SubscriptionTier | null;
+  subscription_admin_override_until?: string | null;
   subscription_plan_features?: SubscriptionProFeatures;
   subscription_features_snapshot?: SubscriptionProFeatures | null;
   subscription_features_effective_at?: string | null;

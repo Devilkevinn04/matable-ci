@@ -39,6 +39,15 @@ export function mapShopRow(row: Record<string, unknown>): ShopRecord {
     subscription_admin_suspended_status: row.subscription_admin_suspended_status == null
       ? null
       : String(row.subscription_admin_suspended_status) as ShopRecord['subscription_admin_suspended_status'],
+    subscription_admin_override_status: row.subscription_admin_override_status == null
+      ? null
+      : String(row.subscription_admin_override_status) as ShopRecord['subscription_admin_override_status'],
+    subscription_admin_override_tier: row.subscription_admin_override_tier == null
+      ? null
+      : String(row.subscription_admin_override_tier) as ShopRecord['subscription_admin_override_tier'],
+    subscription_admin_override_until: row.subscription_admin_override_until == null
+      ? null
+      : String(row.subscription_admin_override_until),
     subscription_plan_features: row.subscription_plan_features == null
       ? DEFAULT_SUBSCRIPTION_PRO_FEATURES
       : parseSubscriptionProFeatures(row.subscription_plan_features),
@@ -83,8 +92,8 @@ async function persistShopWith(
   run: (sql: string, params?: unknown[]) => Promise<{ changes: number }>,
 ): Promise<void> {
   await run(`
-    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, publication_status, featured_until, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, pending_subscription_tier, pending_subscription_effective_at, subscription_cancel_at, subscription_admin_suspended_at, subscription_admin_suspended_status, subscription_features_snapshot, subscription_features_effective_at, subscription_status, trial_start, trial_end, last_notification_sent_at, whatsapp_subscription_reminders_enabled, whatsapp_subscription_reminders_consent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash, owner_name, owner_phone, owner_email)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, publication_status, featured_until, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, pending_subscription_tier, pending_subscription_effective_at, subscription_cancel_at, subscription_admin_suspended_at, subscription_admin_suspended_status, subscription_admin_override_status, subscription_admin_override_tier, subscription_admin_override_until, subscription_features_snapshot, subscription_features_effective_at, subscription_status, trial_start, trial_end, last_notification_sent_at, whatsapp_subscription_reminders_enabled, whatsapp_subscription_reminders_consent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash, owner_name, owner_phone, owner_email)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET name=excluded.name, slug=excluded.slug, whatsapp_number=excluded.whatsapp_number,
       pin_code_hash=excluded.pin_code_hash, theme_color=excluded.theme_color, welcome_message=excluded.welcome_message,
       is_open=excluded.is_open, is_active=excluded.is_active, publication_status=excluded.publication_status, featured_until=excluded.featured_until, payment_status=excluded.payment_status,
@@ -95,6 +104,9 @@ async function persistShopWith(
       subscription_cancel_at=excluded.subscription_cancel_at,
       subscription_admin_suspended_at=excluded.subscription_admin_suspended_at,
       subscription_admin_suspended_status=excluded.subscription_admin_suspended_status,
+      subscription_admin_override_status=excluded.subscription_admin_override_status,
+      subscription_admin_override_tier=excluded.subscription_admin_override_tier,
+      subscription_admin_override_until=excluded.subscription_admin_override_until,
       subscription_features_snapshot=excluded.subscription_features_snapshot,
       subscription_features_effective_at=excluded.subscription_features_effective_at,
       subscription_expires_at=excluded.subscription_expires_at, last_notification_sent_at=excluded.last_notification_sent_at,
@@ -112,6 +124,8 @@ async function persistShopWith(
     shop.pending_subscription_tier ?? null, shop.pending_subscription_effective_at ?? null,
     shop.subscription_cancel_at ?? null, shop.subscription_admin_suspended_at ?? null,
     shop.subscription_admin_suspended_status ?? null,
+    shop.subscription_admin_override_status ?? null, shop.subscription_admin_override_tier ?? null,
+    shop.subscription_admin_override_until ?? null,
     shop.subscription_features_snapshot ? JSON.stringify(shop.subscription_features_snapshot) : null,
     shop.subscription_features_effective_at ?? null,
     shop.subscription_status || 'active', shop.trial_start ?? null, shop.trial_end ?? null, shop.last_notification_sent_at,
