@@ -691,7 +691,9 @@ export function validateRuntimeConfig(): void {
     return;
   }
 
-  const requiredKeys = ['ADMIN_ACCESS_KEY', 'VERIFICATION_ADMIN_ACCESS_KEY', 'AD_EVENT_SIGNING_SECRET', 'APP_URL', 'PORT', 'DATABASE_URL'];
+  const advertisingBetaEnabled = process.env.ADVERTISING_BETA_ENABLED === 'true';
+  const requiredKeys = ['ADMIN_ACCESS_KEY', 'VERIFICATION_ADMIN_ACCESS_KEY', 'APP_URL', 'PORT', 'DATABASE_URL'];
+  if (advertisingBetaEnabled) requiredKeys.push('AD_EVENT_SIGNING_SECRET');
   const missing = requiredKeys.filter((key) => !String(process.env[key] || '').trim());
 
   if (missing.length > 0) {
@@ -711,7 +713,8 @@ export function validateRuntimeConfig(): void {
     throw new Error('ADMIN_ACCESS_KEY et VERIFICATION_ADMIN_ACCESS_KEY doivent être distinctes en production.');
   }
   const adEventSigningSecret = String(process.env.AD_EVENT_SIGNING_SECRET || '').trim();
-  if (adEventSigningSecret.length < 32 || /change_me|demo|example|legacy/i.test(adEventSigningSecret)) {
+  if ((advertisingBetaEnabled || adEventSigningSecret)
+    && (adEventSigningSecret.length < 32 || /change_me|demo|example|legacy/i.test(adEventSigningSecret))) {
     throw new Error('AD_EVENT_SIGNING_SECRET doit être une clé forte, unique et longue d’au moins 32 caractères en production.');
   }
 

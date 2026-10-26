@@ -275,7 +275,7 @@ Cette version finale est un serveur Node/Express avec Neon PostgreSQL. Déployez
 
 Vercel convient au frontend statique, mais ne doit pas héberger directement ce serveur Express avec une base locale. Une base PostgreSQL externe est nécessaire.
 
-Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `DATABASE_URL`, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` fortes, uniques et distinctes, `AD_EVENT_SIGNING_SECRET` forte et unique, `ADVERTISING_BETA_ENABLED=false`, les trois variables Didit et `TRUST_PROXY_HOPS` adapté au reverse proxy. Ne déverrouillez la bêta publicitaire qu’après les contrôles de préproduction décrits ci-dessus.
+Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `DATABASE_URL`, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` fortes, uniques et distinctes, `ADVERTISING_BETA_ENABLED=false`, les trois variables Didit et `TRUST_PROXY_HOPS` adapté au reverse proxy. `AD_EVENT_SIGNING_SECRET` est nécessaire uniquement si `ADVERTISING_BETA_ENABLED=true`; dans ce cas, configurez une clé forte, unique et d’au moins 32 caractères. Ne déverrouillez la bêta publicitaire qu’après les contrôles de préproduction décrits ci-dessus.
 
 ## Build production
 

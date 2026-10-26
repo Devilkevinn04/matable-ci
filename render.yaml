@@ -19,6 +19,8 @@ services:
         generateValue: true
       - key: AD_EVENT_SIGNING_SECRET
         generateValue: true
+      - key: ADVERTISING_BETA_ENABLED
+        value: false
       - key: VERIFICATION_ADMIN_ACCESS_KEY
         sync: false
       - key: DIDIT_API_KEY

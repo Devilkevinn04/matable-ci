@@ -453,3 +453,41 @@ test('rejects unsafe production configuration', () => {
     }
   }
 });
+
+test('requires the ad event signing secret only when advertising delivery is enabled', () => {
+  const keys = [
+    'NODE_ENV',
+    'DATABASE_URL',
+    'ADMIN_ACCESS_KEY',
+    'VERIFICATION_ADMIN_ACCESS_KEY',
+    'AD_EVENT_SIGNING_SECRET',
+    'ADVERTISING_BETA_ENABLED',
+    'APP_URL',
+    'PORT',
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+
+  try {
+    process.env.NODE_ENV = 'production';
+    process.env.DATABASE_URL = 'postgresql://user:password@ep-prod.example.net/matable';
+    process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
+    process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
+    process.env.AD_EVENT_SIGNING_SECRET = '';
+    process.env.ADVERTISING_BETA_ENABLED = 'false';
+    process.env.APP_URL = 'https://matable.ci';
+    process.env.PORT = '3000';
+
+    assert.doesNotThrow(() => validateRuntimeConfig());
+
+    process.env.ADVERTISING_BETA_ENABLED = 'true';
+    assert.throws(() => validateRuntimeConfig(), /Configuration production incomplète : AD_EVENT_SIGNING_SECRET/);
+
+    process.env.AD_EVENT_SIGNING_SECRET = 'production-ad-event-signing-secret-2026-strong';
+    assert.doesNotThrow(() => validateRuntimeConfig());
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
