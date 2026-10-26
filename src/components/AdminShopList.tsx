@@ -178,7 +178,7 @@ export function AdminShopList({
 
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                     <span>📞 {shop.whatsapp_number}</span>
-                    <span>📍 {shop.city || 'Abidjan'}</span>
+                    <span>📍 {shop.city || 'Ville non renseignée'}</span>
                     <span>📦 {shop.products_count} articles</span>
                     <span>🛒 {shop.orders_count} commandes</span>
                     {canSeeFinancials && <span>💰 Commandes : {new Intl.NumberFormat('fr-FR').format(shop.total_sales)} FCFA</span>}

@@ -56,6 +56,7 @@ const sqliteSchema = `
   CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
     price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT,
+    sale_price INTEGER, sale_starts_at TEXT, sale_ends_at TEXT,
     is_available INTEGER NOT NULL DEFAULT 1, is_visible INTEGER NOT NULL DEFAULT 1, sizes TEXT, colors TEXT, lookbook_image TEXT, created_at TEXT,
     gallery_images TEXT, prep_time INTEGER, modifier_groups TEXT, attributes TEXT
   );
@@ -80,6 +81,51 @@ const sqliteSchema = `
     id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, event_type TEXT NOT NULL,
     session_id TEXT NOT NULL, path TEXT, source TEXT, created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS advertising_beta_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1), starts_at TEXT, ends_at TEXT,
+    delivery_enabled INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+    updated_by TEXT NOT NULL DEFAULT 'system'
+  );
+  INSERT OR IGNORE INTO advertising_beta_settings (id, delivery_enabled, updated_at)
+    VALUES (1, 0, CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS advertising_campaigns (
+    id TEXT PRIMARY KEY, shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('product', 'banner')),
+    product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+    headline TEXT NOT NULL, body TEXT NOT NULL, duration_days INTEGER NOT NULL CHECK (duration_days = 7),
+    charter_accepted_at TEXT,
+    status TEXT NOT NULL DEFAULT 'pending_review'
+      CHECK (status IN ('pending_review', 'rejected', 'scheduled', 'active', 'suspended', 'completed', 'cancelled')),
+    starts_at TEXT, ends_at TEXT, review_note TEXT, reviewed_by TEXT, reviewed_at TEXT,
+    submitted_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    UNIQUE (shop_id, kind)
+  );
+  CREATE INDEX IF NOT EXISTS idx_advertising_campaigns_delivery ON advertising_campaigns(status, starts_at, ends_at, kind);
+  CREATE INDEX IF NOT EXISTS idx_advertising_campaigns_shop ON advertising_campaigns(shop_id, submitted_at DESC);
+  CREATE TABLE IF NOT EXISTS advertising_campaign_events (
+    id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL REFERENCES advertising_campaigns(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL CHECK (event_type IN ('impression', 'click', 'shop_visit', 'contact_click')),
+    visitor_hash TEXT NOT NULL, event_date TEXT NOT NULL, created_at TEXT NOT NULL,
+    UNIQUE (campaign_id, event_type, visitor_hash, event_date)
+  );
+  CREATE INDEX IF NOT EXISTS idx_advertising_campaign_events_campaign ON advertising_campaign_events(campaign_id, created_at);
+  CREATE TABLE IF NOT EXISTS advertising_partner_requests (
+    id TEXT PRIMARY KEY, contact_name TEXT NOT NULL, company_name TEXT NOT NULL,
+    email TEXT NOT NULL, phone TEXT,
+    requested_format TEXT NOT NULL CHECK (requested_format IN ('banner', 'product', 'partnership', 'other')),
+    objective TEXT NOT NULL, message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'contacted', 'declined')),
+    admin_note TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_advertising_partner_requests_status ON advertising_partner_requests(status, created_at DESC);
+  CREATE TABLE IF NOT EXISTS advertising_permanent_partners (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, descriptor TEXT NOT NULL, headline TEXT NOT NULL,
+    logo_url TEXT, destination_url TEXT, sort_order INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 0 CHECK (is_active IN (0, 1)),
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_advertising_permanent_partners_public
+    ON advertising_permanent_partners(is_active, sort_order, created_at);
   CREATE TABLE IF NOT EXISTS platform_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1), maintenance_enabled INTEGER NOT NULL DEFAULT 0,
     maintenance_message TEXT NOT NULL DEFAULT 'Le service revient bientôt. Merci de votre patience.',
@@ -207,6 +253,7 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'featured_until', 'TEXT');
   addColumn('shops', 'opening_hours', 'TEXT');
   addColumn('shops', 'owner_email', 'TEXT');
+  addColumn('advertising_campaigns', 'charter_accepted_at', 'TEXT');
   addColumn('shops', 'owner_name', 'TEXT');
   addColumn('shops', 'owner_phone', 'TEXT');
   addColumn('shops', 'owner_access_token_hash', 'TEXT');
@@ -324,6 +371,9 @@ function migrateSqlite(connection: Database.Database) {
   connection.exec('UPDATE products SET is_visible = is_available WHERE is_visible = 1 AND is_available = 0 AND stock > 0');
   addColumn('products', 'attributes', 'TEXT');
   addColumn('products', 'gallery_images', 'TEXT');
+  addColumn('products', 'sale_price', 'INTEGER');
+  addColumn('products', 'sale_starts_at', 'TEXT');
+  addColumn('products', 'sale_ends_at', 'TEXT');
   addColumn('users', 'phone', 'TEXT');
   addColumn('users', 'first_name', "TEXT NOT NULL DEFAULT ''");
   addColumn('users', 'last_name', "TEXT NOT NULL DEFAULT ''");
@@ -385,6 +435,7 @@ export const postgresMigrations = [
   `CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
     price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT,
+    sale_price INTEGER, sale_starts_at TEXT, sale_ends_at TEXT,
     is_available INTEGER NOT NULL DEFAULT 1, is_visible INTEGER NOT NULL DEFAULT 1, category TEXT, sizes JSONB, colors JSONB, created_at TEXT,
     lookbook_image TEXT, gallery_images JSONB, prep_time INTEGER, modifier_groups JSONB, attributes JSONB
   )`,
@@ -485,6 +536,51 @@ export const postgresMigrations = [
   )`,
   'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS source TEXT',
   'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS campaign TEXT',
+  `CREATE TABLE IF NOT EXISTS advertising_beta_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1), starts_at TEXT, ends_at TEXT,
+    delivery_enabled INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+    updated_by TEXT NOT NULL DEFAULT 'system'
+  )`,
+  `INSERT INTO advertising_beta_settings (id, delivery_enabled, updated_at)
+    VALUES (1, 0, CURRENT_TIMESTAMP::TEXT) ON CONFLICT (id) DO NOTHING`,
+  `CREATE TABLE IF NOT EXISTS advertising_campaigns (
+    id TEXT PRIMARY KEY, shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('product', 'banner')),
+    product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+    headline TEXT NOT NULL, body TEXT NOT NULL, duration_days INTEGER NOT NULL CHECK (duration_days = 7),
+    charter_accepted_at TEXT,
+    status TEXT NOT NULL DEFAULT 'pending_review'
+      CHECK (status IN ('pending_review', 'rejected', 'scheduled', 'active', 'suspended', 'completed', 'cancelled')),
+    starts_at TEXT, ends_at TEXT, review_note TEXT, reviewed_by TEXT, reviewed_at TEXT,
+    submitted_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    UNIQUE (shop_id, kind)
+  )`,
+  'ALTER TABLE advertising_campaigns ADD COLUMN IF NOT EXISTS charter_accepted_at TEXT',
+  'CREATE INDEX IF NOT EXISTS idx_advertising_campaigns_delivery ON advertising_campaigns(status, starts_at, ends_at, kind)',
+  'CREATE INDEX IF NOT EXISTS idx_advertising_campaigns_shop ON advertising_campaigns(shop_id, submitted_at DESC)',
+  `CREATE TABLE IF NOT EXISTS advertising_campaign_events (
+    id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL REFERENCES advertising_campaigns(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL CHECK (event_type IN ('impression', 'click', 'shop_visit', 'contact_click')),
+    visitor_hash TEXT NOT NULL, event_date TEXT NOT NULL, created_at TEXT NOT NULL,
+    UNIQUE (campaign_id, event_type, visitor_hash, event_date)
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_advertising_campaign_events_campaign ON advertising_campaign_events(campaign_id, created_at)',
+  `CREATE TABLE IF NOT EXISTS advertising_partner_requests (
+    id TEXT PRIMARY KEY, contact_name TEXT NOT NULL, company_name TEXT NOT NULL,
+    email TEXT NOT NULL, phone TEXT,
+    requested_format TEXT NOT NULL CHECK (requested_format IN ('banner', 'product', 'partnership', 'other')),
+    objective TEXT NOT NULL, message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'contacted', 'declined')),
+    admin_note TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_advertising_partner_requests_status ON advertising_partner_requests(status, created_at DESC)',
+  `CREATE TABLE IF NOT EXISTS advertising_permanent_partners (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, descriptor TEXT NOT NULL, headline TEXT NOT NULL,
+    logo_url TEXT, destination_url TEXT, sort_order INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 0 CHECK (is_active IN (0, 1)),
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_advertising_permanent_partners_public ON advertising_permanent_partners(is_active, sort_order, created_at)',
   `CREATE TABLE IF NOT EXISTS platform_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1), maintenance_enabled INTEGER NOT NULL DEFAULT 0,
     maintenance_message TEXT NOT NULL DEFAULT 'Le service revient bientôt. Merci de votre patience.',
@@ -628,6 +724,9 @@ export const postgresMigrations = [
   "ALTER TABLE shops ALTER COLUMN publication_status SET DEFAULT 'draft'",
   'ALTER TABLE shops ALTER COLUMN publication_status SET NOT NULL',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS attributes JSONB',
+  'ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_price INTEGER',
+  'ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_starts_at TEXT',
+  'ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_ends_at TEXT',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TEXT',
   'CREATE TABLE IF NOT EXISTS id_allocators (name TEXT PRIMARY KEY, last_id BIGINT NOT NULL)',
   'CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)',

@@ -38,7 +38,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
             {/* Orders Statistics Cards */}
             <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:grid-cols-3">
               <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4 min-[380px]:col-span-2 sm:col-span-1">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#eaf4ef] font-bold text-[#1D6B57]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d1fae5] font-bold text-[#1D6B57]">
                   <DollarSign className="w-5 h-5" />
                 </div>
                 <div>
@@ -143,7 +143,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                     : 'Modifiez votre recherche ou vos filtres pour afficher les commandes correspondantes.'}
                 </p>
                 {orders.length === 0 && (
-                  <button type="button" onClick={() => copyOwnerLink('public')} className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-4 text-xs font-bold text-white transition hover:bg-[#155544]">
+                  <button type="button" onClick={() => copyOwnerLink('public')} className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#065f46] px-4 text-xs font-bold text-white transition hover:bg-[#047857]">
                     <ExternalLink className="h-4 w-4" /> Copier le lien de ma vitrine
                   </button>
                 )}

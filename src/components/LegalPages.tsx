@@ -26,7 +26,7 @@ const CookiePreferenceControls: React.FC = () => {
         <input type="checkbox" checked={analyticsEnabled} onChange={(event) => { setAnalyticsEnabled(event.target.checked); setMessage(''); }} />
         Autoriser les statistiques de fréquentation
       </label>
-      <button type="button" onClick={save} className="mt-3 min-h-11 rounded-lg bg-[#0f4d3d] px-4 py-2 text-sm font-bold text-white">Enregistrer mon choix</button>
+      <button type="button" onClick={save} className="mt-3 min-h-11 rounded-lg bg-[#065f46] px-4 py-2 text-sm font-bold text-white">Enregistrer mon choix</button>
       {message && <p className="mt-3 text-sm" role="status" aria-live="polite">{message}</p>}
     </section>
   );

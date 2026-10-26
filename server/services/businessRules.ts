@@ -9,20 +9,30 @@ import {
   type SubscriptionFeature,
   type SubscriptionProFeatures,
 } from '../../src/utils/subscriptionFeatures.ts';
+import { getActiveProductPrice } from '../../src/utils/productPricing.ts';
 export { escapeHtml } from '../../src/utils/escapeHtml.ts';
 
 export function computeIsShopOpen(shop: ShopRecord): boolean {
   if (shop.opening_hours && shop.opening_hours.enabled && !shop.opening_hours.manual_override) {
+    const { open_time: openTime, close_time: closeTime, days } = shop.opening_hours;
+    const isValidTime = (value: string) => {
+      if (!/^\d{2}:\d{2}$/.test(value)) return false;
+      const [hours, minutes] = value.split(':').map(Number);
+      return hours < 24 && minutes < 60;
+    };
+    if (!isValidTime(openTime) || !isValidTime(closeTime) || !days?.length || days.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) {
+      return false;
+    }
     const now = new Date();
     const abidjanNow = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Abidjan' }));
     const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Abidjan', weekday: 'short' }).format(now);
     const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
     const currentMinutes = abidjanNow.getHours() * 60 + abidjanNow.getMinutes();
     const currentDay = dayMap[weekday] ?? abidjanNow.getDay();
-    if (shop.opening_hours.days?.length && !shop.opening_hours.days.includes(currentDay)) return false;
+    if (!days.includes(currentDay)) return false;
 
-    const [openHour, openMinute] = (shop.opening_hours.open_time || '08:00').split(':').map(Number);
-    const [closeHour, closeMinute] = (shop.opening_hours.close_time || '22:00').split(':').map(Number);
+    const [openHour, openMinute] = openTime.split(':').map(Number);
+    const [closeHour, closeMinute] = closeTime.split(':').map(Number);
     const openAt = (openHour || 0) * 60 + (openMinute || 0);
     const closeAt = (closeHour || 0) * 60 + (closeMinute || 0);
     return closeAt >= openAt
@@ -77,7 +87,8 @@ export function canReceiveShopOrders(shop: ShopRecord, currentDate = new Date())
 
 export function getProductUnitPriceWithModifiers(product: ProductRecord, selectedModifiers: string[] = []): number {
   const selected = new Set(selectedModifiers.map((value) => value.trim()).filter(Boolean));
-  if (!product.modifier_groups?.length) return product.price;
+  const basePrice = getActiveProductPrice(product);
+  if (!product.modifier_groups?.length) return basePrice;
   let modifierTotal = 0;
   for (const group of product.modifier_groups) {
     for (const option of group.options) {
@@ -85,7 +96,7 @@ export function getProductUnitPriceWithModifiers(product: ProductRecord, selecte
       if (selected.has(label)) modifierTotal += typeof option === 'string' ? 0 : Number(option.price_delta || 0);
     }
   }
-  return product.price + modifierTotal;
+  return basePrice + modifierTotal;
 }
 
 export function getValidSelectedModifiers(product: ProductRecord, selectedModifiers: string[]) {

@@ -118,7 +118,7 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
             })}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={() => void startPayment()} disabled={isPaymentStarting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0f4d3d] px-4 py-2 text-xs font-bold text-white hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
+            <button type="button" onClick={() => void startPayment()} disabled={isPaymentStarting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#065f46] px-4 py-2 text-xs font-bold text-white hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">
               {isPaymentStarting && <LoaderCircle className="h-4 w-4 animate-spin" />}
               {isPaymentStarting ? 'Préparation du paiement…' : `Payer ${new Intl.NumberFormat('fr-FR').format(amount)} FCFA avec GeniusPay`}
             </button>
@@ -145,7 +145,7 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
                   type="button"
                   onClick={() => void startPayment()}
                   disabled={isPaymentStarting || !billingEmail.trim()}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0f4d3d] px-4 py-2 text-xs font-bold text-white disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#065f46] px-4 py-2 text-xs font-bold text-white disabled:cursor-wait disabled:opacity-60"
                 >
                   {isPaymentStarting && <LoaderCircle className="h-4 w-4 animate-spin" />}
                   Continuer vers le paiement

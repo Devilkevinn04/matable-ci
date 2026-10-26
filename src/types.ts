@@ -13,6 +13,7 @@ export interface ThemeAdvancedCSS {
 }
 
 export type BrandDirection = 'luxe' | 'moderne' | 'authentique';
+export type ShopEventType = 'sales' | 'flash_sale' | 'new_arrival' | 'launch' | 'special_offer' | 'custom';
 
 export interface ShopSocialLinks {
   instagram?: string;
@@ -39,6 +40,7 @@ export interface ThemeConfig {
   custom_banner_url?: string;
   logo_url?: string;
   event_mode_enabled?: boolean;
+  event_type?: ShopEventType;
   event_banner_text?: string;
   social_links?: ShopSocialLinks;
   delivery_zones?: ShopDeliveryZone[];
@@ -117,6 +119,9 @@ export interface Product {
   title: string;
   description: string | null;
   price: number; // in FCFA
+  sale_price?: number | null;
+  sale_starts_at?: string | null;
+  sale_ends_at?: string | null;
   stock: number;
   image_url: string;
   is_available: boolean;

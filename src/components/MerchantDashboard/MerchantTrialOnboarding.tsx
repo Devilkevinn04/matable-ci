@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, BarChart3, Check, CircleCheck, LoaderCircle, LockKeyhole, MessageCircle, Palette, ShieldCheck, Sparkles, Store } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import type { Shop, SubscriptionTier } from '../../types';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 import { MerchantBoostPurchase } from './MerchantBoostPurchase';
@@ -37,6 +38,7 @@ const plans = Object.values(SUBSCRIPTION_PLANS);
 export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, onStart, mode = 'start', previewOnly = false, onBack }: MerchantTrialOnboardingProps) {
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(shop.subscription?.upcomingPlan || shop.subscription?.plan || 'standard');
   const [term, setTerm] = useState<SubscriptionTerm>('monthly');
+  const prefersReducedMotion = useReducedMotion();
   const [purchaseNow, setPurchaseNow] = useState(false);
   const [isPaymentStarting, setIsPaymentStarting] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState('');
@@ -128,7 +130,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
           <>
             {onBack && (
               <div className="py-4 sm:py-6">
-                <button type="button" onClick={onBack} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#ded8ce] bg-[#fffdf9] px-4 text-sm font-bold text-[#31584c] transition hover:bg-[#e4f1ec]">
+                <button type="button" onClick={onBack} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#ded8ce] bg-[#FFFFFF] px-4 text-sm font-bold text-[#47534b] transition hover:bg-[#d1fae5]">
                   <span aria-hidden="true">←</span> {previewOnly ? 'Retour à l’annuaire' : 'Retour à mon forfait'}
                 </button>
               </div>
@@ -157,7 +159,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     <span className="text-xs font-bold text-white/65">Votre espace commerçant</span>
                     <span className="rounded-full bg-[#d9efdf]/15 px-2.5 py-1 text-[10px] font-extrabold text-[#c8efcf]">MATABLE.CI · ESPACE PRO</span>
                   </div>
-                  <div className="mt-4 flex items-center gap-3 rounded-2xl bg-[#fffdf9] p-4 text-[#163d32]">
+                  <div className="mt-4 flex items-center gap-3 rounded-2xl bg-[#FFFFFF] p-4 text-[#163d32]">
                     <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#e5f0e8]"><Store className="h-6 w-6" aria-hidden="true" /></span>
                     <span><strong className="block text-sm font-black">{shop.name}</strong><span className="mt-0.5 block text-xs text-[#6d786f]">Votre activité, à votre image</span></span>
                     <span className="ml-auto h-2.5 w-2.5 rounded-full bg-[#54a876] ring-4 ring-[#54a876]/15" aria-hidden="true" />
@@ -188,7 +190,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
           </>
         ) : (
           <header className="border-b border-[#dce4dc] pb-6">
-            <p className="text-xs font-extrabold uppercase text-[#176b55]">MaTable.ci · Espace commerçant</p>
+            <p className="text-xs font-extrabold uppercase text-[#047857]">MaTable.ci · Espace commerçant</p>
             <h1 className="mt-2 text-2xl font-black sm:text-3xl">{mode === 'expired' ? expiredTitle : `Bienvenue, ${shop.name}`}</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? expiredDescription : isTrialActive ? `Votre essai gratuit reste actif jusqu’au ${shop.subscription?.trialEnd ? formatSubscriptionDate(shop.subscription.trialEnd) : 'terme prévu'}. Vous pouvez payer maintenant : après confirmation, votre formule payante sera active et la durée restante de l’essai sera conservée.` : `Vous pouvez choisir une formule payante dès maintenant ou commencer par l’essai gratuit de ${TRIAL_DURATION_DAYS} jours.`}</p>
             {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-emerald-800 underline underline-offset-2"><MessageCircle className="h-4 w-4" />Contacter l’équipe</a>}
@@ -200,14 +202,14 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             <h2 id="startup-choice-title" className="text-lg font-extrabold text-[#183b31]">Comment souhaitez-vous démarrer ?</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">Vous pourrez toujours passer à une formule payante pendant votre essai.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2" role="group" aria-label="Choisir son démarrage">
-              <button type="button" aria-pressed={!purchaseNow} onClick={() => setPurchaseNow(false)} className={`rounded-2xl border p-4 text-left transition ${!purchaseNow ? 'border-[#176b55] bg-white ring-2 ring-[#176b55]/15' : 'border-[#d5ddd5] bg-white/70 hover:border-[#176b55]'}`}>
+              <button type="button" aria-pressed={!purchaseNow} onClick={() => setPurchaseNow(false)} className={`rounded-2xl border p-4 text-left transition ${!purchaseNow ? 'border-[#047857] bg-white ring-2 ring-[#047857]/15' : 'border-[#d5ddd5] bg-white/70 hover:border-[#047857]'}`}>
                 <span className="flex items-center justify-between gap-3">
                   <span className="text-sm font-extrabold text-[#183b31]">Essayer gratuitement</span>
                   <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-900">7 jours offerts</span>
                 </span>
                 <span className="mt-2 block text-xs leading-5 text-slate-600">Standard, jusqu’à {TRIAL_CATALOG_LIMIT} produits. Aucun paiement nécessaire pour commencer.</span>
               </button>
-              <button type="button" aria-pressed={purchaseNow} onClick={() => setPurchaseNow(true)} className={`rounded-2xl border p-4 text-left transition ${purchaseNow ? 'border-[#176b55] bg-white ring-2 ring-[#176b55]/15' : 'border-[#d5ddd5] bg-white/70 hover:border-[#176b55]'}`}>
+              <button type="button" aria-pressed={purchaseNow} onClick={() => setPurchaseNow(true)} className={`rounded-2xl border p-4 text-left transition ${purchaseNow ? 'border-[#047857] bg-white ring-2 ring-[#047857]/15' : 'border-[#d5ddd5] bg-white/70 hover:border-[#047857]'}`}>
                 <span className="flex items-center justify-between gap-3">
                   <span className="text-sm font-extrabold text-[#183b31]">Choisir une formule payante</span>
                   <span className="rounded-full bg-[#f9f0e6] px-2.5 py-1 text-[10px] font-black text-[#93602e]">Dès 3 000 FCFA/mois</span>
@@ -241,42 +243,56 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                 L’accès à votre boutique prendra fin le {formatSubscriptionDate(shop.subscription.cancellationAt)}. Vous pouvez payer votre renouvellement ici avant cette date : MaTable.ci ne prélève jamais automatiquement et la période restante sera conservée.
               </p>
             )}
-            <div className={`grid gap-4 md:grid-cols-3 ${mode === 'plans' ? 'items-stretch' : 'mt-4'}`} role="radiogroup" aria-label="Formule d’abonnement">
+            <div className={`grid md:grid-cols-3 ${mode === 'plans' ? 'items-stretch gap-4 md:gap-5' : 'mt-4 gap-4'}`} role="radiogroup" aria-label="Formule d’abonnement">
               {plans.map((plan) => {
                 const selected = selectedTier === plan.tier;
                 const featured = mode === 'plans' && plan.tier === 'premium';
-                const planColors = plan.tier === 'pro'
-                  ? { card: selected ? 'border-[#164d3d] bg-[#164d3d] text-white ring-4 ring-[#164d3d]/15' : 'border-[#cad9d0] bg-[#f1f6f1] text-[#183b31] hover:border-[#164d3d]', subdued: selected ? 'text-white/70' : 'text-slate-600', check: selected ? 'text-[#f1ca7a]' : 'text-[#176b55]' }
-                  : { card: selected ? 'border-[#176b55] bg-white ring-4 ring-[#176b55]/10 shadow-[0_18px_42px_-24px_rgba(15,77,61,0.45)]' : 'border-[#e0e4db] bg-white hover:border-[#9fb7a8]', subdued: 'text-slate-600', check: 'text-[#176b55]' };
+                const planIcon = plan.tier === 'standard' ? Store : plan.tier === 'premium' ? Sparkles : BarChart3;
+                const planEyebrow = plan.tier === 'standard' ? 'Pour démarrer' : plan.tier === 'premium' ? 'Le meilleur équilibre' : 'Pour accélérer';
+                const planColors = plan.tier === 'premium'
+                  ? { card: 'border-[#075f48] bg-[#075f48] text-white', subdued: 'text-white/80', check: 'text-[#f0ba80]' }
+                  : plan.tier === 'pro'
+                  ? { card: selected ? 'border-[#075f48] bg-[#075f48] text-white ring-4 ring-[#075f48]/15' : 'border-[#cad9d0] bg-[#f1f6f1] text-[#183b31] hover:border-[#075f48]', subdued: selected ? 'text-white/80' : 'text-slate-600', check: selected ? 'text-[#f0ba80]' : 'text-[#075f48]' }
+                  : { card: selected ? 'border-[#047857] bg-white ring-4 ring-[#047857]/10 shadow-[0_18px_42px_-24px_rgba(15,77,61,0.45)]' : 'border-[#e0e4db] bg-white hover:border-[#9fb7a8]', subdued: 'text-slate-600', check: 'text-[#047857]' };
+                const PlanIcon = planIcon;
                 return (
-                  <button
+                  <motion.button
                     key={plan.tier}
                     type="button"
                     role="radio"
                     aria-checked={selected}
                     disabled={Boolean(shop.subscription?.upcomingPlan && plan.tier !== shop.subscription.upcomingPlan)}
                     onClick={() => setSelectedTier(plan.tier)}
-                    className={`relative flex min-h-[360px] flex-col items-start rounded-[1.5rem] border p-5 text-left transition duration-200 hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 sm:p-6 ${mode === 'plans' ? planColors.card : `min-h-56 rounded-xl p-4 ${selected ? 'border-[#176b55] bg-white ring-2 ring-[#176b55]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[#176b55]'}`}`}
+                    whileHover={mode === 'plans' && !prefersReducedMotion ? { y: -5 } : undefined}
+                    whileTap={mode === 'plans' && !prefersReducedMotion ? { scale: 0.99 } : undefined}
+                    transition={{ duration: prefersReducedMotion ? 0 : 0.2 }}
+                    className={`relative flex min-h-[360px] flex-col items-start rounded-[26px] border p-5 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 sm:p-6 ${mode === 'plans' ? `${planColors.card} ${plan.tier === 'premium' ? 'shadow-[0_22px_55px_rgba(7,95,72,.2)] md:scale-[1.035]' : selected ? 'shadow-[0_18px_42px_-24px_rgba(15,77,61,0.35)]' : 'shadow-[0_12px_34px_rgba(38,35,28,.07)]'}` : `min-h-56 rounded-xl ${selected ? 'border-[#047857] bg-white ring-2 ring-[#047857]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[#047857]'}`} hover:-translate-y-0.5`}
                   >
-                    {featured && <span className="absolute -top-3 left-5 rounded-full bg-[#e8b85f] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#3f301b] shadow-sm">Le meilleur équilibre</span>}
+                  {featured && <span className="mb-4 rounded-full bg-[#f0ba80] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#292d2a] shadow-sm">Recommandée</span>}
                     <span className="flex w-full items-center justify-between gap-2">
-                      <span className={`text-sm font-black uppercase tracking-[0.11em] ${mode === 'plans' && plan.tier === 'pro' && selected ? 'text-[#f1ca7a]' : mode === 'plans' ? 'text-[#176b55]' : ''}`}>{plan.label}</span>
-                      {selected && <Check className={`h-5 w-5 ${mode === 'plans' ? planColors.check : 'text-emerald-700'}`} />}
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'bg-white/10 text-[#f0ba80]' : 'bg-[#e9f5ee] text-[#087c5b]'}`}><PlanIcon className="h-5 w-5" aria-hidden="true" /></span>
+                        <span className="min-w-0"><span className={`block text-[9px] font-black uppercase tracking-[0.12em] ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-[#f0ba80]' : 'text-[#8b7358]'}`}>{planEyebrow}</span><span className={`mt-0.5 block text-sm font-black uppercase tracking-[0.11em] ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-white' : mode === 'plans' ? 'text-[#075f48]' : ''}`}>{plan.label}</span></span>
+                      </span>
+                      {selected && <Check className={`h-5 w-5 shrink-0 ${mode === 'plans' ? planColors.check : 'text-emerald-700'}`} />}
                     </span>
-                    <h3 className={`mt-4 text-xl font-black leading-tight ${mode === 'plans' && plan.tier === 'pro' && selected ? 'text-white' : 'text-[#202d28]'}`}>{plan.headline}</h3>
+                    <h3 className={`mt-4 text-xl font-black leading-tight ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-white' : 'text-[#202d28]'}`}>{plan.headline}</h3>
                     <p className={`mt-2 min-h-10 text-xs leading-5 ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{plan.description}</p>
                     <div className={`mt-5 border-b pb-5 ${mode === 'plans' ? selected && plan.tier === 'pro' ? 'border-white/15' : 'border-[#e8ebe5]' : 'border-[#e8ebe5]'}`}>
-                      <strong className="text-3xl font-black tracking-tight">{subscriptionPrices ? new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier] * (term === 'annual' ? 10 : 1)) : '—'}<span className="ml-1 text-sm font-bold">FCFA</span></strong>
+                      <strong className="text-3xl font-black tracking-tight"><AnimatePresence mode="wait" initial={false}><motion.span key={`${plan.tier}-${term}`} initial={prefersReducedMotion ? false : { opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} exit={prefersReducedMotion ? undefined : { opacity: 0, y: -7 }} transition={{ duration: prefersReducedMotion ? 0 : 0.16 }} className="inline-block">{subscriptionPrices ? new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier] * (term === 'annual' ? 10 : 1)) : '—'}</motion.span></AnimatePresence><span className="ml-1 text-sm font-bold">FCFA</span></strong>
                       <span className={`ml-1 text-xs font-semibold ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>/{term === 'annual' ? 'an' : 'mois'}</span>
-                      <span className={`mt-1.5 block text-xs ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{subscriptionPrices ? term === 'annual' ? `${new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier])} FCFA/mois · 2 mois offerts` : `${new Intl.NumberFormat('fr-FR').format(Math.ceil(subscriptionPrices[plan.tier] / 30))} FCFA par jour` : 'Tarif indisponible'}</span>
+                      <span className={`mt-1.5 block text-xs ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{subscriptionPrices ? term === 'annual' ? `Soit ${new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier])} FCFA/mois · 2 mois offerts` : `${new Intl.NumberFormat('fr-FR').format(Math.ceil(subscriptionPrices[plan.tier] / 30))} FCFA par jour` : 'Tarif indisponible'}</span>
                     </div>
-                    <ul className={`mt-5 flex-1 space-y-3 text-left text-xs leading-5 ${mode === 'plans' ? planColors.subdued : 'text-slate-700'}`}>
+                    {mode === 'plans' && <span className={`group mt-5 flex min-h-11 w-full items-center justify-between gap-2 rounded-full px-4 text-xs font-extrabold transition ${plan.tier === 'premium' ? 'bg-[#f0ba80] text-[#292d2a]' : 'bg-[#075f48] text-white'}`}>
+                      {selected ? 'Formule sélectionnée' : plan.tier === 'standard' ? 'Commencer' : `Choisir ${plan.label}`} <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    </span>}
+                    <p className={`mt-7 border-t pt-5 text-xs font-black ${mode === 'plans' && plan.tier === 'premium' ? 'border-white/20 text-white' : 'border-[#e8ebe5] text-[#202d28]'}`}>
+                      Détails de la formule :
+                    </p>
+                    <ul className={`mt-4 flex-1 space-y-3 text-left text-xs leading-5 ${mode === 'plans' ? planColors.subdued : 'text-slate-700'}`}>
                       {getSubscriptionPlanBenefits(plan.tier, proFeatures || DEFAULT_SUBSCRIPTION_PRO_FEATURES).map((benefit) => <li key={benefit} className="flex items-start gap-2.5"><Check className={`mt-0.5 h-4 w-4 shrink-0 ${mode === 'plans' ? planColors.check : 'text-emerald-700'}`} /><span>{benefit}</span></li>)}
                     </ul>
-                    {mode === 'plans' && <span className={`mt-6 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 text-xs font-extrabold transition ${selected ? plan.tier === 'pro' ? 'bg-[#f1ca7a] text-[#3f301b]' : 'bg-[#174f40] text-white' : plan.tier === 'pro' && selected ? 'bg-white/10 text-white' : 'bg-[#eef3ed] text-[#31584c]'}`}>
-                      {selected ? 'Formule sélectionnée' : `Choisir ${plan.label}`} <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                    </span>}
-                  </button>
+                    </motion.button>
                 );
               })}
             </div>
@@ -348,7 +364,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
         )}
 
         <aside className={`mt-5 flex items-start gap-3 rounded-2xl border p-4 text-sm ${mode === 'plans' ? 'border-[#dbe8dc] bg-white text-[#345448] sm:mt-7 sm:px-5' : 'border-sky-200 bg-sky-50 text-sky-950'}`}>
-          {mode === 'plans' ? <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-[#176b55]" /> : <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-sky-800" />}
+          {mode === 'plans' ? <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-[#047857]" /> : <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-sky-800" />}
           <p>{previewOnly ? 'Aperçu de démonstration : comparez les formules librement. Aucun paiement ne sera lancé.' : isManualSubscriptionSuspension ? 'La suspension manuelle est prioritaire. Le paiement sera indisponible jusqu’à sa levée ou son expiration.' : paymentFlowActive ? isTrialActive ? 'Vous pouvez payer dès maintenant. Après confirmation, votre formule payante sera active immédiatement ; la durée restante de l’essai est conservée avant la nouvelle échéance.' : 'Vous gardez la main : le paiement est lancé uniquement après votre validation et votre formule est activée après confirmation sécurisée de GeniusPay. La publication de la boutique et sa vérification restent des étapes distinctes.' : 'Votre essai gratuit de 7 jours commence lorsque vous le démarrez.'}</p>
         </aside>
 
@@ -359,20 +375,20 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             previewOnly ? (
               <button type="button" disabled className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-300 px-5 py-3 text-sm font-bold text-slate-600">Aperçu · paiement désactivé</button>
             ) : (
-              <button type="button" onClick={() => void startSubscriptionPayment()} disabled={isPaymentStarting || !subscriptionPrices || isManualSubscriptionSuspension} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
+              <button type="button" onClick={() => void startSubscriptionPayment()} disabled={isPaymentStarting || !subscriptionPrices || isManualSubscriptionSuspension} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#065f46] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">
                 {isPaymentStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                 {isPaymentStarting ? 'Préparation du paiement…' : paymentPrice === null ? 'Tarifs indisponibles' : `Payer ${new Intl.NumberFormat('fr-FR').format(paymentPrice)} FCFA avec GeniusPay`}
               </button>
             )
           ) : (
-            <button type="button" onClick={() => onStart?.('standard')} disabled={isStarting || !onStart} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#176b55] disabled:cursor-wait disabled:opacity-60">
+            <button type="button" onClick={() => onStart?.('standard')} disabled={isStarting || !onStart} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#065f46] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">
               {isStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
               {isStarting ? 'Démarrage de l’essai…' : `Commencer mon essai de ${TRIAL_DURATION_DAYS} jours`}
             </button>
           )}
-          {!paymentFlowActive && <button type="button" onClick={() => setPurchaseNow(true)} className="min-h-11 rounded-lg px-3 text-sm font-bold text-[#176b55] underline underline-offset-2">Voir les formules et payer maintenant</button>}
+          {!paymentFlowActive && <button type="button" onClick={() => setPurchaseNow(true)} className="min-h-11 rounded-lg px-3 text-sm font-bold text-[#047857] underline underline-offset-2">Voir les formules et payer maintenant</button>}
           {paymentFlowActive && <span className="text-xs text-slate-600">{selectedPlan.label} · {paymentPrice === null ? 'Tarif indisponible' : `${new Intl.NumberFormat('fr-FR').format(paymentPrice)} FCFA/${term === 'annual' ? 'an' : 'mois'}`}</span>}
-          {mode === 'start' && paymentFlowActive && <button type="button" onClick={() => setPurchaseNow(false)} className="min-h-11 rounded-lg px-3 text-sm font-bold text-[#176b55] underline underline-offset-2">Commencer plutôt par l’essai gratuit</button>}
+          {mode === 'start' && paymentFlowActive && <button type="button" onClick={() => setPurchaseNow(false)} className="min-h-11 rounded-lg px-3 text-sm font-bold text-[#047857] underline underline-offset-2">Commencer plutôt par l’essai gratuit</button>}
         </div>
         {paymentFlowActive && paymentMessage && (
           <div className="mt-3 space-y-2" aria-live="polite">
@@ -397,7 +413,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     type="button"
                     onClick={() => void startSubscriptionPayment()}
                     disabled={isPaymentStarting || !billingEmail.trim() || isManualSubscriptionSuspension}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-4 py-2 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#065f46] px-4 py-2 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"
                   >
                     {isPaymentStarting && <LoaderCircle className="h-4 w-4 animate-spin" />}
                     Continuer vers le paiement

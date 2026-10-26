@@ -4,7 +4,6 @@ import type { Shop } from '../../types';
 import { MerchantState } from './useMerchant';
 import { ThemeCustomizer } from '../ThemeCustomizer';
 import { MerchantIdentityVerification } from './lazyMerchantIdentityVerification';
-import { ProAnalyticsPanel } from './ProAnalyticsPanel';
 import { cleanPhoneForWhatsApp, formatFCFA } from '../../utils/format';
 import {
   getSubscriptionProductLimit,
@@ -16,6 +15,7 @@ import { WhatsAppSubscriptionReminderConsent } from './WhatsAppSubscriptionRemin
 import { MerchantBoostPurchase } from './MerchantBoostPurchase';
 import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
 import { PushNotificationSettings } from './PushNotificationSettings';
+import { ProductOffersManager } from './ProductOffersManager';
 
 interface SettingsTabProps {
   state: MerchantState;
@@ -68,8 +68,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
     hours: { eyebrow: 'Ma boutique', title: 'Horaires et disponibilité', description: 'Définissez les jours et heures pendant lesquels vos clients peuvent commander.' },
     bilan: { eyebrow: 'Mon activité', title: 'Suivi de votre activité', description: 'Consultez les chiffres du jour et partagez votre bilan sur WhatsApp.' },
     verification: { eyebrow: 'Compte', title: 'Vérification du commerce', description: 'Suivez la vérification de votre identité et de votre boutique.' },
-    subscription: { eyebrow: 'Compte', title: 'Abonnement et visibilité', description: 'Consultez votre formule, son échéance et les options de visibilité.' },
-    analytics: { eyebrow: 'Mon activité', title: 'Statistiques de la vitrine', description: 'Analysez les visites et les commandes générées par votre boutique.' },
+    subscription: { eyebrow: 'Compte', title: 'Abonnement', description: 'Consultez votre formule, son échéance et les options de paiement.' },
+    visibility: { eyebrow: 'Visibilité', title: 'Campagnes et boosts', description: 'Gérez la mise à la une, les boosts sponsorisés et les campagnes publicitaires. Les promotions de prix se gèrent dans le catalogue.' },
     notifications: { eyebrow: 'Compte', title: 'Notifications Push', description: 'Choisissez si cet appareil peut recevoir les alertes importantes de votre boutique.' },
   };
   const activeSettingsCopy = settingsCopy[settingsSubTab];
@@ -163,21 +163,21 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
             <header className="flex flex-col gap-4 rounded-3xl border border-[#e7dfd3] bg-white p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1D6B57]">{activeSettingsCopy.eyebrow} · Paramètres</p>
-                <h2 className="mt-1 text-2xl font-black tracking-tight text-[#211712]">{activeSettingsCopy.title}</h2>
+                <h2 className="mt-1 text-2xl font-black tracking-tight text-[#292d2a]">{activeSettingsCopy.title}</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{activeSettingsCopy.description}</p>
               </div>
-              <span className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full border border-[#d8e9df] bg-[#eff7f1] px-3 py-1.5 text-xs font-bold text-[#155544]">
-                <span className={`h-2 w-2 rounded-full ${currentShop.is_open ? 'bg-[#1D6B57]' : 'bg-[#e6572b]'}`} />
+              <span className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full border border-[#d8e9df] bg-[#eff7f1] px-3 py-1.5 text-xs font-bold text-[#047857]">
+                <span className={`h-2 w-2 rounded-full ${currentShop.is_open ? 'bg-[#1D6B57]' : 'bg-[#F97316]'}`} />
                 {currentShop.is_open ? 'Boutique ouverte' : 'Boutique fermée'}
               </span>
             </header>
 
             {settingsSubTab === 'profile' && <section className="flex flex-col gap-4 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
               <div className="max-w-2xl">
-                <h3 className="text-sm font-extrabold text-[#211712]">Mes données</h3>
+                <h3 className="text-sm font-extrabold text-[#292d2a]">Mes données</h3>
                 <p className="mt-1 text-xs leading-5 text-slate-600">Téléchargez les données MaTable.ci enregistrées pour cette boutique. Les données conservées directement par des prestataires externes ne sont pas incluses. Pour demander la suppression du compte, contactez l’assistance.</p>
               </div>
-              <button type="button" onClick={exportMerchantData} disabled={merchantDataExporting} className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#d9cfc2] px-4 text-sm font-bold text-[#4a3a30] disabled:opacity-50">
+              <button type="button" onClick={exportMerchantData} disabled={merchantDataExporting} className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#d9cfc2] px-4 text-sm font-bold text-[#47534b] disabled:opacity-50">
                 {merchantDataExporting ? 'Préparation…' : 'Télécharger mes données'}
               </button>
             </section>}
@@ -185,7 +185,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
             {settingsSubTab === 'profile' && (
               <form onSubmit={saveOwnerProfile} className="space-y-5 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
                 <div>
-                  <h3 className="text-base font-extrabold text-[#211712]">Mes coordonnées personnelles</h3>
+                  <h3 className="text-base font-extrabold text-[#292d2a]">Mes coordonnées personnelles</h3>
                   <p className="mt-1 text-xs leading-5 text-slate-600">Ces informations restent privées et sont distinctes du nom et du WhatsApp affichés sur la vitrine.</p>
                 </div>
                 {ownerProfileError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">{ownerProfileError}</p>}
@@ -200,7 +200,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       onChange={(event) => setOwnerName(event.target.value)}
                       disabled={ownerEmailLoading || ownerProfileSaving}
                       placeholder="Votre nom et prénom"
-                      className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/15 disabled:bg-slate-50"
+                      className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/15 disabled:bg-slate-50"
                     />
                   </label>
                   <label className="block text-sm font-semibold text-slate-800">
@@ -215,7 +215,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       onChange={(event) => setOwnerPhone(event.target.value)}
                       disabled={ownerEmailLoading || ownerProfileSaving}
                       placeholder="+225 07 00 00 00 00"
-                      className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/15 disabled:bg-slate-50"
+                      className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/15 disabled:bg-slate-50"
                     />
                   </label>
                   <label className="block text-sm font-semibold text-slate-800">
@@ -230,7 +230,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       onChange={(event) => setOwnerEmail(event.target.value)}
                       disabled={ownerEmailLoading || ownerProfileSaving}
                       placeholder="vous@exemple.ci"
-                      className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/15 disabled:bg-slate-50"
+                      className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/15 disabled:bg-slate-50"
                     />
                   </label>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -248,7 +248,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       onChange={(event) => setSettingsNewPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
                       placeholder="Nouveau PIN à 6 chiffres"
                       disabled={ownerEmailLoading || ownerProfileSaving}
-                      className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-12 text-sm font-mono tracking-widest outline-none focus:border-[#176b55]"
+                      className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-12 text-sm font-mono tracking-widest outline-none focus:border-[#047857]"
                     />
                     <button type="button" disabled={ownerEmailLoading || ownerProfileSaving} onClick={() => setShowSettingsPin((visible) => !visible)} aria-label={showSettingsPin ? 'Masquer le PIN' : 'Afficher le PIN'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-50">
                       {showSettingsPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -256,7 +256,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                   </div>
                 </div>
                 </div>
-                <button type="submit" disabled={ownerEmailLoading || ownerProfileSaving} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1D6B57] px-5 py-3 text-sm font-extrabold text-white shadow-sm transition-colors hover:bg-[#155544] disabled:cursor-wait disabled:opacity-60">
+                <button type="submit" disabled={ownerEmailLoading || ownerProfileSaving} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1D6B57] px-5 py-3 text-sm font-extrabold text-white shadow-sm transition-colors hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">
                   {ownerProfileSaving ? 'Enregistrement…' : 'Enregistrer le profil'}
                 </button>
               </form>
@@ -311,37 +311,42 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 </div>
                 <p className="text-xs leading-5 text-slate-600">Le paiement est ponctuel, sans prélèvement automatique. GeniusPay confirme le règlement au serveur avant toute activation. Le paiement des commandes clients reste directement convenu avec la boutique.</p>
                 <WhatsAppSubscriptionReminderConsent shop={currentShop} />
-                <div className="flex flex-col gap-3 rounded-xl border border-[#e3d9cc] bg-[#f7f3ee] p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-3 rounded-xl border border-[#e3d9cc] bg-[#FAF8F2] p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm font-extrabold text-slate-900">Besoin d’autres fonctionnalités ?</p>
                     <p className="mt-1 text-xs leading-5 text-slate-600">Comparez Standard, Premium et Pro, puis choisissez un paiement mensuel ou annuel.</p>
                   </div>
-                  <button type="button" onClick={() => setShowPlanChooser(true)} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-full bg-[#0f4d3d] px-4 text-xs font-bold text-white transition hover:bg-[#176b55]">Voir les formules</button>
-                </div>
-                <div className="border-t border-slate-200 pt-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-bold uppercase text-slate-500">Visibilité de la vitrine</p>
-                      <h4 className="mt-1 text-sm font-extrabold text-slate-900">Mise à la une</h4>
-                      <p className="mt-1 text-xs text-slate-600">{isFeatured && featuredUntil ? `Votre boutique est mise à la une jusqu’au ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(featuredUntil))}.` : 'Votre boutique n’est pas actuellement mise à la une.'}</p>
-                    </div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${isFeatured ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-100 text-slate-700'}`}>{isFeatured ? 'Active' : 'Inactive'}</span>
-                  </div>
-                  <MerchantBoostPurchase shop={currentShop} productCount={products.filter((product) => product.shop_id === currentShop.id).length} />
+                  <button type="button" onClick={() => setShowPlanChooser(true)} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-full bg-[#065f46] px-4 text-xs font-bold text-white transition hover:bg-[#047857]">Voir les formules</button>
                 </div>
               </section>
             ))}
 
-            {settingsSubTab === 'analytics' && currentShop && <ProAnalyticsPanel shop={currentShop} />}
             {settingsSubTab === 'notifications' && currentShop && <PushNotificationSettings shop={currentShop} />}
+            {settingsSubTab === 'visibility' && currentShop && (
+              <section className="max-w-3xl space-y-5 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase text-slate-500">Visibilité de la vitrine</p>
+                    <h3 className="mt-1 text-lg font-extrabold text-slate-900">Mise à la une</h3>
+                    <p className="mt-1 text-xs text-slate-600">{isFeatured && featuredUntil ? `Votre boutique est mise à la une jusqu’au ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(featuredUntil))}.` : 'Votre boutique n’est pas actuellement mise à la une.'}</p>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${isFeatured ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-100 text-slate-700'}`}>{isFeatured ? 'Active' : 'Inactive'}</span>
+                </div>
+                <MerchantBoostPurchase shop={currentShop} productCount={products.filter((product) => product.shop_id === currentShop.id).length} />
+                <div className="border-t border-slate-200 pt-5">
+                  <h3 className="mb-3 text-lg font-extrabold text-slate-900">Campagnes publicitaires</h3>
+                  <ProductOffersManager shop={currentShop} products={products} />
+                </div>
+              </section>
+            )}
 
             {/* Sub-Tab 2: GENERAL SETTINGS */}
             {settingsSubTab === 'general' && (
               <form onSubmit={handleSaveGeneralSettings} className="space-y-5 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
                 <div className="flex items-center gap-3 border-b border-[#eee8df] pb-4">
-                  <span className="rounded-2xl bg-[#eaf4ef] p-3 text-[#1D6B57]"><Store className="h-5 w-5" /></span>
+                  <span className="rounded-2xl bg-[#d1fae5] p-3 text-[#1D6B57]"><Store className="h-5 w-5" /></span>
                   <div>
-                    <h3 className="font-extrabold text-[#211712] text-base">Informations publiques</h3>
+                    <h3 className="font-extrabold text-[#292d2a] text-base">Informations publiques</h3>
                     <p className="mt-0.5 text-xs text-slate-500">Les détails que vos clients retrouvent sur votre vitrine.</p>
                   </div>
                 </div>
@@ -364,7 +369,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       required
                       value={settingsName}
                       onChange={(e) => setSettingsName(e.target.value)}
-                      className="w-full rounded-xl border border-[#ded7cd] bg-[#fffdf9] p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
+                      className="w-full rounded-xl border border-[#ded7cd] bg-[#FFFFFF] p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
                     />
                   </div>
 
@@ -376,7 +381,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       type="text"
                       value={settingsCity}
                       onChange={(e) => setSettingsCity(e.target.value)}
-                      className="w-full rounded-xl border border-[#ded7cd] bg-[#fffdf9] p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
+                      placeholder="Ex. : Abidjan, Bouaké, Yamoussoukro"
+                      className="w-full rounded-xl border border-[#ded7cd] bg-[#FFFFFF] p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
                     />
                   </div>
                 </div>
@@ -391,7 +397,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                     value={settingsWelcome}
                     onChange={(e) => setSettingsWelcome(e.target.value)}
                     placeholder="Ex: Nuisettes soyeuses & lingerie fine. Livraison discrète à Abidjan..."
-                    className="w-full rounded-xl border border-[#ded7cd] bg-[#fffdf9] p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
+                    className="w-full rounded-xl border border-[#ded7cd] bg-[#FFFFFF] p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
                   />
                 </div>
 
@@ -405,7 +411,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                     required
                     value={settingsPhone}
                     onChange={(e) => setSettingsPhone(e.target.value)}
-                    className="w-full rounded-xl border border-[#ded7cd] bg-[#fffdf9] p-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
+                    className="w-full rounded-xl border border-[#ded7cd] bg-[#FFFFFF] p-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
                     Les clients seront automatiquement redirigés vers ce numéro WhatsApp avec leur panier validé.
@@ -500,7 +506,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 <div className="pt-2">
                   <button
                     type="submit"
-                    className="rounded-xl bg-[#1D6B57] px-5 py-3 text-xs font-extrabold text-white shadow-sm transition-colors hover:bg-[#155544]"
+                    className="rounded-xl bg-[#1D6B57] px-5 py-3 text-xs font-extrabold text-white shadow-sm transition-colors hover:bg-[#047857]"
                   >
                     Enregistrer les coordonnées
                   </button>
@@ -600,6 +606,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                         </label>
                         <input
                           type="time"
+                          required
                           value={openTime}
                           onChange={(e) => setOpenTime(e.target.value)}
                           className="w-full text-base font-mono font-bold p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
@@ -615,6 +622,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                         </label>
                         <input
                           type="time"
+                          required
                           value={closeTime}
                           onChange={(e) => setCloseTime(e.target.value)}
                           className="w-full text-base font-mono font-bold p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"

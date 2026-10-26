@@ -32,7 +32,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [regName, setRegName] = useState('');
   const [regPhone, setRegPhone] = useState('+225');
   const [regPin, setRegPin] = useState('');
-  const [regCity, setRegCity] = useState('Abidjan');
+  const [regCity, setRegCity] = useState('');
   const [regCityOther, setRegCityOther] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regAcceptedTermsPrivacy, setRegAcceptedTermsPrivacy] = useState(false);
@@ -52,7 +52,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
   // Active view tab
   const [activeTab, setActiveTab] = useState<'overview' | 'catalog' | 'orders' | 'stats' | 'settings'>('overview');
-  const [settingsSubTab, setSettingsSubTab] = useState<'profile' | 'themes' | 'general' | 'hours' | 'bilan' | 'verification' | 'subscription' | 'analytics' | 'notifications'>('themes');
+  const [settingsSubTab, setSettingsSubTab] = useState<'profile' | 'themes' | 'general' | 'hours' | 'bilan' | 'verification' | 'subscription' | 'visibility' | 'notifications'>('themes');
 
   // Products & Orders data
   const [products, setProducts] = useState<Product[]>([]);
@@ -63,7 +63,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
   // Catalog search & filter
   const [catalogSearch, setCatalogSearch] = useState('');
-  const [catalogFilter, setCatalogFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | 'hidden'>('all');
+  const [catalogFilter, setCatalogFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | 'hidden' | 'promotions'>('all');
 
   // Orders search & filter
   const [orderSearch, setOrderSearch] = useState('');
@@ -92,7 +92,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [settingsWelcome, setSettingsWelcome] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(true);
   const [settingsPhone, setSettingsPhone] = useState('');
-  const [settingsCity, setSettingsCity] = useState('Abidjan');
+  const [settingsCity, setSettingsCity] = useState('');
   const [settingsNewPin, setSettingsNewPin] = useState('');
   const [settingsSocialLinks, setSettingsSocialLinks] = useState<ShopSocialLinks>({
     instagram: '',
@@ -106,9 +106,9 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
   // Automated Opening Hours State
   const [hoursEnabled, setHoursEnabled] = useState(false);
-  const [openTime, setOpenTime] = useState('08:00');
-  const [closeTime, setCloseTime] = useState('22:00');
-  const [activeDays, setActiveDays] = useState<number[]>([1, 2, 3, 4, 5, 6, 0]);
+  const [openTime, setOpenTime] = useState('');
+  const [closeTime, setCloseTime] = useState('');
+  const [activeDays, setActiveDays] = useState<number[]>([]);
   const [manualOverride, setManualOverride] = useState(false);
   const [hoursSaved, setHoursSaved] = useState(false);
 
@@ -174,7 +174,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setSettingsWelcome(shop.welcome_message || '');
     setSettingsOpen(shop.is_open);
     setSettingsPhone(shop.whatsapp_number || '');
-    setSettingsCity(shop.city || 'Abidjan');
+    setSettingsCity(shop.city || '');
     setSettingsNewPin('');
     setSettingsSocialLinks({
       instagram: shop.theme_config?.social_links?.instagram || '',
@@ -192,15 +192,15 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
     if (shop.opening_hours) {
       setHoursEnabled(Boolean(shop.opening_hours.enabled));
-      setOpenTime(shop.opening_hours.open_time || '08:00');
-      setCloseTime(shop.opening_hours.close_time || '22:00');
-      setActiveDays(shop.opening_hours.days && shop.opening_hours.days.length > 0 ? shop.opening_hours.days : [1, 2, 3, 4, 5, 6, 0]);
+      setOpenTime(shop.opening_hours.open_time || '');
+      setCloseTime(shop.opening_hours.close_time || '');
+      setActiveDays(shop.opening_hours.days || []);
       setManualOverride(Boolean(shop.opening_hours.manual_override));
     } else {
       setHoursEnabled(false);
-      setOpenTime('08:00');
-      setCloseTime('22:00');
-      setActiveDays([1, 2, 3, 4, 5, 6, 0]);
+      setOpenTime('');
+      setCloseTime('');
+      setActiveDays([]);
       setManualOverride(false);
     }
   };
@@ -353,6 +353,10 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     e.preventDefault();
     if (!regName.trim() || !regPhone.trim() || !regEmail.trim() || !/^\d{6}$/.test(regPin.trim())) {
       toast.error('Renseignez le nom, l’e-mail, le WhatsApp et un PIN de 6 chiffres.');
+      return;
+    }
+    if (!regCity.trim() || regCity === 'Autre ville / commune' && !regCityOther.trim()) {
+      toast.error('Choisissez votre ville ou commune pour situer la boutique.');
       return;
     }
     setRegLoading(true);
@@ -520,6 +524,15 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const handleSaveOpeningHours = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!currentShop) return;
+    const isValidTime = (value: string) => {
+      if (!/^\d{2}:\d{2}$/.test(value)) return false;
+      const [hours, minutes] = value.split(':').map(Number);
+      return hours < 24 && minutes < 60;
+    };
+    if (hoursEnabled && (!isValidTime(openTime) || !isValidTime(closeTime) || activeDays.length === 0)) {
+      toast.error('Renseignez les heures d’ouverture et de fermeture, puis choisissez au moins un jour.');
+      return;
+    }
 
     try {
       const updatedHours = {

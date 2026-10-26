@@ -149,9 +149,9 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="customer-trust-title" className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-[#fffdf9] p-5 shadow-2xl sm:rounded-3xl sm:p-7">
+      <section role="dialog" aria-modal="true" aria-labelledby="customer-trust-title" className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-[#FFFFFF] p-5 shadow-2xl sm:rounded-3xl sm:p-7">
         <header className="flex items-start justify-between gap-4">
-          <div><p className="text-xs font-black uppercase tracking-[0.15em] text-[#b9441f]">Communauté MaTable</p><h2 id="customer-trust-title" className="mt-1 text-xl font-black text-slate-900">{targetName}</h2><p className="mt-1 text-sm text-slate-600">{averageRating == null ? 'Pas encore d’avis publié' : `★ ${averageRating}/5 · ${reviewCount} avis vérifié${reviewCount > 1 ? 's' : ''}`}</p></div>
+          <div><p className="text-xs font-black uppercase tracking-[0.15em] text-[#c2410c]">Communauté MaTable</p><h2 id="customer-trust-title" className="mt-1 text-xl font-black text-slate-900">{targetName}</h2><p className="mt-1 text-sm text-slate-600">{averageRating == null ? 'Pas encore d’avis publié' : `★ ${averageRating}/5 · ${reviewCount} avis vérifié${reviewCount > 1 ? 's' : ''}`}</p></div>
           <button type="button" onClick={onClose} aria-label="Fermer" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-700"><X className="h-5 w-5" /></button>
         </header>
 
@@ -172,13 +172,13 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
               {eligibleOrders.map((order) => <option key={order.id} value={order.id}>Commande #{order.id}</option>)}
             </select>
             {ordersError && <p role="alert" className="text-xs text-rose-800">{ordersError}</p>}
-            {!ordersLoading && !ordersError && !ordersAuthenticated && <p className="text-xs text-slate-600">Connectez-vous à votre compte client pour déposer un avis vérifié. <a href="/connexion" onClick={onClose} className="font-bold text-[#0f4d3d] underline underline-offset-2">Se connecter</a></p>}
+            {!ordersLoading && !ordersError && !ordersAuthenticated && <p className="text-xs text-slate-600">Connectez-vous à votre compte client pour déposer un avis vérifié. <a href="/connexion" onClick={onClose} className="font-bold text-[#065f46] underline underline-offset-2">Se connecter</a></p>}
             {!ordersLoading && !ordersError && ordersAuthenticated && eligibleOrders.length === 0 && <p className="text-xs text-slate-600">{orders.length === 0 ? 'Aucune commande n’est associée à votre compte pour le moment.' : 'Une commande livrée de cette boutique ou contenant ce produit est nécessaire pour laisser un avis.'}</p>}
             <div className="flex gap-1" aria-label="Note sur cinq">
               {[1, 2, 3, 4, 5].map((value) => <button key={value} type="button" onClick={() => setRating(value)} aria-label={`${value} étoile${value > 1 ? 's' : ''}`} aria-pressed={rating === value} className={`rounded p-1 text-2xl ${rating >= value ? 'text-amber-500' : 'text-slate-300'}`}>★</button>)}
             </div>
             <textarea value={comment} onChange={(event) => setComment(event.target.value)} maxLength={1000} rows={3} placeholder="Votre expérience (facultatif)" className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm" />
-            <button type="submit" disabled={saving || ordersLoading || eligibleOrders.length === 0} className="min-h-10 rounded-full bg-[#0f4d3d] px-4 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Envoi…' : 'Envoyer mon avis'}</button>
+            <button type="submit" disabled={saving || ordersLoading || eligibleOrders.length === 0} className="min-h-10 rounded-full bg-[#065f46] px-4 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Envoi…' : 'Envoyer mon avis'}</button>
           </form>
 
           <form onSubmit={submitReport} className="space-y-3">
@@ -187,7 +187,7 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
             <select value={reportReason} onChange={(event) => setReportReason(event.target.value)} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">{reportReasons.map((reason) => <option key={reason.value} value={reason.value}>{reason.label}</option>)}</select>
             <textarea value={reportDetails} onChange={(event) => setReportDetails(event.target.value)} maxLength={1000} rows={3} placeholder="Expliquez brièvement (facultatif)" className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm" />
             <button type="submit" disabled={saving || !ordersAuthenticated} className="min-h-10 rounded-full border border-rose-300 px-4 text-xs font-bold text-rose-800 disabled:opacity-50">{saving ? 'Envoi…' : 'Envoyer le signalement'}</button>
-            {!ordersAuthenticated && <p className="text-xs text-slate-500">Connectez-vous à votre compte client pour envoyer un signalement. <a href="/connexion" onClick={onClose} className="font-bold text-[#0f4d3d] underline underline-offset-2">Se connecter</a></p>}
+            {!ordersAuthenticated && <p className="text-xs text-slate-500">Connectez-vous à votre compte client pour envoyer un signalement. <a href="/connexion" onClick={onClose} className="font-bold text-[#065f46] underline underline-offset-2">Se connecter</a></p>}
           </form>
         </div>
       </section>

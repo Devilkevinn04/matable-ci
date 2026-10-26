@@ -126,9 +126,9 @@ export function GuideChecklist({ role, accountId, collapsible = false }: GuideCh
         <section className="rounded-2xl border border-[#e3d9cc] bg-white p-4 sm:p-6" aria-labelledby={`guide-heading-${role}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#b9441f]">Guide · {guide.label}</p>
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#c2410c]">Guide · {guide.label}</p>
               <h2 id={`guide-heading-${role}`} className="mt-1 text-xl font-black sm:text-2xl">Les étapes essentielles</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-[#6f6a61]">{guide.intro}</p>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-[#647067]">{guide.intro}</p>
             </div>
             <button
               type="button"
@@ -143,18 +143,18 @@ export function GuideChecklist({ role, accountId, collapsible = false }: GuideCh
           <div className="mt-5 flex items-center gap-3" role="status" aria-label={`Progression du guide : ${completedCount} sur ${guide.steps.length} étapes`}>
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#eee9e1]">
               <div
-                className="h-full rounded-full bg-[#176b55] transition-[width]"
+                className="h-full rounded-full bg-[#047857] transition-[width]"
                 style={{ width: `${(completedCount / guide.steps.length) * 100}%` }}
               />
             </div>
-            <span className="shrink-0 text-xs font-black text-[#176b55]">{completedCount}/{guide.steps.length}</span>
+            <span className="shrink-0 text-xs font-black text-[#047857]">{completedCount}/{guide.steps.length}</span>
           </div>
 
           <ol className="mt-5 space-y-3">
             {guide.steps.map((step, index) => {
               const isComplete = progress.includes(step.id);
               return (
-                <li key={step.id} className={`rounded-xl border p-4 transition ${isComplete ? 'border-[#b7d7c6] bg-[#f1f8f3]' : 'border-[#e8e1d7] bg-[#fffdf9]'}`}>
+                <li key={step.id} className={`rounded-xl border p-4 transition ${isComplete ? 'border-[#b7d7c6] bg-[#f1f8f3]' : 'border-[#e8e1d7] bg-[#FFFFFF]'}`}>
                   <div className="flex items-start gap-3">
                     <button
                       type="button"
@@ -162,17 +162,17 @@ export function GuideChecklist({ role, accountId, collapsible = false }: GuideCh
                       aria-pressed={isComplete}
                       onClick={() => toggleStep(step.id)}
                       className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full border transition ${
-                        isComplete ? 'border-[#176b55] bg-[#176b55] text-white' : 'border-[#bdb5aa] bg-white text-transparent hover:border-[#176b55]'
+                        isComplete ? 'border-[#047857] bg-[#047857] text-white' : 'border-[#bdb5aa] bg-white text-transparent hover:border-[#047857]'
                       }`}
                     >
                       <Check className="h-4 w-4" aria-hidden="true" />
                     </button>
                     <div className="min-w-0 flex-1">
                       <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#a2642e]">Étape {index + 1}</p>
-                      <h3 className={`mt-1 text-sm font-extrabold sm:text-base ${isComplete ? 'text-[#176b55]' : 'text-[#25231f]'}`}>{step.title}</h3>
-                      <p className="mt-1 text-sm leading-6 text-[#6f6a61]">{step.description}</p>
+                      <h3 className={`mt-1 text-sm font-extrabold sm:text-base ${isComplete ? 'text-[#047857]' : 'text-[#292d2a]'}`}>{step.title}</h3>
+                      <p className="mt-1 text-sm leading-6 text-[#647067]">{step.description}</p>
                       {step.href && step.linkLabel && (
-                        <Link to={step.href} className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg border border-[#c8dbd0] bg-white px-3 text-xs font-bold text-[#0f4d3d] hover:bg-[#e4f1ec]">
+                        <Link to={step.href} className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg border border-[#c8dbd0] bg-white px-3 text-xs font-bold text-[#065f46] hover:bg-[#d1fae5]">
                           {step.linkLabel}
                         </Link>
                       )}
@@ -195,7 +195,7 @@ export function GuideChecklist({ role, accountId, collapsible = false }: GuideCh
   if (collapsible) {
     return (
       <details className="group rounded-2xl">
-        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-xl border border-[#c8dbd0] bg-white px-4 py-3 text-sm font-bold text-[#0f4d3d] hover:bg-[#f4faf6] [&::-webkit-details-marker]:hidden">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-xl border border-[#c8dbd0] bg-white px-4 py-3 text-sm font-bold text-[#065f46] hover:bg-[#f4faf6] [&::-webkit-details-marker]:hidden">
           <span className="flex items-center gap-2"><BookOpen className="h-4 w-4" aria-hidden="true" />Guide personnel · {guide.label}</span>
           <span className="text-xs font-black">{completedCount}/{guide.steps.length} · Ouvrir</span>
         </summary>
@@ -221,12 +221,12 @@ export function UserGuidePage() {
   const returnLabel = role === 'merchant' ? 'Retour à ma boutique' : role === 'super-admin' || role === 'verification' ? 'Retour à l’administration' : 'Retour à mon compte';
 
   return (
-    <main className="min-h-[70vh] bg-[#f8f6f0] px-4 py-8 text-[#25231f] sm:px-6 sm:py-12">
-      <div className="mx-auto max-w-5xl">
-        <Link to={returnPath} className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[#176b55] hover:text-[#e6572b]">
+    <main className="min-h-[70vh] bg-[#f8f6f0] px-4 py-8 text-[#292d2a] sm:px-6 sm:py-12">
+      <div className="mx-auto max-w-[1184px]">
+        <Link to={returnPath} className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[#047857] hover:text-[#F97316]">
           {returnLabel}
         </Link>
-        <header className="mt-6 rounded-3xl bg-[#123b31] p-5 text-white sm:mt-8 sm:p-8">
+        <header className="mt-6 rounded-3xl bg-[#065f46] p-5 text-white sm:mt-8 sm:p-8">
           <div className="flex items-center gap-2 text-[#f0ba80]">
             <BookOpen className="h-5 w-5" aria-hidden="true" />
             <p className="text-xs font-bold uppercase tracking-[0.14em]">Guide personnel MaTable.ci</p>

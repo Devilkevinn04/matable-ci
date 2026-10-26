@@ -207,7 +207,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       telephone: targetShop.whatsapp_number,
       address: {
         '@type': 'PostalAddress',
-        addressLocality: targetShop.city || 'Abidjan',
+        ...(targetShop.city ? { addressLocality: targetShop.city } : {}),
         addressCountry: 'CI',
       },
       areaServed: 'Côte d’Ivoire',

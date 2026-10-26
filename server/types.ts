@@ -86,6 +86,7 @@ export interface ShopRecord {
     custom_banner_url?: string;
     logo_url?: string;
     event_mode_enabled?: boolean;
+    event_type?: 'sales' | 'flash_sale' | 'new_arrival' | 'launch' | 'special_offer' | 'custom';
     event_banner_text?: string;
     social_links?: {
       instagram?: string;
@@ -115,6 +116,9 @@ export interface ProductRecord {
   title: string;
   description: string | null;
   price: number;
+  sale_price?: number | null;
+  sale_starts_at?: string | null;
+  sale_ends_at?: string | null;
   stock: number;
   image_url: string;
   is_available: boolean;

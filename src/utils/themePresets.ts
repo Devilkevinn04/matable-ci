@@ -1,5 +1,6 @@
 import { ThemeConfig, ShopCategory, SubscriptionTier } from '../types';
 import { getCategoryDefaults } from './categoryDefaults';
+import { isSubscriptionFeatureIncluded } from './subscriptionFeatures';
 
 export interface ThemePreset {
   id: string;
@@ -191,8 +192,11 @@ export function getAllPresetsForCategory(category: ShopCategory): ThemePreset[] 
   }];
 }
 
-export function isFeatureAllowed(_tier: SubscriptionTier, _feature: 'preset_gallery' | 'custom_banner' | 'event_banner' | 'advanced_css'): boolean {
-  return true;
+export function isFeatureAllowed(tier: SubscriptionTier, feature: 'preset_gallery' | 'custom_banner' | 'event_banner' | 'advanced_css'): boolean {
+  if (feature === 'preset_gallery') return true;
+  if (feature === 'custom_banner') return isSubscriptionFeatureIncluded(tier, 'custom_branding');
+  if (feature === 'event_banner') return isSubscriptionFeatureIncluded(tier, 'event_mode');
+  return isSubscriptionFeatureIncluded(tier, 'custom_branding');
 }
 
 // Size guide table for Abidjan / Côte d'Ivoire

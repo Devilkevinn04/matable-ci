@@ -22,6 +22,7 @@ import {
   deleteMerchantSessionRecord,
   summarizeOrderMetrics,
 } from '../server.ts';
+import { normalizeCustomerPhone } from '../src/utils/normalizeCustomerPhone.ts';
 import { TRIAL_DURATION_DAYS } from '../src/utils/subscriptionFeatures.ts';
 
 test('calculates the merchant trial state on the server', () => {
@@ -328,7 +329,14 @@ test('escapes HTML in merchant-controlled shop metadata before rendering', () =>
   assert.equal(sanitizeTextField(rawMessage, 80), 'Bonjour');
 });
 
-test('rejects malformed or oversized order customer data', () => {
+test('normalizes Ivorian numbers consistently and rejects malformed order customer data', () => {
+  assert.equal(normalizeCustomerPhone('0708091011'), '+2250708091011');
+  assert.equal(normalizeCustomerPhone('+2250708091011'), '+2250708091011');
+  assert.equal(normalizeCustomerPhone('2250708091011'), '+2250708091011');
+  assert.equal(normalizeCustomerPhone('(+225) 07 08 09 10 11'), '+2250708091011');
+  assert.equal(normalizeCustomerPhone(''), '');
+  assert.equal(normalizeCustomerPhone('invalid-input'), '');
+
   const invalidPhone = validateCustomerOrderInput({
     customer_name: 'A',
     customer_phone: '123',
@@ -372,6 +380,7 @@ test('rejects placeholder production app URLs', () => {
     DATABASE_URL: process.env.DATABASE_URL,
     ADMIN_ACCESS_KEY: process.env.ADMIN_ACCESS_KEY,
     VERIFICATION_ADMIN_ACCESS_KEY: process.env.VERIFICATION_ADMIN_ACCESS_KEY,
+    AD_EVENT_SIGNING_SECRET: process.env.AD_EVENT_SIGNING_SECRET,
     APP_URL: process.env.APP_URL,
     PORT: process.env.PORT,
     MATABLE_DB_PATH: process.env.MATABLE_DB_PATH,
@@ -382,6 +391,7 @@ test('rejects placeholder production app URLs', () => {
     process.env.DATABASE_URL = 'postgresql://matable:strongpass@ep-demo.us-east-1.aws.neon.tech/matable';
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
     process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
+    process.env.AD_EVENT_SIGNING_SECRET = 'production-ad-event-signing-secret-2026-strong';
     process.env.APP_URL = 'https://example.com';
     process.env.PORT = '3000';
     process.env.MATABLE_DB_PATH = './data/matable.db';
@@ -392,6 +402,7 @@ test('rejects placeholder production app URLs', () => {
     if (previous.DATABASE_URL === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = previous.DATABASE_URL;
     if (previous.ADMIN_ACCESS_KEY === undefined) delete process.env.ADMIN_ACCESS_KEY; else process.env.ADMIN_ACCESS_KEY = previous.ADMIN_ACCESS_KEY;
     if (previous.VERIFICATION_ADMIN_ACCESS_KEY === undefined) delete process.env.VERIFICATION_ADMIN_ACCESS_KEY; else process.env.VERIFICATION_ADMIN_ACCESS_KEY = previous.VERIFICATION_ADMIN_ACCESS_KEY;
+    if (previous.AD_EVENT_SIGNING_SECRET === undefined) delete process.env.AD_EVENT_SIGNING_SECRET; else process.env.AD_EVENT_SIGNING_SECRET = previous.AD_EVENT_SIGNING_SECRET;
     if (previous.APP_URL === undefined) delete process.env.APP_URL; else process.env.APP_URL = previous.APP_URL;
     if (previous.PORT === undefined) delete process.env.PORT; else process.env.PORT = previous.PORT;
     if (previous.MATABLE_DB_PATH === undefined) delete process.env.MATABLE_DB_PATH; else process.env.MATABLE_DB_PATH = previous.MATABLE_DB_PATH;
@@ -403,6 +414,7 @@ test('rejects unsafe production configuration', () => {
     DATABASE_URL: process.env.DATABASE_URL,
     ADMIN_ACCESS_KEY: process.env.ADMIN_ACCESS_KEY,
     VERIFICATION_ADMIN_ACCESS_KEY: process.env.VERIFICATION_ADMIN_ACCESS_KEY,
+    AD_EVENT_SIGNING_SECRET: process.env.AD_EVENT_SIGNING_SECRET,
     APP_URL: process.env.APP_URL,
     PORT: process.env.PORT,
     MATABLE_DB_PATH: process.env.MATABLE_DB_PATH,
@@ -413,6 +425,7 @@ test('rejects unsafe production configuration', () => {
     process.env.DATABASE_URL = 'postgresql://matable:strongpass@ep-demo.us-east-1.aws.neon.tech/matable';
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
     process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
+    process.env.AD_EVENT_SIGNING_SECRET = 'production-ad-event-signing-secret-2026-strong';
     process.env.APP_URL = 'https://matable.ci';
     process.env.PORT = '3000';
     process.env.MATABLE_DB_PATH = './data/matable.db';

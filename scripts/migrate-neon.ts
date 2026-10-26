@@ -35,6 +35,8 @@ const migrationVersions = [
   '030_subscription_lifecycle_controls',
   '031_subscription_plan_features',
   '032_subscription_admin_overrides',
+  '033_advertising_beta',
+  '034_product_sales',
 ];
 const connectionString = process.env.DATABASE_URL;
 

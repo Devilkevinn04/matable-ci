@@ -20,6 +20,9 @@ export function useMerchantProductEditor(
   const [prodCategory, setProdCategory] = useState('');
   const [prodDescription, setProdDescription] = useState('');
   const [prodPrice, setProdPrice] = useState<number | ''>('');
+  const [prodSalePrice, setProdSalePrice] = useState<number | ''>('');
+  const [prodSaleStartsAt, setProdSaleStartsAt] = useState('');
+  const [prodSaleEndsAt, setProdSaleEndsAt] = useState('');
   const [prodStock, setProdStock] = useState<number | ''>(10);
   const [prodImage, setProdImage] = useState('');
   const [prodLookbookImage, setProdLookbookImage] = useState('');
@@ -41,6 +44,9 @@ export function useMerchantProductEditor(
     setProdCategory(draft.category);
     setProdDescription(draft.description);
     setProdPrice(draft.price);
+    setProdSalePrice(draft.sale_price);
+    setProdSaleStartsAt(draft.sale_starts_at);
+    setProdSaleEndsAt(draft.sale_ends_at);
     setProdStock(draft.stock);
     setProdLookbookImage(draft.lookbook_image);
     setProdImage(draft.image_url);
@@ -63,6 +69,9 @@ export function useMerchantProductEditor(
     setProdCategory(draft.category);
     setProdDescription(draft.description);
     setProdPrice(draft.price);
+    setProdSalePrice(draft.sale_price);
+    setProdSaleStartsAt(draft.sale_starts_at);
+    setProdSaleEndsAt(draft.sale_ends_at);
     setProdStock(draft.stock);
     setProdImage(draft.image_url);
     setProdLookbookImage(draft.lookbook_image);
@@ -174,6 +183,9 @@ export function useMerchantProductEditor(
       category: prodCategory,
       description: prodDescription,
       price: prodPrice,
+      sale_price: prodSalePrice,
+      sale_starts_at: prodSaleStartsAt,
+      sale_ends_at: prodSaleEndsAt,
       stock: prodStock,
       image_url: prodImage,
       lookbook_image: prodLookbookImage,
@@ -248,6 +260,9 @@ export function useMerchantProductEditor(
     prodCategory,
     prodDescription,
     prodPrice,
+    prodSalePrice,
+    prodSaleStartsAt,
+    prodSaleEndsAt,
     prodStock,
     prodImage,
     prodLookbookImage,
@@ -267,6 +282,9 @@ export function useMerchantProductEditor(
     setProdCategory,
     setProdDescription,
     setProdPrice,
+    setProdSalePrice,
+    setProdSaleStartsAt,
+    setProdSaleEndsAt,
     setProdStock,
     setProdImage,
     setProdLookbookImage,

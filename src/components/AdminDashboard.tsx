@@ -29,12 +29,16 @@ import {
   ChevronRight,
   BookOpen,
   X,
+  Megaphone,
+  Tag,
 } from 'lucide-react';
 import { AdminIdentityVerificationPanel } from './AdminIdentityVerificationPanel';
 import { AdminShopList } from './AdminShopList';
 import { AdminPushAnnouncements } from './AdminPushAnnouncements';
 import { AdminSubscriptionPlanPricing } from './AdminSubscriptionPlanPricing';
 import { AdminSubscriptionPlanFeatures } from './AdminSubscriptionPlanFeatures';
+import { AdminHomepageMarketing } from './AdminHomepageMarketing';
+import { AdminProductPromotions } from './AdminProductPromotions';
 import { Link } from 'react-router-dom';
 const GuideChecklist = React.lazy(() => import('./UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
 import {
@@ -70,7 +74,7 @@ const adminOrderTransitions: Record<AdminOrder['status'], AdminOrder['status'][]
 };
 
 type AdminRole = 'super_admin' | 'verification_admin';
-type AdminView = 'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'verification-shops' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'push' | 'moderation' | 'audit';
+type AdminView = 'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'verification-shops' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'push' | 'moderation' | 'audit' | 'advertising' | 'promotions';
 
 interface VerificationShopSummary {
   id: number;
@@ -114,6 +118,15 @@ const adminAuditActionLabels: Record<string, string> = {
   trial_extended: 'Essai prolongé',
   trial_reminder_prepared: 'Rappel d’essai préparé',
   admin_shop_operation: 'Opération sur la boutique',
+  advertising_beta_open: 'Bêta publicitaire ouverte',
+  advertising_beta_pause: 'Diffusion publicitaire suspendue',
+  advertising_beta_resume: 'Diffusion publicitaire reprise',
+  advertising_campaign_approve: 'Campagne publicitaire approuvée',
+  advertising_campaign_reject: 'Campagne publicitaire refusée',
+  advertising_campaign_suspend: 'Campagne publicitaire suspendue',
+  advertising_campaign_resume: 'Campagne publicitaire reprise',
+  advertising_campaign_cancel: 'Campagne publicitaire arrêtée',
+  advertising_partner_request_updated: 'Demande partenaire traitée',
 };
 
 const adminAuditDetailLabels: Record<string, string> = {
@@ -160,6 +173,11 @@ const adminAuditDetailLabels: Record<string, string> = {
   deleted_orders: 'Commandes supprimées',
   deleted_reviews: 'Avis supprimés',
   deleted_reports: 'Signalements supprimés',
+  campaign_id: 'Campagne',
+  request_id: 'Demande partenaire',
+  starts_at: 'Début de diffusion',
+  ends_at: 'Fin de diffusion',
+  kind: 'Format',
 };
 
 export const AdminDashboard: React.FC = () => {
@@ -992,7 +1010,7 @@ export const AdminDashboard: React.FC = () => {
           onSubmit={handleAdminLogin}
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md rounded-[2rem] border-[3px] border-[#211712] bg-[#fffaf2] p-6 shadow-[10px_10px_0_rgba(33,23,18,0.96)] backdrop-blur-xl"
+          className="w-full max-w-md rounded-[2rem] border-[3px] border-[#292d2a] bg-[#FFFFFF] p-6 shadow-[10px_10px_0_rgba(33,23,18,0.96)] backdrop-blur-xl"
         >
           <div className="mb-5 flex items-center gap-3">
             <div className="brand-mark">M</div>
@@ -1003,12 +1021,12 @@ export const AdminDashboard: React.FC = () => {
               </h1>
             </div>
           </div>
-          <div className="mb-4 rounded-2xl bg-gradient-to-r from-[#eef5ff] to-[#f7e7c7] p-4 border-[2px] border-[#211712]">
+          <div className="mb-4 rounded-2xl bg-gradient-to-r from-[#eef5ff] to-[#f7e7c7] p-4 border-[2px] border-[#292d2a]">
             <div className="flex items-center gap-2 text-[#1b3a63] font-bold text-xs">
               <ShieldCheck className="w-4 h-4" />
               {loginRole === 'verification_admin' ? 'Espace de vérification' : 'Espace de contrôle central'}
             </div>
-            <p id="admin-login-instructions" className="mt-2 text-sm text-[#4a3a30]">
+            <p id="admin-login-instructions" className="mt-2 text-sm text-[#47534b]">
               {loginRole === 'verification_admin'
                 ? 'Entrez la clé de vérification configurée côté serveur. Cet accès est limité aux vérifications et à la modération.'
                 : 'Entrez la clé configurée côté serveur pour piloter les boutiques et les alertes.'}
@@ -1023,7 +1041,7 @@ export const AdminDashboard: React.FC = () => {
               setAdminKey('');
               setAuthError(null);
             }}
-            className="mb-4 w-full rounded-2xl border-[2px] border-[#211712] bg-[#fffaf2] px-3 py-3 text-sm font-medium text-[#211712] outline-none focus:border-[#1b3a63] focus:bg-white"
+            className="mb-4 w-full rounded-2xl border-[2px] border-[#292d2a] bg-[#FFFFFF] px-3 py-3 text-sm font-medium text-[#292d2a] outline-none focus:border-[#1b3a63] focus:bg-white"
           >
             <option value="super_admin">Super-admin</option>
             <option value="verification_admin">Admin de vérification</option>
@@ -1039,14 +1057,14 @@ export const AdminDashboard: React.FC = () => {
               aria-invalid={Boolean(authError)}
               aria-describedby={authError ? 'admin-key-error' : 'admin-login-instructions'}
               required
-              className="w-full rounded-2xl border-[2px] border-[#211712] bg-[#fffaf2] px-3 py-3 pr-12 text-sm font-medium text-[#211712] outline-none transition focus:border-[#1b3a63] focus:bg-white"
+              className="w-full rounded-2xl border-[2px] border-[#292d2a] bg-[#FFFFFF] px-3 py-3 pr-12 text-sm font-medium text-[#292d2a] outline-none transition focus:border-[#1b3a63] focus:bg-white"
             />
             <button type="button" onClick={() => setShowAdminKey((visible) => !visible)} aria-label={showAdminKey ? 'Masquer la clé' : 'Afficher la clé'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
               {showAdminKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
           {authError && <p id="admin-key-error" role="alert" className="mt-3 text-sm text-[#b93712]">{authError}</p>}
-          <button type="submit" className="mt-5 w-full rounded-2xl bg-[#1b3a63] px-4 py-3 text-sm font-black text-white shadow-[4px_4px_0_rgba(33,23,18,0.95)] border-2 border-[#211712] transition hover:translate-y-[-1px]">
+          <button type="submit" className="mt-5 w-full rounded-2xl bg-[#1b3a63] px-4 py-3 text-sm font-black text-white shadow-[4px_4px_0_rgba(33,23,18,0.95)] border-2 border-[#292d2a] transition hover:translate-y-[-1px]">
             Se connecter
           </button>
         </motion.form>
@@ -1380,6 +1398,8 @@ export const AdminDashboard: React.FC = () => {
           { id: 'subscriptions', label: 'Abonnements', icon: RefreshCw },
           { id: 'operations', label: 'Opérations', icon: Activity },
           { id: 'push', label: 'Annonces Push', icon: Send },
+          { id: 'promotions', label: 'Promotions', icon: Tag },
+          { id: 'advertising', label: 'Publicité', icon: Megaphone },
           { id: 'audit', label: 'Journal d’audit', icon: ClipboardList },
         ],
       },
@@ -1412,10 +1432,10 @@ export const AdminDashboard: React.FC = () => {
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="min-w-0 break-words text-lg font-black tracking-tight text-[#211712] sm:text-xl">{adminRole === 'super_admin' ? 'Super-Admin MaTable.ci' : 'Administration MaTable.ci'}</h1>
+                  <h1 className="min-w-0 break-words text-lg font-black tracking-tight text-[#292d2a] sm:text-xl">{adminRole === 'super_admin' ? 'Super-Admin MaTable.ci' : 'Administration MaTable.ci'}</h1>
                   <span className="dashboard-chip dashboard-chip-soft">{adminRole === 'super_admin' ? 'Tour de contrôle' : 'Espace vérification'}</span>
                 </div>
-                <p className="text-[11px] text-[#4a3a30] mt-0.5 leading-4 max-w-xl">
+                <p className="text-[11px] text-[#47534b] mt-0.5 leading-4 max-w-xl">
                   {adminRole === 'super_admin'
                     ? 'Pilotage global de la plateforme'
                     : 'File de vérification Didit et modération de contenu'}
@@ -1429,12 +1449,12 @@ export const AdminDashboard: React.FC = () => {
                 onClick={() => fetchAdminShops()}
                 disabled={loading}
                 aria-label="Actualiser les boutiques"
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-xs font-black text-[#211712] shadow-[4px_4px_0_rgba(33,23,18,0.96)] border-[2px] border-[#211712] transition hover:translate-y-[-1px] disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-xs font-black text-[#292d2a] shadow-[4px_4px_0_rgba(33,23,18,0.96)] border-[2px] border-[#292d2a] transition hover:translate-y-[-1px] disabled:opacity-60"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                 <span>Actualiser</span>
               </button>
-              <button type="button" onClick={() => void handleAdminLogout()} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border-2 border-[#211712] bg-white px-3 py-2 text-xs font-black text-[#211712] transition hover:bg-rose-50">
+              <button type="button" onClick={() => void handleAdminLogout()} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border-2 border-[#292d2a] bg-white px-3 py-2 text-xs font-black text-[#292d2a] transition hover:bg-rose-50">
                 <LogOut className="h-4 w-4" /> Déconnexion
               </button>
             </div>
@@ -1525,14 +1545,14 @@ export const AdminDashboard: React.FC = () => {
               <h2 className="px-2 pb-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">{group.label}</h2>
               <div className="space-y-1">
                 {group.items.map(({ id, label, icon: Icon }) => (
-                  <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-10 w-full min-w-0 items-center justify-start gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold transition sm:text-sm ${adminView === id ? 'bg-[#176b55] text-white' : 'text-white/90 hover:bg-[#176b55] hover:text-white'}`}>
+                  <button key={id} type="button" aria-current={adminView === id ? 'page' : undefined} onClick={() => setAdminView(id)} className={`flex min-h-10 w-full min-w-0 items-center justify-start gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold transition sm:text-sm ${adminView === id ? 'bg-[#047857] text-white' : 'text-white/90 hover:bg-[#047857] hover:text-white'}`}>
                     <Icon className="h-4 w-4 shrink-0" /><span className="min-w-0 break-words">{label}</span>
                   </button>
                 ))}
               </div>
             </section>
           ))}
-          <div className="mt-auto hidden rounded-2xl bg-[#176b55] px-4 py-3 text-sm font-bold text-white lg:block">
+          <div className="mt-auto hidden rounded-2xl bg-[#047857] px-4 py-3 text-sm font-bold text-white lg:block">
             {adminRole === 'super_admin' ? 'Super-Admin' : 'Admin de vérification'}
           </div>
         </nav>
@@ -1541,7 +1561,7 @@ export const AdminDashboard: React.FC = () => {
         {adminView === 'overview' && (
           <section aria-labelledby="admin-overview-title" className="space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div><p className="text-xs font-bold uppercase tracking-[0.12em] text-[#176b55]">Centre de pilotage</p><h2 id="admin-overview-title" className="mt-1 text-2xl font-black text-[#211712]">Vue d’ensemble</h2><p className="mt-1 text-xs text-slate-500">{analytics ? `Données du ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${analytics.daily[0]?.date || new Date().toISOString().slice(0, 10)}T12:00:00`))} au ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${analytics.daily.at(-1)?.date || new Date().toISOString().slice(0, 10)}T12:00:00`))} · actualisation automatique toutes les 30 secondes` : 'Chargement des données de la période…'}</p></div>
+              <div><p className="text-xs font-bold uppercase tracking-[0.12em] text-[#047857]">Centre de pilotage</p><h2 id="admin-overview-title" className="mt-1 text-2xl font-black text-[#292d2a]">Vue d’ensemble</h2><p className="mt-1 text-xs text-slate-500">{analytics ? `Données du ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${analytics.daily[0]?.date || new Date().toISOString().slice(0, 10)}T12:00:00`))} au ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${analytics.daily.at(-1)?.date || new Date().toISOString().slice(0, 10)}T12:00:00`))} · actualisation automatique toutes les 30 secondes` : 'Chargement des données de la période…'}</p></div>
               <div className="flex flex-wrap items-center gap-2">
                 <label className="sr-only" htmlFor="admin-overview-days">Période des indicateurs</label>
                 <select id="admin-overview-days" value={analyticsDays} onChange={(event) => { const days = Number(event.target.value); setAnalyticsDays(days); void fetchAnalytics(days); }} className="min-h-10 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 sm:flex-none">
@@ -1612,7 +1632,7 @@ export const AdminDashboard: React.FC = () => {
                   <button type="button" onClick={() => setAdminView('finance')} className="flex min-h-24 w-full flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left">
                     <span>
                       <span className="block text-xs font-semibold text-slate-500">Encaissements confirmés · {finance.days} jours</span>
-                      <strong className="mt-1 block text-2xl font-black text-[#0f4d3d]">{new Intl.NumberFormat('fr-FR').format(finance.summary.collected_amount)} FCFA</strong>
+                      <strong className="mt-1 block text-2xl font-black text-[#065f46]">{new Intl.NumberFormat('fr-FR').format(finance.summary.collected_amount)} FCFA</strong>
                       <span className="mt-1 block text-[11px] text-slate-500">{finance.summary.confirmed_count} paiement{finance.summary.confirmed_count === 1 ? '' : 's'} confirmé{finance.summary.confirmed_count === 1 ? '' : 's'}</span>
                     </span>
                     <span className="text-xs font-bold text-emerald-800 underline underline-offset-2">Journal</span>
@@ -1623,7 +1643,7 @@ export const AdminDashboard: React.FC = () => {
             {adminRole === 'super_admin' && (
               <section aria-label="Taux de conversion des visites en commandes" className="chart-panel px-4 py-3">
                 <p className="text-xs font-semibold text-slate-500">Visites vers commandes</p>
-                <strong className="mt-1 block text-2xl font-black text-[#0f4d3d]">{analytics ? `${analytics.totals.conversion_rate.toLocaleString('fr-FR')}%` : '—'}</strong>
+                <strong className="mt-1 block text-2xl font-black text-[#065f46]">{analytics ? `${analytics.totals.conversion_rate.toLocaleString('fr-FR')}%` : '—'}</strong>
                 <p className="mt-1 text-xs text-slate-500">{analytics ? `${formatAudienceChange(analytics.totals.conversion_rate, analytics.previous.conversion_rate, true)} par rapport à la période précédente` : 'Chargement des données…'}</p>
               </section>
             )}
@@ -1856,7 +1876,7 @@ export const AdminDashboard: React.FC = () => {
                     <div className="chart-grid relative h-44 min-w-0 rounded-2xl border border-slate-200 bg-white p-3">
                       <svg role="img" aria-label={`Pages vues consenties par jour, échelle de 0 à ${maxDailyViews}`} viewBox="0 0 420 160" className="h-full w-full">
                         <path d="M18 35H402 M18 82H402 M18 140H402" stroke="#e2e8e5" strokeWidth="1" />
-                        <polyline fill="none" stroke="#176b55" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={chartPoints} />
+                        <polyline fill="none" stroke="#047857" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={chartPoints} />
                         {analytics.daily.map((day, index) => {
                           const x = 18 + (index * (384 / Math.max(analytics.daily.length - 1, 1)));
                           const y = 140 - (day.page_views / maxDailyViews) * 96;
@@ -2592,6 +2612,8 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         {adminView === 'push' && adminRole === 'super_admin' && <AdminPushAnnouncements />}
+        {adminView === 'promotions' && adminRole === 'super_admin' && <AdminProductPromotions />}
+        {adminView === 'advertising' && adminRole === 'super_admin' && <AdminHomepageMarketing />}
 
         {adminView === 'audit' && adminRole === 'super_admin' && (
           <section aria-labelledby="admin-audit-title" className="chart-panel p-4 md:p-5">
@@ -2707,7 +2729,7 @@ export const AdminDashboard: React.FC = () => {
             type="button"
             aria-current={adminView === id ? 'page' : undefined}
             onClick={() => { setAdminView(id); setIsAdminMenuOpen(false); }}
-            className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-t-lg px-1 text-[10px] font-bold sm:text-[11px] ${adminView === id ? 'text-[#155544]' : 'text-slate-500'}`}
+            className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-t-lg px-1 text-[10px] font-bold sm:text-[11px] ${adminView === id ? 'text-[#047857]' : 'text-slate-500'}`}
           >
             <Icon className="h-5 w-5 shrink-0" />
             <span className="max-w-full truncate">{label.replace(/ \(\d+\)$/, '')}</span>
@@ -2720,7 +2742,7 @@ export const AdminDashboard: React.FC = () => {
             aria-expanded={isAdminMenuOpen}
             aria-controls="admin-menu-drawer"
             onClick={() => setIsAdminMenuOpen(true)}
-            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-lg text-[10px] font-bold sm:text-[11px] ${isAdminMenuOpen || !['overview', 'shops', 'identity', 'finance'].includes(adminView) ? 'text-[#155544]' : 'text-slate-500'}`}
+            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-lg text-[10px] font-bold sm:text-[11px] ${isAdminMenuOpen || !['overview', 'shops', 'identity', 'finance'].includes(adminView) ? 'text-[#047857]' : 'text-slate-500'}`}
           >
             <MoreHorizontal className="h-5 w-5" />
             <span>Plus</span>
@@ -2735,7 +2757,7 @@ export const AdminDashboard: React.FC = () => {
             <div className="mb-4 flex items-center justify-between border-b border-[#e7dfd3] pb-4">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1D6B57]">MaTable.ci</p>
-                <h2 id="admin-menu-title" className="text-lg font-black text-[#211712]">Autres rubriques</h2>
+                <h2 id="admin-menu-title" className="text-lg font-black text-[#292d2a]">Autres rubriques</h2>
               </div>
               <button type="button" aria-label="Fermer le menu" onClick={() => setIsAdminMenuOpen(false)} className="rounded-full border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50">
                 <X className="h-4 w-4" />
@@ -2755,7 +2777,7 @@ export const AdminDashboard: React.FC = () => {
                           type="button"
                           aria-current={adminView === id ? 'page' : undefined}
                           onClick={() => { setAdminView(id); setIsAdminMenuOpen(false); }}
-                          className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold ${adminView === id ? 'bg-[#eaf4ef] text-[#155544]' : 'text-slate-800 hover:bg-emerald-50'}`}
+                          className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold ${adminView === id ? 'bg-[#d1fae5] text-[#047857]' : 'text-slate-800 hover:bg-emerald-50'}`}
                         >
                           <Icon className="h-4 w-4 shrink-0 text-emerald-800" />
                           <span>{label}</span>

@@ -15,7 +15,7 @@ interface ProductModalProps {
 export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
   const {
     currentShop, isProductModalOpen, setIsProductModalOpen, editingProduct, prodTitle, setProdTitle, prodCategory, setProdCategory,
-    prodDescription, setProdDescription, prodPrice, setProdPrice, prodStock, setProdStock, prodImage, prodLookbookImage, setProdLookbookImage, prodSizes, setProdSizes, prodColors, setProdColors, prodPrepTime, setProdPrepTime,
+    prodDescription, setProdDescription, prodPrice, setProdPrice, prodSalePrice, setProdSalePrice, prodSaleStartsAt, setProdSaleStartsAt, prodSaleEndsAt, setProdSaleEndsAt, prodStock, setProdStock, prodImage, prodLookbookImage, setProdLookbookImage, prodSizes, setProdSizes, prodColors, setProdColors, prodPrepTime, setProdPrepTime,
     prodModifierGroups, setProdModifierGroups, prodAttributes, setProdAttributes, prodIsAvailable, setProdIsAvailable,
     imageCompressing, compressedSizeKB, originalImageSizeKB, handleImageUpload, handleLookbookImageUpload,
     prodGalleryImages, handleGalleryImageUpload, handleRemoveGalleryImage, handleSaveProduct
@@ -47,8 +47,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
 {/* PRODUCT ADD/EDIT MODAL */}
 
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-sm sm:items-center sm:p-4 lg:p-6" role="presentation">
-          <div role="dialog" aria-modal="true" aria-labelledby="product-dialog-title" className="max-h-[94dvh] w-full max-w-[980px] overflow-y-auto overscroll-contain rounded-t-2xl border border-slate-200 bg-[#fffdf9] px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:rounded-2xl sm:p-5 lg:p-6">
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-[#fffdf9] pb-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="product-dialog-title" className="max-h-[94dvh] w-full max-w-[980px] overflow-y-auto overscroll-contain rounded-t-2xl border border-slate-200 bg-[#FFFFFF] px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:rounded-2xl sm:p-5 lg:p-6">
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-[#FFFFFF] pb-4">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800">
                   <Boxes className="h-5 w-5" />
@@ -100,6 +100,29 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                   className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-mono font-bold text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/15"
                 />
               </div>
+
+              <section className="rounded-xl border border-orange-200 bg-orange-50/60 p-3 sm:p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-extrabold text-orange-950">Promotion temporaire</h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">Le tarif normal est conservé. Le prix promo s’applique automatiquement pendant la période choisie.</p>
+                  </div>
+                  {prodSalePrice !== '' && <button type="button" onClick={() => { setProdSalePrice(''); setProdSaleStartsAt(''); setProdSaleEndsAt(''); }} className="min-h-8 rounded-lg px-2 text-xs font-bold text-orange-900 hover:bg-orange-100">Retirer la promotion</button>}
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <label className="text-xs font-bold text-slate-700">Prix promotionnel (FCFA)
+                    <input type="number" min="1" step="1" max={prodPrice === '' ? undefined : Number(prodPrice) - 1} value={prodSalePrice} onChange={(event) => setProdSalePrice(event.target.value === '' ? '' : Number(event.target.value))} placeholder="Ex. 8 000" className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
+                  </label>
+                  <label className="text-xs font-bold text-slate-700">Début
+                    <input type="datetime-local" required={prodSalePrice !== ''} max={prodSaleEndsAt || undefined} value={prodSaleStartsAt} onChange={(event) => setProdSaleStartsAt(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs" />
+                  </label>
+                  <label className="text-xs font-bold text-slate-700">Fin
+                    <input type="datetime-local" required={prodSalePrice !== ''} min={prodSaleStartsAt || undefined} value={prodSaleEndsAt} onChange={(event) => setProdSaleEndsAt(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs" />
+                  </label>
+                </div>
+                {prodSalePrice !== '' && Number(prodSalePrice) >= Number(prodPrice) && <p role="alert" className="mt-2 text-xs font-semibold text-rose-800">Le prix promotionnel doit être inférieur au prix normal.</p>}
+                {prodSalePrice !== '' && prodSaleStartsAt && prodSaleEndsAt && new Date(prodSaleEndsAt) <= new Date(prodSaleStartsAt) && <p role="alert" className="mt-2 text-xs font-semibold text-rose-800">La date de fin doit être après la date de début.</p>}
+              </section>
 
               <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
                   <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-3 sm:p-4">
@@ -444,7 +467,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
               </section>
               </section>
 
-              <div className="sticky bottom-0 z-10 -mx-4 mt-3 flex flex-col-reverse gap-2 border-t border-slate-200 bg-[#fffdf9]/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur sm:static sm:mx-0 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent sm:p-0 sm:pt-1 lg:gap-3">
+              <div className="sticky bottom-0 z-10 -mx-4 mt-3 flex flex-col-reverse gap-2 border-t border-slate-200 bg-[#FFFFFF]/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur sm:static sm:mx-0 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent sm:p-0 sm:pt-1 lg:gap-3">
                 <button
                   type="button"
                   onClick={() => setIsProductModalOpen(false)}

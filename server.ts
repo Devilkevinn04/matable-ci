@@ -19,6 +19,7 @@ import { createShopRegistrationRouter } from './server/routes/shopRegistration.t
 import { createMerchantVerificationRouter } from './server/routes/merchantVerification.ts';
 import { createTelemetryRouter } from './server/routes/telemetry.ts';
 import { createGeniusPayRouter } from './server/routes/geniusPay.ts';
+import { createAdvertisingRouters } from './server/routes/advertising.ts';
 import { createPublicRateLimitMiddleware } from './server/services/rateLimits.ts';
 import { buildSessionFingerprint, createAuthSessionHelpers, isRequestFingerprintMatch } from './server/services/authSessions.ts';
 import { createSeoHtmlHelpers } from './server/services/seoHtml.ts';
@@ -66,6 +67,7 @@ export {
   saveMerchantSessionRecord,
 } from './server/repositories/sessions.ts';
 import { getCategoryDefaults, isShopCategory, normalizeCustomBannerImage, normalizeProductImage, normalizeWelcomeMessage, sanitizeGalleryImages } from './src/utils/categoryDefaults.ts';
+import { normalizeCustomerPhone } from './src/utils/normalizeCustomerPhone.ts';
 import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from './src/utils/subscriptionFeatures.ts';
 import type { ShopCategory } from './src/utils/categoryDefaults.ts';
 import { findPublicDiscoveryPage } from './src/utils/discoverySeo.ts';
@@ -204,16 +206,14 @@ export function validateCustomerOrderInput(input: {
     return { ok: false, error: 'Nom client invalide.' };
   }
 
-  const normalizedPhone = customerPhone.replace(/\D/g, '');
-  if (!/^(225)?[0-9]{10}$/.test(normalizedPhone) && !/^[+]?225[0-9]{10}$/.test(customerPhone)) {
+  const normalizedCustomerPhone = normalizeCustomerPhone(customerPhone);
+  if (!normalizedCustomerPhone) {
     return { ok: false, error: 'Numéro de téléphone client invalide.' };
   }
 
   if (!deliveryLocation || deliveryLocation.length < 3) {
     return { ok: false, error: 'Lieu de livraison invalide.' };
   }
-
-  const normalizedCustomerPhone = customerPhone.startsWith('+') ? customerPhone : `+225${normalizedPhone.replace(/^225/, '')}`;
 
   return {
     ok: true,
@@ -691,7 +691,7 @@ export function validateRuntimeConfig(): void {
     return;
   }
 
-  const requiredKeys = ['ADMIN_ACCESS_KEY', 'VERIFICATION_ADMIN_ACCESS_KEY', 'APP_URL', 'PORT', 'DATABASE_URL'];
+  const requiredKeys = ['ADMIN_ACCESS_KEY', 'VERIFICATION_ADMIN_ACCESS_KEY', 'AD_EVENT_SIGNING_SECRET', 'APP_URL', 'PORT', 'DATABASE_URL'];
   const missing = requiredKeys.filter((key) => !String(process.env[key] || '').trim());
 
   if (missing.length > 0) {
@@ -709,6 +709,10 @@ export function validateRuntimeConfig(): void {
   }
   if (adminAccessKey === verificationAdminAccessKey) {
     throw new Error('ADMIN_ACCESS_KEY et VERIFICATION_ADMIN_ACCESS_KEY doivent être distinctes en production.');
+  }
+  const adEventSigningSecret = String(process.env.AD_EVENT_SIGNING_SECRET || '').trim();
+  if (adEventSigningSecret.length < 32 || /change_me|demo|example|legacy/i.test(adEventSigningSecret)) {
+    throw new Error('AD_EVENT_SIGNING_SECRET doit être une clé forte, unique et longue d’au moins 32 caractères en production.');
   }
 
   if (DEMO_MODE) {
@@ -885,6 +889,14 @@ async function startServer() {
     requireVerificationAdminAccess,
     clearMerchantSessionsForShop,
   }));
+  const advertisingRouters = createAdvertisingRouters({
+    rateLimitPublicRequest,
+    requireMerchantOwnShop,
+    requireSuperAdminAccess,
+  });
+  app.use('/api/admin/advertising', advertisingRouters.adminRouter);
+  app.use('/api/shops', advertisingRouters.merchantRouter);
+  app.use('/api', advertisingRouters.publicRouter);
   app.use('/api/admin/identity-verifications', requireVerificationAdminAccess, verificationRouters.adminRouter);
   const maintenanceHtmlPath = path.join(process.cwd(), process.env.NODE_ENV === 'production' ? 'dist' : 'public', 'maintenance.html');
   const maintenanceHtml = fs.readFileSync(maintenanceHtmlPath, 'utf-8');
@@ -898,6 +910,12 @@ async function startServer() {
     };
   }, maintenanceHtml));
   await initializeDatabase();
+  await advertisingRouters.reconcileExpiredCampaigns();
+  setInterval(() => {
+    void advertisingRouters.reconcileExpiredCampaigns().catch((error: unknown) => {
+      console.error('Scheduled advertising campaign expiry reconciliation failed.', error);
+    });
+  }, 60 * 1000).unref();
   await dbRun('DELETE FROM didit_webhook_events WHERE received_at < ?', [new Date(Date.now() - 30 * 86400000).toISOString()]);
   await migrateExistingSessionTokens();
   await seedDemoDatabaseIfEmpty({ shops, products, orders, shouldSeedDemoData, hashPin });

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ArrowDown, ArrowRight, BadgeCheck, ChevronLeft, ChevronRight, Heart, MapPin, MessageCircle, Pause, Play, Search, ShoppingBag, Store, Truck } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const tourSteps = [
   {
@@ -8,7 +9,7 @@ const tourSteps = [
     title: 'Le commerce local, facile à trouver',
     description: 'Cherchez une boutique, un produit ou une ville. Vous pouvez aussi partir des catégories ou des tendances pour découvrir de nouvelles adresses.',
     icon: Search,
-    accent: 'bg-[#e2eee6] text-[#0f4d3d]',
+    accent: 'bg-[#e2eee6] text-[#065f46]',
   },
   {
     label: 'Découvrir',
@@ -22,7 +23,7 @@ const tourSteps = [
     title: 'Une relation directe, sans intermédiaire',
     description: 'Vous contactez le commerçant sur WhatsApp pour vérifier la disponibilité, poser vos questions et préciser votre demande.',
     icon: MessageCircle,
-    accent: 'bg-[#e3f2e7] text-[#176b55]',
+    accent: 'bg-[#e3f2e7] text-[#047857]',
   },
   {
     label: 'Convenir',
@@ -71,8 +72,8 @@ const HowItWorksPage: React.FC = () => {
   }, [activeStep, isTourPaused, reduceMotion]);
 
   return (
-    <main className="min-h-screen bg-[#f7f3ee] text-[#25231f]">
-      <section className="relative isolate overflow-hidden bg-[#123b31] text-white">
+    <main className="min-h-screen bg-[#FAF8F2] text-[#292d2a]">
+      <section className="relative isolate overflow-hidden bg-[#065f46] text-white">
         <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-40 -z-10 h-[520px] w-[520px] rounded-full border border-white/10 sm:right-[10%] sm:top-[-320px] sm:h-[800px] sm:w-[800px]" />
         <div className="mx-auto max-w-[1184px] px-5 pb-7 pt-5 sm:px-8 sm:pb-12 sm:pt-8">
           <motion.div
@@ -89,7 +90,7 @@ const HowItWorksPage: React.FC = () => {
             <p className="mt-2 max-w-2xl text-xs leading-5 text-[#e0ebe5] sm:mt-5 sm:text-lg sm:leading-7">
               Découvrez les commerces ivoiriens et échangez directement avec eux.
             </p>
-            <a href="#visite-guidee" className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-full bg-[#f0ba80] px-4 text-xs font-bold text-[#25231f] transition hover:bg-[#ffd09a] sm:mt-7 sm:min-h-12 sm:px-5 sm:text-sm">
+            <a href="#visite-guidee" className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-full bg-[#f0ba80] px-4 text-xs font-bold text-[#292d2a] transition hover:bg-[#ffd09a] sm:mt-7 sm:min-h-12 sm:px-5 sm:text-sm">
               Visiter la plateforme <ArrowDown className="h-4 w-4" aria-hidden="true" />
             </a>
           </motion.div>
@@ -118,16 +119,16 @@ const HowItWorksPage: React.FC = () => {
 
       <section id="visite-guidee" className="mx-auto max-w-[1184px] px-5 py-14 sm:px-8 sm:py-20">
         <header className="mb-8 max-w-2xl sm:mb-10">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#b9441f]">{reduceMotion ? 'Visite guidée' : 'Visite guidée animée'}</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#c2410c]">{reduceMotion ? 'Visite guidée' : 'Visite guidée animée'}</p>
           <h2 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-4xl">Découvrez MaTable en quelques étapes.</h2>
-          <p className="mt-3 text-sm leading-6 text-[#6f6a61] sm:text-base">{reduceMotion ? 'Choisissez un repère ou une étape pour explorer la plateforme à votre rythme.' : 'La visite avance automatiquement. Vous pouvez aussi choisir un repère pour explorer une étape.'}</p>
+          <p className="mt-3 text-sm leading-6 text-[#647067] sm:text-base">{reduceMotion ? 'Choisissez un repère ou une étape pour explorer la plateforme à votre rythme.' : 'La visite avance automatiquement. Vous pouvez aussi choisir un repère pour explorer une étape.'}</p>
         </header>
 
         <div className="grid gap-5 lg:grid-cols-[1.35fr_.85fr] lg:items-stretch">
           <div
             className="relative overflow-hidden rounded-[28px] border border-[#ded6ca] bg-[#ece6dc] p-3 shadow-[0_18px_50px_rgba(36,28,22,.1)] sm:p-5"
           >
-            <div className="overflow-hidden rounded-[20px] border border-[#e6dfd5] bg-[#fffdf9]">
+            <div className="overflow-hidden rounded-[20px] border border-[#e6dfd5] bg-[#FFFFFF]">
               <div className="flex h-11 items-center gap-1.5 border-b border-[#eee7de] bg-white px-4">
                 <span className="h-2.5 w-2.5 rounded-full bg-[#d98473]" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[#edc879]" />
@@ -137,38 +138,38 @@ const HowItWorksPage: React.FC = () => {
               <div className="bg-[#f8f6f0] p-4 sm:p-6">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0f4d3d] text-xs font-black text-white">M</span>
-                    <span className="font-display text-sm font-extrabold">MaTable<span className="text-[#176b55]">.ci</span></span>
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#065f46] text-xs font-black text-white">M</span>
+                    <span className="font-display text-sm font-extrabold">MaTable<span className="text-[#047857]">.ci</span></span>
                   </div>
-                  <span className="rounded-full border border-[#e5d9ca] bg-white px-3 py-1.5 text-[10px] font-bold text-[#31584c]">Boutiques locales</span>
+                  <span className="rounded-full border border-[#e5d9ca] bg-white px-3 py-1.5 text-[10px] font-bold text-[#47534b]">Boutiques locales</span>
                 </div>
-                <div className="mt-5 rounded-2xl bg-[#123b31] p-4 text-white sm:p-5">
+                <div className="mt-5 rounded-2xl bg-[#065f46] p-4 text-white sm:p-5">
                   <p className="text-[9px] font-bold uppercase tracking-[.14em] text-[#f0ba80]">Près de vous · Côte d’Ivoire</p>
                   <p className="mt-1 font-display text-lg font-extrabold leading-tight sm:text-2xl">Les belles trouvailles sont ici.</p>
-                  <div className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-[10px] text-[#81796f] shadow-sm transition-all duration-500 ${activeStep === 0 ? 'border-[#b9441f] bg-white ring-4 ring-[#b9441f]/15' : 'border-transparent bg-white'}`}>
+                  <div className={`mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-[10px] text-[#81796f] shadow-sm transition-all duration-500 ${activeStep === 0 ? 'border-[#c2410c] bg-white ring-4 ring-[#c2410c]/15' : 'border-transparent bg-white'}`}>
                     <Search className="h-3.5 w-3.5 shrink-0" /> Boutique, produit ou quartier…
                   </div>
                   <div className="mt-2 flex gap-1.5">
                     {['Mode', 'Cuisine', 'Beauté'].map((category) => <span key={category} className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[9px] font-semibold text-white/90">{category}</span>)}
                   </div>
                 </div>
-                <div className={`mt-4 flex items-center justify-between rounded-xl transition-all duration-500 ${activeStep === 1 ? 'bg-[#f0ba80]/25 p-2 ring-2 ring-[#b9441f]/20' : 'p-2'}`}>
-                  <div><p className="text-[9px] font-bold uppercase tracking-[.12em] text-[#b9441f]">Une adresse à découvrir</p><p className="mt-0.5 font-display text-sm font-bold">Aya Chic · Abidjan</p></div>
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e4f1ec] text-[#0f4d3d]"><MapPin className="h-4 w-4" /></span>
+                <div className={`mt-4 flex items-center justify-between rounded-xl transition-all duration-500 ${activeStep === 1 ? 'bg-[#f0ba80]/25 p-2 ring-2 ring-[#c2410c]/20' : 'p-2'}`}>
+                  <div><p className="text-[9px] font-bold uppercase tracking-[.12em] text-[#c2410c]">Une adresse à découvrir</p><p className="mt-0.5 font-display text-sm font-bold">Aya Chic · Abidjan</p></div>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#d1fae5] text-[#065f46]"><MapPin className="h-4 w-4" /></span>
                 </div>
-                <div className={`mt-3 grid grid-cols-2 gap-2 rounded-xl transition-all duration-500 ${activeStep === 1 ? 'ring-2 ring-[#b9441f]/35 ring-offset-2' : ''}`}>
+                <div className={`mt-3 grid grid-cols-2 gap-2 rounded-xl transition-all duration-500 ${activeStep === 1 ? 'ring-2 ring-[#c2410c]/35 ring-offset-2' : ''}`}>
                   <div className="rounded-xl border border-[#ebe4da] bg-white p-2">
                     <div className="flex h-16 items-center justify-center rounded-lg bg-gradient-to-br from-[#efc4b2] to-[#e7e2d8]"><ShoppingBag className="h-6 w-6 text-[#855b4c]" /></div>
-                    <p className="mt-2 text-[10px] font-bold">Nuisette satin</p><p className="text-[9px] text-[#6f6a61]">12 000 FCFA</p>
+                    <p className="mt-2 text-[10px] font-bold">Nuisette satin</p><p className="text-[9px] text-[#647067]">12 000 FCFA</p>
                   </div>
                   <div className="rounded-xl border border-[#ebe4da] bg-white p-2">
-                    <div className="flex h-16 items-center justify-center rounded-lg bg-gradient-to-br from-[#d9e8da] to-[#e9d7c5]"><Heart className="h-6 w-6 text-[#176b55]" /></div>
-                    <p className="mt-2 text-[10px] font-bold">Sélection locale</p><p className="text-[9px] text-[#6f6a61]">Voir la vitrine</p>
+                    <div className="flex h-16 items-center justify-center rounded-lg bg-gradient-to-br from-[#d9e8da] to-[#e9d7c5]"><Heart className="h-6 w-6 text-[#047857]" /></div>
+                    <p className="mt-2 text-[10px] font-bold">Sélection locale</p><p className="text-[9px] text-[#647067]">Voir la vitrine</p>
                   </div>
                 </div>
-                <div className={`mt-3 flex items-center justify-between rounded-xl px-3 py-2 transition-all duration-500 ${activeStep === 2 ? 'bg-[#d1ead9] shadow-[0_0_0_4px_rgba(23,107,85,.12)]' : 'bg-[#e4f1ec]'}`}>
-                  <span className="text-[10px] font-bold text-[#31584c]">Une question ? Échangez avec la boutique.</span>
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#176b55] text-white"><MessageCircle className="h-3.5 w-3.5" /></span>
+                <div className={`mt-3 flex items-center justify-between rounded-xl px-3 py-2 transition-all duration-500 ${activeStep === 2 ? 'bg-[#d1ead9] shadow-[0_0_0_4px_rgba(23,107,85,.12)]' : 'bg-[#d1fae5]'}`}>
+                  <span className="text-[10px] font-bold text-[#47534b]">Une question ? Échangez avec la boutique.</span>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#047857] text-white"><MessageCircle className="h-3.5 w-3.5" /></span>
                 </div>
               </div>
             </div>
@@ -181,10 +182,10 @@ const HowItWorksPage: React.FC = () => {
                 aria-label={`Étape ${index + 1} : ${label}`}
                 aria-pressed={activeStep === index}
                 style={hotspotPositions[index]}
-                className={`absolute z-10 flex h-9 w-9 items-center justify-center rounded-full border-[3px] border-white shadow-lg transition hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b9441f] focus-visible:ring-offset-2 ${activeStep === index ? 'scale-110 bg-[#b9441f] text-white ring-4 ring-[#b9441f]/20' : 'bg-[#123b31] text-white'}`}
+                className={`absolute z-10 flex h-9 w-9 items-center justify-center rounded-full border-[3px] border-white shadow-lg transition hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c2410c] focus-visible:ring-offset-2 ${activeStep === index ? 'scale-110 bg-[#c2410c] text-white ring-4 ring-[#c2410c]/20' : 'bg-[#065f46] text-white'}`}
               >
                 <motion.span
-                  className="absolute inset-0 rounded-full border-2 border-[#b9441f]"
+                  className="absolute inset-0 rounded-full border-2 border-[#c2410c]"
                   animate={activeStep === index && !reduceMotion ? { scale: [1, 1.8], opacity: [0.7, 0] } : { scale: 1, opacity: 0 }}
                   transition={activeStep === index && !reduceMotion ? { duration: 1.35, repeat: Infinity, ease: 'easeOut' } : { duration: 0.2 }}
                   aria-hidden="true"
@@ -192,17 +193,17 @@ const HowItWorksPage: React.FC = () => {
                 <Icon className="relative h-4 w-4" aria-hidden="true" />
               </button>
             ))}
-            <span className="absolute bottom-7 left-1/2 hidden -translate-x-1/2 rounded-full bg-[#25231f]/80 px-3 py-1.5 text-[10px] font-semibold text-white sm:block">Sélectionnez un repère</span>
+            <span className="absolute bottom-7 left-1/2 hidden -translate-x-1/2 rounded-full bg-[#292d2a]/80 px-3 py-1.5 text-[10px] font-semibold text-white sm:block">Sélectionnez un repère</span>
           </div>
 
-          <div className="relative flex flex-col rounded-[28px] border border-[#e5d9ca] bg-[#fffdf9] p-5 shadow-[0_12px_35px_rgba(36,28,22,.06)] sm:p-7" aria-live="off" aria-atomic="true">
-            <span aria-hidden="true" className="absolute -left-2 top-12 hidden h-4 w-4 rotate-45 border-b border-l border-[#e5d9ca] bg-[#fffdf9] lg:block" />
+          <div className="relative flex flex-col rounded-[28px] border border-[#e5d9ca] bg-[#FFFFFF] p-5 shadow-[0_12px_35px_rgba(36,28,22,.06)] sm:p-7" aria-live="off" aria-atomic="true">
+            <span aria-hidden="true" className="absolute -left-2 top-12 hidden h-4 w-4 rotate-45 border-b border-l border-[#e5d9ca] bg-[#FFFFFF] lg:block" />
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#b9441f]">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#c2410c]">
                 {reduceMotion ? 'Visite manuelle · ' : isTourPaused ? 'Visite en pause · ' : 'Visite automatique · '}{active.label}
               </p>
               <div className="flex items-center gap-2">
-                {!reduceMotion && <button type="button" onClick={() => setIsTourPaused((paused) => !paused)} aria-pressed={isTourPaused} aria-label={isTourPaused ? 'Reprendre la visite automatique' : 'Mettre en pause la visite automatique'} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[#ded6ca] px-3 text-xs font-bold text-[#4a3a30] transition hover:bg-[#f5f0e9]">
+                {!reduceMotion && <button type="button" onClick={() => setIsTourPaused((paused) => !paused)} aria-pressed={isTourPaused} aria-label={isTourPaused ? 'Reprendre la visite automatique' : 'Mettre en pause la visite automatique'} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[#ded6ca] px-3 text-xs font-bold text-[#47534b] transition hover:bg-[#f5f0e9]">
                   {isTourPaused ? <Play className="h-3.5 w-3.5" aria-hidden="true" /> : <Pause className="h-3.5 w-3.5" aria-hidden="true" />}
                   {isTourPaused ? 'Reprendre' : 'Pause'}
                 </button>}
@@ -221,7 +222,7 @@ const HowItWorksPage: React.FC = () => {
                 >
                   {activeStep === index && <motion.span
                     key={activeStep}
-                    className="absolute inset-y-0 left-0 w-full origin-left rounded-full bg-[#b9441f]"
+                    className="absolute inset-y-0 left-0 w-full origin-left rounded-full bg-[#c2410c]"
                     initial={{ scaleX: 0 }}
                     animate={{ scaleX: 1 }}
                     transition={{ duration: reduceMotion ? 0 : 5.2, ease: 'linear' }}
@@ -241,20 +242,20 @@ const HowItWorksPage: React.FC = () => {
                 <span className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl ${active.accent}`}><ActiveIcon className="h-6 w-6" aria-hidden="true" /></span>
                 <p className="mt-5 text-xs font-bold uppercase tracking-[0.12em] text-[#8a8176]">Étape 0{activeStep + 1} · {active.label}</p>
                 <h3 className="mt-2 font-display text-2xl font-extrabold leading-tight sm:text-3xl">{active.title}</h3>
-                <p className="mt-3 text-sm leading-6 text-[#6f6a61]">{active.description}</p>
-                <div className="mt-5 rounded-2xl border border-[#e7ddd0] bg-[#f7f3ee] p-4">
-                  <p className="text-xs font-bold text-[#31584c]">L’esprit MaTable.ci</p>
-                  <p className="mt-1 text-xs leading-5 text-[#6f6a61]">Découvrir le commerce local, rapprocher les personnes et laisser les commerçants maîtres de leurs échanges.</p>
+                <p className="mt-3 text-sm leading-6 text-[#647067]">{active.description}</p>
+                <div className="mt-5 rounded-2xl border border-[#e7ddd0] bg-[#FAF8F2] p-4">
+                  <p className="text-xs font-bold text-[#47534b]">L’esprit MaTable.ci</p>
+                  <p className="mt-1 text-xs leading-5 text-[#647067]">Découvrir le commerce local, rapprocher les personnes et laisser les commerçants maîtres de leurs échanges.</p>
                 </div>
               </motion.div>
             </AnimatePresence>
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#eee6dd] pt-4">
-              <button type="button" onClick={() => selectStep(activeStep - 1)} className="inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-bold text-[#4a3a30] transition hover:bg-[#f5f0e9]">
+              <button type="button" onClick={() => selectStep(activeStep - 1)} className="inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-bold text-[#47534b] transition hover:bg-[#f5f0e9]">
                 <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Précédent
               </button>
               {activeStep < tourSteps.length - 1
-                ? <button type="button" onClick={() => selectStep(activeStep + 1)} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[#0f4d3d] px-4 text-sm font-bold text-white transition hover:bg-[#176b55]">Suivant <ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
-                : <a href="/boutiques" className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[#b9441f] px-4 text-sm font-bold text-white transition hover:bg-[#a53a1d]">Découvrir <ArrowRight className="h-4 w-4" aria-hidden="true" /></a>}
+                ? <button type="button" onClick={() => selectStep(activeStep + 1)} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[#065f46] px-4 text-sm font-bold text-white transition hover:bg-[#047857]">Suivant <ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
+                : <Link to="/boutiques" className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[#c2410c] px-4 text-sm font-bold text-white transition hover:bg-[#a53a1d]">Découvrir <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>}
             </div>
           </div>
         </div>
@@ -263,15 +264,15 @@ const HowItWorksPage: React.FC = () => {
       <section className="bg-[#eee8df]">
         <div className="mx-auto grid max-w-[1100px] gap-8 px-5 py-14 sm:px-8 sm:py-18 lg:grid-cols-[.8fr_1.2fr] lg:items-center">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#b9441f]">Et côté commerçant ?</p>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#c2410c]">Et côté commerçant ?</p>
             <h2 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-4xl">Votre vitrine, vos échanges.</h2>
-            <p className="mt-3 text-sm leading-6 text-[#6f6a61]">Présentez votre activité et restez en contact direct avec vos clients.</p>
-            <a href="/app/creer-boutique" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#0f4d3d] px-5 text-sm font-bold text-white transition hover:bg-[#176b55]">
-              Créer ma boutique <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </a>
-            <a href="/app" className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full border border-[#c8dbd0] bg-[#fffdf9] px-5 text-sm font-bold text-[#0f4d3d] transition hover:bg-[#e4f1ec]">
+            <p className="mt-3 text-sm leading-6 text-[#647067]">Présentez votre activité et restez en contact direct avec vos clients.</p>
+            <Link to="/commercants" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#065f46] px-5 text-sm font-bold text-white transition hover:bg-[#047857]">
+              Découvrir l’espace commerçant <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+            <Link to="/app" className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-full border border-[#c8dbd0] bg-[#FFFFFF] px-5 text-sm font-bold text-[#065f46] transition hover:bg-[#d1fae5]">
               Déjà commerçant ? Ouvrir mon espace et sa checklist <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </a>
+            </Link>
           </div>
           <ol className="space-y-3">
             {shopSteps.map((step, index) => (
@@ -282,10 +283,10 @@ const HowItWorksPage: React.FC = () => {
                 viewport={{ once: true, amount: 0.35 }}
                 variants={reveal}
                 transition={{ duration: 0.4, delay: reduceMotion ? 0 : index * 0.08 }}
-                className="flex items-start gap-4 rounded-2xl border border-[#e1d8cc] bg-[#fffdf9] p-4"
+                className="flex items-start gap-4 rounded-2xl border border-[#e1d8cc] bg-[#FFFFFF] p-4"
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#e4f1ec] font-bold text-[#0f4d3d]">0{index + 1}</span>
-                <span className="pt-1 text-sm leading-6 text-[#4a3a30]">{step}</span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#d1fae5] font-bold text-[#065f46]">0{index + 1}</span>
+                <span className="pt-1 text-sm leading-6 text-[#47534b]">{step}</span>
               </motion.li>
             ))}
           </ol>
@@ -294,12 +295,12 @@ const HowItWorksPage: React.FC = () => {
 
       <section className="mx-auto flex max-w-[1100px] flex-col items-start justify-between gap-5 px-5 py-12 sm:flex-row sm:items-center sm:px-8 sm:py-16">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#b9441f]">À vous de jouer</p>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#c2410c]">À vous de jouer</p>
           <h2 className="mt-2 font-display text-2xl font-extrabold sm:text-3xl">Prêt à découvrir les commerces près de vous ?</h2>
         </div>
-        <a href="/boutiques" className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-full bg-[#b9441f] px-6 text-sm font-bold text-white transition hover:bg-[#a53a1d]">
+        <Link to="/boutiques" className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-full bg-[#c2410c] px-6 text-sm font-bold text-white transition hover:bg-[#a53a1d]">
           <ShoppingBag className="h-4 w-4" aria-hidden="true" /> Explorer les boutiques <ArrowRight className="h-4 w-4" aria-hidden="true" />
-        </a>
+        </Link>
       </section>
     </main>
   );

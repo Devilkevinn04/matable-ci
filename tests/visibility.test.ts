@@ -12,6 +12,7 @@ import {
   TRIAL_CATALOG_LIMIT,
   TRIAL_DURATION_DAYS,
 } from '../src/utils/subscriptionFeatures';
+import { isFeatureAllowed } from '../src/utils/themePresets';
 
 function makeShop(id: number, overrides: Partial<ShopRecord> = {}): ShopRecord {
   return {
@@ -124,6 +125,13 @@ test('shared marketing tier matrix matches server feature thresholds', () => {
   assert.equal(isSubscriptionFeatureIncluded('pro', 'advanced_analytics'), true);
   assert.equal(isSubscriptionFeatureIncluded('standard', 'boost_discount'), false);
   assert.equal(isSubscriptionFeatureIncluded('pro', 'boost_discount'), true);
+
+  assert.equal(isFeatureAllowed('standard', 'preset_gallery'), true);
+  assert.equal(isFeatureAllowed('standard', 'custom_banner'), false);
+  assert.equal(isFeatureAllowed('premium', 'custom_banner'), true);
+  assert.equal(isFeatureAllowed('premium', 'event_banner'), true);
+  assert.equal(isFeatureAllowed('standard', 'event_banner'), false);
+  assert.equal(isFeatureAllowed('pro', 'advanced_css'), true);
 });
 
 test('trial limits and annual subscription prices match the published offer', () => {

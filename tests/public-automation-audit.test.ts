@@ -749,6 +749,12 @@ test('standard registration keeps delivery zones but does not grant premium soci
     body: JSON.stringify({ theme_config: { event_mode_enabled: true, event_banner_text: 'Promotion test' } }),
   });
   assert.equal(deniedEventMode.status, 403);
+  const invalidEventType = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ theme_config: { event_type: 'unrecognized_operation' } }),
+  });
+  assert.equal(invalidEventType.status, 400);
   const deniedAnalytics = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/analytics`, { headers: { Cookie: merchantCookie } });
   assert.equal(deniedAnalytics.status, 200);
   assert.equal((await deniedAnalytics.json()).days, 7);

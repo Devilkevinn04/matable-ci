@@ -392,3 +392,41 @@ certification d’une restauration avec données métier représentatives et du
 rollback d’un déploiement complet reste différée faute de préproduction. Ce
 rapport ne certifie pas le comportement en production; aucun déploiement ni
 appel distant n’a été effectué.
+
+## Vérifications complémentaires du checklist — 25 octobre 2026
+
+Cette mise à jour consigne les vérifications supplémentaires effectuées
+localement. Elle ne certifie ni la préproduction ni la production.
+
+| Domaine | Résultat local | Limite restante |
+|---|---|---|
+| Authentification et rôles | Tests de renouvellement et d’expiration des sessions client, marchand et admin; tests d’isolation inter-boutiques et de révocation après déconnexion. | Aucune session ni identité réelle de production testée. |
+| Commandes | Suite locale, routes et règles de recalcul des prix et de réservation de stock vérifiées par tests automatisés. Le parcours client reste gratuit, avec remise manuelle du reçu à WhatsApp. | Aucun message WhatsApp réel envoyé; l’accusé de réception et la confirmation du vendeur ne sont pas prouvés par le click-to-chat. |
+| Recherche et interface mobile | Recherche globale visible sur l’accueil; flux API local HTTP 200; largeurs 320, 390 et 1 440 px mesurées sans débordement horizontal; aucune erreur JavaScript observée pendant cette recette. | Tous les filtres combinés, tris et scénarios de résultats vides n’ont pas fait l’objet d’une recette navigateur exhaustive. Une image Unsplash distante a été bloquée par l’environnement de test. |
+| PWA | Manifest HTTP 200, cache `matable-ci-v3` et service worker activé dans le navigateur sur le build; le shell de l’accueil et ses ressources statiques réchauffées s’affichent hors ligne. | Les routes API ne sont pas disponibles hors ligne; installation sur un appareil réel et transition entre versions du service worker non testées. |
+| Publicité | Les boosts de boutique et une mise en avant de boutiques existent déjà. | Les routes et composants de campagnes produit/marketing présents dans le worktree sont vides (0 octet); offres, tarifs, validation admin, paiement et mesure de campagnes ne sont donc pas certifiés. Aucune campagne n’a été activée. |
+| PostgreSQL et sauvegarde | Test dédié PostgreSQL réussi sur un cluster local jetable. Sauvegarde personnalisée créée, checksum vérifié, puis restauration dans une base cible distincte : 71 objets restaurés et comptages concordants pour les six tables métier suivies. | Base de test fraîche sans données métier (comptages à zéro); stockage externe chiffré, planification, rétention et restauration de données représentatives non configurés ni validés. |
+| Qualité et dépendances | `npm test`: 176 tests, 175 réussis, 0 échec, 1 ignoré; `npm run lint`, `npm run build` et `npm audit --audit-level=moderate` réussis; audit des dépendances : 0 vulnérabilité connue. | Les tests ne certifient pas les fournisseurs externes ni les environnements hébergés. |
+| Environnements et livraison | Modèle `.env.production.example` complété; `archives/matable-ci-release-20261025.zip` générée et inspectée : 238 fichiers, aucun élément interdit détecté (secrets, bases/sauvegardes, caches ou métadonnées Git). | L’archive contient aussi les cinq fichiers publicitaires vides du worktree. Aucune configuration de préproduction séparée n’est démontrée dans le dépôt. Aucun déploiement, test post-déploiement, surveillance ou retour arrière réel effectué. |
+
+### État de préparation
+
+**Version non prête pour la livraison ou le déploiement.** Les contrôles locaux
+réussis sont utiles mais ne remplacent pas les blocages critiques suivants :
+
+- créer et valider une préproduction séparée, avec variables et base de test
+  dédiées;
+- configurer le stockage externe et la planification des sauvegardes, puis
+  restaurer un jeu de données de test représentatif;
+- exécuter un parcours de commande et de remise WhatsApp avec des coordonnées
+  de test, et valider les états métier jusqu’à la confirmation;
+- décider des offres et tarifs publicitaires, puis compléter et tester le flux
+  produit, les validations admin et la confirmation des paiements avant toute
+  activation;
+- faire la recette finale sur les cibles mobiles et sur la préproduction,
+  documenter le rollback, puis vérifier logs et surveillance après un
+  déploiement autorisé.
+
+Aucun secret n’a été lu ni copié; aucune base, sauvegarde, campagne ou
+configuration de production n’a été modifiée. Les services et données
+temporaires créés pour les vérifications locales ont été arrêtés et supprimés.

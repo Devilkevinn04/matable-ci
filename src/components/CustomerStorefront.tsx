@@ -31,6 +31,8 @@ import { CustomerUser } from './CustomerAuth';
 import { CustomerCheckoutAuth } from './CustomerCheckoutAuth';
 import { CustomerTrustPanel } from './CustomerTrustPanel';
 import { getCanonicalOrigin } from '../utils/seoCanonical';
+import { getActiveProductPrice } from '../utils/productPricing';
+import { normalizeShopEventType, SHOP_EVENT_VISUALS } from '../utils/shopEventVisuals';
 import { useCustomerCart } from './useCustomerCart';
 import { isAgeRestrictedProduct } from '../utils/ageRestrictedProducts';
 
@@ -66,6 +68,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const prefersReducedMotion = useReducedMotion();
   const [shop, setShop] = useState<Shop | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [saleRefresh, setSaleRefresh] = useState(Date.now());
   const [hasAgeRestrictedProducts, setHasAgeRestrictedProducts] = useState(false);
   const [ageVerified, setAgeVerified] = useState(false);
   const [ageDenied, setAgeDenied] = useState(false);
@@ -81,6 +84,17 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [isFavoriteShop, setIsFavoriteShop] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const nextSaleBoundary = products
+      .flatMap((product) => [product.sale_starts_at, product.sale_ends_at])
+      .map((value) => value ? Date.parse(value) : Number.NaN)
+      .filter((value) => Number.isFinite(value) && value > Date.now())
+      .sort((left, right) => left - right)[0];
+    if (!nextSaleBoundary) return;
+    const timer = window.setTimeout(() => setSaleRefresh(Date.now()), Math.max(0, nextSaleBoundary - Date.now() + 25));
+    return () => window.clearTimeout(timer);
+  }, [products, saleRefresh]);
 
   // Search and Category Filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,7 +126,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   // Checkout form fields
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [deliveryLocation, setDeliveryLocation] = useState('Cocody Angré');
+  const [deliveryLocation, setDeliveryLocation] = useState('');
   const [customLocation, setCustomLocation] = useState('');
   const [deliveryNote, setDeliveryNote] = useState('');
   const [deliverySlot, setDeliverySlot] = useState('Dès que prêt (30-45 min)');
@@ -470,7 +484,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       url: canonicalUrl,
       image,
       telephone: shop.whatsapp_number,
-      address: { '@type': 'PostalAddress', addressLocality: shop.city || 'Abidjan', addressCountry: 'CI' },
+      address: {
+        '@type': 'PostalAddress',
+        ...(shop.city ? { addressLocality: shop.city } : {}),
+        addressCountry: 'CI',
+      },
       areaServed: 'Côte d’Ivoire',
       hasOfferCatalog: {
         '@type': 'OfferCatalog',
@@ -478,7 +496,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         itemListElement: products.filter(product => product.is_available && product.stock > 0).slice(0, 30).map(product => ({
           '@type': 'Offer',
           priceCurrency: 'XOF',
-          price: product.price,
+          price: getActiveProductPrice(product),
           availability: 'https://schema.org/InStock',
           itemOffered: { '@type': 'Product', name: product.title, description: product.description || undefined, image: getProductImageForDisplay(product.image_url, shop.category) },
         })),
@@ -503,11 +521,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const authenticatedCustomer = customerUser || checkoutAuthUser;
 
   const normalizeCustomerPhoneValue = (value: string): string => {
-    const digits = value.replace(/\D/g, '');
+    const digits = String(value ?? '').replace(/\D/g, '');
     if (!digits) return '';
-    if (digits.startsWith('225')) return `+${digits}`;
-    if (digits.startsWith('0')) return `+225${digits}`;
-    return `+225${digits}`;
+
+    const normalizedDigits = digits.startsWith('225') ? digits.slice(3) : digits;
+    const localNumber = normalizedDigits.startsWith('0') ? normalizedDigits : `0${normalizedDigits}`;
+    if (!/^0\d{9}$/.test(localNumber)) return '';
+    return `+225${localNumber}`;
   };
 
   // Handle WhatsApp Checkout
@@ -531,9 +551,16 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       toast.error('Veuillez renseigner un numéro de téléphone WhatsApp valide.');
       return;
     }
-    const finalLocation = deliveryLocation === 'Autre' 
-      ? (customLocation.trim() || 'Abidjan') 
+    const finalLocation = deliveryLocation === 'Autre'
+      ? customLocation.trim()
       : deliveryLocation;
+
+    if (!finalLocation) {
+      toast.error(deliveryLocation === 'Autre'
+        ? 'Veuillez préciser votre ville ou votre quartier.'
+        : 'Veuillez choisir votre commune ou votre quartier.');
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -645,12 +672,12 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     return (
       <div className="not-found-page">
         <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-        <p className="text-sm font-black uppercase tracking-[0.18em] text-[#176b55]">Erreur 404</p>
+        <p className="text-sm font-black uppercase tracking-[0.18em] text-[#047857]">Erreur 404</p>
         <h2 className="text-2xl font-black text-slate-900">Cette page n’existe pas</h2>
         <p className="text-sm text-slate-600 mt-2 mb-6">
           La boutique ou l’adresse demandée n’existe pas ou a été déplacée.
         </p>
-        <a href="/" className="inline-flex items-center justify-center rounded-xl bg-[#176b55] px-5 py-3 font-bold text-white">Retour aux boutiques</a>
+        <a href="/" className="inline-flex items-center justify-center rounded-xl bg-[#047857] px-5 py-3 font-bold text-white">Retour aux boutiques</a>
       </div>
     );
   }
@@ -683,6 +710,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const logoUrl = shop.theme_config?.logo_url;
   const isEventMode = shop.theme_config?.event_mode_enabled;
   const eventBannerText = shop.theme_config?.event_banner_text;
+  const eventVisual = SHOP_EVENT_VISUALS[normalizeShopEventType(shop.theme_config?.event_type)];
   const primaryTextColor = getContrastTextColor(primaryColor);
 
   // Advanced CSS classes
@@ -693,9 +721,16 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     shop.theme_config?.advanced_css?.shadowIntensity === 'soft' ? 'shadow-md' : 'shadow-2xs';
   const glowStyle = shop.theme_config?.advanced_css?.accentGlow ? { boxShadow: `0 0 20px ${primaryColor}40` } : {};
 
-  const hoursSummary = shop.opening_hours?.enabled
-    ? `${shop.opening_hours.open_time || '08:00'}–${shop.opening_hours.close_time || '22:00'} · ${shop.opening_hours.days && shop.opening_hours.days.length > 0 && shop.opening_hours.days.length < 7 ? `${shop.opening_hours.days.length} jours / semaine` : '7 jours / semaine'}`
-    : 'Horaires flexibles selon le commerçant';
+  const openingHours = shop.opening_hours;
+  const hoursRange = openingHours?.open_time && openingHours.close_time
+    ? `${openingHours.open_time}–${openingHours.close_time}`
+    : '';
+  const daysSummary = openingHours?.days?.length
+    ? openingHours.days.length === 7 ? '7 jours / semaine' : `${openingHours.days.length} jours / semaine`
+    : '';
+  const hoursSummary = openingHours?.enabled
+    ? [hoursRange, daysSummary].filter(Boolean).join(' · ')
+    : '';
 
   return (
     <div 
@@ -706,7 +741,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       }}
     >
       {/* 1. Header & Shop Identity */}
-      <header className="bg-[#fffdf9]/95 backdrop-blur-md border-b border-[#ded8ce] sticky top-0 z-30 shadow-sm">
+      <header className="bg-[#FFFFFF]/95 backdrop-blur-md border-b border-[#ded8ce] sticky top-0 z-30 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-2 sm:py-3 flex items-center justify-between gap-2 sm:gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <a href="/" aria-label="Retour à l’annuaire" title="Retour à l’annuaire" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"><ArrowLeft className="h-4 w-4" /></a>
@@ -726,8 +761,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             )}
             <div className="min-w-0">
               <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-2">
-                <h1 className="max-w-full truncate text-sm font-black text-[#211712] sm:text-lg">{shop.name}</h1>
-                <span className={`shrink-0 text-[11px] font-semibold sm:text-xs ${shop.is_open ? 'text-[#176b55]' : 'text-[#8a5a12]'}`}>
+                <h1 className="max-w-full truncate text-sm font-black text-[#292d2a] sm:text-lg">{shop.name}</h1>
+                <span className={`shrink-0 text-[11px] font-semibold sm:text-xs ${shop.is_open ? 'text-[#047857]' : 'text-[#8a5a12]'}`}>
                   {shop.is_open ? 'Ouverte' : 'Fermée'}
                 </span>
               </div>
@@ -745,7 +780,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               onClick={() => toggleCustomerFavorite('shop', shop.id)}
               aria-pressed={isFavoriteShop}
               aria-label={isFavoriteShop ? 'Retirer cette boutique de vos favoris' : 'Ajouter cette boutique à vos favoris'}
-              className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold transition sm:w-auto sm:gap-1.5 sm:px-3 ${isFavoriteShop ? 'border-[#c8dbd0] bg-[#e4f1ec] text-[#0f4d3d]' : 'border-[#ded8ce] bg-white text-[#4a3a30] hover:border-[#176b55]'}`}
+              className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold transition sm:w-auto sm:gap-1.5 sm:px-3 ${isFavoriteShop ? 'border-[#c8dbd0] bg-[#d1fae5] text-[#065f46]' : 'border-[#ded8ce] bg-white text-[#47534b] hover:border-[#047857]'}`}
             >
               <Bookmark className={`h-4 w-4 ${isFavoriteShop ? 'fill-current' : ''}`} />
               <span className="hidden sm:inline">{isFavoriteShop ? 'Enregistrée' : 'Enregistrer'}</span>
@@ -753,7 +788,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             <button
               id="cart-header-btn"
               onClick={() => totalCartCount > 0 ? setIsCartOpen(true) : document.getElementById('store-catalogue')?.scrollIntoView({ behavior: 'smooth' })}
-              className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0f4d3d] text-sm font-semibold text-white transition hover:bg-[#176b55] sm:w-auto sm:gap-2 sm:px-3.5"
+              className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#065f46] text-sm font-semibold text-white transition hover:bg-[#047857] sm:w-auto sm:gap-2 sm:px-3.5"
               aria-label={totalCartCount > 0 ? 'Voir le panier' : 'Découvrir le catalogue'}
             >
               <ShoppingBag className="h-4 w-4" />
@@ -774,12 +809,12 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       {pendingShopSwitchProduct && requiresShopSwitch && (
         createPortal(
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingShopSwitchProduct(null); }}>
-            <section role="dialog" aria-modal="true" aria-labelledby="shop-switch-title" className="w-full max-w-md rounded-2xl border-2 border-[#211712] bg-[#fffaf2] p-5 shadow-2xl">
-              <h2 id="shop-switch-title" className="text-lg font-black text-[#211712]">Votre panier appartient à une autre boutique</h2>
-              <p className="mt-2 text-sm leading-6 text-[#4a3a30]">Pour commander chez {shop?.name}, il faut remplacer le panier de « {cartShopSlug} ». Votre commande restera liée à une seule boutique.</p>
+            <section role="dialog" aria-modal="true" aria-labelledby="shop-switch-title" className="w-full max-w-md rounded-2xl border-2 border-[#292d2a] bg-[#FFFFFF] p-5 shadow-2xl">
+              <h2 id="shop-switch-title" className="text-lg font-black text-[#292d2a]">Votre panier appartient à une autre boutique</h2>
+              <p className="mt-2 text-sm leading-6 text-[#47534b]">Pour commander chez {shop?.name}, il faut remplacer le panier de « {cartShopSlug} ». Votre commande restera liée à une seule boutique.</p>
               <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <button type="button" onClick={() => setPendingShopSwitchProduct(null)} className="min-h-11 rounded-xl border-2 border-[#ded8ce] bg-white px-4 text-sm font-bold text-[#211712]">Garder ce panier</button>
-                <button type="button" onClick={() => { const product = pendingShopSwitchProduct; setPendingShopSwitchProduct(null); addToCart(product, true); }} className="min-h-11 rounded-xl border-2 border-[#211712] bg-[#1d6b57] px-4 text-sm font-bold text-white">Vider et continuer</button>
+                <button type="button" onClick={() => setPendingShopSwitchProduct(null)} className="min-h-11 rounded-xl border-2 border-[#ded8ce] bg-white px-4 text-sm font-bold text-[#292d2a]">Garder ce panier</button>
+                <button type="button" onClick={() => { const product = pendingShopSwitchProduct; setPendingShopSwitchProduct(null); addToCart(product, true); }} className="min-h-11 rounded-xl border-2 border-[#292d2a] bg-[#047857] px-4 text-sm font-bold text-white">Vider et continuer</button>
               </div>
             </section>
           </div>,
@@ -817,7 +852,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 </p>
                 <p className="mt-1 line-clamp-1 max-w-xl text-xs font-medium leading-5 text-white sm:mt-2 sm:line-clamp-2 sm:text-base sm:leading-6">{getWelcomeMessageForDisplay(shop.welcome_message, shop.category)}</p>
               </div>
-              <a href="#store-catalogue" className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/70 bg-[#fffdf9] px-3 py-1.5 text-[11px] font-extrabold text-[#0f4d3d] transition hover:-translate-y-0.5 hover:bg-white sm:min-h-11 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm">Découvrir la sélection<ArrowRight className="h-4 w-4" /></a>
+              <a href="#store-catalogue" className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/70 bg-[#FFFFFF] px-3 py-1.5 text-[11px] font-extrabold text-[#065f46] transition hover:-translate-y-0.5 hover:bg-white sm:min-h-11 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm">Découvrir la sélection<ArrowRight className="h-4 w-4" /></a>
             </div>
           </div>
         </div>
@@ -826,9 +861,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       {isEventMode && eventBannerText && (
         <div className="max-w-6xl mx-auto px-4 pt-3">
           <div className="flex justify-center sm:justify-start">
-            <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-[#e7d5bd] bg-[#fffaf1] px-3 py-1.5 text-center text-[9px] font-extrabold uppercase tracking-[0.06em] text-[#70451f] shadow-[0_4px_14px_rgba(33,23,18,0.05)] sm:px-4 sm:py-2 sm:text-xs sm:tracking-[0.08em]">
-              <span className="shrink-0 text-sm" aria-hidden="true">✦</span>
-              <span className="line-clamp-2">{eventBannerText}</span>
+            <div className={`inline-flex max-w-full items-center gap-2 rounded-2xl border px-3 py-2 text-left text-[9px] font-extrabold shadow-[0_4px_14px_rgba(33,23,18,0.05)] sm:px-4 sm:py-2.5 sm:text-xs ${eventVisual.bannerClass}`}>
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-base ${eventVisual.badgeClass}`} aria-hidden="true">{eventVisual.icon}</span>
+              <span className="min-w-0"><span className="block text-[8px] uppercase tracking-[0.1em] opacity-70 sm:text-[9px]">{eventVisual.label}</span><span className="line-clamp-2">{eventBannerText}</span></span>
             </div>
           </div>
         </div>
@@ -836,11 +871,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
       {/* Main storefront content */}
       <div className="max-w-6xl mx-auto px-4 pt-4">
-        <details className="mb-5 rounded-2xl border border-[#ded8ce] bg-[#fffdf9] px-4 py-3 shadow-[0_8px_24px_rgba(33,23,31,0.05)] sm:p-5">
+        <details className="mb-5 rounded-2xl border border-[#ded8ce] bg-[#FFFFFF] px-4 py-3 shadow-[0_8px_24px_rgba(33,23,31,0.05)] sm:p-5">
           <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
             <span className="flex items-center justify-between gap-3">
-              <span className="text-sm font-black text-[#211712] sm:text-lg">Comment commander ?</span>
-              <span className="shrink-0 rounded-full bg-[#e4f1ec] px-3 py-1.5 text-[10px] font-bold text-[#0f4d3d]">3 étapes</span>
+              <span className="text-sm font-black text-[#292d2a] sm:text-lg">Comment commander ?</span>
+              <span className="shrink-0 rounded-full bg-[#d1fae5] px-3 py-1.5 text-[10px] font-bold text-[#065f46]">3 étapes</span>
             </span>
           </summary>
           <div className="mt-3 border-t border-[#eee8dc] pt-3">
@@ -851,16 +886,16 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               { number: '03', title: 'Convenez avec le commerçant', description: 'Retrait ou livraison et frais éventuels se règlent directement avec lui.' },
             ].map((step) => (
               <div key={step.number} className="flex min-h-24 items-center gap-3 rounded-xl bg-[#f8f3ec] p-3 sm:min-h-28 sm:items-start sm:p-4">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#e4f1ec] text-xs font-black text-[#0f4d3d]">{step.number}</span>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#d1fae5] text-xs font-black text-[#065f46]">{step.number}</span>
                 <div className="min-w-0">
-                  <h3 className="text-xs font-black text-[#211712]">{step.title}</h3>
-                  <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-[#6f6a61]">{step.description}</p>
+                  <h3 className="text-xs font-black text-[#292d2a]">{step.title}</h3>
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-[#647067]">{step.description}</p>
                 </div>
               </div>
             ))}
           </div>
-          <p className="mt-3 flex items-start gap-2 text-[11px] leading-5 text-[#6f6a61]">
-            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#176b55]" />
+          <p className="mt-3 flex items-start gap-2 text-[11px] leading-5 text-[#647067]">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#047857]" />
             MaTable met en relation le client et la boutique ; MaTable ne fournit ni n’organise de service de livraison.
           </p>
           </div>
@@ -873,9 +908,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             <div>
               <p className="font-bold text-sm">Boutique actuellement fermée aux commandes</p>
               <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
-                {shop.opening_hours?.enabled 
-                  ? `Plage horaire de prise de commande : ${shop.opening_hours.open_time} à ${shop.opening_hours.close_time}. Les commandes reprendront automatiquement dès l'ouverture.` 
-                  : 'Le commerçant a momentanément désactivé la prise de commande. Vous pouvez parcourir le catalogue en attendant la réouverture.'}
+                {shop.opening_hours?.enabled && !shop.opening_hours.manual_override && hoursRange
+                  ? `Plage horaire de prise de commande : ${hoursRange.replace('–', ' à ')}. Les commandes reprendront automatiquement dès l'ouverture.`
+                  : 'La boutique est fermée aux commandes pour le moment. Contactez le commerçant pour connaître les prochaines disponibilités.'}
               </p>
             </div>
           </div>
@@ -886,13 +921,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         {/* Catalog Section Header */}
         <div id="store-catalogue" className="scroll-mt-24 mb-4 flex flex-col items-start justify-between gap-3 border-b border-[#ded8ce] pb-4 sm:flex-row sm:items-end">
           <div className="relative pl-4">
-            <span aria-hidden="true" className="absolute bottom-1 left-0 top-1 w-[3px] rounded-full bg-[#b9441f]" />
+            <span aria-hidden="true" className="absolute bottom-1 left-0 top-1 w-[3px] rounded-full bg-[#c2410c]" />
             <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-[#8c5a36]">{categoryDefaults.label} <span className="px-1 text-[#c5b6a3]">/</span> La sélection</p>
-            <h2 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-[#211712] sm:text-3xl">À découvrir</h2>
+            <h2 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-[#292d2a] sm:text-3xl">À découvrir</h2>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-            <span className="rounded-full bg-[#eee9df] px-3 py-1.5 text-[11px] font-bold text-[#6f6a61]">{products.length} pièce{products.length === 1 ? '' : 's'}</span>
-            <button type="button" onClick={() => setTrustTarget({ type: 'shop', id: shop.id, name: shop.name })} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-[#c8dbd0] bg-white px-3 text-[11px] font-bold text-[#0f4d3d] transition hover:bg-[#e4f1ec]">
+            <span className="rounded-full bg-[#eee9df] px-3 py-1.5 text-[11px] font-bold text-[#647067]">{products.length} pièce{products.length === 1 ? '' : 's'}</span>
+            <button type="button" onClick={() => setTrustTarget({ type: 'shop', id: shop.id, name: shop.name })} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-[#c8dbd0] bg-white px-3 text-[11px] font-bold text-[#065f46] transition hover:bg-[#d1fae5]">
               <span aria-hidden="true">★</span>Avis boutique
             </button>
           </div>
@@ -909,7 +944,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label={`Rechercher dans le catalogue de ${shop.name}`}
               placeholder="Rechercher dans le catalogue..."
-              className="w-full rounded-full border border-[#ded8ce] bg-[#fffdf9] py-2.5 pl-10 pr-9 text-xs font-medium shadow-[0_4px_14px_rgba(33,23,18,0.04)] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#176b55]"
+              className="w-full rounded-full border border-[#ded8ce] bg-[#FFFFFF] py-2.5 pl-10 pr-9 text-xs font-medium shadow-[0_4px_14px_rgba(33,23,18,0.04)] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#047857]"
             />
             {searchQuery && (
               <button
@@ -923,13 +958,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           </div>}
 
           {categories.length > 1 && (
-            <label className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-[#ded8ce] bg-[#fffdf9] px-3 text-xs font-bold text-[#6f6a61] shadow-[0_4px_14px_rgba(33,23,18,0.04)] sm:w-auto">
+            <label className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-[#ded8ce] bg-[#FFFFFF] px-3 text-xs font-bold text-[#647067] shadow-[0_4px_14px_rgba(33,23,18,0.04)] sm:w-auto">
               <span className="shrink-0">Catégorie</span>
               <select
                 aria-label="Filtrer les produits par catégorie"
                 value={selectedCategory}
                 onChange={(event) => setSelectedCategory(event.target.value)}
-                className="min-w-0 flex-1 bg-transparent py-2 text-[#211712] outline-none sm:w-56 sm:flex-none"
+                className="min-w-0 flex-1 bg-transparent py-2 text-[#292d2a] outline-none sm:w-56 sm:flex-none"
               >
                 <option value="all">Toutes les catégories ({products.length})</option>
                 {categories.map((category) => {
@@ -993,7 +1028,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     animate={prefersReducedMotion ? undefined : { opacity: [0.7, 0], scale: [0.92, 1.35] }}
                     transition={{ duration: 2.6, repeat: Infinity, ease: 'easeOut', delay: 0.8 }}
                     aria-hidden="true"
-                    className="absolute -inset-[7px] rounded-full border-2 border-[#176b55]"
+                    className="absolute -inset-[7px] rounded-full border-2 border-[#047857]"
                   />
                   <AnimatePresence mode="wait" initial={false}>
                     {ageConfirmationComplete ? (
@@ -1035,7 +1070,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         href="/"
                         whileHover={prefersReducedMotion ? undefined : { y: -2 }}
                         whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
-                        className="flex h-14 w-full items-center justify-center rounded-2xl bg-[#176b55] px-4 text-base font-semibold text-white shadow-[0_14px_26px_-14px_rgba(23,107,85,0.8)] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#176b55]"
+                        className="flex h-14 w-full items-center justify-center rounded-2xl bg-[#047857] px-4 text-base font-semibold text-white shadow-[0_14px_26px_-14px_rgba(23,107,85,0.8)] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#047857]"
                       >
                         Voir les autres boutiques
                       </motion.a>
@@ -1070,7 +1105,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         disabled={isVerifyingAge || ageConfirmationComplete}
                         whileHover={prefersReducedMotion ? undefined : { y: -2 }}
                         whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
-                        className="relative flex h-14 w-full items-center justify-center overflow-hidden rounded-2xl bg-[#176b55] px-4 text-[17px] font-semibold text-white shadow-[0_14px_26px_-14px_rgba(23,107,85,0.8)] transition-colors hover:bg-[#145d4a] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#176b55] disabled:cursor-wait disabled:opacity-80"
+                        className="relative flex h-14 w-full items-center justify-center overflow-hidden rounded-2xl bg-[#047857] px-4 text-[17px] font-semibold text-white shadow-[0_14px_26px_-14px_rgba(23,107,85,0.8)] transition-colors hover:bg-[#145d4a] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#047857] disabled:cursor-wait disabled:opacity-80"
                       >
                         {isVerifyingAge ? 'Vérification en cours…' : ageConfirmationComplete ? 'Accès autorisé' : 'Oui, j’ai 18 ans ou plus'}
                       </motion.button>
@@ -1080,13 +1115,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         disabled={isVerifyingAge || ageConfirmationComplete}
                         whileHover={prefersReducedMotion ? undefined : { backgroundColor: 'rgba(127,127,127,0.08)' }}
                         whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
-                        className="mt-2.5 flex h-14 w-full items-center justify-center rounded-2xl border-[1.5px] border-[#e2e6e3] bg-transparent px-4 text-[17px] font-semibold text-[#12362d] transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#176b55] disabled:cursor-wait disabled:opacity-60"
+                        className="mt-2.5 flex h-14 w-full items-center justify-center rounded-2xl border-[1.5px] border-[#e2e6e3] bg-transparent px-4 text-[17px] font-semibold text-[#12362d] transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#047857] disabled:cursor-wait disabled:opacity-60"
                       >
                         Non, j’ai moins de 18 ans
                       </motion.button>
 
                       <details className="mt-4 text-left text-sm text-[#5d6f69]">
-                        <summary className="cursor-pointer list-none text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#176b55]">
+                        <summary className="cursor-pointer list-none text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#047857]">
                           Pourquoi cette question ?
                         </summary>
                         <p className="mt-2.5 leading-[1.5]">
@@ -1178,12 +1213,12 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           </div>
         )}
 
-        <details className="mt-8 rounded-xl border border-[#ded8ce] bg-[#fffdf9] px-4 py-3 shadow-sm">
+        <details className="mt-8 rounded-xl border border-[#ded8ce] bg-[#FFFFFF] px-4 py-3 shadow-sm">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
             <div><p className="text-[10px] font-black uppercase text-slate-500">Informations pratiques</p><h3 className="mt-1 text-sm font-black text-slate-900">Horaires, remise & contact</h3></div>
-            <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#52645c]"><MapPin className="h-3.5 w-3.5" />{shop.city || 'Abidjan'}</span>
+            {shop.city && <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#52645c]"><MapPin className="h-3.5 w-3.5" />{shop.city}</span>}
           </summary>
-          <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="flex items-center gap-2 text-[11px] font-bold text-slate-700"><Clock className="h-3.5 w-3.5 text-[#1D6B57]" />Horaires</span><span className="text-right text-[11px] font-black text-slate-800">{hoursSummary}</span></div>
+          {hoursSummary && <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="flex items-center gap-2 text-[11px] font-bold text-slate-700"><Clock className="h-3.5 w-3.5 text-[#1D6B57]" />Horaires</span><span className="text-right text-[11px] font-black text-slate-800">{hoursSummary}</span></div>}
           {shop.theme_config?.social_links && Object.values(shop.theme_config.social_links).some(Boolean) &&           <div className="mt-3 flex flex-wrap gap-2 border-b border-[#e5d9ca] pb-3">{shop.theme_config.social_links.instagram && <a href={shop.theme_config.social_links.instagram} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Instagram</a>}{shop.theme_config.social_links.facebook && <a href={shop.theme_config.social_links.facebook} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Facebook</a>}{shop.theme_config.social_links.website && <a href={shop.theme_config.social_links.website} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Site web</a>}{shop.theme_config.social_links.whatsapp && <a href={shop.theme_config.social_links.whatsapp} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">WhatsApp</a>}</div>}
           {shop.theme_config?.delivery_zones && shop.theme_config.delivery_zones.length > 0 && (
             <div className="mt-3">
@@ -1197,7 +1232,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     </div>
                     <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-600">
                       <span>{zone.description || 'Modalité à confirmer'}</span>
-                      <span className="font-black text-[#1D6B57]">{zone.fee ? `${zone.fee.toLocaleString('fr-FR')} FCFA` : 'Gratuit (à confirmer)'}</span>
+                      <span className="font-black text-[#1D6B57]">{typeof zone.fee === 'number' ? zone.fee === 0 ? 'Offert' : `${zone.fee.toLocaleString('fr-FR')} FCFA` : 'Tarif à confirmer'}</span>
                     </div>
                   </div>
                 ))}
@@ -1209,20 +1244,20 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         </div>
 
         <aside aria-label="Récapitulatif de la commande" className="hidden xl:block">
-          <div className="sticky top-24 rounded-2xl border border-[#ded8ce] bg-[#fffdf9] p-4 shadow-[0_12px_32px_rgba(33,23,18,0.08)]">
+          <div className="sticky top-24 rounded-2xl border border-[#ded8ce] bg-[#FFFFFF] p-4 shadow-[0_12px_32px_rgba(33,23,18,0.08)]">
             <div className="flex items-center justify-between gap-3 border-b border-[#e5d9ca] pb-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.15em] text-[#8c5a36]">Votre sélection</p>
-                <h2 className="mt-1 text-base font-black text-[#211712]">Ma commande</h2>
+                <h2 className="mt-1 text-base font-black text-[#292d2a]">Ma commande</h2>
               </div>
-              <span className="rounded-full bg-[#e4f1ec] px-2.5 py-1 text-xs font-black text-[#0f4d3d]">{totalCartCount}</span>
+              <span className="rounded-full bg-[#d1fae5] px-2.5 py-1 text-xs font-black text-[#065f46]">{totalCartCount}</span>
             </div>
 
             {cart.length === 0 ? (
               <div className="py-8 text-center">
                 <ShoppingBag className="mx-auto h-8 w-8 text-[#c5b6a3]" />
-                <p className="mt-2 text-sm font-bold text-[#4a3a30]">Votre panier est vide</p>
-                <p className="mt-1 text-xs leading-5 text-[#6f6a61]">Ajoutez des articles pour préparer votre commande.</p>
+                <p className="mt-2 text-sm font-bold text-[#47534b]">Votre panier est vide</p>
+                <p className="mt-1 text-xs leading-5 text-[#647067]">Ajoutez des articles pour préparer votre commande.</p>
               </div>
             ) : (
               <>
@@ -1236,25 +1271,25 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         className="h-12 w-12 shrink-0 rounded-lg"
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-black text-[#211712]">{item.product.title}</p>
-                        <p className="mt-0.5 text-[11px] text-[#6f6a61]">{formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers))}</p>
+                        <p className="truncate text-xs font-black text-[#292d2a]">{item.product.title}</p>
+                        <p className="mt-0.5 text-[11px] text-[#647067]">{formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers))}</p>
                         <div className="mt-1.5 flex items-center gap-2">
-                          <button type="button" onClick={() => updateQuantity(index, -1)} aria-label={`Retirer un ${item.product.title}`} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#ded8ce] bg-white text-[#4a3a30] hover:bg-[#f8f3ec]"><Minus className="h-3 w-3" /></button>
-                          <span className="min-w-4 text-center text-xs font-black tabular-nums text-[#211712]">{item.quantity}</span>
-                          <button type="button" onClick={() => updateQuantity(index, 1)} disabled={item.quantity >= item.product.stock} aria-label={`Ajouter un ${item.product.title}`} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#ded8ce] bg-white text-[#4a3a30] hover:bg-[#f8f3ec] disabled:cursor-not-allowed disabled:opacity-40"><Plus className="h-3 w-3" /></button>
+                          <button type="button" onClick={() => updateQuantity(index, -1)} aria-label={`Retirer un ${item.product.title}`} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#ded8ce] bg-white text-[#47534b] hover:bg-[#f8f3ec]"><Minus className="h-3 w-3" /></button>
+                          <span className="min-w-4 text-center text-xs font-black tabular-nums text-[#292d2a]">{item.quantity}</span>
+                          <button type="button" onClick={() => updateQuantity(index, 1)} disabled={item.quantity >= item.product.stock} aria-label={`Ajouter un ${item.product.title}`} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#ded8ce] bg-white text-[#47534b] hover:bg-[#f8f3ec] disabled:cursor-not-allowed disabled:opacity-40"><Plus className="h-3 w-3" /></button>
                         </div>
                       </div>
-                      <span className="shrink-0 text-right text-xs font-black text-[#211712]">{formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers) * item.quantity)}</span>
+                      <span className="shrink-0 text-right text-xs font-black text-[#292d2a]">{formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers) * item.quantity)}</span>
                     </li>
                   ))}
                 </ul>
                 <div className="border-t border-[#e5d9ca] pt-3">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-bold text-[#4a3a30]">Total des articles</span>
-                    <span className="text-base font-black text-[#211712]">{formatFCFA(totalCartAmount)}</span>
+                    <span className="text-sm font-bold text-[#47534b]">Total des articles</span>
+                    <span className="text-base font-black text-[#292d2a]">{formatFCFA(totalCartAmount)}</span>
                   </div>
-                  <p className="mt-1 text-[10px] leading-4 text-[#6f6a61]">Hors remise/livraison et frais éventuels, à convenir directement avec la boutique.</p>
-                  <button type="button" onClick={() => setIsCartOpen(true)} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0f4d3d] px-4 text-sm font-black text-white transition hover:bg-[#176b55]">
+                  <p className="mt-1 text-[10px] leading-4 text-[#647067]">Hors livraison et frais éventuels, à convenir directement avec la boutique.</p>
+                  <button type="button" onClick={() => setIsCartOpen(true)} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#065f46] px-4 text-sm font-black text-white transition hover:bg-[#047857]">
                     Préparer ma commande <ArrowRight className="h-4 w-4" />
                   </button>
                 </div>
@@ -1272,7 +1307,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           <button
             id="floating-cart-btn"
             onClick={() => setIsCartOpen(true)}
-            className="w-full text-white p-4 rounded-2xl shadow-[0_10px_25px_rgba(32,23,18,0.2)] flex items-center justify-between gap-3 active:scale-[0.99] transition-transform border-[2px] border-[#211712]"
+            className="w-full text-white p-4 rounded-2xl shadow-[0_10px_25px_rgba(32,23,18,0.2)] flex items-center justify-between gap-3 active:scale-[0.99] transition-transform border-[2px] border-[#292d2a]"
             style={{ background: 'linear-gradient(135deg, #1D6B57 0%, #E6572B 100%)', ...glowStyle }}
           >
             <div className="flex items-center gap-3">
@@ -1305,7 +1340,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             role="dialog"
             aria-modal="true"
             aria-labelledby="checkout-dialog-title"
-            className="bg-[#FFFDF9] w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-[0_18px_40px_rgba(34,32,27,0.18)] overflow-hidden animate-in slide-in-from-bottom-6 duration-200 border-[3px] border-[#211712] sm:border"
+            className="bg-[#FFFDF9] w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-[0_18px_40px_rgba(34,32,27,0.18)] overflow-hidden animate-in slide-in-from-bottom-6 duration-200 border-[3px] border-[#292d2a] sm:border"
           >
             {/* Modal Header */}
             <div className="p-4 sm:p-5 border-b-[2px] border-[#E4D9C8] bg-[#FFF5EE] flex items-center justify-between">
@@ -1489,7 +1524,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       <button
                         type="button"
                         onClick={() => setShowCheckoutAuth(true)}
-                        className="mt-2 text-xs font-bold text-[#176b55] underline underline-offset-2"
+                        className="mt-2 text-xs font-bold text-[#047857] underline underline-offset-2"
                       >
                         Se connecter (facultatif)
                       </button>
@@ -1561,7 +1596,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     {/* Delivery Location / Commune */}
                     <div>
                       <p id="checkout-delivery-location-label" className="block text-xs font-bold text-slate-700 mb-1">
-                        Commune / lieu souhaité *
+                        Commune ou quartier souhaité *
+                      </p>
+                      <p className="mb-2 text-[11px] leading-5 text-slate-500">
+                        Indiquez où vous souhaitez récupérer votre commande ou être contacté pour convenir de la livraison.
                       </p>
                       <div role="group" aria-labelledby="checkout-delivery-location-label" className="grid grid-cols-2 gap-2 text-xs">
                         {[
@@ -1578,10 +1616,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                             key={loc}
                             type="button"
                             onClick={() => setDeliveryLocation(loc)}
+                            aria-pressed={deliveryLocation === loc}
                             className={`py-2 px-2.5 rounded-lg font-medium border text-left flex items-center gap-1.5 transition-colors ${
                               deliveryLocation === loc
                                 ? 'bg-[#1D6B57] text-white border-[#154F41] shadow-[2px_2px_0_rgba(21,79,65,0.2)]'
-                                : 'bg-[#F8F3EC] text-[#211712] border-[#E4D9C8] hover:bg-[#F5EADC]'
+                                : 'bg-[#F8F3EC] text-[#292d2a] border-[#E4D9C8] hover:bg-[#F5EADC]'
                             }`}
                           >
                             <MapPin className="w-3 h-3 shrink-0" />
@@ -1597,6 +1636,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                             id="checkout-custom-location"
                             type="text"
                             required
+                            minLength={2}
                             placeholder="Précisez la ville / quartier (ex: Bingerville, Bouaké, San Pedro...)"
                             value={customLocation}
                             onChange={(e) => setCustomLocation(e.target.value)}
@@ -1623,7 +1663,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                           id="checkout-delivery-slot"
                           value={deliverySlot}
                           onChange={(e) => setDeliverySlot(e.target.value)}
-                          className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#E4D9C8] bg-white font-bold text-[#211712]"
+                          className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#E4D9C8] bg-white font-bold text-[#292d2a]"
                         >
                           <option value="Dès que prêt (30-45 min)">Dès que prêt (30-45 min)</option>
                           <option value="Ce midi (12h - 13h30)">Ce midi (12h - 13h30)</option>

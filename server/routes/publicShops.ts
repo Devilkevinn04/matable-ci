@@ -51,7 +51,7 @@ export function createPublicShopsRouter({
 
   router.get('/feed', async (req, res) => {
     const sort = typeof req.query.sort === 'string' ? req.query.sort : 'popular';
-    if (sort !== 'popular' && sort !== 'new' && sort !== 'for_you') return res.status(400).json({ error: 'Tri de fil invalide.' });
+    if (sort !== 'popular' && sort !== 'new' && sort !== 'for_you' && sort !== 'promotions') return res.status(400).json({ error: 'Tri de fil invalide.' });
     const category = typeof req.query.category === 'string' ? req.query.category : '';
     if (category && !isShopCategory(category)) return res.status(400).json({ error: 'Catégorie invalide.' });
     const preferredCategories: string[] = typeof req.query.preferred_categories === 'string'
@@ -89,6 +89,7 @@ export function createPublicShopsRouter({
     if (popularityJoin) {
       queryParameters.push(...shopIds, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
     }
+    if (sort === 'promotions') queryParameters.push(new Date().toISOString(), new Date().toISOString());
     queryParameters.push(...shopIds);
 
     let orderBy = 'p.created_at DESC, p.id DESC';
@@ -101,6 +102,8 @@ export function createPublicShopsRouter({
         CASE ${preferredCategories.map((_, index) => `WHEN s.category = ? THEN ${index}`).join(' ')} ELSE ${preferredCategories.length} END,
         p.created_at DESC, p.id DESC`;
       queryParameters.push(...preferredCategories, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), ...preferredCategories);
+    } else if (sort === 'promotions') {
+      orderBy = 'p.sale_ends_at ASC, p.created_at DESC, p.id DESC';
     }
 
     const feedProducts: ProductRecord[] = [];
@@ -109,13 +112,14 @@ export function createPublicShopsRouter({
     let hasMoreRawProducts = shopIds.length > 0;
     while (feedProducts.length < requiredProductCount && hasMoreRawProducts) {
       const productRows = await dbAll<Record<string, unknown>>(
-        `SELECT p.id, p.shop_id, p.title, p.description, p.price, p.stock, p.created_at,
+        `SELECT p.id, p.shop_id, p.title, p.description, p.price, p.sale_price, p.sale_starts_at, p.sale_ends_at, p.stock, p.created_at,
           ${popularityJoin ? 'COALESCE(popularity.views, 0)' : '0'} AS views,
           ${popularityJoin ? 'COALESCE(popularity.clicks, 0)' : '0'} AS clicks
          FROM products p
          JOIN shops s ON s.id = p.shop_id
          ${popularityJoin}
          WHERE p.is_available = 1 AND p.stock > 0
+           ${sort === 'promotions' ? 'AND p.sale_price IS NOT NULL AND p.sale_starts_at <= ? AND p.sale_ends_at > ?' : ''}
            AND p.shop_id IN (${shopIds.map(() => '?').join(', ')})
          ORDER BY ${orderBy}
          LIMIT ? OFFSET ?`,
@@ -130,6 +134,9 @@ export function createPublicShopsRouter({
           title: String(row.title),
           description: row.description == null ? null : String(row.description),
           price: Number(row.price),
+          sale_price: row.sale_price == null ? null : Number(row.sale_price),
+          sale_starts_at: row.sale_starts_at == null ? null : String(row.sale_starts_at),
+          sale_ends_at: row.sale_ends_at == null ? null : String(row.sale_ends_at),
           stock: Number(row.stock),
           image_url: '',
           is_available: true,
@@ -146,17 +153,6 @@ export function createPublicShopsRouter({
     }
     const hasPopularityData = [...popularityByProductId.values()].some(({ views, clicks }) => views > 0 || clicks > 0);
 
-    const now = new Date().toISOString();
-    const activeBoosts = publicShopRecords.length > 0
-      ? await dbAll<{ shop_id: number; placement: string }>(
-        `SELECT DISTINCT shop_id, placement FROM shop_boosts
-         WHERE shop_id IN (${publicShopRecords.map(() => '?').join(', ')})
-           AND placement IN ('home', 'directory')
-           AND status IN ('scheduled', 'active') AND starts_at <= ? AND ends_at > ?`,
-        [...publicShopRecords.map((shop) => shop.id), now, now],
-      )
-      : [];
-    const sponsoredShopIds = new Set(activeBoosts.map((boost) => Number(boost.shop_id)));
     const page = feedProducts.slice(offset, offset + limit);
     const pageProductIds = page.map((product) => product.id);
     const [likeCounts, imageRows] = await Promise.all([
@@ -182,7 +178,6 @@ export function createPublicShopsRouter({
           image_url: imageByProductId.get(product.id) || '',
           popularity,
           like_count: likeCounts.get(product.id) || 0,
-          is_sponsored: sponsoredShopIds.has(shop.id),
           shop: {
             id: shop.id,
             name: shop.name,

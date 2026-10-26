@@ -2118,10 +2118,29 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   const productEdit = await apiFetch(`/api/shops/1/products/${createdProduct.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Produit marchand modifié', price: 2600, stock: 5 }),
+    body: JSON.stringify({
+      title: 'Produit marchand modifié',
+      price: 2600,
+      sale_price: 1800,
+      sale_starts_at: new Date(Date.now() - 60_000).toISOString(),
+      sale_ends_at: new Date(Date.now() + 3_600_000).toISOString(),
+      stock: 5,
+    }),
   });
   assert.equal(productEdit.response.status, 200, JSON.stringify(productEdit.payload));
   assert.equal(productEdit.payload.product.title, 'Produit marchand modifié');
+  assert.equal(productEdit.payload.product.sale_price, 1800);
+  const promotionFeed = await apiFetch('/api/v1/catalog/storefronts/feed?sort=promotions&limit=48');
+  assert.equal(promotionFeed.response.status, 200, JSON.stringify(promotionFeed.payload));
+  assert.ok(promotionFeed.payload.products.some((product: any) => (
+    product.id === createdProduct.id && product.price === 2600 && product.sale_price === 1800
+  )));
+  const invalidSale = await apiFetch(`/api/shops/1/products/${createdProduct.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ price: 2600, sale_price: 2600, sale_starts_at: new Date().toISOString(), sale_ends_at: new Date(Date.now() + 3600_000).toISOString() }),
+  });
+  assert.equal(invalidSale.response.status, 400);
 
   const hideProduct = await apiFetch(`/api/shops/1/products/${createdProduct.id}/toggle-visibility`, { method: 'PATCH' });
   assert.equal(hideProduct.response.status, 200, JSON.stringify(hideProduct.payload));
@@ -2183,7 +2202,8 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   const orderId = order.payload.order.id;
 
   assert.equal(order.payload.order.status, 'confirmed');
-  assert.equal(order.payload.order.total_amount, 5400);
+  assert.equal(order.payload.order.total_amount, 3600);
+  assert.equal(order.payload.order.items[0].unit_price, 1800);
   assert.equal(order.payload.order.items[0].product_title, 'Produit actualisé sur une autre instance');
   assert.equal(order.payload.order.whatsapp_tracking_available, true);
   const stockAfterOrderCreation = await apiFetch('/api/shops/1/products');
@@ -2924,6 +2944,11 @@ test('merchant A cannot access merchant B products, orders, or settings', async 
   });
   assert.equal(publishOtherShop.status, 401, await publishOtherShop.text());
   assert.notEqual(merchantAShopId, merchantBShopId);
+
+  const logout = await apiFetch('/api/auth/logout', { method: 'POST' });
+  assert.equal(logout.response.status, 200, JSON.stringify(logout.payload));
+  const revokedMerchantSession = await apiFetch(`/api/shops/${merchantAShopId}/orders`);
+  assert.equal(revokedMerchantSession.response.status, 401);
 });
 
 test('database and order snapshots preserve structural integrity', () => {

@@ -78,21 +78,21 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
       <section aria-labelledby="merchant-overview-analytics-title" className="rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3 border-b border-[#eee8dc] pb-3">
           <div>
-            <h3 id="merchant-overview-analytics-title" className="text-lg font-black text-[#155544]">Statistiques</h3>
+            <h3 id="merchant-overview-analytics-title" className="text-lg font-black text-[#047857]">Statistiques</h3>
             <p className="mt-1 text-xs text-slate-500">Évolution sur {analytics?.days || Math.min(7, maxDays)} jours · valeurs de chaque série normalisées</p>
           </div>
-          <button type="button" onClick={() => setRefreshKey((key) => key + 1)} aria-label="Actualiser les statistiques" className="min-h-9 rounded-full border border-[#dfe8dd] px-3 text-xs font-bold text-[#155544] hover:bg-[#eaf4ef]">Actualiser</button>
+          <button type="button" onClick={() => setRefreshKey((key) => key + 1)} aria-label="Actualiser les statistiques" className="min-h-9 rounded-full border border-[#dfe8dd] px-3 text-xs font-bold text-[#047857] hover:bg-[#d1fae5]">Actualiser</button>
         </div>
         {loading && <p role="status" className="py-3 text-sm text-slate-500">Chargement des statistiques…</p>}
         {error && <div role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">{error}</div>}
         {!loading && !error && daily.length === 0 && <p className="py-6 text-sm text-slate-500">Aucune activité mesurée sur cette période.</p>}
         {daily.length > 0 && (
           <>
-            <div className="mt-4 rounded-xl border border-[#eee8dc] bg-[#fffdf9] p-2">
+            <div className="mt-4 rounded-xl border border-[#eee8dc] bg-[#FFFFFF] p-2">
               <svg role="img" aria-label="Évolution des commandes et de leur valeur par jour" viewBox="0 0 320 110" className="h-40 w-full">
                 {[16, 42, 68, 96].map((y) => <line key={y} x1="12" x2="308" y1={y} y2={y} stroke="#e7dfd3" strokeWidth="1" />)}
-                <polyline points={dailyPoints('orders')} fill="none" stroke="#e6572b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <polyline points={dailyPoints('order_value')} fill="none" stroke="#0f4d3d" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points={dailyPoints('orders')} fill="none" stroke="#F97316" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points={dailyPoints('order_value')} fill="none" stroke="#065f46" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <div className="flex justify-between px-1 text-[10px] text-slate-500">
                 <span>{firstDay ? new Intl.DateTimeFormat('fr-FR', { weekday: 'short' }).format(new Date(`${firstDay.date}T12:00:00`)) : ''}</span>
@@ -100,8 +100,8 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-4 text-[11px] font-semibold text-slate-600">
-              <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#e6572b]" />Commandes</span>
-              <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#0f4d3d]" />Valeur des commandes · FCFA</span>
+              <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#F97316]" />Commandes</span>
+              <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#065f46]" />Valeur des commandes · FCFA</span>
             </div>
             <p className="mt-2 text-[10px] leading-4 text-slate-500">La valeur correspond aux commandes actionnables, pas aux paiements encaissés.</p>
           </>

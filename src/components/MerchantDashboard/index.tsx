@@ -511,7 +511,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       label: 'Mon activité',
       items: [
         { id: 'bilan', label: 'Flash bilan', icon: Send },
-        { id: 'analytics', label: 'Statistiques Pro', icon: BarChart3 },
       ],
     },
     {
@@ -553,6 +552,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     if (catalogFilter === 'low_stock') return p.stock > 0 && p.stock <= 3 && p.is_available !== false;
     if (catalogFilter === 'out_of_stock') return p.stock === 0;
     if (catalogFilter === 'hidden') return p.is_available === false;
+    if (catalogFilter === 'promotions') return p.sale_price !== null && p.sale_price !== undefined;
     return true;
   });
 
@@ -687,7 +687,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const uniqueCustomerCount = new Set(orders.map((order) => order.customer_phone || order.customer_name.trim().toLocaleLowerCase()).filter(Boolean)).size;
 
   return (
-    <div className="merchant-dashboard min-h-screen pb-20 bg-[#fffaf2]">
+    <div className="merchant-dashboard min-h-screen pb-20 bg-[#FFFFFF]">
       {paymentReturnBanner}
       {currentShop.admin_mode && (
         <div role="status" className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 px-4 py-2 text-xs font-bold text-white">
@@ -778,7 +778,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             ) : isShopPublished ? (
               <button
                 onClick={() => onOpenStorefront(currentShop.slug)}
-                className="flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#1D6B57] px-3 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-[#155544] sm:text-xs md:flex-none"
+                className="flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#1D6B57] px-3 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-[#047857] sm:text-xs md:flex-none"
               >
                 <span className="truncate">Voir ma vitrine</span>
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" />
@@ -791,7 +791,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <button
                 type="button"
                 onClick={() => void handlePublicationStatusChange('active')}
-                className="flex min-h-10 min-w-0 flex-1 items-center justify-center rounded-xl bg-[#1D6B57] px-3 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-[#155544] sm:text-xs md:flex-none"
+                className="flex min-h-10 min-w-0 flex-1 items-center justify-center rounded-xl bg-[#1D6B57] px-3 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-[#047857] sm:text-xs md:flex-none"
               >
                 <span className="truncate">Publier ma boutique</span>
               </button>
@@ -835,19 +835,25 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 value={dashboardSearch}
                 onChange={(event) => setDashboardSearch(event.target.value)}
                 placeholder="Rechercher une commande, un produit, un client"
-                className="min-h-12 min-w-0 w-full rounded-full border border-[#e7dfd3] bg-white py-3 pl-11 pr-4 text-sm shadow-sm focus:border-[#176b55] focus:outline-none"
+                className="min-h-12 min-w-0 w-full rounded-full border border-[#e7dfd3] bg-white py-3 pl-11 pr-4 text-sm shadow-sm focus:border-[#047857] focus:outline-none"
               />
-              <button type="submit" className="min-h-10 shrink-0 rounded-full bg-[#0f4d3d] px-3 text-xs font-bold text-white hover:bg-[#176b55] sm:px-4">Rechercher</button>
+              <button type="submit" className="min-h-10 shrink-0 rounded-full bg-[#065f46] px-3 text-xs font-bold text-white hover:bg-[#047857] sm:px-4">Rechercher</button>
             </div>
           </form>
           <div className="flex flex-col gap-4 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1D6B57]">Vue d’ensemble</p>
-              <h2 className="mt-1 text-2xl font-black tracking-tight text-[#155544]">Bonjour, {currentShop.name}</h2>
+              <h2 className="mt-1 text-2xl font-black tracking-tight text-[#047857]">Bonjour, {currentShop.name}</h2>
               <p className="mt-1 text-sm text-slate-600">Voici l’activité de votre boutique aujourd’hui.</p>
             </div>
-            <button type="button" onClick={() => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); }} disabled={dashboardCatalogFull} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1D6B57] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#155544] disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />{dashboardCatalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</button>
+            <button type="button" onClick={() => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); }} disabled={dashboardCatalogFull} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1D6B57] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />{dashboardCatalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</button>
           </div>
+          {currentShop.theme_config?.event_mode_enabled && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950">
+              <p className="text-sm font-bold">Événement actif sur votre vitrine</p>
+              <button type="button" onClick={() => { setSettingsSubTab('themes'); setActiveTab('settings'); }} className="inline-flex min-h-9 items-center rounded-xl border border-amber-300 bg-white px-3 text-xs font-bold hover:bg-amber-100">Gérer l’événement</button>
+            </div>
+          )}
         </section>
       )}
 
@@ -872,7 +878,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           {subscriptionNeedsAttention && (
             <article className={`flex flex-col gap-3 rounded-2xl border p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4 ${subscriptionDaysRemaining !== null && subscriptionDaysRemaining <= 3 || subscriptionStatus === 'past_due' ? 'border-rose-300 bg-rose-50 text-rose-950' : 'border-orange-200 bg-orange-50 text-orange-950'}`}>
               <div className="flex min-w-0 items-start gap-3"><Clock className="mt-0.5 h-5 w-5 shrink-0" /><div><h3 className="text-sm font-extrabold">{subscriptionAlertCopy.title}</h3><p className="mt-1 text-xs leading-5">{subscriptionAlertCopy.description}</p></div></div>
-              <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-[#211712] px-4 text-xs font-bold text-white hover:bg-slate-800">Voir mon forfait</button>
+              <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-[#292d2a] px-4 text-xs font-bold text-white hover:bg-slate-800">Voir mon forfait</button>
             </article>
           )}
           {(actionableOrderCount > 0 || outOfStockCount > 0 || lowStockCount > 0) && (
@@ -891,15 +897,15 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Lancement boutique</p>
-              <h2 id="setup-checklist-title" className="mt-1 text-xl font-black text-[#211712] sm:text-2xl">Votre vitrine est presque prête</h2>
+              <h2 id="setup-checklist-title" className="mt-1 text-xl font-black text-[#292d2a] sm:text-2xl">Votre vitrine est presque prête</h2>
             </div>
             <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-              <Link to="/guide?role=merchant" state={{ guideAccountId: currentShop.id }} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[#155544] hover:bg-[#f3faf6]">
+              <Link to="/guide?role=merchant" state={{ guideAccountId: currentShop.id }} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[#047857] hover:bg-[#f3faf6]">
                 <BookOpen className="h-4 w-4" aria-hidden="true" /> Tutoriel
               </Link>
               <div className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 shadow-sm ring-1 ring-[#e8e0d6]">
                 <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Étapes requises</span>
-                <span className="rounded-full bg-[#eaf4ef] px-2.5 py-1 text-xs font-black text-[#155544]">
+                <span className="rounded-full bg-[#d1fae5] px-2.5 py-1 text-xs font-black text-[#047857]">
                   {[Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), products.length > 0, isShopVerified, hasPublicationSubscriptionAccess, isShopPublished].filter(Boolean).length}/5
                 </span>
               </div>
@@ -908,7 +914,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 aria-expanded={isSetupChecklistExpanded}
                 aria-controls="merchant-setup-steps"
                 onClick={() => setIsSetupChecklistExpanded((expanded) => !expanded)}
-                className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[#155544] lg:hidden"
+                className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[#047857] lg:hidden"
               >
                 {isSetupChecklistExpanded ? 'Masquer les étapes' : 'Voir les étapes'}
                 <ChevronDown className={`h-4 w-4 transition-transform ${isSetupChecklistExpanded ? 'rotate-180' : ''}`} />
@@ -932,11 +938,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 } },
               ].map((step, index) => (
                 <button key={step.label} type="button" onClick={step.action} aria-label={`${step.done ? 'Modifier' : 'Compléter'} : ${step.label}`} className="flex min-h-[82px] items-start gap-3 rounded-2xl border border-[#e8e0d6] bg-white/90 px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-[#f8fdf9]">
-                  <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${step.done ? 'bg-[#0f4d3d] text-white' : 'border-2 border-slate-300 bg-slate-50 text-slate-500'}`}>
+                  <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${step.done ? 'bg-[#065f46] text-white' : 'border-2 border-slate-300 bg-slate-50 text-slate-500'}`}>
                     {step.done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : index + 1}
                   </span>
                   <span>
-                    <span className="block text-sm font-bold text-[#211712]">{step.label}</span>
+                    <span className="block text-sm font-bold text-[#292d2a]">{step.label}</span>
                     <span className="mt-1 block text-xs leading-5 text-slate-500">{step.detail}</span>
                   </span>
                 </button>
@@ -947,7 +953,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Action clé</p>
-                  <h3 className="mt-1 text-lg font-black text-[#211712]">
+                  <h3 className="mt-1 text-lg font-black text-[#292d2a]">
                     {!isShopVerified
                       ? 'Vérifier mon identité'
                       : isAdminSuspended
@@ -959,7 +965,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                             : 'Publier ma boutique'}
                   </h3>
                 </div>
-                <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isShopPublished ? 'bg-[#0f4d3d] text-white' : 'bg-white text-amber-700 ring-1 ring-[#dfe8dd]'}`}>
+                <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isShopPublished ? 'bg-[#065f46] text-white' : 'bg-white text-amber-700 ring-1 ring-[#dfe8dd]'}`}>
                   {isShopPublished ? <Check className="h-4 w-4" aria-hidden="true" /> : <AlertTriangle className="h-4 w-4" aria-hidden="true" />}
                 </span>
               </div>
@@ -988,14 +994,14 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                       : !hasPublicationSubscriptionAccess
                         ? () => { setSettingsSubTab('subscription'); setActiveTab('settings'); }
                         : () => void handlePublicationStatusChange('active')}
-                  className="inline-flex min-h-10 items-center justify-center rounded-full bg-[#0f4d3d] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#155544]"
+                  className="inline-flex min-h-10 items-center justify-center rounded-full bg-[#065f46] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#047857]"
                 >
                   {isShopPublished ? 'Voir la boutique' : 'Continuer'}
                 </button>
                 <button
                   type="button"
                   onClick={() => isShopPublished ? copyOwnerLink('public') : toast.error('Publiez votre boutique avant de partager son lien public.')}
-                  className="inline-flex min-h-10 items-center justify-center rounded-full border border-[#dfe8dd] bg-white px-4 py-2 text-xs font-bold text-[#155544] transition hover:bg-[#edf7f0]"
+                  className="inline-flex min-h-10 items-center justify-center rounded-full border border-[#dfe8dd] bg-white px-4 py-2 text-xs font-bold text-[#047857] transition hover:bg-[#edf7f0]"
                 >
                   Partager le lien
                 </button>
@@ -1025,20 +1031,21 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               { id: 'orders' as const, label: 'Commandes', count: actionableOrderCount, icon: ShoppingBag },
               { id: 'stats' as const, label: 'Statistiques', icon: BarChart3 },
             ].map(({ id, label, icon: Icon, count }) => (
-              <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => setActiveTab(id)} className={`flex min-h-11 min-w-0 items-center justify-start gap-3 rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition-all sm:text-sm lg:w-full ${activeTab === id ? 'border-transparent bg-[#176b55] text-white' : 'border-transparent bg-transparent text-white/90 hover:bg-[#176b55] hover:text-white'}`}>
+              <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => setActiveTab(id)} className={`flex min-h-11 min-w-0 items-center justify-start gap-3 rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition-all sm:text-sm lg:w-full ${activeTab === id ? 'border-transparent bg-[#047857] text-white' : 'border-transparent bg-transparent text-white/90 hover:bg-[#047857] hover:text-white'}`}>
                 <Icon className="h-4 w-4 shrink-0" /><span className="flex-1">{label}</span>
                 {count !== undefined && count > 0 && (
-                  <span className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-[10px] font-black ${id === 'orders' ? 'bg-[#e6572b] text-white' : 'bg-white/15 text-white'}`}>{count}</span>
+                  <span className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-[10px] font-black ${id === 'orders' ? 'bg-[#F97316] text-white' : 'bg-white/15 text-white'}`}>{count}</span>
                 )}
               </button>
             ))}
             <div className="my-2 border-t border-white/15" />
             <p className="px-3 pb-1 pt-1 text-[10px] font-black uppercase tracking-[0.14em] text-white/70">À suivre</p>
             {[
+              { id: 'visibility' as const, label: 'Campagnes et boosts', icon: TrendingUp, badge: '' },
               { id: 'subscription' as const, label: 'Abonnement', icon: CreditCard, badge: subscriptionNeedsAttention ? 'Échéance' : '' },
               { id: 'verification' as const, label: identityStatus === 'verified' ? 'Identité vérifiée' : 'Vérification d’identité', icon: ShieldCheck, badge: identityVerificationRequired ? 'À faire' : '' },
             ].map(({ id, label, icon: Icon, badge }) => (
-              <button key={id} type="button" aria-current={activeTab === 'settings' && settingsSubTab === id ? 'page' : undefined} onClick={() => { setSettingsSubTab(id); setActiveTab('settings'); }} className={`flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold transition sm:text-sm ${activeTab === 'settings' && settingsSubTab === id ? 'bg-[#176b55] text-white' : 'text-white/90 hover:bg-[#176b55] hover:text-white'}`}>
+              <button key={id} type="button" aria-current={activeTab === 'settings' && settingsSubTab === id ? 'page' : undefined} onClick={() => { setSettingsSubTab(id); setActiveTab('settings'); }} className={`flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold transition sm:text-sm ${activeTab === 'settings' && settingsSubTab === id ? 'bg-[#047857] text-white' : 'text-white/90 hover:bg-[#047857] hover:text-white'}`}>
                 <Icon className="h-4 w-4 shrink-0" /><span className="flex-1">{label}</span>{badge && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-900">{badge}</span>}
               </button>
             ))}
@@ -1048,18 +1055,18 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <section key={group.label} className="mb-2">
                 <h2 className="px-3 pb-1 text-[9px] font-black uppercase tracking-wide text-white/60">{group.label}</h2>
                 {group.items.map(({ id, label, icon: Icon }) => (
-                  <button key={id} type="button" aria-current={activeTab === 'settings' && settingsSubTab === id ? 'page' : undefined} onClick={() => { setSettingsSubTab(id); setActiveTab('settings'); }} className={`flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold transition sm:text-sm ${activeTab === 'settings' && settingsSubTab === id ? 'bg-[#176b55] text-white' : 'text-white/90 hover:bg-[#176b55] hover:text-white'}`}>
+                  <button key={id} type="button" aria-current={activeTab === 'settings' && settingsSubTab === id ? 'page' : undefined} onClick={() => { setSettingsSubTab(id); setActiveTab('settings'); }} className={`flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold transition sm:text-sm ${activeTab === 'settings' && settingsSubTab === id ? 'bg-[#047857] text-white' : 'text-white/90 hover:bg-[#047857] hover:text-white'}`}>
                     <Icon className="h-4 w-4 shrink-0" /><span>{label}</span>
                   </button>
                 ))}
               </section>
             ))}
             <p className="px-3 pb-1 pt-1 text-[10px] font-black uppercase tracking-[0.14em] text-white/70">Partage</p>
-            <button type="button" disabled={!isShopPublished} onClick={() => void copyOwnerLink('public')} className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-[#176b55] disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"><Copy className="h-4 w-4 shrink-0" />Lien vitrine</button>
-            <button type="button" disabled={!isShopPublished} onClick={() => setIsQrKitOpen(true)} className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-[#176b55] disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"><QrCode className="h-4 w-4 shrink-0" />QR code et affiche</button>
-            <button type="button" onClick={() => void copyOwnerLink('private')} className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-[#176b55] sm:text-sm"><Key className="h-4 w-4 shrink-0" />Lien d’accès privé</button>
-            {dashboardSupportUrl && <a href={dashboardSupportUrl} target="_blank" rel="noreferrer" className="flex min-h-10 items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-white/90 hover:bg-[#176b55] sm:text-sm"><MessageCircle className="h-4 w-4 shrink-0" />Centre d’aide</a>}
-            <button type="button" onClick={handleLogout} className="mt-2 inline-flex min-h-11 min-w-max items-center justify-start gap-3 rounded-xl border-t border-white/15 px-3 py-2.5 text-left text-xs font-bold text-white/80 transition hover:bg-[#176b55] hover:text-white sm:text-sm lg:w-full">
+            <button type="button" disabled={!isShopPublished} onClick={() => void copyOwnerLink('public')} className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"><Copy className="h-4 w-4 shrink-0" />Lien vitrine</button>
+            <button type="button" disabled={!isShopPublished} onClick={() => setIsQrKitOpen(true)} className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"><QrCode className="h-4 w-4 shrink-0" />QR code et affiche</button>
+            <button type="button" onClick={() => void copyOwnerLink('private')} className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-[#047857] sm:text-sm"><Key className="h-4 w-4 shrink-0" />Lien d’accès privé</button>
+            {dashboardSupportUrl && <a href={dashboardSupportUrl} target="_blank" rel="noreferrer" className="flex min-h-10 items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-white/90 hover:bg-[#047857] sm:text-sm"><MessageCircle className="h-4 w-4 shrink-0" />Centre d’aide</a>}
+            <button type="button" onClick={handleLogout} className="mt-2 inline-flex min-h-11 min-w-max items-center justify-start gap-3 rounded-xl border-t border-white/15 px-3 py-2.5 text-left text-xs font-bold text-white/80 transition hover:bg-[#047857] hover:text-white sm:text-sm lg:w-full">
             <LogOut className="h-4 w-4 shrink-0" /><span>Déconnexion</span>
             </button>
           </nav>
@@ -1073,13 +1080,13 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                   { label: 'Montant des commandes', value: formatFCFA(orderValue), hint: 'Paiements non suivis par MaTable.ci', tone: 'text-[#1D6B57]', icon: DollarSign },
                   { label: 'Clients', value: uniqueCustomerCount, hint: 'Clients ayant commandé', tone: 'text-[#1D6B57]', icon: UserPlus },
                   { label: 'Articles', value: `${products.length} / ${Number.isFinite(dashboardProductLimit) ? dashboardProductLimit : '∞'}`, hint: 'Dans votre catalogue', tone: 'text-[#1D6B57]', icon: Package },
-                ].map((metric) => <div key={metric.label} className="flex min-h-[104px] items-start gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4"><span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f7f4ee] ${metric.tone}`}><metric.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="text-xs font-semibold text-slate-500">{metric.label}</p><strong className="mt-1 block truncate text-xl font-black text-[#211712]">{metric.value}</strong><p className="mt-1 truncate text-[11px] text-slate-500">{metric.hint}</p></div></div>)}
+                ].map((metric) => <div key={metric.label} className="flex min-h-[104px] items-start gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4"><span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f7f4ee] ${metric.tone}`}><metric.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="text-xs font-semibold text-slate-500">{metric.label}</p><strong className="mt-1 block truncate text-xl font-black text-[#292d2a]">{metric.value}</strong><p className="mt-1 truncate text-[11px] text-slate-500">{metric.hint}</p></div></div>)}
               </div>
               <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,0.9fr)]">
                 <section aria-labelledby="merchant-recent-orders-title" className="min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
                   <div className="mb-3 flex items-center justify-between gap-3 border-b border-[#eee8dc] pb-3">
-                    <h3 id="merchant-recent-orders-title" className="text-lg font-black text-[#155544]">Commandes récentes</h3>
-                    <button type="button" onClick={() => setActiveTab('orders')} className="text-xs font-bold text-[#155544] underline underline-offset-2">Voir tout</button>
+                    <h3 id="merchant-recent-orders-title" className="text-lg font-black text-[#047857]">Commandes récentes</h3>
+                    <button type="button" onClick={() => setActiveTab('orders')} className="text-xs font-bold text-[#047857] underline underline-offset-2">Voir tout</button>
                   </div>
                   {recentOrders.length === 0 ? (
                     <p className="py-5 text-sm text-slate-500">Vos nouvelles commandes apparaîtront ici.</p>
@@ -1102,13 +1109,13 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                           : 'Heure indisponible';
                         return (
                           <li key={order.id} className="flex min-w-0 flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
-                            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#f8f1e7] text-[#e6572b]"><ShoppingBag className="h-4 w-4" /></span>
+                            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#f8f1e7] text-[#F97316]"><ShoppingBag className="h-4 w-4" /></span>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-bold text-[#211712]">N° {order.id} · {orderItemName}</p>
+                              <p className="truncate text-sm font-bold text-[#292d2a]">N° {order.id} · {orderItemName}</p>
                               <p className="mt-0.5 text-xs text-slate-500">{isToday ? 'Aujourd’hui' : orderDateLabel}, {orderTime}</p>
                             </div>
-                            <span className="rounded-full bg-[#e2eee8] px-2.5 py-1 text-xs font-bold text-[#155544]">{orderStatusLabels[order.status]}</span>
-                            <strong className="min-w-24 text-right text-sm font-black text-[#211712]">{formatFCFA(order.total_amount)}</strong>
+                            <span className="rounded-full bg-[#e2eee8] px-2.5 py-1 text-xs font-bold text-[#047857]">{orderStatusLabels[order.status]}</span>
+                            <strong className="min-w-24 text-right text-sm font-black text-[#292d2a]">{formatFCFA(order.total_amount)}</strong>
                           </li>
                         );
                       })}
@@ -1123,20 +1130,20 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                         {currentShop.theme_config?.logo_url ? <img src={currentShop.theme_config.logo_url} alt="" className="h-full w-full rounded-full object-cover" /> : getCategoryDefaults(currentShop.category).icon}
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <h3 id="merchant-shop-card-title" className="font-black text-[#155544]">{currentShop.name}</h3>
-                        {isShopVerified && <span className="rounded-full bg-[#e2eee8] px-2 py-0.5 text-[10px] font-bold text-[#155544]">Vérifiée</span>}
+                        <h3 id="merchant-shop-card-title" className="font-black text-[#047857]">{currentShop.name}</h3>
+                        {isShopVerified && <span className="rounded-full bg-[#e2eee8] px-2 py-0.5 text-[10px] font-bold text-[#047857]">Vérifiée</span>}
                       </div>
                       <p className="mt-1 text-xs text-slate-500">{currentShop.city || 'Localisation à compléter'} · {currentShop.is_open ? 'Ouverte' : 'Fermée'}</p>
-                      <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('general'); }} className="mt-3 min-h-10 w-full rounded-full border border-[#155544] px-3 text-xs font-bold text-[#155544] hover:bg-[#eaf4ef]">Modifier ma boutique</button>
+                      <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('general'); }} className="mt-3 min-h-10 w-full rounded-full border border-[#047857] px-3 text-xs font-bold text-[#047857] hover:bg-[#d1fae5]">Modifier ma boutique</button>
                     </div>
                   </section>
                   <section aria-labelledby="merchant-quick-actions-title" className="rounded-2xl border border-[#e7dfd3] bg-white p-4">
-                    <h3 id="merchant-quick-actions-title" className="mb-3 font-black text-[#155544]">Accès rapides</h3>
+                    <h3 id="merchant-quick-actions-title" className="mb-3 font-black text-[#047857]">Accès rapides</h3>
                     <div className="grid grid-cols-2 gap-2">
-                      <button type="button" onClick={() => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); }} disabled={dashboardCatalogFull} className="min-h-16 rounded-xl bg-[#f7f4ee] p-3 text-left text-xs font-bold text-[#211712] hover:bg-[#eaf4ef] disabled:opacity-50"><Package className="mb-1 h-4 w-4 text-[#155544]" />Ajouter un produit</button>
-                      <button type="button" onClick={() => setActiveTab('orders')} className="min-h-16 rounded-xl bg-[#f7f4ee] p-3 text-left text-xs font-bold text-[#211712] hover:bg-[#eaf4ef]"><ShoppingBag className="mb-1 h-4 w-4 text-[#155544]" />Voir les commandes</button>
-                      <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('hours'); }} className="min-h-16 rounded-xl bg-[#f7f4ee] p-3 text-left text-xs font-bold text-[#211712] hover:bg-[#eaf4ef]"><Clock className="mb-1 h-4 w-4 text-[#155544]" />Gérer les horaires</button>
-                      <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('profile'); }} className="min-h-16 rounded-xl bg-[#f7f4ee] p-3 text-left text-xs font-bold text-[#211712] hover:bg-[#eaf4ef]"><Key className="mb-1 h-4 w-4 text-[#155544]" />Profil et sécurité</button>
+                      <button type="button" onClick={() => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); }} disabled={dashboardCatalogFull} className="min-h-16 rounded-xl bg-[#f7f4ee] p-3 text-left text-xs font-bold text-[#292d2a] hover:bg-[#d1fae5] disabled:opacity-50"><Package className="mb-1 h-4 w-4 text-[#047857]" />Ajouter un produit</button>
+                      <button type="button" onClick={() => setActiveTab('orders')} className="min-h-16 rounded-xl bg-[#f7f4ee] p-3 text-left text-xs font-bold text-[#292d2a] hover:bg-[#d1fae5]"><ShoppingBag className="mb-1 h-4 w-4 text-[#047857]" />Voir les commandes</button>
+                      <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('hours'); }} className="min-h-16 rounded-xl bg-[#f7f4ee] p-3 text-left text-xs font-bold text-[#292d2a] hover:bg-[#d1fae5]"><Clock className="mb-1 h-4 w-4 text-[#047857]" />Gérer les horaires</button>
+                      <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('profile'); }} className="min-h-16 rounded-xl bg-[#f7f4ee] p-3 text-left text-xs font-bold text-[#292d2a] hover:bg-[#d1fae5]"><Key className="mb-1 h-4 w-4 text-[#047857]" />Profil et sécurité</button>
                     </div>
                   </section>
                 </div>
@@ -1146,19 +1153,19 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                   <ProAnalyticsPanel shop={currentShop} compact />
                   <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#e7dfd3] bg-[#f9f0e6] p-4 sm:p-5">
                     <div className="flex items-center gap-3">
-                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#e6572b] text-white"><TrendingUp className="h-5 w-5" /></span>
+                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#F97316] text-white"><TrendingUp className="h-5 w-5" /></span>
                       <div>
                         <h3 className="font-black text-[#93602e]">Boostez votre visibilité</h3>
                         <p className="mt-0.5 text-xs text-slate-600">Mettez votre boutique en avant dans l’annuaire.</p>
                       </div>
                     </div>
-                    <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('subscription'); }} className="min-h-10 rounded-full bg-[#0f4d3d] px-5 text-xs font-bold text-white hover:bg-[#176b55]">Découvrir</button>
+                    <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('subscription'); }} className="min-h-10 rounded-full bg-[#065f46] px-5 text-xs font-bold text-white hover:bg-[#047857]">Découvrir</button>
                   </section>
                 </div>
                 <section aria-labelledby="merchant-latest-reviews-title" className="min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3 border-b border-[#eee8dc] pb-3">
                     <div>
-                      <h3 id="merchant-latest-reviews-title" className="text-lg font-black text-[#155544]">Derniers avis</h3>
+                      <h3 id="merchant-latest-reviews-title" className="text-lg font-black text-[#047857]">Derniers avis</h3>
                       {shopReviewSummary.average !== null && <p className="mt-1 text-xs font-semibold text-slate-500">{shopReviewSummary.average.toLocaleString('fr-FR')} / 5 · {shopReviewSummary.count} avis</p>}
                     </div>
                   </div>
@@ -1168,9 +1175,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                   {!reviewsLoading && !reviewsError && reviewShopIsPublished && shopReviews.length === 0 && <p className="py-5 text-sm text-slate-500">Aucun avis pour le moment.</p>}
                   {!reviewsLoading && !reviewsError && shopReviews.slice(0, 2).map((review) => (
                     <article key={review.id} className="flex gap-3 border-b border-[#eee8dc] py-3 last:border-0">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#e2eee8] text-xs font-black text-[#155544]">{review.author_name.slice(0, 2).toLocaleUpperCase()}</span>
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#e2eee8] text-xs font-black text-[#047857]">{review.author_name.slice(0, 2).toLocaleUpperCase()}</span>
                       <div className="min-w-0">
-                        <p className="text-xs font-bold text-[#211712]">{review.author_name} <span className="font-normal text-slate-500">· {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(review.created_at))}</span></p>
+                        <p className="text-xs font-bold text-[#292d2a]">{review.author_name} <span className="font-normal text-slate-500">· {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(review.created_at))}</span></p>
                         <p className="mt-1 text-xs font-bold text-[#93602e]" aria-label={`${review.rating} sur 5 étoiles`}>{'★'.repeat(Math.max(0, Math.min(5, Math.round(review.rating))))}</p>
                         <p className="mt-1 break-words text-xs leading-5 text-slate-600">{review.comment}</p>
                       </div>
@@ -1196,37 +1203,37 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           { id: 'orders' as const, label: 'Commandes', icon: ShoppingBag, count: actionableOrderCount },
           { id: 'stats' as const, label: 'Stats', icon: BarChart3 },
         ].map(({ id, label, icon: Icon, count }) => (
-          <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => { setActiveTab(id); setIsSettingsDrawerOpen(false); }} className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-lg text-[10px] font-bold ${activeTab === id ? 'text-[#155544]' : 'text-slate-500'}`}>
+          <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => { setActiveTab(id); setIsSettingsDrawerOpen(false); }} className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-lg text-[10px] font-bold ${activeTab === id ? 'text-[#047857]' : 'text-slate-500'}`}>
             <Icon className="h-5 w-5" />
             <span>{label}</span>
-            {count !== undefined && count > 0 && <span className="absolute right-[calc(50%-20px)] top-1 min-w-4 rounded-full bg-[#e6572b] px-1 text-center text-[9px] leading-4 text-white">{count}</span>}
+            {count !== undefined && count > 0 && <span className="absolute right-[calc(50%-20px)] top-1 min-w-4 rounded-full bg-[#F97316] px-1 text-center text-[9px] leading-4 text-white">{count}</span>}
           </button>
         ))}
-        <button type="button" aria-label={mobileNotificationCount > 0 ? `Plus, ${mobileNotificationCount} priorité${mobileNotificationCount === 1 ? '' : 's'} à consulter` : 'Plus'} aria-expanded={isSettingsDrawerOpen} aria-controls="merchant-menu-drawer" onClick={() => setIsSettingsDrawerOpen(true)} className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-lg text-[10px] font-bold ${isSettingsDrawerOpen || activeTab === 'settings' ? 'text-[#155544]' : 'text-slate-500'}`}>
+        <button type="button" aria-label={mobileNotificationCount > 0 ? `Plus, ${mobileNotificationCount} priorité${mobileNotificationCount === 1 ? '' : 's'} à consulter` : 'Plus'} aria-expanded={isSettingsDrawerOpen} aria-controls="merchant-menu-drawer" onClick={() => setIsSettingsDrawerOpen(true)} className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-t-lg text-[10px] font-bold ${isSettingsDrawerOpen || activeTab === 'settings' ? 'text-[#047857]' : 'text-slate-500'}`}>
           <MoreHorizontal className="h-5 w-5" /><span>Plus</span>
-          {mobileNotificationCount > 0 && <span aria-hidden="true" className="absolute right-[calc(50%-18px)] top-0 min-w-4 rounded-full bg-[#e6572b] px-1 text-center text-[9px] leading-4 text-white">{mobileNotificationCount > 9 ? '9+' : mobileNotificationCount}</span>}
+          {mobileNotificationCount > 0 && <span aria-hidden="true" className="absolute right-[calc(50%-18px)] top-0 min-w-4 rounded-full bg-[#F97316] px-1 text-center text-[9px] leading-4 text-white">{mobileNotificationCount > 9 ? '9+' : mobileNotificationCount}</span>}
         </button>
       </nav>
 
       {isIdentityGuideOpen && createPortal(
-        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-[#211712]/60 p-0 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-[#292d2a]/60 p-0 sm:items-center sm:p-4">
           <button type="button" aria-label="Fermer le guide" onClick={dismissIdentityGuide} className="absolute inset-0" />
           <section role="dialog" aria-modal="true" aria-labelledby="identity-guide-title" className="relative max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-[#fffdf8] p-5 shadow-2xl sm:rounded-3xl sm:p-7">
             <button type="button" aria-label="Fermer le guide" onClick={dismissIdentityGuide} className="absolute right-4 top-4 rounded-full border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50"><X className="h-4 w-4" /></button>
             <span className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-100 text-amber-900"><ShieldCheck className="h-6 w-6" /></span>
             <p className="mt-4 text-[10px] font-black uppercase tracking-[0.14em] text-amber-800">Première étape</p>
-            <h2 id="identity-guide-title" className="mt-1 pr-8 text-2xl font-black text-[#211712]">Bienvenue dans votre espace boutique</h2>
+            <h2 id="identity-guide-title" className="mt-1 pr-8 text-2xl font-black text-[#292d2a]">Bienvenue dans votre espace boutique</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">Pour apparaître dans l’annuaire et recevoir des commandes, commencez par vérifier l’identité du responsable. Vous pourrez ensuite compléter votre vitrine et la publier.</p>
             <ol className="mt-5 space-y-3">
               {[
                 ['Vérifier votre identité', 'Étape nécessaire avant la publication.'],
                 ['Compléter votre vitrine', 'Ajoutez un logo, vos coordonnées et vos produits.'],
                 ['Publier et partager', 'Vos clients pourront découvrir la boutique et vous contacter.'],
-              ].map(([title, description], index) => <li key={title} className="flex items-start gap-3 rounded-xl border border-[#e7dfd3] bg-white p-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#eaf4ef] text-xs font-black text-[#155544]">{index + 1}</span><span><strong className="block text-sm text-[#211712]">{title}</strong><span className="mt-0.5 block text-xs leading-5 text-slate-600">{description}</span></span></li>)}
+              ].map(([title, description], index) => <li key={title} className="flex items-start gap-3 rounded-xl border border-[#e7dfd3] bg-white p-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#d1fae5] text-xs font-black text-[#047857]">{index + 1}</span><span><strong className="block text-sm text-[#292d2a]">{title}</strong><span className="mt-0.5 block text-xs leading-5 text-slate-600">{description}</span></span></li>)}
             </ol>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button type="button" onClick={dismissIdentityGuide} className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">Plus tard</button>
-              <button type="button" onClick={openIdentityVerification} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#155544] px-4 text-sm font-bold text-white hover:bg-[#0f4538]">Commencer la vérification<ChevronRight className="h-4 w-4" /></button>
+              <button type="button" onClick={openIdentityVerification} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#047857] px-4 text-sm font-bold text-white hover:bg-[#0f4538]">Commencer la vérification<ChevronRight className="h-4 w-4" /></button>
             </div>
           </section>
         </div>,
@@ -1234,18 +1241,18 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       )}
 
       {subscriptionReminderDay !== null && createPortal(
-        <div className="fixed inset-0 z-[85] flex items-end justify-center bg-[#211712]/60 p-0 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-[85] flex items-end justify-center bg-[#292d2a]/60 p-0 sm:items-center sm:p-4">
           <button type="button" aria-label="Fermer le rappel d’abonnement" onClick={dismissSubscriptionReminder} className="absolute inset-0" />
           <section role="dialog" aria-modal="true" aria-labelledby="subscription-reminder-title" className="relative max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-[#fffdf8] p-5 shadow-2xl sm:rounded-3xl sm:p-7">
             <button type="button" aria-label="Fermer le rappel d’abonnement" onClick={dismissSubscriptionReminder} className="absolute right-4 top-4 rounded-full border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50"><X className="h-4 w-4" /></button>
             <span className={`grid h-12 w-12 place-items-center rounded-2xl ${subscriptionReminderDay <= 3 ? 'bg-rose-100 text-rose-900' : 'bg-orange-100 text-orange-900'}`}><Clock className="h-6 w-6" /></span>
             <p className="mt-4 text-[10px] font-black uppercase tracking-[0.14em] text-orange-800">Rappel d’échéance · J−{subscriptionReminderDay}</p>
-            <h2 id="subscription-reminder-title" className="mt-1 pr-8 text-2xl font-black text-[#211712]">{subscriptionReminderDay === 1 ? 'Votre forfait se termine demain' : `Votre forfait se termine dans ${subscriptionReminderDay} jours`}</h2>
+            <h2 id="subscription-reminder-title" className="mt-1 pr-8 text-2xl font-black text-[#292d2a]">{subscriptionReminderDay === 1 ? 'Votre forfait se termine demain' : `Votre forfait se termine dans ${subscriptionReminderDay} jours`}</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">{subscriptionStatus === 'trialing' ? 'Consultez les options de votre forfait pour préparer la suite après l’essai.' : 'Renouvelez votre forfait avant cette date pour conserver l’accès aux fonctionnalités incluses.'} Ce rappel restera dans votre tableau de bord jusqu’à son échéance.</p>
             <p className="mt-3 rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">Les rappels WhatsApp suivent un calendrier séparé (J−14, J−7, J−3 et J−1) lorsque vous y avez consenti et que le service est configuré.</p>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button type="button" onClick={dismissSubscriptionReminder} className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">Me le rappeler plus tard</button>
-              <button type="button" onClick={() => { dismissSubscriptionReminder(); setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#155544] px-4 text-sm font-bold text-white hover:bg-[#0f4538]">Voir mon forfait<ChevronRight className="h-4 w-4" /></button>
+              <button type="button" onClick={() => { dismissSubscriptionReminder(); setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#047857] px-4 text-sm font-bold text-white hover:bg-[#0f4538]">Voir mon forfait<ChevronRight className="h-4 w-4" /></button>
             </div>
           </section>
         </div>,
@@ -1253,11 +1260,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       )}
 
       {isSettingsDrawerOpen && (
-        <div className="fixed inset-0 z-40 bg-[#fffaf2] lg:hidden">
-          <button type="button" aria-label="Fermer le menu" onClick={() => setIsSettingsDrawerOpen(false)} className="absolute inset-0 bg-[#211712]/55" />
-          <aside id="merchant-menu-drawer" aria-labelledby="merchant-menu-title" className="absolute inset-x-0 top-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] flex h-auto w-full flex-col overflow-y-auto bg-[#fffaf2] p-4 sm:p-5">
+        <div className="fixed inset-0 z-40 bg-[#FFFFFF] lg:hidden">
+          <button type="button" aria-label="Fermer le menu" onClick={() => setIsSettingsDrawerOpen(false)} className="absolute inset-0 bg-[#292d2a]/55" />
+          <aside id="merchant-menu-drawer" aria-labelledby="merchant-menu-title" className="absolute inset-x-0 top-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] flex h-auto w-full flex-col overflow-y-auto bg-[#FFFFFF] p-4 sm:p-5">
             <header className="flex items-start justify-between gap-3 border-b border-[#ded8ce] pb-4">
-              <div><p className="text-[10px] font-black uppercase text-[#e6572b]">MaTable.ci</p><h2 id="merchant-menu-title" className="mt-1 text-xl font-black text-[#211712]">Plus</h2></div>
+              <div><p className="text-[10px] font-black uppercase text-[#F97316]">MaTable.ci</p><h2 id="merchant-menu-title" className="mt-1 text-xl font-black text-[#292d2a]">Plus</h2></div>
               <button type="button" onClick={() => setIsSettingsDrawerOpen(false)} aria-label="Fermer le menu" className="rounded-lg border border-slate-300 bg-white p-2 text-slate-700"><X className="h-4 w-4" /></button>
             </header>
             <nav className="mt-4 space-y-4" aria-label="Navigation et réglages commerçant">
@@ -1278,8 +1285,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <section>
                 <h3 className="mb-1 px-3 text-[10px] font-black uppercase tracking-wide text-slate-500">Visibilité</h3>
                 <div className="overflow-hidden rounded-xl border border-[#e9e5dc] bg-white">
-                  <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-12 w-full items-center gap-3 px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50">
-                    <TrendingUp className="h-4 w-4 shrink-0 text-emerald-800" /><span className="flex-1">Promotion et boost</span><ChevronRight className="h-4 w-4 text-slate-400" />
+                  <button type="button" onClick={() => { setSettingsSubTab('visibility'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-12 w-full items-center gap-3 px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50">
+                    <TrendingUp className="h-4 w-4 shrink-0 text-emerald-800" /><span className="flex-1">Campagnes et boosts</span><ChevronRight className="h-4 w-4 text-slate-400" />
                   </button>
                 </div>
               </section>
@@ -1288,7 +1295,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 <div className="overflow-hidden rounded-xl border border-[#e9e5dc] bg-white">
                   {[
                     { id: 'bilan' as const, label: 'Flash bilan', icon: Send },
-                    { id: 'analytics' as const, label: 'Statistiques Pro', icon: BarChart3 },
                   ].map(({ id, label, icon: Icon }) => (
                     <button key={id} type="button" onClick={() => { setSettingsSubTab(id); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-12 w-full items-center gap-3 border-b border-[#eee9e1] px-3 text-left text-sm font-semibold text-slate-800 last:border-0 hover:bg-emerald-50">
                       <Icon className="h-4 w-4 shrink-0 text-emerald-800" /><span className="flex-1">{label}</span><ChevronRight className="h-4 w-4 text-slate-400" />

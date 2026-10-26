@@ -1,11 +1,13 @@
 import { Order, Product, Shop } from '../types';
 import { getCategoryDefaults } from './categoryDefaults';
+import { getActiveProductPrice } from './productPricing';
 
 export function getProductUnitPrice(product: Product, selectedModifiers?: string[]): number {
   const selected = new Set((selectedModifiers || []).map(value => value.trim()).filter(Boolean));
+  const basePrice = getActiveProductPrice(product);
 
   if (!product.modifier_groups || product.modifier_groups.length === 0) {
-    return product.price;
+    return basePrice;
   }
 
   let modifiersTotal = 0;
@@ -19,7 +21,7 @@ export function getProductUnitPrice(product: Product, selectedModifiers?: string
     }
   }
 
-  return product.price + modifiersTotal;
+  return basePrice + modifiersTotal;
 }
 
 export function formatFCFA(amount: number): string {

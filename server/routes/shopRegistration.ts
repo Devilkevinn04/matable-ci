@@ -57,16 +57,19 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     const acceptedTermsPrivacy = req.body?.accepted_terms_privacy === true;
     const effectivePin = pin_code || pin;
     const safeName = sanitizeTextField(name, 100);
-    const safeCity = sanitizeTextField(city || 'Abidjan', 100);
+    const safeCity = sanitizeTextField(city || '', 100);
     const safeWelcomeMessage = sanitizeTextField(welcome_message, 300);
     const requestedThemeConfig = theme_config && typeof theme_config === 'object' ? theme_config : {};
+    const requestedOpenTime = typeof opening_hours?.open_time === 'string' ? opening_hours.open_time.slice(0, 5) : '';
+    const requestedCloseTime = typeof opening_hours?.close_time === 'string' ? opening_hours.close_time.slice(0, 5) : '';
+    const requestedDays = Array.isArray(opening_hours?.days)
+      ? opening_hours.days.filter((day: unknown): day is number => typeof day === 'number' && Number.isInteger(day) && day >= 0 && day <= 6).slice(0, 7)
+      : [];
     const normalizedOpeningHours = {
       enabled: Boolean(opening_hours?.enabled),
-      open_time: typeof opening_hours?.open_time === 'string' ? opening_hours.open_time.slice(0, 5) : '08:00',
-      close_time: typeof opening_hours?.close_time === 'string' ? opening_hours.close_time.slice(0, 5) : '22:00',
-      days: Array.isArray(opening_hours?.days)
-        ? opening_hours.days.filter((day: unknown): day is number => typeof day === 'number' && Number.isInteger(day) && day >= 0 && day <= 6).slice(0, 7)
-        : [0, 1, 2, 3, 4, 5, 6],
+      open_time: requestedOpenTime,
+      close_time: requestedCloseTime,
+      days: requestedDays,
       manual_override: Boolean(opening_hours?.manual_override),
     };
     const deliveryZones = Array.isArray(requestedThemeConfig.delivery_zones)
@@ -83,6 +86,18 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     }
     if (!acceptedTermsPrivacy) {
       return res.status(400).json({ error: 'Veuillez accepter les CGU et la politique de confidentialité pour créer une boutique.' });
+    }
+    const isValidTime = (value: string) => {
+      if (!/^\d{2}:\d{2}$/.test(value)) return false;
+      const [hours, minutes] = value.split(':').map(Number);
+      return hours < 24 && minutes < 60;
+    };
+    if (normalizedOpeningHours.enabled && (
+      !isValidTime(normalizedOpeningHours.open_time)
+      || !isValidTime(normalizedOpeningHours.close_time)
+      || normalizedOpeningHours.days.length === 0
+    )) {
+      return res.status(400).json({ error: 'Un planning actif doit inclure des heures valides et au moins un jour d’ouverture.' });
     }
     if (safeName.length < 2 || !whatsapp_number || !/^[0-9]{6}$/.test(String(effectivePin || '').trim())) {
       return res.status(400).json({ error: 'Nom, numéro WhatsApp et code PIN requis.' });

@@ -51,7 +51,7 @@ function PreviewBottomNav({ items, active, onSelect }: {
   return (
     <nav aria-label="Aperçu de la navigation mobile" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }} className="fixed inset-x-0 bottom-0 z-20 mx-auto grid max-w-md border-t border-[#e7dfd3] bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] pt-1 shadow-[0_-8px_24px_rgba(33,23,18,0.08)] backdrop-blur">
       {items.map(({ label, icon: Icon }) => (
-        <button key={label} type="button" aria-current={label === active ? 'page' : undefined} onClick={() => onSelect(label)} className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[10px] font-bold ${label === active ? 'text-[#155544]' : 'text-slate-500'}`}>
+        <button key={label} type="button" aria-current={label === active ? 'page' : undefined} onClick={() => onSelect(label)} className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[10px] font-bold ${label === active ? 'text-[#047857]' : 'text-slate-500'}`}>
           <Icon className="h-5 w-5" />
           <span>{label}</span>
         </button>
@@ -69,23 +69,23 @@ function PreviewSection({ title, detail, items, onBack }: {
   return (
     <main className="space-y-4 pb-24">
       <section>
-        {onBack && <button type="button" onClick={onBack} className="mb-3 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-[#155544]"><ArrowLeft className="h-4 w-4" />Retour</button>}
-        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#176b55]">Aperçu de navigation</p>
-        <h1 className="mt-1 text-2xl font-black text-[#211712]">{title}</h1>
+        {onBack && <button type="button" onClick={onBack} className="mb-3 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-[#047857]"><ArrowLeft className="h-4 w-4" />Retour</button>}
+        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#047857]">Aperçu de navigation</p>
+        <h1 className="mt-1 text-2xl font-black text-[#292d2a]">{title}</h1>
         <p className="mt-1 text-xs text-slate-500">{detail}</p>
       </section>
       <section className="overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white shadow-sm">
         {items.map(({ label, value, icon: Icon, onClick }, index) => (
           onClick ? (
             <button key={label} type="button" onClick={onClick} className={`flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 ${index ? 'border-t border-slate-100' : ''}`}>
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#eaf4ef] text-[#155544]"><Icon className="h-5 w-5" /></span>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#d1fae5] text-[#047857]"><Icon className="h-5 w-5" /></span>
               <span className="min-w-0 flex-1 text-sm font-bold text-slate-800">{label}</span>
               <span className="text-right text-xs font-semibold text-slate-500">{value}</span>
               <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
             </button>
           ) : (
             <article key={label} className={`flex min-h-16 items-center gap-3 px-4 py-3 ${index ? 'border-t border-slate-100' : ''}`}>
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#eaf4ef] text-[#155544]"><Icon className="h-5 w-5" /></span>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#d1fae5] text-[#047857]"><Icon className="h-5 w-5" /></span>
               <span className="min-w-0 flex-1 text-sm font-bold text-slate-800">{label}</span>
               <span className="text-right text-xs font-semibold text-slate-500">{value}</span>
             </article>
@@ -101,9 +101,9 @@ function PreviewPageHeader({ title, subtitle }: { title: string; subtitle: strin
   return (
     <header className="mb-4 flex items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-3">
-        <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#155544] text-base font-black text-white">M</span>
+        <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#047857] text-base font-black text-white">M</span>
         <div className="min-w-0">
-          <p className="truncate text-[10px] font-black uppercase tracking-[0.14em] text-[#155544]">MaTable.ci · {title}</p>
+          <p className="truncate text-[10px] font-black uppercase tracking-[0.14em] text-[#047857]">MaTable.ci · {title}</p>
           <p className="truncate text-xs text-slate-500">{subtitle}</p>
         </div>
       </div>
@@ -222,7 +222,7 @@ function MerchantPreview() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Votre boutique</p>
-              <h1 className="mt-1 text-xl font-black text-[#211712]">Atelier Awa</h1>
+              <h1 className="mt-1 text-xl font-black text-[#292d2a]">Atelier Awa</h1>
             </div>
             <button type="button" aria-pressed={isShopOpen} onClick={() => setIsShopOpen((open) => !open)} className={`min-h-10 rounded-full px-3 text-[11px] font-bold ${isShopOpen ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>
               {isShopOpen ? 'Boutique ouverte' : 'Boutique fermée'}
@@ -233,7 +233,7 @@ function MerchantPreview() {
             {[['Commandes', '12'], ['Produits', String(products.length)], ['À traiter', '3']].map(([label, value]) => (
               <div key={label} className="rounded-xl bg-[#f8f6f1] p-2.5">
                 <p className="text-[10px] font-semibold text-slate-500">{label}</p>
-                <p className="mt-1 text-lg font-black text-[#211712]">{value}</p>
+                <p className="mt-1 text-lg font-black text-[#292d2a]">{value}</p>
               </div>
             ))}
           </div>
@@ -241,8 +241,8 @@ function MerchantPreview() {
 
         <section aria-labelledby="merchant-plus-title" className="overflow-hidden rounded-2xl border border-[#e7dfd3] bg-[#fffdf8] shadow-sm">
           <header className="border-b border-[#e7dfd3] px-4 py-3">
-            <p className="text-[10px] font-black uppercase tracking-wide text-[#155544]">Menu commerçant</p>
-            <h2 id="merchant-plus-title" className="mt-0.5 text-lg font-black text-[#211712]">Plus</h2>
+            <p className="text-[10px] font-black uppercase tracking-wide text-[#047857]">Menu commerçant</p>
+            <h2 id="merchant-plus-title" className="mt-0.5 text-lg font-black text-[#292d2a]">Plus</h2>
           </header>
           <div className="space-y-4 p-3">
             {sections.map((section) => (
@@ -258,7 +258,7 @@ function MerchantPreview() {
                         : setMenuTarget(label)}
                       className={`flex min-h-12 w-full items-center gap-3 px-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-50 ${index ? 'border-t border-[#eee9e1]' : ''}`}
                     >
-                      <Icon className="h-4 w-4 shrink-0 text-[#155544]" />
+                      <Icon className="h-4 w-4 shrink-0 text-[#047857]" />
                       <span className="min-w-0 flex-1">{label}</span>
                       {badge && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${badge === 'À faire' ? 'bg-amber-100 text-amber-900' : 'bg-emerald-50 text-emerald-800'}`}>{badge}</span>}
                       <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
@@ -269,7 +269,7 @@ function MerchantPreview() {
             ))}
             <div className="overflow-hidden rounded-xl border border-[#e9e5dc] bg-white">
               <button type="button" onClick={() => setActionNotice('Aperçu uniquement : aucun lien réel n’a été copié.')} className="flex min-h-12 w-full items-center gap-3 px-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-50">
-                <MessageCircle className="h-4 w-4 shrink-0 text-[#155544]" />
+                <MessageCircle className="h-4 w-4 shrink-0 text-[#047857]" />
                 <span className="flex-1">Aide et assistance</span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
               </button>
@@ -285,10 +285,10 @@ function MerchantPreview() {
       </main> : activeTab === 'Produits' ? <main className="space-y-4 pb-24">
         <section className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-wide text-[#176b55]">Catalogue de démonstration</p>
-            <h1 className="mt-1 text-xl font-black text-[#211712]">Produits ({products.length})</h1>
+            <p className="text-[10px] font-black uppercase tracking-wide text-[#047857]">Catalogue de démonstration</p>
+            <h1 className="mt-1 text-xl font-black text-[#292d2a]">Produits ({products.length})</h1>
           </div>
-          <button type="button" onClick={() => openProductForm()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#155544] px-3 text-xs font-bold text-white">
+          <button type="button" onClick={() => openProductForm()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#047857] px-3 text-xs font-bold text-white">
             <Plus className="h-4 w-4" /> Ajouter
           </button>
         </section>
@@ -309,7 +309,7 @@ function MerchantPreview() {
                 <input required min="0" type="number" value={draftStock} onChange={(event) => setDraftStock(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-normal" />
               </label>
             </div>
-            <button type="submit" className="min-h-11 w-full rounded-xl bg-[#155544] text-sm font-bold text-white">Enregistrer dans l’aperçu</button>
+            <button type="submit" className="min-h-11 w-full rounded-xl bg-[#047857] text-sm font-bold text-white">Enregistrer dans l’aperçu</button>
           </form>
         )}
         <section aria-label="Actions des produits" className="space-y-3">
@@ -335,8 +335,8 @@ function MerchantPreview() {
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950"><strong>Mode démonstration :</strong> ajout, modification, stock et visibilité changent uniquement dans cet aperçu.</p>
       </main> : activeTab === 'Commandes' ? <main className="space-y-4 pb-24">
         <section>
-          <p className="text-[10px] font-black uppercase tracking-wide text-[#176b55]">Gestion commerciale</p>
-          <h1 className="mt-1 text-xl font-black text-[#211712]">Commandes</h1>
+          <p className="text-[10px] font-black uppercase tracking-wide text-[#047857]">Gestion commerciale</p>
+          <h1 className="mt-1 text-xl font-black text-[#292d2a]">Commandes</h1>
           <p className="mt-1 text-xs text-slate-500">Accepter, préparer, remettre ou annuler une commande.</p>
         </section>
         {[1048, 1047, 1046].map((orderId, index) => {
@@ -348,9 +348,9 @@ function MerchantPreview() {
             <article key={orderId} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div><h2 className="text-sm font-black text-slate-900">Commande #{orderId}</h2><p className="mt-1 text-xs text-slate-600">{customer} · {amount} FCFA</p></div>
-                <span className="rounded-full bg-[#eaf4ef] px-2 py-1 text-[10px] font-bold capitalize text-[#155544]">{status === 'pending' ? 'À confirmer' : status === 'delivered' ? 'Livrée' : status === 'ready' ? 'Prête' : status === 'preparing' ? 'En préparation' : 'Acceptée'}</span>
+                <span className="rounded-full bg-[#d1fae5] px-2 py-1 text-[10px] font-bold capitalize text-[#047857]">{status === 'pending' ? 'À confirmer' : status === 'delivered' ? 'Livrée' : status === 'ready' ? 'Prête' : status === 'preparing' ? 'En préparation' : 'Acceptée'}</span>
               </div>
-              {nextAction && <button type="button" onClick={() => updateDemoOrderStatus(orderId, nextAction.next)} className="min-h-11 w-full rounded-xl bg-[#155544] px-3 text-sm font-bold text-white">{nextAction.label}</button>}
+              {nextAction && <button type="button" onClick={() => updateDemoOrderStatus(orderId, nextAction.next)} className="min-h-11 w-full rounded-xl bg-[#047857] px-3 text-sm font-bold text-white">{nextAction.label}</button>}
               {['pending', 'confirmed', 'preparing', 'ready'].includes(status) && <button type="button" onClick={() => updateDemoOrderStatus(orderId, 'cancelled')} className="min-h-10 w-full rounded-xl border border-rose-200 bg-rose-50 text-xs font-bold text-rose-800">Annuler la commande (démo)</button>}
               {status === 'cancelled' && <button type="button" onClick={() => updateDemoOrderStatus(orderId, 'pending')} className="min-h-10 w-full rounded-xl border border-slate-300 text-xs font-bold text-slate-700">Réactiver (démo)</button>}
               {status === 'delivered' && <p className="text-xs font-bold text-emerald-800">Commande terminée</p>}
@@ -361,13 +361,13 @@ function MerchantPreview() {
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950"><strong>Mode démonstration :</strong> statuts temporaires à l’écran ; aucun client ni service externe n’est contacté.</p>
       </main> : activeTab === 'Accueil' ? <main className="space-y-4 pb-24">
         <section className="rounded-2xl border border-[#e7dfd3] bg-white p-4 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-wide text-[#176b55]">Vue d’ensemble</p>
-          <h1 className="mt-1 text-xl font-black text-[#211712]">Atelier Awa</h1>
+          <p className="text-[10px] font-black uppercase tracking-wide text-[#047857]">Vue d’ensemble</p>
+          <h1 className="mt-1 text-xl font-black text-[#292d2a]">Atelier Awa</h1>
           <p className="mt-1 text-xs text-slate-600">Commandes à traiter · Produits · État de la boutique</p>
           <div className="mt-4 grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setIsShopOpen((open) => !open)} className="min-h-11 rounded-xl border border-[#d7e4da] bg-[#f5faf6] px-3 text-xs font-bold text-[#155544]">{isShopOpen ? 'Fermer la boutique' : 'Ouvrir la boutique'}</button>
+            <button type="button" onClick={() => setIsShopOpen((open) => !open)} className="min-h-11 rounded-xl border border-[#d7e4da] bg-[#f5faf6] px-3 text-xs font-bold text-[#047857]">{isShopOpen ? 'Fermer la boutique' : 'Ouvrir la boutique'}</button>
             <button type="button" onClick={() => setActionNotice('Aperçu uniquement : la vitrine publique ne sera pas ouverte.')} className="min-h-11 rounded-xl border border-slate-300 px-3 text-xs font-bold text-slate-700">Voir ma vitrine</button>
-            <button type="button" onClick={() => { setActiveTab('Produits'); openProductForm(); }} className="min-h-11 rounded-xl bg-[#155544] px-3 text-xs font-bold text-white">Ajouter un produit</button>
+            <button type="button" onClick={() => { setActiveTab('Produits'); openProductForm(); }} className="min-h-11 rounded-xl bg-[#047857] px-3 text-xs font-bold text-white">Ajouter un produit</button>
             <button type="button" onClick={() => setActiveTab('Commandes')} className="min-h-11 rounded-xl border border-slate-300 px-3 text-xs font-bold text-slate-700">Traiter les commandes</button>
           </div>
           <p role="status" className="mt-3 text-xs font-semibold text-slate-600">Boutique {isShopOpen ? 'ouverte' : 'fermée'} · {products.length} produits de démonstration.</p>
@@ -399,7 +399,7 @@ function AdminPreview() {
     { label: 'Plus', icon: MoreHorizontal },
   ];
   const metrics = [
-    { label: 'Boutiques actives', value: '24 / 31', icon: Store, color: 'text-[#155544] bg-[#eaf4ef]' },
+    { label: 'Boutiques actives', value: '24 / 31', icon: Store, color: 'text-[#047857] bg-[#d1fae5]' },
     { label: 'Commandes', value: '186', icon: ShoppingBag, color: 'text-blue-800 bg-blue-50' },
     { label: 'Montant commandé', value: '2,48 M F', icon: CreditCard, color: 'text-amber-900 bg-amber-50' },
     { label: 'Conversion', value: '4,8 %', icon: Activity, color: 'text-violet-800 bg-violet-50' },
@@ -416,8 +416,8 @@ function AdminPreview() {
       {activeTab === 'Accueil' ? <main className="space-y-4 pb-24">
         <section className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#176b55]">Centre de pilotage</p>
-            <h1 className="mt-1 text-2xl font-black text-[#211712]">Vue d’ensemble</h1>
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#047857]">Centre de pilotage</p>
+            <h1 className="mt-1 text-2xl font-black text-[#292d2a]">Vue d’ensemble</h1>
             <p className="mt-1 text-xs text-slate-500">Indicateurs de démonstration · 30 derniers jours</p>
           </div>
           <button type="button" disabled className="min-h-10 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-500">30 jours</button>
@@ -434,7 +434,7 @@ function AdminPreview() {
         <section className="overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white shadow-sm">
           <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <div>
-              <h2 className="text-base font-black text-[#211712]">À traiter</h2>
+              <h2 className="text-base font-black text-[#292d2a]">À traiter</h2>
               <p className="text-xs text-slate-500">Priorités pour l’équipe</p>
             </div>
             <span className="rounded-full bg-[#fff0e8] px-2.5 py-1 text-xs font-black text-[#b84320]">12</span>
@@ -457,9 +457,9 @@ function AdminPreview() {
           </div>
         </section>
         <section className="rounded-2xl border border-[#dcebe3] bg-[#edf6f1] p-4">
-          <div className="flex items-center gap-2 text-[#155544]"><CreditCard className="h-4 w-4" /><h2 className="text-sm font-black">Encaissements confirmés</h2></div>
+          <div className="flex items-center gap-2 text-[#047857]"><CreditCard className="h-4 w-4" /><h2 className="text-sm font-black">Encaissements confirmés</h2></div>
           <p className="mt-1 text-xs text-slate-600">Sur les 90 derniers jours</p>
-          <p className="mt-2 text-2xl font-black text-[#155544]">845 000 F CFA</p>
+          <p className="mt-2 text-2xl font-black text-[#047857]">845 000 F CFA</p>
           <p className="mt-1 text-xs font-semibold text-slate-600">36 paiements confirmés · période de démonstration</p>
         </section>
       </main> : activeTab === 'Plus' && moreTarget ? <PreviewSection
@@ -547,9 +547,9 @@ function IdentityPreview() {
       {isIdentityTab ? <main className="space-y-4 pb-24">
         <section className="overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white shadow-sm">
           <header className="flex items-center gap-3 border-b border-slate-100 px-4 py-4">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#eaf4ef] text-[#155544]"><ShieldCheck className="h-5 w-5" /></span>
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#d1fae5] text-[#047857]"><ShieldCheck className="h-5 w-5" /></span>
             <div className="min-w-0 flex-1">
-              <h1 className="text-base font-black text-[#211712]">{selected ? 'Dossier de vérification' : 'File de vérification Didit'}</h1>
+              <h1 className="text-base font-black text-[#292d2a]">{selected ? 'Dossier de vérification' : 'File de vérification Didit'}</h1>
               <p className="text-xs text-slate-500">{selected ? 'Consultation seule · décision synchronisée par Didit' : `${filtered.length} dossiers de démonstration`}</p>
             </div>
           </header>
@@ -558,13 +558,13 @@ function IdentityPreview() {
               <label className="relative block">
                 <span className="sr-only">Rechercher une boutique</span>
                 <Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher une boutique" className="min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#176b55] focus:ring-2 focus:ring-[#176b55]/20" />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher une boutique" className="min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/20" />
               </label>
               {filtered.map((item) => (
                 <article key={item.id} className="rounded-xl border border-slate-200 bg-white p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h2 className="text-base font-black text-[#211712]">{item.name}</h2>
+                      <h2 className="text-base font-black text-[#292d2a]">{item.name}</h2>
                       <p className="mt-1 text-xs text-slate-500">/{item.slug} · Boutique #{item.id}</p>
                     </div>
                     <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${item.status === 'À vérifier' ? 'bg-amber-100 text-amber-900' : 'bg-blue-50 text-blue-900'}`}>{item.status}</span>
@@ -583,12 +583,12 @@ function IdentityPreview() {
           ) : (
             <div className="p-4">
               <div className="flex items-center justify-between gap-2">
-                <button type="button" onClick={() => setSelectedShopId(null)} className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-[#155544]"><ArrowLeft className="h-4 w-4" />Retour à la file</button>
+                <button type="button" onClick={() => setSelectedShopId(null)} className="inline-flex min-h-10 items-center gap-2 text-sm font-bold text-[#047857]"><ArrowLeft className="h-4 w-4" />Retour à la file</button>
                 <span className="text-xs font-semibold text-slate-500">{selectedIndex + 1} sur {filtered.length}</span>
               </div>
               <article className="mt-3 rounded-xl border border-slate-200 bg-white p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div><h2 className="text-base font-black text-[#211712]">{selected.name}</h2><p className="mt-1 text-sm text-slate-500">/{selected.slug} · Boutique #{selected.id}</p></div>
+                  <div><h2 className="text-base font-black text-[#292d2a]">{selected.name}</h2><p className="mt-1 text-sm text-slate-500">/{selected.slug} · Boutique #{selected.id}</p></div>
                   <span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${selected.status === 'À vérifier' ? 'bg-amber-100 text-amber-900' : 'bg-blue-50 text-blue-900'}`}>{selected.status}</span>
                 </div>
                 <dl className="mt-4 divide-y divide-slate-100 border-y border-slate-100">
@@ -597,7 +597,7 @@ function IdentityPreview() {
                   ))}
                 </dl>
                 <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">Le statut est transmis par Didit. Cet écran permet de consulter le dossier et de relancer le propriétaire ; aucune validation ou décision manuelle n’est effectuée ici.</p>
-                <button type="button" onClick={() => setActionNotice('Aperçu uniquement : aucun rappel WhatsApp n’a été préparé ni envoyé.')} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#155544] px-3 text-sm font-bold text-white"><MessageCircle className="h-4 w-4" />Préparer un rappel WhatsApp</button>
+                <button type="button" onClick={() => setActionNotice('Aperçu uniquement : aucun rappel WhatsApp n’a été préparé ni envoyé.')} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#047857] px-3 text-sm font-bold text-white"><MessageCircle className="h-4 w-4" />Préparer un rappel WhatsApp</button>
               </article>
               {actionNotice && <p role="status" className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-700">{actionNotice}</p>}
               <div className="mt-3 grid grid-cols-2 gap-2">
@@ -638,14 +638,14 @@ export default function MobileDashboardPreview() {
       : <IdentityPreview />;
 
   return (
-    <div className="min-h-screen bg-[#f6f3ed] px-3 pb-20 pt-4 text-slate-800 sm:px-5">
+    <div className="min-h-screen bg-[#FAF8F2] px-3 pb-20 pt-4 text-slate-800 sm:px-5">
       <div className="mx-auto max-w-md">
         <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-950">
           <strong>Aperçu mobile · environnement de test.</strong> Contenu de démonstration, indépendant des comptes et des données réelles.
         </div>
         <nav aria-label="Choisir un aperçu" className="mb-4 grid grid-cols-3 gap-1 rounded-xl border border-[#e7dfd3] bg-white p-1">
           {previewViews.map(({ id, label }) => (
-            <button key={id} type="button" aria-pressed={activeView === id} onClick={() => setActiveView(id)} className={`min-h-10 rounded-lg px-2 text-xs font-bold transition ${activeView === id ? 'bg-[#155544] text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
+            <button key={id} type="button" aria-pressed={activeView === id} onClick={() => setActiveView(id)} className={`min-h-10 rounded-lg px-2 text-xs font-bold transition ${activeView === id ? 'bg-[#047857] text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
               {label}
             </button>
           ))}

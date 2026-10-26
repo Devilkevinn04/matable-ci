@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Star } from 'lucide-react';
 import { getCategoryDefaults, getProductImageForDisplay, normalizeCustomBannerImage } from '../utils/categoryDefaults';
+import { normalizeShopEventType, SHOP_EVENT_VISUALS } from '../utils/shopEventVisuals';
 
 interface FeaturedShop {
   slug: string;
@@ -12,7 +13,7 @@ interface FeaturedShop {
   products_count?: number;
   welcome_message?: string | null;
   theme_color?: string;
-  theme_config?: { custom_banner_url?: string; primary_color?: string; event_mode_enabled?: boolean; event_banner_text?: string };
+  theme_config?: { custom_banner_url?: string; primary_color?: string; event_mode_enabled?: boolean; event_type?: string; event_banner_text?: string };
   products_preview?: { id: number; title: string; image_url: string; price: number }[];
 }
 
@@ -47,12 +48,13 @@ export const FeaturedCarousel: React.FC<FeaturedCarouselProps> = ({ shops, onOpe
     || (activeShop.products_preview?.[0]
       ? getProductImageForDisplay(activeShop.products_preview[0].image_url, activeShop.category)
       : getCategoryDefaults(activeShop.category).bannerPlaceholderImageUrl);
+  const activeEventVisual = SHOP_EVENT_VISUALS[normalizeShopEventType(activeShop.theme_config?.event_type)];
   const sideShops = carouselShops.filter((_, index) => index !== activeIndex).slice(0, 2);
 
   return (
     <div className={`grid gap-3 ${sideShops.length ? 'lg:grid-cols-[minmax(0,1fr)_250px]' : ''}`}>
       <section
-        className="featured-carousel relative grid min-h-[300px] overflow-hidden rounded-[24px] bg-[#17332c] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e6572b] sm:min-h-[320px] lg:grid-cols-[1.05fr_.95fr]"
+        className="featured-carousel relative grid min-h-[300px] overflow-hidden rounded-[24px] bg-[#17332c] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] sm:min-h-[320px] lg:grid-cols-[1.05fr_.95fr]"
         aria-label="Boutiques mises en avant"
         aria-roledescription="carrousel"
         tabIndex={0}
@@ -76,7 +78,7 @@ export const FeaturedCarousel: React.FC<FeaturedCarouselProps> = ({ shops, onOpe
         <div className="relative z-10 flex flex-col items-start justify-center p-6 pb-20 sm:p-9 sm:pb-20">
           <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.1em] text-[#f2c38d]">
             <Star className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
-            {activeShop.is_sponsored ? 'Sponsorisé' : activeShop.theme_config?.event_mode_enabled ? 'Offre en cours' : 'À la une'} · {getCategoryDefaults(activeShop.category).label}
+            {activeShop.is_sponsored ? 'Sponsorisé' : activeShop.theme_config?.event_mode_enabled ? `${activeEventVisual.icon} ${activeEventVisual.label}` : 'À la une'} · {getCategoryDefaults(activeShop.category).label}
           </span>
           <div aria-live="polite" aria-atomic="true">
             <h2 className="mt-3 max-w-xl font-display text-3xl font-extrabold text-white sm:text-[34px]">{activeShop.name}</h2>
@@ -84,7 +86,7 @@ export const FeaturedCarousel: React.FC<FeaturedCarouselProps> = ({ shops, onOpe
               ? activeShop.theme_config.event_banner_text
               : activeShop.welcome_message || 'Une belle adresse locale à découvrir.'}</p>
           </div>
-          <button type="button" onClick={() => onOpenShop(activeShop.slug)} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#b9441f] px-5 text-sm font-bold text-white transition hover:bg-[#a53a1d]">
+          <button type="button" onClick={() => onOpenShop(activeShop.slug)} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#c2410c] px-5 text-sm font-bold text-white transition hover:bg-[#a53a1d]">
             Voir la boutique <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </button>
           {carouselShops.length > 1 && <div className="absolute bottom-5 left-6 flex items-center gap-2 sm:left-9">
@@ -95,7 +97,7 @@ export const FeaturedCarousel: React.FC<FeaturedCarouselProps> = ({ shops, onOpe
         <button type="button" onClick={() => onOpenShop(activeShop.slug)} aria-label={`Découvrir ${activeShop.name}`} className="group relative min-h-[200px] overflow-hidden text-left lg:min-h-full">
           {shopImage && <img src={shopImage} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" onError={(event) => { event.currentTarget.hidden = true; }} />}
           <div className="absolute inset-0 bg-gradient-to-t from-[#17211f]/35 to-transparent" />
-          <span className="absolute bottom-4 left-4 rounded-full bg-[#fffdf9]/90 px-3 py-1.5 text-xs font-bold text-[#0f4d3d]">Découvrir cette adresse <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></span>
+          <span className="absolute bottom-4 left-4 rounded-full bg-[#FFFFFF]/90 px-3 py-1.5 text-xs font-bold text-[#065f46]">Découvrir cette adresse <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></span>
         </button>
 
         {carouselShops.length > 1 && <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2 sm:bottom-5 sm:right-6">
@@ -114,11 +116,11 @@ export const FeaturedCarousel: React.FC<FeaturedCarouselProps> = ({ shops, onOpe
             || (shop.products_preview?.[0]
               ? getProductImageForDisplay(shop.products_preview[0].image_url, shop.category)
               : getCategoryDefaults(shop.category).bannerPlaceholderImageUrl);
-          return <button key={shop.slug} type="button" onClick={() => setActiveIndex(carouselShops.findIndex((item) => item.slug === shop.slug))} className="group relative min-h-[120px] overflow-hidden rounded-[20px] bg-[#17332c] text-left text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e6572b] focus-visible:ring-offset-2 lg:min-h-0">
+          return <button key={shop.slug} type="button" onClick={() => setActiveIndex(carouselShops.findIndex((item) => item.slug === shop.slug))} className="group relative min-h-[120px] overflow-hidden rounded-[20px] bg-[#17332c] text-left text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316] focus-visible:ring-offset-2 lg:min-h-0">
             <img src={image} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
             <span className="absolute inset-0 bg-gradient-to-t from-[#17211f]/90 via-[#17211f]/20 to-transparent" />
             <span className="absolute bottom-3 left-3 right-3">
-              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#f2c38d]">{shop.is_sponsored ? 'Sponsorisé' : shop.theme_config?.event_mode_enabled ? 'Offre en cours' : 'À la une'}</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#f2c38d]">{shop.is_sponsored ? 'Sponsorisé' : shop.theme_config?.event_mode_enabled ? `${SHOP_EVENT_VISUALS[normalizeShopEventType(shop.theme_config.event_type)].icon} ${SHOP_EVENT_VISUALS[normalizeShopEventType(shop.theme_config.event_type)].label}` : 'À la une'}</span>
               <span className="mt-1 block line-clamp-1 font-display text-sm font-extrabold">{shop.name}</span>
             </span>
           </button>;

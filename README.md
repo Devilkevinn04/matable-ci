@@ -7,6 +7,19 @@ déplace aucune route métier pour l’instant.
 
 Application React + Vite + Express pour la gestion de vitrines locales, de commandes WhatsApp et de tableaux de bord MaTable.ci.
 
+## Identité visuelle du frontend
+
+Les couleurs partagées sont définies dans `src/index.css` : vert émeraude
+(`#059669`), orange (`#F97316`), ivoire (`#FAF8F2`) et surfaces blanches.
+Les interfaces utilisent les variables `--mt-*` pour garder une palette, des
+contrastes et des ombres cohérents. Les couleurs configurées par les
+commerçants pour leur propre vitrine restent indépendantes de cette identité.
+L’accueil met en avant les catégories disponibles et les boutiques ayant une
+photo réelle, sans substituer des vitrines fictives aux commerces publiés. Le
+catalogue d’accueil présente une grille de produits sans défilement automatique,
+avec filtres par catégorie, disponibilité, prix et boutique ; les campagnes
+actives y sont identifiées et affichées avant les produits.
+
 ## État actuel
 
 - Les demandes de commande utilisent le click-to-chat WhatsApp (`wa.me`) : le mode sélectionné au checkout est une préférence transmise à la boutique, pas un paiement en ligne. Les paiements d’abonnement et de boosts utilisent l’API et le checkout hébergé GeniusPay, qui achemine les paiements vers ses passerelles; les rappels d’échéance WhatsApp Business nécessitent une configuration fournisseur et le consentement du commerçant.
@@ -70,6 +83,8 @@ APP_URL="http://localhost:3000"
 TRUST_PROXY_HOPS="0"
 ADMIN_ACCESS_KEY="CHANGE_ME_ADMIN_KEY"
 VERIFICATION_ADMIN_ACCESS_KEY="CHANGE_ME_VERIFICATION_ADMIN_KEY"
+AD_EVENT_SIGNING_SECRET=""
+ADVERTISING_BETA_ENABLED="false"
 DIDIT_API_KEY=""
 DIDIT_WORKFLOW_ID=""
 DIDIT_WEBHOOK_SECRET=""
@@ -188,6 +203,12 @@ Générez une paire VAPID dédiée au serveur, par exemple avec `npx web-push ge
 
 Chaque commerçant choisit explicitement ses appareils et peut les désabonner dans ses paramètres. Les abonnements sont liés à la boutique authentifiée ; les endpoints expirés (HTTP 404/410) sont supprimés. Les envois sont dédupliqués et les échecs sont journalisés sans annuler la commande, la modification du stock ou la vérification d’identité à l’origine de l’alerte. Les Push exigent HTTPS (Render le fournit) et l’autorisation du navigateur. Le centre opérationnel admin affiche le nombre d’appareils associés, l’état VAPID, l’historique des annonces et permet leur diffusion uniquement aux appareils abonnés.
 
+### Publicité et partenariats
+
+Le boost payant de boutique reste inchangé et conserve son checkout GeniusPay. La nouvelle bêta, lorsqu’elle sera autorisée, permet aux boutiques actives, vérifiées et dont les informations publiques sont complètes de soumettre gratuitement une campagne produit et une bannière au maximum par format, pour sept jours chacune. Chaque création exige l’acceptation de la charte affichée dans l’espace marchand et une approbation du Super-admin avant diffusion. Les emplacements publicitaires restent limités à un module sponsorisé par page; un produit sponsorisé n’est présenté qu’après au moins six produits naturels. Les demandes de partenaires externes sont examinées manuellement, sans compte annonceur ni paiement autonome.
+
+La bêta dure 30 jours et n’est pas lancée par défaut. Hors tests automatisés, `ADVERTISING_BETA_ENABLED=false` verrouille le démarrage et la reprise; ne positionnez ce drapeau à `true` qu’après validation de la préproduction, des commandes, des contrôles de sécurité et de la stabilité. `AD_EVENT_SIGNING_SECRET` doit être une clé aléatoire, propre à l’environnement et d’au moins 32 caractères; elle signe les jetons d’événements et protège la pseudonymisation. Les impressions et clics ne sont enregistrés qu’après consentement explicite de mesure et sont dédupliqués par visiteur pseudonymisé, campagne, type et jour. Ces mesures ne prouvent ni commande ni revenu publicitaire. Aucune nouvelle tarification ou facturation automatique n’est prévue pour ces formats.
+
 Après confirmation d’un abonnement par un webhook GeniusPay signé et vérifié, un reçu est généré et envoyé à l’adresse e-mail du propriétaire via Resend. Configurer `RESEND_API_KEY` et une adresse d’expédition vérifiée dans `RESEND_FROM_EMAIL` (ou `EMAIL_FROM`). Aucun reçu d’abonnement n’est émis à partir d’une simple déclaration de paiement côté navigateur. La validation locale ne prouve pas le fonctionnement d’un compte GeniusPay ou Resend en production : un paiement réel exige les identifiants et domaines vérifiés des fournisseurs.
 
 ## Règles métier
@@ -208,7 +229,7 @@ Les jetons OIDC sont vérifiés côté serveur avec issuer, audience, nonce, PKC
 
 ## Sécurité et vérifications
 
-- `npm run archive:release` crée un ZIP des fichiers suivis ou non ignorés du dépôt. Il exclut les fichiers `.env` (sauf les modèles), les bases et journaux SQLite dans `data/`, ainsi que `node_modules`, `dist`, `build` et les archives précédentes. Contrôlez toujours la liste avant envoi avec `npm run archive:release -- --dry-run`.
+- `npm run archive:release` crée un ZIP des fichiers suivis ou non ignorés du dépôt. Il exclut les métadonnées Git, caches, sauvegardes, bases locales et journaux, clés privées et fichiers d’environnement secrets (sauf `.env.example` et `.env.production.example`). Les données de `data/` sont exclues sauf `data/.gitkeep`. Contrôlez toujours la liste avant envoi avec `npm run archive:release -- --dry-run`.
 - Si une archive contenant une clé ou une base de données a déjà été partagée, considérez ces secrets et données comme compromis : renouvelez les clés concernées via les paramètres de déploiement et n’envoyez plus cette archive.
 - Les routes marchand exigent une session `HttpOnly`, son empreinte de requête et une boutique active.
 - Les routes admin exigent une session admin séparée.
@@ -254,7 +275,7 @@ Cette version finale est un serveur Node/Express avec Neon PostgreSQL. Déployez
 
 Vercel convient au frontend statique, mais ne doit pas héberger directement ce serveur Express avec une base locale. Une base PostgreSQL externe est nécessaire.
 
-Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `DATABASE_URL`, `ADMIN_ACCESS_KEY` longue et unique (générée automatiquement par Render si elle n’est pas configurée manuellement), les trois variables Didit et `TRUST_PROXY_HOPS` adapté au reverse proxy.
+Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `DATABASE_URL`, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` fortes, uniques et distinctes, `AD_EVENT_SIGNING_SECRET` forte et unique, `ADVERTISING_BETA_ENABLED=false`, les trois variables Didit et `TRUST_PROXY_HOPS` adapté au reverse proxy. Ne déverrouillez la bêta publicitaire qu’après les contrôles de préproduction décrits ci-dessus.
 
 ## Build production
 

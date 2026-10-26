@@ -26,7 +26,7 @@ export const CustomerOAuthButtons: React.FC<CustomerOAuthButtonsProps> = ({ retu
 
   if (!providers.google && !providers.apple) return null;
   const query = new URLSearchParams({ return_to: returnTo }).toString();
-  const buttonClass = 'flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#d9ded7] bg-white px-3 py-2.5 text-sm font-bold text-[#25231f] transition hover:border-[#176b55] hover:bg-[#f8faf7]';
+  const buttonClass = 'flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#d9ded7] bg-white px-3 py-2.5 text-sm font-bold text-[#292d2a] transition hover:border-[#047857] hover:bg-[#f8faf7]';
 
   return (
     <div className="mb-5">

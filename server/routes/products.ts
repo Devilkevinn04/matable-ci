@@ -9,6 +9,7 @@ import { getProductFromDatabase } from '../repositories/products.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import { getSubscriptionState } from '../services/businessRules.ts';
 import { dispatchStockTransitionPush } from '../services/pushNotifications.ts';
+import { validateProductSale } from '../../src/utils/productPricing.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
 import type { ProductRecord } from '../types.ts';
 
@@ -54,13 +55,15 @@ export function createProductRouter({
       ? getSubscriptionProductPhotoLimit('standard')
       : getSubscriptionProductPhotoLimit(subscription.plan, subscription.planFeatures);
 
-    const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
+    const { title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
     const safeTitle = sanitizeTextField(title, 120);
     const numericPrice = Number(price);
     const numericStock = Number(stock ?? 0);
     if (safeTitle.length < 2 || !Number.isSafeInteger(numericPrice) || numericPrice < 0 || !Number.isSafeInteger(numericStock) || numericStock < 0) {
       return res.status(400).json({ error: 'Titre et prix obligatoires.' });
     }
+    const sale = validateProductSale(numericPrice, sale_price, sale_starts_at, sale_ends_at);
+    if (!sale) return res.status(400).json({ error: 'La promotion doit avoir un prix inférieur au prix normal et une période valide.' });
 
     const newProduct: ProductRecord = {
       id: 0,
@@ -69,6 +72,7 @@ export function createProductRouter({
       title: safeTitle,
       description: description ? sanitizeTextField(description, 500) : null,
       price: numericPrice,
+      ...sale,
       stock: numericStock,
       image_url: normalizeProductImage(image_url),
       is_available: (is_available !== undefined ? Boolean(is_available) : true) && numericStock > 0,
@@ -105,10 +109,15 @@ export function createProductRouter({
         );
         if (Number(count?.count || 0) >= productLimit) return 'limit_reached';
         await transaction.run(`
-          INSERT INTO products (id, shop_id, title, description, price, stock, image_url, is_available, is_visible, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
+          INSERT INTO products (id, shop_id, title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, is_available, is_visible, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes, created_at)
+          VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            COALESCE(?, CURRENT_TIMESTAMP)
+          )
         `, [
-          newProduct.id, newProduct.shop_id, newProduct.title, newProduct.description ?? null, newProduct.price, newProduct.stock,
+          newProduct.id, newProduct.shop_id, newProduct.title, newProduct.description ?? null, newProduct.price,
+          newProduct.sale_price ?? null, newProduct.sale_starts_at ?? null, newProduct.sale_ends_at ?? null, newProduct.stock,
           newProduct.image_url, newProduct.is_available ? 1 : 0, newProduct.is_visible === false ? 0 : 1, newProduct.category ?? null,
           newProduct.sizes ? JSON.stringify(newProduct.sizes) : null, newProduct.colors ? JSON.stringify(newProduct.colors) : null,
           newProduct.lookbook_image ?? null, newProduct.gallery_images?.length ? JSON.stringify(newProduct.gallery_images) : null,
@@ -139,7 +148,7 @@ export function createProductRouter({
     const cachedProduct = products.find((candidate) => candidate.id === productId && candidate.shop_id === shopId);
     const product = { ...currentProduct };
 
-    const { title, description, price, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
+    const { title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
     const shop = await getShopFromDatabase(shopId);
     if (shop && !req.adminShopAccess) {
       const subscription = getSubscriptionState(shop);
@@ -168,6 +177,14 @@ export function createProductRouter({
       if (!Number.isSafeInteger(numericPrice) || numericPrice < 0) return res.status(400).json({ error: 'Prix de produit invalide.' });
       product.price = numericPrice;
     }
+    const sale = validateProductSale(
+      product.price,
+      sale_price !== undefined ? sale_price : product.sale_price,
+      sale_starts_at !== undefined ? sale_starts_at : product.sale_starts_at,
+      sale_ends_at !== undefined ? sale_ends_at : product.sale_ends_at,
+    );
+    if (!sale) return res.status(400).json({ error: 'La promotion doit avoir un prix inférieur au prix normal et une période valide.' });
+    Object.assign(product, sale);
     if (stock !== undefined) {
       const numericStock = Number(stock);
       if (!Number.isSafeInteger(numericStock) || numericStock < 0) return res.status(400).json({ error: 'Stock de produit invalide.' });

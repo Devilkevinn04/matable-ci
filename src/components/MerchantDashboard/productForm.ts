@@ -6,6 +6,9 @@ export interface ProductDraft {
   category: string;
   description: string;
   price: number | '';
+  sale_price: number | '';
+  sale_starts_at: string;
+  sale_ends_at: string;
   stock: number | '';
   image_url: string;
   lookbook_image: string;
@@ -38,6 +41,9 @@ export interface ProductSavePayload {
   category?: string;
   description: string;
   price: number;
+  sale_price?: number | null;
+  sale_starts_at?: string | null;
+  sale_ends_at?: string | null;
   stock: number;
   image_url: string;
   lookbook_image?: string;
@@ -89,6 +95,9 @@ export function createProductDraft(category: unknown): ProductDraft {
     category: '',
     description: '',
     price: '',
+    sale_price: '',
+    sale_starts_at: '',
+    sale_ends_at: '',
     stock: 10,
     image_url: '',
     lookbook_image: '',
@@ -125,6 +134,9 @@ export function productToDraft(product: Product): ProductDraft {
     category: product.category || '',
     description: product.description || '',
     price: product.price,
+    sale_price: product.sale_price ?? '',
+    sale_starts_at: toDateTimeLocal(product.sale_starts_at),
+    sale_ends_at: toDateTimeLocal(product.sale_ends_at),
     stock: product.stock,
     image_url: isLegacyGenericProductImage(product.image_url) ? '' : product.image_url,
     lookbook_image: product.lookbook_image || '',
@@ -138,6 +150,14 @@ export function productToDraft(product: Product): ProductDraft {
     attributes: product.attributes || {},
     is_available: product.is_available !== false,
   };
+}
+
+function toDateTimeLocal(value?: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 16);
 }
 
 export function buildProductSavePayload(draft: ProductDraft, category: ShopCategory): ProductSavePayload {
@@ -179,6 +199,9 @@ export function buildProductSavePayload(draft: ProductDraft, category: ShopCateg
     category: draft.category.trim() || undefined,
     description: draft.description.trim(),
     price: Number(draft.price),
+    sale_price: draft.sale_price === '' ? null : Number(draft.sale_price),
+    sale_starts_at: draft.sale_price === '' || !draft.sale_starts_at ? null : new Date(draft.sale_starts_at).toISOString(),
+    sale_ends_at: draft.sale_price === '' || !draft.sale_ends_at ? null : new Date(draft.sale_ends_at).toISOString(),
     stock: draft.stock === '' ? 0 : Number(draft.stock),
     image_url: draft.image_url,
     lookbook_image: draft.lookbook_image.trim() || undefined,

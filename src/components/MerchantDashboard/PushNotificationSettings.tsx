@@ -124,9 +124,9 @@ export const PushNotificationSettings: React.FC<PushNotificationSettingsProps> =
   return (
     <section className="max-w-3xl rounded-2xl border border-[#e7dfd3] bg-white p-5 sm:p-6">
       <div className="flex items-start gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#eaf4ef] text-[#155544]"><Bell className="h-5 w-5" /></span>
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#d1fae5] text-[#047857]"><Bell className="h-5 w-5" /></span>
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-extrabold text-[#211712]">Notifications sur cet appareil</h3>
+          <h3 className="text-base font-extrabold text-[#292d2a]">Notifications sur cet appareil</h3>
           <p className="mt-1 text-sm leading-6 text-slate-600">Recevez les nouvelles commandes, les alertes de stock, les échéances d’abonnement, les changements de vérification et les annonces de MaTable.ci.</p>
         </div>
       </div>
@@ -152,7 +152,7 @@ export const PushNotificationSettings: React.FC<PushNotificationSettingsProps> =
             Désactiver sur cet appareil
           </button>
         ) : (
-          <button type="button" onClick={enablePush} disabled={busy || loading || !configuration?.configured || !supported} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#0f4d3d] px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={enablePush} disabled={busy || loading || !configuration?.configured || !supported} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#065f46] px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
             {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
             Activer les notifications
           </button>

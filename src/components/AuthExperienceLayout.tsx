@@ -11,7 +11,7 @@ export const AuthAudienceSwitcher: React.FC<{
       type="button"
       onClick={onSelectCustomer}
       aria-current={activeAudience === 'customer' ? 'page' : undefined}
-      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'customer' ? 'bg-white text-[#0f4d3d] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
+      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'customer' ? 'bg-white text-[#065f46] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
     >
       <UserRound className="h-4 w-4" aria-hidden="true" />
       Connexion client
@@ -20,7 +20,7 @@ export const AuthAudienceSwitcher: React.FC<{
       type="button"
       onClick={onSelectMerchant}
       aria-current={activeAudience === 'merchant' ? 'page' : undefined}
-      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'merchant' ? 'bg-white text-[#0f4d3d] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
+      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'merchant' ? 'bg-white text-[#065f46] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
     >
       <Store className="h-4 w-4" aria-hidden="true" />
       Connexion marchand
@@ -44,8 +44,8 @@ const AUTH_HERO_IMAGE = 'https://images.unsplash.com/photo-1531123897727-8f129e1
 
 export const BrandMark: React.FC<{ className?: string }> = ({ className = '' }) => (
   <span className={`relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] bg-[#e8f1e9] ${className}`} aria-hidden="true">
-    <MapPin className="h-7 w-7 fill-[#0f4d3d] text-[#0f4d3d]" strokeWidth={2.4} />
-    <span className="absolute left-1/2 top-[35%] h-2 w-2 -translate-x-1/2 rounded-full bg-[#e6572b]" />
+    <MapPin className="h-7 w-7 fill-[#065f46] text-[#065f46]" strokeWidth={2.4} />
+    <span className="absolute left-1/2 top-[35%] h-2 w-2 -translate-x-1/2 rounded-full bg-[#F97316]" />
   </span>
 );
 
@@ -60,16 +60,16 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
   onBack,
   imageAlt = 'Une cliente découvre le commerce local en Côte d’Ivoire',
 }) => (
-  <main className="auth-experience min-h-[calc(100svh-2.5rem)] bg-[#f6f3ed] px-3 py-3 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+  <main className="auth-experience min-h-[calc(100svh-2.5rem)] bg-[#FAF8F2] px-3 py-3 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
     <div className="mx-auto grid w-full max-w-[1180px] gap-3 lg:grid-cols-[0.92fr_1.08fr] lg:gap-7">
-      <section className="auth-story relative isolate flex min-h-[170px] flex-col overflow-hidden rounded-[22px] bg-[#0f4d3d] p-4 text-white sm:min-h-[270px] sm:rounded-[26px] sm:p-8 lg:min-h-[520px] lg:rounded-[30px] lg:p-9">
+      <section className="auth-story relative isolate flex min-h-[170px] flex-col overflow-hidden rounded-[22px] bg-[#065f46] p-4 text-white sm:min-h-[270px] sm:rounded-[26px] sm:p-8 lg:min-h-[520px] lg:rounded-[30px] lg:p-9">
         <img
           src={AUTH_HERO_IMAGE}
           alt={imageAlt}
           className="auth-story-image absolute inset-x-0 bottom-0 -z-10 h-[30%] w-full object-cover object-[center_22%] sm:h-[42%] sm:object-[center_44%] lg:h-[44%]"
           onError={(event) => { event.currentTarget.hidden = true; }}
         />
-        <div className="auth-story-shade absolute inset-0 -z-10" style={{ background: 'linear-gradient(180deg, #0f4d3d 0%, rgba(15,77,61,0.98) 37%, rgba(15,77,61,0.72) 62%, rgba(15,77,61,0.16) 100%)' }} />
+        <div className="auth-story-shade absolute inset-0 -z-10" style={{ background: 'linear-gradient(180deg, #065f46 0%, rgba(15,77,61,0.98) 37%, rgba(15,77,61,0.72) 62%, rgba(15,77,61,0.16) 100%)' }} />
         <div className="flex items-center gap-3">
           <BrandMark className="bg-white/95" />
           <div>
@@ -90,7 +90,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
         </div>
       </section>
 
-      <section className="flex min-w-0 flex-col rounded-[22px] bg-[#fffdf9] px-4 py-4 shadow-[0_12px_34px_rgba(37,35,31,0.07)] sm:rounded-[26px] sm:px-8 sm:py-6 lg:rounded-[30px] lg:px-9 lg:py-6">
+      <section className="flex min-w-0 flex-col rounded-[22px] bg-[#FFFFFF] px-4 py-4 shadow-[0_12px_34px_rgba(37,35,31,0.07)] sm:rounded-[26px] sm:px-8 sm:py-6 lg:rounded-[30px] lg:px-9 lg:py-6">
         <div className="flex min-h-10 items-center justify-between gap-3">
           {onBack ? (
             <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-full px-2 py-2 text-sm font-semibold text-[#426458] transition hover:bg-[#edf3ec]">
@@ -99,8 +99,8 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
           ) : <span />}
           {topPrompt && topActionLabel && onTopAction && (
             <div className="flex items-center gap-2 text-right text-xs sm:text-sm">
-              <span className="hidden text-[#52635b] sm:inline">{topPrompt}</span>
-              <button type="button" onClick={onTopAction} className="inline-flex items-center gap-1 font-bold text-[#0f4d3d] hover:text-[#e6572b]">
+              <span className="hidden text-[#47534b] sm:inline">{topPrompt}</span>
+              <button type="button" onClick={onTopAction} className="inline-flex items-center gap-1 font-bold text-[#065f46] hover:text-[#F97316]">
                 {topActionLabel}<ArrowRight className="h-3.5 w-3.5" />
               </button>
             </div>

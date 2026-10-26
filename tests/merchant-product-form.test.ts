@@ -107,3 +107,20 @@ test('does not serialize Food-specific modifiers for another category', () => {
 
   assert.equal(payload.modifier_groups, undefined);
 });
+
+test('serializes timed product promotions without replacing the regular price', () => {
+  const draft = {
+    ...createProductDraft('beauty'),
+    title: 'Soin karité',
+    price: 10000,
+    sale_price: 7500,
+    sale_starts_at: '2026-10-26T16:00',
+    sale_ends_at: '2026-10-30T20:00',
+  };
+
+  const payload = buildProductSavePayload(draft, 'beauty');
+  assert.equal(payload.price, 10000);
+  assert.equal(payload.sale_price, 7500);
+  assert.equal(payload.sale_starts_at, new Date(draft.sale_starts_at).toISOString());
+  assert.equal(payload.sale_ends_at, new Date(draft.sale_ends_at).toISOString());
+});

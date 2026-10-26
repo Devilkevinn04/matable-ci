@@ -47,6 +47,8 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     Object.prototype.hasOwnProperty.call(requested, field)
       && JSON.stringify(requested[field]) !== JSON.stringify(current[field])
   );
+  const isValidEventType = (value: unknown): value is NonNullable<ShopRecord['theme_config']['event_type']> =>
+    ['sales', 'flash_sale', 'new_arrival', 'launch', 'special_offer', 'custom'].includes(String(value));
 
   router.get('/:id/owner-profile', requireMerchantOwnShop, async (req, res) => {
     const shop = await getShopFromDatabase(Number(req.params.id));
@@ -350,11 +352,15 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     if (theme_config) {
       const requestedThemeConfig = { ...theme_config };
       const themeConfig = shop.theme_config as unknown as Record<string, unknown>;
+      if (Object.prototype.hasOwnProperty.call(requestedThemeConfig, 'event_type')
+        && !isValidEventType(requestedThemeConfig.event_type)) {
+        return res.status(400).json({ error: 'Choisissez un type d’opération commerciale valide.' });
+      }
       if (hasChangedFields(themeConfig, requestedThemeConfig, ['primary_color', 'secondary_color', 'font_family', 'layout_style', 'theme_preset_id', 'brand_direction', 'custom_banner_url', 'logo_url', 'advanced_css'])
         && !req.adminShopAccess && !canUseSubscriptionFeature(shop, 'custom_branding')) {
         return res.status(403).json({ error: 'La personnalisation avancée de la vitrine est réservée aux formules Premium et Pro.' });
       }
-      if (hasChangedFields(themeConfig, requestedThemeConfig, ['event_mode_enabled', 'event_banner_text'])
+      if (hasChangedFields(themeConfig, requestedThemeConfig, ['event_mode_enabled', 'event_type', 'event_banner_text'])
         && !req.adminShopAccess && !canUseSubscriptionFeature(shop, 'event_mode')) {
         return res.status(403).json({ error: 'Le mode événement est réservé aux formules Premium et Pro.' });
       }
@@ -384,12 +390,16 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       ? theme_config as Record<string, unknown>
       : {};
     const currentThemeConfig = shop.theme_config as unknown as Record<string, unknown>;
+    if (Object.prototype.hasOwnProperty.call(requestedThemeConfig, 'event_type')
+      && !isValidEventType(requestedThemeConfig.event_type)) {
+      return res.status(400).json({ error: 'Choisissez un type d’opération commerciale valide.' });
+    }
     if ((hasChangedFields(currentThemeConfig, requestedThemeConfig, ['primary_color', 'secondary_color', 'font_family', 'layout_style', 'theme_preset_id', 'brand_direction', 'custom_banner_url', 'logo_url', 'advanced_css'])
       || theme_color !== undefined && theme_color !== shop.theme_color)
       && !req.adminShopAccess && !canUseSubscriptionFeature(shop, 'custom_branding')) {
       return res.status(403).json({ error: 'La personnalisation avancée de la vitrine est réservée aux formules Premium et Pro.' });
     }
-    if (hasChangedFields(currentThemeConfig, requestedThemeConfig, ['event_mode_enabled', 'event_banner_text'])
+    if (hasChangedFields(currentThemeConfig, requestedThemeConfig, ['event_mode_enabled', 'event_type', 'event_banner_text'])
       && !req.adminShopAccess && !canUseSubscriptionFeature(shop, 'event_mode')) {
       return res.status(403).json({ error: 'Le mode événement est réservé aux formules Premium et Pro.' });
     }
@@ -454,9 +464,24 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
           : (shop.theme_config.delivery_zones || []),
       };
     }
+    if (opening_hours?.enabled) {
+      const openTime = typeof opening_hours.open_time === 'string' ? opening_hours.open_time.slice(0, 5) : '';
+      const closeTime = typeof opening_hours.close_time === 'string' ? opening_hours.close_time.slice(0, 5) : '';
+      const days = Array.isArray(opening_hours.days)
+        ? opening_hours.days.filter((day: unknown): day is number => typeof day === 'number' && Number.isInteger(day) && day >= 0 && day <= 6)
+        : [];
+      const isValidTime = (value: string) => {
+        if (!/^\d{2}:\d{2}$/.test(value)) return false;
+        const [hours, minutes] = value.split(':').map(Number);
+        return hours < 24 && minutes < 60;
+      };
+      if (!isValidTime(openTime) || !isValidTime(closeTime) || days.length === 0) {
+        return res.status(400).json({ error: 'Un planning actif doit inclure des heures valides et au moins un jour d’ouverture.' });
+      }
+    }
     if (opening_hours) {
       shop.opening_hours = {
-        ...(shop.opening_hours || { enabled: false, open_time: '08:00', close_time: '22:00', manual_override: false }),
+        ...(shop.opening_hours || { enabled: false, open_time: '', close_time: '', days: [], manual_override: false }),
         ...opening_hours,
       };
     }
