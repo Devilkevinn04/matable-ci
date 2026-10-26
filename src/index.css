@@ -11,6 +11,11 @@
   --mt-text: #292d2a;
   --mt-text-muted: #647067;
   --mt-border: #e7e9e5;
+  --mt-motion-fast: 160ms;
+  --mt-motion-standard: 260ms;
+  --mt-motion-deliberate: 420ms;
+  --mt-motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --mt-motion-ease-entrance: cubic-bezier(0.16, 1, 0.3, 1);
   --bg: var(--mt-background);
   --bg-soft: #f1f5f2;
   --ink: var(--mt-text);
@@ -46,6 +51,24 @@ html {
 
 *, *::before, *::after {
   box-sizing: border-box;
+}
+
+.motion-interactive {
+  transition:
+    translate var(--mt-motion-fast) var(--mt-motion-ease),
+    scale var(--mt-motion-fast) var(--mt-motion-ease),
+    box-shadow var(--mt-motion-fast) var(--mt-motion-ease),
+    border-color var(--mt-motion-fast) var(--mt-motion-ease),
+    background-color var(--mt-motion-fast) var(--mt-motion-ease);
+}
+
+.motion-interactive:hover {
+  translate: 0 -2px;
+}
+
+.motion-interactive:active {
+  translate: 0 0;
+  scale: 0.98;
 }
 
 img, svg, video, canvas {

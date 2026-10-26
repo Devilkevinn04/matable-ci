@@ -4,7 +4,7 @@ import { ShopCategory } from '../../types';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../../utils/categoryDefaults';
 import { ABIDJAN_COMMUNES } from '../../utils/abidjanCommunes';
 import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from '../../utils/subscriptionFeatures';
-import { AuthExperienceLayout } from '../AuthExperienceLayout';
+import { AuthExperienceLayout, MerchantRegistrationProgress, MerchantShopPreview } from '../AuthExperienceLayout';
 import { MerchantState } from './useMerchant';
 import { TermsPrivacyConsent } from '../TermsPrivacyConsent';
 
@@ -23,6 +23,14 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
     regAcceptedTermsPrivacy, setRegAcceptedTermsPrivacy,
     handleRegisterShop, setIsRegisterModalOpen,
   } = state;
+  const submitStep = (event: React.FormEvent<HTMLFormElement>) => {
+    if (step === 2) {
+      handleRegisterShop(event);
+      return;
+    }
+    event.preventDefault();
+    if (formRef.current?.reportValidity()) setStep(2);
+  };
 
   const benefits = [
     { label: 'Vitrine locale', icon: Store },
@@ -35,7 +43,12 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
       eyebrow="Votre commerce, en ligne"
       title="Faites découvrir votre boutique."
       description="Créez votre vitrine locale et recevez les commandes de vos clients directement sur WhatsApp."
-      imageAlt="Une entrepreneure souriante pour représenter les commerces locaux"
+      imageAlt="Aperçu dynamique de la vitrine de votre boutique"
+      storyCard={<MerchantShopPreview
+        name={regName}
+        category={getCategoryDefaults(regCategory).label}
+        city={regCity === 'Autre ville / commune' ? regCityOther : regCity}
+      />}
       topPrompt="Déjà une boutique ?"
       topActionLabel="Se connecter"
       onTopAction={() => setIsRegisterModalOpen(false)}
@@ -53,9 +66,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
           <p className="text-sm font-bold text-[#F97316]">Étape {step} sur 2</p>
           <h2 className="mt-1 text-[30px] font-extrabold leading-tight text-[#292d2a]">{step === 1 ? 'Présentez votre boutique' : 'Créez votre accès'}</h2>
         </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-[#e9e5dc]" role="progressbar" aria-label="Progression de l’inscription" aria-valuemin={1} aria-valuemax={2} aria-valuenow={step}>
-          <div className={`h-full rounded-full bg-[#047857] transition-all ${step === 1 ? 'w-1/2' : 'w-full'}`} />
-        </div>
+        <MerchantRegistrationProgress step={step} />
         <p className="text-sm leading-6 text-[#68756c]">{step === 1
           ? `Créez votre vitrine locale en deux étapes. Vous bénéficiez de ${TRIAL_DURATION_DAYS} jours d’essai Standard gratuit à la création, avec jusqu’à ${TRIAL_CATALOG_LIMIT} produits.`
           : 'Ces informations permettent à vos clients de vous contacter et vous serviront à retrouver votre espace marchand.'}</p>
@@ -71,7 +82,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
         </div>
       </div>
 
-      <form ref={formRef} onSubmit={handleRegisterShop} className="space-y-4">
+      <form ref={formRef} onSubmit={submitStep} className="space-y-4">
         {step === 1 && (
         <div className="rounded-[18px] border border-[#eef0ea] bg-[#f7f5f2] p-3 sm:p-4">
           <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#47534b]">
@@ -114,20 +125,22 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-[#47534b]">
               Numéro WhatsApp
-              <input type="tel" inputMode="tel" value={regPhone} onChange={(event) => setRegPhone(event.target.value)} required autoComplete="tel" placeholder="+225 07 00 00 00 00" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857]" />
+              <input type="tel" inputMode="tel" value={regPhone} onChange={(event) => setRegPhone(event.target.value)} required autoComplete="tel" placeholder="+225 07 00 00 00 00" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" />
+              <span className="mt-1 block text-xs font-normal text-[#68756c]">Ce numéro servira au contact avec vos clients et à retrouver votre espace.</span>
             </label>
 
             <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
               <label className="block text-sm font-semibold text-[#47534b]">
                 Code PIN (6 chiffres)
                 <div className="relative">
-                  <input type={showRegPin ? 'text' : 'password'} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={regPin} onChange={(event) => setRegPin(event.target.value.replace(/\D/g, '').slice(0, 6))} required autoComplete="new-password" placeholder="6 chiffres" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 pr-14 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857]" />
+                  <input type={showRegPin ? 'text' : 'password'} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={regPin} onChange={(event) => setRegPin(event.target.value.replace(/\D/g, '').slice(0, 6))} required autoComplete="new-password" placeholder="6 chiffres" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 pr-14 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" />
+                  <span className="mt-1 block text-xs font-normal text-[#68756c]">Choisissez un code que vous pourrez mémoriser.</span>
                   <button type="button" onClick={() => setShowRegPin((visible) => !visible)} className="absolute right-2 top-[calc(50%+3px)] -translate-y-1/2 rounded-full px-2 py-1 text-xs font-bold text-[#047857]">{showRegPin ? 'Masquer' : 'Afficher'}</button>
                 </div>
               </label>
               <label className="block text-sm font-semibold text-[#47534b]">
                 E-mail
-                <input type="email" value={regEmail} onChange={(event) => setRegEmail(event.target.value)} required autoComplete="email" placeholder="vous@exemple.ci" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857]" />
+                <input type="email" value={regEmail} onChange={(event) => setRegEmail(event.target.value)} required autoComplete="email" placeholder="vous@exemple.ci" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" />
               </label>
             </div>
           </div>
@@ -148,9 +161,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
         <div className="flex flex-col-reverse gap-2 sm:flex-row">
           {step === 2 && <button type="button" onClick={() => setStep(1)} className="min-h-12 flex-1 rounded-full border border-[#d5ddd5] bg-white px-5 py-3 text-sm font-bold text-[#47534b] transition hover:bg-[#f7f5f2]">Retour</button>}
           {step === 1 ? (
-            <button type="button" onClick={() => {
-              if (formRef.current?.reportValidity()) setStep(2);
-            }} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#065f46] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_25px_rgba(15,77,61,0.18)] transition hover:bg-[#047857]">
+            <button type="submit" className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#065f46] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_25px_rgba(15,77,61,0.18)] transition hover:bg-[#047857]">
               Continuer <ArrowRight className="h-4 w-4" />
             </button>
           ) : (

@@ -95,12 +95,14 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                   <input
                     type="tel"
                     required
+                    inputMode="tel"
+                    autoComplete="tel"
                     aria-invalid={Boolean(phoneFieldError)}
                     aria-describedby={phoneFieldError ? 'merchant-phone-error' : undefined}
                     placeholder="+225 07 00 11 22 33"
                     value={phoneInput}
                     onChange={(e) => setPhoneInput(e.target.value)}
-                    className="w-full text-xs py-3 pl-10 pr-3 rounded-xl border-[2px] border-[#292d2a] bg-[#fff] text-[#292d2a] focus:outline-none focus:border-[#1b3a63]"
+                    className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-10 pr-3 text-sm text-[#292d2a] outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10"
                   />
                 </div>
                 {phoneFieldError && <p id="merchant-phone-error" role="alert" className="mt-1.5 text-xs font-semibold text-[#b93712]">{phoneFieldError}</p>}
@@ -119,12 +121,13 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                     pattern="[0-9]*"
                     minLength={6}
                     maxLength={6}
+                    autoComplete="current-password"
                     aria-invalid={Boolean(pinFieldError)}
                     aria-describedby={pinFieldError ? 'merchant-pin-error' : undefined}
                     placeholder="••••••"
                     value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value)}
-                    className="w-full text-xs py-3 pl-10 pr-12 rounded-xl border-[2px] border-[#292d2a] bg-[#fff] text-[#292d2a] focus:outline-none focus:border-[#1b3a63]"
+                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-10 pr-12 text-sm text-[#292d2a] outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10"
                   />
                   <button type="button" onClick={() => setShowPinInput((visible) => !visible)} aria-label={showPinInput ? 'Masquer le PIN' : 'Afficher le PIN'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-[#47534b] hover:bg-[#f7f1e6]">
                     {showPinInput ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -136,7 +139,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
               <button
                 type="submit"
                 disabled={authLoading}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#065f46] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60"
+                className="motion-interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#065f46] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60"
               >
                 <span>{authLoading ? 'Connexion...' : 'Se connecter'}</span>
                 <ChevronRight className="w-4 h-4" />

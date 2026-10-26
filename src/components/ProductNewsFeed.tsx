@@ -7,6 +7,7 @@ import type { ShopCategory } from '../utils/categoryDefaults';
 import { getDiscoveryCityLabel } from '../utils/discoverySeo';
 import { deduplicateProductsById } from '../utils/productFeed';
 import { getActiveProductPrice } from '../utils/productPricing';
+import { MotionReveal } from './MotionSystem';
 import { PublicCampaignCarousel } from './PublicCampaignCarousel';
 import { PublicPartnerRequestForm } from './PublicPartnerRequestForm';
 
@@ -135,6 +136,9 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
     const productTitle = product.title.trim() || 'Produit local';
     const activePrice = getActiveProductPrice(product);
     const isPromotion = activePrice < product.price;
+    const discountPercent = isPromotion && product.price > 0
+      ? Math.round(((product.price - activePrice) / product.price) * 100)
+      : 0;
     const isRecent = product.created_at ? Date.now() - Date.parse(product.created_at) < 21 * 24 * 60 * 60 * 1000 : false;
     const label = sort === 'popular' && !rankingFallback && product.popularity.views + product.popularity.clicks > 0
       ? 'Tendance'
@@ -145,13 +149,13 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
     return (
     <Link
       to={`/${encodeURIComponent(product.shop.slug)}`}
-      className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[#e7e9e5] bg-white text-left shadow-[0_2px_12px_rgba(20,40,30,.06)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2"
+      className="motion-interactive group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[#e7e9e5] bg-white text-left shadow-[0_2px_12px_rgba(20,40,30,.06)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2"
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-[#d1fae5]">
         <img src={getProductImageForDisplay(product.image_url, product.shop.category)} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           {isPromotion
-            ? <span className="inline-flex items-center gap-1 rounded-full bg-[#c2410c] px-2.5 py-1 text-[10px] font-bold text-white"><BadgePercent className="h-3 w-3" aria-hidden="true" />Promotion</span>
+            ? <span aria-label={discountPercent > 0 ? `Réduction de ${discountPercent} %` : 'Prix réduit'} className="inline-flex items-center gap-1 rounded-full bg-[#c2410c] px-2.5 py-1 text-[10px] font-bold text-white"><BadgePercent className="h-3 w-3" aria-hidden="true" />{discountPercent > 0 ? `−${discountPercent}%` : 'Prix réduit'}</span>
             : label && <span className="rounded-full bg-[#FFFFFF]/95 px-2.5 py-1 text-[10px] font-bold text-[#065f46]">{label}</span>}
         </div>
         {product.stock > 0 && <span className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold text-[#065f46]">
@@ -164,7 +168,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
         <div className="mt-2 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <p className={`text-base font-extrabold ${isPromotion ? 'text-[#c2410c]' : 'text-[#065f46]'}`}>{formatFCFA(activePrice)}</p>
-            {isPromotion && <p className="text-xs font-semibold text-[#81786d] line-through">{formatFCFA(product.price)}</p>}
+            {isPromotion && <p className="text-xs font-semibold text-[#81786d]"><del>{formatFCFA(product.price)}</del></p>}
             {isPromotion && product.sale_ends_at && <p className="basis-full text-[10px] font-semibold text-[#a53a1d]">Jusqu’au {new Date(product.sale_ends_at).toLocaleDateString('fr-FR')}</p>}
           </div>
           {product.shop.city && <p className="flex items-center gap-1 text-[11px] text-[#647067]"><MapPin className="h-3 w-3 text-[#047857]" aria-hidden="true" />{getDiscoveryCityLabel(product.shop.city)}</p>}
@@ -175,15 +179,15 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
   };
 
   return (
-    <section id="decouvertes" className="mx-auto w-full max-w-[1440px] scroll-mt-24 overflow-hidden py-8 sm:py-12" aria-labelledby="product-feed-title">
+    <section id={promotionsOnly ? undefined : 'decouvertes'} className="mx-auto w-full max-w-[1440px] scroll-mt-24 overflow-hidden py-8 sm:py-12" aria-labelledby="product-feed-title">
       <div className="mx-auto max-w-[1184px] px-5 sm:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#c2410c]">{promotionsOnly ? 'Offres à durée limitée' : 'À parcourir aujourd’hui'}</p>
-            <h2 id="product-feed-title" className="mt-1 font-display text-2xl font-extrabold tracking-tight sm:text-3xl">{promotionsOnly ? 'Promotions en cours' : 'À découvrir près de chez vous'}</h2>
+            <h2 id="product-feed-title" className="mt-1 font-display text-2xl font-extrabold tracking-tight sm:text-3xl">{promotionsOnly ? 'Les offres actives' : 'À découvrir près de chez vous'}</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#647067]">
               {promotionsOnly
-                ? 'Des prix réduits publiés par les boutiques, visibles uniquement pendant les dates annoncées.'
+                ? 'Chaque réduction est calculée à partir du prix habituel et affichée avec sa date de fin. Les offres expirées ne sont pas présentées comme actives.'
                 : sort === 'popular'
                 ? rankingFallback
                   ? 'Les tendances se dessinent au fil des consultations. En attendant, voici les produits récemment ajoutés.'
@@ -198,9 +202,9 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
         </div>
 
         <div className="mt-4 max-w-sm">
-          <label className="flex min-h-10 items-center gap-3 rounded-xl border border-[#e0d5c6] bg-white px-3 text-sm font-semibold text-[#47534b]">
-            <span className="shrink-0 text-[#647067]">Catégorie</span>
-            <select value={category} onChange={(event) => changeFilter(() => setCategory(event.target.value))} className="min-w-0 flex-1 bg-transparent py-2 outline-none">
+          <label htmlFor="product-feed-category" className="flex min-h-10 items-center gap-3 rounded-xl border border-[#e0d5c6] bg-white px-3 text-sm font-semibold text-[#47534b]">
+            <span className="shrink-0 text-[#647067]">{promotionsOnly ? 'Filtrer' : 'Catégorie'}</span>
+            <select id="product-feed-category" value={category} onChange={(event) => changeFilter(() => setCategory(event.target.value))} className="min-w-0 flex-1 bg-transparent py-2 outline-none">
               <option value="all">Toutes les catégories</option>
               {categories.map((key) => <option key={key} value={key}>{getCategoryDefaults(key).label}</option>)}
             </select>
@@ -221,7 +225,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
           <ul className="mt-5 grid list-none grid-cols-2 items-stretch gap-3 p-0 sm:mt-6 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4" aria-label="Produits à découvrir">
             {products.map((product, index) => (
               <React.Fragment key={`${product.shop_id}-${product.id}`}>
-                <li className="min-w-0">{renderProductCard(product)}</li>
+                <li className="min-w-0"><MotionReveal delay={Math.min(index, 7) * 0.045}>{renderProductCard(product)}</MotionReveal></li>
                 {!promotionsOnly && index === 3 && products.length >= 6 && <PublicCampaignCarousel onOpenShop={onOpenShop} eligible placement="feed" />}
               </React.Fragment>
             ))}

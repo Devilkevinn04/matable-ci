@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowRight, BadgePercent, CheckCircle2, Clock3, MapPin, RotateCcw, Search, Store, X } from 'lucide-react';
+import { MotionReveal } from './MotionSystem';
 import { getCategoryDefaults, getProductImageForDisplay, isShopCategory, normalizeCustomBannerImage, SHOP_CATEGORIES } from '../utils/categoryDefaults';
 import { shopMatchesDirectorySearch } from '../utils/directorySearch';
 import { getPublicDiscoveryPages, toDiscoveryCitySlug, type DiscoveryPage } from '../utils/discoverySeo';
@@ -40,6 +41,8 @@ interface PublicDirectoryProps {
   isPromotionsPage?: boolean;
 }
 
+type DirectorySort = 'recommended' | 'open' | 'name';
+
 const categoryTileColors: Record<string, string> = {
   fashion: '#d1fae5',
   food: '#fbe3d6',
@@ -58,6 +61,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
   const location = useLocation();
   const [query, setQuery] = useState(() => isShopDirectoryPage ? new URLSearchParams(location.search).get('q') || '' : '');
   const [category, setCategory] = useState(discoveryPage?.category || 'all');
+  const [directorySort, setDirectorySort] = useState<DirectorySort>('recommended');
   const [campaignEligible, setCampaignEligible] = useState(false);
   const [hasHeroCampaign, setHasHeroCampaign] = useState(false);
   useEffect(() => {
@@ -100,13 +104,17 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         : !isShopDirectoryPage
           ? 'home'
           : null;
-    if (!targetPlacement) return filtered;
-    return filtered.map((shop, index) => ({ shop, index })).sort((left, right) => {
-      const leftBoosted = left.shop.boost_placements?.includes(targetPlacement) || left.shop.boost_placements?.includes('directory');
-      const rightBoosted = right.shop.boost_placements?.includes(targetPlacement) || right.shop.boost_placements?.includes('directory');
-      return Number(rightBoosted) - Number(leftBoosted) || left.index - right.index;
-    }).map(({ shop }) => shop);
-  }, [shops, query, category, discoveryPage?.citySlug, discoveryPage?.category, isShopDirectoryPage]);
+    const ordered = targetPlacement
+      ? filtered.map((shop, index) => ({ shop, index })).sort((left, right) => {
+        const leftBoosted = left.shop.boost_placements?.includes(targetPlacement) || left.shop.boost_placements?.includes('directory');
+        const rightBoosted = right.shop.boost_placements?.includes(targetPlacement) || right.shop.boost_placements?.includes('directory');
+        return Number(rightBoosted) - Number(leftBoosted) || left.index - right.index;
+      }).map(({ shop }) => shop)
+      : filtered;
+    if (directorySort === 'open') return [...ordered].sort((left, right) => Number(Boolean(right.is_open)) - Number(Boolean(left.is_open)));
+    if (directorySort === 'name') return [...ordered].sort((left, right) => left.name.localeCompare(right.name, 'fr', { sensitivity: 'base' }));
+    return ordered;
+  }, [shops, query, category, directorySort, discoveryPage?.citySlug, discoveryPage?.category, isShopDirectoryPage]);
   const getShopImage = (shop: DirectoryShop) => normalizeCustomBannerImage(shop.theme_config?.custom_banner_url, shop.category)
     || (shop.products_preview?.[0]
       ? getProductImageForDisplay(shop.products_preview[0].image_url, shop.category)
@@ -115,7 +123,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
   const searchForm = <form
     onSubmit={(event) => {
       event.preventDefault();
-      if (isShopDirectoryPage) document.getElementById('boutiques')?.scrollIntoView({ behavior: 'smooth' });
+      if (isShopDirectoryPage) onOpenDirectory(query.trim() || undefined);
       else onOpenDirectory(query);
     }}
     className={`mt-4 flex w-full max-w-[610px] items-center gap-1.5 rounded-[16px] border p-1.5 shadow-[0_10px_28px_rgba(0,0,0,.12)] focus-within:ring-2 focus-within:ring-[#f0ba80]/50 sm:mt-6 sm:gap-2 sm:rounded-[18px] sm:p-2 ${isShopDirectoryPage ? 'border-white/20 bg-white text-[#292d2a]' : 'border-[#d9cdbd] bg-white focus-within:border-[#047857] focus-within:ring-[#047857]/15'}`}
@@ -140,18 +148,34 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       <main className="min-h-screen bg-[#FAF8F2] text-[#292d2a]">
         <section className="relative isolate overflow-hidden bg-[#065f46] text-white">
           <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-32 -z-10 h-80 w-80 rounded-full border border-white/10 sm:right-[12%] sm:h-[34rem] sm:w-[34rem]" />
-          <div className="mx-auto max-w-[1184px] px-5 py-9 sm:px-8 sm:py-12">
-            <nav aria-label="Fil d’Ariane" className="mb-6 text-sm text-white/65">
-              <Link to="/" className="font-semibold text-white hover:underline">Accueil</Link>
-              <span aria-hidden="true" className="px-2">/</span>
-              <span>Promotions</span>
-            </nav>
-            <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#f0ba80]"><BadgePercent className="h-4 w-4" aria-hidden="true" /> Bons plans des boutiques</p>
-            <h1 className="mt-3 max-w-3xl font-display text-3xl font-extrabold leading-tight tracking-[-.04em] sm:text-5xl">Les offres locales, au bon moment.</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/80 sm:text-base">Des réductions datées, publiées par les commerçants. Le prix normal reste visible et le tarif promotionnel s’applique uniquement pendant la période indiquée.</p>
+          <div className="mx-auto grid max-w-[1184px] gap-8 px-5 py-9 sm:px-8 sm:py-12 lg:grid-cols-[1fr_350px] lg:items-end">
+            <MotionReveal>
+              <nav aria-label="Fil d’Ariane" className="mb-6 text-sm text-white/65">
+                <Link to="/" className="font-semibold text-white hover:underline">Accueil</Link>
+                <span aria-hidden="true" className="px-2">/</span>
+                <span>Promotions</span>
+              </nav>
+              <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#f0ba80]"><BadgePercent className="h-4 w-4" aria-hidden="true" /> Bons plans des boutiques</p>
+              <h1 className="mt-3 max-w-3xl font-display text-4xl font-extrabold leading-[1.04] tracking-[-.045em] sm:text-6xl">Les bons plans du quartier. <span className="text-[#f0ba80]">Vraiment.</span></h1>
+              <p className="mt-4 max-w-2xl text-sm leading-6 text-white/80 sm:text-lg sm:leading-7">Des prix réduits publiés par les boutiques locales, visibles pendant leurs dates réelles. Repérez une offre, découvrez le vendeur et échangez directement avec lui.</p>
+              <a href="#offres-actives" className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f0ba80] px-5 text-sm font-extrabold text-[#292d2a] transition hover:bg-[#ffd09a]">Voir les offres actives <ArrowRight className="h-4 w-4" aria-hidden="true" /></a>
+            </MotionReveal>
+            <MotionReveal delay={0.1}>
+            <aside className="rounded-[24px] border border-white/15 bg-white/[0.08] p-5 backdrop-blur-sm sm:p-6" aria-label="Comment reconnaître une offre active">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-[#f0ba80]">Une offre claire, pas de surprise</p>
+              <ul className="mt-4 space-y-3 text-sm leading-5 text-white/90">
+                <li className="flex gap-2.5"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#f0ba80]" aria-hidden="true" /><span>Le prix réduit et le prix habituel sont affichés ensemble.</span></li>
+                <li className="flex gap-2.5"><Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[#f0ba80]" aria-hidden="true" /><span>La période de validité est indiquée sur chaque offre.</span></li>
+                <li className="flex gap-2.5"><Store className="mt-0.5 h-4 w-4 shrink-0 text-[#f0ba80]" aria-hidden="true" /><span>Disponibilité, retrait et livraison se confirment avec la boutique.</span></li>
+              </ul>
+              <Link to="/comment-ca-marche#promotions" className="mt-5 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-[#f0ba80] hover:text-white">Comprendre les promotions <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+            </aside>
+            </MotionReveal>
           </div>
         </section>
-        <ProductNewsFeed key="promotions" onOpenShop={onOpenShop} categories={categories} promotionsOnly />
+        <div id="offres-actives">
+          <ProductNewsFeed key="promotions" onOpenShop={onOpenShop} categories={categories} promotionsOnly />
+        </div>
       </main>
     );
   }
@@ -184,7 +208,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           <div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-36 -z-10 h-[470px] w-[470px] rounded-full border border-white/10 sm:right-[8%] sm:top-[-250px] sm:h-[700px] sm:w-[700px]" />
           <div aria-hidden="true" className="pointer-events-none absolute -right-5 top-20 -z-10 h-64 w-64 rounded-full border border-[#f0ba80]/20 sm:right-[15%] sm:top-8 sm:h-96 sm:w-96" />
           <div className="mx-auto grid w-full max-w-[1280px] gap-9 px-5 pb-10 pt-8 sm:px-8 sm:pb-14 sm:pt-10 lg:grid-cols-[1fr_340px] lg:items-end lg:gap-16 lg:px-12 lg:pb-16 lg:pt-12">
-            <div className="min-w-0">
+            <MotionReveal className="min-w-0">
               <nav aria-label="Fil d’Ariane" className="mb-8 text-sm text-white/65">
                 <Link to="/" className="font-semibold text-white hover:underline">Accueil</Link>
                 <span aria-hidden="true" className="px-2">/</span>
@@ -204,7 +228,8 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <span className="mr-1 font-semibold text-white/90">Explorer :</span>
                 {popularSearches.map((term) => <button key={term} type="button" onClick={() => setQuery(term)} className="rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-white transition hover:border-[#f0ba80] hover:bg-white/10">{term}</button>)}
               </div>
-            </div>
+            </MotionReveal>
+            <MotionReveal delay={0.1}>
             <aside className="relative overflow-hidden rounded-[26px] border border-white/15 bg-[#FFFFFF] p-5 text-[#292d2a] shadow-[0_24px_70px_rgba(0,0,0,.2)] sm:p-6" aria-label="Repères de l’annuaire">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -228,12 +253,13 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 {cityPages.slice(0, 3).map((page) => <Link key={page.path} to={page.path} className="inline-flex items-center gap-1 rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[#065f46] transition hover:bg-[#d2e8dd]"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{page.city}</Link>)}
               </div>}
             </aside>
+            </MotionReveal>
           </div>
         </section>
       ) : (
       <section className="mx-auto w-full max-w-[1280px] px-4 pb-4 pt-4 sm:px-8 sm:pb-6 sm:pt-6 lg:px-10">
         <div className="grid overflow-hidden rounded-3xl border border-[#e7dfd3] bg-white shadow-[0_8px_28px_rgba(20,40,30,.07)] lg:min-h-[330px] lg:grid-cols-[.88fr_1.12fr]">
-          <div className="flex min-w-0 flex-col justify-center bg-gradient-to-br from-[#fffdf8] via-[#f8f5ef] to-[#edf5f0] p-5 sm:p-8 lg:p-9">
+          <MotionReveal className="flex min-w-0 flex-col justify-center bg-gradient-to-br from-[#fffdf8] via-[#f8f5ef] to-[#edf5f0] p-5 sm:p-8 lg:p-9">
             <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#c2410c] sm:text-xs">Le commerce local, simplifié</p>
             <h1 className="max-w-[600px] font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.055em] text-[#065f46] sm:text-[48px] lg:text-[58px]">
               Le commerce local, <span className="text-[#c2410c]">tout près de vous.</span>
@@ -248,8 +274,8 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Retrait ou livraison à convenir</span>
             </div>
             {!discoveryPage && !isShopDirectoryPage && <PublicPartnerCarousel />}
-          </div>
-          <div className="relative flex min-h-[250px] flex-col justify-end overflow-hidden bg-[#075f48] sm:min-h-[300px] lg:min-h-full">
+          </MotionReveal>
+          <MotionReveal delay={0.12} className="relative flex min-h-[250px] flex-col justify-end overflow-hidden bg-[#075f48] sm:min-h-[300px] lg:min-h-full">
             <img
               src={getShopImage(homeShops[0] || { slug: '', name: '', category: 'food' })}
               alt=""
@@ -301,7 +327,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 </button>
               )}
             </div>
-          </div>
+          </MotionReveal>
         </div>
       </section>
       )}
@@ -319,9 +345,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         {isLoading ? <div role="status" aria-label="Chargement des catégories" className="flex gap-3 overflow-hidden">
           {[0, 1, 2, 3, 4].map((item) => <div key={item} className="h-[94px] min-w-[118px] animate-pulse rounded-2xl bg-[#e9e4da] sm:min-w-[150px]" />)}
         </div> : <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-5">
-          {categories.map((item) => {
+          {categories.map((item, index) => {
             const count = categoryCounts.get(item) || 0;
-            return <button key={item} type="button" onClick={() => onOpenDirectory(categoryLabel(item))} className="group flex min-h-[94px] min-w-[118px] snap-start flex-col items-start justify-between rounded-2xl border border-black/[.04] px-3 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(20,40,30,.08)] sm:min-w-0 sm:px-4" style={{ backgroundColor: categoryTileColors[item] || '#f1f5f2' }}>
+            return <MotionReveal key={item} delay={index * 0.05} className="min-w-[118px] sm:min-w-0">
+            <button type="button" onClick={() => onOpenDirectory(categoryLabel(item))} className="motion-interactive group flex min-h-[94px] min-w-[118px] snap-start flex-col items-start justify-between rounded-2xl border border-black/[.04] px-3 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(20,40,30,.08)] sm:min-w-0 sm:px-4" style={{ backgroundColor: categoryTileColors[item] || '#f1f5f2' }}>
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/80 text-xl" aria-hidden="true">{getCategoryDefaults(item).icon}</span>
               <span className="mt-2 flex w-full items-end justify-between gap-1">
                 <span className="min-w-0">
@@ -330,7 +357,8 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 </span>
                 <ArrowRight className="mb-0.5 h-3.5 w-3.5 shrink-0 text-[#047857] transition-transform group-hover:translate-x-1" aria-hidden="true" />
               </span>
-            </button>;
+            </button>
+            </MotionReveal>;
           })}
         </div>}
       </section>}
@@ -356,8 +384,9 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             <div className="flex min-h-28 items-center justify-center rounded-2xl border border-dashed border-[#d8d0c3] bg-white px-5 text-center text-sm text-[#647067]">Les boutiques locales seront bientôt à découvrir ici.</div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              {homeShops.map((shop) => (
-                <Link key={shop.slug} to={`/${encodeURIComponent(shop.slug)}`} className="group relative flex min-h-[94px] min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white p-2.5 shadow-[0_2px_12px_rgba(20,40,30,.05)] transition hover:-translate-y-0.5 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.09)]">
+              {homeShops.map((shop, index) => (
+                <MotionReveal key={shop.slug} delay={index * 0.07}>
+                <Link to={`/${encodeURIComponent(shop.slug)}`} className="motion-interactive group relative flex min-h-[94px] min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white p-2.5 shadow-[0_2px_12px_rgba(20,40,30,.05)] transition hover:-translate-y-0.5 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.09)]">
                   <div className="relative h-[76px] w-[92px] shrink-0 overflow-hidden rounded-xl bg-[#edf5f0]">
                     <img src={getShopImage(shop)} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" onError={(event) => { event.currentTarget.hidden = true; }} />
                     {(shop.is_sponsored || shop.is_featured) && <span className="absolute left-1.5 top-1.5 rounded-full bg-[#fffdf8] px-2 py-0.5 text-[8px] font-black uppercase text-[#8f351d]">À la une</span>}
@@ -369,12 +398,14 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                   </div>
                   <ArrowRight className="mr-1 h-4 w-4 shrink-0 text-[#059669] transition-transform group-hover:translate-x-1" aria-hidden="true" />
                 </Link>
+                </MotionReveal>
               ))}
             </div>
           )}
         </section>
 
-        <Link to="/promotions" className="group relative flex min-h-44 flex-col justify-between overflow-hidden rounded-2xl bg-[#fff0df] p-5 text-left transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(150,70,30,.12)] sm:p-6">
+        <MotionReveal delay={0.12}>
+        <Link to="/promotions" className="motion-interactive group relative flex min-h-44 flex-col justify-between overflow-hidden rounded-2xl bg-[#fff0df] p-5 text-left transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(150,70,30,.12)] sm:p-6">
           <span aria-hidden="true" className="absolute -right-7 -top-8 h-36 w-36 rounded-full border-[18px] border-[#f5d3b5]" />
           <span className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-[#c2410c] text-white"><BadgePercent className="h-5 w-5" aria-hidden="true" /></span>
           <span className="relative mt-5">
@@ -383,6 +414,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             <span className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-[#a53a1d]">Voir les promotions <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden="true" /></span>
           </span>
         </Link>
+        </MotionReveal>
       </section>}
 
       {!discoveryPage && !isShopDirectoryPage && <PublicCampaignCarousel onOpenShop={onOpenShop} eligible={campaignEligible} placement="tiles" />}
@@ -400,7 +432,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         {isLoading ? <div className="flex gap-3 overflow-hidden pb-2" role="status" aria-label="Chargement des catégories">
           {[0, 1, 2, 3, 4].map((item) => <div key={item} className="h-[88px] min-w-[190px] animate-pulse rounded-2xl bg-[#e9e4da]" />)}
         </div> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {categories.map((item) => {
+          {categories.map((item, index) => {
             const count = shops.filter((shop) => shop.category === item).length;
             const selected = category === item;
             const className = `group flex min-h-[88px] min-w-0 flex-col items-start justify-center rounded-2xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selected ? 'border-[#065f46] ring-2 ring-[#065f46]/15' : 'border-transparent'}`;
@@ -409,9 +441,11 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <span className="mt-1 text-xs text-[#47534b]">{count} boutique{count === 1 ? '' : 's'}</span>
               </>;
             const categoryPage = discoveryPages.find((page) => page.category === item);
-            return categoryPage
-              ? <Link key={item} to={categoryPage.path} className={className} style={{ backgroundColor: categoryTileColors[item] || '#e9e4da' }}>{contents}</Link>
-              : <button key={item} type="button" aria-pressed={selected} onClick={() => { setCategory(selected ? 'all' : item); document.getElementById('boutiques')?.scrollIntoView({ behavior: 'smooth' }); }} className={className} style={{ backgroundColor: categoryTileColors[item] || '#e9e4da' }}>{contents}</button>;
+              return <MotionReveal key={item} delay={index * 0.05}>
+                {categoryPage
+                  ? <Link to={categoryPage.path} className={className} style={{ backgroundColor: categoryTileColors[item] || '#e9e4da' }}>{contents}</Link>
+                  : <button type="button" aria-pressed={selected} onClick={() => { setCategory(selected ? 'all' : item); document.getElementById('boutiques')?.scrollIntoView({ behavior: 'smooth' }); }} className={className} style={{ backgroundColor: categoryTileColors[item] || '#e9e4da' }}>{contents}</button>}
+              </MotionReveal>;
           })}
         </div>}
       </section>}
@@ -426,6 +460,23 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           </div>
           <span className="text-sm text-[#647067]" aria-live="polite">{isLoading ? 'Chargement…' : `${filteredShops.length} adresse${filteredShops.length === 1 ? '' : 's'}`}</span>
         </div>
+
+        {isShopDirectoryPage && (
+          <div className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-[#e7ddd0] bg-white p-3 sm:p-4">
+            <label htmlFor="directory-sort" className="text-xs font-bold text-[#47534b] sm:text-sm">Trier par</label>
+            <select
+              id="directory-sort"
+              value={directorySort}
+              onChange={(event) => setDirectorySort(event.target.value as DirectorySort)}
+              className="min-h-10 min-w-0 flex-1 rounded-xl border border-[#e0d5c6] bg-[#FAF8F2] px-3 text-sm font-semibold text-[#292d2a] sm:flex-none"
+            >
+              <option value="recommended">Ordre recommandé</option>
+              <option value="open">Ouvertes en premier</option>
+              <option value="name">Nom : A à Z</option>
+            </select>
+            {(query.trim() || category !== 'all') && <button type="button" onClick={() => { setQuery(''); setCategory('all'); onOpenDirectory(); }} className="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-xs font-bold text-[#065f46] hover:bg-[#e9f5ee] sm:text-sm">Effacer les filtres <X className="h-4 w-4" aria-hidden="true" /></button>}
+          </div>
+        )}
 
         {isShopDirectoryPage && cityPages.length > 0 && (
           <nav className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm" aria-label="Découvrir les boutiques par ville">
@@ -460,8 +511,9 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           </div>
         ) : (
           <div className="grid grid-cols-2 items-stretch gap-3 sm:gap-4 lg:gap-5 max-[360px]:grid-cols-1">
-            {filteredShops.map((shop) => (
-              <Link key={shop.slug} to={`/${encodeURIComponent(shop.slug)}`} className="group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[#FFFFFF] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2 sm:rounded-[24px]">
+            {filteredShops.map((shop, index) => (
+              <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045}>
+              <Link to={`/${encodeURIComponent(shop.slug)}`} className="motion-interactive group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[#FFFFFF] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2 sm:rounded-[24px]">
                 <div className="relative aspect-[1.35] shrink-0 overflow-hidden sm:aspect-[1.65]" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
                   <img src={getShopImage(shop)} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
                   <span className="absolute inset-0 bg-gradient-to-t from-[#17211f]/75 via-transparent to-[#17211f]/5" />
@@ -494,6 +546,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                   </div>
                 </div>
               </Link>
+              </MotionReveal>
             ))}
           </div>
         )}

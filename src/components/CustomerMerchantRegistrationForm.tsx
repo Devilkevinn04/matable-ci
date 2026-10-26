@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { ArrowRight, CheckCircle2, MessageCircleMore, ShieldCheck, Sparkles, Store } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { ArrowRight, CheckCircle2, Eye, EyeOff, MessageCircleMore, ShieldCheck, Sparkles, Store } from 'lucide-react';
 import { ShopCategory } from '../types';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../utils/categoryDefaults';
 import { ABIDJAN_COMMUNES } from '../utils/abidjanCommunes';
 import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from '../utils/subscriptionFeatures';
 import { TermsPrivacyConsent } from './TermsPrivacyConsent';
+import { MerchantRegistrationProgress, MerchantShopPreview } from './AuthExperienceLayout';
 
 interface CustomerMerchantRegistrationFormProps {
   onCreated: () => void;
@@ -18,12 +19,15 @@ interface ShopRegistrationResponse {
 }
 
 export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistrationFormProps> = ({ onCreated, onLogin }) => {
+  const [step, setStep] = useState<1 | 2>(1);
+  const formRef = useRef<HTMLFormElement>(null);
   const [name, setName] = useState('');
   const [category, setCategory] = useState<ShopCategory>('fashion');
   const [city, setCity] = useState('');
   const [otherCity, setOtherCity] = useState('');
   const [phone, setPhone] = useState('+225');
   const [pin, setPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
   const [email, setEmail] = useState('');
   const [acceptedTermsPrivacy, setAcceptedTermsPrivacy] = useState(false);
   const [error, setError] = useState('');
@@ -31,6 +35,10 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (step === 1) {
+      if (formRef.current?.reportValidity()) setStep(2);
+      return;
+    }
     setError('');
     setIsSubmitting(true);
     try {
@@ -77,7 +85,14 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
         <Sparkles className="h-3.5 w-3.5" />
         Espace commerçant
       </div>
-      <p className="text-sm leading-6 text-[#47534b]">Créez votre vitrine et recevez les commandes directement sur WhatsApp. {TRIAL_DURATION_DAYS} jours d’essai Standard gratuit, jusqu’à {TRIAL_CATALOG_LIMIT} produits.</p>
+      <div>
+        <p className="text-xs font-black uppercase tracking-[0.12em] text-[#c2410c]">Étape {step} sur 2</p>
+        <h3 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-[#292d2a]">{step === 1 ? 'Présentons votre boutique' : 'Sécurisons votre accès'}</h3>
+        <p className="mt-1 text-sm leading-6 text-[#47534b]">{step === 1
+          ? `Créez votre vitrine et recevez les commandes directement sur WhatsApp. ${TRIAL_DURATION_DAYS} jours d’essai Standard gratuit, jusqu’à ${TRIAL_CATALOG_LIMIT} produits.`
+          : 'Votre numéro WhatsApp sera visible pour le contact client. Le PIN protège l’accès à votre espace marchand.'}</p>
+      </div>
+      <MerchantRegistrationProgress step={step} />
       <div className="grid gap-2 sm:grid-cols-3">
         {benefits.map(({ label, icon: Icon }) => (
           <div key={label} className="flex items-center gap-2 rounded-2xl border border-[#e7e0d6] bg-[#FAF8F2] px-2.5 py-2.5 text-[11px] font-semibold text-[#47534b]">
@@ -88,7 +103,12 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
           </div>
         ))}
       </div>
-      <form onSubmit={submit} className="space-y-3">
+      <div className="flex items-center gap-3 rounded-[18px] border border-[#d8e4d9] bg-gradient-to-br from-[#0c604a] to-[#073f32] p-3.5 text-white shadow-[0_10px_28px_rgba(7,63,50,.12)] sm:p-4">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f0ba80] text-[#073f32]"><Store className="h-5 w-5" aria-hidden="true" /></span>
+        <MerchantShopPreview name={name} category={getCategoryDefaults(category).label} city={city === 'Autre ville / commune' ? otherCity : city} />
+      </div>
+      <form ref={formRef} onSubmit={submit} className="space-y-3">
+        {step === 1 && <>
         <div className="rounded-[18px] border border-[#eef0ea] bg-[#f7f5f2] p-3">
           <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#47534b]">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#dfeee6] text-[#065f46]">1</span>
@@ -124,7 +144,9 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
             )}
           </div>
         </div>
+        </>}
 
+        {step === 2 && <>
         <div className="rounded-[18px] border border-[#eef0ea] bg-[#f7f5f2] p-3">
           <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#47534b]">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#dfeee6] text-[#065f46]">2</span>
@@ -139,7 +161,10 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
             <div className="grid gap-3 min-[430px]:grid-cols-2">
               <label className="block text-sm font-semibold text-[#47534b]">
                 Code PIN (6 chiffres)
-                <input type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 6))} required autoComplete="new-password" placeholder="Choisissez un PIN" className={fieldClass} />
+                <span className="relative mt-1.5 block">
+                  <input type={showPin ? 'text' : 'password'} inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 6))} required autoComplete="new-password" placeholder="Choisissez un PIN" aria-label="Code PIN (6 chiffres)" className={`${fieldClass} mt-0 pr-12`} />
+                  <button type="button" onClick={() => setShowPin((visible) => !visible)} aria-label={showPin ? 'Masquer le PIN' : 'Afficher le PIN'} aria-pressed={showPin} className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-[#647067] transition hover:bg-[#f3f1eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">{showPin ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}</button>
+                </span>
               </label>
               <label className="block text-sm font-semibold text-[#47534b]">
                 E-mail
@@ -156,10 +181,14 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
           </div>
         </div>
         <TermsPrivacyConsent id="merchant-registration-terms-privacy" checked={acceptedTermsPrivacy} onChange={setAcceptedTermsPrivacy} />
+        </>}
         {error && <p role="alert" className="rounded-xl border border-[#F97316]/30 bg-[#fff0e8] px-3 py-2.5 text-sm font-semibold text-[#a33e24]">{error}</p>}
-        <button type="submit" disabled={isSubmitting} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#065f46] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_25px_rgba(15,77,61,0.24)] transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">
-          {isSubmitting ? 'Création en cours…' : 'Créer ma boutique'} <ArrowRight className="h-4 w-4" />
-        </button>
+        <div className="flex gap-2">
+          {step === 2 && <button type="button" onClick={() => setStep(1)} className="min-h-12 flex-1 rounded-full border border-[#d5ddd5] bg-white px-4 py-3 text-sm font-bold text-[#47534b] transition hover:bg-[#f7f5f2]">Retour</button>}
+          <button type="submit" disabled={isSubmitting} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#065f46] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_25px_rgba(15,77,61,0.24)] transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">
+            {isSubmitting ? 'Création en cours…' : step === 1 ? 'Continuer' : 'Créer ma boutique'} <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
       </form>
       <button type="button" onClick={onLogin} className="mt-2 flex min-h-10 w-full items-center justify-center gap-2 py-2 text-sm font-bold text-[#065f46] hover:text-[#F97316]">
         <Store className="h-4 w-4" aria-hidden="true" /> Déjà commerçant ? Se connecter

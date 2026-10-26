@@ -99,7 +99,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             </span>
           </Link>
         </div>
-        {isDirectory && headerSearch('hidden max-w-[480px] flex-1 lg:flex')}
+        {isDirectory && headerSearch('hidden max-w-[320px] flex-1 2xl:flex')}
 
         <motion.button
           type="button"
@@ -176,7 +176,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             </Link>
           )}
         </nav>
-        {isDirectory && headerSearch('basis-full lg:hidden')}
+        {isDirectory && headerSearch('basis-full 2xl:hidden')}
 
         <AnimatePresence initial={false}>
           {mobileMenuOpen && (

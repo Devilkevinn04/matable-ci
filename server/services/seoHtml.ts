@@ -23,6 +23,35 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
     .replace(/<meta name="robots" content=".*?" \/>/, '<meta name="robots" content="noindex, nofollow" />')
     .replace(/<link rel="canonical" href=".*?" \/>/, '');
 
+  const injectPublicPageSeo = (html: string, req: Request, title: string, description: string) => {
+    const origin = getPublicOrigin(req);
+    const pagePath = req.path.length > 1 ? req.path.replace(/\/+$/, '') : req.path;
+    const canonical = `${origin}${pagePath}`;
+    const tags = [
+      `<title>${escapeHtml(title)}</title>`,
+      `<meta name="description" content="${escapeHtml(description)}" />`,
+      '<meta name="robots" content="index, follow, max-image-preview:large" />',
+      `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
+      `<meta property="og:title" content="${escapeHtml(title)}" />`,
+      `<meta property="og:description" content="${escapeHtml(description)}" />`,
+      '<meta property="og:type" content="website" />',
+      `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
+      `<meta property="og:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      '<meta property="og:locale" content="fr_CI" />',
+      '<meta name="twitter:card" content="summary_large_image" />',
+      `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
+      `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
+      `<meta name="twitter:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+    ].join('\n  ');
+    return html
+      .replace(/<title>.*?<\/title>/, '')
+      .replace(/<meta name="description" content=".*?" \/>/, '')
+      .replace(/<meta name="robots" content=".*?" \/>/, '')
+      .replace(/<link rel="canonical" href=".*?" \/>/, '')
+      .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
+      .replace('</head>', `  ${tags}\n  </head>`);
+  };
+
   const injectFaqSeo = (html: string, req: Request) => {
     const origin = getPublicOrigin(req);
     const canonical = `${origin}/faq`;
@@ -393,6 +422,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
   return {
     getPublicOrigin,
     injectNoIndexSeo,
+    injectPublicPageSeo,
     injectFaqSeo,
     injectHowItWorksSeo,
     injectMerchantPlansSeo,

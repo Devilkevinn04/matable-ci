@@ -9,6 +9,7 @@ import { CustomerAccount, CustomerAuth, CustomerUser } from './components/Custom
 import { FaqPage } from './components/FaqPage';
 import { AccountRecoveryPage } from './components/AccountRecoveryPage';
 import { ProductModal } from './components/MerchantDashboard/ProductModal';
+import { MotionSystemProvider, PublicRouteEnter } from './components/MotionSystem';
 import type { MerchantState } from './components/MerchantDashboard/useMerchant';
 import type { Shop } from './types';
 import { findPublicDiscoveryPage } from './utils/discoverySeo';
@@ -285,6 +286,13 @@ export default function App() {
   const isMobileDashboardPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/mobile';
   const isAdvertisingPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/advertising';
   const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isRecoveryPage || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview || isAdvertisingPreview;
+  const isAnimatedPublicRoute = currentRole === 'storefront'
+    && customerView === 'none'
+    && !isRecoveryPage
+    && !isProductModalPreview
+    && !isMerchantPlansPreview
+    && !isMobileDashboardPreview
+    && !isAdvertisingPreview;
   const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !isShopDirectoryRoute && !isPromotionsPage && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && customerView === 'none';
   const isUnknownStorefront = isCustomerStorefront && !isLoadingShops && !availableShops.some((shop) => shop.slug === normalizedPath);
 
@@ -454,6 +462,7 @@ export default function App() {
   };
 
   return (
+    <MotionSystemProvider>
     <ToastProvider>
       <a href="#main-content" className="skip-link">Aller au contenu</a>
       <div className="min-h-screen flex flex-col bg-transparent font-sans">
@@ -462,7 +471,7 @@ export default function App() {
                 {!hasStandaloneAccountFlow && currentRole !== 'admin' && !isCustomerStorefront && <Navigation
                   currentRole={currentRole}
                   onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')}
-                  isDirectory={path === '/' || isShopDirectoryRoute || isPromotionsPage}
+                  isDirectory={path === '/' || isPromotionsPage}
                   isLegalPage={Boolean(legalPage)}
                   customerUser={customerUser}
                   onOpenCustomerAccount={() => navigate('/compte')}
@@ -472,8 +481,9 @@ export default function App() {
                 {!isMobileDashboardPreview && !isAdvertisingPreview && <CookieBanner />}
 
                 <div id="main-content" className="flex-1 app-shell" tabIndex={-1}>
-                  <React.Suspense fallback={isShopDirectoryRoute || isDiscoveryRoute ? <DirectoryPageLoading /> : <p role="status" className="p-6 text-center text-sm font-semibold text-slate-600">Chargement de la page…</p>}>
-                    <Routes>
+                  <PublicRouteEnter enabled={isAnimatedPublicRoute} routeKey={isAnimatedPublicRoute ? path : 'persistent-app'}>
+                    <React.Suspense fallback={isShopDirectoryRoute || isDiscoveryRoute ? <DirectoryPageLoading /> : <p role="status" className="p-6 text-center text-sm font-semibold text-slate-600">Chargement de la page…</p>}>
+                      <Routes>
                       <Route path="/__preview/article-form" element={isProductModalPreview ? <ProductModalDevPreview /> : <NotFoundPage />} />
                       <Route path="/__preview/merchant-plans" element={isMerchantPlansPreview
                         ? <React.Suspense fallback={<p role="status" className="p-6 text-center text-sm font-semibold text-slate-600">Chargement de la page…</p>}><MerchantTrialOnboarding shop={merchantPlanPreviewShop} isStarting={false} mode="plans" previewOnly onBack={() => navigate('/boutiques')} /></React.Suspense>
@@ -512,13 +522,15 @@ export default function App() {
                       <Route path="/admin/*" element={<AdminDashboard />} />
                       <Route path="/:slug" element={<StorefrontRoute customerUser={customerUser} onCustomerAuthenticated={setCustomerUser} />} />
                       <Route path="*" element={<NotFoundPage />} />
-                    </Routes>
-                  </React.Suspense>
+                      </Routes>
+                    </React.Suspense>
+                  </PublicRouteEnter>
                 </div>
                 {!hasStandaloneAccountFlow && currentRole !== 'admin' && <Footer compact={Boolean(legalPage)} />}
               </div>
             </div>
       </div>
     </ToastProvider>
+    </MotionSystemProvider>
   );
 }

@@ -1101,6 +1101,7 @@ async function startServer() {
   const {
     getPublicOrigin,
     injectNoIndexSeo,
+    injectPublicPageSeo,
     injectFaqSeo,
     injectHowItWorksSeo,
     injectMerchantPlansSeo,
@@ -1130,6 +1131,16 @@ async function startServer() {
       .some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`));
   };
   const isFrontendPagePath = (pathname: string) => pathname !== '/' && !pathname.startsWith('/api/') && !pathname.startsWith('/@') && !path.extname(pathname);
+  const publicPageSeoMetadata: Record<string, { title: string; description: string }> = {
+    '/promotions': {
+      title: 'Promotions en cours | MaTable.ci',
+      description: 'Découvrez les promotions temporaires des boutiques locales en Côte d’Ivoire et profitez de prix réduits pendant leur période de validité.',
+    },
+    '/guide': {
+      title: 'Guide personnel | MaTable.ci',
+      description: 'Votre guide pratique MaTable.ci, adapté à votre espace client, marchand ou administration.',
+    },
+  };
 
   app.use(createSeoRouter({ getPublicOrigin, escapeHtml }));
 
@@ -1218,6 +1229,19 @@ async function startServer() {
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
           return res.status(200).set({ 'Content-Type': 'text/html' }).end(await injectMerchantPlansSeo(transformed, req));
+        } catch (error) {
+          return next(error);
+        }
+      }
+      const publicPageSeo = publicPageSeoMetadata[req.path.replace(/\/+$/, '')] || null;
+      if (publicPageSeo && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(
+            injectPublicPageSeo(transformed, req, publicPageSeo.title, publicPageSeo.description),
+          );
         } catch (error) {
           return next(error);
         }
@@ -1335,6 +1359,7 @@ async function startServer() {
         injectDiscoverySeo: injectCurrentDiscoverySeo,
         injectShopDirectorySeo: injectCurrentShopDirectorySeo,
         injectMerchantPlansSeo: injectCurrentMerchantPlansSeo,
+        injectPublicPageSeo: injectCurrentPublicPageSeo,
         injectShopOpenGraph: injectCurrentShopOpenGraph,
       } = createSeoHtmlHelpers({
         shops: seoShops,
@@ -1358,6 +1383,12 @@ async function startServer() {
       const legalPage = matchSlug && ['mentions-legales', 'confidentialite', 'cgu', 'cookies'].includes(matchSlug) ? matchSlug : null;
       const discoveryPage = findPublicDiscoveryPage(req.path, seoShops.filter((shop) => isShopPubliclyVisible(shop)));
 
+      const publicPageSeo = publicPageSeoMetadata[req.path.replace(/\/+$/, '')] || null;
+      if (publicPageSeo && baseHtml && shouldServePublicHtml(req)) {
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(
+          injectCurrentPublicPageSeo(baseHtml, req, publicPageSeo.title, publicPageSeo.description),
+        );
+      }
       if (req.path.replace(/\/+$/, '') === '/commercants' && baseHtml && shouldServePublicHtml(req)) {
         return res.status(200).set({ 'Content-Type': 'text/html' }).send(await injectCurrentMerchantPlansSeo(baseHtml, req));
       }

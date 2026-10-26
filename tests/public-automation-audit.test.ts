@@ -299,6 +299,33 @@ test('how-it-works guide exposes indexable metadata and crawlable tutorial steps
   assert.equal((html.match(/property="og:title"/g) || []).length, 1);
 });
 
+test('promotions and personal guide routes are directly accessible and indexable', async () => {
+  const publicPages = [
+    {
+      path: '/promotions',
+      title: 'Promotions en cours | MaTable.ci',
+      description: 'Découvrez les promotions temporaires des boutiques locales en Côte d’Ivoire',
+    },
+    {
+      path: '/guide',
+      title: 'Guide personnel | MaTable.ci',
+      description: 'Votre guide pratique MaTable.ci',
+    },
+  ];
+
+  for (const page of publicPages) {
+    const response = await fetch(`${BASE_URL}${page.path}`, {
+      headers: { 'User-Agent': 'Googlebot', Accept: 'text/html' },
+    });
+    assert.equal(response.status, 200, `${page.path} should load directly`);
+    const html = await response.text();
+    assert.ok(html.includes(`<title>${page.title}</title>`));
+    assert.ok(html.includes(`<link rel="canonical" href="${BASE_URL}${page.path}" />`));
+    assert.ok(html.includes('<meta name="robots" content="index, follow, max-image-preview:large" />'));
+    assert.ok(html.includes(page.description));
+  }
+});
+
 test('merchant plans page exposes current prices and indexable SEO metadata', async () => {
   const response = await fetch(`${BASE_URL}/commercants`, {
     headers: { 'User-Agent': 'Googlebot', Accept: 'text/html' },
