@@ -229,10 +229,6 @@ Les jetons OIDC sont vérifiés côté serveur avec issuer, audience, nonce, PKC
 
 ## Sécurité et vérifications
 
-- Pour préparer une préproduction Render sans toucher au service de production,
-  suivez [docs/STAGING_RENDER.md](./docs/STAGING_RENDER.md) et utilisez
-  `render.staging.yaml`. La base PostgreSQL, l’URL publique et les clés doivent
-  être dédiées à cet environnement.
 - `npm run archive:release` crée un ZIP des fichiers suivis ou non ignorés du dépôt. Il exclut les métadonnées Git, caches, sauvegardes, bases locales et journaux, clés privées et fichiers d’environnement secrets (sauf `.env.example` et `.env.production.example`). Les données de `data/` sont exclues sauf `data/.gitkeep`. Contrôlez toujours la liste avant envoi avec `npm run archive:release -- --dry-run`.
 - Si une archive contenant une clé ou une base de données a déjà été partagée, considérez ces secrets et données comme compromis : renouvelez les clés concernées via les paramètres de déploiement et n’envoyez plus cette archive.
 - Les routes marchand exigent une session `HttpOnly`, son empreinte de requête et une boutique active.
