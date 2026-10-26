@@ -1,13 +1,152 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { BarChart3, Eye, MousePointer2, Package, RefreshCw, ShoppingBag, Users, Wallet } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { Shop } from '../../types';
 import { getSubscriptionAnalyticsDayLimit } from '../../utils/subscriptionFeatures';
 
+type DailyAnalytics = {
+  date: string;
+  page_views: number;
+  unique_visitors: number;
+  orders: number;
+  order_value: number;
+};
+
+type ProductAnalytics = {
+  product_id: number;
+  title: string;
+  views: number;
+  clicks: number;
+};
+
 type ProAnalytics = {
   days: number;
-  summary: { page_views: number; unique_visitors: number; orders: number; order_value: number; whatsapp_clicks: number; product_views: number; product_clicks: number };
-  daily: { date: string; page_views: number; unique_visitors: number; orders: number; order_value: number }[];
-  top_products: { product_id: number; title: string; views: number; clicks: number }[];
+  summary: {
+    page_views: number;
+    unique_visitors: number;
+    orders: number;
+    order_value: number;
+    whatsapp_clicks: number;
+    product_views: number;
+    product_clicks: number;
+  };
+  daily: DailyAnalytics[];
+  top_products: ProductAnalytics[];
 };
+
+const numberFormat = new Intl.NumberFormat('fr-FR');
+const currencyFormat = new Intl.NumberFormat('fr-FR');
+const shortDateFormat = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
+
+function formatCurrency(value: number) {
+  return `${currencyFormat.format(value)} F`;
+}
+
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'green' | 'orange' | 'blue' | 'gold';
+}) {
+  const tones = {
+    green: 'bg-emerald-50 text-emerald-800 ring-emerald-100',
+    orange: 'bg-orange-50 text-orange-800 ring-orange-100',
+    blue: 'bg-sky-50 text-sky-800 ring-sky-100',
+    gold: 'bg-amber-50 text-amber-800 ring-amber-100',
+  };
+
+  return (
+    <div className="min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-4 shadow-[0_3px_12px_rgba(41,45,42,.03)] sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs font-bold leading-5 text-slate-600">{label}</p>
+        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 ${tones[tone]}`}>
+          <Icon className="h-4 w-4" aria-hidden="true" />
+        </span>
+      </div>
+      <p className="mt-3 break-words text-2xl font-black tracking-tight text-[#183b31] sm:text-3xl">{value}</p>
+      <p className="mt-1 text-[11px] leading-4 text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+function DailyBars({
+  title,
+  description,
+  rows,
+  valueFor,
+  color,
+  formatValue,
+}: {
+  title: string;
+  description: string;
+  rows: DailyAnalytics[];
+  valueFor: (row: DailyAnalytics) => number;
+  color: string;
+  formatValue: (value: number) => string;
+}) {
+  const maxValue = Math.max(1, ...rows.map(valueFor));
+  const tickIndexes = Array.from(new Set([0, Math.floor((rows.length - 1) / 2), rows.length - 1]));
+
+  return (
+    <section className="min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5" aria-label={title}>
+      <div>
+        <h3 className="font-extrabold text-[#183b31]">{title}</h3>
+        <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
+      </div>
+      {rows.length ? (
+        <>
+          <div className="mt-5 grid h-36 grid-cols-[36px_minmax(0,1fr)] gap-2 sm:h-44 sm:grid-cols-[48px_minmax(0,1fr)]">
+            <div className="flex flex-col justify-between pb-1 text-right text-[10px] tabular-nums text-slate-400" aria-hidden="true">
+              <span>{formatValue(maxValue)}</span>
+              <span>{formatValue(Math.round(maxValue / 2))}</span>
+              <span>0</span>
+            </div>
+            <div
+              className="relative flex min-w-0 items-end gap-[3px] border-b border-l border-slate-200 px-1 pb-1"
+              role="img"
+              aria-label={`${title}: ${rows.map((row) => `${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${row.date}T12:00:00`))}, ${formatValue(valueFor(row))}`).join('; ')}`}
+            >
+              <div className="pointer-events-none absolute inset-x-0 top-0 flex h-full flex-col justify-between pb-1" aria-hidden="true">
+                <span className="border-t border-dashed border-slate-100" />
+                <span className="border-t border-dashed border-slate-100" />
+                <span className="border-t border-slate-200" />
+              </div>
+              {rows.map((row) => {
+                const value = valueFor(row);
+                const height = value ? Math.max(4, (value / maxValue) * 100) : 0;
+                return (
+                  <div key={row.date} className="relative z-[1] flex h-full min-w-0 flex-1 items-end justify-center">
+                    <div
+                      className="w-full max-w-3 rounded-t-[3px] transition-[height] duration-300 sm:max-w-4"
+                      style={{ height: `${height}%`, backgroundColor: color, opacity: value ? 0.85 : 0.12 }}
+                      title={`${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${row.date}T12:00:00`))} : ${formatValue(value)}`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="ml-10 mt-2 flex justify-between text-[10px] font-medium text-slate-400 sm:ml-14">
+            {tickIndexes.map((index) => (
+              <span key={rows[index].date}>{shortDateFormat.format(new Date(`${rows[index].date}T12:00:00`))}</span>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="mt-4 grid h-36 place-items-center rounded-xl bg-[#faf9f5] px-4 text-center text-sm text-slate-500">
+          Les données apparaîtront ici dès que votre boutique aura reçu de l’activité.
+        </div>
+      )}
+    </section>
+  );
+}
 
 export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compact?: boolean }) {
   const maxDays = shop.admin_mode ? 90 : getSubscriptionAnalyticsDayLimit(shop.subscription?.plan, shop.subscription?.planFeatures);
@@ -19,14 +158,27 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
   const canUseAnalytics = shop.admin_mode || shop.subscription?.isActive === true;
 
   useEffect(() => {
-    if (!canUseAnalytics) return;
+    setDays(compact ? Math.min(7, maxDays) : maxDays);
+  }, [compact, maxDays]);
+
+  useEffect(() => {
+    if (!canUseAnalytics) {
+      setAnalytics(null);
+      setLoading(false);
+      return;
+    }
     let isCurrentRequest = true;
     setLoading(true);
     setError('');
     fetch(`/api/shops/${shop.id}/analytics?days=${days}`, { credentials: 'include' })
       .then(async (response) => {
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || 'Impossible de charger les statistiques.');
+        const payload: unknown = await response.json();
+        if (!response.ok) {
+          const message = payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
+            ? payload.error
+            : 'Impossible de charger les statistiques.';
+          throw new Error(message);
+        }
         return payload as ProAnalytics;
       })
       .then((payload) => { if (isCurrentRequest) setAnalytics(payload); })
@@ -37,121 +189,176 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
     return () => { isCurrentRequest = false; };
   }, [canUseAnalytics, days, refreshKey, shop.id]);
 
-  useEffect(() => {
-    setDays(compact ? Math.min(7, maxDays) : maxDays);
-  }, [compact, maxDays]);
+  const periods = Array.from(new Set([7, 30, 90, maxDays])).filter((period) => period <= maxDays);
+  const dailyRows = useMemo(() => analytics?.daily || [], [analytics?.daily]);
+  const metrics = [
+    { icon: Eye, label: 'Visites de la vitrine', value: numberFormat.format(analytics?.summary.page_views ?? 0), detail: `${numberFormat.format(analytics?.summary.unique_visitors ?? 0)} visiteurs distincts · après consentement`, tone: 'green' as const },
+    { icon: ShoppingBag, label: 'Commandes reçues', value: numberFormat.format(analytics?.summary.orders ?? 0), detail: 'Commandes non annulées', tone: 'orange' as const },
+    { icon: MousePointer2, label: 'Clics WhatsApp', value: numberFormat.format(analytics?.summary.whatsapp_clicks ?? 0), detail: 'Clics suivis depuis les reçus de commande', tone: 'blue' as const },
+    { icon: Wallet, label: 'Valeur des commandes', value: formatCurrency(analytics?.summary.order_value ?? 0), detail: 'Montant demandé, pas un paiement encaissé', tone: 'gold' as const },
+  ];
 
   if (!canUseAnalytics) {
     return (
-      <section className="max-w-3xl rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
-        <p className="text-xs font-bold uppercase text-emerald-800">Statistiques de la boutique</p>
+      <section className="max-w-3xl rounded-2xl border border-[#e7dfd3] bg-white p-5 sm:p-6">
+        <p className="text-xs font-bold uppercase tracking-wide text-emerald-800">Statistiques de la boutique</p>
         <h3 className="mt-1 text-lg font-extrabold text-slate-900">Suivez la visibilité de votre boutique</h3>
         <p className="mt-2 text-sm leading-6 text-slate-600">Les statistiques sont accessibles pendant un essai ou un abonnement actif.</p>
       </section>
     );
   }
 
-  const summaryItems = [
-    { label: 'Visites consenties', value: analytics?.summary.page_views ?? 0 },
-    { label: 'Sessions uniques', value: analytics?.summary.unique_visitors ?? 0 },
-    { label: 'Commandes actionnables', value: analytics?.summary.orders ?? 0 },
-    { label: 'Clics WhatsApp suivis', value: analytics?.summary.whatsapp_clicks ?? 0 },
-    { label: 'Valeur des commandes', value: `${new Intl.NumberFormat('fr-FR').format(analytics?.summary.order_value ?? 0)} FCFA` },
-    { label: 'Vues produits consenties', value: analytics?.summary.product_views ?? 0 },
-    { label: 'Clics produits', value: analytics?.summary.product_clicks ?? 0 },
-  ];
-  const dailyPoints = (key: 'orders' | 'order_value') => {
-    const daily = analytics?.daily || [];
-    const maxValue = Math.max(1, ...daily.map((day) => day[key]));
-    return daily.map((day, index) => {
-      const x = daily.length <= 1 ? 12 : 12 + (index / (daily.length - 1)) * 296;
-      const y = 96 - (day[key] / maxValue) * 80;
-      return `${x},${y}`;
-    }).join(' ');
-  };
-
   if (compact) {
-    const daily = analytics?.daily || [];
-    const firstDay = daily[0];
-    const lastDay = daily.at(-1);
+    const daily = dailyRows.slice(-7);
+    const maxOrders = Math.max(1, ...daily.map((day) => day.orders));
     return (
       <section aria-labelledby="merchant-overview-analytics-title" className="rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3 border-b border-[#eee8dc] pb-3">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 id="merchant-overview-analytics-title" className="text-lg font-black text-[#047857]">Statistiques</h3>
-            <p className="mt-1 text-xs text-slate-500">Évolution sur {analytics?.days || Math.min(7, maxDays)} jours · valeurs de chaque série normalisées</p>
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-emerald-800">Votre activité</p>
+            <h3 id="merchant-overview-analytics-title" className="mt-1 text-lg font-black text-[#183b31]">Cette semaine</h3>
           </div>
-          <button type="button" onClick={() => setRefreshKey((key) => key + 1)} aria-label="Actualiser les statistiques" className="min-h-9 rounded-full border border-[#dfe8dd] px-3 text-xs font-bold text-[#047857] hover:bg-[#d1fae5]">Actualiser</button>
+          <button type="button" onClick={() => setRefreshKey((key) => key + 1)} aria-label="Actualiser les statistiques" className="grid h-9 w-9 place-items-center rounded-full border border-[#dfe8dd] text-[#047857] hover:bg-emerald-50">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+          </button>
         </div>
-        {loading && <p role="status" className="py-3 text-sm text-slate-500">Chargement des statistiques…</p>}
         {error && <div role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">{error}</div>}
-        {!loading && !error && daily.length === 0 && <p className="py-6 text-sm text-slate-500">Aucune activité mesurée sur cette période.</p>}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="rounded-xl bg-[#f4f7f3] p-3"><p className="text-[10px] font-bold text-slate-500">Visiteurs</p><p className="mt-1 text-xl font-black text-[#183b31]">{numberFormat.format(analytics?.summary.unique_visitors ?? 0)}</p></div>
+          <div className="rounded-xl bg-[#fff5eb] p-3"><p className="text-[10px] font-bold text-slate-500">Commandes</p><p className="mt-1 text-xl font-black text-[#a64a1f]">{numberFormat.format(analytics?.summary.orders ?? 0)}</p></div>
+        </div>
+        {loading && !analytics && <p role="status" className="mt-3 text-xs text-slate-500">Chargement…</p>}
+        {!loading && !error && !daily.length && <p className="mt-4 rounded-xl bg-[#faf9f5] p-4 text-xs leading-5 text-slate-500">Les visites apparaîtront ici dès que votre vitrine recevra de l’activité.</p>}
         {daily.length > 0 && (
-          <>
-            <div className="mt-4 rounded-xl border border-[#eee8dc] bg-[#FFFFFF] p-2">
-              <svg role="img" aria-label="Évolution des commandes et de leur valeur par jour" viewBox="0 0 320 110" className="h-40 w-full">
-                {[16, 42, 68, 96].map((y) => <line key={y} x1="12" x2="308" y1={y} y2={y} stroke="#e7dfd3" strokeWidth="1" />)}
-                <polyline points={dailyPoints('orders')} fill="none" stroke="#F97316" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <polyline points={dailyPoints('order_value')} fill="none" stroke="#065f46" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <div className="flex justify-between px-1 text-[10px] text-slate-500">
-                <span>{firstDay ? new Intl.DateTimeFormat('fr-FR', { weekday: 'short' }).format(new Date(`${firstDay.date}T12:00:00`)) : ''}</span>
-                <span>{lastDay ? new Intl.DateTimeFormat('fr-FR', { weekday: 'short' }).format(new Date(`${lastDay.date}T12:00:00`)) : ''}</span>
-              </div>
+          <div className="mt-4">
+            <div className="flex h-16 items-end gap-1.5" role="img" aria-label="Commandes reçues chaque jour cette semaine">
+              {daily.map((day) => (
+                <div key={day.date} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1" title={`${shortDateFormat.format(new Date(`${day.date}T12:00:00`))} : ${day.orders} commande(s)`}>
+                  <span className="text-[9px] font-bold tabular-nums text-slate-500">{day.orders || ''}</span>
+                  <span className="w-full max-w-7 rounded-t bg-[#e77a3d]" style={{ height: `${day.orders ? Math.max(12, (day.orders / maxOrders) * 38) : 3}px`, opacity: day.orders ? 1 : 0.2 }} />
+                  <span className="text-[9px] text-slate-400">{new Intl.DateTimeFormat('fr-FR', { weekday: 'narrow' }).format(new Date(`${day.date}T12:00:00`))}</span>
+                </div>
+              ))}
             </div>
-            <div className="mt-3 flex flex-wrap gap-4 text-[11px] font-semibold text-slate-600">
-              <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#F97316]" />Commandes</span>
-              <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#065f46]" />Valeur des commandes · FCFA</span>
-            </div>
-            <p className="mt-2 text-[10px] leading-4 text-slate-500">La valeur correspond aux commandes actionnables, pas aux paiements encaissés.</p>
-          </>
+          </div>
         )}
+        {analytics && <p className="mt-3 border-t border-slate-100 pt-3 text-[10px] leading-4 text-slate-500">Les montants des commandes ne signifient pas que le paiement a été encaissé sur MaTable.ci.</p>}
       </section>
     );
   }
 
   return (
-    <section className="max-w-5xl space-y-4" aria-labelledby="merchant-pro-analytics-title">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-3">
-        <div>
-          <p className="text-xs font-bold uppercase text-emerald-800">Formule {shop.subscription?.plan || 'Pro'}</p>
-          <h3 id="merchant-pro-analytics-title" className="mt-1 text-lg font-extrabold text-slate-900">Statistiques de la boutique</h3>
-          <p className="mt-1 text-xs text-slate-500">Votre formule donne accès aux statistiques sur {maxDays} jours. Une visite n’est comptée qu’après consentement.</p>
+    <section className="mx-auto w-full max-w-6xl space-y-5 pb-4" aria-labelledby="merchant-pro-analytics-title">
+      <header className="overflow-hidden rounded-[1.5rem] bg-[#123e32] p-5 text-white shadow-[0_12px_30px_rgba(18,62,50,.12)] sm:p-7">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-100">
+              <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" /> Aperçu de votre boutique
+            </p>
+            <h2 id="merchant-pro-analytics-title" className="mt-3 text-2xl font-black tracking-tight sm:text-3xl">Vos statistiques</h2>
+            <p className="mt-2 max-w-xl text-xs leading-5 text-emerald-50/80 sm:text-sm">Comprenez les visites, les commandes et les articles qui attirent l’attention.</p>
+          </div>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Période des statistiques">
+            {periods.map((period) => (
+              <button
+                key={period}
+                type="button"
+                aria-pressed={days === period}
+                onClick={() => setDays(period)}
+                className={`min-h-10 rounded-full px-4 text-xs font-extrabold transition ${days === period ? 'bg-[#f0ba80] text-[#292d2a]' : 'border border-white/25 bg-white/5 text-white hover:bg-white/10'}`}
+              >
+                {period} jours
+              </button>
+            ))}
+          </div>
         </div>
-        <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
-          Période
-          <select value={days} onChange={(event) => setDays(Number(event.target.value))} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2">
-            {Array.from(new Set([7, 30, 90, maxDays])).filter((period) => period <= maxDays).map((period) => <option key={period} value={period}>{period} jours</option>)}
-          </select>
-        </label>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/15 pt-4 text-[11px] text-emerald-50/80">
+          <p>Formule {shop.subscription?.plan || 'Standard'} · données sur {analytics?.days || days} jours · visites comptées après consentement</p>
+          <button type="button" onClick={() => setRefreshKey((key) => key + 1)} disabled={loading} className="inline-flex min-h-9 items-center gap-2 rounded-full border border-white/25 px-3 font-bold text-white transition hover:bg-white/10 disabled:opacity-60">
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            Actualiser
+          </button>
+        </div>
+      </header>
+
+      {error && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+          <span>{error}</span>
+          <button type="button" onClick={() => setRefreshKey((key) => key + 1)} className="min-h-10 rounded-full border border-rose-300 bg-white px-4 text-xs font-bold">Réessayer</button>
+        </div>
+      )}
+      {loading && !analytics && <p role="status" className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">Chargement de vos statistiques…</p>}
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}
       </div>
 
-      {loading && <p role="status" className="text-sm text-slate-500">Chargement des statistiques…</p>}
-      {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"><span>{error}</span><button type="button" onClick={() => setRefreshKey((key) => key + 1)} className="min-h-9 rounded-md border border-rose-300 bg-white px-3 text-xs font-bold">Réessayer</button></div>}
-      <dl className="grid gap-3 border-y border-slate-200 py-4 sm:grid-cols-2 xl:grid-cols-4">
-        {summaryItems.map((item) => <div key={item.label}><dt className="text-xs font-semibold text-slate-500">{item.label}</dt><dd className="mt-1 text-xl font-black text-slate-900">{typeof item.value === 'number' ? new Intl.NumberFormat('fr-FR').format(item.value) : item.value}</dd></div>)}
-      </dl>
-      <p className="text-xs leading-5 text-slate-500">La valeur des commandes correspond aux commandes actionnables enregistrées sur MaTable.ci; elle ne représente pas un paiement encaissé par la plateforme.</p>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <DailyBars
+          title="Visites de la vitrine"
+          description="Nombre de consultations mesurées chaque jour."
+          rows={dailyRows}
+          valueFor={(day) => day.page_views}
+          color="#087c5b"
+          formatValue={(value) => numberFormat.format(value)}
+        />
+        <DailyBars
+          title="Commandes reçues"
+          description="Commandes enregistrées et non annulées, par jour."
+          rows={dailyRows}
+          valueFor={(day) => day.orders}
+          color="#e77a3d"
+          formatValue={(value) => numberFormat.format(value)}
+        />
+      </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-        <table className="w-full min-w-[620px] border-collapse text-left text-xs">
-          <thead className="bg-slate-50 text-slate-600"><tr><th className="px-3 py-2.5 font-bold">Jour</th><th className="px-3 py-2.5 font-bold">Visites</th><th className="px-3 py-2.5 font-bold">Sessions</th><th className="px-3 py-2.5 font-bold">Commandes</th><th className="px-3 py-2.5 text-right font-bold">Valeur des commandes</th></tr></thead>
-          <tbody className="divide-y divide-slate-100">
-            {!analytics?.daily.length && <tr><td colSpan={5} className="px-3 py-6 text-center text-slate-500">{loading ? 'Chargement…' : 'Aucune activité mesurée sur cette période.'}</td></tr>}
-            {analytics?.daily.map((day) => <tr key={day.date}><td className="px-3 py-2.5 font-semibold text-slate-800">{new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${day.date}T00:00:00`))}</td><td className="px-3 py-2.5 tabular-nums">{new Intl.NumberFormat('fr-FR').format(day.page_views)}</td><td className="px-3 py-2.5 tabular-nums">{new Intl.NumberFormat('fr-FR').format(day.unique_visitors)}</td><td className="px-3 py-2.5 tabular-nums">{new Intl.NumberFormat('fr-FR').format(day.orders)}</td><td className="px-3 py-2.5 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(day.order_value)} FCFA</td></tr>)}
-          </tbody>
-        </table>
+      <section aria-labelledby="merchant-analytics-details-title" className="overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white">
+        <div className="border-b border-[#eee8dc] px-4 py-4 sm:px-5">
+          <h3 id="merchant-analytics-details-title" className="font-extrabold text-[#183b31]">Autres indicateurs</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Interactions suivies avec le consentement du visiteur.</p>
+        </div>
+        <div className="grid divide-y divide-[#eee8dc] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <div className="flex items-center gap-3 p-4 sm:p-5"><span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-800"><Users className="h-4 w-4" aria-hidden="true" /></span><div><p className="text-[11px] font-semibold text-slate-500">Visiteurs distincts</p><p className="mt-1 font-black text-[#183b31]">{numberFormat.format(analytics?.summary.unique_visitors ?? 0)}</p></div></div>
+          <div className="flex items-center gap-3 p-4 sm:p-5"><span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-800"><Package className="h-4 w-4" aria-hidden="true" /></span><div><p className="text-[11px] font-semibold text-slate-500">Vues des produits</p><p className="mt-1 font-black text-[#183b31]">{numberFormat.format(analytics?.summary.product_views ?? 0)}</p></div></div>
+          <div className="flex items-center gap-3 p-4 sm:p-5"><span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><MousePointer2 className="h-4 w-4" aria-hidden="true" /></span><div><p className="text-[11px] font-semibold text-slate-500">Clics sur les produits</p><p className="mt-1 font-black text-[#183b31]">{numberFormat.format(analytics?.summary.product_clicks ?? 0)}</p></div></div>
+        </div>
+      </section>
+
+      <section aria-labelledby="merchant-top-products-title" className="overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white">
+        <div className="border-b border-[#eee8dc] px-4 py-4 sm:px-5">
+          <div className="flex items-center gap-2"><Package className="h-4 w-4 text-emerald-800" aria-hidden="true" /><h3 id="merchant-top-products-title" className="font-extrabold text-[#183b31]">Articles qui attirent le plus</h3></div>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Classés selon les vues enregistrées pendant la période choisie.</p>
+        </div>
+        {analytics?.top_products.length ? (
+          <ol className="divide-y divide-[#f0eee8]">
+            {analytics.top_products.map((product, index) => {
+              const maxViews = Math.max(1, ...analytics.top_products.map((item) => item.views));
+              const engagementRate = product.views ? (product.clicks / product.views) * 100 : 0;
+              return (
+                <li key={product.product_id} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#f4f7f3] text-xs font-black text-[#315548]">{index + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-slate-800">{product.title}</p>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#087c5b]" style={{ width: `${Math.min(100, (product.views / maxViews) * 100)}%` }} /></div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-black tabular-nums text-[#183b31]">{numberFormat.format(product.views)} <span className="text-[10px] font-semibold text-slate-500">vues</span></p>
+                    <p className="mt-0.5 text-[10px] text-slate-500">{numberFormat.format(product.clicks)} clics · {engagementRate.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        ) : (
+          <p className="px-4 py-8 text-center text-sm text-slate-500">Aucune vue produit mesurée sur cette période. Partagez votre vitrine pour commencer.</p>
+        )}
+      </section>
+
+      <div className="flex items-start gap-3 rounded-2xl border border-[#eadfce] bg-[#fffaf2] p-4 text-xs leading-5 text-[#6b6255]">
+        <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-[#93602e]" aria-hidden="true" />
+        <p><span className="font-bold text-[#4c4031]">À propos des montants :</span> les commandes affichées sont les demandes enregistrées sur MaTable.ci. Leur valeur n’indique pas qu’un paiement a été encaissé ni confirmé.</p>
       </div>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-3 py-2.5 text-sm font-bold text-slate-800">Produits les plus vus</div>
-        <table className="w-full min-w-[480px] border-collapse text-left text-xs">
-          <thead className="bg-slate-50 text-slate-600"><tr><th className="px-3 py-2.5 font-bold">Produit</th><th className="px-3 py-2.5 text-right font-bold">Vues consenties</th><th className="px-3 py-2.5 text-right font-bold">Clics</th></tr></thead>
-          <tbody className="divide-y divide-slate-100">
-            {!analytics?.top_products.length && <tr><td colSpan={3} className="px-3 py-6 text-center text-slate-500">{loading ? 'Chargement…' : 'Aucune vue produit consentie sur cette période.'}</td></tr>}
-            {analytics?.top_products.map((product) => <tr key={product.product_id}><td className="px-3 py-2.5 font-semibold text-slate-800">{product.title}</td><td className="px-3 py-2.5 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(product.views)}</td><td className="px-3 py-2.5 text-right tabular-nums">{new Intl.NumberFormat('fr-FR').format(product.clicks)}</td></tr>)}
-          </tbody>
-        </table>
-      </div>
+
     </section>
   );
 }
