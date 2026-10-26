@@ -409,7 +409,7 @@ export default function App() {
       : isShopDirectoryRoute
         ? shopDirectoryMetadata
       : isMerchantPlansPage
-        ? { title: 'Formules commerçants et tarifs | MaTable.ci', description: 'Comparez les formules Standard, Premium et Pro de MaTable.ci. Créez votre vitrine avec un essai gratuit de 7 jours, sans paiement pour démarrer.' }
+        ? { title: 'Formules commerçants et tarifs | MaTable.ci', description: 'Comparez les formules Standard, Premium et Pro de MaTable.ci. Créez votre vitrine avec un essai gratuit de deux mois ou choisissez directement une formule payante.' }
       : isHowItWorksRoute
         ? howItWorksMetadata
       : isUserGuideRoute

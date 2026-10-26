@@ -37,6 +37,15 @@ export function createProductRouter({
   trialProductLimit,
 }: ProductRouterOptions) {
   const router = Router({ mergeParams: true });
+  const requireActiveSubscription: RequestHandler = async (req, res, next) => {
+    if (req.adminShopAccess) return next();
+    const shop = await getShopFromDatabase(Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (!getSubscriptionState(shop).isActive) {
+      return res.status(403).json({ error: 'Votre abonnement n’est pas actif. Réactivez-le pour modifier le catalogue.' });
+    }
+    return next();
+  };
 
   router.get('/', requireMerchantAccess, async (req, res) => {
     const shopId = Number(req.params.id);
@@ -44,7 +53,7 @@ export function createProductRouter({
     res.json(rows.map(mapProductRow));
   });
 
-  router.post('/', requireMerchantAccess, async (req, res) => {
+  router.post('/', requireMerchantAccess, requireActiveSubscription, async (req, res) => {
     const shopId = Number(req.params.id);
     const shop = await getShopFromDatabase(shopId);
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
@@ -57,11 +66,13 @@ export function createProductRouter({
 
     const { title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
     const safeTitle = sanitizeTextField(title, 120);
+    const safeDescription = sanitizeTextField(description, 500);
     const numericPrice = Number(price);
     const numericStock = Number(stock ?? 0);
     if (safeTitle.length < 2 || !Number.isSafeInteger(numericPrice) || numericPrice < 0 || !Number.isSafeInteger(numericStock) || numericStock < 0) {
       return res.status(400).json({ error: 'Titre et prix obligatoires.' });
     }
+    if (!safeDescription) return res.status(400).json({ error: 'La description de l’article est obligatoire.' });
     const sale = validateProductSale(numericPrice, sale_price, sale_starts_at, sale_ends_at);
     if (!sale) return res.status(400).json({ error: 'La promotion doit avoir un prix inférieur au prix normal et une période valide.' });
 
@@ -70,7 +81,7 @@ export function createProductRouter({
       shop_id: shopId,
       created_at: new Date().toISOString(),
       title: safeTitle,
-      description: description ? sanitizeTextField(description, 500) : null,
+      description: safeDescription,
       price: numericPrice,
       ...sale,
       stock: numericStock,
@@ -139,7 +150,7 @@ export function createProductRouter({
     res.json({ success: true, product: newProduct });
   });
 
-  router.put('/:productId', requireMerchantAccess, async (req, res) => {
+  router.put('/:productId', requireMerchantAccess, requireActiveSubscription, async (req, res) => {
     const shopId = Number(req.params.id);
     const productId = Number(req.params.productId);
     const currentProduct = await getProductFromDatabase(productId);
@@ -171,7 +182,11 @@ export function createProductRouter({
       if (safeTitle.length < 2) return res.status(400).json({ error: 'Titre de produit invalide.' });
       product.title = safeTitle;
     }
-    if (description !== undefined) product.description = description ? sanitizeTextField(description, 500) : null;
+    if (description !== undefined) {
+      const safeDescription = sanitizeTextField(description, 500);
+      if (!safeDescription) return res.status(400).json({ error: 'La description de l’article est obligatoire.' });
+      product.description = safeDescription;
+    }
     if (price !== undefined) {
       const numericPrice = Number(price);
       if (!Number.isSafeInteger(numericPrice) || numericPrice < 0) return res.status(400).json({ error: 'Prix de produit invalide.' });
@@ -212,7 +227,7 @@ export function createProductRouter({
     res.json({ success: true, product });
   });
 
-  router.patch('/:productId/stock', requireMerchantAccess, async (req, res) => {
+  router.patch('/:productId/stock', requireMerchantAccess, requireActiveSubscription, async (req, res) => {
     const shopId = Number(req.params.id);
     const productId = Number(req.params.productId);
     const cachedProduct = products.find((candidate) => candidate.id === productId && candidate.shop_id === shopId);
@@ -241,7 +256,7 @@ export function createProductRouter({
     res.json({ success: true, stock: product.stock, product });
   });
 
-  router.patch('/:productId/toggle-visibility', requireMerchantAccess, async (req, res) => {
+  router.patch('/:productId/toggle-visibility', requireMerchantAccess, requireActiveSubscription, async (req, res) => {
     const shopId = Number(req.params.id);
     const productId = Number(req.params.productId);
     const product = await getProductFromDatabase(productId);
@@ -259,7 +274,7 @@ export function createProductRouter({
     res.json({ success: true, is_available: updatedProduct.is_available, product: updatedProduct });
   });
 
-  router.delete('/:productId', requireMerchantAccess, async (req, res) => {
+  router.delete('/:productId', requireMerchantAccess, requireActiveSubscription, async (req, res) => {
     const shopId = Number(req.params.id);
     const productId = Number(req.params.productId);
     const product = products.find((candidate) => candidate.id === productId && candidate.shop_id === shopId);

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
 import { databaseMode, dbTransaction } from '../../db.ts';
+import { addCalendarMonths } from '../../src/utils/subscriptionFeatures.ts';
 import { persistShopInTransaction } from '../repositories/shops.ts';
 import { sendMerchantWelcomeEmail } from '../services/email.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
@@ -24,8 +25,7 @@ interface RegistrationOptions {
   normalizeCustomBannerImage: (value: unknown, category: ShopCategory) => string;
   normalizeWelcomeMessage: (value: string | null | undefined, category: ShopCategory) => string;
   sanitizeTextField: (value: string | null | undefined, maxLength?: number) => string;
-  addDays: (date: Date, days: number) => string;
-  trialDurationDays: number;
+  trialDurationMonths: number;
   computeIsShopOpen: (shop: ShopRecord) => boolean;
   createMerchantSession: (res: import('express').Response, shopId: number, req: import('express').Request) => Promise<void>;
   toSafeShop: (shop: ShopRecord) => object;
@@ -43,8 +43,7 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     getCategoryDefaults,
     normalizeWelcomeMessage,
     sanitizeTextField,
-    addDays,
-    trialDurationDays,
+    trialDurationMonths,
     computeIsShopOpen,
     createMerchantSession,
     toSafeShop,
@@ -142,7 +141,7 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     };
     const now = new Date();
     const trialStart = now.toISOString();
-    const trialEnd = addDays(now, trialDurationDays);
+    const trialEnd = addCalendarMonths(now, trialDurationMonths);
     const newShop: ShopRecord = {
       id: reservedShopId,
       name: safeName,
@@ -222,7 +221,7 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       success: true,
       shop: toSafeShop(newShop),
       owner_access_token: ownerAccessToken,
-      message: `Boutique créée. Votre essai Standard gratuit de ${trialDurationDays} jours commence maintenant. Choisissez ensuite une formule et réglez-la avec GeniusPay pour poursuivre. Les commandes clients vous sont transmises via un reçu WhatsApp à ouvrir manuellement.`,
+      message: `Boutique créée. Votre essai Standard gratuit de ${trialDurationMonths} mois commence maintenant. Vous pouvez choisir une formule payante et la régler avec GeniusPay dès maintenant ou quand vous le souhaitez. Les commandes clients vous sont transmises via un reçu WhatsApp à ouvrir manuellement.`,
     });
   });
 

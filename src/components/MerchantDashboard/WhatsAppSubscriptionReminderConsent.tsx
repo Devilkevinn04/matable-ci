@@ -37,13 +37,13 @@ export const WhatsAppSubscriptionReminderConsent: React.FC<WhatsAppSubscriptionR
 
   return (
     <section className="border-y border-slate-200 py-4">
-      <label className="flex cursor-pointer items-start gap-3">
+      <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl p-2 focus-within:ring-2 focus-within:ring-emerald-700">
         <input
           type="checkbox"
           checked={enabled}
           disabled={saving}
           onChange={(event) => void updateConsent(event.target.checked)}
-          className="mt-0.5 h-4 w-4 accent-emerald-700"
+          className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700"
         />
         <span>
           <strong className="block text-sm text-slate-900">Autoriser les rappels WhatsApp avant l’échéance</strong>

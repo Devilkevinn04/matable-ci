@@ -85,14 +85,15 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="relative space-y-4">
+          <form onSubmit={handleLogin} aria-busy={authLoading} className="relative space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#47534b] mb-1">
+                <label htmlFor="merchant-login-phone" className="block text-xs font-bold text-[#47534b] mb-1">
                   Numéro WhatsApp de la boutique
                 </label>
                 <div className="relative">
                   <Phone className="w-4 h-4 text-[#47534b] absolute left-3 top-3.5" />
                   <input
+                    id="merchant-login-phone"
                     type="tel"
                     required
                     inputMode="tel"
@@ -109,12 +110,13 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#47534b] mb-1">
+                <label htmlFor="merchant-login-pin" className="block text-xs font-bold text-[#47534b] mb-1">
                   Code PIN (6 chiffres)
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-[#47534b] absolute left-3 top-3.5" />
                   <input
+                    id="merchant-login-pin"
                     type={showPinInput ? 'text' : 'password'}
                     required
                     inputMode="numeric"
@@ -129,7 +131,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                     onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-10 pr-12 text-sm text-[#292d2a] outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10"
                   />
-                  <button type="button" onClick={() => setShowPinInput((visible) => !visible)} aria-label={showPinInput ? 'Masquer le PIN' : 'Afficher le PIN'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-[#47534b] hover:bg-[#f7f1e6]">
+                  <button type="button" onClick={() => setShowPinInput((visible) => !visible)} aria-label={showPinInput ? 'Masquer le PIN' : 'Afficher le PIN'} className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-[#47534b] hover:bg-[#f7f1e6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
                     {showPinInput ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
@@ -204,7 +206,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                 </div>
               </div>
 
-              <form onSubmit={handleRegisterShop} className="space-y-6 p-5 sm:p-7">
+              <form onSubmit={handleRegisterShop} aria-busy={regLoading} className="space-y-6 p-5 sm:p-7">
                 <section className="space-y-3">
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.14em] text-[#047857]">Identité de la boutique</p>
@@ -215,7 +217,8 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                     type="text"
                     aria-label="Nom de votre boutique"
                     required
-                    placeholder="Ex: Glamour Abidjan, Babi Braisé..."
+                    maxLength={100}
+                    placeholder="Ex. : Glamour Abidjan ou Babi Braisé"
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
                     className="w-full rounded-xl border border-[#ded8ce] bg-white p-3 text-sm font-bold text-[#292d2a] outline-none focus:border-[#047857] placeholder:text-slate-400"
@@ -227,7 +230,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                       <select
                         value={regCategory}
                         onChange={(e) => setRegCategory(e.target.value as ShopCategory)}
-                        className="w-full rounded-xl border border-[#ded8ce] bg-white p-3 text-sm font-bold text-[#292d2a] outline-none focus:border-[#047857]"
+                        className="min-h-11 w-full rounded-xl border border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-bold text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10"
                       >
                         {shopCategoryOptions.map((option) => (
                           <option key={option.value} value={option.value}>{option.icon} {option.label}</option>
@@ -241,7 +244,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                         required
                         value={regCity}
                         onChange={(e) => setRegCity(e.target.value)}
-                        className="w-full rounded-xl border border-[#ded8ce] bg-white p-3 text-sm text-[#292d2a] outline-none focus:border-[#047857]"
+                        className="min-h-11 w-full rounded-xl border border-[#ded8ce] bg-white px-3 py-2.5 text-sm text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10"
                       >
                         <option value="">Choisir une ville ou commune</option>
                         <option value="Abidjan">Abidjan</option>
@@ -254,7 +257,8 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                           value={regCityOther}
                           onChange={(e) => setRegCityOther(e.target.value)}
                           placeholder="Saisissez votre ville ou commune"
-                          className="mt-2 w-full rounded-xl border border-[#ded8ce] bg-white p-3 text-sm text-[#292d2a] outline-none focus:border-[#047857]"
+                          maxLength={100}
+                          className="mt-2 min-h-11 w-full rounded-xl border border-[#ded8ce] bg-white px-3 py-2.5 text-sm text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10"
                         />
                       )}
                     </div>
@@ -277,7 +281,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                         placeholder="+225 07 00 11 22 33"
                         value={regPhone}
                         onChange={(e) => setRegPhone(e.target.value)}
-                        className="w-full rounded-xl border border-[#ded8ce] bg-white p-3 text-sm font-mono text-[#292d2a] outline-none focus:border-[#047857]"
+                        className="min-h-11 w-full rounded-xl border border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-mono text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10"
                       />
                     </div>
 
@@ -293,13 +297,13 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                           placeholder="6 chiffres"
                           value={regPin}
                           onChange={(e) => setRegPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                          className="w-full rounded-xl border border-[#ded8ce] bg-white p-3 pr-10 text-center text-sm font-mono tracking-widest text-[#292d2a] outline-none focus:border-[#047857]"
+                          className="min-h-11 w-full rounded-xl border border-[#ded8ce] bg-white px-3 py-2.5 pr-12 text-center text-sm font-mono tracking-widest text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10"
                         />
                         <button
                           type="button"
                           onClick={() => setShowRegPin((visible) => !visible)}
                           aria-label={showRegPin ? 'Masquer le PIN' : 'Afficher le PIN'}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 transition hover:bg-[#edf7f2]"
+                          className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 transition hover:bg-[#edf7f2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]"
                         >
                           {showRegPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
@@ -314,7 +318,8 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                       placeholder="vous@exemple.ci"
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
-                      className="w-full rounded-xl border border-[#ded8ce] bg-white p-3 text-sm text-[#292d2a] outline-none focus:border-[#047857]"
+                      maxLength={254}
+                      className="min-h-11 w-full rounded-xl border border-[#ded8ce] bg-white px-3 py-2.5 text-sm text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10"
                     />
                   </div>
                 </section>
@@ -333,14 +338,14 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                   <button
                     type="button"
                     onClick={() => setIsRegisterModalOpen(false)}
-                    className="w-full rounded-xl border border-[#ded8ce] bg-white px-5 py-3 text-sm font-bold text-[#292d2a] transition hover:-translate-y-0.5 sm:w-auto"
+                    className="min-h-11 w-full rounded-xl border border-[#ded8ce] bg-white px-5 py-3 text-sm font-bold text-[#292d2a] transition hover:-translate-y-0.5 sm:w-auto"
                   >
                     Annuler
                   </button>
                   <button
                     type="submit"
                     disabled={regLoading}
-                    className="w-full rounded-xl border border-[#ff6a3d] bg-[#ff6a3d] px-6 py-3 text-sm font-black text-white shadow-[0_8px_18px_rgba(255,106,61,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                    className="min-h-11 w-full rounded-xl border border-[#ff6a3d] bg-[#ff6a3d] px-6 py-3 text-sm font-black text-white shadow-[0_8px_18px_rgba(255,106,61,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
                   >
                     {regLoading ? 'Création...' : 'Créer ma boutique'}
                   </button>

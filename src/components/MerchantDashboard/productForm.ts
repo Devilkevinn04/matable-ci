@@ -63,6 +63,14 @@ export interface ProductModifierGroupDraft {
   options: string[];
 }
 
+export function parseProductChoices(value: string): string[] {
+  return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))];
+}
+
+export function serializeProductChoices(choices: string[]): string {
+  return [...new Set(choices.map((item) => item.trim()).filter(Boolean))].join(', ');
+}
+
 export function parseProductModifierGroups(value: string): ProductModifierGroupDraft[] {
   if (!value.trim()) return [];
 
@@ -102,8 +110,8 @@ export function createProductDraft(category: unknown): ProductDraft {
     image_url: '',
     lookbook_image: '',
     gallery_images: [],
-    sizes: defaults.defaultProductSizes,
-    colors: defaults.defaultProductColors,
+    sizes: '',
+    colors: '',
     prep_time: defaults.defaultProductPrepTime ?? '',
     modifier_groups: parseProductModifierGroups(defaults.defaultProductModifiers),
     attributes: {},
@@ -161,9 +169,10 @@ function toDateTimeLocal(value?: string | null): string {
 }
 
 export function buildProductSavePayload(draft: ProductDraft, category: ShopCategory): ProductSavePayload {
-  const parseList = (value: string) => value
-    ? value.split(',').map((item) => item.trim()).filter(Boolean)
-    : undefined;
+  const parseList = (value: string) => {
+    const choices = parseProductChoices(value);
+    return choices.length > 0 ? choices : undefined;
+  };
   const defaults = getCategoryDefaults(category);
   const allowedAttributeKeys = new Set(defaults.productAttributes.map((field) => field.key));
   const attributes = Object.fromEntries(

@@ -338,7 +338,7 @@ test('merchant plans page exposes current prices and indexable SEO metadata', as
   assert.match(html, /"price":3000/);
   assert.match(html, /"price":5000/);
   assert.match(html, /"price":8000/);
-  assert.match(html, /Essai gratuit de 7 jours/);
+  assert.match(html, /Essai gratuit de 2 mois/);
   assert.match(html, /href="http:\/\/127\.0\.0\.1:43124\/app\/creer-boutique"/);
   assert.equal((html.match(/property="og:title"/g) || []).length, 1);
 });
@@ -506,6 +506,7 @@ test('shop and product API defaults are category-aware and product placeholders 
     },
     body: JSON.stringify({
       title: 'Soin hydratant',
+      description: 'Soin hydratant au beurre de karité pour une peau douce.',
       price: 5000,
       stock: 3,
       attributes: { care_type: 'Hydratant', volume: '250 ml', wrong_field: 'À ignorer' },
@@ -524,6 +525,7 @@ test('shop and product API defaults are category-aware and product placeholders 
     },
     body: JSON.stringify({
       title: 'Puff rechargeable',
+      description: 'Produit réservé aux clients majeurs, vente soumise à vérification.',
       price: 6000,
       stock: 4,
     }),
@@ -770,6 +772,12 @@ test('standard registration keeps delivery zones but does not grant premium soci
     body: JSON.stringify({ theme_config: { primary_color: '#123456' } }),
   });
   assert.equal(deniedBranding.status, 403);
+  const deniedThemeSocialLinks = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/theme`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ theme_config: { social_links: { instagram: 'https://instagram.com/standard-theme-route' } } }),
+  });
+  assert.equal(deniedThemeSocialLinks.status, 403);
   const deniedEventMode = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
@@ -791,6 +799,67 @@ test('standard registration keeps delivery zones but does not grant premium soci
   const publicData = await publicBySlug.json();
   assert.equal(publicData.shop.theme_config?.social_links?.instagram, '');
   assert.equal(publicData.shop.theme_config?.delivery_zones?.[0]?.mode, 'livraison');
+
+  const createdProduct = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ title: 'Robe de test', description: 'Produit de vérification', price: 2500, stock: 5 }),
+  });
+  assert.equal(createdProduct.status, 200);
+  const product = (await createdProduct.json()).product;
+
+  const testDb = new Database(TEST_DB_PATH);
+  try {
+    testDb.prepare("UPDATE shops SET subscription_status = 'suspended' WHERE id = ?").run(createdPayload.shop.id);
+  } finally {
+    testDb.close();
+  }
+
+  const unavailableBoost = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/boost-payments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ duration_days: 7, placement: 'home' }),
+  });
+  assert.equal(unavailableBoost.status, 409);
+
+  const privateProducts = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/products`, {
+    headers: { Cookie: merchantCookie },
+  });
+  assert.equal(privateProducts.status, 200);
+  assert.equal((await privateProducts.json()).length, 1);
+
+  const mutations: Array<{ method: string; path: string; body?: unknown }> = [
+    { method: 'POST', path: `/api/shops/${createdPayload.shop.id}/products`, body: { title: 'Nouvel article', description: 'Ne doit pas être créé', price: 1000, stock: 1 } },
+    { method: 'PUT', path: `/api/shops/${createdPayload.shop.id}/products/${product.id}`, body: { title: 'Nom modifié' } },
+    { method: 'PATCH', path: `/api/shops/${createdPayload.shop.id}/products/${product.id}/stock`, body: { delta: 1 } },
+    { method: 'PATCH', path: `/api/shops/${createdPayload.shop.id}/products/${product.id}/toggle-visibility` },
+    { method: 'DELETE', path: `/api/shops/${createdPayload.shop.id}/products/${product.id}` },
+  ];
+  for (const mutation of mutations) {
+    const response = await fetch(`${BASE_URL}${mutation.path}`, {
+      method: mutation.method,
+      headers: {
+        Cookie: merchantCookie,
+        ...(mutation.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
+      ...(mutation.body === undefined ? {} : { body: JSON.stringify(mutation.body) }),
+    });
+    assert.equal(response.status, 403, `${mutation.method} ${mutation.path} must be blocked for an inactive subscription`);
+  }
+
+  const verifyDb = new Database(TEST_DB_PATH);
+  try {
+    const persistedProduct = verifyDb.prepare('SELECT title, stock, is_visible FROM products WHERE id = ?').get(product.id) as {
+      title: string;
+      stock: number;
+      is_visible: number;
+    };
+    assert.deepEqual(persistedProduct, { title: 'Robe de test', stock: 5, is_visible: 1 });
+    const productCount = verifyDb.prepare('SELECT COUNT(*) AS count FROM products WHERE shop_id = ?').get(createdPayload.shop.id) as { count: number };
+    assert.equal(productCount.count, 1);
+  } finally {
+    verifyDb.close();
+  }
 });
 
 test('merchant can update storefront social links and service zones', async () => {
@@ -868,6 +937,7 @@ test('merchant can update storefront social links and service zones', async () =
       theme_config: {
         brand_direction: 'authentique',
         primary_color: '#176B55',
+        social_links: { instagram: 'https://instagram.com/premium-theme-route' },
       },
     }),
   });
@@ -875,11 +945,12 @@ test('merchant can update storefront social links and service zones', async () =
   const savedTheme = await themeSave.json();
   assert.equal(savedTheme.shop.theme_config?.brand_direction, 'authentique');
   assert.equal(savedTheme.shop.theme_config?.primary_color, '#176B55');
+  assert.equal(savedTheme.shop.theme_config?.social_links?.instagram, 'https://instagram.com/premium-theme-route');
 
   const publicBySlug = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.slug}`);
   assert.equal(publicBySlug.status, 200);
   const publicData = await publicBySlug.json();
-  assert.equal(publicData.shop.theme_config?.social_links?.instagram, 'https://instagram.com/merchant-meta');
+  assert.equal(publicData.shop.theme_config?.social_links?.instagram, 'https://instagram.com/premium-theme-route');
   assert.equal(publicData.shop.theme_config?.brand_direction, 'authentique');
   assert.equal(publicData.shop.theme_config?.primary_color, '#176B55');
   assert.equal(publicData.shop.theme_config?.delivery_zones?.[0]?.mode, 'livraison');

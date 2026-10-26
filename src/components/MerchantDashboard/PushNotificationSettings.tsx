@@ -142,17 +142,17 @@ export const PushNotificationSettings: React.FC<PushNotificationSettingsProps> =
       {error && <p role="alert" className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
 
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+        <div className="flex min-h-11 items-center gap-2 text-xs font-semibold text-slate-600" aria-live="polite">
           {subscribed ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <Smartphone className="h-4 w-4 text-slate-400" />}
           {loading ? 'Vérification de cet appareil…' : subscribed ? 'Notifications activées sur cet appareil' : 'Notifications désactivées sur cet appareil'}
         </div>
         {subscribed ? (
-          <button type="button" onClick={disablePush} disabled={busy || loading} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-slate-300 px-4 text-sm font-bold text-slate-700 disabled:opacity-50">
+          <button type="button" onClick={disablePush} disabled={busy || loading} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-slate-300 px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 disabled:opacity-50 sm:w-auto">
             {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <BellOff className="h-4 w-4" />}
             Désactiver sur cet appareil
           </button>
         ) : (
-          <button type="button" onClick={enablePush} disabled={busy || loading || !configuration?.configured || !supported} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#065f46] px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={enablePush} disabled={busy || loading || !configuration?.configured || !supported} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#065f46] px-4 text-sm font-bold text-white transition hover:bg-[#047857] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
             {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
             Activer les notifications
           </button>

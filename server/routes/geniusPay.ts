@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Router, type Request, type RequestHandler } from 'express';
 import { databaseMode, dbAll, dbGet, dbRun, dbTransaction } from '../../db.ts';
-import { computeIsShopOpen, getSubscriptionPlanConfig, getSubscriptionState, normalizeSubscriptionTier, normalizeWhatsAppPhone } from '../services/businessRules.ts';
+import { computeIsShopOpen, getShopPublicationBlockReason, getSubscriptionPlanConfig, getSubscriptionState, normalizeSubscriptionTier, normalizeWhatsAppPhone } from '../services/businessRules.ts';
 import { createGeniusPayCheckout, getGeniusPayPayment, getRenewedSubscriptionExpiry, GeniusPayApiError, isValidGeniusPaySignature } from '../services/geniusPay.ts';
 import type { ShopRecord, SubscriptionTier } from '../types.ts';
 import { type SubscriptionTerm } from '../../src/utils/subscriptionFeatures.ts';
@@ -626,6 +626,9 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       }
       if (transactionShop.merchant_verification_status !== 'verified') {
         return { error: 'La vérification du commerçant doit être validée avant d’acheter un boost.' } as const;
+      }
+      if (getShopPublicationBlockReason(transactionShop, now)) {
+        return { error: 'La boutique doit pouvoir être publiée pour acheter un boost.' } as const;
       }
       const city = String(transactionShop.city || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
       if (!city) return { error: 'Renseignez la ville de la boutique avant d’acheter un boost.' } as const;

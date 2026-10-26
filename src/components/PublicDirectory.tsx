@@ -62,6 +62,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
   const [query, setQuery] = useState(() => isShopDirectoryPage ? new URLSearchParams(location.search).get('q') || '' : '');
   const [category, setCategory] = useState(discoveryPage?.category || 'all');
   const [directorySort, setDirectorySort] = useState<DirectorySort>('recommended');
+  const [openOnly, setOpenOnly] = useState(false);
   const [campaignEligible, setCampaignEligible] = useState(false);
   const [hasHeroCampaign, setHasHeroCampaign] = useState(false);
   useEffect(() => {
@@ -95,6 +96,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
     const filtered = shops.filter((shop) =>
     shopMatchesDirectorySearch(shop, query, categoryLabel(shop.category))
       && (category === 'all' || shop.category === category)
+      && (!openOnly || shop.is_open)
       && (!discoveryPage?.citySlug || toDiscoveryCitySlug(shop.city || '') === discoveryPage.citySlug)
     );
     const targetPlacement = discoveryPage?.citySlug
@@ -114,7 +116,8 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
     if (directorySort === 'open') return [...ordered].sort((left, right) => Number(Boolean(right.is_open)) - Number(Boolean(left.is_open)));
     if (directorySort === 'name') return [...ordered].sort((left, right) => left.name.localeCompare(right.name, 'fr', { sensitivity: 'base' }));
     return ordered;
-  }, [shops, query, category, directorySort, discoveryPage?.citySlug, discoveryPage?.category, isShopDirectoryPage]);
+  }, [shops, query, category, openOnly, directorySort, discoveryPage?.citySlug, discoveryPage?.category, isShopDirectoryPage]);
+  const hasActiveDirectoryFilters = Boolean(query.trim() || category !== 'all' || openOnly);
   const getShopImage = (shop: DirectoryShop) => normalizeCustomBannerImage(shop.theme_config?.custom_banner_url, shop.category)
     || (shop.products_preview?.[0]
       ? getProductImageForDisplay(shop.products_preview[0].image_url, shop.category)
@@ -421,72 +424,100 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
 
       {!discoveryPage && !isShopDirectoryPage && <ProductNewsFeed onOpenShop={onOpenShop} categories={categories} onCampaignEligibilityChange={setCampaignEligible} />}
 
-      {isShopDirectoryPage && <section className="mx-auto w-full max-w-[1280px] px-5 pb-5 pt-9 sm:px-8 sm:pb-8 sm:pt-12 lg:px-12" aria-labelledby="categories-title">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+      {(discoveryPage || isShopDirectoryPage) && <section id="boutiques" className={`relative isolate mx-auto w-full scroll-mt-24 overflow-hidden rounded-[28px] border border-[#e8dfd2] bg-gradient-to-br from-[#f5efe4] via-[#fcfaf5] to-[#edf5ef] px-4 pb-8 pt-6 shadow-[0_14px_50px_rgba(42,53,43,.06)] sm:rounded-[36px] sm:px-8 sm:pb-12 sm:pt-9 ${isShopDirectoryPage ? 'max-w-[1280px] lg:px-12' : 'max-w-[1184px]'}`}>
+        <div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-24 z-0 h-72 w-72 rounded-full bg-[#d5e9dc]/45 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 -left-24 z-0 h-80 w-80 rounded-full bg-[#f3d9bb]/35 blur-3xl" />
+        <div className="relative z-10 mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#c2410c]">Choisissez votre ambiance</p>
-            <h2 id="categories-title" className="mt-1 font-display text-2xl font-bold tracking-tight sm:text-3xl">Choisir une ambiance</h2>
-          </div>
-          <span className="text-sm text-[#647067]">Un monde local à chaque détour</span>
-        </div>
-        {isLoading ? <div className="flex gap-3 overflow-hidden pb-2" role="status" aria-label="Chargement des catégories">
-          {[0, 1, 2, 3, 4].map((item) => <div key={item} className="h-[88px] min-w-[190px] animate-pulse rounded-2xl bg-[#e9e4da]" />)}
-        </div> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {categories.map((item, index) => {
-            const count = shops.filter((shop) => shop.category === item).length;
-            const selected = category === item;
-            const className = `group flex min-h-[88px] min-w-0 flex-col items-start justify-center rounded-2xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selected ? 'border-[#065f46] ring-2 ring-[#065f46]/15' : 'border-transparent'}`;
-            const contents = <>
-                <span className="font-display text-base font-bold text-[#292d2a] sm:text-lg">{categoryLabel(item)} <span className="inline-block transition-transform group-hover:translate-x-1" aria-hidden="true">→</span></span>
-                <span className="mt-1 text-xs text-[#47534b]">{count} boutique{count === 1 ? '' : 's'}</span>
-              </>;
-            const categoryPage = discoveryPages.find((page) => page.category === item);
-              return <MotionReveal key={item} delay={index * 0.05}>
-                {categoryPage
-                  ? <Link to={categoryPage.path} className={className} style={{ backgroundColor: categoryTileColors[item] || '#e9e4da' }}>{contents}</Link>
-                  : <button type="button" aria-pressed={selected} onClick={() => { setCategory(selected ? 'all' : item); document.getElementById('boutiques')?.scrollIntoView({ behavior: 'smooth' }); }} className={className} style={{ backgroundColor: categoryTileColors[item] || '#e9e4da' }}>{contents}</button>}
-              </MotionReveal>;
-          })}
-        </div>}
-      </section>}
-
-      {(discoveryPage || isShopDirectoryPage) && <section id="boutiques" className={`mx-auto w-full scroll-mt-24 px-5 pb-12 pt-5 sm:px-8 sm:pb-16 ${isShopDirectoryPage ? 'max-w-[1280px] lg:px-12' : 'max-w-[1184px]'}`}>
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#c2410c]">{isShopDirectoryPage ? 'Le carnet des adresses' : 'Découverte'}</p>
-            <h2 className="mt-1 font-display text-2xl font-bold tracking-tight sm:text-3xl">
-              {discoveryPage ? 'Les boutiques à découvrir' : query.trim() || category !== 'all' ? 'Adresses correspondantes' : 'Le répertoire des boutiques'}
+            <p className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#a53a1d] sm:text-xs"><span className="h-px w-6 bg-[#c2410c]" aria-hidden="true" />{isShopDirectoryPage ? 'Le carnet des adresses' : 'Découverte'}</p>
+            <h2 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-[#183f32] sm:text-3xl">
+              {discoveryPage ? 'Les boutiques à découvrir' : hasActiveDirectoryFilters ? 'Adresses correspondantes' : 'Le répertoire des boutiques'}
             </h2>
           </div>
-          <span className="text-sm text-[#647067]" aria-live="polite">{isLoading ? 'Chargement…' : `${filteredShops.length} adresse${filteredShops.length === 1 ? '' : 's'}`}</span>
+          <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-white/80 bg-white/80 px-3 text-xs font-bold text-[#47534b] shadow-sm backdrop-blur sm:text-sm" aria-live="polite">
+            <span className="h-2 w-2 rounded-full bg-[#07805b]" aria-hidden="true" />
+            {isLoading ? 'Chargement…' : `${filteredShops.length} adresse${filteredShops.length === 1 ? '' : 's'}`}
+          </span>
         </div>
 
         {isShopDirectoryPage && (
-          <div className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-[#e7ddd0] bg-white p-3 sm:p-4">
-            <label htmlFor="directory-sort" className="text-xs font-bold text-[#47534b] sm:text-sm">Trier par</label>
-            <select
-              id="directory-sort"
-              value={directorySort}
-              onChange={(event) => setDirectorySort(event.target.value as DirectorySort)}
-              className="min-h-10 min-w-0 flex-1 rounded-xl border border-[#e0d5c6] bg-[#FAF8F2] px-3 text-sm font-semibold text-[#292d2a] sm:flex-none"
-            >
-              <option value="recommended">Ordre recommandé</option>
-              <option value="open">Ouvertes en premier</option>
-              <option value="name">Nom : A à Z</option>
-            </select>
-            {(query.trim() || category !== 'all') && <button type="button" onClick={() => { setQuery(''); setCategory('all'); onOpenDirectory(); }} className="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-xs font-bold text-[#065f46] hover:bg-[#e9f5ee] sm:text-sm">Effacer les filtres <X className="h-4 w-4" aria-hidden="true" /></button>}
+          <div className="relative z-10 mb-5 overflow-hidden rounded-[24px] border border-white/90 bg-white/75 p-3 shadow-[0_8px_28px_rgba(40,52,43,.07)] backdrop-blur-sm sm:rounded-[28px] sm:p-5">
+            <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full bg-[#f3d9bb]/35 blur-2xl" />
+            <div className="relative">
+              <div className="mb-3 flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#a53a1d]">À chacun son univers</p>
+                  <p className="mt-1 font-display text-lg font-extrabold text-[#183f32] sm:text-xl">Qu’avez-vous envie de découvrir ?</p>
+                </div>
+                <span className="hidden pb-1 text-xs font-medium text-[#647067] sm:block">Choisissez une catégorie</span>
+              </div>
+              <div className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 pb-2 sm:flex-wrap sm:overflow-visible sm:pb-0" aria-label="Filtrer par catégorie">
+                <button
+                  type="button"
+                  aria-pressed={category === 'all'}
+                  onClick={() => setCategory('all')}
+                  className={`motion-interactive flex min-h-[70px] min-w-[104px] shrink-0 flex-col items-start justify-between rounded-2xl border px-3 py-2.5 text-left transition sm:min-w-[126px] sm:px-4 ${category === 'all' ? 'border-[#065f46] bg-[#065f46] text-white shadow-[0_8px_18px_rgba(6,95,70,.2)]' : 'border-[#e9e1d7] bg-[#fffdf8] text-[#183f32] hover:border-[#9cbdab] hover:bg-[#f4faf6]'}`}
+                >
+                  <span className={`flex h-8 w-8 items-center justify-center rounded-xl text-base ${category === 'all' ? 'bg-white/15' : 'bg-[#e2eee6]'}`} aria-hidden="true">✳</span>
+                  <span className="flex w-full items-center justify-between gap-2 text-xs font-bold sm:text-sm">
+                    Tout voir
+                    <span className={`text-[10px] ${category === 'all' ? 'text-white/70' : 'text-[#81786d]'}`}>{shops.length}</span>
+                  </span>
+                </button>
+                {categories.map((item) => {
+                  const selected = category === item;
+                  return (
+                    <button
+                      key={item}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setCategory(selected ? 'all' : item)}
+                      className={`motion-interactive flex min-h-[70px] min-w-[104px] shrink-0 flex-col items-start justify-between rounded-2xl border px-3 py-2.5 text-left transition sm:min-w-[126px] sm:px-4 ${selected ? 'border-[#065f46] bg-[#065f46] text-white shadow-[0_8px_18px_rgba(6,95,70,.2)]' : 'border-[#e9e1d7] bg-[#fffdf8] text-[#183f32] hover:border-[#9cbdab] hover:bg-[#f4faf6]'}`}
+                    >
+                      <span className={`flex h-8 w-8 items-center justify-center rounded-xl text-lg ${selected ? 'bg-white/15' : ''}`} style={!selected ? { backgroundColor: categoryTileColors[item] || '#e9e4da' } : undefined} aria-hidden="true">{getCategoryDefaults(item).icon}</span>
+                      <span className="flex w-full items-center justify-between gap-2 text-xs font-bold sm:text-sm">
+                        {categoryLabel(item)}
+                        <span className={`text-[10px] ${selected ? 'text-white/70' : 'text-[#81786d]'}`}>{categoryCounts.get(item) || 0}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="relative mt-3 flex flex-wrap items-center gap-2 border-t border-[#e9e1d7] pt-3 sm:mt-4 sm:pt-4">
+              <label htmlFor="directory-sort" className="mr-1 text-[10px] font-black uppercase tracking-wide text-[#647067] sm:text-xs">Affiner</label>
+              <select
+                id="directory-sort"
+                value={directorySort}
+                onChange={(event) => setDirectorySort(event.target.value as DirectorySort)}
+                className="min-h-10 min-w-[185px] flex-1 rounded-xl border border-[#e0d5c6] bg-[#fffdf8] px-3 text-sm font-semibold text-[#292d2a] outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/15 sm:flex-none"
+              >
+                <option value="recommended">Ordre recommandé</option>
+                <option value="open">Ouvertes en premier</option>
+                <option value="name">Nom : A à Z</option>
+              </select>
+              <button
+                type="button"
+                aria-pressed={openOnly}
+                onClick={() => setOpenOnly((current) => !current)}
+                className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition sm:text-sm ${openOnly ? 'border-[#065f46] bg-[#e2eee6] text-[#065f46]' : 'border-[#e0d5c6] bg-white text-[#47534b] hover:border-[#047857]'}`}
+              >
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                Ouvertes uniquement
+              </button>
+              {hasActiveDirectoryFilters && <button type="button" onClick={() => { setQuery(''); setCategory('all'); setOpenOnly(false); onOpenDirectory(); }} className="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-xs font-bold text-[#065f46] transition hover:bg-[#e9f5ee] sm:text-sm">Effacer les filtres <X className="h-4 w-4" aria-hidden="true" /></button>}
+            </div>
+            {cityPages.length > 0 && (
+              <nav className="relative mt-3 flex flex-wrap items-center gap-2 border-t border-[#e9e1d7] pt-3 sm:mt-4 sm:pt-4" aria-label="Découvrir les boutiques par ville">
+                <span className="mr-1 text-[10px] font-black uppercase tracking-wide text-[#647067]">Explorer une ville</span>
+                {cityPages.map((page) => <Link key={page.path} to={page.path} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-white/80 bg-white/70 px-3 text-xs font-bold text-[#315548] shadow-sm transition hover:border-[#9cbdab] hover:bg-white"><MapPin className="h-3.5 w-3.5 text-[#c2410c]" aria-hidden="true" />{page.city}</Link>)}
+              </nav>
+            )}
           </div>
         )}
 
-        {isShopDirectoryPage && cityPages.length > 0 && (
-          <nav className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm" aria-label="Découvrir les boutiques par ville">
-            <span className="font-semibold text-[#647067]">Explorer par ville</span>
-            {cityPages.map((page) => <Link key={page.path} to={page.path} className="font-bold text-[#065f46] underline decoration-[#b8d3c8] underline-offset-4 hover:text-[#047857]">{page.city}</Link>)}
-          </nav>
-        )}
-
         {isLoading ? (
-          <div role="status" aria-label="Chargement des boutiques" className="grid grid-cols-2 gap-3 sm:gap-4 max-[360px]:grid-cols-1">
+          <div role="status" aria-label="Chargement des boutiques" className="relative z-10 grid grid-cols-2 gap-3 sm:gap-4 max-[360px]:grid-cols-1">
             {[0, 1, 2, 3].map((item) => <div key={item} className="overflow-hidden rounded-[20px] border border-[#e7ddd0] bg-white sm:rounded-[24px]" aria-hidden="true">
               <div className="aspect-[1.35] animate-pulse bg-[#e5ded3]" />
               <div className="space-y-3 p-3 sm:p-5">
@@ -497,22 +528,22 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             </div>)}
           </div>
         ) : loadError ? (
-          <div role="alert" className="rounded-2xl border border-[#e8b8a4] bg-[#fff8f4] p-8 text-center">
+          <div role="alert" className="relative z-10 rounded-2xl border border-[#e8b8a4] bg-[#fff8f4] p-8 text-center">
             <h3 className="font-display text-lg font-bold text-[#292d2a]">Impossible de charger les boutiques</h3>
             <p className="mt-2 text-sm text-[#647067]">Vérifiez votre connexion, puis réessayez.</p>
             <button type="button" onClick={onRetry} className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full bg-[#065f46] px-4 text-sm font-bold text-white hover:bg-[#047857]"><RotateCcw className="h-4 w-4" aria-hidden="true" /> Réessayer</button>
           </div>
         ) : filteredShops.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-[#cfc8bc] bg-[#FFFFFF] p-8 text-center">
+          <div className="relative z-10 rounded-2xl border border-dashed border-[#cfc8bc] bg-[#FFFFFF] p-8 text-center">
             <Store className="mx-auto h-10 w-10 text-[#047857]" aria-hidden="true" />
-            <h3 className="mt-3 font-display text-lg font-bold">{query.trim() || category !== 'all' ? 'Aucune boutique trouvée' : 'Aucune boutique disponible pour le moment'}</h3>
-            <p className="mt-2 text-sm text-[#647067]">{query.trim() || category !== 'all' ? 'Essayez un autre mot-clé ou effacez votre recherche.' : 'La vitrine s’actualisera dès qu’une boutique sera publiée.'}</p>
-            {(query.trim() || category !== 'all') && <button type="button" onClick={() => { setQuery(''); setCategory('all'); }} className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#065f46] px-4 py-2 text-sm font-bold text-white">Effacer les filtres <X className="h-4 w-4" /></button>}
+            <h3 className="mt-3 font-display text-lg font-bold">{openOnly && !query.trim() && category === 'all' ? 'Aucune boutique ouverte en ce moment' : hasActiveDirectoryFilters ? 'Aucune boutique trouvée' : 'Aucune boutique disponible pour le moment'}</h3>
+            <p className="mt-2 text-sm text-[#647067]">{openOnly && !query.trim() && category === 'all' ? 'Consultez les horaires affichés sur les boutiques ou retirez ce filtre.' : hasActiveDirectoryFilters ? 'Essayez un autre mot-clé ou effacez vos filtres.' : 'La vitrine s’actualisera dès qu’une boutique sera publiée.'}</p>
+            {hasActiveDirectoryFilters && <button type="button" onClick={() => { setQuery(''); setCategory('all'); setOpenOnly(false); }} className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#065f46] px-4 py-2 text-sm font-bold text-white">Effacer les filtres <X className="h-4 w-4" /></button>}
           </div>
         ) : (
-          <div className="grid grid-cols-2 items-stretch gap-3 sm:gap-4 lg:gap-5 max-[360px]:grid-cols-1">
+          <div className={`relative z-10 grid items-stretch gap-3 sm:gap-4 lg:gap-5 max-[360px]:grid-cols-1 ${filteredShops.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
             {filteredShops.map((shop, index) => (
-              <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045}>
+              <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045} className={filteredShops.length === 1 ? 'mx-auto w-full max-w-[760px]' : undefined}>
               <Link to={`/${encodeURIComponent(shop.slug)}`} className="motion-interactive group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[#FFFFFF] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2 sm:rounded-[24px]">
                 <div className="relative aspect-[1.35] shrink-0 overflow-hidden sm:aspect-[1.65]" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
                   <img src={getShopImage(shop)} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />

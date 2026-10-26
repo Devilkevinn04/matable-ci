@@ -16,7 +16,7 @@ import {
   getSubscriptionPlanBenefits,
   SUBSCRIPTION_PLANS,
   TRIAL_CATALOG_LIMIT,
-  TRIAL_DURATION_DAYS,
+  TRIAL_DURATION_MONTHS,
   type SubscriptionTerm,
 } from '../../utils/subscriptionFeatures';
 import { useSubscriptionPrices } from '../../utils/useSubscriptionPrices';
@@ -192,7 +192,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
           <header className="border-b border-[#dce4dc] pb-6">
             <p className="text-xs font-extrabold uppercase text-[#047857]">MaTable.ci · Espace commerçant</p>
             <h1 className="mt-2 text-2xl font-black sm:text-3xl">{mode === 'expired' ? expiredTitle : `Bienvenue, ${shop.name}`}</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? expiredDescription : isTrialActive ? `Votre essai gratuit reste actif jusqu’au ${shop.subscription?.trialEnd ? formatSubscriptionDate(shop.subscription.trialEnd) : 'terme prévu'}. Vous pouvez payer maintenant : après confirmation, votre formule payante sera active et la durée restante de l’essai sera conservée.` : `Vous pouvez choisir une formule payante dès maintenant ou commencer par l’essai gratuit de ${TRIAL_DURATION_DAYS} jours.`}</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? expiredDescription : isTrialActive ? `Votre essai gratuit reste actif jusqu’au ${shop.subscription?.trialEnd ? formatSubscriptionDate(shop.subscription.trialEnd) : 'terme prévu'}. Vous pouvez payer maintenant : après confirmation, votre formule payante sera active et la durée restante de l’essai sera conservée.` : `Vous pouvez choisir une formule payante dès maintenant ou commencer par l’essai gratuit de ${TRIAL_DURATION_MONTHS} mois.`}</p>
             {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-emerald-800 underline underline-offset-2"><MessageCircle className="h-4 w-4" />Contacter l’équipe</a>}
           </header>
         )}
@@ -205,7 +205,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
               <button type="button" aria-pressed={!purchaseNow} onClick={() => setPurchaseNow(false)} className={`rounded-2xl border p-4 text-left transition ${!purchaseNow ? 'border-[#047857] bg-white ring-2 ring-[#047857]/15' : 'border-[#d5ddd5] bg-white/70 hover:border-[#047857]'}`}>
                 <span className="flex items-center justify-between gap-3">
                   <span className="text-sm font-extrabold text-[#183b31]">Essayer gratuitement</span>
-                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-900">7 jours offerts</span>
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-900">{TRIAL_DURATION_MONTHS} mois offerts</span>
                 </span>
                 <span className="mt-2 block text-xs leading-5 text-slate-600">Standard, jusqu’à {TRIAL_CATALOG_LIMIT} produits. Aucun paiement nécessaire pour commencer.</span>
               </button>
@@ -349,8 +349,8 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             <h2 className="text-lg font-extrabold">Essai gratuit · Standard</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               {shop.subscription?.status === 'not_started'
-                ? `L’essai dure ${TRIAL_DURATION_DAYS} jours à partir de son activation. Il donne accès aux fonctions Standard avec une limite de ${TRIAL_CATALOG_LIMIT} produits.`
-                : `L’essai de ${TRIAL_DURATION_DAYS} jours commence à la création de votre boutique. Il donne accès aux fonctions Standard avec une limite de ${TRIAL_CATALOG_LIMIT} produits.`}
+                ? `L’essai dure ${TRIAL_DURATION_MONTHS} mois à partir de son activation. Il donne accès aux fonctions Standard avec une limite de ${TRIAL_CATALOG_LIMIT} produits.`
+                : `L’essai de ${TRIAL_DURATION_MONTHS} mois commence à la création de votre boutique. Il donne accès aux fonctions Standard avec une limite de ${TRIAL_CATALOG_LIMIT} produits.`}
             </p>
             <ul className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
               {[
@@ -365,7 +365,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
 
         <aside className={`mt-5 flex items-start gap-3 rounded-2xl border p-4 text-sm ${mode === 'plans' ? 'border-[#dbe8dc] bg-white text-[#345448] sm:mt-7 sm:px-5' : 'border-sky-200 bg-sky-50 text-sky-950'}`}>
           {mode === 'plans' ? <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-[#047857]" /> : <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-sky-800" />}
-          <p>{previewOnly ? 'Aperçu de démonstration : comparez les formules librement. Aucun paiement ne sera lancé.' : isManualSubscriptionSuspension ? 'La suspension manuelle est prioritaire. Le paiement sera indisponible jusqu’à sa levée ou son expiration.' : paymentFlowActive ? isTrialActive ? 'Vous pouvez payer dès maintenant. Après confirmation, votre formule payante sera active immédiatement ; la durée restante de l’essai est conservée avant la nouvelle échéance.' : 'Vous gardez la main : le paiement est lancé uniquement après votre validation et votre formule est activée après confirmation sécurisée de GeniusPay. La publication de la boutique et sa vérification restent des étapes distinctes.' : 'Votre essai gratuit de 7 jours commence lorsque vous le démarrez.'}</p>
+          <p>{previewOnly ? 'Aperçu de démonstration : comparez les formules librement. Aucun paiement ne sera lancé.' : isManualSubscriptionSuspension ? 'La suspension manuelle est prioritaire. Le paiement sera indisponible jusqu’à sa levée ou son expiration.' : paymentFlowActive ? isTrialActive ? 'Vous pouvez payer dès maintenant. Après confirmation, votre formule payante sera active immédiatement ; la durée restante de l’essai est conservée avant la nouvelle échéance.' : 'Vous gardez la main : le paiement est lancé uniquement après votre validation et votre formule est activée après confirmation sécurisée de GeniusPay. La publication de la boutique et sa vérification restent des étapes distinctes.' : `Votre essai gratuit de ${TRIAL_DURATION_MONTHS} mois commence lorsque vous le démarrez.`}</p>
         </aside>
 
         {mode === 'expired' && <div className="mt-5 rounded-xl border border-slate-200 bg-white px-4"><WhatsAppSubscriptionReminderConsent shop={shop} /></div>}
@@ -383,7 +383,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
           ) : (
             <button type="button" onClick={() => onStart?.('standard')} disabled={isStarting || !onStart} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#065f46] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">
               {isStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-              {isStarting ? 'Démarrage de l’essai…' : `Commencer mon essai de ${TRIAL_DURATION_DAYS} jours`}
+              {isStarting ? 'Démarrage de l’essai…' : `Commencer mon essai de ${TRIAL_DURATION_MONTHS} mois`}
             </button>
           )}
           {!paymentFlowActive && <button type="button" onClick={() => setPurchaseNow(true)} className="min-h-11 rounded-lg px-3 text-sm font-bold text-[#047857] underline underline-offset-2">Voir les formules et payer maintenant</button>}
@@ -413,7 +413,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     type="button"
                     onClick={() => void startSubscriptionPayment()}
                     disabled={isPaymentStarting || !billingEmail.trim() || isManualSubscriptionSuspension}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#065f46] px-4 py-2 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#065f46] px-4 py-2 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60 sm:w-auto"
                   >
                     {isPaymentStarting && <LoaderCircle className="h-4 w-4 animate-spin" />}
                     Continuer vers le paiement

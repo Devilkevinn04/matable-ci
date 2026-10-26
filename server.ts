@@ -68,7 +68,7 @@ export {
 } from './server/repositories/sessions.ts';
 import { getCategoryDefaults, isShopCategory, normalizeCustomBannerImage, normalizeProductImage, normalizeWelcomeMessage, sanitizeGalleryImages } from './src/utils/categoryDefaults.ts';
 import { normalizeCustomerPhone } from './src/utils/normalizeCustomerPhone.ts';
-import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from './src/utils/subscriptionFeatures.ts';
+import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from './src/utils/subscriptionFeatures.ts';
 import type { ShopCategory } from './src/utils/categoryDefaults.ts';
 import { findPublicDiscoveryPage } from './src/utils/discoverySeo.ts';
 
@@ -989,8 +989,7 @@ async function startServer() {
     dbAll,
     requireMerchantAccess,
     requireMerchantOwnShop,
-    addDays,
-    trialDurationDays: TRIAL_DURATION_DAYS,
+    trialDurationMonths: TRIAL_DURATION_MONTHS,
     rotateMerchantAccessTokenForShop,
     persistShop,
     toSafeShop,
@@ -1015,8 +1014,7 @@ async function startServer() {
     normalizeCustomBannerImage,
     normalizeWelcomeMessage,
     sanitizeTextField,
-    addDays,
-    trialDurationDays: TRIAL_DURATION_DAYS,
+    trialDurationMonths: TRIAL_DURATION_MONTHS,
     computeIsShopOpen,
     createMerchantSession,
     toSafeShop,

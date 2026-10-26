@@ -6,7 +6,7 @@ import {
   getSubscriptionPlanBenefits,
   SUBSCRIPTION_PLANS,
   TRIAL_CATALOG_LIMIT,
-  TRIAL_DURATION_DAYS,
+  TRIAL_DURATION_MONTHS,
   type SubscriptionTerm,
 } from '../utils/subscriptionFeatures';
 import { useState } from 'react';
@@ -87,7 +87,7 @@ export function MerchantPlansPage() {
           </div>
           <p className="mt-5 flex items-start gap-2 text-xs leading-5 text-[#6f6a62] sm:text-sm">
             <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[#087c5b]" aria-hidden="true" />
-            Essai Standard gratuit de {TRIAL_DURATION_DAYS} jours, jusqu’à {TRIAL_CATALOG_LIMIT} produits. Aucun paiement requis pour commencer.
+            Essai Standard gratuit de {TRIAL_DURATION_MONTHS} mois, jusqu’à {TRIAL_CATALOG_LIMIT} produits. Aucun paiement requis pour commencer ; vous pouvez aussi choisir et payer une formule directement.
           </p>
         </div>
 

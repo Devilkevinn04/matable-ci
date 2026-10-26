@@ -177,6 +177,10 @@ export function useMerchantProductEditor(
   const handleSaveProduct = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!currentShop || !prodTitle.trim() || prodPrice === '') return;
+    if (!prodDescription.trim()) {
+      toast.error('Ajoutez une description pour présenter votre article.');
+      return;
+    }
 
     const payload = buildProductSavePayload({
       title: prodTitle.trim(),

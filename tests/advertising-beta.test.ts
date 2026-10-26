@@ -99,7 +99,7 @@ async function createVerifiedShop(label: string) {
   const product = await api<{ product: { id: number } }>(`/api/shops/${shopId}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({ title: `Produit sponsorisé ${label}`, price: 2500, stock: 8 }),
+    body: JSON.stringify({ title: `Produit sponsorisé ${label}`, description: 'Produit utilisé pour tester la campagne sponsorisée.', price: 2500, stock: 8 }),
   });
   assert.equal(product.response.status, 200, JSON.stringify(product.payload));
   return { shopId, cookie, productId: product.payload.product.id };

@@ -145,7 +145,7 @@ export const ProductOffersManager: React.FC<ProductOffersManagerProps> = ({ shop
 
       <form onSubmit={(event) => void submit(event)} className="grid gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:grid-cols-2">
         <label className="text-xs font-bold text-slate-700">Format
-          <select value={kind} onChange={(event) => setKind(event.target.value as 'product' | 'banner')} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
+          <select value={kind} onChange={(event) => setKind(event.target.value as 'product' | 'banner')} className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#047857]/15">
             <option value="product">Produit sponsorisé</option>
             <option value="banner">Bannière de boutique</option>
           </select>
@@ -153,19 +153,19 @@ export const ProductOffersManager: React.FC<ProductOffersManagerProps> = ({ shop
         <p className="self-center text-xs font-semibold text-slate-600">Durée fixe de la bêta : 7 jours</p>
         {kind === 'banner' && !hasCustomBanner && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 sm:col-span-2">Ajoutez d’abord une image de bannière dans Apparence de la vitrine.</p>}
         {kind === 'product' && <label className="text-xs font-bold text-slate-700 sm:col-span-2">Produit à mettre en avant
-          <select value={productId} onChange={(event) => setProductId(event.target.value)} required className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
+          <select value={productId} onChange={(event) => setProductId(event.target.value)} required className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#047857]/15">
             <option value="">Choisir un produit disponible</option>
             {availableProducts.map((product) => <option key={product.id} value={product.id}>{product.title} · {product.stock} en stock</option>)}
           </select>
         </label>}
         <label className="text-xs font-bold text-slate-700 sm:col-span-2">Titre
-          <input value={headline} onChange={(event) => setHeadline(event.target.value)} maxLength={90} required className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" />
+          <input value={headline} onChange={(event) => setHeadline(event.target.value)} maxLength={90} required className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#047857]/15" />
         </label>
         <label className="text-xs font-bold text-slate-700 sm:col-span-2">Description
-          <textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={220} minLength={1} required rows={3} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={220} minLength={1} required rows={3} className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#047857]/15" />
         </label>
         <label className="flex items-start gap-2 text-xs leading-5 text-slate-600 sm:col-span-2">
-          <input name="charter_accepted" type="checkbox" required className="mt-1 accent-[#047857]" />
+          <input name="charter_accepted" type="checkbox" required className="mt-1 h-5 w-5 shrink-0 accent-[#047857] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2" />
           <span>Je confirme l’exactitude des informations et respecte la charte : pas de promesse trompeuse, contenu illicite ou image sans droit d’usage. La campagne est soumise à validation MaTable.ci. *</span>
         </label>
         <button type="submit" disabled={!canSubmit || busy || (kind === 'product' && availableProducts.length === 0) || (kind === 'banner' && !hasCustomBanner)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#047857] px-5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-2">

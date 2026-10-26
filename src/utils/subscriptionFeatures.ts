@@ -59,10 +59,21 @@ export function getSubscriptionAnalyticsDayLimit(
   return getSubscriptionPlanFeatures(tier, proFeatures).analyticsDayLimit;
 }
 
-export const TRIAL_DURATION_DAYS = 7;
+export const TRIAL_DURATION_MONTHS = 2;
 export const TRIAL_CATALOG_LIMIT = 2;
 export const SUBSCRIPTION_EXPIRY_GRACE_DAYS = 2;
 export const PRO_BOOST_DISCOUNT_PERCENT = DEFAULT_SUBSCRIPTION_PRO_FEATURES.boostDiscountPercent;
+
+export function addCalendarMonths(date: Date, months: number): string {
+  if (!Number.isInteger(months)) throw new RangeError('Calendar months must be an integer.');
+  const result = new Date(date);
+  const dayOfMonth = result.getUTCDate();
+  result.setUTCDate(1);
+  result.setUTCMonth(result.getUTCMonth() + months);
+  const lastDayOfTargetMonth = new Date(Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0)).getUTCDate();
+  result.setUTCDate(Math.min(dayOfMonth, lastDayOfTargetMonth));
+  return result.toISOString().slice(0, 10);
+}
 
 export const SUBSCRIPTION_PLANS = {
   standard: {

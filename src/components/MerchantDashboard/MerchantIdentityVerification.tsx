@@ -103,8 +103,8 @@ export function MerchantIdentityVerification({ shopId, shopName, onStatusChange 
 
         {canStartVerification && (
           <>
-          <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm text-slate-700">
-            <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-1 h-4 w-4 accent-emerald-800" />
+          <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-3 rounded-xl p-2 text-sm text-slate-700 focus-within:ring-2 focus-within:ring-emerald-700">
+            <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-1 h-5 w-5 shrink-0 accent-emerald-800" />
             <span>J’accepte que mes données d’identité et, si le parcours le demande, mes données biométriques soient traitées par Didit afin de vérifier l’identité du responsable de cette boutique. Je comprends que ces données sont transmises directement à Didit et que MaTable.ci reçoit le résultat de la vérification.</span>
           </label>
           <p className="mt-3 text-xs text-slate-500">Consultez la <a href="/confidentialite" target="_blank" rel="noreferrer" className="font-semibold underline">politique de confidentialité</a> pour connaître les détails du traitement et vos droits.</p>
@@ -123,7 +123,7 @@ export function MerchantIdentityVerification({ shopId, shopName, onStatusChange 
       {['submitted', 'under_review'].includes(status?.status || '') && (
         <p className="mt-3 text-xs leading-5 text-slate-600">La création d’une autre session interromprait le suivi de celle-ci. Si vous avez fermé la page Didit avant la fin, contactez l’assistance pour obtenir de l’aide.</p>
       )}
-      <button type="button" onClick={() => void refreshStatus()} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+      <button type="button" onClick={() => void refreshStatus()} disabled={!hasLoadedStatus} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 disabled:cursor-wait disabled:opacity-60">
         <RefreshCw className="h-3.5 w-3.5" /> Actualiser le statut
       </button>
       {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}

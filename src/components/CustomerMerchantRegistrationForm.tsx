@@ -3,7 +3,7 @@ import { ArrowRight, CheckCircle2, Eye, EyeOff, MessageCircleMore, ShieldCheck, 
 import { ShopCategory } from '../types';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../utils/categoryDefaults';
 import { ABIDJAN_COMMUNES } from '../utils/abidjanCommunes';
-import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from '../utils/subscriptionFeatures';
+import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../utils/subscriptionFeatures';
 import { TermsPrivacyConsent } from './TermsPrivacyConsent';
 import { MerchantRegistrationProgress, MerchantShopPreview } from './AuthExperienceLayout';
 
@@ -89,7 +89,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
         <p className="text-xs font-black uppercase tracking-[0.12em] text-[#c2410c]">Étape {step} sur 2</p>
         <h3 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-[#292d2a]">{step === 1 ? 'Présentons votre boutique' : 'Sécurisons votre accès'}</h3>
         <p className="mt-1 text-sm leading-6 text-[#47534b]">{step === 1
-          ? `Créez votre vitrine et recevez les commandes directement sur WhatsApp. ${TRIAL_DURATION_DAYS} jours d’essai Standard gratuit, jusqu’à ${TRIAL_CATALOG_LIMIT} produits.`
+          ? `Créez votre vitrine et recevez les commandes directement sur WhatsApp. ${TRIAL_DURATION_MONTHS} mois d’essai Standard gratuit, jusqu’à ${TRIAL_CATALOG_LIMIT} produits. Vous pouvez aussi payer directement une formule.`
           : 'Votre numéro WhatsApp sera visible pour le contact client. Le PIN protège l’accès à votre espace marchand.'}</p>
       </div>
       <MerchantRegistrationProgress step={step} />

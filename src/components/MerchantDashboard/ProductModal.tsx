@@ -2,6 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Trash2, X, Upload, Boxes } from 'lucide-react';
 import { MerchantState } from './useMerchant';
+import { parseProductChoices, serializeProductChoices } from './productForm';
 import type { ProductModifierGroupDraft } from './productForm';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
 import { CategoryProductImage } from '../CategoryProductImage';
@@ -21,6 +22,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
     prodGalleryImages, handleGalleryImageUpload, handleRemoveGalleryImage, handleSaveProduct
   } = state;
   const [modifierOptionDrafts, setModifierOptionDrafts] = React.useState<Record<number, string>>({});
+  const [customSize, setCustomSize] = React.useState('');
+  const [customColor, setCustomColor] = React.useState('');
 
   if (!isProductModalOpen) return null;
   const categoryDefaults = getCategoryDefaults(currentShop.category);
@@ -31,6 +34,28 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
   const productPhotoCount = (prodImage ? 1 : 0) + (prodLookbookImage ? 1 : 0) + prodGalleryImages.length;
   const canAddLookbookPhoto = Boolean(prodLookbookImage) || productPhotoCount < productPhotoLimit;
   const modifierGroups = prodModifierGroups;
+  const sizeChoices = ['Taille unique', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '36', '38', '40', '42', '44', '46'];
+  const colorChoices = ['Noir', 'Blanc', 'Rouge', 'Bleu', 'Vert', 'Jaune', 'Rose', 'Marron', 'Beige', 'Orange', 'Violet', 'Gris', 'Doré', 'Multicolore'];
+  const toggleProductChoice = (
+    choice: string,
+    current: string,
+    setValue: React.Dispatch<React.SetStateAction<string>>,
+  ) => {
+    const selected = parseProductChoices(current);
+    setValue(serializeProductChoices(selected.includes(choice)
+      ? selected.filter((item) => item !== choice)
+      : [...selected, choice]));
+  };
+  const addCustomProductChoice = (
+    value: string,
+    setDraft: React.Dispatch<React.SetStateAction<string>>,
+    current: string,
+    setValue: React.Dispatch<React.SetStateAction<string>>,
+  ) => {
+    const additions = parseProductChoices(value);
+    if (additions.length > 0) setValue(serializeProductChoices([...parseProductChoices(current), ...additions]));
+    setDraft('');
+  };
   const updateModifierGroups = (update: (groups: ProductModifierGroupDraft[]) => ProductModifierGroupDraft[]) => {
     setProdModifierGroups((groups) => update(groups));
   };
@@ -57,7 +82,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                   <h3 id="product-dialog-title" className="truncate text-base font-extrabold text-slate-900 sm:text-lg lg:text-xl">
                     {editingProduct ? 'Modifier l\'article' : 'Ajouter un article au catalogue'}
                   </h3>
-                  <p className="mt-0.5 text-[10px] text-slate-500 sm:text-[11px] lg:text-xs">Renseignez les détails utiles à votre boutique et à vos clients.</p>
+                  <p className="mt-0.5 text-[10px] text-slate-500 sm:text-[11px] lg:text-xs">Commencez par le nom, le prix et une courte présentation. Vous pourrez compléter le reste ensuite.</p>
                 </div>
               </div>
               <button
@@ -73,12 +98,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
             <form onSubmit={handleSaveProduct} className="mt-5 space-y-4 lg:space-y-5">
               <section className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 lg:p-5">
                 <div>
-                  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                  <label htmlFor="merchant-product-title" className="mb-1.5 block text-xs font-bold text-slate-700">
                     Nom de l'article *
                   </label>
                   <input
+                    id="merchant-product-title"
                     type="text"
                     required
+                    maxLength={120}
                     placeholder={categoryDefaults.productTitlePlaceholder}
                     value={prodTitle}
                     onChange={(e) => setProdTitle(e.target.value)}
@@ -88,8 +115,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
               </section>
 
               <div className="max-w-md">
-                <label className="mb-1.5 block text-xs font-bold text-slate-700">Prix (en FCFA) *</label>
+                <label htmlFor="merchant-product-price" className="mb-1.5 block text-xs font-bold text-slate-700">Prix habituel (en FCFA) *</label>
                 <input
+                  id="merchant-product-price"
                   type="number"
                   required
                   min={0}
@@ -101,41 +129,44 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                 />
               </div>
 
-              <section className="rounded-xl border border-orange-200 bg-orange-50/60 p-3 sm:p-4">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <h4 className="text-sm font-extrabold text-orange-950">Promotion temporaire</h4>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">Le tarif normal est conservé. Le prix promo s’applique automatiquement pendant la période choisie.</p>
+              <details open={prodSalePrice !== ''} className="rounded-xl border border-orange-200 bg-orange-50/60 p-3 sm:p-4">
+                <summary className="cursor-pointer text-sm font-extrabold text-orange-950">Ajouter une promotion (facultatif)</summary>
+                <div className="mt-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="text-xs leading-5 text-slate-600">Indiquez un prix réduit et les dates de la promotion. Sinon, laissez ces champs vides.</p>
+                    {prodSalePrice !== '' && <button type="button" onClick={() => { setProdSalePrice(''); setProdSaleStartsAt(''); setProdSaleEndsAt(''); }} className="min-h-8 rounded-lg px-2 text-xs font-bold text-orange-900 hover:bg-orange-100">Retirer la promotion</button>}
                   </div>
-                  {prodSalePrice !== '' && <button type="button" onClick={() => { setProdSalePrice(''); setProdSaleStartsAt(''); setProdSaleEndsAt(''); }} className="min-h-8 rounded-lg px-2 text-xs font-bold text-orange-900 hover:bg-orange-100">Retirer la promotion</button>}
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <label className="text-xs font-bold text-slate-700">Prix réduit (FCFA)
+                      <input type="number" min="1" step="1" max={prodPrice === '' ? undefined : Number(prodPrice) - 1} value={prodSalePrice} onChange={(event) => setProdSalePrice(event.target.value === '' ? '' : Number(event.target.value))} placeholder="Ex. 8 000" className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
+                    </label>
+                    <label className="text-xs font-bold text-slate-700">Début de la promotion
+                      <input type="datetime-local" required={prodSalePrice !== ''} max={prodSaleEndsAt || undefined} value={prodSaleStartsAt} onChange={(event) => setProdSaleStartsAt(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs" />
+                    </label>
+                    <label className="text-xs font-bold text-slate-700">Fin de la promotion
+                      <input type="datetime-local" required={prodSalePrice !== ''} min={prodSaleStartsAt || undefined} value={prodSaleEndsAt} onChange={(event) => setProdSaleEndsAt(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs" />
+                    </label>
+                  </div>
+                  {prodSalePrice !== '' && Number(prodSalePrice) >= Number(prodPrice) && <p role="alert" className="mt-2 text-xs font-semibold text-rose-800">Le prix réduit doit être inférieur au prix habituel.</p>}
+                  {prodSalePrice !== '' && prodSaleStartsAt && prodSaleEndsAt && new Date(prodSaleEndsAt) <= new Date(prodSaleStartsAt) && <p role="alert" className="mt-2 text-xs font-semibold text-rose-800">La date de fin doit être après la date de début.</p>}
                 </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                  <label className="text-xs font-bold text-slate-700">Prix promotionnel (FCFA)
-                    <input type="number" min="1" step="1" max={prodPrice === '' ? undefined : Number(prodPrice) - 1} value={prodSalePrice} onChange={(event) => setProdSalePrice(event.target.value === '' ? '' : Number(event.target.value))} placeholder="Ex. 8 000" className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-                  </label>
-                  <label className="text-xs font-bold text-slate-700">Début
-                    <input type="datetime-local" required={prodSalePrice !== ''} max={prodSaleEndsAt || undefined} value={prodSaleStartsAt} onChange={(event) => setProdSaleStartsAt(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs" />
-                  </label>
-                  <label className="text-xs font-bold text-slate-700">Fin
-                    <input type="datetime-local" required={prodSalePrice !== ''} min={prodSaleStartsAt || undefined} value={prodSaleEndsAt} onChange={(event) => setProdSaleEndsAt(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs" />
-                  </label>
-                </div>
-                {prodSalePrice !== '' && Number(prodSalePrice) >= Number(prodPrice) && <p role="alert" className="mt-2 text-xs font-semibold text-rose-800">Le prix promotionnel doit être inférieur au prix normal.</p>}
-                {prodSalePrice !== '' && prodSaleStartsAt && prodSaleEndsAt && new Date(prodSaleEndsAt) <= new Date(prodSaleStartsAt) && <p role="alert" className="mt-2 text-xs font-semibold text-rose-800">La date de fin doit être après la date de début.</p>}
-              </section>
+              </details>
 
               <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
                   <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-3 sm:p-4">
-                <div>
+                <details open={Boolean(editingProduct && prodCategory)} className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4">
+                <summary className="cursor-pointer text-xs font-bold text-slate-700">Choisir une catégorie pour mieux classer l’article (facultatif)</summary>
+                <div className="mt-3">
                   <div className="mb-1 flex items-center justify-between gap-2">
-                    <label className="block text-xs font-bold text-slate-700">
-                      Catégorie d'article (optionnelle)
+                    <label htmlFor="merchant-product-category" className="block text-xs font-bold text-slate-700">
+                      Catégorie
                     </label>
-                    <span className="text-[11px] text-slate-500">Filtrage client</span>
                   </div>
                   <input
+                    id="merchant-product-category"
                     type="text"
                     list="product-category-suggestions"
+                    maxLength={80}
                     placeholder={categoryDefaults.productCategoryPlaceholder}
                     value={prodCategory}
                     onChange={(e) => setProdCategory(e.target.value)}
@@ -147,32 +178,38 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                     ))}
                   </datalist>
                 </div>
+                </details>
 
                 <div>
                   <div className="mb-1 flex items-center justify-between gap-2">
-                    <label className="block text-xs font-bold text-slate-700">
-                      Descriptif court
+                    <label htmlFor="product-description" className="block text-xs font-bold text-slate-700">
+                      Présentez l’article en quelques mots <span className="text-rose-600" aria-hidden="true">*</span>
                     </label>
-                    <span className={`text-[11px] font-mono ${prodDescription.length > 200 ? 'font-bold text-amber-700' : 'text-slate-400'}`}>
+                    <span className={`text-[11px] font-mono ${prodDescription.length === 0 ? 'text-rose-600' : 'text-slate-400'}`}>
                       {prodDescription.length}/200
                     </span>
                   </div>
                   <textarea
+                    id="product-description"
                     rows={3}
                     maxLength={200}
+                    required
+                    aria-required="true"
                     placeholder={categoryDefaults.productDescriptionPlaceholder}
                     value={prodDescription}
                     onChange={(e) => setProdDescription(e.target.value)}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/15"
                   />
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">Par exemple : la matière, la taille ou ce qui rend cet article spécial. Cette présentation est obligatoire.</p>
                 </div>
                   </section>
 
                   {categoryDefaults.productAttributes.length > 0 && (
-                    <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 sm:p-4">
+                    <details open={Boolean(editingProduct && Object.values(prodAttributes).some(Boolean))} className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4">
+                  <summary className="cursor-pointer text-sm font-extrabold text-emerald-900">{categoryDefaults.productAttributesHeading} (facultatif)</summary>
+                  <section className="mt-3 space-y-3">
                   <div>
-                    <h4 className="text-sm font-extrabold text-emerald-900">{categoryDefaults.productAttributesHeading}</h4>
-                      <p className="mt-1 text-xs leading-5 text-slate-500">Ajoutez les précisions que vos clients cherchent le plus souvent.</p>
+                      <p className="text-xs leading-5 text-slate-500">Ajoutez ces précisions si vous les connaissez. Vous pouvez aussi continuer sans les remplir.</p>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {categoryDefaults.productAttributes.map((field) => (
@@ -188,31 +225,56 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                     ))}
                   </div>
                     </section>
+                    </details>
                   )}
 
                   {(categoryDefaults.productFormType === 'fashion' || categoryDefaults.productFormType === 'food') && (
-                    <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 sm:p-4 lg:p-5">
+                    <details open={Boolean(editingProduct)} className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4 lg:p-5">
+                    <summary className="cursor-pointer text-sm font-bold text-slate-700">
+                      {categoryDefaults.productFormType === 'fashion' ? 'Ajouter les tailles et couleurs (facultatif)' : 'Ajouter le temps de préparation ou des choix (facultatif)'}
+                    </summary>
+                    <section className="mt-3 space-y-3">
                 {categoryDefaults.productFormType === 'fashion' ? (
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div>
-                      <label className="mb-1.5 block text-xs font-bold text-slate-700">Tailles</label>
-                      <input
-                        type="text"
-                        placeholder="S, M, L, XL"
-                        value={prodSizes}
-                        onChange={(e) => setProdSizes(e.target.value)}
-                        className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/15"
-                      />
+                      <fieldset>
+                        <legend className="mb-1.5 text-xs font-bold text-slate-700">Tailles disponibles (facultatif)</legend>
+                        <p className="mb-2 text-[11px] leading-4 text-slate-500">Touchez toutes les tailles proposées. Vous pouvez aussi ajouter une taille.</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[...sizeChoices, ...parseProductChoices(prodSizes).filter((choice) => !sizeChoices.includes(choice))].map((choice) => {
+                            const selected = parseProductChoices(prodSizes).includes(choice);
+                            return (
+                              <button key={choice} type="button" aria-pressed={selected} onClick={() => toggleProductChoice(choice, prodSizes, setProdSizes)} className={`min-h-10 min-w-10 rounded-full border px-3 text-xs font-bold transition ${selected ? 'border-emerald-800 bg-emerald-800 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-700 hover:bg-emerald-50'}`}>
+                                {choice}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-2 flex gap-2">
+                          <input value={customSize} onChange={(event) => setCustomSize(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addCustomProductChoice(customSize, setCustomSize, prodSizes, setProdSizes); } }} placeholder="Autre taille" aria-label="Ajouter une autre taille" className="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15" />
+                          <button type="button" onClick={() => addCustomProductChoice(customSize, setCustomSize, prodSizes, setProdSizes)} disabled={!customSize.trim()} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-45">Ajouter</button>
+                        </div>
+                      </fieldset>
                     </div>
                     <div>
-                      <label className="mb-1.5 block text-xs font-bold text-slate-700">Couleurs</label>
-                      <input
-                        type="text"
-                        placeholder="Noir, Rouge, Doré"
-                        value={prodColors}
-                        onChange={(e) => setProdColors(e.target.value)}
-                        className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/15"
-                      />
+                      <fieldset>
+                        <legend className="mb-1.5 text-xs font-bold text-slate-700">Couleurs disponibles (facultatif)</legend>
+                        <p className="mb-2 text-[11px] leading-4 text-slate-500">Touchez toutes les couleurs proposées. Vous pouvez aussi ajouter une couleur.</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[...colorChoices, ...parseProductChoices(prodColors).filter((choice) => !colorChoices.includes(choice))].map((choice) => {
+                            const selected = parseProductChoices(prodColors).includes(choice);
+                            return (
+                              <button key={choice} type="button" aria-pressed={selected} onClick={() => toggleProductChoice(choice, prodColors, setProdColors)} className={`min-h-10 rounded-full border px-3 text-xs font-bold transition ${selected ? 'border-emerald-800 bg-emerald-800 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-700 hover:bg-emerald-50'}`}>
+                                {choice}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-2 flex gap-2">
+                          <input value={customColor} onChange={(event) => setCustomColor(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addCustomProductChoice(customColor, setCustomColor, prodColors, setProdColors); } }} placeholder="Autre couleur" aria-label="Ajouter une autre couleur" className="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15" />
+                          <button type="button" onClick={() => addCustomProductChoice(customColor, setCustomColor, prodColors, setProdColors)} disabled={!customColor.trim()} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-45">Ajouter</button>
+                        </div>
+                      </fieldset>
                     </div>
                   </div>
                 ) : categoryDefaults.productFormType === 'food' ? (
@@ -348,9 +410,13 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                   </div>
                 ) : null}
                     </section>
+                    </details>
                   )}
-                <div className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4">
-                  <label className="mb-1.5 block text-xs font-bold text-slate-700">Quantité en stock</label>
+                <details open={Boolean(editingProduct)} className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4">
+                  <summary className="cursor-pointer text-xs font-bold text-slate-700">
+                  Quantité disponible : {prodStock === '' ? 'non indiquée' : prodStock} (facultatif)
+                  </summary>
+                  <label className="mt-3 block text-xs font-bold text-slate-700">Nombre d’articles disponibles</label>
                   <input
                     type="number"
                     min={0}
@@ -359,11 +425,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                     onChange={(e) => setProdStock(e.target.value === '' ? '' : Number(e.target.value))}
                     className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-mono text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/15"
                   />
-                </div>
+                  <p className="mt-1 text-[11px] text-slate-500">Le nombre diminue quand un client commande.</p>
+                </details>
 
               <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-3 sm:p-4 lg:p-5">
                 <div>
-                  <label className="mb-1.5 block text-xs font-bold text-slate-700">Photo produit</label>
+                  <label className="mb-1.5 block text-xs font-bold text-slate-700">Photo principale (conseillée)</label>
                   <div className="flex flex-col gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 sm:flex-row sm:items-center">
                     <CategoryProductImage
                       imageUrl={prodImage}
@@ -381,9 +448,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                         className="sr-only"
                       />
                       <label htmlFor="product-photo-upload" className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-emerald-800 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-900">
-                        <Upload className="h-3.5 w-3.5" /> Choisir une photo HD
+                        <Upload className="h-3.5 w-3.5" /> {prodImage ? 'Changer la photo' : 'Ajouter une photo'}
                       </label>
-                      <p className="mt-2 text-[11px] text-slate-500">JPG, PNG, WebP ou AVIF. La photo est optimisée automatiquement.</p>
+                      <p className="mt-2 text-[11px] text-slate-500">Choisissez une photo dans votre téléphone ou votre ordinateur. Elle sera préparée automatiquement.</p>
                       {imageCompressing && <span className="mt-2 block text-[11px] font-bold text-amber-700">Optimisation de la photo en cours...</span>}
                       {compressedSizeKB && (
                         <span className="mt-2 block text-[11px] font-bold text-emerald-600">
@@ -394,9 +461,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                <details open={Boolean(editingProduct && (prodLookbookImage || prodGalleryImages.length > 0))} className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4">
+                <summary className="cursor-pointer text-xs font-bold text-slate-700">Ajouter d’autres photos (facultatif · {productPhotoCount}/{productPhotoLimit})</summary>
+                <div className="mt-3 space-y-4">
                 <div>
-                  <label className="mb-1.5 block text-xs font-bold text-slate-700">Photo secondaire / lookbook <span className="font-normal text-slate-400">(optionnelle)</span></label>
+                  <label className="mb-1.5 block text-xs font-bold text-slate-700">Autre photo de l’article</label>
                   <div className="flex flex-col gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 sm:flex-row sm:items-center">
                     {prodLookbookImage ? (
                       <img src={prodLookbookImage} alt="Aperçu de la photo secondaire" className="h-20 w-20 shrink-0 rounded-xl border border-slate-200 bg-white object-cover" />
@@ -448,9 +517,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                       </div>
                     )}
                   </div>
-                  <p className="mt-2 text-[10px] text-slate-500">Ajoutez jusqu'à 6 photos additionnelles pour montrer l'article sous différents angles.</p>
+                  <p className="mt-2 text-[10px] text-slate-500">Vous pouvez ajouter plusieurs photos pour montrer l’article sous différents angles.</p>
                 </div>
                 </div>
+                </details>
 
                 <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
                   <input
@@ -461,7 +531,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                     className="mt-0.5 rounded border-slate-300 text-emerald-800 focus:ring-emerald-700"
                   />
                   <label htmlFor="prod-available" className="cursor-pointer text-xs font-semibold text-emerald-900 lg:text-sm">
-                    Afficher immédiatement cet article dans la vitrine client
+                    Rendre l’article visible aux clients tout de suite
                   </label>
                 </div>
               </section>

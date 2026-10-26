@@ -9,8 +9,9 @@ import {
   getSubscriptionProductLimit,
   getSubscriptionProductPhotoLimit,
   isSubscriptionFeatureIncluded,
+  addCalendarMonths,
   TRIAL_CATALOG_LIMIT,
-  TRIAL_DURATION_DAYS,
+  TRIAL_DURATION_MONTHS,
 } from '../src/utils/subscriptionFeatures';
 import { isFeatureAllowed } from '../src/utils/themePresets';
 
@@ -135,7 +136,9 @@ test('shared marketing tier matrix matches server feature thresholds', () => {
 });
 
 test('trial limits and annual subscription prices match the published offer', () => {
-  assert.equal(TRIAL_DURATION_DAYS, 7);
+  assert.equal(TRIAL_DURATION_MONTHS, 2);
+  assert.equal(addCalendarMonths(new Date('2026-01-31T12:00:00.000Z'), TRIAL_DURATION_MONTHS), '2026-03-31');
+  assert.equal(addCalendarMonths(new Date('2026-12-31T12:00:00.000Z'), TRIAL_DURATION_MONTHS), '2027-02-28');
   assert.equal(TRIAL_CATALOG_LIMIT, 2);
   assert.equal(getSubscriptionProductLimit('standard'), 20);
   assert.equal(getSubscriptionProductLimit('premium'), Number.POSITIVE_INFINITY);

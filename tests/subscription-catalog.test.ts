@@ -9,7 +9,7 @@ import {
   SUBSCRIPTION_PLANS,
   SUBSCRIPTION_PRODUCT_LIMITS,
   TRIAL_CATALOG_LIMIT,
-  TRIAL_DURATION_DAYS,
+  TRIAL_DURATION_MONTHS,
 } from '../src/utils/subscriptionFeatures';
 
 function normalizeSpaces(value: string) {
@@ -38,6 +38,7 @@ test('public subscription prices and catalog limits match the active plan config
   assert.ok(readme.includes('20 produits et 2 photos par produit'));
   assert.ok(readme.includes('Premium un nombre illimité de produits'));
   assert.ok(readme.includes('Pro un nombre illimité de produits'));
-  assert.ok(readme.includes(`essai Standard de ${TRIAL_DURATION_DAYS} jours`));
+  assert.equal(TRIAL_DURATION_MONTHS, 2);
+  assert.ok(readme.includes('essai Standard de deux mois'));
   assert.ok(readme.includes(`${TRIAL_CATALOG_LIMIT} produits maximum`));
 });

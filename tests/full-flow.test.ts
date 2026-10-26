@@ -1467,7 +1467,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   const createdProduct = await apiFetch(`/api/shops/${shopId}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Plat du jour test client', price: 2500, stock: 6, is_available: true }),
+    body: JSON.stringify({ title: 'Plat du jour test client', description: 'Un plat préparé chaque matin avec des ingrédients locaux.', price: 2500, stock: 6, is_available: true }),
   });
   assert.equal(createdProduct.response.status, 200, JSON.stringify(createdProduct.payload));
   const productId = createdProduct.payload.product.id;
@@ -1927,7 +1927,7 @@ test('Didit alone controls merchant verification; signed webhooks are fresh and 
     const product = await apiFetch(`/api/shops/${shopId}/products`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: `Article d’essai ${index + 1}`, price: 1500, stock: 2 }),
+      body: JSON.stringify({ title: `Article d’essai ${index + 1}`, description: 'Article de démonstration du catalogue marchand.', price: 1500, stock: 2 }),
     });
     assert.equal(product.response.status, 200, JSON.stringify(product.payload));
     if (index === 0) trialProductId = product.payload.product.id;
@@ -1935,7 +1935,7 @@ test('Didit alone controls merchant verification; signed webhooks are fresh and 
   const thirdTrialProduct = await apiFetch(`/api/shops/${shopId}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Troisième article d’essai', price: 1500, stock: 2 }),
+    body: JSON.stringify({ title: 'Troisième article d’essai', description: 'Article de démonstration supplémentaire.', price: 1500, stock: 2 }),
   });
   assert.equal(thirdTrialProduct.response.status, 409, JSON.stringify(thirdTrialProduct.payload));
   const testDbAfterTrial = new Database(TEST_DB_PATH);
@@ -2092,6 +2092,14 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal(login.payload.success, true);
   assert.equal(login.payload.shop.id, 1);
 
+  const missingDescription = await apiFetch('/api/shops/1/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Produit sans descriptif', description: '   ', price: 2500, stock: 5 }),
+  });
+  assert.equal(missingDescription.response.status, 400, JSON.stringify(missingDescription.payload));
+  assert.match(String(missingDescription.payload.error), /description.*obligatoire/i);
+
   const productCreate = await apiFetch('/api/shops/1/products', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2130,6 +2138,13 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal(productEdit.response.status, 200, JSON.stringify(productEdit.payload));
   assert.equal(productEdit.payload.product.title, 'Produit marchand modifié');
   assert.equal(productEdit.payload.product.sale_price, 1800);
+  const emptyDescriptionEdit = await apiFetch(`/api/shops/1/products/${createdProduct.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description: '  ' }),
+  });
+  assert.equal(emptyDescriptionEdit.response.status, 400, JSON.stringify(emptyDescriptionEdit.payload));
+  assert.equal(emptyDescriptionEdit.payload.error, 'La description de l’article est obligatoire.');
   const promotionFeed = await apiFetch('/api/v1/catalog/storefronts/feed?sort=promotions&limit=48');
   assert.equal(promotionFeed.response.status, 200, JSON.stringify(promotionFeed.payload));
   assert.ok(promotionFeed.payload.products.some((product: any) => (
@@ -2152,7 +2167,7 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   const temporaryProduct = await apiFetch('/api/shops/1/products', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Article test suppression', price: 900, stock: 1 }),
+    body: JSON.stringify({ title: 'Article test suppression', description: 'Article temporaire utilisé pour tester le stock.', price: 900, stock: 1 }),
   });
   assert.equal(temporaryProduct.response.status, 200, JSON.stringify(temporaryProduct.payload));
   const temporaryProductId = temporaryProduct.payload.product.id;
@@ -2374,7 +2389,8 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.equal('owner_access_token_hash' in merchantDataExport.payload.shop, false);
   assert.equal(typeof registration.payload.shop.subscription.trialStart, 'string');
   assert.equal(typeof registration.payload.shop.subscription.trialEnd, 'string');
-  assert.equal(registration.payload.shop.subscription.trialDaysRemaining, 7);
+  assert.ok(registration.payload.shop.subscription.trialDaysRemaining >= 59);
+  assert.ok(registration.payload.shop.subscription.trialDaysRemaining <= 62);
   assert.ok(registration.payload.owner_access_token);
 
   const newShopId = registration.payload.shop.id;
@@ -2450,7 +2466,9 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.equal(trialStart.payload.shop.subscription.plan, 'standard');
   assert.equal(typeof trialStart.payload.shop.subscription.trialStart, 'string');
   assert.equal(typeof trialStart.payload.shop.subscription.trialEnd, 'string');
-  assert.equal(trialStart.payload.shop.subscription.trialDaysRemaining, 7);
+  assert.ok(trialStart.payload.shop.subscription.trialDaysRemaining >= 59);
+  assert.ok(trialStart.payload.shop.subscription.trialDaysRemaining <= 62);
+  assert.equal(trialStart.payload.trial_months, 2);
   const persistedDatabase = new Database(TEST_DB_PATH, { readonly: true });
   try {
     const savedPlan = persistedDatabase.prepare('SELECT selected_subscription_tier, subscription_status, trial_start, trial_end, subscription_expires_at, owner_name, owner_phone FROM shops WHERE id = ?').get(newShopId) as { selected_subscription_tier: string; subscription_status: string; trial_start: string; trial_end: string; subscription_expires_at: string; owner_name: string; owner_phone: string };
@@ -2697,7 +2715,7 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   const adminProduct = await apiFetch(`/api/shops/${shopId}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Article administré', price: 1200, stock: 2 }),
+    body: JSON.stringify({ title: 'Article administré', description: 'Produit ajouté pour vérifier les droits administrateur.', price: 1200, stock: 2 }),
   });
   assert.equal(adminProduct.response.status, 200, JSON.stringify(adminProduct.payload));
   const deleteAdminProduct = await apiFetch(`/api/shops/${shopId}/products/${adminProduct.payload.product.id}`, { method: 'DELETE' });
@@ -2896,7 +2914,7 @@ test('merchant A cannot access merchant B products, orders, or settings', async 
   const product = await apiFetch(`/api/shops/${merchantBShopId}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Produit privé B', price: 2500, stock: 4 }),
+    body: JSON.stringify({ title: 'Produit privé B', description: 'Produit privé de la boutique du marchand B.', price: 2500, stock: 4 }),
   });
   assert.equal(product.response.status, 200, JSON.stringify(product.payload));
   const productId = product.payload.product.id;

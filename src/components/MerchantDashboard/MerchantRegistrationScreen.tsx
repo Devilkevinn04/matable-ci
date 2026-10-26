@@ -3,7 +3,7 @@ import { ArrowRight, CheckCircle2, MessageCircleMore, ShieldCheck, Sparkles, Sto
 import { ShopCategory } from '../../types';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../../utils/categoryDefaults';
 import { ABIDJAN_COMMUNES } from '../../utils/abidjanCommunes';
-import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_DAYS } from '../../utils/subscriptionFeatures';
+import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
 import { AuthExperienceLayout, MerchantRegistrationProgress, MerchantShopPreview } from '../AuthExperienceLayout';
 import { MerchantState } from './useMerchant';
 import { TermsPrivacyConsent } from '../TermsPrivacyConsent';
@@ -68,7 +68,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
         </div>
         <MerchantRegistrationProgress step={step} />
         <p className="text-sm leading-6 text-[#68756c]">{step === 1
-          ? `Créez votre vitrine locale en deux étapes. Vous bénéficiez de ${TRIAL_DURATION_DAYS} jours d’essai Standard gratuit à la création, avec jusqu’à ${TRIAL_CATALOG_LIMIT} produits.`
+          ? `Créez votre vitrine locale en deux étapes. Vous bénéficiez de ${TRIAL_DURATION_MONTHS} mois d’essai Standard gratuit à la création, avec jusqu’à ${TRIAL_CATALOG_LIMIT} produits. Vous pouvez aussi payer directement une formule.`
           : 'Ces informations permettent à vos clients de vous contacter et vous serviront à retrouver votre espace marchand.'}</p>
         <div className="grid gap-2 sm:grid-cols-3">
           {benefits.map(({ label, icon: Icon }) => (
@@ -92,26 +92,26 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-[#47534b]">
               Nom de la boutique
-              <input type="text" value={regName} onChange={(event) => setRegName(event.target.value)} required autoComplete="organization" placeholder="Ex. : Atelier Awa" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" />
+              <input type="text" value={regName} onChange={(event) => setRegName(event.target.value)} required maxLength={100} autoComplete="organization" placeholder="Ex. : Atelier Awa" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" />
             </label>
 
             <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
               <label className="block text-sm font-semibold text-[#47534b]">
                 Activité
-                <select value={regCategory} onChange={(event) => setRegCategory(event.target.value as ShopCategory)} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857]">
+                <select value={regCategory} onChange={(event) => setRegCategory(event.target.value as ShopCategory)} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10">
                   {SHOP_CATEGORIES.map((category) => <option key={category} value={category}>{getCategoryDefaults(category).icon} {getCategoryDefaults(category).label}</option>)}
                 </select>
               </label>
               <label className="block text-sm font-semibold text-[#47534b]">
                 Ville / commune
-                <select value={regCity} onChange={(event) => setRegCity(event.target.value)} required className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857]">
+                <select value={regCity} onChange={(event) => setRegCity(event.target.value)} required className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10">
                   <option value="">Choisir une ville ou commune</option>
                   <option value="Abidjan">Abidjan</option>
                   {ABIDJAN_COMMUNES.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
                 </select>
               </label>
             </div>
-            {regCity === 'Autre ville / commune' && <label className="block text-sm font-semibold text-[#47534b]">Votre ville<input value={regCityOther} onChange={(event) => setRegCityOther(event.target.value)} required placeholder="Saisissez votre ville" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857]" /></label>}
+            {regCity === 'Autre ville / commune' && <label className="block text-sm font-semibold text-[#47534b]">Votre ville<input value={regCityOther} onChange={(event) => setRegCityOther(event.target.value)} required maxLength={100} placeholder="Saisissez votre ville" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" /></label>}
           </div>
         </div>
         )}
@@ -135,7 +135,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
                 <div className="relative">
                   <input type={showRegPin ? 'text' : 'password'} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={regPin} onChange={(event) => setRegPin(event.target.value.replace(/\D/g, '').slice(0, 6))} required autoComplete="new-password" placeholder="6 chiffres" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 pr-14 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" />
                   <span className="mt-1 block text-xs font-normal text-[#68756c]">Choisissez un code que vous pourrez mémoriser.</span>
-                  <button type="button" onClick={() => setShowRegPin((visible) => !visible)} className="absolute right-2 top-[calc(50%+3px)] -translate-y-1/2 rounded-full px-2 py-1 text-xs font-bold text-[#047857]">{showRegPin ? 'Masquer' : 'Afficher'}</button>
+                  <button type="button" onClick={() => setShowRegPin((visible) => !visible)} className="absolute right-1 top-[calc(50%+3px)] flex h-11 -translate-y-1/2 items-center rounded-full px-3 text-xs font-bold text-[#047857] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">{showRegPin ? 'Masquer' : 'Afficher'}</button>
                 </div>
               </label>
               <label className="block text-sm font-semibold text-[#47534b]">

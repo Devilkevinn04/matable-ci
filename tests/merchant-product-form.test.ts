@@ -1,16 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildProductSavePayload, createProductDraft, parseProductModifierGroups, productToDraft, serializeProductModifierGroups } from '../src/components/MerchantDashboard/productForm';
+import { buildProductSavePayload, createProductDraft, parseProductChoices, parseProductModifierGroups, productToDraft, serializeProductChoices, serializeProductModifierGroups } from '../src/components/MerchantDashboard/productForm';
 import { CATEGORY_DEFAULTS } from '../src/utils/categoryDefaults';
 import { Product } from '../src/types';
 
-test('starts product drafts with category values and leaves images unpersisted', () => {
+test('starts product drafts without preselecting variants and leaves images unpersisted', () => {
   const fashionDraft = createProductDraft('fashion');
   const foodDraft = createProductDraft('food');
   const otherDraft = createProductDraft('other');
 
-  assert.equal(fashionDraft.sizes, CATEGORY_DEFAULTS.fashion.defaultProductSizes);
-  assert.equal(fashionDraft.colors, CATEGORY_DEFAULTS.fashion.defaultProductColors);
+  assert.equal(fashionDraft.sizes, '');
+  assert.equal(fashionDraft.colors, '');
   assert.equal(foodDraft.prep_time, 20);
   assert.deepEqual(foodDraft.modifier_groups.map((group) => group.name), ['Sauce', 'Accompagnement']);
   assert.ok(foodDraft.modifier_groups.every((group) => !group.required && group.max_selections === 2));
@@ -19,6 +19,25 @@ test('starts product drafts with category values and leaves images unpersisted',
   assert.deepEqual(otherDraft.modifier_groups, []);
   assert.ok(CATEGORY_DEFAULTS.automotive.productAttributes.some((field) => field.key === 'model_year'));
   assert.ok(CATEGORY_DEFAULTS.education.productAttributes.some((field) => field.key === 'level'));
+});
+
+test('parses and serializes multiple product choices without duplicates or empty values', () => {
+  assert.deepEqual(parseProductChoices('S, M, S, , XL '), ['S', 'M', 'XL']);
+  assert.equal(serializeProductChoices(['S', ' M ', 'S', '']), 'S, M');
+});
+
+test('saves selected product sizes and colors in the existing API format', () => {
+  const payload = buildProductSavePayload({
+    ...createProductDraft('fashion'),
+    title: 'Robe en wax',
+    description: 'Robe en coton, disponible en plusieurs tailles.',
+    price: 15000,
+    sizes: serializeProductChoices(['M', 'XL']),
+    colors: serializeProductChoices(['Noir', 'Doré']),
+  }, 'fashion');
+
+  assert.deepEqual(payload.sizes, ['M', 'XL']);
+  assert.deepEqual(payload.colors, ['Noir', 'Doré']);
 });
 
 test('hydrates edit drafts while keeping legacy generic imagery out of the saved value', () => {
@@ -72,7 +91,7 @@ test('serializes a Food draft into the existing API shape and bounds modifier se
   assert.equal(payload.title, 'Poulet braisé');
   assert.equal(payload.category, 'Grillades');
   assert.equal(payload.stock, 0);
-  assert.deepEqual(payload.sizes, [' ', ' '].filter(Boolean).length ? [] : undefined);
+  assert.equal(payload.sizes, undefined);
   assert.deepEqual(payload.colors, ['Rouge', 'Jaune']);
   assert.equal(payload.prep_time, 25);
   assert.equal(payload.image_url, 'data:image/webp;base64,photo');

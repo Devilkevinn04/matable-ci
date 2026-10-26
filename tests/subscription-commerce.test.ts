@@ -130,7 +130,8 @@ test('Pro subscription exposes consented product stats and activates discounted 
   const trialPayload = await trial.json();
   assert.equal(trial.status, 200, JSON.stringify(trialPayload));
   assert.equal(trialPayload.shop.subscription.plan, 'standard');
-  assert.equal(trialPayload.shop.subscription.trialDaysRemaining, 7);
+  assert.ok(trialPayload.shop.subscription.trialDaysRemaining >= 59);
+  assert.ok(trialPayload.shop.subscription.trialDaysRemaining <= 62);
   const earlyPaymentResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/subscription-payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
@@ -168,6 +169,7 @@ test('Pro subscription exposes consented product stats and activates discounted 
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
     body: JSON.stringify({
       title: 'Produit avec trop de photos',
+      description: 'Produit de test pour vérifier la limite de photos.',
       price: 1500,
       stock: 5,
       image_url: 'https://example.com/product-main.jpg',
@@ -179,7 +181,7 @@ test('Pro subscription exposes consented product stats and activates discounted 
   const firstProductResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
-    body: JSON.stringify({ title: 'Produit 1', price: 1500, stock: 5 }),
+    body: JSON.stringify({ title: 'Produit 1', description: 'Produit de test pour la boutique.', price: 1500, stock: 5 }),
   });
   const firstProductPayload = await firstProductResponse.json();
   assert.equal(firstProductResponse.status, 200, JSON.stringify(firstProductPayload));
@@ -243,7 +245,7 @@ test('Pro subscription exposes consented product stats and activates discounted 
     const productResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/products`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
-      body: JSON.stringify({ title: `Produit ${index + 1}`, price: 1500, stock: 5 }),
+      body: JSON.stringify({ title: `Produit ${index + 1}`, description: 'Produit de test pour le catalogue.', price: 1500, stock: 5 }),
     });
     const productPayload = await productResponse.json();
     assert.equal(productResponse.status, 200, JSON.stringify(productPayload));

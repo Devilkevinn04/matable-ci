@@ -92,7 +92,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                 onClick={handleOpenAddModal}
                 disabled={catalogFull}
                 title={catalogFull ? `La limite de votre formule est de ${productLimit} articles.` : undefined}
-                className="py-2.5 px-4 rounded-xl bg-[#1D6B57] hover:bg-[#047857] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors self-start sm:self-auto disabled:cursor-not-allowed disabled:opacity-45"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-[#1D6B57] px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
               >
                 <Plus className="w-4 h-4" />
                 <span>{catalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</span>
@@ -109,17 +109,17 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   placeholder="Rechercher un article..."
                   value={catalogSearch}
                   onChange={(e) => setCatalogSearch(e.target.value)}
-                  className="w-full rounded-xl border border-[#d9d5cd] bg-white py-2 pl-9 pr-3 text-xs text-[#292d2a] focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#047857]/15"
+                  className="min-h-11 w-full rounded-xl border border-[#d9d5cd] bg-white py-2 pl-9 pr-3 text-sm text-[#292d2a] focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#047857]/15"
                 />
               </div>
 
-              <label className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-[#d9d5cd] bg-white px-3 text-xs font-bold text-[#47534b] sm:w-auto">
+              <label className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-[#d9d5cd] bg-white px-3 text-sm font-bold text-[#47534b] sm:w-auto">
                 <span className="shrink-0">Afficher</span>
                 <select
                   aria-label="Filtrer les articles du catalogue"
                   value={catalogFilter}
                   onChange={(event) => setCatalogFilter(event.target.value as typeof catalogFilter)}
-                  className="min-w-0 flex-1 bg-transparent py-2 outline-none sm:w-48 sm:flex-none"
+                  className="min-h-11 min-w-0 flex-1 bg-transparent py-2 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#047857] sm:w-48 sm:flex-none"
                 >
                   {catalogFilterOptions.map(({ id, label, count }) => (
                     <option key={id} value={id}>{label} ({count})</option>

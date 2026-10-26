@@ -1159,7 +1159,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           </div>
           )
         ) : (
-          <div className={products.length === 1
+          <div className={filteredProducts.length === 1
             ? 'mx-auto grid w-full max-w-md grid-cols-1 gap-3 sm:gap-4'
             : 'grid grid-cols-2 gap-2 sm:gap-4'
           }>
@@ -1167,7 +1167,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               const activeModifiers = selectedModifiers[product.id] || [];
               const cartIndex = cart.findIndex((item) => item.product.id === product.id);
               return (
-                <div key={product.id} data-analytics-product-id={product.id}>
+                <div key={product.id} data-analytics-product-id={product.id} className="min-w-0">
                   <CustomerProductCard
                     product={product}
                     category={shop.category}

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useToast } from '../Toast';
 import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks, SubscriptionTier } from '../../types';
 import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
-import { TRIAL_DURATION_DAYS } from '../../utils/subscriptionFeatures';
+import { TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
 import { useMerchantProductEditor } from './useMerchantProductEditor';
 
 export type MerchantOrderFilter = 'all' | 'actionable' | OrderStatus;
@@ -387,7 +387,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       setIsRegisterModalOpen(false);
       const publicUrl = `${window.location.origin}/${data.shop.slug}`;
       const privateUrl = `${window.location.origin}/app?access=${encodeURIComponent(data.owner_access_token)}`;
-      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable.ci. Votre essai Standard gratuit de ${TRIAL_DURATION_DAYS} jours a commencé et votre espace marchand est accessible immédiatement. Vérifiez votre identité pour publier la boutique, recevoir des commandes et payer une formule après l’essai. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
+      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable.ci. Votre essai Standard gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé et votre espace marchand est accessible immédiatement. Vous pouvez choisir une formule payante et la régler dès maintenant ou quand vous le souhaitez. Vérifiez votre identité pour publier la boutique et recevoir des commandes. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
       setRegistrationLinks({
         publicUrl,
         privateUrl,
@@ -441,7 +441,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       if (!response.ok) throw new Error(data.error || 'Impossible de démarrer l’essai.');
       setCurrentShop(data.shop);
       syncShopSettings(data.shop);
-      toast.success(`Votre essai Standard gratuit de ${TRIAL_DURATION_DAYS} jours a commencé.`);
+      toast.success(`Votre essai Standard gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Impossible de contacter le serveur.');
     } finally {

@@ -91,16 +91,16 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                   placeholder="Rechercher par client, tél ou #..."
                   value={orderSearch}
                   onChange={(e) => setOrderSearch(e.target.value)}
-                    className="min-h-10 w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/20"
+                  className="min-h-11 w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/20"
                 />
               </div>
-                <label className="flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-600 sm:w-56">
+                <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-600 sm:w-56">
                   <span className="shrink-0">Paiement</span>
                   <select
                     aria-label="Filtrer les commandes par mode de paiement"
                     value={orderPaymentFilter}
                     onChange={(event) => setOrderPaymentFilter(event.target.value as typeof orderPaymentFilter)}
-                    className="min-w-0 flex-1 border-0 bg-transparent py-2 text-xs font-bold text-slate-800 outline-none"
+                    className="min-h-11 min-w-0 flex-1 border-0 bg-transparent py-2 text-sm font-bold text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#047857]"
                   >
                     <option value="all">Tous les modes</option>
                     <option value="wave">Wave ({orders.filter(o => o.payment_method_preference === 'wave').length})</option>
@@ -112,13 +112,13 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
               </div>
 
               <div className="border-t border-[#f0ebe2] pt-3">
-                <label className="flex min-h-10 w-full items-center gap-3 rounded-xl border border-slate-200 bg-[#fffdf8] px-3 text-xs font-bold text-slate-600 sm:w-auto">
+                <label className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-slate-200 bg-[#fffdf8] px-3 text-sm font-bold text-slate-600 sm:w-auto">
                   <span className="shrink-0">Statut</span>
                   <select
                     aria-label="Filtrer les commandes par statut"
                     value={orderStatusFilter}
                     onChange={(event) => setOrderStatusFilter(event.target.value as MerchantOrderFilter)}
-                    className="min-w-0 flex-1 bg-transparent py-2 text-slate-800 outline-none sm:w-56 sm:flex-none"
+                    className="min-h-11 min-w-0 flex-1 bg-transparent py-2 text-sm text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#047857] sm:w-56 sm:flex-none"
                   >
                     {orderStatusOptions.map((status) => (
                       <option key={status.id} value={status.id}>{status.label} ({status.count})</option>

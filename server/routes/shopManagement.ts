@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from 'express';
 import { dbGet, dbRun } from '../../db.ts';
-import { getSubscriptionAnalyticsDayLimit } from '../../src/utils/subscriptionFeatures.ts';
+import { addCalendarMonths, getSubscriptionAnalyticsDayLimit } from '../../src/utils/subscriptionFeatures.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
 import { canUseSubscriptionFeature, getShopPublicationBlockReason, getSubscriptionPlanConfig, getSubscriptionState } from '../services/businessRules.ts';
 import { getVapidConfiguration, isAllowedPushEndpoint } from '../services/pushNotifications.ts';
@@ -8,12 +8,17 @@ import { getShopFromDatabase } from '../repositories/shops.ts';
 import { getDefaultSubscriptionPrices, parseSubscriptionPrices } from '../services/subscriptionPricing.ts';
 import type { ShopRecord } from '../types.ts';
 
+function getCalendarDayCount(startDate: string, endDate: string): number {
+  const start = Date.parse(startDate.slice(0, 10));
+  const end = Date.parse(endDate.slice(0, 10));
+  return Math.round((end - start) / 86400000);
+}
+
 interface ShopManagementOptions {
   dbAll: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
   requireMerchantAccess: RequestHandler;
   requireMerchantOwnShop: RequestHandler;
-  addDays: (date: Date, days: number) => string;
-  trialDurationDays: number;
+  trialDurationMonths: number;
   rotateMerchantAccessTokenForShop: (shopId: number) => Promise<string>;
   persistShop: (shop: ShopRecord) => Promise<void>;
   toSafeShop: (shop: ShopRecord) => object;
@@ -30,8 +35,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     dbAll,
     requireMerchantAccess,
     requireMerchantOwnShop,
-    addDays,
-    trialDurationDays,
+    trialDurationMonths,
     rotateMerchantAccessTokenForShop,
     persistShop,
     toSafeShop,
@@ -117,7 +121,13 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     if (shop.trial_start && shop.trial_end) {
-      return res.json({ success: true, shop: toSafeShop(shop), trial_days: trialDurationDays, already_started: true });
+      return res.json({
+        success: true,
+        shop: toSafeShop(shop),
+        trial_days: getCalendarDayCount(shop.trial_start, shop.trial_end),
+        trial_months: trialDurationMonths,
+        already_started: true,
+      });
     }
     if (shop.subscription_status !== 'not_started') return res.status(409).json({ error: 'Cet essai ne peut pas être démarré.' });
     const tier = 'standard';
@@ -125,7 +135,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     shop.selected_subscription_tier = tier;
     shop.subscription_status = 'trialing';
     shop.trial_start = startedAt.toISOString();
-    shop.trial_end = addDays(startedAt, trialDurationDays);
+    shop.trial_end = addCalendarMonths(startedAt, trialDurationMonths);
     shop.subscription_expires_at = shop.trial_end;
     await persistShop(shop);
     const settings = await dbGet<{ subscription_plan_prices: string }>(
@@ -137,7 +147,8 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     res.json({
       success: true,
       shop: toSafeShop(shop),
-      trial_days: trialDurationDays,
+      trial_days: getCalendarDayCount(startedAt.toISOString(), shop.trial_end),
+      trial_months: trialDurationMonths,
       plan: { ...getSubscriptionPlanConfig(tier), amount: prices.standard },
     });
   });
@@ -363,6 +374,10 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       if (hasChangedFields(themeConfig, requestedThemeConfig, ['event_mode_enabled', 'event_type', 'event_banner_text'])
         && !req.adminShopAccess && !canUseSubscriptionFeature(shop, 'event_mode')) {
         return res.status(403).json({ error: 'Le mode événement est réservé aux formules Premium et Pro.' });
+      }
+      if (hasChangedFields(themeConfig, requestedThemeConfig, ['social_links'])
+        && !req.adminShopAccess && !canUseSubscriptionFeature(shop, 'social_links')) {
+        return res.status(403).json({ error: 'Les liens de réseaux sociaux sont réservés aux formules Premium et Pro.' });
       }
       const requestedBrandDirection = ['luxe', 'moderne', 'authentique'].includes(requestedThemeConfig.brand_direction)
         ? requestedThemeConfig.brand_direction as ShopRecord['theme_config']['brand_direction']
