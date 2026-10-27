@@ -8,6 +8,7 @@ import { getPublicDiscoveryPages, toDiscoveryCitySlug, type DiscoveryPage } from
 import { ProductNewsFeed } from './ProductNewsFeed';
 import { PublicCampaignCarousel } from './PublicCampaignCarousel';
 import { PublicPartnerCarousel } from './PublicPartnerCarousel';
+import { formatFCFA } from '../utils/format';
 
 interface DirectoryShop {
   id?: number;
@@ -64,7 +65,6 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
   const [directorySort, setDirectorySort] = useState<DirectorySort>('recommended');
   const [openOnly, setOpenOnly] = useState(false);
   const [campaignEligible, setCampaignEligible] = useState(false);
-  const [hasHeroCampaign, setHasHeroCampaign] = useState(false);
   useEffect(() => {
     if (isShopDirectoryPage) setQuery(new URLSearchParams(location.search).get('q') || '');
   }, [isShopDirectoryPage, location.search]);
@@ -82,8 +82,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
   };
   const homeShops = [...shops]
     .sort((left, right) => Number(Boolean(right.is_sponsored || right.is_featured)) - Number(Boolean(left.is_sponsored || left.is_featured)))
-    .slice(0, 3);
-  const heroShops = homeShops.slice(0, hasHeroCampaign ? 2 : 3);
+    .slice(0, 8);
   const categoryCounts = new Map<string, number>();
   for (const shop of shops) {
     if (shop.category) categoryCounts.set(shop.category, (categoryCounts.get(shop.category) || 0) + 1);
@@ -276,64 +275,21 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Échange direct</span>
               <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Retrait ou livraison à convenir</span>
             </div>
-            {!discoveryPage && !isShopDirectoryPage && <PublicPartnerCarousel />}
           </MotionReveal>
-          <MotionReveal delay={0.12} className="relative flex min-h-[250px] flex-col justify-end overflow-hidden bg-[#075f48] sm:min-h-[300px] lg:min-h-full">
-            <img
-              src={getShopImage(homeShops[0] || { slug: '', name: '', category: 'food' })}
-              alt=""
-              loading="lazy"
-              className="absolute inset-0 h-full w-full object-cover"
-              onError={(event) => { event.currentTarget.hidden = true; }}
-            />
-            <span aria-hidden="true" className="absolute inset-0 bg-gradient-to-t from-[#082e24]/95 via-[#082e24]/55 to-[#082e24]/10" />
-            <div className="relative z-10 p-5 sm:p-8 lg:p-9">
-              <p className="inline-flex items-center gap-2 rounded-full bg-white/95 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-[#065f46] sm:text-[10px]">
-                <MapPin className="h-3.5 w-3.5" aria-hidden="true" /> Le meilleur de vos commerces locaux
-              </p>
-              <h2 className="mt-3 max-w-lg font-display text-2xl font-black leading-tight text-white sm:text-3xl lg:text-4xl">Consommez local. Soutenez nos commerçants.</h2>
-              <p className="mt-2 max-w-md text-xs leading-5 text-white/85 sm:text-sm">Des adresses de quartier, des produits disponibles et un échange direct avec les boutiques.</p>
-              <button type="button" onClick={() => onOpenDirectory()} className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-[#f97316] px-4 text-xs font-extrabold text-white shadow transition hover:bg-[#ea580c] sm:text-sm">
-                Découvrir les boutiques <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </button>
+          <MotionReveal delay={0.12} className="flex min-w-0 flex-col justify-center bg-[#fffdf8] p-4 sm:p-6 lg:p-7">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff0df] px-3 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#8f351d] sm:text-[10px]">
+                <BadgePercent className="h-3.5 w-3.5" aria-hidden="true" /> Vitrine premium
+              </span>
+              <span className="text-[9px] font-bold uppercase tracking-wide text-[#647067] sm:text-[10px]">Sponsors & partenaires</span>
             </div>
-            <div className="relative z-10 grid grid-cols-2 gap-2.5 bg-gradient-to-b from-transparent to-[#082e24]/40 p-4 pt-2 sm:gap-3 sm:p-6">
-              {!discoveryPage && !isShopDirectoryPage && <PublicCampaignCarousel
-                onOpenShop={onOpenShop}
-                eligible={campaignEligible}
-                placement="hero"
-                onCampaignVisibilityChange={setHasHeroCampaign}
-              />}
-              {heroShops.map((shop, index) => (
-                <Link
-                  key={shop.slug}
-                  to={`/${encodeURIComponent(shop.slug)}`}
-                  aria-label={`Découvrir la boutique ${shop.name}`}
-                  className={`group min-w-0 overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-[0_8px_22px_rgba(0,0,0,.16)] transition hover:-translate-y-1 hover:shadow-[0_14px_30px_rgba(0,0,0,.22)] ${index === 2 ? 'col-span-2 mx-auto w-[calc(50%-0.375rem)]' : ''}`}
-                >
-                  <span className="relative block aspect-[2.4/1] overflow-hidden bg-[#e9f5ee]">
-                    <img src={getShopImage(shop)} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" onError={(event) => { event.currentTarget.hidden = true; }} />
-                    <span className="absolute left-2 top-2 rounded-full bg-white/95 px-2 py-1 text-[8px] font-black uppercase tracking-wide text-[#8f351d] sm:text-[9px]">{categoryLabel(shop.category)}</span>
-                  </span>
-                  <span className="flex min-w-0 items-center justify-between gap-2 p-2 sm:p-2.5">
-                    <span className="min-w-0">
-                      <span className="block truncate font-display text-[10px] font-extrabold text-[#292d2a] sm:text-xs">{shop.name}</span>
-                      {shop.city && <span className="mt-0.5 block truncate text-[9px] text-[#647067]">{shop.city}</span>}
-                    </span>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-[#059669] transition-transform group-hover:translate-x-1" aria-hidden="true" />
-                  </span>
-                </Link>
-              ))}
-              {heroShops.length === 0 && (
-                <button type="button" onClick={() => onOpenDirectory()} className="col-span-2 flex min-h-24 items-center justify-center rounded-2xl border border-white/80 bg-white/90 text-[#065f46]">
-                  <Store className="h-8 w-8" aria-hidden="true" />
-                </button>
-              )}
-            </div>
+            <PublicCampaignCarousel onOpenShop={onOpenShop} eligible={campaignEligible} placement="billboard" />
           </MotionReveal>
         </div>
       </section>
       )}
+
+      {!discoveryPage && !isShopDirectoryPage && <PublicPartnerCarousel />}
 
       {!discoveryPage && !isShopDirectoryPage && (isLoading || categories.length > 0) && <section className="mx-auto w-full max-w-[1280px] px-5 pb-4 sm:px-8 sm:pb-6 lg:px-10" aria-labelledby="home-categories-title">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
@@ -366,56 +322,74 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         </div>}
       </section>}
 
-      {!discoveryPage && !isShopDirectoryPage && <PublicCampaignCarousel onOpenShop={onOpenShop} eligible={campaignEligible} placement="billboard" />}
-
-      {!discoveryPage && !isShopDirectoryPage && <section className="mx-auto grid w-full max-w-[1280px] gap-6 px-5 pb-6 pt-3 sm:px-8 sm:pb-8 lg:grid-cols-[1.2fr_.8fr] lg:gap-8 lg:px-10" aria-label="Boutiques à la une et promotions">
-        <section aria-labelledby="home-shops-title">
-          <div className="mb-3 flex items-end justify-between gap-3">
+      {!discoveryPage && !isShopDirectoryPage && <section className="mx-auto w-full max-w-[1280px] px-5 pb-6 pt-3 sm:px-8 sm:pb-8 lg:px-10" aria-labelledby="home-shops-title">
+        <div className="overflow-hidden rounded-[26px] border border-[#e7dfd3] bg-gradient-to-br from-[#f6faf6] via-white to-[#fff8ef] p-4 shadow-[0_8px_28px_rgba(20,40,30,.06)] sm:rounded-[32px] sm:p-6">
+          <div className="mb-4 flex items-end justify-between gap-3">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#c2410c]">Adresses sélectionnées</p>
-              <h2 id="home-shops-title" className="mt-1 font-display text-xl font-extrabold tracking-tight sm:text-2xl">Boutiques à la une</h2>
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#c2410c]">Les commerces de proximité</p>
+              <h2 id="home-shops-title" className="mt-1 font-display text-xl font-extrabold tracking-tight text-[#183f32] sm:text-2xl">Boutiques à la une</h2>
             </div>
-            <button type="button" onClick={() => onOpenDirectory()} className="inline-flex min-h-10 shrink-0 items-center gap-1 text-[11px] font-bold text-[#065f46] hover:text-[#047857] sm:text-sm">
-              Toutes <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </button>
+            <div className="flex items-center gap-3">
+              <Link to="/promotions" className="hidden min-h-10 items-center gap-1.5 rounded-full bg-[#fff0df] px-4 text-xs font-extrabold text-[#a53a1d] transition hover:bg-[#fbe3d6] sm:inline-flex">
+                <BadgePercent className="h-4 w-4" aria-hidden="true" /> Offres du moment
+              </Link>
+              <button type="button" onClick={() => onOpenDirectory()} className="inline-flex min-h-10 shrink-0 items-center gap-1 text-[11px] font-bold text-[#065f46] hover:text-[#047857] sm:text-sm">
+                Toutes <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
           </div>
           {isLoading ? (
-            <div role="status" aria-label="Chargement des boutiques à la une" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              {[0, 1, 2].map((item) => <div key={item} className="h-[92px] animate-pulse rounded-2xl bg-[#e9e4da]" />)}
+            <div role="status" aria-label="Chargement des boutiques à la une" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {[0, 1, 2, 3].map((item) => <div key={item} className="h-[220px] animate-pulse rounded-2xl bg-[#e9e4da]" />)}
             </div>
           ) : homeShops.length === 0 ? (
             <div className="flex min-h-28 items-center justify-center rounded-2xl border border-dashed border-[#d8d0c3] bg-white px-5 text-center text-sm text-[#647067]">Les boutiques locales seront bientôt à découvrir ici.</div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0 sm:gap-4 lg:grid-cols-4">
               {homeShops.map((shop, index) => (
-                <MotionReveal key={shop.slug} delay={index * 0.07}>
-                <Link to={`/${encodeURIComponent(shop.slug)}`} className="motion-interactive group relative flex min-h-[94px] min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white p-2.5 shadow-[0_2px_12px_rgba(20,40,30,.05)] transition hover:-translate-y-0.5 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.09)]">
-                  <div className="relative h-[76px] w-[92px] shrink-0 overflow-hidden rounded-xl bg-[#edf5f0]">
-                    <img src={getShopImage(shop)} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" onError={(event) => { event.currentTarget.hidden = true; }} />
-                    {(shop.is_sponsored || shop.is_featured) && <span className="absolute left-1.5 top-1.5 rounded-full bg-[#fffdf8] px-2 py-0.5 text-[8px] font-black uppercase text-[#8f351d]">À la une</span>}
-                  </div>
-                  <div className="min-w-0 flex-1 py-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-[#c2410c]">{categoryLabel(shop.category)}</span>
-                    <h3 className="mt-0.5 line-clamp-1 font-display text-sm font-extrabold text-[#292d2a] sm:text-base">{shop.name}</h3>
-                    {shop.city && <p className="mt-1 flex items-center gap-1 truncate text-xs text-[#647067]"><MapPin className="h-3 w-3 shrink-0 text-[#059669]" aria-hidden="true" />{shop.city}</p>}
-                  </div>
-                  <ArrowRight className="mr-1 h-4 w-4 shrink-0 text-[#059669] transition-transform group-hover:translate-x-1" aria-hidden="true" />
-                </Link>
+                <MotionReveal key={shop.slug} delay={index * 0.04} className="min-w-[78%] snap-start sm:min-w-0">
+                  <Link to={`/${encodeURIComponent(shop.slug)}`} className="motion-interactive group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white shadow-[0_2px_12px_rgba(20,40,30,.05)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.1)]">
+                    <span className="relative block aspect-[1.45] overflow-hidden bg-[#e9f5ee]">
+                      <img src={getShopImage(shop)} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" onError={(event) => { event.currentTarget.hidden = true; }} />
+                      <span className="absolute left-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-[8px] font-black uppercase tracking-wide text-[#8f351d] sm:text-[9px]">{categoryLabel(shop.category)}</span>
+                      {(shop.is_sponsored || shop.is_featured) && <span className="absolute right-2 top-2 rounded-full bg-[#065f46]/95 px-2.5 py-1 text-[8px] font-black uppercase tracking-wide text-white">À la une</span>}
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col p-3 sm:p-3.5">
+                      <span className="block truncate font-display text-sm font-extrabold text-[#292d2a] sm:text-base">{shop.name}</span>
+                      {shop.city && <span className="mt-1 flex items-center gap-1 truncate text-[10px] text-[#647067] sm:text-xs"><MapPin className="h-3 w-3 shrink-0 text-[#059669]" aria-hidden="true" />{shop.city}</span>}
+                      {shop.products_preview && shop.products_preview.length > 0 && <span className="mt-3 flex min-w-0 items-center gap-2 border-t border-[#eee8de] pt-2.5">
+                        {shop.products_preview.slice(0, 2).map((product) => (
+                          <span key={product.id} className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <img src={getProductImageForDisplay(product.image_url, shop.category)} alt="" loading="lazy" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+                            <span className="min-w-0">
+                              <span className="block truncate text-[9px] font-semibold text-[#47534b]">{product.title}</span>
+                              <span className="block truncate text-[9px] font-extrabold text-[#065f46]">{formatFCFA(product.price)}</span>
+                            </span>
+                          </span>
+                        ))}
+                      </span>}
+                      <span className="mt-auto flex items-center justify-between gap-2 pt-3 text-[9px] font-semibold text-[#647067] sm:text-[10px]">
+                        <span className="truncate">Retrait ou livraison à convenir</span>
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[#059669] transition-transform group-hover:translate-x-1" aria-hidden="true" />
+                      </span>
+                    </span>
+                  </Link>
                 </MotionReveal>
               ))}
             </div>
           )}
-        </section>
-
-        <MotionReveal delay={0.12}>
-        <Link to="/promotions" className="motion-interactive group relative flex min-h-44 flex-col justify-between overflow-hidden rounded-2xl bg-[#fff0df] p-5 text-left transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(150,70,30,.12)] sm:p-6">
+        </div>
+        <MotionReveal delay={0.12} className="mt-3">
+        <Link to="/promotions" className="motion-interactive group relative flex min-h-[92px] items-center justify-between gap-4 overflow-hidden rounded-2xl bg-[#fff0df] px-4 py-4 text-left transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(150,70,30,.12)] sm:px-6">
           <span aria-hidden="true" className="absolute -right-7 -top-8 h-36 w-36 rounded-full border-[18px] border-[#f5d3b5]" />
-          <span className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-[#c2410c] text-white"><BadgePercent className="h-5 w-5" aria-hidden="true" /></span>
-          <span className="relative mt-5">
+          <span className="relative flex min-w-0 items-center gap-3 sm:gap-4">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#c2410c] text-white"><BadgePercent className="h-5 w-5" aria-hidden="true" /></span>
+            <span className="min-w-0">
             <span className="block text-xs font-black uppercase tracking-[0.12em] text-[#a53a1d]">Promotions des boutiques</span>
-            <span className="mt-1 block font-display text-xl font-extrabold leading-tight text-[#292d2a]">Les prix réduits, sans chercher partout.</span>
-            <span className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-[#a53a1d]">Voir les promotions <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden="true" /></span>
+            <span className="mt-1 block font-display text-base font-extrabold leading-tight text-[#292d2a] sm:text-lg">Les offres actives, réunies au même endroit.</span>
+            </span>
           </span>
+          <span className="relative inline-flex shrink-0 items-center gap-1 text-xs font-bold text-[#a53a1d] sm:text-sm">Voir les offres <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden="true" /></span>
         </Link>
         </MotionReveal>
       </section>}

@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom';
 import type { Product } from '../types';
 import { formatFCFA } from '../utils/format';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
-import { getActiveProductPrice } from '../utils/productPricing';
 
 interface PublicCampaign {
   id: string;
@@ -25,8 +24,7 @@ interface PublicCampaign {
 interface PublicCampaignCarouselProps {
   onOpenShop: (slug: string) => void;
   eligible: boolean;
-  placement: 'billboard' | 'hero' | 'tiles' | 'feed';
-  onCampaignVisibilityChange?: (visible: boolean) => void;
+  placement: 'billboard' | 'tiles' | 'feed';
 }
 
 const CONSENT_KEY = 'matable-ad-measurement-consent-v1';
@@ -40,7 +38,7 @@ function getVisitorId(): string {
   return created;
 }
 
-export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ onOpenShop, eligible, placement, onCampaignVisibilityChange }) => {
+export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ onOpenShop, eligible, placement }) => {
   const [campaigns, setCampaigns] = useState<PublicCampaign[]>([]);
   const [campaignsLoaded, setCampaignsLoaded] = useState(false);
   const [measurementConsent, setMeasurementConsent] = useState(false);
@@ -80,18 +78,18 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
   const bannerCampaigns = campaigns.filter((candidate) => candidate.kind === 'banner');
   const bannerCampaign = bannerCampaigns[bannerIndex % Math.max(bannerCampaigns.length, 1)];
   const productCampaigns = campaigns.filter((candidate) => candidate.kind === 'product');
-  const heroCampaign = productCampaigns[0];
-  const tileCampaigns = productCampaigns.slice(1, 4);
+  const tileCampaigns = productCampaigns.slice(0, 4);
   const feedCampaign = productCampaigns[4];
   const campaign = placement === 'billboard' ? bannerCampaign
-    : placement === 'hero' ? heroCampaign
     : placement === 'tiles' ? tileCampaigns[0]
       : feedCampaign;
-  const visibleCampaigns = placement === 'tiles' ? tileCampaigns : campaign ? [campaign] : [];
-
-  useEffect(() => {
-    if (placement === 'hero') onCampaignVisibilityChange?.(Boolean(heroCampaign));
-  }, [placement, heroCampaign?.id, onCampaignVisibilityChange]);
+  const billboardCampaigns = Array.from(
+    { length: Math.min(3, bannerCampaigns.length) },
+    (_, index) => bannerCampaigns[(bannerIndex + index) % bannerCampaigns.length],
+  );
+  const visibleCampaigns = placement === 'billboard'
+    ? billboardCampaigns
+    : placement === 'tiles' ? tileCampaigns : campaign ? [campaign] : [];
 
   const sendEvent = async (eventType: 'impression' | 'click', targetCampaign = campaign) => {
     if (!targetCampaign || !measurementConsent) return;
@@ -127,6 +125,14 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
     }
   };
 
+  const openPartnerRequest = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const requestForm = document.getElementById('public-partner-request');
+    if (!(requestForm instanceof HTMLDetailsElement)) return;
+    event.preventDefault();
+    requestForm.open = true;
+    requestForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   useEffect(() => {
     if (placement !== 'billboard' || bannerCampaigns.length < 2
       || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -154,8 +160,8 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
 
   useEffect(() => {
     const element = campaignElement.current;
-    const observedCampaigns = placement === 'tiles'
-      ? tileCampaigns
+    const observedCampaigns = placement === 'tiles' || placement === 'billboard'
+      ? visibleCampaigns
       : campaign ? [campaign] : [];
     if (!eligible || !measurementConsent || observedCampaigns.length === 0 || !element
       || typeof IntersectionObserver === 'undefined') return;
@@ -163,7 +169,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         if (!entry.isIntersecting || entry.intersectionRatio < 0.5) continue;
-        const target = placement === 'tiles'
+        const target = placement === 'tiles' || placement === 'billboard'
           ? observedCampaigns.find((candidate) => candidate.id === (entry.target as HTMLElement).dataset.adCampaignId)
           : campaign;
         if (!target || recordedImpressions.current.has(target.id)) continue;
@@ -171,24 +177,36 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
         void sendEvent('impression', target);
       }
     }, { threshold: [0.5] });
-    const elements = placement === 'tiles'
+    const elements = placement === 'tiles' || placement === 'billboard'
       ? Array.from(element.querySelectorAll<HTMLElement>('[data-ad-campaign-id]'))
       : [element];
     elements.forEach((item) => observer.observe(item));
     return () => observer.disconnect();
-  }, [eligible, measurementConsent, campaign?.id, placement, tileCampaigns.length]);
+  }, [eligible, measurementConsent, campaign?.id, placement, visibleCampaigns.map((item) => item.id).join(',')]);
 
+  if (placement === 'billboard' && (!eligible || !campaign)) {
+    return (
+      <aside className="flex min-h-[230px] flex-col justify-between overflow-hidden rounded-[26px] border border-[#d6e5dc] bg-[radial-gradient(circle_at_85%_15%,rgba(249,115,22,.15),transparent_35%),linear-gradient(135deg,#f4faf6,#fffdf8_58%,#e6f2e9)] p-5 shadow-[0_8px_28px_rgba(20,40,30,.08)] sm:min-h-[300px] sm:rounded-[32px] sm:p-8 lg:min-h-[350px] lg:p-9" aria-label="Espace partenaires">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#8f351d] shadow-sm">
+            <Megaphone className="h-3.5 w-3.5" aria-hidden="true" /> Espace partenaires
+          </span>
+          <h2 className="mt-5 max-w-xl font-display text-2xl font-black leading-tight text-[#065f46] sm:mt-7 sm:text-3xl lg:text-4xl">
+            Votre marque au cœur du commerce local.
+          </h2>
+          <p className="mt-3 max-w-lg text-sm leading-6 text-[#47534b]">
+            Une vitrine premium pour rencontrer les boutiques et les clients de Côte d’Ivoire.
+          </p>
+        </div>
+        <button type="button" onClick={openPartnerRequest} className="mt-5 inline-flex min-h-11 w-fit items-center gap-2 rounded-full bg-[#f97316] px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-[#ea580c]">
+          Proposer un partenariat <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </aside>
+    );
+  }
   if (!eligible || (!campaign && !campaignsLoaded)) return null;
   if (!campaign && placement !== 'feed') return null;
   if (!campaign && placement === 'feed') {
-    const openPartnerRequest = (event: React.MouseEvent<HTMLButtonElement>) => {
-      const requestForm = document.getElementById('public-partner-request');
-      if (!(requestForm instanceof HTMLDetailsElement)) return;
-      event.preventDefault();
-      requestForm.open = true;
-      requestForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    };
-
     return (
       <li className="col-span-2 list-none sm:col-span-3 lg:col-span-4">
       <aside className="overflow-hidden rounded-3xl border border-dashed border-[#b8d3c8] bg-gradient-to-r from-[#f5faf6] to-white shadow-sm" aria-label="Espace publicitaire">
@@ -213,37 +231,6 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
         </div>
       </aside>
       </li>
-    );
-  }
-  if (placement === 'hero' && campaign) {
-    const product = campaign.product;
-    return (
-      <button
-        ref={(element) => { campaignElement.current = element; }}
-        data-ad-campaign-id={campaign.id}
-        type="button"
-        onClick={() => { void sendEvent('click', campaign); onOpenShop(campaign.shop.slug); }}
-        className="group relative col-span-2 flex min-h-[150px] min-w-0 items-end overflow-hidden rounded-2xl border border-white/80 bg-[#17332c] p-4 text-left shadow-[0_10px_26px_rgba(20,40,30,.16)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_32px_rgba(20,40,30,.22)] sm:min-h-[180px] sm:rounded-[22px] sm:p-5"
-      >
-        <img
-          src={product?.image_url || campaign.shop.image_url}
-          alt=""
-          loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
-        />
-        <span aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-[#102d25]/90 via-[#102d25]/58 to-[#102d25]/10" />
-        <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-[#8f351d] sm:left-4 sm:top-4 sm:text-[10px]">
-          <Megaphone className="h-3 w-3" aria-hidden="true" /> Sponsorisé
-        </span>
-        <span className="absolute right-3 top-3 rounded-full bg-[#fff]/90 px-2.5 py-1 text-[9px] font-bold text-[#315548] sm:right-4 sm:top-4 sm:text-[10px]">
-          {campaign.shop.category ? getCategoryDefaults(campaign.shop.category).label : 'Commerce local'}
-        </span>
-        <span className="relative block max-w-[85%] text-white sm:max-w-[75%]">
-          <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-white/80 sm:text-xs">À la une · {campaign.shop.name}{campaign.shop.city ? ` · ${campaign.shop.city}` : ''}</span>
-          <span className="mt-1 block line-clamp-2 font-display text-lg font-black leading-tight sm:text-2xl">{campaign.headline}</span>
-          {product && <span className="mt-2 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-[#065f46]">{formatFCFA(getActiveProductPrice(product))} {getActiveProductPrice(product) < product.price && <span className="font-semibold text-slate-400 line-through">{formatFCFA(product.price)}</span>}<ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" /></span>}
-        </span>
-      </button>
     );
   }
   if (placement === 'tiles') {
@@ -283,40 +270,51 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
   }
 
   if (placement === 'billboard' && campaign) {
+    const renderBanner = (item: PublicCampaign, featured: boolean) => (
+      <button
+        key={item.id}
+        data-ad-campaign-id={item.id}
+        type="button"
+        onClick={() => { void sendEvent('click', item); onOpenShop(item.shop.slug); }}
+        className={`group relative flex min-w-0 items-end overflow-hidden rounded-2xl bg-[#17332c] text-left shadow-[0_8px_24px_rgba(20,40,30,.12)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(20,40,30,.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2 ${featured ? 'min-h-[255px] p-5 sm:min-h-[300px] sm:rounded-[26px] sm:p-7 lg:min-h-[350px] lg:rounded-[30px] lg:p-8' : 'min-h-[150px] p-4 sm:min-h-[170px] sm:p-5 lg:min-h-0'}`}
+      >
+        <img src={item.shop.image_url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
+        <span aria-hidden="true" className={`absolute inset-0 ${featured ? 'bg-gradient-to-r from-[#102d25]/90 via-[#102d25]/55 to-[#102d25]/10' : 'bg-gradient-to-t from-[#102d25]/90 via-[#102d25]/35 to-transparent'}`} />
+        <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-[#8f351d] sm:left-4 sm:top-4">
+          <Megaphone className="h-3 w-3" aria-hidden="true" /> Sponsorisé
+        </span>
+        <span className={`relative block min-w-0 text-white ${featured ? 'max-w-[90%] sm:max-w-[82%]' : 'w-full'}`}>
+          <span className="block truncate text-[9px] font-bold uppercase tracking-[0.12em] text-white/80 sm:text-[10px]">{item.shop.name}{item.shop.city ? ` · ${item.shop.city}` : ''}</span>
+          <span className={`mt-1 block font-display font-black leading-tight ${featured ? 'line-clamp-2 text-xl sm:text-2xl lg:text-3xl' : 'line-clamp-2 text-base sm:text-lg'}`}>{item.headline}</span>
+          {featured && item.body && <span className="mt-2 line-clamp-2 block max-w-lg text-xs leading-5 text-white/90 sm:text-sm">{item.body}</span>}
+          <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-[10px] font-extrabold text-[#065f46] sm:text-xs">Découvrir <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
+        </span>
+      </button>
+    );
+
     return (
-      <section ref={(element) => { campaignElement.current = element; }} className="relative mx-auto w-full max-w-[1280px] px-4 pb-4 sm:px-8 sm:pb-6 lg:px-10" aria-label="Campagnes sponsorisées">
-        <button type="button" onClick={() => { void sendEvent('click'); onOpenShop(campaign.shop.slug); }} className="group relative flex min-h-[230px] w-full items-end overflow-hidden rounded-[26px] bg-[#17332c] p-5 pb-16 text-left shadow-[0_12px_32px_rgba(20,40,30,.14)] sm:min-h-[300px] sm:rounded-[32px] sm:p-8 sm:pb-20 lg:min-h-[350px] lg:p-10 lg:pb-20">
-          <img src={campaign.shop.image_url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.02]" />
-          <span className="absolute inset-0 bg-gradient-to-r from-[#102d25]/85 via-[#102d25]/35 to-transparent" />
-          <span className="absolute left-5 top-5 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#8f351d] sm:left-7 sm:top-7">
-            <Megaphone className="h-3.5 w-3.5" aria-hidden="true" /> Sponsorisé
-          </span>
-          <span className="absolute right-5 top-5 rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-bold text-[#315548] sm:right-7 sm:top-7">
-            {campaign.shop.category ? getCategoryDefaults(campaign.shop.category).label : 'Commerce local'}{campaign.shop.city ? ` · ${campaign.shop.city}` : ''}
-          </span>
-          <span className="relative block max-w-2xl text-white">
-            <span className="block text-xs font-bold uppercase tracking-[0.14em] text-white/80">Mise en avant par {campaign.shop.name}</span>
-            <span className="mt-2 block font-display text-3xl font-black leading-tight sm:text-4xl lg:text-5xl">{campaign.headline}</span>
-            <span className="mt-2 block max-w-xl text-sm leading-6 text-white/90 sm:text-base">{campaign.body}</span>
-            <span className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-white px-4 text-xs font-extrabold text-[#065f46]">Découvrir <ArrowUpRight className="h-4 w-4" aria-hidden="true" /></span>
-          </span>
-        </button>
+      <section ref={(element) => { campaignElement.current = element; }} className="min-w-0" aria-label="Campagnes sponsorisées">
+        <div className={`grid gap-3 ${visibleCampaigns.length > 1 ? 'lg:grid-cols-[1.55fr_1fr]' : ''}`}>
+          {visibleCampaigns[0] && renderBanner(visibleCampaigns[0], true)}
+          {visibleCampaigns.length > 1 && <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+            {visibleCampaigns.slice(1).map((item) => renderBanner(item, false))}
+          </div>}
+        </div>
         {bannerCampaigns.length > 1 && (
-          <div className="absolute bottom-8 right-7 flex items-center gap-2 sm:bottom-10 sm:right-12" aria-label="Naviguer entre les campagnes">
-            <button type="button" aria-label="Campagne précédente" onClick={() => setBannerIndex((index) => (index - 1 + bannerCampaigns.length) % bannerCampaigns.length)} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-[#292d2a] shadow-sm transition hover:bg-white">
+          <div className="mt-2 flex items-center justify-end gap-2" aria-label="Naviguer entre les campagnes">
+            <span className="mr-auto text-[10px] font-semibold text-[#647067]" aria-live="polite">Partenaires mis en avant</span>
+            <button type="button" aria-label="Campagne précédente" onClick={() => setBannerIndex((index) => (index - 1 + bannerCampaigns.length) % bannerCampaigns.length)} className="flex h-8 w-8 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8]">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </button>
-            {bannerCampaigns.map((item, index) => (
-              <button key={item.id} type="button" aria-label={`Afficher la campagne ${index + 1}`} aria-current={index === bannerIndex ? 'true' : undefined} onClick={() => setBannerIndex(index)} className={`h-2.5 rounded-full transition-all ${index === bannerIndex ? 'w-6 bg-white' : 'w-2.5 bg-white/55 hover:bg-white/80'}`} />
-            ))}
-            <button type="button" aria-label="Campagne suivante" onClick={() => setBannerIndex((index) => (index + 1) % bannerCampaigns.length)} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-[#292d2a] shadow-sm transition hover:bg-white">
+            <span className="text-[10px] font-semibold text-[#647067]">{bannerIndex + 1} / {bannerCampaigns.length}</span>
+            <button type="button" aria-label="Campagne suivante" onClick={() => setBannerIndex((index) => (index + 1) % bannerCampaigns.length)} className="flex h-8 w-8 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8]">
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
         )}
-        <label className="mt-2 flex items-start gap-2 px-1 text-[11px] leading-4 text-[#647067]">
+        <label className="mt-2 flex items-start gap-2 text-[10px] leading-4 text-[#647067]">
           <input type="checkbox" checked={measurementConsent} onChange={(event) => acceptMeasurement(event.target.checked)} className="mt-0.5 accent-[#047857]" />
-          <span>J’accepte la mesure anonymisée des impressions et clics publicitaires.</span>
+          <span>J’accepte la mesure anonymisée des impressions et clics publicitaires. Elle reste désactivée sans votre accord.</span>
         </label>
       </section>
     );
