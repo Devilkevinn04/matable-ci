@@ -78,7 +78,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         aria-label="Rechercher un produit, une boutique ou une catégorie"
         value={searchQuery}
         onChange={(event) => setSearchQuery(event.target.value)}
-        placeholder="Rechercher un produit, une boutique, une catégorie…"
+        placeholder="Boutique, produit, quartier…"
         className="min-h-9 min-w-0 flex-1 border-0 bg-transparent text-xs text-[#292d2a] outline-none placeholder:text-[#7b817d] sm:text-sm"
       />
       <button type="submit" aria-label="Rechercher" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#059669] text-white transition hover:bg-[#047857]">
@@ -91,11 +91,11 @@ export const Navigation: React.FC<NavigationProps> = ({
     <header className="sticky top-0 z-50 border-b border-[#e5d9ca] bg-[#FFFFFF]/95 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-2 px-4 py-2.5 sm:gap-3 sm:px-8 sm:py-4">
         <div className="flex min-w-0 items-center gap-3">
-          <Link to="/" aria-label="MaTable.ci, accueil" className="flex items-center gap-2.5 text-left">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#e9f5ee] text-[#059669]"><ShoppingBag className="h-6 w-6" aria-hidden="true" /></span>
-            <span>
-              <span className="block text-xl font-black leading-5 tracking-tight text-[#059669]">MaTable<span className="text-[#F97316]">.ci</span></span>
-              <span className="hidden text-[9px] font-semibold tracking-[0.06em] text-[#647067] sm:block">Vos commerces, ici</span>
+          <Link to="/" aria-label="MaTable.ci, accueil" className="flex min-h-11 items-center gap-2.5 text-left">
+            <img src="/icon-192.svg" alt="" className="h-11 w-11 shrink-0 rounded-[14px] shadow-[0_3px_8px_rgba(6,95,70,.15)]" />
+            <span className="min-w-0">
+              <span className="block whitespace-nowrap text-[19px] font-black leading-5 tracking-[-0.045em] text-[#087f62] sm:text-xl">MaTable<span className="text-[#F97316]">.ci</span></span>
+              <span className="mt-0.5 block text-[9px] font-bold leading-3 tracking-[0.04em] text-[#647067]">Vos commerces, ici</span>
             </span>
           </Link>
         </div>
