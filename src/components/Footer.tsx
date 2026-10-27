@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUpRight, MapPin, Store } from 'lucide-react';
+import { ArrowUpRight, MapPin, ShoppingBag, Store } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface FooterProps {
@@ -19,7 +19,9 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
       <div className="grid gap-9 lg:grid-cols-[1.05fr_1.4fr] lg:gap-16">
         <section aria-labelledby="footer-brand-title" className="max-w-md">
           <Link to="/" aria-label="MaTable.ci, accueil" className="inline-flex items-center gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0ba80] focus-visible:ring-offset-4 focus-visible:ring-offset-[#064e3b]">
-            <img src="/icon-192.svg" alt="" className="h-11 w-11 rounded-[14px]" />
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-[#f0ba80]">
+              <ShoppingBag className="h-6 w-6" aria-hidden="true" />
+            </span>
             <span id="footer-brand-title" className="font-display text-xl font-black tracking-tight">
               MaTable<span className="text-[#f97316]">.ci</span>
             </span>
