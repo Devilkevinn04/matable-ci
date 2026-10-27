@@ -182,7 +182,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
     <section id={promotionsOnly ? undefined : 'decouvertes'} className="mx-auto w-full max-w-[1440px] scroll-mt-24 overflow-hidden py-8 sm:py-12" aria-labelledby="product-feed-title">
       <div className="mx-auto max-w-[1184px] px-5 sm:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+          <MotionReveal>
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#c2410c]">{promotionsOnly ? 'Offres à durée limitée' : 'À parcourir aujourd’hui'}</p>
             <h2 id="product-feed-title" className="mt-1 font-display text-2xl font-extrabold tracking-tight sm:text-3xl">{promotionsOnly ? 'Les offres actives' : 'À découvrir près de chez vous'}</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#647067]">
@@ -194,7 +194,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
                   : 'Les produits les plus consultés et cliqués récemment, tous visiteurs confondus.'
                 : 'Les derniers produits ajoutés aux vitrines publiques.'}
             </p>
-          </div>
+          </MotionReveal>
           {!promotionsOnly && <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end" aria-label="Trier les produits">
             <button type="button" aria-pressed={sort === 'popular'} onClick={() => changeFilter(() => setSort('popular'))} className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-bold transition ${sort === 'popular' ? 'bg-[#065f46] text-white' : 'border border-[#e0d5c6] bg-white text-[#47534b] hover:border-[#047857]'}`}><Flame className="h-4 w-4" aria-hidden="true" />Tendances</button>
             <button type="button" aria-pressed={sort === 'new'} onClick={() => changeFilter(() => setSort('new'))} className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-bold transition ${sort === 'new' ? 'bg-[#065f46] text-white' : 'border border-[#e0d5c6] bg-white text-[#47534b] hover:border-[#047857]'}`}><Sparkles className="h-4 w-4" aria-hidden="true" />Nouveautés</button>

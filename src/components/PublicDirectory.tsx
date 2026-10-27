@@ -59,6 +59,16 @@ const categoryTileColors: Record<string, string> = {
   other: '#eee9df',
 };
 
+const homeTitleWords = [
+  { text: 'Le', accent: false },
+  { text: 'commerce', accent: false },
+  { text: 'local,', accent: false },
+  { text: 'tout', accent: true },
+  { text: 'près', accent: true },
+  { text: 'de', accent: true },
+  { text: 'vous.', accent: true },
+];
+
 export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoading, loadError, onRetry, onOpenShop, onOpenDirectory, discoveryPage, isShopDirectoryPage = false, isPromotionsPage = false }) => {
   const location = useLocation();
   const prefersReducedMotion = useReducedMotion();
@@ -337,20 +347,36 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           <motion.div
             initial={prefersReducedMotion ? false : 'hidden'}
             animate="visible"
-            variants={{ hidden: {}, visible: { transition: { delayChildren: 0.08, staggerChildren: 0.1 } } }}
+            variants={{ hidden: {}, visible: { transition: { delayChildren: 0.08, staggerChildren: 0.12 } } }}
             className="flex min-w-0 flex-col justify-center bg-gradient-to-br from-[#fffdf8] via-[#f8f5ef] to-[#edf5f0] p-5 sm:p-8 lg:p-9"
           >
-            <motion.p variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.42, ease: 'easeOut' } } }} className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#c2410c] sm:text-xs">Le commerce local, simplifié</motion.p>
-            <motion.h1 variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.42, ease: 'easeOut' } } }} className="max-w-[600px] font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.055em] text-[#065f46] sm:text-[48px] lg:text-[58px]">
-              Le commerce local, <span className="text-[#c2410c]">tout près de vous.</span>
+            <motion.p variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }} className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#c2410c] sm:text-xs">Le commerce local, simplifié</motion.p>
+            <motion.h1
+              variants={{ hidden: {}, visible: { transition: { delayChildren: 0.04, staggerChildren: 0.055 } } }}
+              className="max-w-[600px] font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.055em] text-[#065f46] sm:text-[48px] lg:text-[58px]"
+            >
+              {homeTitleWords.map((word, index) => (
+                <React.Fragment key={word.text}>
+                  {index > 0 && ' '}
+                  <motion.span
+                    variants={{
+                      hidden: { opacity: 0, y: 12, filter: 'blur(5px)' },
+                      visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.42, ease: 'easeOut' } },
+                    }}
+                    className={`inline-block ${word.accent ? 'text-[#c2410c]' : ''}`}
+                  >
+                    {word.text}
+                  </motion.span>
+                </React.Fragment>
+              ))}
             </motion.h1>
-            <motion.p variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.42, ease: 'easeOut' } } }} className="mt-3 max-w-[480px] text-sm leading-6 text-[#47534b] sm:text-[15px]">
+            <motion.p variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }} className="mt-3 max-w-[480px] text-sm leading-6 text-[#47534b] sm:text-[15px]">
               Parcourez les boutiques, repérez leurs produits et contactez directement les commerçants de Côte d’Ivoire.
             </motion.p>
-            <motion.div variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.42, ease: 'easeOut' } } }}>
+            <motion.div variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }}>
               {searchForm}
             </motion.div>
-            <motion.div variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.42, ease: 'easeOut' } } }} className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[11px] font-semibold text-[#315548] sm:text-xs">
+            <motion.div variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }} className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[11px] font-semibold text-[#315548] sm:text-xs">
               <span className="inline-flex items-center gap-1.5"><Store className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Boutiques locales</span>
               <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Échange direct</span>
               <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Retrait ou livraison à convenir</span>
@@ -381,10 +407,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
 
       {!discoveryPage && !isShopDirectoryPage && (isLoading || categories.length > 0) && <section className="mx-auto w-full max-w-[1280px] px-5 pb-4 sm:px-8 sm:pb-6 lg:px-10" aria-labelledby="home-categories-title">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <div>
+          <MotionReveal>
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#c2410c]">Explorez par univers</p>
             <h2 id="home-categories-title" className="mt-1 font-display text-xl font-extrabold tracking-tight sm:text-2xl">Les catégories du moment</h2>
-          </div>
+          </MotionReveal>
           <button type="button" onClick={() => onOpenDirectory()} className="inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-[#065f46] hover:text-[#047857]">
             Toutes les boutiques <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -413,10 +439,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       {!discoveryPage && !isShopDirectoryPage && <section className="mx-auto w-full max-w-[1280px] px-5 pb-6 pt-3 sm:px-8 sm:pb-8 lg:px-10" aria-labelledby="home-shops-title">
         <div className="overflow-hidden rounded-[26px] border border-[#e7dfd3] bg-gradient-to-br from-[#f6faf6] via-white to-[#fff8ef] p-4 shadow-[0_8px_28px_rgba(20,40,30,.06)] sm:rounded-[32px] sm:p-6">
           <div className="mb-4 flex items-end justify-between gap-3">
-            <div>
+            <MotionReveal>
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#c2410c]">Les commerces de proximité</p>
               <h2 id="home-shops-title" className="mt-1 font-display text-xl font-extrabold tracking-tight text-[#183f32] sm:text-2xl">Boutiques à la une</h2>
-            </div>
+            </MotionReveal>
             <div className="flex items-center gap-3">
               <Link to="/promotions" className="hidden min-h-10 items-center gap-1.5 rounded-full bg-[#fff0df] px-4 text-xs font-extrabold text-[#a53a1d] transition hover:bg-[#fbe3d6] sm:inline-flex">
                 <BadgePercent className="h-4 w-4" aria-hidden="true" /> Offres du moment
