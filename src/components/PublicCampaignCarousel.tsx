@@ -5,7 +5,7 @@ import type { Product } from '../types';
 import { formatFCFA } from '../utils/format';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
 
-interface PublicCampaign {
+export interface PublicCampaign {
   id: string;
   kind: 'product' | 'banner';
   headline: string;
@@ -25,6 +25,7 @@ interface PublicCampaignCarouselProps {
   onOpenShop: (slug: string) => void;
   eligible: boolean;
   placement: 'billboard' | 'tiles' | 'feed';
+  previewCampaigns?: PublicCampaign[];
 }
 
 const CONSENT_KEY = 'matable-ad-measurement-consent-v1';
@@ -38,15 +39,21 @@ function getVisitorId(): string {
   return created;
 }
 
-export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ onOpenShop, eligible, placement }) => {
-  const [campaigns, setCampaigns] = useState<PublicCampaign[]>([]);
+export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ onOpenShop, eligible, placement, previewCampaigns }) => {
+  const [campaigns, setCampaigns] = useState<PublicCampaign[]>(previewCampaigns || []);
   const [campaignsLoaded, setCampaignsLoaded] = useState(false);
   const [measurementConsent, setMeasurementConsent] = useState(false);
   const [bannerIndex, setBannerIndex] = useState(0);
   const campaignElement = useRef<HTMLElement | null>(null);
   const recordedImpressions = useRef(new Set<string>());
+  const isPreview = previewCampaigns !== undefined;
 
   useEffect(() => {
+    if (isPreview) {
+      setCampaigns(previewCampaigns);
+      setCampaignsLoaded(true);
+      return undefined;
+    }
     if (!eligible) {
       setCampaigns([]);
       setCampaignsLoaded(false);
@@ -73,7 +80,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
       console.error('Unable to read advertising measurement preference.', error);
     }
     return () => { cancelled = true; };
-  }, [eligible]);
+  }, [eligible, isPreview, previewCampaigns]);
 
   const bannerCampaigns = campaigns.filter((candidate) => candidate.kind === 'banner');
   const bannerCampaign = bannerCampaigns[bannerIndex % Math.max(bannerCampaigns.length, 1)];
@@ -92,7 +99,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
     : placement === 'tiles' ? tileCampaigns : campaign ? [campaign] : [];
 
   const sendEvent = async (eventType: 'impression' | 'click', targetCampaign = campaign) => {
-    if (!targetCampaign || !measurementConsent) return;
+    if (isPreview || !targetCampaign || !measurementConsent) return;
     try {
       const visitorId = getVisitorId();
       const response = await fetch('/api/advertising/events', {
@@ -163,7 +170,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
     const observedCampaigns = placement === 'tiles' || placement === 'billboard'
       ? visibleCampaigns
       : campaign ? [campaign] : [];
-    if (!eligible || !measurementConsent || observedCampaigns.length === 0 || !element
+    if (isPreview || !eligible || !measurementConsent || observedCampaigns.length === 0 || !element
       || typeof IntersectionObserver === 'undefined') return;
 
     const observer = new IntersectionObserver((entries) => {
@@ -182,9 +189,9 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
       : [element];
     elements.forEach((item) => observer.observe(item));
     return () => observer.disconnect();
-  }, [eligible, measurementConsent, campaign?.id, placement, visibleCampaigns.map((item) => item.id).join(',')]);
+  }, [eligible, isPreview, measurementConsent, campaign?.id, placement, visibleCampaigns.map((item) => item.id).join(',')]);
 
-  if (placement === 'billboard' && (!eligible || !campaign)) {
+  if (placement === 'billboard' && !campaign && (!eligible || campaignsLoaded)) {
     return (
       <aside className="flex min-h-[230px] flex-col justify-between overflow-hidden rounded-[26px] border border-[#d6e5dc] bg-[radial-gradient(circle_at_85%_15%,rgba(249,115,22,.15),transparent_35%),linear-gradient(135deg,#f4faf6,#fffdf8_58%,#e6f2e9)] p-5 shadow-[0_8px_28px_rgba(20,40,30,.08)] sm:min-h-[300px] sm:rounded-[32px] sm:p-8 lg:min-h-[350px] lg:p-9" aria-label="Espace partenaires">
         <div>
@@ -204,7 +211,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
       </aside>
     );
   }
-  if (!eligible || (!campaign && !campaignsLoaded)) return null;
+  if ((!eligible && !isPreview) || (!campaign && !campaignsLoaded)) return null;
   if (!campaign && placement !== 'feed') return null;
   if (!campaign && placement === 'feed') {
     return (

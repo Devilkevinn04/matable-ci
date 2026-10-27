@@ -6,8 +6,8 @@ import { getCategoryDefaults, getProductImageForDisplay, isShopCategory, normali
 import { shopMatchesDirectorySearch } from '../utils/directorySearch';
 import { getPublicDiscoveryPages, toDiscoveryCitySlug, type DiscoveryPage } from '../utils/discoverySeo';
 import { ProductNewsFeed } from './ProductNewsFeed';
-import { PublicCampaignCarousel } from './PublicCampaignCarousel';
-import { PublicPartnerCarousel } from './PublicPartnerCarousel';
+import { PublicCampaignCarousel, type PublicCampaign } from './PublicCampaignCarousel';
+import { PublicPartnerCarousel, type PublicPermanentPartner } from './PublicPartnerCarousel';
 import { formatFCFA } from '../utils/format';
 
 interface DirectoryShop {
@@ -83,6 +83,77 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
   const homeShops = [...shops]
     .sort((left, right) => Number(Boolean(right.is_sponsored || right.is_featured)) - Number(Boolean(left.is_sponsored || left.is_featured)))
     .slice(0, 8);
+  const isLocalAdvertisingDemo = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true
+    && new URLSearchParams(location.search).get('demo') === '1'
+    && !discoveryPage && !isShopDirectoryPage;
+  const demoContent = useMemo(() => {
+    if (!isLocalAdvertisingDemo) return undefined;
+    const shuffled = <T,>(items: T[]) => {
+      const result = [...items];
+      for (let index = result.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+      }
+      return result;
+    };
+    const getPreviewShopImage = (shop: DirectoryShop) => normalizeCustomBannerImage(shop.theme_config?.custom_banner_url, shop.category)
+      || (shop.products_preview?.[0]
+        ? getProductImageForDisplay(shop.products_preview[0].image_url, shop.category)
+        : getCategoryDefaults(shop.category).bannerPlaceholderImageUrl);
+    const availableShops = shuffled(shops).slice(0, 8);
+    const bannerCampaigns: PublicCampaign[] = availableShops.slice(0, 3).map((shop, index) => ({
+      id: `local-demo-banner-${shop.slug}-${index}`,
+      kind: 'banner',
+      headline: [
+        'Les bonnes adresses de votre quartier',
+        'Le savoir-faire local à découvrir',
+        'Des talents proches de vous',
+      ][index],
+      body: `Découvrez ${shop.name} et ses produits disponibles à ${shop.city || 'Côte d’Ivoire'}.`,
+      event_token: 'local-demo-only',
+      shop: {
+        name: shop.name,
+        slug: shop.slug,
+        image_url: getPreviewShopImage(shop),
+        category: shop.category,
+        city: shop.city,
+      },
+    }));
+    const products = shuffled(availableShops.flatMap((shop) =>
+      (shop.products_preview || []).map((product) => ({ shop, product })),
+    )).slice(0, 4);
+    const productCampaigns: PublicCampaign[] = products.map(({ shop, product }, index) => ({
+      id: `local-demo-product-${product.id}-${index}`,
+      kind: 'product',
+      headline: product.title || 'Produit local à découvrir',
+      body: `Une sélection de ${shop.name}, boutique locale à ${shop.city || 'Côte d’Ivoire'}.`,
+      event_token: 'local-demo-only',
+      shop: {
+        name: shop.name,
+        slug: shop.slug,
+        image_url: getPreviewShopImage(shop),
+        category: shop.category,
+        city: shop.city,
+      },
+      product: {
+        id: product.id,
+        title: product.title,
+        price: product.price,
+        sale_price: null,
+        sale_starts_at: null,
+        sale_ends_at: null,
+        image_url: product.image_url,
+        stock: 1,
+      },
+    }));
+    const demoPartners: PublicPermanentPartner[] = shuffled([
+      { id: 'local-demo-partner-koro', name: 'KÔRÔ', descriptor: 'Artisanat & création', headline: 'Les talents d’ici rayonnent.', logo_url: null, destination_url: null },
+      { id: 'local-demo-partner-naya', name: 'NAYA', descriptor: 'Solutions de paiement', headline: 'Le commerce avance avec vous.', logo_url: null, destination_url: null },
+      { id: 'local-demo-partner-terre', name: 'TERRE D’ICI', descriptor: 'Produits du terroir', headline: 'Le meilleur de nos terroirs.', logo_url: null, destination_url: null },
+      { id: 'local-demo-partner-civ', name: 'CÔTE D’IVOIRE', descriptor: 'Partenaire institutionnel', headline: 'Ensemble, faisons grandir nos commerces.', logo_url: null, destination_url: null },
+    ]);
+    return { campaigns: [...bannerCampaigns, ...productCampaigns], partners: demoPartners };
+  }, [shops, isLocalAdvertisingDemo]);
   const categoryCounts = new Map<string, number>();
   for (const shop of shops) {
     if (shop.category) categoryCounts.set(shop.category, (categoryCounts.get(shop.category) || 0) + 1);
@@ -283,13 +354,16 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               </span>
               <span className="text-[9px] font-bold uppercase tracking-wide text-[#647067] sm:text-[10px]">Sponsors & partenaires</span>
             </div>
-            <PublicCampaignCarousel onOpenShop={onOpenShop} eligible={campaignEligible} placement="billboard" />
+            <PublicCampaignCarousel onOpenShop={onOpenShop} eligible={campaignEligible} placement="billboard" previewCampaigns={demoContent?.campaigns} />
           </MotionReveal>
         </div>
       </section>
       )}
 
-      {!discoveryPage && !isShopDirectoryPage && <PublicPartnerCarousel />}
+      {demoContent && <aside className="mx-auto mt-3 w-[calc(100%-2rem)] max-w-[1200px] rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-semibold leading-5 text-amber-950 sm:text-sm" role="status">
+        Mode démo local : campagnes et partenaires fictifs, sélectionnés aléatoirement pour cet aperçu. Aucun événement publicitaire n’est envoyé et aucune donnée n’est enregistrée.
+      </aside>}
+      {!discoveryPage && !isShopDirectoryPage && <PublicPartnerCarousel previewPartners={demoContent?.partners} />}
 
       {!discoveryPage && !isShopDirectoryPage && (isLoading || categories.length > 0) && <section className="mx-auto w-full max-w-[1280px] px-5 pb-4 sm:px-8 sm:pb-6 lg:px-10" aria-labelledby="home-categories-title">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
@@ -394,7 +468,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         </MotionReveal>
       </section>}
 
-      {!discoveryPage && !isShopDirectoryPage && <PublicCampaignCarousel onOpenShop={onOpenShop} eligible={campaignEligible} placement="tiles" />}
+      {!discoveryPage && !isShopDirectoryPage && <PublicCampaignCarousel onOpenShop={onOpenShop} eligible={campaignEligible} placement="tiles" previewCampaigns={demoContent?.campaigns} />}
 
       {!discoveryPage && !isShopDirectoryPage && <ProductNewsFeed onOpenShop={onOpenShop} categories={categories} onCampaignEligibilityChange={setCampaignEligible} />}
 
