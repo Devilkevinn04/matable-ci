@@ -43,9 +43,6 @@ interface PermanentPartner {
   name: string;
   descriptor: string;
   headline: string;
-  logo_url: string | null;
-  destination_url: string | null;
-  sort_order: number;
   is_active: boolean | number;
 }
 
@@ -86,7 +83,6 @@ export const AdminHomepageMarketing: React.FC = () => {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const [startsAt, setStartsAt] = useState<Record<string, string>>({});
 
   const loadData = useCallback(async () => {
     const [betaResponse, campaignsResponse, requestsResponse, partnersResponse] = await Promise.all([
@@ -148,68 +144,6 @@ export const AdminHomepageMarketing: React.FC = () => {
     }
   };
 
-  const createPermanentPartner = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const values = new FormData(form);
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      const response = await fetch('/api/admin/advertising/partners', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: values.get('partner_name'),
-          descriptor: values.get('partner_descriptor'),
-          headline: values.get('partner_headline'),
-          logo_url: values.get('partner_logo_url'),
-          destination_url: values.get('partner_destination_url'),
-          sort_order: Number(values.get('partner_sort_order') || 0),
-        }),
-      });
-      const payload = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(payload.error || 'Impossible de créer le partenaire.');
-      form.reset();
-      setNotice('Partenaire ajouté en pause. Activez-le uniquement après validation de l’accord et des visuels.');
-      await loadData();
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Impossible de créer le partenaire.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const updatePermanentPartner = async (event: React.FormEvent<HTMLFormElement>, partnerId: string) => {
-    event.preventDefault();
-    const values = new FormData(event.currentTarget);
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      const response = await fetch(`/api/admin/advertising/partners/${encodeURIComponent(partnerId)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: values.get('partner_name'),
-          descriptor: values.get('partner_descriptor'),
-          headline: values.get('partner_headline'),
-          logo_url: values.get('partner_logo_url'),
-          destination_url: values.get('partner_destination_url'),
-          sort_order: Number(values.get('partner_sort_order') || 0),
-        }),
-      });
-      const payload = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(payload.error || 'Impossible de modifier le partenaire.');
-      setNotice('Partenaire permanent mis à jour.');
-      await loadData();
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Impossible de modifier le partenaire.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const deletePermanentPartner = async (partnerId: string, partnerName: string) => {
     if (!window.confirm(`Retirer définitivement ${partnerName} des partenaires permanents ?`)) return;
     setBusy(true);
@@ -244,7 +178,7 @@ export const AdminHomepageMarketing: React.FC = () => {
           <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[#047857]"><Megaphone className="h-5 w-5" aria-hidden="true" /></span>
           <div>
             <h2 id="admin-advertising-title" className="text-xl font-black text-slate-900">Publicité et visibilité</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-600">Modération obligatoire, bêta gratuite de 30 jours et demandes partenaires traitées manuellement. Aucun paiement publicitaire n’est activé.</p>
+            <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-600">La diffusion et la rotation des campagnes éligibles sont automatiques. La validation des contenus et le contrôle de diffusion restent réservés à l’administration.</p>
           </div>
         </div>
         <button type="button" disabled={busy || loading || !data || (betaAction === 'resume' && data.beta.days_remaining === 0)} onClick={() => void runAction('/api/admin/advertising/beta', 'POST', { action: betaAction }, 'Configuration de la bêta mise à jour.')} className="min-h-11 shrink-0 rounded-full bg-[#047857] px-5 text-sm font-bold text-white disabled:opacity-50">
@@ -268,36 +202,14 @@ export const AdminHomepageMarketing: React.FC = () => {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5" aria-labelledby="admin-permanent-partners-title">
           <h3 id="admin-permanent-partners-title" className="text-sm font-black text-slate-900">Partenaires permanents ({data.partners.length})</h3>
-          <p className="mt-1 text-xs leading-5 text-slate-500">Présence en carrousel à gauche de l’accueil, distincte des campagnes produit. Les nouveaux partenaires sont créés en pause et restent invisibles jusqu’à activation par un Super-admin.</p>
-          <form onSubmit={(event) => void createPermanentPartner(event)} className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
-            <label className="text-xs font-bold text-slate-700">Nom de la marque *
-              <input name="partner_name" required maxLength={100} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-            </label>
-            <label className="text-xs font-bold text-slate-700">Activité / descriptif *
-              <input name="partner_descriptor" required maxLength={120} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-            </label>
-            <label className="text-xs font-bold text-slate-700 sm:col-span-2">Phrase de mise en avant *
-              <input name="partner_headline" required maxLength={180} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-            </label>
-            <label className="text-xs font-bold text-slate-700">URL du logo (HTTPS)
-              <input name="partner_logo_url" type="url" placeholder="https://…" maxLength={2048} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-            </label>
-            <label className="text-xs font-bold text-slate-700">Lien de destination (HTTPS ou chemin interne)
-              <input name="partner_destination_url" type="text" inputMode="url" placeholder="https://… ou /boutiques" maxLength={2048} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-            </label>
-            <label className="text-xs font-bold text-slate-700 sm:w-40">Ordre d’affichage
-              <input name="partner_sort_order" type="number" min="0" max="10000" defaultValue="0" className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-            </label>
-            <p className="self-end text-xs leading-5 text-slate-500">Les liens et les contenus sont affichés tels que validés ici. Aucun logo fictif n’est publié automatiquement.</p>
-            <button type="submit" disabled={busy} className="min-h-10 rounded-lg bg-emerald-700 px-4 text-xs font-bold text-white disabled:opacity-50 sm:col-span-2 sm:justify-self-start">Ajouter le partenaire en pause</button>
-          </form>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Les partenaires actifs sont présentés dans un ordre renouvelé automatiquement. La création, la modification du contenu et le réglage de l’ordre ne sont plus disponibles ici ; seuls l’activation, la suspension et le retrait restent accessibles.</p>
           <div className="mt-3 divide-y divide-slate-200">
             {data.partners.length === 0 ? <p className="py-4 text-sm text-slate-500">Aucun partenaire permanent configuré.</p> : data.partners.map((partner) => (
               <article key={partner.id} className="py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0">
                     <h4 className="truncate text-sm font-bold text-slate-900">{partner.name} · {partner.descriptor}</h4>
-                    <p className="mt-1 text-xs text-slate-600">{partner.headline} · ordre {partner.sort_order} · {partner.is_active ? 'En affichage public' : 'En pause'}</p>
+                    <p className="mt-1 text-xs text-slate-600">{partner.headline} · {partner.is_active ? 'En affichage public' : 'En pause'}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button type="button" disabled={busy} onClick={() => void runAction(
@@ -311,30 +223,6 @@ export const AdminHomepageMarketing: React.FC = () => {
                     <button type="button" disabled={busy} onClick={() => void deletePermanentPartner(partner.id, partner.name)} className="min-h-9 rounded-lg border border-rose-300 px-3 text-xs font-bold text-rose-900 disabled:opacity-50">Retirer</button>
                   </div>
                 </div>
-                <details className="mt-2">
-                  <summary className="w-fit cursor-pointer text-xs font-semibold text-slate-600">Modifier les informations</summary>
-                  <form onSubmit={(event) => void updatePermanentPartner(event, partner.id)} className="mt-3 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
-                    <label className="text-xs font-bold text-slate-700">Nom de la marque
-                      <input name="partner_name" required maxLength={100} defaultValue={partner.name} className="mt-1 min-h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-                    </label>
-                    <label className="text-xs font-bold text-slate-700">Activité / descriptif
-                      <input name="partner_descriptor" required maxLength={120} defaultValue={partner.descriptor} className="mt-1 min-h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-                    </label>
-                    <label className="text-xs font-bold text-slate-700 sm:col-span-2">Phrase de mise en avant
-                      <input name="partner_headline" required maxLength={180} defaultValue={partner.headline} className="mt-1 min-h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-                    </label>
-                    <label className="text-xs font-bold text-slate-700">URL du logo (HTTPS)
-                      <input name="partner_logo_url" type="url" maxLength={2048} defaultValue={partner.logo_url || ''} className="mt-1 min-h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-                    </label>
-                    <label className="text-xs font-bold text-slate-700">Lien de destination
-                      <input name="partner_destination_url" type="text" inputMode="url" maxLength={2048} defaultValue={partner.destination_url || ''} className="mt-1 min-h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-                    </label>
-                    <label className="text-xs font-bold text-slate-700 sm:w-40">Ordre d’affichage
-                      <input name="partner_sort_order" type="number" min="0" max="10000" defaultValue={partner.sort_order} className="mt-1 min-h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-                    </label>
-                    <button type="submit" disabled={busy} className="min-h-9 rounded-lg bg-slate-800 px-4 text-xs font-bold text-white disabled:opacity-50 sm:col-span-2 sm:justify-self-start">Enregistrer les modifications</button>
-                  </form>
-                </details>
               </article>
             ))}
           </div>
@@ -362,14 +250,11 @@ export const AdminHomepageMarketing: React.FC = () => {
                   </label>}
                   <div className="flex flex-wrap gap-2">
                     {campaign.status === 'pending_review' && <>
-                      <label className="flex min-h-9 items-center gap-2 text-xs font-semibold text-slate-600">Début de diffusion (facultatif)
-                        <input type="datetime-local" value={startsAt[campaign.id] || ''} onChange={(event) => setStartsAt((current) => ({ ...current, [campaign.id]: event.target.value }))} className="min-h-9 rounded-lg border border-slate-300 px-2 text-xs" />
-                      </label>
                       <button type="button" disabled={busy} onClick={() => void runAction(
                         `/api/admin/advertising/campaigns/${encodeURIComponent(campaign.id)}/review`,
                         'POST',
-                        { action: 'approve', ...(startsAt[campaign.id] ? { starts_at: new Date(startsAt[campaign.id]).toISOString() } : {}) },
-                        'Campagne approuvée et programmée.',
+                        { action: 'approve' },
+                        'Campagne approuvée et démarrée automatiquement.',
                       )} className="min-h-9 rounded-lg bg-emerald-700 px-3 text-xs font-bold text-white disabled:opacity-50">Approuver</button>
                       <button type="button" disabled={busy} onClick={() => void runAction(`/api/admin/advertising/campaigns/${encodeURIComponent(campaign.id)}/review`, 'POST', { action: 'reject', note: notes[campaign.id] || '' }, 'Campagne refusée.')} className="min-h-9 rounded-lg border border-rose-300 px-3 text-xs font-bold text-rose-900 disabled:opacity-50">Refuser</button>
                     </>}

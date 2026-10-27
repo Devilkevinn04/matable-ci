@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, ArrowUpRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUpRight, Pause, Play } from 'lucide-react';
 
 export interface PublicPermanentPartner {
   id: string;
@@ -10,6 +10,15 @@ export interface PublicPermanentPartner {
   destination_url: string | null;
 }
 
+function shufflePartners(items: PublicPermanentPartner[]): PublicPermanentPartner[] {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
 interface PublicPartnerCarouselProps {
   previewPartners?: PublicPermanentPartner[];
 }
@@ -17,6 +26,9 @@ interface PublicPartnerCarouselProps {
 export const PublicPartnerCarousel: React.FC<PublicPartnerCarouselProps> = ({ previewPartners }) => {
   const [partners, setPartners] = useState<PublicPermanentPartner[]>(previewPartners || []);
   const scrollContainer = useRef<HTMLDivElement | null>(null);
+  const [paused, setPaused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
   const isPreview = previewPartners !== undefined;
 
   useEffect(() => {
@@ -30,13 +42,30 @@ export const PublicPartnerCarousel: React.FC<PublicPartnerCarouselProps> = ({ pr
         if (!response.ok) throw new Error(`Permanent partner request failed: ${response.status}`);
         const payload = await response.json() as { partners?: PublicPermanentPartner[] };
         if (!Array.isArray(payload.partners)) throw new Error('Permanent partner response is invalid.');
-        if (!cancelled) setPartners(payload.partners);
+        if (!cancelled) setPartners(shufflePartners(payload.partners));
       })
       .catch((error: unknown) => {
         if (!cancelled) console.error('Unable to load permanent partners.', error);
       });
     return () => { cancelled = true; };
   }, [isPreview, previewPartners]);
+
+  useEffect(() => {
+    const container = scrollContainer.current;
+    if (!container || partners.length < 2 || paused || hovered || focused
+      || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      || container.scrollWidth <= container.clientWidth) return undefined;
+    const interval = window.setInterval(() => {
+      const maxScroll = container.scrollWidth - container.clientWidth;
+      const distance = Math.max(container.clientWidth * 0.75, 240);
+      if (container.scrollLeft + distance >= maxScroll - 12) {
+        container.scrollTo({ left: 0, behavior: 'smooth' });
+      } else {
+        container.scrollBy({ left: distance, behavior: 'smooth' });
+      }
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [partners.length, paused, hovered, focused]);
 
   if (partners.length === 0) return null;
 
@@ -48,7 +77,17 @@ export const PublicPartnerCarousel: React.FC<PublicPartnerCarouselProps> = ({ pr
   };
 
   return (
-    <section className="mx-auto w-full max-w-[1280px] px-4 py-4 sm:px-8 sm:py-5 lg:px-10" aria-label="Partenaires permanents de MaTable.ci">
+    <section
+      className="mx-auto w-full max-w-[1280px] px-4 py-4 sm:px-8 sm:py-5 lg:px-10"
+      aria-label="Partenaires permanents de MaTable.ci"
+      aria-roledescription="carrousel"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+      }}
+    >
       <div className="mb-3 flex items-end justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#c2410c]">Partenaires et institutions</p>
@@ -59,6 +98,9 @@ export const PublicPartnerCarousel: React.FC<PublicPartnerCarouselProps> = ({ pr
           {partners.length > 1 && <>
             <button type="button" onClick={() => scroll(-1)} aria-label="Partenaires précédents" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button type="button" onClick={() => setPaused((current) => !current)} aria-label={paused ? 'Reprendre le défilement des partenaires' : 'Mettre en pause le défilement des partenaires'} className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
+              {paused ? <Play className="h-3.5 w-3.5" aria-hidden="true" /> : <Pause className="h-3.5 w-3.5" aria-hidden="true" />}
             </button>
             <button type="button" onClick={() => scroll(1)} aria-label="Partenaires suivants" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
