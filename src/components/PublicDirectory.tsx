@@ -434,7 +434,9 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                       {shop.products_preview && shop.products_preview.length > 0 && <span className="mt-3 flex min-w-0 items-center gap-2 border-t border-[#eee8de] pt-2.5">
                         {shop.products_preview.slice(0, 2).map((product) => (
                           <span key={product.id} className="flex min-w-0 flex-1 items-center gap-1.5">
-                            <img src={getProductImageForDisplay(product.image_url, shop.category)} alt="" loading="lazy" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#e9f5ee]">
+                              <img src={getProductImageForDisplay(product.image_url, shop.category)} alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />
+                            </span>
                             <span className="min-w-0">
                               <span className="block truncate text-[9px] font-semibold text-[#47534b]">{product.title}</span>
                               <span className="block truncate text-[9px] font-extrabold text-[#065f46]">{formatFCFA(product.price)}</span>
@@ -610,7 +612,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                   </div>
                   <div className="mt-2 flex min-w-0 items-center gap-2 sm:mt-4 sm:gap-3">
                     {shop.theme_config?.logo_url && <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e9e1d7] bg-white sm:h-12 sm:w-12 sm:rounded-2xl">
-                      <img src={shop.theme_config.logo_url} alt="" className="h-full w-full object-cover" />
+                      <img src={shop.theme_config.logo_url} alt="" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />
                     </span>}
                     <h3 className="line-clamp-2 min-w-0 font-display text-base font-extrabold leading-tight tracking-tight text-[#292d2a] sm:text-xl lg:text-2xl">{shop.name}</h3>
                   </div>

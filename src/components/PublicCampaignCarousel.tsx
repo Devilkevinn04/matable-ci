@@ -254,7 +254,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
           {visibleCampaigns.map((item) => (
             <button key={item.id} data-ad-campaign-id={item.id} type="button" onClick={() => { void sendEvent('click', item); onOpenShop(item.shop.slug); }} className="group flex min-h-24 min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[#e0d5c6] bg-white p-2.5 text-left shadow-[0_2px_12px_rgba(20,40,30,.05)] transition hover:-translate-y-0.5 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.09)]">
               <span className="relative h-[76px] w-[92px] shrink-0 overflow-hidden rounded-xl bg-[#e9f5ee]">
-                <img src={item.product?.image_url || item.shop.image_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                <img src={item.product?.image_url || item.shop.image_url} alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />
                 <span className="absolute left-1.5 top-1.5 rounded-full bg-white/95 px-2 py-0.5 text-[8px] font-black uppercase text-[#8f351d]">Sponsorisé</span>
               </span>
               <span className="min-w-0 flex-1">
@@ -285,7 +285,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
         onClick={() => { void sendEvent('click', item); onOpenShop(item.shop.slug); }}
         className={`group relative flex min-w-0 items-end overflow-hidden rounded-2xl bg-[#17332c] text-left shadow-[0_8px_24px_rgba(20,40,30,.12)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(20,40,30,.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2 ${featured ? 'min-h-[255px] p-5 sm:min-h-[300px] sm:rounded-[26px] sm:p-7 lg:min-h-[350px] lg:rounded-[30px] lg:p-8' : 'min-h-[150px] p-4 sm:min-h-[170px] sm:p-5 lg:min-h-0'}`}
       >
-        <img src={item.shop.image_url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
+        <img src={item.shop.image_url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" onError={(event) => { event.currentTarget.hidden = true; }} />
         <span aria-hidden="true" className={`absolute inset-0 ${featured ? 'bg-gradient-to-r from-[#102d25]/90 via-[#102d25]/55 to-[#102d25]/10' : 'bg-gradient-to-t from-[#102d25]/90 via-[#102d25]/35 to-transparent'}`} />
         <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-[#8f351d] sm:left-4 sm:top-4">
           <Megaphone className="h-3 w-3" aria-hidden="true" /> Sponsorisé
@@ -336,7 +336,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
     <li ref={(element) => { campaignElement.current = element; }} className="min-w-0 overflow-hidden rounded-2xl border border-[#e0d5c6] bg-white shadow-[0_2px_12px_rgba(20,40,30,.06)]" aria-label="Produit sponsorisé">
       <button type="button" onClick={() => { void sendEvent('click'); onOpenShop(campaign.shop.slug); }} className="group flex h-full w-full flex-col text-left">
         <span className="relative aspect-[4/3] w-full overflow-hidden bg-[#d1fae5]">
-          <img src={product.image_url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
+          <img src={product.image_url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
           <span className="absolute left-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-black uppercase text-[#8f351d]">Sponsorisé</span>
           <span className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold text-[#065f46]">{formatFCFA(product.price)}</span>
         </span>
