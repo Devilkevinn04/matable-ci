@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BadgePercent, Bookmark, ChevronDown, ChevronUp, Clock, Expand, Heart, MessageSquareText, Minus, Plus, ShoppingBag, X } from 'lucide-react';
+import { BadgePercent, Bookmark, ChevronDown, ChevronUp, Clock, Expand, Heart, Minus, Plus, ShoppingBag, Star, X } from 'lucide-react';
 import type { Product, ShopCategory } from '../types';
 import type { CategoryDefaults } from '../utils/categoryDefaults';
 import { formatFCFA } from '../utils/format';
@@ -27,6 +27,7 @@ interface CustomerProductCardProps {
   selectedUnitPrice: number;
   isFavorite: boolean;
   isLiked: boolean;
+  isLikePending: boolean;
   onToggleFavorite: () => void;
   onToggleLike: () => void;
   onOpenTrust: () => void;
@@ -57,6 +58,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   selectedUnitPrice,
   isFavorite,
   isLiked,
+  isLikePending,
   onToggleFavorite,
   onToggleLike,
   onOpenTrust,
@@ -169,7 +171,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
               <Bookmark className={`h-4 w-4 ${isFavorite ? 'fill-current' : ''}`} aria-hidden="true" />
               <span className="sr-only">{isFavorite ? 'Enregistré dans vos favoris' : 'Enregistrer ce produit'}</span>
             </button>
-            <button type="button" onClick={onToggleLike} aria-pressed={isLiked} aria-label={`${isLiked ? 'Retirer votre mention J’aime' : 'Aimer ce produit'}${product.like_count ? `, ${product.like_count} mentions J’aime` : ''}`} title="J’aime" className={`flex h-9 min-w-9 items-center justify-center gap-1 rounded-full border border-white/70 px-2.5 shadow-sm backdrop-blur-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${isLiked ? 'bg-[#FFFFFF] text-[#c74445]' : 'bg-[#FFFFFF]/90 text-[#47534b] hover:bg-white'}`}>
+            <button type="button" onClick={onToggleLike} disabled={isLikePending} aria-busy={isLikePending} aria-pressed={isLiked} aria-label={`${isLikePending ? 'Mise à jour du J’aime' : isLiked ? 'Retirer votre mention J’aime' : 'Aimer ce produit'}${product.like_count ? `, ${product.like_count} mentions J’aime` : ''}`} title="J’aime" className={`flex h-9 min-w-9 items-center justify-center gap-1 rounded-full border border-white/70 px-2.5 shadow-sm backdrop-blur-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-wait disabled:opacity-70 ${isLiked ? 'bg-[#FFFFFF] text-[#c74445]' : 'bg-[#FFFFFF]/90 text-[#47534b] hover:bg-white'}`}>
               <Heart className={`h-4 w-4 ${isLiked ? 'fill-current' : ''}`} aria-hidden="true" />
               <span className="text-xs font-bold tabular-nums">{product.like_count || 0}</span>
             </button>
@@ -220,7 +222,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
             </div>
           </details>
         )}
-        <button type="button" onClick={onOpenTrust} className="inline-flex min-h-8 items-center gap-1 text-[10px] font-bold text-[#047857] hover:underline sm:gap-1.5 sm:text-[11px]"><MessageSquareText className="h-3.5 w-3.5" />Avis vérifiés · Signaler</button>
+        <button type="button" onClick={onOpenTrust} aria-label="Lire et rédiger un avis ou signaler un problème" className="inline-flex min-h-9 items-center gap-1 text-[10px] font-bold text-[#047857] hover:underline sm:gap-1.5 sm:text-[11px]"><Star className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden="true" />Lire / donner un avis</button>
 
         <div className="mb-2 mt-auto flex items-center justify-between gap-1 border-t border-slate-100 pt-2 sm:mb-3 sm:items-baseline">
           <div className="min-w-0"><span className="hidden text-[11px] font-bold text-slate-400 sm:block">Prix unitaire</span><span className="whitespace-nowrap text-sm font-black tracking-tight sm:text-lg" style={{ color: isPromotion ? '#c2410c' : primaryColor }}>{formatFCFA(selectedUnitPrice)}</span>{isPromotion && <><span className="ml-1.5 whitespace-nowrap text-[10px] font-semibold text-slate-400 line-through">{formatFCFA(product.price + selectedModifierTotal)}</span>{product.sale_ends_at && <span className="mt-0.5 block text-[9px] font-semibold text-[#a53a1d]">Jusqu’au {new Date(product.sale_ends_at).toLocaleDateString('fr-FR')}</span>}</>}{selectedModifierTotal > 0 && <span className="mt-0.5 block text-[10px] font-medium text-slate-500">{formatFCFA(activeBasePrice)} + {formatFCFA(selectedModifierTotal)} de supplément</span>}</div>

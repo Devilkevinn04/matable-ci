@@ -265,6 +265,16 @@ export function createOrderRouter({
       LEFT JOIN order_whatsapp_tracking ON order_whatsapp_tracking.order_id = orders.id
       WHERE orders.customer_user_id = ?
       ORDER BY orders.created_at DESC, orders.id DESC`, [customerSession.user.id]);
+    const reviewRows = await dbAll<{ order_id: number; target_type: string; target_id: number }>(
+      'SELECT order_id, target_type, target_id FROM customer_reviews WHERE user_id = ? ORDER BY target_type, target_id',
+      [customerSession.user.id],
+    );
+    const reviewsByOrder = new Map<number, { target_type: string; target_id: number }[]>();
+    for (const review of reviewRows) {
+      const orderReviews = reviewsByOrder.get(Number(review.order_id)) || [];
+      orderReviews.push({ target_type: review.target_type, target_id: Number(review.target_id) });
+      reviewsByOrder.set(Number(review.order_id), orderReviews);
+    }
     const customerOrders = rows.map((row) => {
       const rawItems = row.items;
       const items = rawItems ? typeof rawItems === 'string' ? JSON.parse(rawItems) : rawItems : [];
@@ -285,8 +295,10 @@ export function createOrderRouter({
         whatsapp_clicked_at: row.whatsapp_clicked_at == null ? null : String(row.whatsapp_clicked_at),
         items: Array.isArray(items) ? items : [],
         shop_name: String(row.shop_name || 'Boutique locale'),
+        reviewed_targets: reviewsByOrder.get(Number(row.id)) || [],
       };
     });
+    res.setHeader('Cache-Control', 'no-store');
     res.json({ orders: customerOrders });
   });
 

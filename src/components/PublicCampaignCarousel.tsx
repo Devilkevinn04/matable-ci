@@ -224,22 +224,22 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
       <li className={horizontalFeed
         ? 'carousel-rail-item min-w-0 shrink-0 snap-start basis-[82%] list-none sm:basis-[44%] lg:basis-[calc((100%-48px)/4)]'
         : 'col-span-2 list-none sm:col-span-3 lg:col-span-4'}>
-      <aside className="overflow-hidden rounded-3xl border border-dashed border-[#b8d3c8] bg-gradient-to-r from-[#f5faf6] to-white shadow-sm" aria-label="Espace publicitaire">
-        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <aside className="h-full overflow-hidden rounded-3xl border border-dashed border-[#b8d3c8] bg-gradient-to-r from-[#f5faf6] to-white shadow-sm" aria-label="Espace publicitaire">
+        <div className="flex h-full flex-col gap-3 p-3 sm:gap-4 sm:p-4">
           <div className="min-w-0">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e3f1e8] px-3 py-1 text-[10px] font-black uppercase tracking-wide text-[#065f46]">
               <Megaphone className="h-3.5 w-3.5" aria-hidden="true" /> Espace publicitaire
             </span>
-            <h3 className="mt-2 text-lg font-black text-[#292d2a]">Aucune campagne sponsorisée en cours</h3>
-            <p className="mt-1 max-w-2xl text-sm leading-5 text-[#647067]">
+            <h3 className="mt-2 text-base font-black leading-snug text-[#292d2a] sm:text-lg">Aucune campagne sponsorisée en cours</h3>
+            <p className="mt-1 line-clamp-3 text-xs leading-5 text-[#647067]">
               Les mises en avant apparaîtront ici après validation. Les commerçants peuvent proposer un produit depuis leur espace; les marques peuvent demander un partenariat.
             </p>
           </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <Link to="/commercants" className="inline-flex min-h-10 items-center justify-center rounded-full bg-[#065f46] px-4 text-xs font-bold text-white transition hover:bg-[#047857]">
+          <div className="mt-auto flex flex-col gap-2">
+            <Link to="/commercants" className="inline-flex min-h-9 items-center justify-center rounded-full bg-[#065f46] px-3 text-center text-[11px] font-bold text-white transition hover:bg-[#047857]">
               Espace commerçant
             </Link>
-            <button type="button" onClick={openPartnerRequest} className="inline-flex min-h-10 items-center justify-center rounded-full border border-[#b8d3c8] bg-white px-4 text-xs font-bold text-[#065f46] transition hover:bg-[#f5faf6]">
+            <button type="button" onClick={openPartnerRequest} className="inline-flex min-h-9 items-center justify-center rounded-full border border-[#b8d3c8] bg-white px-3 text-center text-[11px] font-bold text-[#065f46] transition hover:bg-[#f5faf6]">
               Proposer un partenariat
             </button>
           </div>

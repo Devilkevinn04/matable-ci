@@ -447,8 +447,21 @@ export default function App() {
   const renderCustomerAuth = (initialMode: 'login' | 'register') => (
     <CustomerAuth
       initialMode={initialMode}
-      onModeChange={(mode) => navigate(mode === 'register' ? '/inscription' : '/connexion')}
-      onAuthenticated={(user) => { setCustomerUser(user); navigate('/compte'); }}
+      onModeChange={(mode) => {
+        const returnTo = new URLSearchParams(location.search).get('return_to');
+        const nextPath = mode === 'register' ? '/inscription' : '/connexion';
+        navigate(returnTo ? `${nextPath}?return_to=${encodeURIComponent(returnTo)}` : nextPath);
+      }}
+      onAuthenticated={(user) => {
+        setCustomerUser(user);
+        const requestedReturnTo = new URLSearchParams(location.search).get('return_to');
+        const returnTo = requestedReturnTo?.startsWith('/')
+          && !requestedReturnTo.startsWith('//')
+          && !requestedReturnTo.includes('\\')
+          ? requestedReturnTo
+          : '/compte';
+        navigate(returnTo);
+      }}
       onBack={() => navigate('/')}
       onMerchantLogin={() => navigate('/app/connexion')}
       onMerchantRegister={() => navigate('/app/creer-boutique')}

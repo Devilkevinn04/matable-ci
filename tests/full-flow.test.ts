@@ -1699,6 +1699,13 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
     body: JSON.stringify({ order_id: reviewOrderId, target_type: 'shop', target_id: shopId, rating: 5 }),
   });
   assert.equal(duplicateReview.response.status, 409);
+  const customerOrdersWithReviews = await apiFetch('/api/auth/customer-orders');
+  const reviewedOrder = customerOrdersWithReviews.payload.orders.find((order: any) => order.id === reviewOrderId);
+  assert.ok(reviewedOrder);
+  assert.deepEqual(reviewedOrder.reviewed_targets, [
+    { target_type: 'product', target_id: productId },
+    { target_type: 'shop', target_id: shopId },
+  ]);
   const unmoderatedReviews = await apiFetch(`/api/customer-engagement/reviews?target_type=shop&target_id=${shopId}`);
   assert.equal(unmoderatedReviews.payload.review_count, 0);
 

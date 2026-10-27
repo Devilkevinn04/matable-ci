@@ -16,6 +16,7 @@ interface TrustOrder {
   shop_id: number;
   status: string;
   items?: { product_id: number }[];
+  reviewed_targets?: { target_type: TargetType; target_id: number }[];
 }
 
 interface CustomerTrustPanelProps {
@@ -39,6 +40,7 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
   const [averageRating, setAverageRating] = useState<number | null>(null);
   const [reviewCount, setReviewCount] = useState(0);
   const [orders, setOrders] = useState<TrustOrder[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersAuthenticated, setOrdersAuthenticated] = useState(isAuthenticated);
   const [ordersError, setOrdersError] = useState('');
@@ -50,15 +52,29 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
-  const eligibleOrders = useMemo(() => orders.filter((order) =>
+  const eligibleOrders = useMemo(() => orders
+    .filter((order) => order.status === 'delivered'
+      && (targetType === 'shop'
+        ? order.shop_id === targetId
+        : order.items?.some((item) => Number(item.product_id) === targetId)))
+    .filter((order) => !order.reviewed_targets?.some((review) =>
+      review.target_type === targetType && Number(review.target_id) === targetId,
+    )), [orders, targetId, targetType]);
+  const hasReviewedTargetOrder = orders.some((order) =>
     order.status === 'delivered'
     && (targetType === 'shop'
       ? order.shop_id === targetId
-      : order.items?.some((item) => Number(item.product_id) === targetId)),
-  ), [orders, targetId, targetType]);
+      : order.items?.some((item) => Number(item.product_id) === targetId))
+    && order.reviewed_targets?.some((review) =>
+      review.target_type === targetType && Number(review.target_id) === targetId,
+    ),
+  );
+  const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const customerLoginUrl = `/connexion?return_to=${encodeURIComponent(returnTo)}`;
 
   useEffect(() => {
     let active = true;
+    setReviewsLoading(true);
     fetch(`/api/customer-engagement/reviews?target_type=${targetType}&target_id=${targetId}`)
       .then(async (response) => {
         const data = await response.json();
@@ -70,6 +86,9 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
       })
       .catch((caught: unknown) => {
         if (active) setError(caught instanceof Error ? caught.message : 'Impossible de charger les avis.');
+      })
+      .finally(() => {
+        if (active) setReviewsLoading(false);
       });
     fetch('/api/auth/customer-orders', { credentials: 'include' })
       .then(async (response) => {
@@ -134,7 +153,17 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
       setError('Sélectionnez une commande terminée pour déposer un avis.');
       return;
     }
+    const submittedOrderId = Number(orderId);
     if (await submit('/api/customer-engagement/reviews', { order_id: Number(orderId), rating, comment }, 'Merci. Votre avis sera visible après modération.')) {
+      setOrders((previous) => previous.map((order) => order.id === submittedOrderId
+        ? {
+          ...order,
+          reviewed_targets: [
+            ...(order.reviewed_targets || []),
+            { target_type: targetType, target_id: targetId },
+          ],
+        }
+        : order));
       setComment('');
       setOrderId('');
     }
@@ -160,20 +189,21 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
 
         <div className="mt-5 max-h-48 space-y-3 overflow-y-auto">
           {reviews.map((review) => <article key={review.id} className="rounded-xl border border-slate-200 bg-white p-3"><div className="flex items-center justify-between gap-2"><strong className="text-sm text-slate-900">{review.author_name}</strong><span className="text-amber-600" aria-label={`${review.rating} sur 5`}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</span></div>{review.comment && <p className="mt-1 whitespace-pre-wrap text-sm leading-5 text-slate-700">{review.comment}</p>}<time className="mt-1 block text-[11px] text-slate-500">{new Date(review.created_at).toLocaleDateString('fr-FR')}</time></article>)}
-          {reviews.length === 0 && <p className="text-sm text-slate-500">Les avis validés par l’équipe apparaîtront ici.</p>}
+          {reviewsLoading && <p role="status" className="text-sm text-slate-500">Chargement des avis…</p>}
+          {!reviewsLoading && reviews.length === 0 && <p className="text-sm text-slate-500">Aucun avis publié pour le moment. Les avis validés par l’équipe apparaîtront ici.</p>}
         </div>
 
         <div className="mt-6 grid gap-5 border-t border-slate-200 pt-5 sm:grid-cols-2">
           <form onSubmit={submitReview} className="space-y-3">
             <h3 className="flex items-center gap-2 text-sm font-black text-slate-900"><Star className="h-4 w-4 text-amber-500" />Donner un avis vérifié</h3>
-            <p className="text-xs leading-5 text-slate-600">Seules les commandes clôturées peuvent donner lieu à un avis.</p>
-            <select aria-label="Commande terminée" value={orderId} onChange={(event) => setOrderId(event.target.value)} required disabled={ordersLoading || eligibleOrders.length === 0} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100">
-              <option value="">{ordersLoading ? 'Chargement de vos commandes…' : 'Choisir une commande terminée'}</option>
+            <p className="text-xs leading-5 text-slate-600">Seules les commandes livrées de votre compte peuvent donner lieu à un avis vérifié.</p>
+            <select aria-label="Commande livrée" value={orderId} onChange={(event) => setOrderId(event.target.value)} required disabled={ordersLoading || eligibleOrders.length === 0} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100">
+              <option value="">{ordersLoading ? 'Chargement de vos commandes…' : 'Choisir une commande livrée'}</option>
               {eligibleOrders.map((order) => <option key={order.id} value={order.id}>Commande #{order.id}</option>)}
             </select>
             {ordersError && <p role="alert" className="text-xs text-rose-800">{ordersError}</p>}
-            {!ordersLoading && !ordersError && !ordersAuthenticated && <p className="text-xs text-slate-600">Connectez-vous à votre compte client pour déposer un avis vérifié. <a href="/connexion" onClick={onClose} className="font-bold text-[#065f46] underline underline-offset-2">Se connecter</a></p>}
-            {!ordersLoading && !ordersError && ordersAuthenticated && eligibleOrders.length === 0 && <p className="text-xs text-slate-600">{orders.length === 0 ? 'Aucune commande n’est associée à votre compte pour le moment.' : 'Une commande livrée de cette boutique ou contenant ce produit est nécessaire pour laisser un avis.'}</p>}
+            {!ordersLoading && !ordersError && !ordersAuthenticated && <p className="text-xs text-slate-600">Connectez-vous à votre compte client pour déposer un avis vérifié. <a href={customerLoginUrl} onClick={onClose} className="font-bold text-[#065f46] underline underline-offset-2">Se connecter</a></p>}
+            {!ordersLoading && !ordersError && ordersAuthenticated && eligibleOrders.length === 0 && <p className="text-xs text-slate-600">{orders.length === 0 ? 'Aucune commande n’est associée à votre compte pour le moment.' : hasReviewedTargetOrder ? 'Vous avez déjà donné votre avis sur cet élément pour toutes vos commandes livrées.' : 'Une commande livrée de cette boutique ou contenant ce produit est nécessaire pour laisser un avis.'}</p>}
             <div className="flex gap-1" aria-label="Note sur cinq">
               {[1, 2, 3, 4, 5].map((value) => <button key={value} type="button" onClick={() => setRating(value)} aria-label={`${value} étoile${value > 1 ? 's' : ''}`} aria-pressed={rating === value} className={`rounded p-1 text-2xl ${rating >= value ? 'text-amber-500' : 'text-slate-300'}`}>★</button>)}
             </div>
@@ -187,7 +217,7 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
             <select value={reportReason} onChange={(event) => setReportReason(event.target.value)} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">{reportReasons.map((reason) => <option key={reason.value} value={reason.value}>{reason.label}</option>)}</select>
             <textarea value={reportDetails} onChange={(event) => setReportDetails(event.target.value)} maxLength={1000} rows={3} placeholder="Expliquez brièvement (facultatif)" className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm" />
             <button type="submit" disabled={saving || !ordersAuthenticated} className="min-h-10 rounded-full border border-rose-300 px-4 text-xs font-bold text-rose-800 disabled:opacity-50">{saving ? 'Envoi…' : 'Envoyer le signalement'}</button>
-            {!ordersAuthenticated && <p className="text-xs text-slate-500">Connectez-vous à votre compte client pour envoyer un signalement. <a href="/connexion" onClick={onClose} className="font-bold text-[#065f46] underline underline-offset-2">Se connecter</a></p>}
+            {!ordersAuthenticated && <p className="text-xs text-slate-500">Connectez-vous à votre compte client pour envoyer un signalement. <a href={customerLoginUrl} onClick={onClose} className="font-bold text-[#065f46] underline underline-offset-2">Se connecter</a></p>}
           </form>
         </div>
       </section>

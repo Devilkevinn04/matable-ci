@@ -165,6 +165,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
   };
   const renderProductCard = (product: FeedProduct) => {
     const productTitle = product.title.trim() || 'Produit local';
+    const productDescription = product.description?.trim();
     const activePrice = getActiveProductPrice(product);
     const isPromotion = activePrice < product.price;
     const discountPercent = isPromotion && product.price > 0
@@ -195,12 +196,15 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
             : label && <span className="rounded-full bg-[#FFFFFF]/95 px-2.5 py-1 text-[10px] font-bold text-[#065f46]">{label}</span>}
         </div>
         {product.stock > 0 && <span className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold text-[#065f46]">
-          <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Disponible
+          <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> {product.stock <= 3 ? `Plus que ${product.stock} disponible${product.stock > 1 ? 's' : ''}` : `${product.stock} en stock`}
         </span>}
       </div>
-      <div className="flex min-w-0 flex-1 flex-col p-3.5 sm:p-4">
+      <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4">
         <p className="line-clamp-1 text-xs font-semibold text-[#647067]">{product.shop.name}</p>
         <h3 className="mt-1 line-clamp-2 min-h-10 font-display text-[15px] font-bold leading-5 text-[#292d2a] sm:text-base">{productTitle}</h3>
+        <p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-[#647067]">
+          {productDescription || 'Contactez la boutique pour en savoir plus sur ce produit.'}
+        </p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <p className={`text-base font-extrabold ${isPromotion ? 'text-[#c2410c]' : 'text-[#065f46]'}`}>{formatFCFA(activePrice)}</p>
@@ -209,6 +213,10 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
           </div>
           {product.shop.city && <p className="flex items-center gap-1 text-[11px] text-[#647067]"><MapPin className="h-3 w-3 text-[#047857]" aria-hidden="true" />{getDiscoveryCityLabel(product.shop.city)}</p>}
         </div>
+        <span className="mt-3 flex items-center justify-between border-t border-[#eee8de] pt-2.5 text-[11px] font-bold text-[#065f46]">
+          <span>Découvrir la boutique</span>
+          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden="true" />
+        </span>
       </div>
     </Link>
   );

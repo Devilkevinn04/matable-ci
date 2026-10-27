@@ -81,6 +81,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const ageConfirmationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [favoriteProductIds, setFavoriteProductIds] = useState<Set<number>>(new Set());
   const [likedProductIds, setLikedProductIds] = useState<Set<number>>(new Set());
+  const [pendingLikeProductIds, setPendingLikeProductIds] = useState<Set<number>>(new Set());
+  const pendingLikeRequests = useRef(new Set<number>());
   const [isFavoriteShop, setIsFavoriteShop] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -335,9 +337,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const toggleProductLike = async (productId: number) => {
     if (!customerUser) {
       toast.info('Connectez-vous pour aimer un produit.');
-      window.location.assign('/connexion');
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      window.location.assign(`/connexion?return_to=${encodeURIComponent(returnTo)}`);
       return;
     }
+    if (pendingLikeRequests.current.has(productId)) return;
+    pendingLikeRequests.current.add(productId);
+    setPendingLikeProductIds((previous) => new Set(previous).add(productId));
     try {
       const response = await fetch(`/api/customer-engagement/products/${productId}/like`, {
         method: 'POST',
@@ -354,6 +360,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       setProducts((previous) => previous.map((product) => product.id === productId ? { ...product, like_count: data.like_count } : product));
     } catch (engagementError) {
       toast.error(engagementError instanceof Error ? engagementError.message : 'Impossible de mettre à jour votre mention J’aime.');
+    } finally {
+      pendingLikeRequests.current.delete(productId);
+      setPendingLikeProductIds((previous) => {
+        const next = new Set(previous);
+        next.delete(productId);
+        return next;
+      });
     }
   };
 
@@ -1187,6 +1200,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     selectedUnitPrice={getProductUnitPrice(product, activeModifiers)}
                     isFavorite={favoriteProductIds.has(product.id)}
                     isLiked={likedProductIds.has(product.id)}
+                    isLikePending={pendingLikeProductIds.has(product.id)}
                     onToggleFavorite={() => toggleCustomerFavorite('product', product.id)}
                     onToggleLike={() => toggleProductLike(product.id)}
                     onOpenTrust={() => setTrustTarget({ type: 'product', id: product.id, name: product.title })}
