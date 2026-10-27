@@ -109,6 +109,7 @@ const sqliteSchema = `
     UNIQUE (campaign_id, event_type, visitor_hash, event_date)
   );
   CREATE INDEX IF NOT EXISTS idx_advertising_campaign_events_campaign ON advertising_campaign_events(campaign_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_advertising_campaign_events_rotation ON advertising_campaign_events(event_type, created_at, campaign_id);
   CREATE TABLE IF NOT EXISTS advertising_partner_requests (
     id TEXT PRIMARY KEY, contact_name TEXT NOT NULL, company_name TEXT NOT NULL,
     email TEXT NOT NULL, phone TEXT,
@@ -565,6 +566,7 @@ export const postgresMigrations = [
     UNIQUE (campaign_id, event_type, visitor_hash, event_date)
   )`,
   'CREATE INDEX IF NOT EXISTS idx_advertising_campaign_events_campaign ON advertising_campaign_events(campaign_id, created_at)',
+  'CREATE INDEX IF NOT EXISTS idx_advertising_campaign_events_rotation ON advertising_campaign_events(event_type, created_at, campaign_id)',
   `CREATE TABLE IF NOT EXISTS advertising_partner_requests (
     id TEXT PRIMARY KEY, contact_name TEXT NOT NULL, company_name TEXT NOT NULL,
     email TEXT NOT NULL, phone TEXT,

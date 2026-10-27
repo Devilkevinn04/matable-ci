@@ -8,6 +8,7 @@ import { isShopPubliclyVisible } from '../services/businessRules.ts';
 
 const BETA_DURATION_DAYS = 30;
 const CAMPAIGN_DURATIONS_DAYS = [7] as const;
+const CAMPAIGN_IMPRESSION_WINDOW_MS = 24 * 60 * 60 * 1000;
 const CAMPAIGN_TOKEN_LIFETIME_MS = 30 * 60 * 1000;
 const eventTypes = ['impression', 'click', 'shop_visit', 'contact_click'] as const;
 const campaignKinds = ['product', 'banner'] as const;
@@ -226,19 +227,20 @@ export function createAdvertisingRouters({
     }
 
     const now = new Date().toISOString();
+    const impressionCutoff = new Date(Date.now() - CAMPAIGN_IMPRESSION_WINDOW_MS).toISOString();
     const kindsToLoad = kind ? [String(kind) as CampaignKind] : campaignKinds;
     const campaignsByKind = await Promise.all(kindsToLoad.map((campaignKind) => dbAll<CampaignRow>(
       `SELECT c.* FROM advertising_campaigns c
         LEFT JOIN (
           SELECT campaign_id, COUNT(*) AS impression_count
           FROM advertising_campaign_events
-          WHERE event_type = 'impression'
+          WHERE event_type = 'impression' AND created_at >= ?
           GROUP BY campaign_id
         ) event_metrics ON event_metrics.campaign_id = c.id
         WHERE c.status IN ('scheduled', 'active')
           AND c.starts_at <= ? AND c.ends_at > ? AND c.kind = ?
         ORDER BY COALESCE(event_metrics.impression_count, 0) ASC, c.starts_at ASC, c.created_at ASC LIMIT 10`,
-      [now, now, campaignKind],
+      [impressionCutoff, now, now, campaignKind],
     )));
     const campaigns = campaignsByKind.flat();
     const publicCampaigns = [];

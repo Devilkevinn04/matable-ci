@@ -358,6 +358,7 @@ test('advertising beta enforces roles, merchant ownership, moderation, consented
   assert.notEqual(crossShopSubmit.response.status, 201);
 
   const impressionDatabase = new Database(TEST_DB_PATH);
+  const oldImpressionDate = new Date(Date.now() - 8 * 86400000);
   impressionDatabase.prepare(
     `INSERT INTO advertising_campaign_events
       (id, campaign_id, event_type, visitor_hash, event_date, created_at)
@@ -366,8 +367,8 @@ test('advertising beta enforces roles, merchant ownership, moderation, consented
     'prior-campaign-impression',
     campaignSubmission.payload.id,
     'prior-campaign-visitor-hash',
-    new Date().toISOString().slice(0, 10),
-    new Date().toISOString(),
+    oldImpressionDate.toISOString().slice(0, 10),
+    oldImpressionDate.toISOString(),
   );
   impressionDatabase.close();
 
@@ -375,7 +376,7 @@ test('advertising beta enforces roles, merchant ownership, moderation, consented
   assert.equal(publicCampaigns.response.status, 200);
   assert.equal(publicCampaigns.response.headers.get('cache-control'), 'private, max-age=0');
   assert.equal(publicCampaigns.payload.campaigns.length, 2);
-  assert.equal(publicCampaigns.payload.campaigns[0].id, secondCampaign.payload.id);
+  assert.equal(publicCampaigns.payload.campaigns[0].id, campaignSubmission.payload.id);
   const publicCampaign = publicCampaigns.payload.campaigns[0];
   const event = {
     campaign_id: publicCampaign.id,
@@ -410,7 +411,7 @@ test('advertising beta enforces roles, merchant ownership, moderation, consented
   assert.equal(invalidEvent.response.status, 400);
 
   const updatedCampaigns = await api<{ campaigns: Array<{ id: string; metrics: Record<string, number> }> }>('/api/admin/advertising/campaigns', { headers: { Cookie: admin } });
-  assert.equal(updatedCampaigns.payload.campaigns.find((campaign) => campaign.id === publicCampaign.id)?.metrics.impression, 1);
+  assert.equal(updatedCampaigns.payload.campaigns.find((campaign) => campaign.id === publicCampaign.id)?.metrics.impression, 2);
 
   const suspended = await api(`/api/admin/advertising/campaigns/${publicCampaign.id}/review`, {
     method: 'POST',
@@ -419,14 +420,14 @@ test('advertising beta enforces roles, merchant ownership, moderation, consented
   });
   assert.equal(suspended.response.status, 200);
   const suspendedCampaigns = await api<{ campaigns: Array<{ id: string }> }>('/api/advertising/campaigns');
-  assert.deepEqual(suspendedCampaigns.payload.campaigns.map((campaign) => campaign.id), [campaignSubmission.payload.id]);
+  assert.deepEqual(suspendedCampaigns.payload.campaigns.map((campaign) => campaign.id), [secondCampaign.payload.id]);
   const resumed = await api(`/api/admin/advertising/campaigns/${publicCampaign.id}/review`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: admin },
     body: JSON.stringify({ action: 'resume' }),
   });
   assert.equal(resumed.response.status, 200);
-  const cancelOtherCampaign = await api(`/api/admin/advertising/campaigns/${campaignSubmission.payload.id}/review`, {
+  const cancelOtherCampaign = await api(`/api/admin/advertising/campaigns/${secondCampaign.payload.id}/review`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: admin },
     body: JSON.stringify({ action: 'cancel' }),
