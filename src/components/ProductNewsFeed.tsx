@@ -8,7 +8,7 @@ import { getDiscoveryCityLabel } from '../utils/discoverySeo';
 import { deduplicateProductsById } from '../utils/productFeed';
 import { getActiveProductPrice } from '../utils/productPricing';
 import { MotionReveal } from './MotionSystem';
-import { PublicCampaignCarousel } from './PublicCampaignCarousel';
+import { PublicCampaignCarousel, type PublicCampaign } from './PublicCampaignCarousel';
 import { PublicPartnerRequestForm } from './PublicPartnerRequestForm';
 
 interface FeedShop {
@@ -19,7 +19,7 @@ interface FeedShop {
   city?: string;
 }
 
-interface FeedProduct {
+export interface FeedProduct {
   id: number;
   shop_id: number;
   title: string;
@@ -47,11 +47,15 @@ interface ProductNewsFeedProps {
   categories: ShopCategory[];
   onCampaignEligibilityChange?: (eligible: boolean) => void;
   promotionsOnly?: boolean;
+  demoProducts?: FeedProduct[];
+  demoCampaigns?: PublicCampaign[];
+  demoCategory?: string;
+  demoSearch?: string;
 }
 
 const PAGE_SIZE = 8;
 
-export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, categories, onCampaignEligibilityChange, promotionsOnly = false }) => {
+export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, categories, onCampaignEligibilityChange, promotionsOnly = false, demoProducts, demoCampaigns, demoCategory = 'all', demoSearch = '' }) => {
   const location = useLocation();
   const [sort, setSort] = useState<'popular' | 'new' | 'promotions'>(promotionsOnly ? 'promotions' : 'popular');
   const [category, setCategory] = useState('all');
@@ -68,6 +72,11 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
     setOffset(0);
     setCategory('all');
   }, [promotionsOnly]);
+
+  useEffect(() => {
+    setCategory(demoCategory);
+    setOffset(0);
+  }, [demoCategory]);
 
   useEffect(() => {
     onCampaignEligibilityChange?.(products.length >= 6);
@@ -100,6 +109,25 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
   }, [products]);
 
   useEffect(() => {
+    if (demoProducts) {
+      const search = demoSearch.trim().toLocaleLowerCase('fr');
+      const filtered = demoProducts
+        .filter((product) => category === 'all' || product.shop.category === category)
+        .filter((product) => !search || [product.title, product.shop.name, product.shop.city, getCategoryDefaults(product.shop.category).label]
+          .some((value) => value?.toLocaleLowerCase('fr').includes(search)))
+        .filter((product) => sort !== 'promotions' || getActiveProductPrice(product) < product.price)
+        .sort((left, right) => sort === 'new'
+          ? Date.parse(right.created_at || '') - Date.parse(left.created_at || '')
+          : right.popularity.views + right.popularity.clicks - left.popularity.views - left.popularity.clicks);
+      const page = filtered.slice(offset, offset + PAGE_SIZE);
+      setProducts((current) => deduplicateProductsById(offset === 0 ? page : [...current, ...page]));
+      setHasMore(offset + PAGE_SIZE < filtered.length);
+      setRankingFallback(false);
+      setIsLoading(false);
+      setError(false);
+      return undefined;
+    }
+
     const controller = new AbortController();
     const params = new URLSearchParams({ sort, limit: String(PAGE_SIZE), offset: String(offset) });
     if (category !== 'all') params.set('category', category);
@@ -126,7 +154,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
       });
 
     return () => controller.abort();
-  }, [sort, category, offset, retryKey]);
+  }, [sort, category, offset, retryKey, demoProducts, demoCategory, demoSearch]);
 
   const changeFilter = (update: () => void) => {
     update();
@@ -149,6 +177,11 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
     return (
     <Link
       to={`/${encodeURIComponent(product.shop.slug)}`}
+      onClick={(event) => {
+        if (!demoProducts) return;
+        event.preventDefault();
+        onOpenShop(product.shop.slug);
+      }}
       className="motion-interactive group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[#e7e9e5] bg-white text-left shadow-[0_2px_12px_rgba(20,40,30,.06)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2"
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-[#d1fae5]">
@@ -226,7 +259,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
             {products.map((product, index) => (
               <React.Fragment key={`${product.shop_id}-${product.id}`}>
                 <li className="min-w-0"><MotionReveal delay={Math.min(index, 7) * 0.045}>{renderProductCard(product)}</MotionReveal></li>
-                {!promotionsOnly && index === 3 && products.length >= 6 && <PublicCampaignCarousel onOpenShop={onOpenShop} eligible placement="feed" />}
+                {!promotionsOnly && index === 3 && products.length >= 6 && <PublicCampaignCarousel onOpenShop={onOpenShop} eligible placement="feed" previewCampaigns={demoCampaigns} />}
               </React.Fragment>
             ))}
           </ul>
