@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowRight, BadgePercent, CheckCircle2, Clock3, MapPin, RotateCcw, Search, Store, X } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
 import { MotionReveal } from './MotionSystem';
 import { getCategoryDefaults, getProductImageForDisplay, isShopCategory, normalizeCustomBannerImage, SHOP_CATEGORIES } from '../utils/categoryDefaults';
 import { shopMatchesDirectorySearch } from '../utils/directorySearch';
@@ -60,6 +61,7 @@ const categoryTileColors: Record<string, string> = {
 
 export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoading, loadError, onRetry, onOpenShop, onOpenDirectory, discoveryPage, isShopDirectoryPage = false, isPromotionsPage = false }) => {
   const location = useLocation();
+  const prefersReducedMotion = useReducedMotion();
   const [query, setQuery] = useState(() => isShopDirectoryPage ? new URLSearchParams(location.search).get('q') || '' : '');
   const [category, setCategory] = useState(discoveryPage?.category || 'all');
   const [directorySort, setDirectorySort] = useState<DirectorySort>('recommended');
@@ -332,22 +334,34 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       ) : (
       <section className="mx-auto w-full max-w-[1280px] px-4 pb-4 pt-4 sm:px-8 sm:pb-6 sm:pt-6 lg:px-10">
         <div className="grid overflow-hidden rounded-3xl border border-[#e7dfd3] bg-white shadow-[0_8px_28px_rgba(20,40,30,.07)] lg:min-h-[330px] lg:grid-cols-[.88fr_1.12fr]">
-          <MotionReveal className="flex min-w-0 flex-col justify-center bg-gradient-to-br from-[#fffdf8] via-[#f8f5ef] to-[#edf5f0] p-5 sm:p-8 lg:p-9">
-            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#c2410c] sm:text-xs">Le commerce local, simplifié</p>
-            <h1 className="max-w-[600px] font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.055em] text-[#065f46] sm:text-[48px] lg:text-[58px]">
+          <motion.div
+            initial={prefersReducedMotion ? false : 'hidden'}
+            animate="visible"
+            variants={{ hidden: {}, visible: { transition: { delayChildren: 0.08, staggerChildren: 0.1 } } }}
+            className="flex min-w-0 flex-col justify-center bg-gradient-to-br from-[#fffdf8] via-[#f8f5ef] to-[#edf5f0] p-5 sm:p-8 lg:p-9"
+          >
+            <motion.p variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.42, ease: 'easeOut' } } }} className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#c2410c] sm:text-xs">Le commerce local, simplifié</motion.p>
+            <motion.h1 variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.42, ease: 'easeOut' } } }} className="max-w-[600px] font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.055em] text-[#065f46] sm:text-[48px] lg:text-[58px]">
               Le commerce local, <span className="text-[#c2410c]">tout près de vous.</span>
-            </h1>
-            <p className="mt-3 max-w-[480px] text-sm leading-6 text-[#47534b] sm:text-[15px]">
+            </motion.h1>
+            <motion.p variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.42, ease: 'easeOut' } } }} className="mt-3 max-w-[480px] text-sm leading-6 text-[#47534b] sm:text-[15px]">
               Parcourez les boutiques, repérez leurs produits et contactez directement les commerçants de Côte d’Ivoire.
-            </p>
-            {searchForm}
-            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[11px] font-semibold text-[#315548] sm:text-xs">
+            </motion.p>
+            <motion.div variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.42, ease: 'easeOut' } } }}>
+              {searchForm}
+            </motion.div>
+            <motion.div variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.42, ease: 'easeOut' } } }} className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[11px] font-semibold text-[#315548] sm:text-xs">
               <span className="inline-flex items-center gap-1.5"><Store className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Boutiques locales</span>
               <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Échange direct</span>
               <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Retrait ou livraison à convenir</span>
-            </div>
-          </MotionReveal>
-          <MotionReveal delay={0.12} className="flex min-w-0 flex-col justify-center bg-[#fffdf8] p-4 sm:p-6 lg:p-7">
+            </motion.div>
+          </motion.div>
+          <motion.div
+            initial={prefersReducedMotion ? false : { opacity: 0, y: 14, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.55, delay: prefersReducedMotion ? 0 : 0.22, ease: 'easeOut' }}
+            className="flex min-w-0 flex-col justify-center bg-[#fffdf8] p-4 sm:p-6 lg:p-7"
+          >
             <div className="mb-3 flex items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff0df] px-3 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#8f351d] sm:text-[10px]">
                 <BadgePercent className="h-3.5 w-3.5" aria-hidden="true" /> Vitrine premium
@@ -355,7 +369,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <span className="text-[9px] font-bold uppercase tracking-wide text-[#647067] sm:text-[10px]">Sponsors & partenaires</span>
             </div>
             <PublicCampaignCarousel onOpenShop={onOpenShop} eligible={campaignEligible} placement="billboard" previewCampaigns={demoContent?.campaigns} />
-          </MotionReveal>
+          </motion.div>
         </div>
       </section>
       )}
