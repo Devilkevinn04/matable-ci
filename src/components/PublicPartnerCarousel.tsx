@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, ArrowUpRight, Pause, Play } from 'lucide-react';
+import { useAutoScrollRail } from '../hooks/useAutoScrollRail';
 
 export interface PublicPermanentPartner {
   id: string;
@@ -25,11 +26,9 @@ interface PublicPartnerCarouselProps {
 
 export const PublicPartnerCarousel: React.FC<PublicPartnerCarouselProps> = ({ previewPartners }) => {
   const [partners, setPartners] = useState<PublicPermanentPartner[]>(previewPartners || []);
-  const scrollContainer = useRef<HTMLDivElement | null>(null);
   const [paused, setPaused] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
   const isPreview = previewPartners !== undefined;
+  const { railRef: scrollContainer, handlers } = useAutoScrollRail<HTMLDivElement>(!paused, partners.length, 5000);
 
   useEffect(() => {
     if (isPreview) {
@@ -50,23 +49,6 @@ export const PublicPartnerCarousel: React.FC<PublicPartnerCarouselProps> = ({ pr
     return () => { cancelled = true; };
   }, [isPreview, previewPartners]);
 
-  useEffect(() => {
-    const container = scrollContainer.current;
-    if (!container || partners.length < 2 || paused || hovered || focused
-      || window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      || container.scrollWidth <= container.clientWidth) return undefined;
-    const interval = window.setInterval(() => {
-      const maxScroll = container.scrollWidth - container.clientWidth;
-      const distance = Math.max(container.clientWidth * 0.75, 240);
-      if (container.scrollLeft + distance >= maxScroll - 12) {
-        container.scrollTo({ left: 0, behavior: 'smooth' });
-      } else {
-        container.scrollBy({ left: distance, behavior: 'smooth' });
-      }
-    }, 5000);
-    return () => window.clearInterval(interval);
-  }, [partners.length, paused, hovered, focused]);
-
   if (partners.length === 0) return null;
 
   const scroll = (direction: -1 | 1) => {
@@ -78,37 +60,32 @@ export const PublicPartnerCarousel: React.FC<PublicPartnerCarouselProps> = ({ pr
 
   return (
     <section
-      className="mx-auto w-full max-w-[1280px] px-4 py-4 sm:px-8 sm:py-5 lg:px-10"
+      className="group mx-auto w-full max-w-[1280px] px-4 py-4 sm:px-8 sm:py-5 lg:px-10"
       aria-label="Partenaires permanents de MaTable.ci"
       aria-roledescription="carrousel"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onFocus={() => setFocused(true)}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
-      }}
+      {...handlers}
     >
       <div className="mb-3 flex items-end justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#c2410c]">Partenaires et institutions</p>
           <h2 className="mt-1 font-display text-lg font-extrabold tracking-tight text-[#183f32] sm:text-xl">Ils accompagnent le commerce local</h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="carousel-controls flex items-center gap-2">
           {isPreview && <span className="hidden rounded-full bg-[#e3f1e8] px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-[#065f46] sm:inline-flex">Exemple fictif · aperçu</span>}
           {partners.length > 1 && <>
-            <button type="button" onClick={() => scroll(-1)} aria-label="Partenaires précédents" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
+            <button type="button" onClick={() => scroll(-1)} aria-label="Partenaires précédents" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </button>
-            <button type="button" onClick={() => setPaused((current) => !current)} aria-label={paused ? 'Reprendre le défilement des partenaires' : 'Mettre en pause le défilement des partenaires'} className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
+            <button type="button" onClick={() => setPaused((current) => !current)} aria-label={paused ? 'Reprendre le défilement des partenaires' : 'Mettre en pause le défilement des partenaires'} className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
               {paused ? <Play className="h-3.5 w-3.5" aria-hidden="true" /> : <Pause className="h-3.5 w-3.5" aria-hidden="true" />}
             </button>
-            <button type="button" onClick={() => scroll(1)} aria-label="Partenaires suivants" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
+            <button type="button" onClick={() => scroll(1)} aria-label="Partenaires suivants" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </>}
         </div>
       </div>
-      <div ref={scrollContainer} className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:thin]">
+      <div ref={scrollContainer} className="carousel-rail -mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2">
         {partners.map((partner) => (
           <article key={partner.id} className="flex min-h-[106px] min-w-[78%] snap-start items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-3 shadow-[0_3px_14px_rgba(20,40,30,.05)] sm:min-w-[44%] sm:p-4 lg:min-w-[calc(25%-9px)]">
             <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#eee8de] bg-[#fffdf8] text-lg font-black text-[#065f46]">

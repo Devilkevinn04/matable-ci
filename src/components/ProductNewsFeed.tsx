@@ -10,6 +10,7 @@ import { getActiveProductPrice } from '../utils/productPricing';
 import { MotionReveal } from './MotionSystem';
 import { PublicCampaignCarousel, type PublicCampaign } from './PublicCampaignCarousel';
 import { PublicPartnerRequestForm } from './PublicPartnerRequestForm';
+import { useAutoScrollRail } from '../hooks/useAutoScrollRail';
 
 interface FeedShop {
   id: number;
@@ -66,6 +67,8 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const isHorizontalRail = !promotionsOnly;
+  const productRail = useAutoScrollRail<HTMLUListElement>(isHorizontalRail, products.length, 5400);
 
   useEffect(() => {
     setSort(promotionsOnly ? 'promotions' : 'popular');
@@ -182,7 +185,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
         event.preventDefault();
         onOpenShop(product.shop.slug);
       }}
-      className="motion-interactive group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[#e7e9e5] bg-white text-left shadow-[0_2px_12px_rgba(20,40,30,.06)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2"
+      className="motion-interactive group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[#e7e9e5] bg-white text-left shadow-[0_2px_12px_rgba(20,40,30,.06)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2"
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-[#d1fae5]">
         <img src={getProductImageForDisplay(product.image_url, product.shop.category)} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
@@ -255,11 +258,21 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
         <div className="mt-6 rounded-2xl border border-dashed border-[#cfc8bc] bg-[#FFFFFF] p-8 text-center text-sm text-[#647067]">{promotionsOnly ? 'Aucune promotion active pour cette catégorie. Revenez bientôt pour découvrir les prochaines offres.' : 'Aucun produit disponible avec ces filtres pour l’instant.'}</div>
       ) : (
         <>
-          <ul className="mt-5 grid list-none grid-cols-2 items-stretch gap-3 p-0 sm:mt-6 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4" aria-label="Produits à découvrir">
+          <ul
+            ref={isHorizontalRail ? productRail.railRef : undefined}
+            {...(isHorizontalRail ? productRail.handlers : {})}
+            className={`mt-5 list-none items-stretch gap-3 p-0 sm:mt-6 sm:gap-4 ${isHorizontalRail ? 'carousel-rail flex snap-x snap-mandatory overflow-x-auto pb-2' : 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'}`}
+            aria-label="Produits à découvrir"
+            aria-roledescription={isHorizontalRail ? 'carrousel' : undefined}
+            role={isHorizontalRail ? 'region' : undefined}
+            tabIndex={isHorizontalRail ? 0 : undefined}
+          >
             {products.map((product, index) => (
               <React.Fragment key={`${product.shop_id}-${product.id}`}>
-                <li className="min-w-0"><MotionReveal delay={Math.min(index, 7) * 0.045}>{renderProductCard(product)}</MotionReveal></li>
-                {!promotionsOnly && index === 3 && products.length >= 6 && <PublicCampaignCarousel onOpenShop={onOpenShop} eligible placement="feed" previewCampaigns={demoCampaigns} />}
+                <li className={isHorizontalRail ? 'min-w-0 shrink-0 snap-start basis-[82%] sm:basis-[44%] lg:basis-[calc((100%-48px)/4)]' : 'min-w-0'}>
+                  <MotionReveal delay={Math.min(index, 7) * 0.045} className="h-full">{renderProductCard(product)}</MotionReveal>
+                </li>
+                {!promotionsOnly && index === 3 && products.length >= 6 && <PublicCampaignCarousel onOpenShop={onOpenShop} eligible placement="feed" previewCampaigns={demoCampaigns} horizontalFeed />}
               </React.Fragment>
             ))}
           </ul>

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowUpRight, ArrowRight, Megaphone } from 'lucide-react';
+import { useReducedMotion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import type { Product } from '../types';
 import { formatFCFA } from '../utils/format';
@@ -26,6 +27,7 @@ interface PublicCampaignCarouselProps {
   eligible: boolean;
   placement: 'billboard' | 'tiles' | 'feed';
   previewCampaigns?: PublicCampaign[];
+  horizontalFeed?: boolean;
 }
 
 const CONSENT_KEY = 'matable-ad-measurement-consent-v1';
@@ -39,14 +41,19 @@ function getVisitorId(): string {
   return created;
 }
 
-export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ onOpenShop, eligible, placement, previewCampaigns }) => {
+export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ onOpenShop, eligible, placement, previewCampaigns, horizontalFeed = false }) => {
   const [campaigns, setCampaigns] = useState<PublicCampaign[]>(previewCampaigns || []);
   const [campaignsLoaded, setCampaignsLoaded] = useState(false);
   const [measurementConsent, setMeasurementConsent] = useState(false);
   const [bannerIndex, setBannerIndex] = useState(0);
+  const [billboardHovered, setBillboardHovered] = useState(false);
+  const [billboardFocused, setBillboardFocused] = useState(false);
+  const [billboardPointerDown, setBillboardPointerDown] = useState(false);
   const campaignElement = useRef<HTMLElement | null>(null);
   const recordedImpressions = useRef(new Set<string>());
   const isPreview = previewCampaigns !== undefined;
+  const prefersReducedMotion = useReducedMotion();
+  const billboardInteracting = billboardHovered || billboardFocused || billboardPointerDown;
 
   useEffect(() => {
     if (isPreview) {
@@ -141,13 +148,12 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
   };
 
   useEffect(() => {
-    if (placement !== 'billboard' || bannerCampaigns.length < 2
-      || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (placement !== 'billboard' || bannerCampaigns.length < 2 || prefersReducedMotion || billboardInteracting) return;
     const timer = window.setInterval(() => {
       setBannerIndex((index) => (index + 1) % bannerCampaigns.length);
     }, 6500);
     return () => window.clearInterval(timer);
-  }, [placement, bannerCampaigns.length]);
+  }, [placement, bannerCampaigns.length, prefersReducedMotion, billboardInteracting]);
 
   useEffect(() => {
     setBannerIndex((index) => bannerCampaigns.length ? index % bannerCampaigns.length : 0);
@@ -215,7 +221,9 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
   if (!campaign && placement !== 'feed') return null;
   if (!campaign && placement === 'feed') {
     return (
-      <li className="col-span-2 list-none sm:col-span-3 lg:col-span-4">
+      <li className={horizontalFeed
+        ? 'carousel-rail-item min-w-0 shrink-0 snap-start basis-[82%] list-none sm:basis-[44%] lg:basis-[calc((100%-48px)/4)]'
+        : 'col-span-2 list-none sm:col-span-3 lg:col-span-4'}>
       <aside className="overflow-hidden rounded-3xl border border-dashed border-[#b8d3c8] bg-gradient-to-r from-[#f5faf6] to-white shadow-sm" aria-label="Espace publicitaire">
         <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div className="min-w-0">
@@ -300,7 +308,19 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
     );
 
     return (
-      <section ref={(element) => { campaignElement.current = element; }} className="min-w-0" aria-label="Campagnes sponsorisées">
+      <section
+        ref={(element) => { campaignElement.current = element; }}
+        className="group/billboard min-w-0"
+        aria-label="Campagnes sponsorisées"
+        onPointerEnter={(event) => { if (event.pointerType !== 'touch') setBillboardHovered(true); }}
+        onPointerLeave={() => setBillboardHovered(false)}
+        onPointerDown={() => setBillboardPointerDown(true)}
+        onPointerUp={() => setBillboardPointerDown(false)}
+        onFocus={() => setBillboardFocused(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setBillboardFocused(false);
+        }}
+      >
         <div className={`grid gap-3 ${visibleCampaigns.length > 1 ? 'lg:grid-cols-[1.55fr_1fr]' : ''}`}>
           {visibleCampaigns[0] && renderBanner(visibleCampaigns[0], true)}
           {visibleCampaigns.length > 1 && <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
@@ -308,7 +328,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
           </div>}
         </div>
         {bannerCampaigns.length > 1 && (
-          <div className="mt-2 flex items-center justify-end gap-2" aria-label="Naviguer entre les campagnes">
+          <div className="carousel-controls mt-2 flex items-center justify-end gap-2" aria-label="Naviguer entre les campagnes">
             <span className="mr-auto text-[10px] font-semibold text-[#647067]" aria-live="polite">Partenaires mis en avant</span>
             <button type="button" aria-label="Campagne précédente" onClick={() => setBannerIndex((index) => (index - 1 + bannerCampaigns.length) % bannerCampaigns.length)} className="flex h-8 w-8 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8]">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -333,7 +353,11 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
   if (!campaign || !product) return null;
 
   return (
-    <li ref={(element) => { campaignElement.current = element; }} className="min-w-0 overflow-hidden rounded-2xl border border-[#e0d5c6] bg-white shadow-[0_2px_12px_rgba(20,40,30,.06)]" aria-label="Produit sponsorisé">
+    <li
+      ref={(element) => { campaignElement.current = element; }}
+      className={`${horizontalFeed ? 'carousel-rail-item min-w-0 shrink-0 snap-start basis-[82%] sm:basis-[44%] lg:basis-[calc((100%-48px)/4)]' : 'min-w-0'} overflow-hidden rounded-2xl border border-[#e0d5c6] bg-white shadow-[0_2px_12px_rgba(20,40,30,.06)]`}
+      aria-label="Produit sponsorisé"
+    >
       <button type="button" onClick={() => { void sendEvent('click'); onOpenShop(campaign.shop.slug); }} className="group flex h-full w-full flex-col text-left">
         <span className="relative aspect-[4/3] w-full overflow-hidden bg-[#d1fae5]">
           <img src={product.image_url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />

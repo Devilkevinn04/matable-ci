@@ -10,6 +10,7 @@ import { ProductNewsFeed, type FeedProduct } from './ProductNewsFeed';
 import { PublicCampaignCarousel, type PublicCampaign } from './PublicCampaignCarousel';
 import { PublicPartnerCarousel, type PublicPermanentPartner } from './PublicPartnerCarousel';
 import { formatFCFA } from '../utils/format';
+import { useAutoScrollRail } from '../hooks/useAutoScrollRail';
 
 interface DirectoryShop {
   id?: number;
@@ -190,6 +191,16 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       && (!query.trim() || shopMatchesDirectorySearch(shop, query, categoryLabel(shop.category))))
     .sort((left, right) => Number(Boolean(right.is_sponsored || right.is_featured)) - Number(Boolean(left.is_sponsored || left.is_featured)))
     .slice(0, 8);
+  const categoryRail = useAutoScrollRail<HTMLDivElement>(
+    !discoveryPage && !isShopDirectoryPage && !directoryIsLoading,
+    categories.length,
+    4600,
+  );
+  const shopRail = useAutoScrollRail<HTMLDivElement>(
+    !discoveryPage && !isShopDirectoryPage && !isLoading,
+    homeShops.length,
+    5200,
+  );
   const demoContent = useMemo(() => {
     if (!isLocalAdvertisingDemo) return undefined;
     const shuffled = <T,>(items: T[]) => {
@@ -513,11 +524,19 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         </div>
         {directoryIsLoading ? <div role="status" aria-label="Chargement des catégories" className="flex gap-3 overflow-hidden">
           {[0, 1, 2, 3, 4].map((item) => <div key={item} className="h-[94px] min-w-[118px] animate-pulse rounded-2xl bg-[#e9e4da] sm:min-w-[150px]" />)}
-        </div> : <div className="-mx-5 flex snap-x gap-3 overflow-x-auto px-5 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-5">
+        </div> : <div
+          ref={categoryRail.railRef}
+          {...categoryRail.handlers}
+          className="carousel-rail -mx-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-2 sm:mx-0 sm:px-0"
+          aria-label="Catégories de boutiques"
+          aria-roledescription="carrousel"
+          role="region"
+          tabIndex={0}
+        >
           {categories.map((item, index) => {
             const count = categoryCounts.get(item) || 0;
-            return <MotionReveal key={item} delay={index * 0.05} className="min-w-[118px] sm:min-w-0">
-            <button type="button" aria-pressed={category === item} onClick={() => isLocalAdvertisingDemo ? setCategory(category === item ? 'all' : item) : onOpenDirectory(categoryLabel(item))} className={`motion-interactive group flex min-h-[94px] min-w-[118px] snap-start flex-col items-start justify-between rounded-2xl border border-black/[.04] px-3 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(20,40,30,.08)] sm:min-w-0 sm:px-4 ${category === item && isLocalAdvertisingDemo ? 'ring-2 ring-[#065f46] ring-offset-2' : ''}`} style={{ backgroundColor: categoryTileColors[item] || '#f1f5f2' }}>
+            return <MotionReveal key={item} delay={index * 0.05} className="w-[46%] shrink-0 snap-start sm:w-[calc(33.333%-8px)] lg:w-[calc(20%-10px)]">
+            <button type="button" aria-pressed={category === item} onClick={() => isLocalAdvertisingDemo ? setCategory(category === item ? 'all' : item) : onOpenDirectory(categoryLabel(item))} className={`motion-interactive group flex min-h-[112px] w-full flex-col items-start justify-between rounded-2xl border border-black/[.04] px-3 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(20,40,30,.08)] sm:px-4 ${category === item && isLocalAdvertisingDemo ? 'ring-2 ring-[#065f46] ring-offset-2' : ''}`} style={{ backgroundColor: categoryTileColors[item] || '#f1f5f2' }}>
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/80 text-xl" aria-hidden="true">{getCategoryDefaults(item).icon}</span>
               <span className="mt-2 flex w-full items-end justify-between gap-1">
                 <span className="min-w-0">
@@ -555,9 +574,17 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           ) : homeShops.length === 0 ? (
             <div className="flex min-h-28 items-center justify-center rounded-2xl border border-dashed border-[#d8d0c3] bg-white px-5 text-center text-sm text-[#647067]">Les boutiques locales seront bientôt à découvrir ici.</div>
           ) : (
-            <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0 sm:gap-4 lg:grid-cols-4">
+            <div
+              ref={shopRail.railRef}
+              {...shopRail.handlers}
+              className="carousel-rail -mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 sm:mx-0 sm:gap-4"
+              aria-label="Boutiques à la une"
+              aria-roledescription="carrousel"
+              role="region"
+              tabIndex={0}
+            >
               {homeShops.map((shop, index) => (
-                <MotionReveal key={shop.slug} delay={index * 0.04} className="min-w-[78%] snap-start sm:min-w-0">
+                <MotionReveal key={shop.slug} delay={index * 0.04} className="h-[336px] min-w-[78%] snap-start sm:min-w-[44%] lg:min-w-[calc(25%-12px)]">
                   <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className="motion-interactive group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white shadow-[0_2px_12px_rgba(20,40,30,.05)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.1)]">
                     <span className="relative block aspect-[1.45] overflow-hidden bg-[#e9f5ee]">
                       <img src={getShopImage(shop)} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" onError={(event) => { event.currentTarget.hidden = true; }} />

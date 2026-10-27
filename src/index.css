@@ -71,6 +71,26 @@ html {
   scale: 0.98;
 }
 
+.carousel-rail {
+  scrollbar-width: none;
+}
+
+.carousel-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.carousel-controls {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--mt-motion-fast) var(--mt-motion-ease);
+}
+
+.group:hover .carousel-controls,
+.group:focus-within .carousel-controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 img, svg, video, canvas {
   max-width: 100%;
 }
