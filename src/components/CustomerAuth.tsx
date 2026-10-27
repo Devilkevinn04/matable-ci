@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { ArrowRight, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, Eye, EyeOff, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MapPin, Menu, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, UserRound, X } from 'lucide-react';
+import { ArrowRight, CalendarDays, Check, ChevronRight, Clock3, Eye, EyeOff, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MapPin, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, UserRound } from 'lucide-react';
 import { AuthAudienceSwitcher, AuthExperienceLayout } from './AuthExperienceLayout';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
 import { CustomerMerchantRegistrationForm } from './CustomerMerchantRegistrationForm';
@@ -235,8 +234,6 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
   const [savedError, setSavedError] = useState<string | null>(null);
   const [savedRefresh, setSavedRefresh] = useState(0);
   const [activeSection, setActiveSection] = useState<CustomerAccountSection>('overview');
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const prefersReducedMotion = useReducedMotion();
   const [firstName, setFirstName] = useState(user.first_name);
   const [lastName, setLastName] = useState(user.last_name);
   const [phone, setPhone] = useState(user.phone);
@@ -454,150 +451,46 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
     }
   };
 
-  const accountSections: { id: CustomerAccountSection; label: string; description: string; icon: typeof ShoppingBag }[] = [
-    { id: 'overview', label: 'Vue d’ensemble', description: 'Résumé de votre compte', icon: LayoutDashboard },
-    { id: 'orders', label: 'Mes commandes', description: 'Historique et détails', icon: ShoppingBag },
-    { id: 'favorites', label: 'Mes favoris', description: 'Boutiques et produits gardés', icon: Heart },
-    { id: 'profile', label: 'Mes informations', description: 'Coordonnées du compte', icon: UserRound },
-    { id: 'security', label: 'Sécurité', description: 'Mot de passe et accès', icon: KeyRound },
+  const accountSections: { id: CustomerAccountSection; label: string; mobileLabel: string; description: string; icon: typeof ShoppingBag }[] = [
+    { id: 'overview', label: 'Vue d’ensemble', mobileLabel: 'Accueil', description: 'Résumé de votre compte', icon: LayoutDashboard },
+    { id: 'orders', label: 'Mes commandes', mobileLabel: 'Commandes', description: 'Historique et détails', icon: ShoppingBag },
+    { id: 'favorites', label: 'Mes favoris', mobileLabel: 'Favoris', description: 'Boutiques et produits gardés', icon: Heart },
+    { id: 'profile', label: 'Mes informations', mobileLabel: 'Profil', description: 'Coordonnées du compte', icon: UserRound },
+    { id: 'security', label: 'Sécurité', mobileLabel: 'Sécurité', description: 'Mot de passe et accès', icon: KeyRound },
   ];
-  const currentAccountSection = accountSections.find(({ id }) => id === activeSection) || accountSections[0];
-  const accountMenuVariants = {
-    closed: {
-      opacity: 0,
-      y: -12,
-      scale: 0.98,
-      height: 0,
-      transition: prefersReducedMotion ? { duration: 0 } : { duration: 0.14, ease: 'easeIn' as const },
-    },
-    open: {
-      opacity: 1,
-      y: 0,
-      scale: 1,
-      height: 'auto',
-      transition: prefersReducedMotion ? { duration: 0 } : { type: 'spring' as const, stiffness: 360, damping: 30, staggerChildren: 0.055, delayChildren: 0.06 },
-    },
-  };
-  const accountMenuItemVariants = {
-    closed: { opacity: 0, y: -8 },
-    open: { opacity: 1, y: 0, transition: prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: 'easeOut' as const } },
-  };
   const activeOrdersCount = orders.filter((order) => ['pending', 'confirmed', 'preparing', 'ready'].includes(order.status)).length;
-  const completedOrdersCount = orders.filter((order) => order.status === 'delivered').length;
 
   return (
-    <main className="min-h-screen bg-[#FAF8F2] text-[#292d2a]">
+    <main className="min-h-screen bg-[#FAF8F2] pb-24 text-[#292d2a] lg:pb-0">
       <header className="border-b border-[#e3d9cc] bg-[#FFFFFF]">
         <div className="mx-auto flex max-w-[1184px] flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-8">
-          <a href="/" className="inline-flex items-center gap-3 font-display text-lg font-extrabold tracking-tight text-[#292d2a]">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#065f46] text-white">M</span>
+          <Link to="/" className="inline-flex items-center gap-3 font-display text-lg font-extrabold tracking-tight text-[#292d2a]">
+            <img src="/brand-kit/monogram.svg" alt="" className="h-10 w-10 shrink-0" />
             <span>MaTable<span className="text-[#047857]">.ci</span></span>
-          </a>
+          </Link>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={onBack} className="inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-bold text-[#47534b] transition hover:bg-[#d1fae5]"><ShoppingBag className="h-4 w-4" />Découvrir</button>
-            <button type="button" onClick={onLogout} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#ded8ce] px-4 text-sm font-bold text-[#647067] transition hover:bg-[#FAF8F2]"><LogOut className="h-4 w-4" />Déconnexion</button>
+            <button type="button" onClick={onBack} aria-label="Découvrir les boutiques" className="inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm font-bold text-[#47534b] transition hover:bg-[#d1fae5] sm:px-4"><ShoppingBag className="h-4 w-4" /><span className="sr-only sm:not-sr-only">Découvrir</span></button>
+            <button type="button" onClick={onLogout} aria-label="Déconnexion" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[#ded8ce] px-3 text-sm font-bold text-[#647067] transition hover:bg-[#FAF8F2] sm:px-4"><LogOut className="h-4 w-4" /><span className="sr-only sm:not-sr-only">Déconnexion</span></button>
           </div>
         </div>
       </header>
 
       <section className="relative isolate overflow-hidden bg-[#065f46] text-white">
         <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-36 -z-10 h-96 w-96 rounded-full border border-white/10 sm:right-8 sm:top-[-17rem] sm:h-[34rem] sm:w-[34rem]" />
-        <div className="mx-auto flex max-w-[1184px] flex-col justify-between gap-7 px-5 py-8 sm:px-8 sm:py-11 md:flex-row md:items-end">
-          <div className="flex min-w-0 items-start gap-4">
-            <span aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 font-display text-xl font-extrabold text-[#f0ba80] sm:h-16 sm:w-16 sm:text-2xl">
+        <div className="mx-auto flex max-w-[1184px] items-center gap-3 px-5 py-5 sm:gap-4 sm:px-8 sm:py-8">
+          <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 font-display text-lg font-extrabold text-[#f0ba80] sm:h-16 sm:w-16 sm:text-2xl">
               {(user.first_name || user.name).trim().charAt(0).toLocaleUpperCase()}
-            </span>
-            <div className="min-w-0 max-w-2xl">
-              <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#f0ba80]">Votre espace client</p>
-              <h1 className="mt-2 font-display text-3xl font-extrabold leading-tight tracking-[-0.04em] sm:text-5xl">Bonjour {user.first_name || user.name}.</h1>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-white/75 sm:text-base">Vos commandes et les informations de votre compte, réunies au même endroit.</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-3 pl-[4.5rem] md:pl-0">
-            <div className="min-w-32 rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3">
-              <span className="block text-2xl font-extrabold tabular-nums">{ordersLoading ? '…' : orders.length}</span>
-              <span className="text-xs text-white/70">commande{orders.length === 1 ? '' : 's'}</span>
-            </div>
-            <div className="min-w-40 rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3">
-              <span className="flex items-center gap-2 text-sm font-bold"><CalendarDays className="h-4 w-4 text-[#f0ba80]" />Membre depuis</span>
-              <span className="mt-1 block text-xs capitalize text-white/70">{user.created_at ? new Date(user.created_at).toLocaleDateString('fr-CI', { month: 'long', year: 'numeric' }) : 'MaTable.ci'}</span>
-            </div>
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#f0ba80] sm:text-xs">Votre espace client</p>
+            <h1 className="mt-0.5 truncate font-display text-2xl font-extrabold leading-tight tracking-[-0.04em] sm:mt-1 sm:text-4xl">Bonjour {user.first_name || user.name}.</h1>
+            <p className="mt-1 text-xs leading-5 text-white/75 sm:mt-2 sm:text-sm">Commandes, favoris et informations au même endroit.</p>
+            {user.created_at && <p className="mt-1 flex items-center gap-1.5 text-[10px] text-white/60 sm:text-xs"><CalendarDays className="h-3 w-3 text-[#f0ba80]" />Membre depuis {new Date(user.created_at).toLocaleDateString('fr-CI', { month: 'long', year: 'numeric' })}</p>}
           </div>
         </div>
       </section>
 
-      <div className="mx-auto grid min-w-0 max-w-[1184px] grid-cols-[minmax(0,1fr)] gap-6 px-5 py-7 sm:px-8 sm:py-10 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <div className="lg:hidden">
-          <motion.button
-            type="button"
-            aria-label={accountMenuOpen ? 'Fermer le menu du compte' : 'Ouvrir le menu du compte'}
-            aria-expanded={accountMenuOpen}
-            aria-controls="mobile-customer-account-menu"
-            onClick={() => setAccountMenuOpen((open) => !open)}
-            whileTap={prefersReducedMotion ? undefined : { scale: 0.98 }}
-            className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl border border-[#d9e7de] bg-[#FFFFFF] px-4 text-left shadow-[0_8px_24px_rgba(36,28,22,.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2"
-          >
-            <span className="flex min-w-0 items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#d1fae5] text-[#065f46]"><currentAccountSection.icon className="h-5 w-5" aria-hidden="true" /></span>
-              <span className="min-w-0">
-                <span className="block text-[10px] font-bold uppercase tracking-[0.13em] text-[#c2410c]">Votre espace client</span>
-                <span className="mt-0.5 block truncate font-display text-base font-extrabold text-[#292d2a]">{currentAccountSection.label}</span>
-              </span>
-            </span>
-            <span className="flex h-10 shrink-0 items-center gap-2 rounded-full bg-[#f0f7f2] px-3 text-sm font-extrabold text-[#065f46]">
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.span
-                  key={accountMenuOpen ? 'close' : 'open'}
-                  initial={prefersReducedMotion ? false : { opacity: 0, rotate: -70, scale: 0.7 }}
-                  animate={{ opacity: 1, rotate: 0, scale: 1 }}
-                  exit={prefersReducedMotion ? undefined : { opacity: 0, rotate: 70, scale: 0.7 }}
-                  transition={{ duration: prefersReducedMotion ? 0 : 0.18 }}
-                  className="flex"
-                >
-                  {accountMenuOpen ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-4 w-4" aria-hidden="true" />}
-                </motion.span>
-              </AnimatePresence>
-              {accountMenuOpen ? 'Fermer' : 'Menu'}
-            </span>
-          </motion.button>
-
-          <AnimatePresence initial={false}>
-            {accountMenuOpen && (
-              <motion.nav
-                id="mobile-customer-account-menu"
-                aria-label="Rubriques du compte"
-                variants={accountMenuVariants}
-                initial="closed"
-                animate="open"
-                exit="closed"
-                transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.16, ease: 'easeOut' }}
-                className="mt-3 origin-top overflow-hidden rounded-[22px] border border-[#e3d9cc] bg-[#FFFFFF] p-2 shadow-[0_18px_48px_rgba(36,28,22,.12)]"
-              >
-                <div className="grid gap-1.5">
-                  {accountSections.map(({ id, label, description, icon: Icon }) => (
-                    <motion.button
-                      key={id}
-                      type="button"
-                      aria-current={activeSection === id ? 'page' : undefined}
-                      variants={accountMenuItemVariants}
-                      whileHover={prefersReducedMotion ? undefined : { x: 3 }}
-                      whileTap={prefersReducedMotion ? undefined : { scale: 0.99 }}
-                      onClick={() => { setActiveSection(id); setAccountMenuOpen(false); }}
-                      className={`flex min-h-14 items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition ${activeSection === id ? 'bg-[#d1fae5] text-[#065f46]' : 'text-[#514b43] hover:bg-[#FAF8F2]'}`}
-                    >
-                      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${activeSection === id ? 'bg-white text-[#065f46]' : 'bg-[#f1eee7] text-[#647067]'}`}><Icon className="h-4 w-4" aria-hidden="true" /></span>
-                      <span className="min-w-0 flex-1">
-                        <strong className="block text-sm">{label}</strong>
-                        <span className="mt-0.5 block text-xs text-[#81796f]">{description}</span>
-                      </span>
-                      {activeSection === id && <CheckCircle2 className="h-4 w-4 shrink-0 text-[#047857]" aria-hidden="true" />}
-                    </motion.button>
-                  ))}
-                </div>
-              </motion.nav>
-            )}
-          </AnimatePresence>
-        </div>
+      <div className="mx-auto grid min-w-0 max-w-[1184px] grid-cols-[minmax(0,1fr)] gap-6 px-4 py-4 sm:px-8 sm:py-8 lg:grid-cols-[260px_minmax(0,1fr)]">
 
         <nav aria-label="Menu du compte client" className="hidden gap-2 pb-1 lg:flex lg:flex-col">
           {accountSections.map(({ id, label, description, icon: Icon }) => (
@@ -617,54 +510,41 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
           </div>
         </nav>
 
-        <section className="min-w-0 rounded-[24px] border border-[#e3d9cc] bg-[#FFFFFF] p-5 shadow-[0_10px_30px_rgba(37,35,31,.05)] sm:p-7" aria-live="polite">
+        <section className="min-w-0 rounded-[24px] border border-[#e3d9cc] bg-[#FFFFFF] p-4 shadow-[0_10px_30px_rgba(37,35,31,.05)] sm:p-7" aria-live="polite">
           {activeSection === 'overview' && <>
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#c2410c]">Votre espace MaTable</p>
-                <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Votre compte, en un coup d’œil</h2>
-                <p className="mt-2 text-sm leading-6 text-[#647067]">Suivez vos achats et retrouvez rapidement vos informations utiles.</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[#c2410c] sm:text-xs">Votre espace MaTable</p>
+                <h2 className="mt-1 font-display text-xl font-extrabold sm:text-3xl">Votre activité</h2>
+                <p className="mt-1 text-xs leading-5 text-[#647067] sm:mt-2 sm:text-sm sm:leading-6">Suivez vos commandes et retrouvez vos sélections.</p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Link to="/guide?role=customer" state={{ guideAccountId: user.id }} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[#065f46] transition hover:bg-[#d1fae5]">
-                  <BookOpen className="h-4 w-4" /> Guide d’utilisation
-                </Link>
-                <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#065f46] px-5 text-sm font-bold text-white transition hover:bg-[#047857]">
-                  Découvrir les boutiques <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
+              <button type="button" onClick={onBack} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[#065f46] px-4 text-xs font-bold text-white transition hover:bg-[#047857] sm:min-h-11 sm:px-5 sm:text-sm">
+                Découvrir <ArrowRight className="h-4 w-4" />
+              </button>
             </div>
 
-            <div className="mt-5">
+            <div className="mt-3 sm:mt-5">
               <React.Suspense fallback={<p role="status" className="text-sm text-slate-500">Chargement de votre guide…</p>}>
                 <GuideChecklist role="customer" accountId={user.id} collapsible />
               </React.Suspense>
             </div>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-[#e8e0d6] bg-white p-4">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d1fae5] text-[#065f46]"><ShoppingBag className="h-5 w-5" /></span>
-                <span className="mt-4 block text-2xl font-extrabold tabular-nums text-[#292d2a]">{ordersLoading ? '…' : orders.length}</span>
-                <span className="mt-1 block text-sm text-[#647067]">Commande{orders.length === 1 ? '' : 's'} au total</span>
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#eadfce] bg-[#fff8ec] p-4">
-                <div className="flex items-start gap-3">
-                  <Heart className="mt-0.5 h-5 w-5 shrink-0 text-[#c2410c]" />
-                  <div><p className="font-bold text-[#3d3933]">Vos adresses et produits préférés</p><p className="mt-1 text-sm text-[#647067]">{savedState.shops.length + savedState.products.length} élément{savedState.shops.length + savedState.products.length === 1 ? '' : 's'} enregistré{savedState.shops.length + savedState.products.length === 1 ? '' : 's'}.</p></div>
-                </div>
-                <button type="button" onClick={() => setActiveSection('favorites')} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#e8c7a4] bg-white px-4 text-sm font-bold text-[#87411f] hover:bg-[#fff2df]">Voir mes favoris <ArrowRight className="h-4 w-4" /></button>
-              </div>
-              <div className="rounded-2xl border border-[#e8e0d6] bg-white p-4">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fff2df] text-[#9b5a13]"><Clock3 className="h-5 w-5" /></span>
-                <span className="mt-4 block text-2xl font-extrabold tabular-nums text-[#292d2a]">{ordersLoading ? '…' : activeOrdersCount}</span>
-                <span className="mt-1 block text-sm text-[#647067]">En cours</span>
-              </div>
-              <div className="rounded-2xl border border-[#e8e0d6] bg-white p-4">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f1eee7] text-[#47534b]"><CheckCircle2 className="h-5 w-5" /></span>
-                <span className="mt-4 block text-2xl font-extrabold tabular-nums text-[#292d2a]">{ordersLoading ? '…' : completedOrdersCount}</span>
-                <span className="mt-1 block text-sm text-[#647067]">Terminée{completedOrdersCount === 1 ? '' : 's'}</span>
-              </div>
+            <div className="mt-4 grid grid-cols-3 gap-2 sm:mt-6 sm:gap-3">
+              <button type="button" onClick={() => setActiveSection('orders')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#c8dbd0] hover:bg-[#f8fcf9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] sm:p-4">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#d1fae5] text-[#065f46] sm:h-10 sm:w-10"><ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5" /></span>
+                <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{ordersLoading ? '…' : orders.length}</span>
+                <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#647067] sm:text-sm">Commandes</span>
+              </button>
+              <button type="button" onClick={() => setActiveSection('orders')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#e8c69a] hover:bg-[#fffaf2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] sm:p-4">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#fff2df] text-[#9b5a13] sm:h-10 sm:w-10"><Clock3 className="h-4 w-4 sm:h-5 sm:w-5" /></span>
+                <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{ordersLoading ? '…' : activeOrdersCount}</span>
+                <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#647067] sm:text-sm">En cours</span>
+              </button>
+              <button type="button" onClick={() => setActiveSection('favorites')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#e8c69a] hover:bg-[#fffaf2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] sm:p-4">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#fff2df] text-[#c2410c] sm:h-10 sm:w-10"><Heart className="h-4 w-4 sm:h-5 sm:w-5" /></span>
+                <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{savedLoading ? '…' : savedState.shops.length + savedState.products.length}</span>
+                <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#647067] sm:text-sm">Favoris</span>
+              </button>
             </div>
 
             <div className="mt-7 grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(260px,.8fr)]">
@@ -905,6 +785,23 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
           </div>}
         </section>
       </div>
+
+      <nav aria-label="Navigation du compte client" className="fixed inset-x-0 bottom-0 z-40 border-t border-[#e3d9cc] bg-white/95 px-1 pt-2 shadow-[0_-8px_24px_rgba(36,28,22,.08)] backdrop-blur lg:hidden" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)' }}>
+        <div className="mx-auto flex max-w-lg items-stretch">
+          {accountSections.map(({ id, mobileLabel, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              aria-current={activeSection === id ? 'page' : undefined}
+              onClick={() => setActiveSection(id)}
+              className={`flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#047857] ${activeSection === id ? 'text-[#065f46]' : 'text-[#81796f] hover:text-[#47534b]'}`}
+            >
+              <span className={`flex h-7 w-9 items-center justify-center rounded-full ${activeSection === id ? 'bg-[#d1fae5]' : ''}`}><Icon className="h-[18px] w-[18px]" aria-hidden="true" /></span>
+              <span className="w-full truncate text-[10px] font-bold leading-tight sm:text-xs">{mobileLabel}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
     </main>
   );
 };
