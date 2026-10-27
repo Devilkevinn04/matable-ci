@@ -1,11 +1,15 @@
-const CACHE_NAME = 'matable-ci-v3';
+const CACHE_NAME = 'matable-ci-v4';
 const APP_SHELL = [
   '/',
   '/index.html',
   '/offline.html',
   '/manifest.json',
   '/icon-192.svg',
-  '/icon-512.svg'
+  '/icon-512.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-512.png',
+  '/social-share.png'
 ];
 
 self.addEventListener('install', (event) => {

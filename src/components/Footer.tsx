@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUpRight, MapPin, ShoppingBag, Store } from 'lucide-react';
+import { ArrowUpRight, MapPin, Store } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface FooterProps {
@@ -18,13 +18,8 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
     <div className={`relative z-10 mx-auto max-w-[1280px] px-5 sm:px-8 lg:px-10 ${compact ? 'py-7 sm:py-8' : 'py-9 sm:py-12'}`}>
       <div className="grid gap-9 lg:grid-cols-[1.05fr_1.4fr] lg:gap-16">
         <section aria-labelledby="footer-brand-title" className="max-w-md">
-          <Link to="/" aria-label="MaTable.ci, accueil" className="inline-flex items-center gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0ba80] focus-visible:ring-offset-4 focus-visible:ring-offset-[#064e3b]">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-[#f0ba80]">
-              <ShoppingBag className="h-6 w-6" aria-hidden="true" />
-            </span>
-            <span id="footer-brand-title" className="font-display text-xl font-black tracking-tight">
-              MaTable<span className="text-[#f97316]">.ci</span>
-            </span>
+          <Link to="/" aria-label="MaTable.ci, accueil" className="inline-flex max-w-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0ba80] focus-visible:ring-offset-4 focus-visible:ring-offset-[#064e3b]">
+            <img id="footer-brand-title" src="/brand-kit/logo-reversed.svg" alt="MaTable.ci — Vos commerces, ici" className="h-auto w-[250px] max-w-full" />
           </Link>
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/75">
             Les boutiques, les produits et les talents de Côte d’Ivoire, réunis au même endroit.

@@ -92,10 +92,10 @@ export const Navigation: React.FC<NavigationProps> = ({
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-2 px-4 py-2.5 sm:gap-3 sm:px-8 sm:py-4">
         <div className="flex min-w-0 items-center gap-3">
           <Link to="/" aria-label="MaTable.ci, accueil" className="flex items-center gap-2.5 text-left">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#e9f5ee] text-[#059669]"><ShoppingBag className="h-6 w-6" aria-hidden="true" /></span>
-            <span>
-              <span className="block text-xl font-black leading-5 tracking-tight text-[#059669]">MaTable<span className="text-[#F97316]">.ci</span></span>
-              <span className="hidden text-[9px] font-semibold tracking-[0.06em] text-[#647067] sm:block">Vos commerces, ici</span>
+            <img src="/brand-kit/monogram.svg" alt="" className="h-10 w-10 shrink-0" />
+            <span className="min-w-0">
+              <span className="block whitespace-nowrap text-xl font-black leading-5 tracking-tight text-[#103E32]">MaTable<span className="text-[#F97316]">.ci</span></span>
+              <span className="mt-1 block whitespace-nowrap text-[8px] font-extrabold tracking-[0.09em] text-[#587067]">VOS COMMERCES, ICI.</span>
             </span>
           </Link>
         </div>

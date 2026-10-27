@@ -1,14 +1,14 @@
 {
   "id": "/",
-  "name": "MaTable.ci - Vitrine E-commerce & WhatsApp",
+  "name": "MaTable.ci — Vos commerces, ici",
   "short_name": "MaTable.ci",
-  "description": "Plateforme e-commerce ultra-lean et prise de commande WhatsApp pour commerçants indépendants en Côte d'Ivoire.",
+  "description": "Découvrez les boutiques, produits et talents de Côte d'Ivoire.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f6f3ed",
-  "theme_color": "#176b55",
+  "background_color": "#FAF8F2",
+  "theme_color": "#087F62",
   "icons": [
     {
       "src": "/icon-192.png",

@@ -1,19 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#E11D48"/>
-      <stop offset="100%" stop-color="#BE123C"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="128" fill="url(#brandGrad)"/>
-  <!-- Table / Shop Stall Icon -->
-  <path d="M120 180h272a16 16 0 0 1 16 16v24a16 16 0 0 1-16 16H120a16 16 0 0 1-16-16v-24a16 16 0 0 1 16-16z" fill="#FFFFFF"/>
-  <path d="M150 236v150a12 12 0 0 0 24 0V236h-24zm188 0v150a12 12 0 0 0 24 0V236h-24z" fill="#FFFFFF" opacity="0.9"/>
-  <!-- WhatsApp Chat Bubble accent -->
-  <circle cx="360" cy="150" r="48" fill="#22C55E"/>
-  <path d="M350 138a18 18 0 0 0-14 29l-3 10 11-3a18 18 0 1 0 6-36z" fill="#FFFFFF"/>
-  <!-- CI flag mini stripe dot -->
-  <circle cx="160" cy="140" r="10" fill="#F97316"/>
-  <circle cx="185" cy="140" r="10" fill="#FFFFFF"/>
-  <circle cx="210" cy="140" r="10" fill="#22C55E"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="512" height="512">
+  <rect x="4" y="4" width="120" height="120" rx="34" fill="#087F62"/>
+  <path d="M29 91V39h13l22 28 22-28h13v52H82V62L64 84 46 62v29H29Z" fill="#FFFDF8"/>
+  <circle cx="100" cy="28" r="10" fill="#F97316"/>
+  <path d="M100 22v12M94 28h12" stroke="#FFFDF8" stroke-linecap="round" stroke-width="2.5"/>
 </svg>

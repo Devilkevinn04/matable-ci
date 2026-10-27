@@ -36,12 +36,12 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       `<meta property="og:description" content="${escapeHtml(description)}" />`,
       '<meta property="og:type" content="website" />',
       `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
-      `<meta property="og:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      `<meta property="og:image" content="${escapeHtml(`${origin}/social-share.png`)}" />`,
       '<meta property="og:locale" content="fr_CI" />',
       '<meta name="twitter:card" content="summary_large_image" />',
       `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
       `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
-      `<meta name="twitter:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      `<meta name="twitter:image" content="${escapeHtml(`${origin}/social-share.png`)}" />`,
     ].join('\n  ');
     return html
       .replace(/<title>.*?<\/title>/, '')
@@ -79,13 +79,13 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       `<meta property="og:description" content="${escapeHtml(description)}" />`,
       '<meta property="og:type" content="website" />',
       `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
-      `<meta property="og:image" content="${origin}/icon-512.png" />`,
+      `<meta property="og:image" content="${origin}/social-share.png" />`,
       '<meta property="og:image:alt" content="MaTable.ci, boutiques locales en Côte d’Ivoire" />',
       '<meta property="og:locale" content="fr_CI" />',
       '<meta name="twitter:card" content="summary_large_image" />',
       '<meta name="twitter:title" content="Questions fréquentes | MaTable.ci" />',
       `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
-      `<meta name="twitter:image" content="${origin}/icon-512.png" />`,
+      `<meta name="twitter:image" content="${origin}/social-share.png" />`,
       `<script type="application/ld+json">${jsonLd}</script>`,
     ].join('\n  ');
     const faqSectionsHtml = FAQ_SECTIONS.map((section) => {
@@ -140,12 +140,12 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       `<meta property="og:description" content="${escapeHtml(description)}" />`,
       '<meta property="og:type" content="article" />',
       `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
-      `<meta property="og:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      `<meta property="og:image" content="${escapeHtml(`${origin}/social-share.png`)}" />`,
       '<meta property="og:locale" content="fr_CI" />',
       '<meta name="twitter:card" content="summary_large_image" />',
       `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
       `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
-      `<meta name="twitter:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      `<meta name="twitter:image" content="${escapeHtml(`${origin}/social-share.png`)}" />`,
       `<script type="application/ld+json">${jsonLd}</script>`,
     ].join('\n  ');
     const crawlableGuide = `<noscript><main><h1>Comment ça marche sur MaTable.ci ?</h1><p>${escapeHtml(description)}</p><ol>${steps.map((step) => `<li><h2>${escapeHtml(step.name)}</h2><p>${escapeHtml(step.text)}</p></li>`).join('')}</ol></main></noscript>`;
@@ -196,12 +196,12 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       `<meta property="og:description" content="${escapeHtml(description)}" />`,
       '<meta property="og:type" content="website" />',
       `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
-      `<meta property="og:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      `<meta property="og:image" content="${escapeHtml(`${origin}/social-share.png`)}" />`,
       '<meta property="og:locale" content="fr_CI" />',
       '<meta name="twitter:card" content="summary_large_image" />',
       `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
       `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
-      `<meta name="twitter:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      `<meta name="twitter:image" content="${escapeHtml(`${origin}/social-share.png`)}" />`,
       `<script type="application/ld+json">${jsonLd}</script>`,
     ].join('\n  ');
     const crawlablePlans = `<noscript><main><h1>Vendre sur MaTable.ci</h1><p>${escapeHtml(description)}</p><p>Essai gratuit de ${TRIAL_DURATION_MONTHS} mois, jusqu’à ${TRIAL_CATALOG_LIMIT} produits. Vous pouvez aussi choisir et payer directement une formule.</p><h2>Formules commerçants</h2><ul>${plans.map((plan) => `<li><h3>${escapeHtml(plan.label)} — ${escapeHtml(new Intl.NumberFormat('fr-FR').format(prices[plan.tier]))} FCFA par mois</h3><p>${escapeHtml(plan.description)}</p><ul>${plan.benefits.map((benefit) => `<li>${escapeHtml(benefit)}</li>`).join('')}</ul></li>`).join('')}</ul><p><a href="${escapeHtml(`${origin}/app/creer-boutique`)}">Créer ma boutique</a></p></main></noscript>`;
@@ -220,7 +220,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
     const shopUrl = `${origin}/${encodeURIComponent(targetShop.slug)}`;
     const title = `${sanitizeTextField(targetShop.name, 100)} — Boutique locale en Côte d’Ivoire | MaTable.ci`;
     const description = sanitizeTextField(targetShop.welcome_message || `Découvrez le catalogue de ${targetShop.name} et commandez directement sur WhatsApp.`, 160);
-    const defaultImage = `${origin}/icon-512.svg`;
+    const defaultImage = `${origin}/social-share.png`;
     const customImage = targetShop.theme_config?.custom_banner_url;
     const image = customImage && /^https?:\/\//i.test(String(customImage)) ? String(customImage) : defaultImage;
     const shopProducts = products
@@ -336,7 +336,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
     const jsonLd = JSON.stringify(structuredData).replace(/</g, '\\u003c');
     const shareImage = page.category
       ? getCategoryDefaults(page.category).bannerPlaceholderImageUrl
-      : `${origin}/icon-512.png`;
+      : `${origin}/social-share.png`;
     const tags = [
       `<title>${escapeHtml(page.title)}</title>`,
       `<meta name="description" content="${escapeHtml(page.description)}" />`,
@@ -400,12 +400,12 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       `<meta property="og:description" content="${escapeHtml(description)}" />`,
       '<meta property="og:type" content="website" />',
       `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
-      `<meta property="og:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      `<meta property="og:image" content="${escapeHtml(`${origin}/social-share.png`)}" />`,
       '<meta property="og:locale" content="fr_CI" />',
       '<meta name="twitter:card" content="summary_large_image" />',
       `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
       `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
-      `<meta name="twitter:image" content="${escapeHtml(`${origin}/icon-512.png`)}" />`,
+      `<meta name="twitter:image" content="${escapeHtml(`${origin}/social-share.png`)}" />`,
       `<script type="application/ld+json">${jsonLd}</script>`,
     ].join('\n  ');
     const crawlableFallback = `<noscript><main><h1>Découvrez les boutiques locales</h1><p>${escapeHtml(description)}</p><ul>${directoryShops.map((shop) => `<li><a href="${escapeHtml(`${origin}/${encodeURIComponent(shop.slug)}`)}">${escapeHtml(shop.name)}</a></li>`).join('')}</ul></main></noscript>`;
