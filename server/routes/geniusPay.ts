@@ -3,6 +3,11 @@ import { Router, type Request, type RequestHandler } from 'express';
 import { databaseMode, dbAll, dbGet, dbRun, dbTransaction } from '../../db.ts';
 import { computeIsShopOpen, getShopPublicationBlockReason, getSubscriptionPlanConfig, getSubscriptionState, normalizeSubscriptionTier, normalizeWhatsAppPhone } from '../services/businessRules.ts';
 import { createGeniusPayCheckout, getGeniusPayPayment, getRenewedSubscriptionExpiry, GeniusPayApiError, isValidGeniusPaySignature } from '../services/geniusPay.ts';
+import {
+  applyDeliveryPaymentStatus,
+  applyDeliveryPaymentSuccess,
+  reconcilePendingDeliveryPayments,
+} from '../services/deliveryPayments.ts';
 import type { ShopRecord, SubscriptionTier } from '../types.ts';
 import { type SubscriptionTerm } from '../../src/utils/subscriptionFeatures.ts';
 import { getDefaultSubscriptionPrices, getSubscriptionPriceForTerm, parseSubscriptionPrices } from '../services/subscriptionPricing.ts';
@@ -278,8 +283,21 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       'SELECT shop_id FROM subscription_payment_intents WHERE id = ?',
       [paymentId],
     );
+    if (payment) {
+      await dbRun(`INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at)
+        VALUES ('system', ?, ?, ?, ?)`, [action, payment.shop_id, JSON.stringify({ payment_id: paymentId, ...details }), new Date().toISOString()]);
+      return;
+    }
+    const deliveryPayment = await dbGet<{ driver_id: number | string }>(
+      'SELECT driver_id FROM delivery_driver_payment_intents WHERE id = ?',
+      [paymentId],
+    );
     await dbRun(`INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at)
-      VALUES ('system', ?, ?, ?, ?)`, [action, payment?.shop_id || null, JSON.stringify({ payment_id: paymentId, ...details }), new Date().toISOString()]);
+      VALUES ('system', ?, NULL, ?, ?)`, [action, JSON.stringify({
+      payment_id: paymentId,
+      ...(deliveryPayment ? { driver_id: Number(deliveryPayment.driver_id) } : {}),
+      ...details,
+    }), new Date().toISOString()]);
   };
 
   const reconcilePayment = async (payment: SubscriptionPaymentIntent, minimumIntervalMs?: number) => {
@@ -374,6 +392,11 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       } catch (error) {
         console.warn(`Unable to reconcile GeniusPay payment ${payment.id}.`, error);
       }
+    }
+    try {
+      await reconcilePendingDeliveryPayments();
+    } catch (error) {
+      console.warn('Unable to reconcile pending delivery payments.', error);
     }
   };
 
@@ -785,19 +808,25 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
           amount?: number | string;
           amount_refunded?: number | string;
           currency?: string;
-          metadata?: { subscription_payment_id?: string; payment_type?: string };
+          metadata?: { subscription_payment_id?: string; delivery_payment_id?: string; payment_type?: string };
         };
         status?: string;
         reference?: string;
         amount?: number | string;
         amount_refunded?: number | string;
         currency?: string;
-        metadata?: { subscription_payment_id?: string; payment_type?: string };
+        metadata?: { subscription_payment_id?: string; delivery_payment_id?: string; payment_type?: string };
       };
     };
     const webhookEvent = String(req.header('x-webhook-event') || event.event || '');
     const paymentData = event.data?.transaction || event.data;
-    const paymentId = String(paymentData?.metadata?.subscription_payment_id || '');
+    const metadataType = paymentData?.metadata?.payment_type;
+    const isDeliveryPayment = metadataType === 'delivery';
+    const paymentId = String(
+      isDeliveryPayment
+        ? paymentData?.metadata?.delivery_payment_id || ''
+        : paymentData?.metadata?.subscription_payment_id || paymentData?.metadata?.delivery_payment_id || '',
+    );
     const providerReference = String(paymentData?.reference || '');
     const eventId = typeof event.id === 'string' && event.id.length > 0 && event.id.length <= 255
       ? event.id
@@ -859,8 +888,7 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       await finishWebhookEvent(eventId, 'rejected', 'unexpected_currency');
       return res.json({ received: true });
     }
-    const metadataType = paymentData?.metadata?.payment_type;
-    if (!metadataType || !['subscription', 'promotion'].includes(metadataType)) {
+    if (!metadataType || !['subscription', 'promotion', 'delivery'].includes(metadataType)) {
       if (paymentId) await recordPaymentIncident(paymentId, 'geniuspay_webhook_review', {
         event_id: eventId,
         event_type: webhookEvent,
@@ -870,6 +898,63 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       await finishWebhookEvent(eventId, 'rejected', 'invalid_payment_type');
       return res.json({ received: true });
     }
+
+    if (isDeliveryPayment) {
+      if (failedStatus) {
+        const result = await applyDeliveryPaymentStatus({
+          paymentId,
+          providerReference,
+          amount,
+          status: failedStatus,
+          ...(failedStatus === 'refunded' && paymentData.amount_refunded !== undefined
+            ? { refundedAmount: Number(paymentData.amount_refunded) }
+            : {}),
+        });
+        if (result === 'reference_pending') {
+          await finishWebhookEvent(eventId, 'retryable', 'reference_pending');
+          return res.status(503).json({ error: 'La référence de paiement est en cours d’enregistrement. GeniusPay peut réessayer le webhook.' });
+        }
+        if (['not_found', 'mismatch', 'reference_mismatch'].includes(result)) {
+          if (result !== 'not_found') {
+            await recordPaymentIncident(paymentId, 'geniuspay_webhook_review', {
+              event_id: eventId,
+              event_type: webhookEvent,
+              result,
+              provider_reference: providerReference,
+              amount,
+              payment_type: 'delivery',
+            });
+          }
+          await finishWebhookEvent(eventId, 'rejected', result);
+          return res.json({ received: true, rejected: true, reason: result });
+        }
+        await finishWebhookEvent(eventId, 'processed', result);
+        return res.json({ received: true, duplicate: result === 'duplicate' });
+      }
+
+      const result = await applyDeliveryPaymentSuccess({ paymentId, providerReference, amount });
+      if (result.result === 'reference_pending') {
+        await finishWebhookEvent(eventId, 'retryable', 'reference_pending');
+        return res.status(503).json({ error: 'La référence de paiement est en cours d’enregistrement. GeniusPay peut réessayer le webhook.' });
+      }
+      if (['not_found', 'mismatch', 'reference_mismatch', 'reference_conflict'].includes(result.result)) {
+        if (result.result !== 'not_found') {
+          await recordPaymentIncident(paymentId, 'geniuspay_webhook_review', {
+            event_id: eventId,
+            event_type: webhookEvent,
+            result: result.result,
+            provider_reference: providerReference,
+            amount,
+            payment_type: 'delivery',
+          });
+        }
+        await finishWebhookEvent(eventId, 'rejected', result.result);
+        return res.json({ received: true, rejected: true, reason: result.result });
+      }
+      await finishWebhookEvent(eventId, 'processed', result.result);
+      return res.json({ received: true, duplicate: result.result === 'duplicate' });
+    }
+
     await expireStaleSubscriptionIntents();
 
     if (failedStatus) {

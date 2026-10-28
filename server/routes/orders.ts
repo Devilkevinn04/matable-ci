@@ -6,7 +6,19 @@ import { getShopFromDatabase } from '../repositories/shops.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
 import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
 import { normalizeAnalyticsCampaign } from '../../src/utils/analyticsAttribution.ts';
-import { dispatchStockTransitionPush, sendMerchantPush } from '../services/pushNotifications.ts';
+import {
+  dispatchStockTransitionPush,
+  getVapidConfiguration,
+  parseBrowserPushSubscription,
+  sendMerchantPush,
+} from '../services/pushNotifications.ts';
+import {
+  auditOrderContactReveal,
+  checkContactRevealRateLimit,
+  hashContactIp,
+  isOrderContactAvailable,
+  maskContactPhone,
+} from '../services/contactGuard.ts';
 
 interface CustomerSession {
   authenticated: boolean;
@@ -232,6 +244,78 @@ export function createOrderRouter({
     }
   });
 
+  router.get('/customers/orders/:id/contacts/merchant', rateLimitPublicRequest(60), async (req, res) => {
+    const orderId = Number(req.params.id);
+    if (!Number.isSafeInteger(orderId) || orderId <= 0) return res.status(400).json({ error: 'Identifiant de commande invalide.' });
+    const customerSession = await getCustomerSessionState(req, res);
+    if (!customerSession.authenticated || !customerSession.user) {
+      return res.status(401).json({ error: 'Authentification client requise.' });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    const order = await dbGet<{ status: string; merchant_phone: string | null }>(`
+      SELECT orders.status, shops.whatsapp_number AS merchant_phone
+      FROM orders
+      JOIN shops ON shops.id = orders.shop_id
+      WHERE orders.id = ? AND orders.customer_user_id = ?
+    `, [orderId, customerSession.user.id]);
+    if (!order) return res.status(404).json({ error: 'Commande introuvable.' });
+    if (!isOrderContactAvailable(order.status)) {
+      return res.status(403).json({ error: 'Le contact est verrouillé pour cette commande terminée.' });
+    }
+    if (!order.merchant_phone) return res.status(409).json({ error: 'La boutique n’a pas renseigné de numéro de contact.' });
+    return res.json({
+      role: 'merchant',
+      phone_masked: maskContactPhone(order.merchant_phone),
+      can_reveal: true,
+    });
+  });
+
+  router.post('/customers/orders/:id/contacts/merchant', rateLimitPublicRequest(30), async (req, res) => {
+    const orderId = Number(req.params.id);
+    if (!Number.isSafeInteger(orderId) || orderId <= 0) return res.status(400).json({ error: 'Identifiant de commande invalide.' });
+    const customerSession = await getCustomerSessionState(req, res);
+    if (!customerSession.authenticated || !customerSession.user) {
+      return res.status(401).json({ error: 'Authentification client requise.' });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+    const ipHash = hashContactIp(req, hashAccessToken);
+    const result = await dbTransaction(async (transaction) => {
+      const order = await transaction.get<{ id: number | string; status: string; merchant_phone: string | null }>(`
+        SELECT orders.id, orders.status, shops.whatsapp_number AS merchant_phone
+        FROM orders
+        JOIN shops ON shops.id = orders.shop_id
+        WHERE orders.id = ? AND orders.customer_user_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE OF orders' : ''}
+      `, [orderId, customerSession.user?.id]);
+      if (!order) return { type: 'missing' as const };
+      if (!isOrderContactAvailable(order.status)) return { type: 'terminal' as const };
+      if (!order.merchant_phone) return { type: 'no_contact' as const };
+      const allowed = await checkContactRevealRateLimit(transaction, {
+        actorType: 'customer',
+        actorId: customerSession.user!.id,
+        ipHash,
+        nowMs,
+        hashAccessToken,
+      });
+      if (!allowed) return { type: 'limited' as const };
+      await auditOrderContactReveal(transaction, {
+        orderId: Number(order.id),
+        actorType: 'customer',
+        actorId: customerSession.user!.id,
+        contactRole: 'merchant',
+        ipHash,
+        revealedAt: now,
+      });
+      return { type: 'revealed' as const, phone: order.merchant_phone };
+    });
+    if (result.type === 'missing') return res.status(404).json({ error: 'Commande introuvable.' });
+    if (result.type === 'terminal') return res.status(403).json({ error: 'Le contact est verrouillé pour cette commande terminée.' });
+    if (result.type === 'no_contact') return res.status(409).json({ error: 'La boutique n’a pas renseigné de numéro de contact.' });
+    if (result.type === 'limited') return res.status(429).json({ error: 'Limite de révélations atteinte. Réessayez plus tard.' });
+    return res.json({ role: 'merchant', phone: result.phone, revealed_at: now });
+  });
+
   router.post('/orders/:id/whatsapp-click', rateLimitPublicRequest(60), async (req, res) => {
     const orderId = Number(req.params.id);
     const token = typeof req.body?.token === 'string' ? req.body.token : '';
@@ -254,15 +338,69 @@ export function createOrderRouter({
     res.json({ success: true, clicked_at: clickedAt });
   });
 
+  router.get('/auth/customer-push/config', async (req, res) => {
+    const customerSession = await getCustomerSessionState(req, res);
+    if (!customerSession.authenticated || !customerSession.user) return res.status(401).json({ error: 'Authentification client requise.' });
+    const vapid = getVapidConfiguration();
+    const subscriptions = await dbAll<{ count: number | string }>(
+      'SELECT COUNT(*) AS count FROM customer_push_subscriptions WHERE user_id = ?',
+      [customerSession.user.id],
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      configured: Boolean(vapid),
+      public_key: vapid?.publicKey || null,
+      subscribed_devices: Number(subscriptions[0]?.count || 0),
+    });
+  });
+
+  router.put('/auth/customer-push/subscription', async (req, res) => {
+    const customerSession = await getCustomerSessionState(req, res);
+    if (!customerSession.authenticated || !customerSession.user) return res.status(401).json({ error: 'Authentification client requise.' });
+    if (!getVapidConfiguration()) {
+      return res.status(503).json({ error: 'Les notifications Push ne sont pas encore configurées sur le serveur.' });
+    }
+    const subscription = parseBrowserPushSubscription(req.body);
+    if (!subscription) return res.status(400).json({ error: 'Abonnement navigateur invalide.' });
+    const now = new Date().toISOString();
+    const saved = await dbRun(`INSERT INTO customer_push_subscriptions
+      (user_id, endpoint, p256dh, auth, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT (endpoint) DO UPDATE SET
+        p256dh = excluded.p256dh, auth = excluded.auth, updated_at = excluded.updated_at
+      WHERE customer_push_subscriptions.user_id = excluded.user_id`,
+    [customerSession.user.id, subscription.endpoint, subscription.p256dh, subscription.auth, now, now]);
+    if (saved.changes !== 1) return res.status(409).json({ error: 'Cet appareil est déjà associé à un autre compte client.' });
+    res.json({ success: true });
+  });
+
+  router.delete('/auth/customer-push/subscription', async (req, res) => {
+    const customerSession = await getCustomerSessionState(req, res);
+    if (!customerSession.authenticated || !customerSession.user) return res.status(401).json({ error: 'Authentification client requise.' });
+    const endpoint = typeof req.body?.endpoint === 'string' ? req.body.endpoint : '';
+    if (!endpoint || endpoint.length > 2048) return res.status(400).json({ error: 'Appareil invalide.' });
+    await dbRun('DELETE FROM customer_push_subscriptions WHERE user_id = ? AND endpoint = ?', [customerSession.user.id, endpoint]);
+    res.json({ success: true });
+  });
+
   router.get('/auth/customer-orders', async (req, res) => {
     const customerSession = await getCustomerSessionState(req, res);
     if (!customerSession.authenticated || !customerSession.user) return res.status(401).json({ error: 'Authentification client requise.' });
     const rows = await dbAll<Record<string, unknown>>(`SELECT orders.*, shops.name AS shop_name,
       order_whatsapp_tracking.order_id IS NOT NULL AS whatsapp_tracking_available,
-      order_whatsapp_tracking.clicked_at AS whatsapp_clicked_at
+      order_whatsapp_tracking.clicked_at AS whatsapp_clicked_at,
+      delivery_orders.id AS delivery_id,
+      delivery_orders.status AS delivery_status,
+      delivery_orders.ticket_number AS delivery_ticket_number,
+      delivery_orders.quoted_amount AS delivery_quoted_amount,
+      delivery_proofs.id IS NOT NULL AS delivery_proof_available,
+      delivery_proofs.captured_at AS delivery_proof_captured_at,
+      delivery_proofs.byte_size AS delivery_proof_byte_size
       FROM orders
       LEFT JOIN shops ON shops.id = orders.shop_id
       LEFT JOIN order_whatsapp_tracking ON order_whatsapp_tracking.order_id = orders.id
+      LEFT JOIN delivery_orders ON delivery_orders.order_id = orders.id
+      LEFT JOIN delivery_proofs ON delivery_proofs.delivery_id = delivery_orders.id
       WHERE orders.customer_user_id = ?
       ORDER BY orders.created_at DESC, orders.id DESC`, [customerSession.user.id]);
     const reviewRows = await dbAll<{ order_id: number; target_type: string; target_id: number }>(
@@ -283,7 +421,6 @@ export function createOrderRouter({
         shop_id: Number(row.shop_id),
         customer_user_id: Number(row.customer_user_id),
         customer_name: String(row.customer_name),
-        customer_phone: String(row.customer_phone),
         delivery_location: String(row.delivery_location),
         delivery_note: row.delivery_note == null ? undefined : String(row.delivery_note),
         delivery_slot: row.delivery_slot == null ? undefined : String(row.delivery_slot),
@@ -296,6 +433,15 @@ export function createOrderRouter({
         items: Array.isArray(items) ? items : [],
         shop_name: String(row.shop_name || 'Boutique locale'),
         reviewed_targets: reviewsByOrder.get(Number(row.id)) || [],
+        delivery: row.delivery_id == null ? null : {
+          id: Number(row.delivery_id),
+          status: String(row.delivery_status),
+          ticket_number: row.delivery_ticket_number == null ? null : String(row.delivery_ticket_number),
+          quoted_amount: Number(row.delivery_quoted_amount),
+          proof_available: Boolean(row.delivery_proof_available),
+          proof_captured_at: row.delivery_proof_captured_at == null ? null : String(row.delivery_proof_captured_at),
+          proof_byte_size: row.delivery_proof_byte_size == null ? null : Number(row.delivery_proof_byte_size),
+        },
       };
     });
     res.setHeader('Cache-Control', 'no-store');

@@ -3,6 +3,12 @@ export { getRenewedSubscriptionExpiry } from '../../src/utils/subscriptionExpiry
 
 const DEFAULT_GENIUSPAY_API_URL = 'https://geniuspay.ci/api/v1/merchant/payments';
 
+export interface GeniusPayMetadata {
+  subscription_payment_id?: string;
+  delivery_payment_id?: string;
+  payment_type: 'subscription' | 'promotion' | 'delivery';
+}
+
 interface GeniusPayCheckoutRequest {
   amount: number;
   description: string;
@@ -14,10 +20,7 @@ interface GeniusPayCheckoutRequest {
   };
   success_url: string;
   error_url: string;
-  metadata: {
-    subscription_payment_id: string;
-    payment_type: 'subscription' | 'promotion';
-  };
+  metadata: GeniusPayMetadata;
 }
 
 interface GeniusPayApiResponse {
@@ -31,13 +34,13 @@ interface GeniusPayApiResponse {
     amount?: number | string;
     currency?: string;
     status?: string;
-    metadata?: { subscription_payment_id?: string; payment_type?: string };
+    metadata?: { subscription_payment_id?: string; delivery_payment_id?: string; payment_type?: string };
     transaction?: {
       reference?: string;
       amount?: number | string;
       currency?: string;
       status?: string;
-      metadata?: { subscription_payment_id?: string; payment_type?: string };
+      metadata?: { subscription_payment_id?: string; delivery_payment_id?: string; payment_type?: string };
     };
   };
 }
@@ -47,7 +50,7 @@ export interface GeniusPayPayment {
   amount: number;
   currency: string;
   status: string;
-  metadata: { subscription_payment_id?: string; payment_type?: string };
+  metadata: { subscription_payment_id?: string; delivery_payment_id?: string; payment_type?: string };
 }
 
 export class GeniusPayApiError extends Error {
@@ -99,6 +102,8 @@ export async function createGeniusPayCheckout(
   const apiKey = String(process.env.GENIUSPAY_API_KEY || '').trim();
   const apiSecret = String(process.env.GENIUSPAY_API_SECRET || '').trim();
   if (!apiKey || !apiSecret) throw new GeniusPayApiError('Le paiement GeniusPay n’est pas encore configuré.');
+  const idempotencyKey = request.metadata.subscription_payment_id || request.metadata.delivery_payment_id;
+  if (!idempotencyKey) throw new GeniusPayApiError('La référence interne du paiement est manquante.', false);
 
   let response: Response;
   try {
@@ -107,7 +112,7 @@ export async function createGeniusPayCheckout(
       headers: {
         'X-API-Key': apiKey,
         'X-API-Secret': apiSecret,
-        'Idempotency-Key': request.metadata.subscription_payment_id,
+        'Idempotency-Key': idempotencyKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

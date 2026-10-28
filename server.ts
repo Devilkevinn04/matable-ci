@@ -19,6 +19,8 @@ import { createShopRegistrationRouter } from './server/routes/shopRegistration.t
 import { createMerchantVerificationRouter } from './server/routes/merchantVerification.ts';
 import { createTelemetryRouter } from './server/routes/telemetry.ts';
 import { createGeniusPayRouter } from './server/routes/geniusPay.ts';
+import { createDeliveryAdminRouter } from './server/routes/deliveryAdmin.ts';
+import { createDeliveryRouter } from './server/routes/delivery.ts';
 import { createAdvertisingRouters } from './server/routes/advertising.ts';
 import { createPublicRateLimitMiddleware } from './server/services/rateLimits.ts';
 import { buildSessionFingerprint, createAuthSessionHelpers, isRequestFingerprintMatch } from './server/services/authSessions.ts';
@@ -85,6 +87,8 @@ declare global {
 }
 
 const DEMO_MODE = String(process.env.DEMO_MODE || '').trim().toLowerCase() === 'true';
+const DELIVERY_TEST_MODE = process.env.NODE_ENV !== 'production'
+  && String(process.env.DELIVERY_TEST_MODE || '').trim().toLowerCase() === 'true';
 
 export function shouldSeedDemoData(): boolean {
   if (process.env.NODE_ENV !== 'production') {
@@ -892,6 +896,13 @@ async function startServer() {
     requireVerificationAdminAccess,
     clearMerchantSessionsForShop,
   }));
+  app.use('/api/admin/delivery', requireSuperAdminAccess, createDeliveryAdminRouter({
+    dbAll,
+    dbGet,
+    dbRun,
+    dbTransaction,
+    testMode: DELIVERY_TEST_MODE,
+  }));
   const advertisingRouters = createAdvertisingRouters({
     rateLimitPublicRequest,
     requireMerchantOwnShop,
@@ -1081,9 +1092,29 @@ async function startServer() {
     products,
     orders,
     requireMerchantAccess,
+    hashAccessToken,
+    rateLimitPublicRequest,
     isSameBusinessDay,
     summarizeOrderMetrics,
   }));
+
+  if (DELIVERY_TEST_MODE) {
+    app.use('/api', createDeliveryRouter({
+      hashAccessToken,
+      hashPin,
+      verifyPin,
+      getCookie,
+      buildSessionFingerprint,
+      isRequestFingerprintMatch,
+      requireMerchantAccess,
+      rateLimitPublicRequest,
+      sandboxPaymentsEnabled: process.env.NODE_ENV !== 'production'
+        && String(process.env.DELIVERY_SANDBOX_PAYMENTS || '').trim().toLowerCase() === 'true',
+      requireProof: String(process.env.DELIVERY_REQUIRE_PROOF || '').trim().toLowerCase() !== 'false',
+      getCustomerSessionState,
+      databaseMode,
+    }));
+  }
 
   app.use('/api', createOrderRouter({
     shops,
@@ -1188,6 +1219,19 @@ async function startServer() {
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
           return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Aperçus mobiles | MaTable.ci'));
+        } catch (error) {
+          return next(error);
+        }
+      }
+
+      if (req.path === '/__preview/delivery-courier' && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(200)
+            .set({ 'Content-Type': 'text/html', 'Cache-Control': 'no-store' })
+            .end(injectNoIndexSeo(transformed, 'Aperçu test livreur | MaTable.ci'));
         } catch (error) {
           return next(error);
         }

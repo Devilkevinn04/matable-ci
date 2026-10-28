@@ -1,14 +1,23 @@
 import { Router, type RequestHandler } from 'express';
-import { databaseMode, dbAll, dbTransaction } from '../../db.ts';
+import { databaseMode, dbAll, dbGet, dbTransaction } from '../../db.ts';
 import { mapProductRow } from '../repositories/products.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
+import {
+  auditOrderContactReveal,
+  checkContactRevealRateLimit,
+  hashContactIp,
+  isOrderContactAvailable,
+  maskContactPhone,
+} from '../services/contactGuard.ts';
 
 interface MerchantOrdersOptions {
   shops: ShopRecord[];
   products: ProductRecord[];
   orders: OrderRecord[];
   requireMerchantAccess: RequestHandler;
+  hashAccessToken: (token: string) => string;
+  rateLimitPublicRequest: (limit?: number) => RequestHandler;
   isSameBusinessDay: (value: string | Date) => boolean;
   summarizeOrderMetrics: (orders: OrderRecord[], shopId?: number) => {
     received: number;
@@ -51,6 +60,8 @@ export function createMerchantOrdersRouter({
   products,
   orders,
   requireMerchantAccess,
+  hashAccessToken,
+  rateLimitPublicRequest,
   isSameBusinessDay,
   summarizeOrderMetrics,
 }: MerchantOrdersOptions) {
@@ -58,11 +69,15 @@ export function createMerchantOrdersRouter({
 
   router.get('/:id/orders', requireMerchantAccess, async (req, res) => {
     const shopId = Number(req.params.id);
+    res.setHeader('Cache-Control', 'no-store');
     const rows = await dbAll<Record<string, unknown>>(`SELECT orders.*, order_whatsapp_tracking.order_id IS NOT NULL AS whatsapp_tracking_available,
       order_whatsapp_tracking.clicked_at AS whatsapp_clicked_at
       FROM orders LEFT JOIN order_whatsapp_tracking ON order_whatsapp_tracking.order_id = orders.id
       WHERE orders.shop_id = ? ORDER BY orders.created_at DESC, orders.id DESC`, [shopId]);
-    const shopOrders = rows.map(mapOrderRow);
+    const shopOrders = rows.map((row) => {
+      const order = mapOrderRow(row);
+      return { ...order, customer_phone: maskContactPhone(order.customer_phone) };
+    });
     res.json(req.adminRole === 'verification_admin'
       ? shopOrders.map((order) => ({
         ...order,
@@ -70,6 +85,74 @@ export function createMerchantOrdersRouter({
         items: order.items?.map((item) => ({ ...item, unit_price: 0 })),
       }))
       : shopOrders);
+  });
+
+  router.get('/:id/orders/:orderId/contacts/customer', requireMerchantAccess, rateLimitPublicRequest(60), async (req, res) => {
+    const shopId = Number(req.params.id);
+    const orderId = Number(req.params.orderId);
+    if (!Number.isSafeInteger(shopId) || shopId <= 0 || !Number.isSafeInteger(orderId) || orderId <= 0) {
+      return res.status(400).json({ error: 'Boutique ou commande invalide.' });
+    }
+    if (req.adminShopAccess) return res.status(403).json({ error: 'La révélation directe est réservée au compte marchand.' });
+    res.setHeader('Cache-Control', 'no-store');
+    const order = await dbGet<{ status: string; customer_phone: string }>(
+      'SELECT status, customer_phone FROM orders WHERE id = ? AND shop_id = ?',
+      [orderId, shopId],
+    );
+    if (!order) return res.status(404).json({ error: 'Commande introuvable.' });
+    if (!isOrderContactAvailable(order.status || 'pending')) {
+      return res.status(403).json({ error: 'Le contact est verrouillé pour cette commande terminée.' });
+    }
+    if (!order.customer_phone) return res.status(409).json({ error: 'Le client n’a pas renseigné de numéro de contact.' });
+    return res.json({
+      role: 'customer',
+      phone_masked: maskContactPhone(order.customer_phone),
+      can_reveal: true,
+    });
+  });
+
+  router.post('/:id/orders/:orderId/contacts/customer', requireMerchantAccess, rateLimitPublicRequest(30), async (req, res) => {
+    const shopId = Number(req.params.id);
+    const orderId = Number(req.params.orderId);
+    if (!Number.isSafeInteger(shopId) || shopId <= 0 || !Number.isSafeInteger(orderId) || orderId <= 0) {
+      return res.status(400).json({ error: 'Boutique ou commande invalide.' });
+    }
+    if (req.adminShopAccess) return res.status(403).json({ error: 'La révélation directe est réservée au compte marchand.' });
+    res.setHeader('Cache-Control', 'no-store');
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+    const ipHash = hashContactIp(req, hashAccessToken);
+    const result = await dbTransaction(async (transaction) => {
+      const order = await transaction.get<{ id: number | string; status: string; customer_phone: string }>(`
+        SELECT id, status, customer_phone FROM orders
+        WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}
+      `, [orderId, shopId]);
+      if (!order) return { type: 'missing' as const };
+      if (!isOrderContactAvailable(order.status || 'pending')) return { type: 'terminal' as const };
+      if (!order.customer_phone) return { type: 'no_contact' as const };
+      const allowed = await checkContactRevealRateLimit(transaction, {
+        actorType: 'merchant',
+        actorId: shopId,
+        ipHash,
+        nowMs,
+        hashAccessToken,
+      });
+      if (!allowed) return { type: 'limited' as const };
+      await auditOrderContactReveal(transaction, {
+        orderId: Number(order.id),
+        actorType: 'merchant',
+        actorId: shopId,
+        contactRole: 'customer',
+        ipHash,
+        revealedAt: now,
+      });
+      return { type: 'revealed' as const, phone: order.customer_phone };
+    });
+    if (result.type === 'missing') return res.status(404).json({ error: 'Commande introuvable.' });
+    if (result.type === 'terminal') return res.status(403).json({ error: 'Le contact est verrouillé pour cette commande terminée.' });
+    if (result.type === 'no_contact') return res.status(409).json({ error: 'Le client n’a pas renseigné de numéro de contact.' });
+    if (result.type === 'limited') return res.status(429).json({ error: 'Limite de révélations atteinte. Réessayez plus tard.' });
+    return res.json({ role: 'customer', phone: result.phone, revealed_at: now });
   });
 
   router.patch('/:id/orders/:orderId/status', requireMerchantAccess, async (req, res) => {
@@ -109,6 +192,16 @@ export function createMerchantOrdersRouter({
         if (previousStatus === status) return { order, previousStatus, unchanged: true };
         if (!allowedTransitions[previousStatus]?.includes(status) && !req.adminShopAccess) {
           throw Object.assign(new Error(`Transition impossible : ${previousStatus} → ${status}.`), { statusCode: 409 });
+        }
+        const linkedDelivery = await transaction.get<{ id: number | string; status: string }>(
+          `SELECT id, status FROM delivery_orders WHERE order_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+          [order.id],
+        );
+        if (status === 'delivered' && linkedDelivery && linkedDelivery.status !== 'delivered') {
+          throw Object.assign(new Error('La course MaTable doit être terminée par le livreur avant de clôturer la commande.'), { statusCode: 409 });
+        }
+        if (['cancelled', 'expired'].includes(status) && linkedDelivery?.status === 'picked_up') {
+          throw Object.assign(new Error('La commande ne peut plus être annulée après récupération du colis par le livreur.'), { statusCode: 409 });
         }
 
         const quantities = new Map<number, number>();
@@ -157,6 +250,16 @@ export function createMerchantOrdersRouter({
         }
 
         await transaction.run('UPDATE orders SET status = ? WHERE id = ? AND shop_id = ?', [status, order.id, shopId]);
+        if (['cancelled', 'expired'].includes(status) && linkedDelivery
+          && ['requested', 'accepted', 'to_pickup'].includes(linkedDelivery.status)) {
+          const cancelledAt = new Date().toISOString();
+          await transaction.run(`UPDATE delivery_orders SET status = 'cancelled', cancelled_at = ?
+            WHERE id = ? AND status = ?`, [cancelledAt, linkedDelivery.id, linkedDelivery.status]);
+          await transaction.run(`INSERT INTO delivery_course_events
+            (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
+            VALUES (?, 'merchant', ?, ?, 'cancelled', ?)`,
+          [linkedDelivery.id, shopId, linkedDelivery.status, cancelledAt]);
+        }
         if (req.adminShopAccess) {
           await transaction.run(
             'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',

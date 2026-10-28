@@ -436,6 +436,7 @@ export function createAuthSessionHelpers({
       }
     }
     await dbRun('DELETE FROM admin_sessions WHERE expires_at <= ?', [now]);
+    await dbRun('DELETE FROM delivery_driver_sessions WHERE expires_at <= ?', [now]);
   }
 
   function clearMerchantSessionsForShop(shopId: number) {

@@ -8,7 +8,7 @@ const allowedPushServiceHosts = new Set([
   'web.push.apple.com',
 ]);
 
-export type MerchantPushCategory = 'orders' | 'stock' | 'subscription' | 'identity' | 'announcement';
+export type MerchantPushCategory = 'orders' | 'stock' | 'subscription' | 'identity' | 'announcement' | 'delivery';
 
 export interface MerchantPushNotification {
   eventKey: string;
@@ -86,6 +86,83 @@ async function forEachLimited<T>(items: T[], concurrency: number, operation: (it
       if (item !== undefined) await operation(item);
     }
   }));
+}
+
+export interface PushTargetSubscription {
+  id: number;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
+export interface BrowserPushSubscriptionInput {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
+export function parseBrowserPushSubscription(body: unknown): BrowserPushSubscriptionInput | null {
+  const subscription = (body as { subscription?: { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } } } | null)
+    ?.subscription;
+  const endpoint = typeof subscription?.endpoint === 'string' ? subscription.endpoint.trim() : '';
+  const p256dh = typeof subscription?.keys?.p256dh === 'string' ? subscription.keys.p256dh : '';
+  const auth = typeof subscription?.keys?.auth === 'string' ? subscription.keys.auth : '';
+  if (!endpoint || endpoint.length > 2048 || !p256dh || p256dh.length > 256 || !auth || auth.length > 256) return null;
+  try {
+    if (!isAllowedPushEndpoint(new URL(endpoint))) return null;
+  } catch {
+    return null;
+  }
+  return { endpoint, p256dh, auth };
+}
+
+export interface PushTargetNotification {
+  title: string;
+  body: string;
+  url: string;
+  tag: string;
+  category: MerchantPushCategory;
+}
+
+export async function sendPushToSubscriptions(
+  subscriptions: PushTargetSubscription[],
+  notification: PushTargetNotification,
+  removeSubscription: (id: number) => Promise<unknown>,
+) {
+  const vapid = getVapidConfiguration();
+  if (!vapid) return { configured: false, attempted: 0, sent: 0, failed: 0 };
+  const url = normalizePushUrl(notification.url);
+  const title = normalizePushText(notification.title, 100);
+  const body = normalizePushText(notification.body, 240);
+  if (!subscriptions.length || !url || !title || !body) {
+    return { configured: true, attempted: 0, sent: 0, failed: 0 };
+  }
+
+  webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
+  let sent = 0;
+  let failed = 0;
+  await forEachLimited(subscriptions, 8, async (subscription) => {
+    const payload: PushSubscription = {
+      endpoint: subscription.endpoint,
+      keys: { p256dh: subscription.p256dh, auth: subscription.auth },
+    };
+    try {
+      await webpush.sendNotification(payload, JSON.stringify({
+        title,
+        body,
+        url,
+        tag: notification.tag.slice(0, 120),
+        category: notification.category,
+      }), { TTL: 60 * 60 * 24, urgency: 'normal' });
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      const statusCode = getStatusCode(error);
+      if (statusCode === 404 || statusCode === 410) await removeSubscription(subscription.id);
+      console.error(`Push delivery failed (${statusCode ? `http_${statusCode}` : 'provider_error'}).`);
+    }
+  });
+  return { configured: true, attempted: subscriptions.length, sent, failed };
 }
 
 export async function sendMerchantPush(shopId: number, notification: MerchantPushNotification) {
