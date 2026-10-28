@@ -5,6 +5,7 @@ import {
   isAllowedPushEndpoint,
   normalizePushText,
   normalizePushUrl,
+  parseBrowserPushSubscription,
 } from '../server/services/pushNotifications.ts';
 
 const publicKey = 'A'.repeat(87);
@@ -56,4 +57,24 @@ test('push text removes markup and enforces its display length', () => {
   assert.equal(normalizePushText('  Nouvelle <b>commande</b>  ', 100), 'Nouvelle commande');
   assert.equal(normalizePushText('<script>alerte</script>', 5), 'alert');
   assert.equal(normalizePushText(42, 100), '');
+});
+
+test('browser push subscriptions are validated before storage', () => {
+  assert.deepEqual(parseBrowserPushSubscription({
+    subscription: {
+      endpoint: ' https://fcm.googleapis.com/fcm/send/token ',
+      keys: { p256dh: 'public-key', auth: 'auth-secret' },
+    },
+  }), {
+    endpoint: 'https://fcm.googleapis.com/fcm/send/token',
+    p256dh: 'public-key',
+    auth: 'auth-secret',
+  });
+  assert.equal(parseBrowserPushSubscription({}), null);
+  assert.equal(parseBrowserPushSubscription({
+    subscription: { endpoint: 'https://attacker.example/push', keys: { p256dh: 'k', auth: 'a' } },
+  }), null);
+  assert.equal(parseBrowserPushSubscription({
+    subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/token', keys: { p256dh: '', auth: 'a' } },
+  }), null);
 });
