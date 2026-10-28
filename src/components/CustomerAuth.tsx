@@ -1,11 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowRight, CalendarDays, Check, ChevronRight, Clock3, Eye, EyeOff, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MapPin, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, UserRound } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowRight, CalendarDays, Check, ChevronRight, Clock3, Eye, EyeOff, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MapPin, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, Truck, UserRound } from 'lucide-react';
 import { AuthAudienceSwitcher, AuthExperienceLayout } from './AuthExperienceLayout';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
 import { CustomerMerchantRegistrationForm } from './CustomerMerchantRegistrationForm';
 import { TermsPrivacyConsent } from './TermsPrivacyConsent';
 import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
 import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
+import { OrderContactReveal } from './OrderContactReveal';
+import { DeliveryTimeline, type DeliveryTimelineEvent } from './DeliveryTimeline';
+import { PushOptIn } from './PushOptIn';
+import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import { Link } from 'react-router-dom';
 
 const GuideChecklist = React.lazy(() => import('./UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
@@ -206,6 +210,16 @@ export const CustomerAccount: React.FC<CustomerAccountProps> = ({ user, onLogout
   <CustomerAccountContent user={user} onLogout={onLogout} onBack={onBack} onUserUpdated={onUserUpdated} />
 );
 
+interface CustomerOrderDelivery {
+  id: number;
+  status: string;
+  ticket_number: string | null;
+  quoted_amount: number;
+  proof_available: boolean;
+  proof_captured_at: string | null;
+  proof_byte_size: number | null;
+}
+
 interface CustomerOrder {
   id: number;
   total_amount: number;
@@ -214,7 +228,97 @@ interface CustomerOrder {
   shop_id: number;
   shop_name?: string;
   delivery_location?: string;
+  delivery?: CustomerOrderDelivery | null;
   items?: { id: number; product_title?: string; quantity: number; unit_price: number; selected_size?: string; selected_color?: string; selected_modifiers?: string[] }[];
+}
+
+const CUSTOMER_DELIVERY_STATUS_LABELS: Record<string, string> = {
+  requested: 'En attente d’un livreur',
+  accepted: 'Livreur assigné',
+  to_pickup: 'En route vers la boutique',
+  picked_up: 'En cours de livraison',
+  delivered: 'Livrée',
+  cancelled: 'Annulée',
+};
+
+function CustomerDeliverySummary({ order }: { order: CustomerOrder }) {
+  const delivery = order.delivery;
+  const [proofUrl, setProofUrl] = useState<string | null>(null);
+  const [proofError, setProofError] = useState<string | null>(null);
+  const [proofLoading, setProofLoading] = useState(false);
+  const [timelineEvents, setTimelineEvents] = useState<DeliveryTimelineEvent[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!delivery) return;
+    let cancelled = false;
+    setTimelineLoading(true);
+    setTimelineError(null);
+    fetch(`/api/customers/orders/${order.id}/delivery/events`, { credentials: 'include', cache: 'no-store' })
+      .then(async (response) => {
+        const data = await response.json() as { events?: DeliveryTimelineEvent[]; error?: string };
+        if (!response.ok) throw new Error(data.error || 'Impossible de charger le suivi de la livraison.');
+        if (!cancelled) setTimelineEvents(Array.isArray(data.events) ? data.events : []);
+      })
+      .catch((loadError: unknown) => {
+        if (!cancelled) setTimelineError(loadError instanceof Error ? loadError.message : 'Impossible de charger le suivi de la livraison.');
+      })
+      .finally(() => { if (!cancelled) setTimelineLoading(false); });
+    return () => { cancelled = true; };
+  }, [order.id, delivery?.id, delivery?.status]);
+
+  if (!delivery) return null;
+
+  const loadProof = async () => {
+    setProofLoading(true);
+    setProofError(null);
+    try {
+      const response = await fetch(`/api/customers/orders/${order.id}/delivery/proof`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      const data = await response.json() as { proof?: { data_url: string }; error?: string };
+      if (!response.ok || !data.proof) throw new Error(data.error || 'Preuve photo indisponible.');
+      setProofUrl(data.proof.data_url);
+    } catch (error) {
+      setProofError(error instanceof Error ? error.message : 'Preuve photo indisponible.');
+    } finally {
+      setProofLoading(false);
+    }
+  };
+
+  return (
+    <section aria-label={`Livraison MaTable de la commande ${order.id}`} className="mt-3 rounded-xl border border-[#c7e5d8] bg-[#f0faf5] p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-[#065f46]"><Truck className="h-3.5 w-3.5" />Livraison MaTable</p>
+          <p className="mt-1 font-mono text-sm font-black tracking-wide text-[#1f3129]">{delivery.ticket_number || `COURSE-${delivery.id}`}</p>
+          <p className="mt-0.5 text-xs font-semibold text-[#47534b]">{CUSTOMER_DELIVERY_STATUS_LABELS[delivery.status] || delivery.status} · {delivery.quoted_amount.toLocaleString('fr-FR')} FCFA</p>
+        </div>
+        {delivery.proof_available && (
+          <button type="button" onClick={() => void loadProof()} disabled={proofLoading} className="min-h-9 rounded-lg border border-[#047857] bg-white px-3 text-xs font-bold text-[#065f46] disabled:opacity-50">
+            {proofLoading ? 'Chargement…' : proofUrl ? 'Preuve affichée' : 'Voir la preuve'}
+          </button>
+        )}
+      </div>
+      {proofUrl && (
+        <figure className="mt-2 rounded-lg border border-[#c7e5d8] bg-white p-2">
+          <img src={proofUrl} alt={`Preuve de livraison de la commande ${order.id}`} className="max-h-60 w-full rounded-md object-cover" />
+          <figcaption className="mt-1 text-[10px] text-[#647067]">Photo enregistrée par le livreur.</figcaption>
+        </figure>
+      )}
+      {proofError && <p role="alert" className="mt-2 text-xs font-semibold text-[#9f1239]">{proofError}</p>}
+      <div className="mt-3">
+        <DeliveryTimeline
+          events={timelineEvents}
+          loading={timelineLoading}
+          error={timelineError}
+          title="Suivi de la livraison"
+        />
+      </div>
+    </section>
+  );
 }
 
 type CustomerAccountSection = 'overview' | 'orders' | 'favorites' | 'profile' | 'security';
@@ -229,6 +333,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState<string | null>(null);
   const [ordersRefresh, setOrdersRefresh] = useState(0);
+  const ordersLoadedRef = useRef(false);
   const [savedState, setSavedState] = useState<CustomerSavedState>({ shops: [], products: [] });
   const [savedLoading, setSavedLoading] = useState(true);
   const [savedError, setSavedError] = useState<string | null>(null);
@@ -266,7 +371,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
 
   useEffect(() => {
     let isActive = true;
-    setOrdersLoading(true);
+    if (!ordersLoadedRef.current) setOrdersLoading(true);
     setOrdersError(null);
     fetch('/api/auth/customer-orders', { credentials: 'include' })
       .then((response) => {
@@ -281,9 +386,22 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
       .catch((error: unknown) => {
         if (isActive) setOrdersError(error instanceof Error ? error.message : 'Impossible de charger vos commandes. Réessayez.');
       })
-      .finally(() => { if (isActive) setOrdersLoading(false); });
+      .finally(() => {
+        if (isActive) {
+          setOrdersLoading(false);
+          ordersLoadedRef.current = true;
+        }
+      });
     return () => { isActive = false; };
   }, [ordersRefresh]);
+
+  const hasActiveDelivery = orders.some((order) => order.delivery
+    && !['delivered', 'cancelled'].includes(order.delivery.status));
+  useVisibilityPolling(
+    () => setOrdersRefresh((value) => value + 1),
+    20_000,
+    hasActiveDelivery,
+  );
 
   useEffect(() => {
     let isActive = true;
@@ -671,6 +789,13 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
               </div>
               {!ordersLoading && <span className="rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[#065f46]">{orders.length} au total</span>}
             </div>
+            <PushOptIn
+              configUrl="/api/auth/customer-push/config"
+              subscriptionUrl="/api/auth/customer-push/subscription"
+              title="Suivi de livraison sur cet appareil"
+              description="Recevez une alerte quand un livreur accepte votre course, récupère le colis, arrive ou dépose la photo de preuve."
+              className="mt-4"
+            />
             {ordersLoading && <div role="status" className="mt-6 space-y-3"><span className="sr-only">Chargement de vos commandes…</span>{[0, 1].map((item) => <div key={item} className="h-28 animate-pulse rounded-2xl bg-[#f1eee7]" />)}</div>}
             {ordersError && <div role="alert" className="mt-6 rounded-2xl border border-[#e8c69a] bg-[#fff8ec] p-4 text-sm text-[#704d16]"><p>{ordersError}</p><button type="button" onClick={() => setOrdersRefresh((value) => value + 1)} className="mt-2 font-bold underline underline-offset-2">Réessayer</button></div>}
             {!ordersLoading && !ordersError && orders.length === 0 && <div className="mt-6 rounded-2xl border border-dashed border-[#d9cfc2] bg-[#f9f6f0] p-7 text-center">
@@ -699,6 +824,14 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                   </li>)}
                 </ul> : null}
                 {order.delivery_location && <p className="mt-3 flex items-center gap-2 border-t border-[#eee6dd] pt-3 text-xs text-[#647067]"><MapPin className="h-3.5 w-3.5 shrink-0 text-[#047857]" />{order.delivery_location}</p>}
+                <CustomerDeliverySummary order={order} />
+                <div className="mt-3 border-t border-[#eee6dd] pt-3">
+                  <OrderContactReveal
+                    endpoint={`/api/customers/orders/${order.id}/contacts/merchant`}
+                    contactLabel="la boutique"
+                    orderStatus={order.status}
+                  />
+                </div>
               </article>)}
             </div>}
           </>}

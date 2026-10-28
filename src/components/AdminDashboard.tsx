@@ -31,6 +31,7 @@ import {
   X,
   Megaphone,
   Tag,
+  MapPin,
 } from 'lucide-react';
 import { AdminIdentityVerificationPanel } from './AdminIdentityVerificationPanel';
 import { AdminShopList } from './AdminShopList';
@@ -39,6 +40,7 @@ import { AdminSubscriptionPlanPricing } from './AdminSubscriptionPlanPricing';
 import { AdminSubscriptionPlanFeatures } from './AdminSubscriptionPlanFeatures';
 import { AdminHomepageMarketing } from './AdminHomepageMarketing';
 import { AdminProductPromotions } from './AdminProductPromotions';
+import { AdminDeliveryPricing } from './AdminDeliveryPricing';
 import { Link } from 'react-router-dom';
 const GuideChecklist = React.lazy(() => import('./UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
 import {
@@ -74,7 +76,7 @@ const adminOrderTransitions: Record<AdminOrder['status'], AdminOrder['status'][]
 };
 
 type AdminRole = 'super_admin' | 'verification_admin';
-type AdminView = 'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'verification-shops' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'push' | 'moderation' | 'audit' | 'advertising' | 'promotions';
+type AdminView = 'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'verification-shops' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'push' | 'moderation' | 'audit' | 'advertising' | 'promotions' | 'delivery';
 
 interface VerificationShopSummary {
   id: number;
@@ -1399,6 +1401,7 @@ export const AdminDashboard: React.FC = () => {
           { id: 'operations', label: 'Opérations', icon: Activity },
           { id: 'push', label: 'Annonces Push', icon: Send },
           { id: 'promotions', label: 'Promotions', icon: Tag },
+          { id: 'delivery', label: 'Livraison', icon: MapPin },
           { id: 'advertising', label: 'Publicité', icon: Megaphone },
           { id: 'audit', label: 'Journal d’audit', icon: ClipboardList },
         ],
@@ -2612,6 +2615,7 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         {adminView === 'push' && adminRole === 'super_admin' && <AdminPushAnnouncements />}
+        {adminView === 'delivery' && adminRole === 'super_admin' && <AdminDeliveryPricing />}
         {adminView === 'promotions' && adminRole === 'super_admin' && <AdminProductPromotions />}
         {adminView === 'advertising' && adminRole === 'super_admin' && <AdminHomepageMarketing />}
 

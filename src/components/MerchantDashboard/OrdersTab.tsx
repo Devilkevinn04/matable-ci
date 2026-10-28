@@ -1,11 +1,278 @@
-import React from 'react';
-import { ShoppingBag, Check, ExternalLink, Search, TrendingUp, DollarSign, MapPin, MessageCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ShoppingBag, Check, ExternalLink, Search, TrendingUp, DollarSign, MapPin } from 'lucide-react';
 import type { MerchantOrderFilter, MerchantState } from './useMerchant';
-import { cleanPhoneForWhatsApp, formatFCFA } from '../../utils/format';
+import { formatFCFA } from '../../utils/format';
+import { OrderContactReveal } from '../OrderContactReveal';
+import { DeliveryTimeline, type DeliveryTimelineEvent } from '../DeliveryTimeline';
+import { PushOptIn } from '../PushOptIn';
+import { useVisibilityPolling } from '../../hooks/useVisibilityPolling';
 
 interface OrdersTabProps {
   state: MerchantState;
   filteredOrders: any[]; orderValue: number; averageOrderValue: number;
+}
+
+interface DeliveryZoneOption {
+  id: number;
+  label: string;
+}
+
+interface DeliveryQuote {
+  amount: number;
+  origin_zone: string;
+  destination_zone: string;
+}
+
+interface MerchantDelivery {
+  id: number;
+  order_id: number;
+  quoted_amount: number;
+  status: string;
+  ticket_number?: string;
+  proof_available?: boolean;
+  pickup_zone?: string;
+  destination_zone?: string;
+}
+
+function MerchantDeliveryRequest({ shopId, orderId, orderStatus }: {
+  shopId: number;
+  orderId: number;
+  orderStatus: string;
+}) {
+  const [zones, setZones] = useState<DeliveryZoneOption[]>([]);
+  const [destinationZoneId, setDestinationZoneId] = useState('');
+  const [quote, setQuote] = useState<DeliveryQuote | null>(null);
+  const [delivery, setDelivery] = useState<MerchantDelivery | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [proofUrl, setProofUrl] = useState<string | null>(null);
+  const [proofLoading, setProofLoading] = useState(false);
+  const [timelineEvents, setTimelineEvents] = useState<DeliveryTimelineEvent[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
+
+  const refresh = async () => {
+    setError('');
+    try {
+      const [zonesResponse, deliveriesResponse] = await Promise.all([
+        fetch('/api/delivery/zones', { credentials: 'include', cache: 'no-store' }),
+        fetch(`/api/shops/${shopId}/deliveries`, { credentials: 'include', cache: 'no-store' }),
+      ]);
+      const [zoneData, deliveryData] = await Promise.all([
+        zonesResponse.json() as Promise<{ zones?: DeliveryZoneOption[]; error?: string }>,
+        deliveriesResponse.json() as Promise<{ deliveries?: MerchantDelivery[]; error?: string }>,
+      ]);
+      if (!zonesResponse.ok) throw new Error(zoneData.error || 'Service livraison de test indisponible.');
+      if (!deliveriesResponse.ok) throw new Error(deliveryData.error || 'Impossible de charger les demandes de livraison.');
+      setZones(zoneData.zones || []);
+      setDelivery((deliveryData.deliveries || []).find((item) => item.order_id === orderId) || null);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Impossible de charger les demandes de livraison.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+  }, [shopId, orderId]);
+
+  const refreshDelivery = async () => {
+    try {
+      const response = await fetch(`/api/shops/${shopId}/deliveries`, { credentials: 'include', cache: 'no-store' });
+      const data = await response.json() as { deliveries?: MerchantDelivery[]; error?: string };
+      if (!response.ok) return;
+      setDelivery((data.deliveries || []).find((item) => item.order_id === orderId) || null);
+    } catch {
+      // Polling keeps the last known delivery state if the network is momentarily unavailable.
+    }
+  };
+
+  useEffect(() => {
+    if (!delivery) {
+      setTimelineEvents([]);
+      setTimelineError(null);
+      setTimelineLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setTimelineLoading(true);
+    setTimelineError(null);
+    fetch(`/api/shops/${shopId}/deliveries/${delivery.id}/events`, { credentials: 'include', cache: 'no-store' })
+      .then(async (response) => {
+        const data = await response.json() as { events?: DeliveryTimelineEvent[]; error?: string };
+        if (!response.ok) throw new Error(data.error || 'Impossible de charger l’historique de la course.');
+        if (!cancelled) setTimelineEvents(Array.isArray(data.events) ? data.events : []);
+      })
+      .catch((loadError: unknown) => {
+        if (!cancelled) setTimelineError(loadError instanceof Error ? loadError.message : 'Impossible de charger l’historique de la course.');
+      })
+      .finally(() => { if (!cancelled) setTimelineLoading(false); });
+    return () => { cancelled = true; };
+  }, [shopId, delivery?.id, delivery?.status]);
+
+  useVisibilityPolling(
+    refreshDelivery,
+    15_000,
+    Boolean(delivery && ['requested', 'accepted', 'to_pickup', 'picked_up'].includes(delivery.status)),
+  );
+
+  const loadQuote = async () => {
+    if (!destinationZoneId) return;
+    setSaving(true);
+    setError('');
+    setNotice('');
+    setQuote(null);
+    try {
+      const response = await fetch(`/api/shops/${shopId}/orders/${orderId}/delivery-quote?destination_zone_id=${encodeURIComponent(destinationZoneId)}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      const data = await response.json() as { quote?: DeliveryQuote; error?: string };
+      if (!response.ok) throw new Error(data.error || 'Aucun tarif disponible pour ce trajet.');
+      setQuote(data.quote || null);
+    } catch (quoteError) {
+      setError(quoteError instanceof Error ? quoteError.message : 'Impossible de calculer le devis.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const requestDelivery = async () => {
+    if (!destinationZoneId) return;
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch(`/api/shops/${shopId}/orders/${orderId}/delivery`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destination_zone_id: Number(destinationZoneId) }),
+      });
+      const data = await response.json() as { delivery?: MerchantDelivery; error?: string };
+      if (!response.ok) throw new Error(data.error || 'Impossible de demander cette livraison.');
+      setDelivery(data.delivery || null);
+      setNotice('Demande envoyée aux livreurs disponibles.');
+      setQuote(null);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Impossible de demander cette livraison.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelDelivery = async () => {
+    if (!delivery) return;
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch(`/api/shops/${shopId}/deliveries/${delivery.id}/cancel`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Impossible d’annuler cette demande.');
+      setDelivery({ ...delivery, status: 'cancelled' });
+      setNotice('La demande de livraison est annulée.');
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : 'Impossible d’annuler cette demande.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loadProof = async () => {
+    if (!delivery) return;
+    setProofLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/shops/${shopId}/deliveries/${delivery.id}/proof`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      const data = await response.json() as { proof?: { data_url: string }; error?: string };
+      if (!response.ok || !data.proof) throw new Error(data.error || 'Impossible de charger la preuve photo.');
+      setProofUrl(data.proof.data_url);
+    } catch (proofError) {
+      setError(proofError instanceof Error ? proofError.message : 'Impossible de charger la preuve photo.');
+    } finally {
+      setProofLoading(false);
+    }
+  };
+
+  const isActiveOrder = ['confirmed', 'preparing', 'ready'].includes(orderStatus);
+  if ((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV !== true) return null;
+  if (!isActiveOrder && !delivery) return null;
+
+  return (
+    <section aria-label={`Livraison MaTable pour la commande ${orderId}`} className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+      <div className="flex items-center gap-2 text-xs font-black text-sky-950"><MapPin className="h-4 w-4" />Livraison MaTable</div>
+      {loading ? <p role="status" className="mt-2 text-xs text-slate-600">Chargement des zones…</p> : delivery ? (
+        <div className="mt-2 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-slate-700">
+              <strong className="font-mono">{delivery.ticket_number || `COURSE-${delivery.id}`}</strong>
+              <br />{delivery.pickup_zone || 'Retrait'} → {delivery.destination_zone || 'Destination'} · <strong>{formatFCFA(delivery.quoted_amount)}</strong> · {delivery.status}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {delivery.proof_available && !proofUrl && (
+                <button type="button" onClick={() => void loadProof()} disabled={proofLoading} className="min-h-9 rounded-lg border border-sky-300 bg-white px-3 text-xs font-bold text-sky-950 disabled:opacity-50">
+                  {proofLoading ? 'Chargement…' : 'Voir la preuve'}
+                </button>
+              )}
+              {isActiveOrder && ['requested', 'accepted', 'to_pickup'].includes(delivery.status) && (
+                <button type="button" onClick={() => void cancelDelivery()} disabled={saving} className="min-h-9 rounded-lg border border-rose-300 bg-white px-3 text-xs font-bold text-rose-800 disabled:opacity-50">Annuler la demande</button>
+              )}
+            </div>
+          </div>
+          {proofUrl && (
+            <figure className="rounded-lg border border-sky-200 bg-white p-2">
+              <img src={proofUrl} alt={`Preuve de livraison de la course ${delivery.id}`} className="max-h-60 w-full rounded-md object-cover" />
+              <figcaption className="mt-1 text-[10px] text-slate-500">Preuve photo enregistrée · course #{delivery.id}</figcaption>
+            </figure>
+          )}
+          <DeliveryTimeline
+            events={timelineEvents}
+            loading={timelineLoading}
+            error={timelineError}
+            title="Historique de la course"
+          />
+        </div>
+      ) : (
+        <div className="mt-2 space-y-2">
+          <p className="text-[11px] leading-5 text-slate-600">Choisissez la zone correspondant à l’adresse de livraison. Un devis n’est proposé que pour un tarif actif de 1 500 à 2 500 FCFA.</p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="sr-only" htmlFor={`delivery-destination-${orderId}`}>Zone de destination pour la commande {orderId}</label>
+            <select
+              id={`delivery-destination-${orderId}`}
+              value={destinationZoneId}
+              onChange={(event) => { setDestinationZoneId(event.target.value); setQuote(null); }}
+              className="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800"
+            >
+              <option value="">Zone de destination</option>
+              {zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.label}</option>)}
+            </select>
+            {!quote ? (
+              <button type="button" onClick={() => void loadQuote()} disabled={saving || !destinationZoneId} className="min-h-10 rounded-lg bg-sky-900 px-3 text-xs font-bold text-white disabled:opacity-50">
+                {saving ? 'Recherche…' : 'Afficher le devis'}
+              </button>
+            ) : (
+              <button type="button" onClick={() => void requestDelivery()} disabled={saving} className="min-h-10 rounded-lg bg-sky-900 px-3 text-xs font-bold text-white disabled:opacity-50">
+                Demander · {formatFCFA(quote.amount)}
+              </button>
+            )}
+          </div>
+          {quote && <p role="status" className="text-xs font-semibold text-sky-950">{quote.origin_zone} → {quote.destination_zone} : {formatFCFA(quote.amount)}</p>}
+        </div>
+      )}
+      {error && <p role="alert" className="mt-2 text-xs font-semibold text-rose-800">{error}</p>}
+      {notice && <p role="status" className="mt-2 text-xs font-semibold text-emerald-800">{notice}</p>}
+    </section>
+  );
 }
 
 export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, orderValue, averageOrderValue }) => {
@@ -34,6 +301,15 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
               <h2 className="mt-1 text-xl font-black text-slate-900">Commandes</h2>
               <p className="mt-1 text-xs leading-5 text-slate-500">Traitez les demandes clients et suivez leur progression.</p>
             </header>
+
+            {state.currentShop && (
+              <PushOptIn
+                configUrl={`/api/shops/${state.currentShop.id}/push/config`}
+                subscriptionUrl={`/api/shops/${state.currentShop.id}/push/subscription`}
+                title="Alertes de livraison"
+                description="Soyez prévenu lorsqu’un livreur accepte une course, récupère le colis ou termine la livraison."
+              />
+            )}
 
             {/* Orders Statistics Cards */}
             <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:grid-cols-3">
@@ -238,6 +514,13 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                             </div>
                           ))}
                         </div>
+                        {state.currentShop && order.customer_phone && (
+                          <MerchantDeliveryRequest
+                            shopId={state.currentShop.id}
+                            orderId={order.id}
+                            orderStatus={order.status || 'pending'}
+                          />
+                        )}
                       </div>
 
                       <div className="flex min-w-0 flex-col gap-2.5 border-t border-slate-100 pt-3 md:w-56 md:shrink-0 md:items-end md:justify-between md:border-t-0 md:pt-0">
@@ -247,15 +530,12 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
 
                         {/* Order status action buttons */}
                         <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                          {order.customer_phone && (
-                            <a
-                              href={`https://wa.me/${cleanPhoneForWhatsApp(order.customer_phone)}?text=${encodeURIComponent(`Bonjour ${order.customer_name}, je vous contacte au sujet de votre demande de commande #${order.id} sur MaTable.ci.`)}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-900 transition hover:bg-emerald-100 sm:w-auto"
-                            >
-                              <MessageCircle className="h-4 w-4" /> Contacter sur WhatsApp
-                            </a>
+                          {state.currentShop && (
+                            <OrderContactReveal
+                              endpoint={`/api/shops/${state.currentShop.id}/orders/${order.id}/contacts/customer`}
+                              contactLabel="le client"
+                              orderStatus={order.status || 'pending'}
+                            />
                           )}
                           {(!order.status || order.status === 'pending') && (
                             <>

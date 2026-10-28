@@ -179,15 +179,15 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                       className="aspect-4/3 bg-[#f3efe8]"
                     >
                       {prod.prep_time && (
-                        <span className="absolute top-2 left-2 bg-[#292d2a]/85 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-[#e8a93a]" />
+                        <span className="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-[#292d2a]/85 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-xs">
+                          <Clock className="h-3 w-3 shrink-0 text-[#e8a93a]" />
                           <span>{prod.prep_time} min</span>
                         </span>
                       )}
 
                       {prod.is_available === false && (
-                        <span className="absolute bottom-2 left-2 bg-[#292d2a]/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
-                          <EyeOff className="w-3 h-3 text-[#f4e6c8]" />
+                        <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-[#292d2a]/90 px-2 py-0.5 text-[10px] font-bold text-white">
+                          <EyeOff className="h-3 w-3 shrink-0 text-[#f4e6c8]" />
                           <span>Masqué</span>
                         </span>
                       )}
@@ -208,6 +208,11 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                     </CategoryProductImage>
 
                     <div className="p-4 flex flex-col flex-1">
+                      {prod.category && (
+                        <span className="mb-1 w-fit max-w-full truncate rounded-full bg-[#edf3ec] px-2 py-0.5 text-[10px] font-bold text-[#315548]">
+                          {prod.category}
+                        </span>
+                      )}
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <h3 className="font-extrabold text-[#292d2a] text-sm line-clamp-1">
                           {prod.title}
@@ -239,31 +244,79 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                       })()}
 
                       {prod.description && (
-                        <p className="text-[#47534b] text-xs line-clamp-2 mb-2 leading-relaxed">
+                        <p className="mb-2 whitespace-pre-line break-words text-xs leading-relaxed text-[#47534b]">
                           {prod.description}
                         </p>
                       )}
 
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {Object.entries(prod.attributes || {}).map(([key, value]) => (
-                          <span key={key} className="text-[10px] bg-[#edf3ec] font-bold px-1.5 py-0.5 rounded text-[#315548] border border-[#315548]/15">
-                            {typeof value === 'string' ? value : ''}
-                          </span>
-                        ))}
-                        {prod.sizes && prod.sizes.map(s => (
-                          <span key={s} className="text-[10px] bg-[#f1f3f5] font-bold px-1.5 py-0.5 rounded text-[#292d2a] border border-[#292d2a]/10">
-                            Taille {s}
-                          </span>
-                        ))}
-                        {prod.colors && prod.colors.map(c => {
-                          const label = typeof c === 'string' ? c : c.name;
-                          return (
-                            <span key={label} className="text-[10px] bg-[#f1f3f5] font-bold px-1.5 py-0.5 rounded text-[#292d2a] border border-[#292d2a]/10">
-                              {label}
+                      {Object.entries(prod.attributes || {}).some(([, value]) => typeof value === 'string' && value.trim()) && (
+                        <dl className="mb-2 grid grid-cols-2 gap-x-3 gap-y-1">
+                          {Object.entries(prod.attributes || {}).filter(([, value]) => typeof value === 'string' && value.trim()).map(([key, value]) => {
+                            const field = getCategoryDefaults(currentShop.category).productAttributes.find((candidate) => candidate.key === key);
+                            const label = field?.label || key.replace(/_/g, ' ');
+                            const displayValue = typeof value === 'string' ? value : '';
+                            return (
+                              <div key={key} className="min-w-0">
+                                <dt className="truncate text-[10px] font-semibold text-slate-500">{label}</dt>
+                                <dd className="break-words text-[11px] font-bold text-[#315548]">{displayValue}</dd>
+                              </div>
+                            );
+                          })}
+                        </dl>
+                      )}
+
+                      {((prod.sizes?.length ?? 0) > 0 || (prod.colors?.length ?? 0) > 0) && (
+                        <div className="mb-2 flex flex-wrap gap-1">
+                          {prod.sizes?.map((size: string) => (
+                            <span key={size} className="rounded border border-[#292d2a]/10 bg-[#f1f3f5] px-1.5 py-0.5 text-[10px] font-bold text-[#292d2a]">
+                              Taille {size}
                             </span>
-                          );
-                        })}
-                      </div>
+                          ))}
+                          {prod.colors?.map((color: string | { name: string }) => {
+                            const label = typeof color === 'string' ? color : color.name;
+                            return (
+                              <span key={label} className="rounded border border-[#292d2a]/10 bg-[#f1f3f5] px-1.5 py-0.5 text-[10px] font-bold text-[#292d2a]">
+                                Couleur {label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {prod.modifier_groups?.length > 0 && (
+                        <div className="mb-2 space-y-2">
+                          {prod.modifier_groups.map((group: { name: string; required?: boolean; max_selections?: number; options: (string | { label: string; price_delta: number })[] }) => (
+                            <div key={group.name} className="min-w-0">
+                              <p className="text-[10px] font-bold text-slate-600">
+                                {group.name}{group.required ? ' · obligatoire' : ''}
+                                {group.max_selections && group.max_selections > 1 ? ` · jusqu’à ${group.max_selections} choix` : ''}
+                              </p>
+                              <p className="break-words text-[11px] text-slate-700">
+                                {group.options.map((option) => {
+                                  if (typeof option === 'string') return option;
+                                  return option.price_delta > 0 ? `${option.label} (+${formatFCFA(option.price_delta)})` : option.label;
+                                }).join(' · ')}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {(prod.lookbook_image || prod.gallery_images?.length > 0) && (
+                        <div className="mb-2 flex gap-1.5 overflow-x-auto" aria-label={`Photos supplémentaires de ${prod.title}`}>
+                          {[...(prod.lookbook_image ? [prod.lookbook_image] : []), ...(prod.gallery_images || [])].map((imageUrl: string, index: number) => (
+                            <img
+                              key={`${prod.id}-photo-${index}`}
+                              src={imageUrl}
+                              alt={`${prod.title}, photo supplémentaire ${index + 1}`}
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              className="h-12 w-12 shrink-0 rounded-lg border border-[#e7dfd3] object-cover"
+                              onError={(event) => { event.currentTarget.hidden = true; }}
+                            />
+                          ))}
+                        </div>
+                      )}
 
                       <div className="mt-auto flex items-center justify-between border-t border-[#ece7de] pt-3">
                         <div className="flex items-center gap-1 rounded-xl border border-[#e7dfd3] bg-[#f8f5ef] p-1">
@@ -296,28 +349,28 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                             type="button"
                             onClick={() => handleQuickToggleVisibility(prod.id)}
                             aria-label={prod.is_available === false ? `Rendre ${prod.title} visible` : `Masquer ${prod.title} de la vitrine`}
-                            className="min-h-10 min-w-10 rounded-lg border border-[#d9d5cd] bg-white text-[#47534b] transition hover:bg-[#edf5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]"
+                            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-[#d9d5cd] bg-white text-[#47534b] transition hover:bg-[#edf5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]"
                             title={prod.is_available === false ? "Rendre visible" : "Masquer de la vitrine"}
                           >
-                            {prod.is_available === false ? <EyeOff className="w-4 h-4 text-[#b93712]" /> : <Eye className="w-4 h-4" />}
+                            {prod.is_available === false ? <EyeOff className="h-4 w-4 shrink-0 text-[#b93712]" /> : <Eye className="h-4 w-4 shrink-0" />}
                           </button>
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(prod)}
                             aria-label={`Modifier ${prod.title}`}
-                            className="min-h-10 min-w-10 rounded-lg border border-[#d9d5cd] bg-white text-[#47534b] transition hover:bg-[#edf5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]"
+                            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-[#d9d5cd] bg-white text-[#47534b] transition hover:bg-[#edf5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]"
                             title="Modifier"
                           >
-                            <Edit3 className="w-4 h-4" />
+                            <Edit3 className="h-4 w-4 shrink-0" />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteProduct(prod.id)}
                             aria-label={`Supprimer ${prod.title}`}
-                            className="min-h-10 min-w-10 rounded-lg border border-[#e9c8c2] bg-white text-rose-700 transition hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
+                            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-[#e9c8c2] bg-white text-rose-700 transition hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
                             title="Supprimer"
                           >
-                            <Trash2 className="w-4 h-4 text-[#b93712]" />
+                            <Trash2 className="h-4 w-4 shrink-0 text-[#b93712]" />
                           </button>
                         </div>
                       </div>
