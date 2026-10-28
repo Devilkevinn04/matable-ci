@@ -21,6 +21,7 @@ import { createTelemetryRouter } from './server/routes/telemetry.ts';
 import { createGeniusPayRouter } from './server/routes/geniusPay.ts';
 import { createDeliveryAdminRouter } from './server/routes/deliveryAdmin.ts';
 import { createDeliveryRouter } from './server/routes/delivery.ts';
+import { expireStaleRequestedCourses, parseOfferTtlMinutes } from './server/services/deliveryLifecycle.ts';
 import { createAdvertisingRouters } from './server/routes/advertising.ts';
 import { createPublicRateLimitMiddleware } from './server/services/rateLimits.ts';
 import { buildSessionFingerprint, createAuthSessionHelpers, isRequestFingerprintMatch } from './server/services/authSessions.ts';
@@ -89,6 +90,7 @@ declare global {
 const DEMO_MODE = String(process.env.DEMO_MODE || '').trim().toLowerCase() === 'true';
 const DELIVERY_TEST_MODE = process.env.NODE_ENV !== 'production'
   && String(process.env.DELIVERY_TEST_MODE || '').trim().toLowerCase() === 'true';
+const DELIVERY_OFFER_TTL_MINUTES = parseOfferTtlMinutes(process.env.DELIVERY_OFFER_TTL_MINUTES);
 
 export function shouldSeedDemoData(): boolean {
   if (process.env.NODE_ENV !== 'production') {
@@ -902,6 +904,7 @@ async function startServer() {
     dbRun,
     dbTransaction,
     testMode: DELIVERY_TEST_MODE,
+    offerTtlMinutes: DELIVERY_OFFER_TTL_MINUTES,
   }));
   const advertisingRouters = createAdvertisingRouters({
     rateLimitPublicRequest,
@@ -1114,6 +1117,16 @@ async function startServer() {
       getCustomerSessionState,
       databaseMode,
     }));
+    const runDeliveryExpiry = () => {
+      void expireStaleRequestedCourses(DELIVERY_OFFER_TTL_MINUTES)
+        .then((count) => {
+          if (count > 0) console.info(`Expired ${count} delivery course(s) without a driver.`);
+        })
+        .catch((error: unknown) => {
+          console.error('Scheduled delivery course expiry failed.', error);
+        });
+    };
+    setInterval(runDeliveryExpiry, 10 * 60 * 1000).unref();
   }
 
   app.use('/api', createOrderRouter({

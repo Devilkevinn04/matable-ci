@@ -453,6 +453,20 @@ test('local delivery flow covers account approval, sandbox fee, zone quote, cour
   assert.deepEqual(acceptedTimeline.payload.events.map((event) => event.next_status), ['requested', 'accepted']);
   assert.equal(acceptedTimeline.payload.events[1].actor_type, 'driver');
   assert.equal(acceptedTimeline.payload.events[1].actor_name, 'Livreur E2E');
+  const released = await api(`/api/delivery/courses/${deliveryId}/release`, {
+    method: 'POST',
+  }, driverCookie);
+  assert.equal(released.response.status, 200, JSON.stringify(released.payload));
+  const releasedTimeline = await api<{ events: { next_status: string; actor_type: string }[] }>(
+    `/api/shops/1/deliveries/${deliveryId}/events`,
+    {},
+    merchantCookie,
+  );
+  assert.equal(releasedTimeline.response.status, 200);
+  assert.deepEqual(releasedTimeline.payload.events.map((event) => event.next_status), ['requested', 'accepted', 'requested']);
+  assert.deepEqual(releasedTimeline.payload.events.map((event) => event.actor_type), ['merchant', 'driver', 'driver']);
+  assert.equal((await api(`/api/delivery/courses/${deliveryId}/release`, { method: 'POST' }, driverCookie)).response.status, 404);
+  assert.equal((await api(`/api/delivery/courses/${deliveryId}/accept`, { method: 'POST' }, driverCookie)).response.status, 200);
   const overlappingCourse = await api(`/api/delivery/courses/${secondDeliveryId}/accept`, {
     method: 'POST',
   }, driverCookie);
@@ -541,7 +555,7 @@ test('local delivery flow covers account approval, sandbox fee, zone quote, cour
   assert.equal(deliveredTimeline.response.status, 200);
   assert.deepEqual(
     deliveredTimeline.payload.events.map((event) => event.next_status),
-    ['requested', 'accepted', 'to_pickup', 'picked_up', 'delivered'],
+    ['requested', 'accepted', 'requested', 'accepted', 'to_pickup', 'picked_up', 'delivered'],
   );
   const replaceAfterDelivery = await api(`/api/delivery/courses/${deliveryId}/proof`, {
     method: 'PUT',
@@ -563,6 +577,34 @@ test('local delivery flow covers account approval, sandbox fee, zone quote, cour
     auditDb.close();
   }
 
+  assert.equal((await api(`/api/delivery/courses/${secondDeliveryId}/accept`, { method: 'POST' }, driverCookie)).response.status, 200);
+  const adminCourses = await api<{ courses: { id: number; status: string; driver_name: string | null }[] }>(
+    '/api/admin/delivery/courses?status=all',
+    {},
+    admin,
+  );
+  assert.equal(adminCourses.response.status, 200);
+  assert.deepEqual(
+    adminCourses.payload.courses.map((course) => course.id).sort((left, right) => left - right),
+    [deliveryId, secondDeliveryId].sort((left, right) => left - right),
+  );
+  const adminRelease = await api(`/api/admin/delivery/courses/${secondDeliveryId}/release`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: 'Réaffectation de test' }),
+  }, admin);
+  assert.equal(adminRelease.response.status, 200);
+  const afterAdminReleaseTimeline = await api<{ events: { next_status: string; actor_type: string }[] }>(
+    '/api/customers/orders/101/delivery/events',
+    {},
+    customerCookie,
+  );
+  assert.equal(afterAdminReleaseTimeline.response.status, 200);
+  assert.deepEqual(afterAdminReleaseTimeline.payload.events.map((event) => event.next_status), ['requested', 'accepted', 'requested']);
+  assert.equal(afterAdminReleaseTimeline.payload.events[2].actor_type, 'admin');
+  assert.equal((await api(`/api/admin/delivery/courses/${secondDeliveryId}/release`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: 'Sans livreur' }),
+  }, admin)).response.status, 409);
   assert.equal((await api(`/api/delivery/courses/${secondDeliveryId}/accept`, { method: 'POST' }, driverCookie)).response.status, 200);
   const secondProofUpload = await api(`/api/delivery/courses/${secondDeliveryId}/proof`, {
     method: 'PUT',
@@ -595,8 +637,8 @@ test('local delivery flow covers account approval, sandbox fee, zone quote, cour
     customerCookie,
   );
   assert.equal(customerSecondTimeline.response.status, 200);
-  assert.deepEqual(customerSecondTimeline.payload.events.map((event) => event.next_status), ['requested', 'accepted']);
-  assert.deepEqual(customerSecondTimeline.payload.events.map((event) => event.actor_type), ['merchant', 'driver']);
+  assert.deepEqual(customerSecondTimeline.payload.events.map((event) => event.next_status), ['requested', 'accepted', 'requested', 'accepted']);
+  assert.deepEqual(customerSecondTimeline.payload.events.map((event) => event.actor_type), ['merchant', 'driver', 'admin', 'driver']);
   assert.equal((await api(`/api/shops/1/deliveries/${secondDeliveryId}/cancel`, { method: 'POST' }, merchantCookie)).response.status, 200);
   const afterCancellationReveal = await api(`/api/delivery/courses/${secondDeliveryId}/contacts/customer/reveal`, {
     method: 'POST',
@@ -643,8 +685,6 @@ test('local delivery flow covers account approval, sandbox fee, zone quote, cour
     method: 'POST',
   }, customerCookie);
   assert.equal(afterCustomerOrderCancellationReveal.response.status, 403);
-  const wrongShopContact = await api('/api/shops/2/orders/101/contacts/customer', {}, merchantCookie);
-  assert.equal(wrongShopContact.response.status, 401);
 
   const orderAuditDb = new Database(TEST_DB_PATH, { readonly: true });
   try {
@@ -658,4 +698,79 @@ test('local delivery flow covers account approval, sandbox fee, zone quote, cour
   } finally {
     orderAuditDb.close();
   }
+
+  const adminCoursesDb = new Database(TEST_DB_PATH);
+  try {
+    for (const orderId of [102, 103]) {
+      adminCoursesDb.prepare(`INSERT INTO orders (
+        id, shop_id, customer_name, customer_phone, delivery_location, total_amount,
+        created_at, status, items
+      ) SELECT ?, shop_id, customer_name, customer_phone, delivery_location, total_amount,
+        ?, 'confirmed', items FROM orders WHERE id = 1`).run(orderId, new Date().toISOString());
+    }
+  } finally {
+    adminCoursesDb.close();
+  }
+
+  const adminCancelledRequest = await api<{ delivery: { id: number } }>('/api/shops/1/orders/102/delivery', {
+    method: 'POST',
+    body: JSON.stringify({ destination_zone_id: bingervilleId }),
+  }, merchantCookie);
+  assert.equal(adminCancelledRequest.response.status, 201);
+  const adminCancelledId = adminCancelledRequest.payload.delivery.id;
+  assert.equal((await api(`/api/admin/delivery/courses/${adminCancelledId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: 'x' }),
+  }, admin)).response.status, 400);
+  const adminCancellation = await api(`/api/admin/delivery/courses/${adminCancelledId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: 'Adresse erronée confirmée' }),
+  }, admin);
+  assert.equal(adminCancellation.response.status, 200);
+  const adminCancellationTimeline = await api<{ events: { next_status: string; actor_type: string }[] }>(
+    `/api/shops/1/deliveries/${adminCancelledId}/events`,
+    {},
+    merchantCookie,
+  );
+  assert.equal(adminCancellationTimeline.response.status, 200);
+  assert.deepEqual(adminCancellationTimeline.payload.events.map((event) => event.next_status), ['requested', 'cancelled']);
+  assert.equal(adminCancellationTimeline.payload.events[1].actor_type, 'admin');
+  assert.equal((await api(`/api/admin/delivery/courses/${adminCancelledId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: 'Déjà annulée' }),
+  }, admin)).response.status, 409);
+
+  const expiryRequest = await api<{ delivery: { id: number } }>('/api/shops/1/orders/103/delivery', {
+    method: 'POST',
+    body: JSON.stringify({ destination_zone_id: bingervilleId }),
+  }, merchantCookie);
+  assert.equal(expiryRequest.response.status, 201);
+  const expiryId = expiryRequest.payload.delivery.id;
+  const expiryDb = new Database(TEST_DB_PATH);
+  try {
+    expiryDb.prepare('UPDATE delivery_orders SET created_at = ? WHERE id = ?')
+      .run(new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), expiryId);
+  } finally {
+    expiryDb.close();
+  }
+  const expiry = await api<{ cancelled: number; ttl_minutes: number }>(
+    '/api/admin/delivery/maintenance/expire-courses',
+    { method: 'POST', body: JSON.stringify({ ttl_minutes: 120 }) },
+    admin,
+  );
+  assert.equal(expiry.response.status, 200);
+  assert.equal(expiry.payload.cancelled, 1);
+  assert.equal(expiry.payload.ttl_minutes, 120);
+  const expiredTimeline = await api<{ events: { next_status: string; actor_type: string }[] }>(
+    `/api/shops/1/deliveries/${expiryId}/events`,
+    {},
+    merchantCookie,
+  );
+  assert.equal(expiredTimeline.response.status, 200);
+  assert.deepEqual(expiredTimeline.payload.events.map((event) => event.next_status), ['requested', 'cancelled']);
+  assert.equal(expiredTimeline.payload.events[1].actor_type, 'admin');
+
+  // This wrong-shop request invalidates the merchant session, so it must stay last.
+  const wrongShopContact = await api('/api/shops/2/orders/101/contacts/customer', {}, merchantCookie);
+  assert.equal(wrongShopContact.response.status, 401);
 });

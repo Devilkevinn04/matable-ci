@@ -251,28 +251,65 @@ export async function dispatchDeliveryCancelledPush(
   deliveryId: number,
   previousStatus: string,
   driverId: number | null,
+  cancelledBy: 'merchant' | 'admin' | 'system' = 'merchant',
 ) {
   try {
     const context = await getDeliveryContext(deliveryId);
     if (!context) return;
+    const reason = cancelledBy === 'admin'
+      ? 'par l’équipe MaTable'
+      : cancelledBy === 'system'
+        ? 'automatiquement faute de livreur disponible'
+        : 'par la boutique';
+    const eventKey = `delivery-${Number(context.id)}-cancelled-${Date.now()}`;
     const tasks: Promise<unknown>[] = [
       notifyCustomer(context, {
         title: 'Livraison annulée',
-        body: `La course ${deliveryLabel(context)} a été annulée par la boutique.`,
+        body: `La course ${deliveryLabel(context)} a été annulée ${reason}.`,
         tag: `delivery-${Number(context.id)}-cancelled`,
       }),
     ];
+    if (cancelledBy !== 'merchant') {
+      tasks.push(notifyMerchant(context, eventKey, {
+        title: 'Course annulée',
+        body: `La course ${deliveryLabel(context)} a été annulée ${reason}.`,
+        tag: `delivery-${Number(context.id)}-cancelled`,
+      }));
+    }
     if (driverId) {
       tasks.push(sendToDriver(driverId, {
         title: 'Course annulée',
-        body: `La boutique a annulé ${deliveryLabel(context)} (${deliveryRouteLabel(context)}).`,
+        body: `La course ${deliveryLabel(context)} (${deliveryRouteLabel(context)}) a été annulée ${reason}.`,
         url: '/__preview/delivery-courier',
         tag: `delivery-${Number(context.id)}-cancelled`,
       }));
     }
     await Promise.allSettled(tasks);
-    if (previousStatus) console.info(`Delivery ${deliveryId} cancelled from ${previousStatus}.`);
+    if (previousStatus) console.info(`Delivery ${deliveryId} cancelled from ${previousStatus} (${cancelledBy}).`);
   } catch (error) {
     console.error(`Unable to dispatch delivery cancellation push for delivery ${deliveryId}.`, error);
+  }
+}
+
+export async function dispatchDeliveryReleasedPush(deliveryId: number, driverName: string) {
+  try {
+    const context = await getDeliveryContext(deliveryId);
+    if (!context) return;
+    const eventKey = `delivery-${Number(context.id)}-released-${Date.now()}`;
+    await Promise.allSettled([
+      notifyMerchant(context, eventKey, {
+        title: 'Livreur libéré',
+        body: `${driverName} a libéré ${deliveryLabel(context)}. La course est de nouveau proposée aux livreurs.`,
+        tag: `delivery-${Number(context.id)}-released`,
+      }),
+      notifyCustomer(context, {
+        title: 'Nouveau livreur recherché',
+        body: `Votre commande ${deliveryLabel(context)} est de nouveau proposée à un livreur disponible.`,
+        tag: `delivery-${Number(context.id)}-released`,
+      }),
+      notifyEligibleDrivers(context),
+    ]);
+  } catch (error) {
+    console.error(`Unable to dispatch delivery release push for delivery ${deliveryId}.`, error);
   }
 }

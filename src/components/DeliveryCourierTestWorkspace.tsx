@@ -432,6 +432,28 @@ export function DeliveryCourierTestWorkspace() {
     }
   };
 
+  const releaseCourse = async () => {
+    if (!activeDelivery) return;
+    if (!window.confirm('Libérer cette course ? Elle sera reproposée à un autre livreur.')) return;
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch(`/api/delivery/courses/${activeDelivery.id}/release`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await readJson<{ error?: string }>(response);
+      if (!response.ok) throw new Error(data.error || 'La course n’a pas pu être libérée.');
+      await refreshCourses();
+      setNotice('Course libérée. Elle est de nouveau proposée aux livreurs disponibles.');
+    } catch (releaseError) {
+      setError(releaseError instanceof Error ? releaseError.message : 'La course n’a pas pu être libérée.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const revealContact = async (role: 'merchant' | 'customer') => {
     if (!activeDelivery) return;
     setSaving(true);
@@ -675,6 +697,16 @@ export function DeliveryCourierTestWorkspace() {
                             title="Historique de cette course"
                           />
                         </div>
+                        {['accepted', 'to_pickup'].includes(activeDelivery.status) && (
+                          <button
+                            type="button"
+                            onClick={() => void releaseCourse()}
+                            disabled={saving}
+                            className="mt-3 min-h-10 w-full rounded-lg border border-amber-300 bg-white px-4 text-xs font-bold text-amber-950 disabled:opacity-50"
+                          >
+                            Libérer la course
+                          </button>
+                        )}
                       </div>
                     </section>
                   ) : (

@@ -11,6 +11,7 @@ import {
   dispatchDeliveryCancelledPush,
   dispatchDeliveryCreatedPush,
   dispatchDeliveryProofPush,
+  dispatchDeliveryReleasedPush,
   dispatchDeliveryStatusPush,
 } from '../services/deliveryNotifications.ts';
 import {
@@ -25,6 +26,7 @@ import {
 const DRIVER_SESSION_COOKIE = 'matable_delivery_session';
 const DRIVER_SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const SUBSCRIPTION_DURATION_MS = 24 * 60 * 60 * 1000;
+const MAX_DAILY_COURSE_RELEASES = 3;
 const SANDBOX_SUBSCRIPTION_AMOUNT = 1000;
 const MIN_DELIVERY_QUOTE = 1500;
 const MAX_DELIVERY_QUOTE = 2500;
@@ -733,6 +735,47 @@ export function createDeliveryRouter({
     `, [deliveryId]);
     void dispatchDeliveryAssignedPush(deliveryId, session.driver.name);
     return res.json({ delivery: delivery ? toPublicDelivery(delivery) : null });
+  });
+
+  router.post('/delivery/courses/:id/release', rateLimitPublicRequest(10), async (req, res) => {
+    const session = await requireDriver(req, res);
+    if (!session) return;
+    const deliveryId = Number(req.params.id);
+    if (!isPositiveSafeInteger(deliveryId)) {
+      return res.status(400).json({ error: 'Identifiant de course invalide.' });
+    }
+    const now = new Date().toISOString();
+    const releaseWindowStart = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const result = await dbTransaction(async (transaction) => {
+      const delivery = await transaction.get<DeliveryRow>(
+        `SELECT * FROM delivery_orders WHERE id = ? AND driver_id = ?${mode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+        [deliveryId, session.driver.id],
+      );
+      if (!delivery) return 'missing' as const;
+      if (!['accepted', 'to_pickup'].includes(delivery.status)) return 'state' as const;
+      const releases = await transaction.get<{ count: number | string }>(`
+        SELECT COUNT(*) AS count FROM delivery_course_events
+        WHERE actor_type = 'driver' AND actor_id = ? AND next_status = 'requested'
+          AND previous_status IN ('accepted', 'to_pickup') AND created_at >= ?
+      `, [session.driver.id, releaseWindowStart]);
+      if (Number(releases?.count || 0) >= MAX_DAILY_COURSE_RELEASES) return 'limit' as const;
+      await transaction.run(`UPDATE delivery_orders SET status = 'requested', driver_id = NULL,
+        accepted_at = NULL, to_pickup_at = NULL WHERE id = ? AND driver_id = ? AND status = ?`,
+      [deliveryId, session.driver.id, delivery.status]);
+      await transaction.run(`INSERT INTO delivery_course_events
+        (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
+        VALUES (?, 'driver', ?, ?, 'requested', ?)`,
+      [deliveryId, session.driver.id, delivery.status, now]);
+      return { type: 'released' as const, previousStatus: delivery.status };
+    });
+    if (result === 'missing') return res.status(404).json({ error: 'Course introuvable pour ce livreur.' });
+    if (result === 'state') return res.status(409).json({ error: 'Une course ne peut être libérée qu’avant la récupération du colis.' });
+    if (result === 'limit') {
+      return res.status(429).json({ error: 'Trop de courses libérées aujourd’hui. Contactez MaTable pour débloquer votre compte.' });
+    }
+    void dispatchDeliveryReleasedPush(deliveryId, session.driver.name);
+    console.info(`Delivery ${deliveryId} released by driver ${session.driver.id} from ${result.previousStatus}.`);
+    return res.json({ success: true, status: 'requested' });
   });
 
   router.patch('/delivery/courses/:id/status', rateLimitPublicRequest(30), async (req, res) => {

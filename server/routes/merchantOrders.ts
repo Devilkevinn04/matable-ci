@@ -10,6 +10,7 @@ import {
   isOrderContactAvailable,
   maskContactPhone,
 } from '../services/contactGuard.ts';
+import { dispatchDeliveryCancelledPush } from '../services/deliveryNotifications.ts';
 
 interface MerchantOrdersOptions {
   shops: ShopRecord[];
@@ -180,6 +181,7 @@ export function createMerchantOrdersRouter({
       expired: [],
     };
     const stockUpdates: { productId: number; stock: number; isAvailable: boolean }[] = [];
+    let cancelledDelivery: { id: number; previousStatus: string; driverId: number | null } | null = null;
     try {
       const result = await dbTransaction(async (transaction) => {
         const row = await transaction.get<Record<string, unknown>>(
@@ -193,8 +195,8 @@ export function createMerchantOrdersRouter({
         if (!allowedTransitions[previousStatus]?.includes(status) && !req.adminShopAccess) {
           throw Object.assign(new Error(`Transition impossible : ${previousStatus} → ${status}.`), { statusCode: 409 });
         }
-        const linkedDelivery = await transaction.get<{ id: number | string; status: string }>(
-          `SELECT id, status FROM delivery_orders WHERE order_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+        const linkedDelivery = await transaction.get<{ id: number | string; status: string; driver_id: number | string | null }>(
+          `SELECT id, status, driver_id FROM delivery_orders WHERE order_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
           [order.id],
         );
         if (status === 'delivered' && linkedDelivery && linkedDelivery.status !== 'delivered') {
@@ -259,6 +261,11 @@ export function createMerchantOrdersRouter({
             (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
             VALUES (?, 'merchant', ?, ?, 'cancelled', ?)`,
           [linkedDelivery.id, shopId, linkedDelivery.status, cancelledAt]);
+          cancelledDelivery = {
+            id: Number(linkedDelivery.id),
+            previousStatus: linkedDelivery.status,
+            driverId: linkedDelivery.driver_id === null ? null : Number(linkedDelivery.driver_id),
+          };
         }
         if (req.adminShopAccess) {
           await transaction.run(
@@ -292,6 +299,14 @@ export function createMerchantOrdersRouter({
         }
         : result.order;
       if (result.unchanged) return res.json({ success: true, order: responseOrder });
+      if (cancelledDelivery) {
+        void dispatchDeliveryCancelledPush(
+          cancelledDelivery.id,
+          cancelledDelivery.previousStatus,
+          cancelledDelivery.driverId,
+          req.adminShopAccess ? 'admin' : 'merchant',
+        );
+      }
       res.json({
         success: true,
         order: responseOrder,

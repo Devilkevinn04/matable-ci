@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AdminDeliveryTestControls } from './AdminDeliveryTestControls';
+import { AdminDeliveryOperations } from './AdminDeliveryOperations';
 
 interface DeliveryZone {
   id: number;
@@ -214,6 +215,7 @@ export function AdminDeliveryPricing() {
       )}
 
       {(error || notice) && <p role={error ? 'alert' : 'status'} className={`rounded-lg border p-3 text-sm font-semibold ${error ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}>{error || notice}</p>}
+      {!loading && configuration && <AdminDeliveryOperations />}
       {!loading && configuration && (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && (
         <AdminDeliveryTestControls zones={configuration.zones} />
       )}

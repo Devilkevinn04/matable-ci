@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { dispatchDeliveryCancelledPush, dispatchDeliveryReleasedPush } from '../services/deliveryNotifications.ts';
+import { expireStaleRequestedCourses, parseOfferTtlMinutes } from '../services/deliveryLifecycle.ts';
 
 interface DeliveryAdminRouterOptions {
   dbAll: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
@@ -10,6 +12,7 @@ interface DeliveryAdminRouterOptions {
     run: (sql: string, params?: unknown[]) => Promise<{ changes: number; lastInsertRowid?: number }>;
   }) => Promise<T>) => Promise<T>;
   testMode: boolean;
+  offerTtlMinutes?: number;
 }
 
 interface DeliveryZoneRow {
@@ -63,7 +66,7 @@ export function normalizeDeliveryConfiguration(zones: DeliveryZoneRow[], tariffs
   };
 }
 
-export function createDeliveryAdminRouter({ dbAll, dbGet, dbRun, dbTransaction, testMode }: DeliveryAdminRouterOptions) {
+export function createDeliveryAdminRouter({ dbAll, dbGet, dbRun, dbTransaction, testMode, offerTtlMinutes }: DeliveryAdminRouterOptions) {
   const router = Router();
 
   const loadConfiguration = async () => {
@@ -214,7 +217,152 @@ export function createDeliveryAdminRouter({ dbAll, dbGet, dbRun, dbTransaction, 
     return res.json(await loadConfiguration());
   });
 
+  router.get('/courses', async (req, res) => {
+    const status = typeof req.query.status === 'string' ? req.query.status : 'active';
+    const allowedFilters = ['active', 'all', 'requested', 'accepted', 'to_pickup', 'picked_up', 'delivered', 'cancelled'];
+    if (!allowedFilters.includes(status)) {
+      return res.status(400).json({ error: 'Filtre de statut de course invalide.' });
+    }
+    const activeStatuses = ['requested', 'accepted', 'to_pickup', 'picked_up'];
+    const where = status === 'active'
+      ? `WHERE deliveries.status IN (${activeStatuses.map(() => '?').join(', ')})`
+      : status === 'all' ? '' : 'WHERE deliveries.status = ?';
+    const params = status === 'active' ? activeStatuses : status === 'all' ? [] : [status];
+    const rows = await dbAll<{
+      id: number | string;
+      order_id: number | string;
+      shop_id: number | string;
+      quoted_amount: number;
+      status: string;
+      ticket_number: string | null;
+      created_at: string;
+      accepted_at: string | null;
+      delivered_at: string | null;
+      cancelled_at: string | null;
+      driver_id: number | string | null;
+      driver_name: string | null;
+      shop_name: string;
+      pickup_zone: string;
+      destination_zone: string;
+    }>(`
+      SELECT deliveries.id, deliveries.order_id, deliveries.shop_id, deliveries.quoted_amount,
+        deliveries.status, deliveries.ticket_number, deliveries.created_at, deliveries.accepted_at,
+        deliveries.delivered_at, deliveries.cancelled_at, deliveries.driver_id,
+        drivers.name AS driver_name, shops.name AS shop_name,
+        pickup.label AS pickup_zone, destination.label AS destination_zone
+      FROM delivery_orders AS deliveries
+      JOIN shops ON shops.id = deliveries.shop_id
+      JOIN delivery_zones AS pickup ON pickup.id = deliveries.pickup_zone_id
+      JOIN delivery_zones AS destination ON destination.id = deliveries.destination_zone_id
+      LEFT JOIN delivery_drivers AS drivers ON drivers.id = deliveries.driver_id
+      ${where}
+      ORDER BY deliveries.created_at DESC, deliveries.id DESC
+      LIMIT 100
+    `, params);
+    return res.json({ courses: rows.map((course) => ({
+      id: toSafeId(course.id),
+      order_id: toSafeId(course.order_id),
+      shop_id: toSafeId(course.shop_id),
+      quoted_amount: Number(course.quoted_amount),
+      status: course.status,
+      ticket_number: course.ticket_number,
+      created_at: course.created_at,
+      accepted_at: course.accepted_at,
+      delivered_at: course.delivered_at,
+      cancelled_at: course.cancelled_at,
+      driver_id: course.driver_id === null ? null : toSafeId(course.driver_id),
+      driver_name: course.driver_name,
+      shop_name: course.shop_name,
+      pickup_zone: course.pickup_zone,
+      destination_zone: course.destination_zone,
+    })) });
+  });
+
+  router.post('/courses/:id/cancel', async (req, res) => {
+    const courseId = Number(req.params.id);
+    const reason = typeof req.body?.reason === 'string'
+      ? req.body.reason.trim().replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 500)
+      : '';
+    if (!isPositiveSafeInteger(courseId)) return res.status(400).json({ error: 'Identifiant de course invalide.' });
+    if (reason.length < 3) return res.status(400).json({ error: 'Un motif (au moins 3 caractères) est obligatoire.' });
+    const now = new Date().toISOString();
+    const result = await dbTransaction(async (transaction) => {
+      const course = await transaction.get<{ id: number | string; status: string; driver_id: number | string | null }>(
+        'SELECT id, status, driver_id FROM delivery_orders WHERE id = ?',
+        [courseId],
+      );
+      if (!course) return 'missing' as const;
+      if (['delivered', 'cancelled'].includes(course.status)) return 'terminal' as const;
+      await transaction.run(
+        `UPDATE delivery_orders SET status = 'cancelled', cancelled_at = ? WHERE id = ? AND status = ?`,
+        [now, courseId, course.status],
+      );
+      await transaction.run(`INSERT INTO delivery_course_events
+        (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
+        VALUES (?, 'admin', NULL, ?, 'cancelled', ?)`,
+      [courseId, course.status, now]);
+      return {
+        type: 'cancelled' as const,
+        previousStatus: course.status,
+        driverId: course.driver_id === null ? null : toSafeId(course.driver_id),
+      };
+    });
+    if (result === 'missing') return res.status(404).json({ error: 'Course introuvable.' });
+    if (result === 'terminal') return res.status(409).json({ error: 'Cette course est déjà terminée.' });
+    await writeAuditLog(req, 'delivery_course_cancelled', { course_id: courseId, reason });
+    void dispatchDeliveryCancelledPush(courseId, result.previousStatus, result.driverId, 'admin');
+    return res.json({ success: true, status: 'cancelled' });
+  });
+
+  router.post('/courses/:id/release', async (req, res) => {
+    const courseId = Number(req.params.id);
+    const reason = typeof req.body?.reason === 'string'
+      ? req.body.reason.trim().replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 500)
+      : '';
+    if (!isPositiveSafeInteger(courseId)) return res.status(400).json({ error: 'Identifiant de course invalide.' });
+    if (reason.length < 3) return res.status(400).json({ error: 'Un motif (au moins 3 caractères) est obligatoire.' });
+    const now = new Date().toISOString();
+    const result = await dbTransaction(async (transaction) => {
+      const course = await transaction.get<{
+        id: number | string;
+        status: string;
+        driver_id: number | string | null;
+        driver_name: string | null;
+      }>(`
+        SELECT deliveries.id, deliveries.status, deliveries.driver_id, drivers.name AS driver_name
+        FROM delivery_orders AS deliveries
+        LEFT JOIN delivery_drivers AS drivers ON drivers.id = deliveries.driver_id
+        WHERE deliveries.id = ?
+      `, [courseId]);
+      if (!course) return 'missing' as const;
+      if (!course.driver_id || course.status === 'requested') return 'unassigned' as const;
+      if (['delivered', 'cancelled'].includes(course.status)) return 'terminal' as const;
+      await transaction.run(`UPDATE delivery_orders SET status = 'requested', driver_id = NULL,
+        accepted_at = NULL, to_pickup_at = NULL WHERE id = ? AND status = ?`, [courseId, course.status]);
+      await transaction.run(`INSERT INTO delivery_course_events
+        (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
+        VALUES (?, 'admin', NULL, ?, 'requested', ?)`,
+      [courseId, course.status, now]);
+      return { type: 'released' as const, previousStatus: course.status, driverName: course.driver_name || 'Le livreur' };
+    });
+    if (result === 'missing') return res.status(404).json({ error: 'Course introuvable.' });
+    if (result === 'unassigned') return res.status(409).json({ error: 'Aucun livreur à retirer de cette course.' });
+    if (result === 'terminal') return res.status(409).json({ error: 'Cette course est déjà terminée.' });
+    await writeAuditLog(req, 'delivery_course_released', { course_id: courseId, reason, previous_status: result.previousStatus });
+    void dispatchDeliveryReleasedPush(courseId, result.driverName);
+    return res.json({ success: true, status: 'requested' });
+  });
+
   if (testMode) {
+    router.post('/maintenance/expire-courses', async (req, res) => {
+      const ttlMinutes = req.body?.ttl_minutes === undefined
+        ? parseOfferTtlMinutes(offerTtlMinutes)
+        : parseOfferTtlMinutes(req.body.ttl_minutes);
+      const cancelled = await expireStaleRequestedCourses(ttlMinutes);
+      await writeAuditLog(req, 'delivery_courses_expired', { ttl_minutes: ttlMinutes, cancelled });
+      return res.json({ success: true, cancelled, ttl_minutes: ttlMinutes });
+    });
+
     router.get('/drivers', async (_req, res) => {
       const rows = await dbAll<{
         id: number | string;
