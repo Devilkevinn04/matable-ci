@@ -37,6 +37,11 @@ const migrationVersions = [
   '032_subscription_admin_overrides',
   '033_advertising_beta',
   '034_product_sales',
+  '035_delivery_zone_tariffs',
+  '036_delivery_mvp',
+  '037_order_contact_audits',
+  '038_delivery_tickets_proofs_payments',
+  '039_delivery_notifications',
 ];
 const connectionString = process.env.DATABASE_URL;
 

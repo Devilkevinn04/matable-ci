@@ -14,7 +14,7 @@ let sqliteTransactionQueue: Promise<void> = Promise.resolve();
 
 const dataDir = path.join(process.cwd(), 'data');
 const configuredDbPath = process.env.MATABLE_DB_PATH
-  ? path.resolve(process.env.MATABLE_DB_PATH)
+  ? process.env.MATABLE_DB_PATH === ':memory:' ? ':memory:' : path.resolve(process.env.MATABLE_DB_PATH)
   : path.join(dataDir, 'matable.db');
 const sqliteDb = usePostgres ? null : (() => {
   if (configuredDbPath !== ':memory:') fs.mkdirSync(path.dirname(configuredDbPath), { recursive: true });
@@ -70,6 +70,156 @@ const sqliteSchema = `
     order_id INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
     token_hash TEXT NOT NULL UNIQUE, clicked_at TEXT
   );
+  CREATE TABLE IF NOT EXISTS delivery_zones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL UNIQUE,
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_delivery_zones_active_label ON delivery_zones(is_active, label);
+  CREATE TABLE IF NOT EXISTS delivery_zone_tariffs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    origin_zone_id INTEGER NOT NULL REFERENCES delivery_zones(id) ON DELETE RESTRICT,
+    destination_zone_id INTEGER NOT NULL REFERENCES delivery_zones(id) ON DELETE RESTRICT,
+    amount INTEGER NOT NULL CHECK (amount BETWEEN 1 AND 1000000),
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    UNIQUE (origin_zone_id, destination_zone_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_delivery_zone_tariffs_active_pair
+    ON delivery_zone_tariffs(is_active, origin_zone_id, destination_zone_id);
+  CREATE TABLE IF NOT EXISTS delivery_drivers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT NOT NULL UNIQUE,
+    email TEXT,
+    pin_hash TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'active', 'suspended')),
+    access_expires_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS delivery_driver_sessions (
+    token_hash TEXT PRIMARY KEY, driver_id INTEGER NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    expires_at INTEGER NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_delivery_driver_sessions_driver ON delivery_driver_sessions(driver_id);
+  CREATE TABLE IF NOT EXISTS delivery_driver_zones (
+    driver_id INTEGER NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    zone_id INTEGER NOT NULL REFERENCES delivery_zones(id) ON DELETE RESTRICT,
+    is_active INTEGER NOT NULL DEFAULT 0 CHECK (is_active IN (0, 1)),
+    assigned_at TEXT NOT NULL, PRIMARY KEY (driver_id, zone_id)
+  );
+  CREATE TABLE IF NOT EXISTS delivery_driver_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    driver_id INTEGER NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    amount INTEGER NOT NULL CHECK (amount = 1000), payment_mode TEXT NOT NULL
+      CHECK (payment_mode IN ('sandbox', 'provider')),
+    payment_intent_id TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'expired')),
+    created_at TEXT NOT NULL, expires_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_delivery_driver_subscriptions_driver
+    ON delivery_driver_subscriptions(driver_id, expires_at DESC);
+  CREATE TABLE IF NOT EXISTS delivery_driver_payment_intents (
+    id TEXT PRIMARY KEY,
+    driver_id INTEGER NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    amount INTEGER NOT NULL CHECK (amount = 1000),
+    currency TEXT NOT NULL DEFAULT 'XOF',
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'paid', 'failed', 'cancelled', 'expired', 'refunded')),
+    provider_reference TEXT,
+    provider_checkout_url TEXT,
+    provider_checked_at TEXT,
+    provider_check_attempts INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    paid_at TEXT
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_delivery_driver_payment_intents_reference
+    ON delivery_driver_payment_intents(provider_reference);
+  CREATE INDEX IF NOT EXISTS idx_delivery_driver_payment_intents_driver
+    ON delivery_driver_payment_intents(driver_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS delivery_shop_origins (
+    shop_id INTEGER PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
+    zone_id INTEGER NOT NULL REFERENCES delivery_zones(id) ON DELETE RESTRICT,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS delivery_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    pickup_zone_id INTEGER NOT NULL REFERENCES delivery_zones(id) ON DELETE RESTRICT,
+    destination_zone_id INTEGER NOT NULL REFERENCES delivery_zones(id) ON DELETE RESTRICT,
+    quoted_amount INTEGER NOT NULL CHECK (quoted_amount BETWEEN 1500 AND 2500),
+    ticket_number TEXT,
+    status TEXT NOT NULL DEFAULT 'requested'
+      CHECK (status IN ('requested', 'accepted', 'to_pickup', 'picked_up', 'delivered', 'cancelled')),
+    driver_id INTEGER REFERENCES delivery_drivers(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL, accepted_at TEXT, to_pickup_at TEXT,
+    picked_up_at TEXT, delivered_at TEXT, cancelled_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_delivery_orders_dispatch
+    ON delivery_orders(status, pickup_zone_id, destination_zone_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_delivery_orders_driver_status
+    ON delivery_orders(driver_id, status, created_at DESC);
+  CREATE TABLE IF NOT EXISTS delivery_proofs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    delivery_id INTEGER NOT NULL UNIQUE REFERENCES delivery_orders(id) ON DELETE CASCADE,
+    driver_id INTEGER NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    content_type TEXT NOT NULL CHECK (content_type IN ('image/jpeg', 'image/png', 'image/webp')),
+    byte_size INTEGER NOT NULL CHECK (byte_size BETWEEN 1 AND 307200),
+    image_base64 TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    captured_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_delivery_proofs_driver_created
+    ON delivery_proofs(driver_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS customer_push_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_customer_push_subscriptions_user
+    ON customer_push_subscriptions(user_id);
+  CREATE TABLE IF NOT EXISTS delivery_driver_push_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    driver_id INTEGER NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_delivery_driver_push_subscriptions_driver
+    ON delivery_driver_push_subscriptions(driver_id);
+  CREATE TABLE IF NOT EXISTS delivery_course_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    delivery_id INTEGER NOT NULL REFERENCES delivery_orders(id) ON DELETE CASCADE,
+    actor_type TEXT NOT NULL CHECK (actor_type IN ('merchant', 'driver', 'admin')),
+    actor_id INTEGER, previous_status TEXT, next_status TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS contact_audits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    delivery_id INTEGER NOT NULL REFERENCES delivery_orders(id) ON DELETE CASCADE,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    driver_id INTEGER NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    contact_role TEXT NOT NULL CHECK (contact_role IN ('merchant', 'customer')),
+    ip_hash TEXT NOT NULL, revealed_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_contact_audits_driver_time ON contact_audits(driver_id, revealed_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_contact_audits_ip_time ON contact_audits(ip_hash, revealed_at DESC);
+  CREATE TABLE IF NOT EXISTS order_contact_audits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    actor_type TEXT NOT NULL CHECK (actor_type IN ('customer', 'merchant')),
+    actor_id INTEGER NOT NULL,
+    contact_role TEXT NOT NULL CHECK (contact_role IN ('customer', 'merchant')),
+    ip_hash TEXT NOT NULL,
+    revealed_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_order_contact_audits_actor_time ON order_contact_audits(actor_type, actor_id, revealed_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_order_contact_audits_ip_time ON order_contact_audits(ip_hash, revealed_at DESC);
   CREATE TABLE IF NOT EXISTS subscription_payment_intents (
     id TEXT PRIMARY KEY, shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
     payment_type TEXT NOT NULL DEFAULT 'subscription', tier TEXT NOT NULL, amount INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'XOF',
@@ -358,6 +508,14 @@ function migrateSqlite(connection: Database.Database) {
   }
   addColumn('orders', 'status', "TEXT DEFAULT 'pending'");
   addColumn('orders', 'customer_user_id', 'INTEGER');
+  addColumn('delivery_drivers', 'email', 'TEXT');
+  addColumn('delivery_orders', 'ticket_number', 'TEXT');
+  addColumn('delivery_driver_subscriptions', 'payment_intent_id', 'TEXT');
+  connection.exec(`UPDATE delivery_orders SET ticket_number =
+    'LIV-' || substr(created_at, 3, 2) || substr(created_at, 6, 2) || substr(created_at, 9, 2)
+    || '-' || printf('%06d', id)
+    WHERE ticket_number IS NULL AND created_at IS NOT NULL`);
+  connection.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_delivery_orders_ticket_number ON delivery_orders(ticket_number)');
   addColumn('analytics_events', 'source', 'TEXT');
   addColumn('analytics_events', 'campaign', 'TEXT');
   addColumn('orders', 'attribution_campaign', 'TEXT');
@@ -754,6 +912,152 @@ export const postgresMigrations = [
   )`,
   'CREATE INDEX IF NOT EXISTS idx_geniuspay_webhook_events_intent_received ON geniuspay_webhook_events(payment_intent_id, received_at DESC)',
   'CREATE TABLE IF NOT EXISTS didit_schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)',
+  `CREATE TABLE IF NOT EXISTS delivery_zones (
+    id BIGSERIAL PRIMARY KEY, label TEXT NOT NULL UNIQUE,
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_delivery_zones_active_label ON delivery_zones(is_active, label)',
+  `CREATE TABLE IF NOT EXISTS delivery_zone_tariffs (
+    id BIGSERIAL PRIMARY KEY,
+    origin_zone_id BIGINT NOT NULL REFERENCES delivery_zones(id) ON DELETE RESTRICT,
+    destination_zone_id BIGINT NOT NULL REFERENCES delivery_zones(id) ON DELETE RESTRICT,
+    amount INTEGER NOT NULL CHECK (amount BETWEEN 1 AND 1000000),
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    UNIQUE (origin_zone_id, destination_zone_id)
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_delivery_zone_tariffs_active_pair ON delivery_zone_tariffs(is_active, origin_zone_id, destination_zone_id)',
+  `CREATE TABLE IF NOT EXISTS delivery_drivers (
+    id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL UNIQUE,
+    pin_hash TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'active', 'suspended')),
+    access_expires_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS delivery_driver_sessions (
+    token_hash TEXT PRIMARY KEY, driver_id BIGINT NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    expires_at BIGINT NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_delivery_driver_sessions_driver ON delivery_driver_sessions(driver_id)',
+  `CREATE TABLE IF NOT EXISTS delivery_driver_zones (
+    driver_id BIGINT NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    zone_id BIGINT NOT NULL REFERENCES delivery_zones(id) ON DELETE RESTRICT,
+    is_active INTEGER NOT NULL DEFAULT 0 CHECK (is_active IN (0, 1)),
+    assigned_at TEXT NOT NULL, PRIMARY KEY (driver_id, zone_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS delivery_driver_subscriptions (
+    id BIGSERIAL PRIMARY KEY,
+    driver_id BIGINT NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    amount INTEGER NOT NULL CHECK (amount = 1000), payment_mode TEXT NOT NULL
+      CHECK (payment_mode IN ('sandbox', 'provider')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'expired')),
+    created_at TEXT NOT NULL, expires_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_delivery_driver_subscriptions_driver ON delivery_driver_subscriptions(driver_id, expires_at DESC)',
+  `CREATE TABLE IF NOT EXISTS delivery_shop_origins (
+    shop_id BIGINT PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
+    zone_id BIGINT NOT NULL REFERENCES delivery_zones(id) ON DELETE RESTRICT,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS delivery_orders (
+    id BIGSERIAL PRIMARY KEY,
+    order_id BIGINT NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
+    shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    pickup_zone_id BIGINT NOT NULL REFERENCES delivery_zones(id) ON DELETE RESTRICT,
+    destination_zone_id BIGINT NOT NULL REFERENCES delivery_zones(id) ON DELETE RESTRICT,
+    quoted_amount INTEGER NOT NULL CHECK (quoted_amount BETWEEN 1500 AND 2500),
+    status TEXT NOT NULL DEFAULT 'requested'
+      CHECK (status IN ('requested', 'accepted', 'to_pickup', 'picked_up', 'delivered', 'cancelled')),
+    driver_id BIGINT REFERENCES delivery_drivers(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL, accepted_at TEXT, to_pickup_at TEXT,
+    picked_up_at TEXT, delivered_at TEXT, cancelled_at TEXT
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_delivery_orders_dispatch ON delivery_orders(status, pickup_zone_id, destination_zone_id, created_at)',
+  'CREATE INDEX IF NOT EXISTS idx_delivery_orders_driver_status ON delivery_orders(driver_id, status, created_at DESC)',
+  `CREATE TABLE IF NOT EXISTS delivery_course_events (
+    id BIGSERIAL PRIMARY KEY,
+    delivery_id BIGINT NOT NULL REFERENCES delivery_orders(id) ON DELETE CASCADE,
+    actor_type TEXT NOT NULL CHECK (actor_type IN ('merchant', 'driver', 'admin')),
+    actor_id BIGINT, previous_status TEXT, next_status TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS contact_audits (
+    id BIGSERIAL PRIMARY KEY,
+    delivery_id BIGINT NOT NULL REFERENCES delivery_orders(id) ON DELETE CASCADE,
+    order_id BIGINT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    driver_id BIGINT NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    contact_role TEXT NOT NULL CHECK (contact_role IN ('merchant', 'customer')),
+    ip_hash TEXT NOT NULL, revealed_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_contact_audits_driver_time ON contact_audits(driver_id, revealed_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_contact_audits_ip_time ON contact_audits(ip_hash, revealed_at DESC)',
+  `CREATE TABLE IF NOT EXISTS order_contact_audits (
+    id BIGSERIAL PRIMARY KEY,
+    order_id BIGINT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    actor_type TEXT NOT NULL CHECK (actor_type IN ('customer', 'merchant')),
+    actor_id BIGINT NOT NULL,
+    contact_role TEXT NOT NULL CHECK (contact_role IN ('customer', 'merchant')),
+    ip_hash TEXT NOT NULL,
+    revealed_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_order_contact_audits_actor_time ON order_contact_audits(actor_type, actor_id, revealed_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_order_contact_audits_ip_time ON order_contact_audits(ip_hash, revealed_at DESC)',
+  'ALTER TABLE delivery_drivers ADD COLUMN IF NOT EXISTS email TEXT',
+  'ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS ticket_number TEXT',
+  `UPDATE delivery_orders SET ticket_number =
+    'LIV-' || substr(created_at, 3, 2) || substr(created_at, 6, 2) || substr(created_at, 9, 2)
+    || '-' || lpad(id::text, 6, '0')
+    WHERE ticket_number IS NULL AND created_at IS NOT NULL`,
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_delivery_orders_ticket_number ON delivery_orders(ticket_number)',
+  'ALTER TABLE delivery_driver_subscriptions ADD COLUMN IF NOT EXISTS payment_intent_id TEXT',
+  `CREATE TABLE IF NOT EXISTS delivery_driver_payment_intents (
+    id TEXT PRIMARY KEY,
+    driver_id BIGINT NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    amount INTEGER NOT NULL CHECK (amount = 1000),
+    currency TEXT NOT NULL DEFAULT 'XOF',
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'paid', 'failed', 'cancelled', 'expired', 'refunded')),
+    provider_reference TEXT,
+    provider_checkout_url TEXT,
+    provider_checked_at TEXT,
+    provider_check_attempts INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    paid_at TEXT
+  )`,
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_delivery_driver_payment_intents_reference ON delivery_driver_payment_intents(provider_reference)',
+  'CREATE INDEX IF NOT EXISTS idx_delivery_driver_payment_intents_driver ON delivery_driver_payment_intents(driver_id, created_at DESC)',
+  `CREATE TABLE IF NOT EXISTS delivery_proofs (
+    id BIGSERIAL PRIMARY KEY,
+    delivery_id BIGINT NOT NULL UNIQUE REFERENCES delivery_orders(id) ON DELETE CASCADE,
+    driver_id BIGINT NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    content_type TEXT NOT NULL CHECK (content_type IN ('image/jpeg', 'image/png', 'image/webp')),
+    byte_size INTEGER NOT NULL CHECK (byte_size BETWEEN 1 AND 307200),
+    image_base64 TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    captured_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_delivery_proofs_driver_created ON delivery_proofs(driver_id, created_at DESC)',
+  `CREATE TABLE IF NOT EXISTS customer_push_subscriptions (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_customer_push_subscriptions_user ON customer_push_subscriptions(user_id)',
+  `CREATE TABLE IF NOT EXISTS delivery_driver_push_subscriptions (
+    id BIGSERIAL PRIMARY KEY,
+    driver_id BIGINT NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_delivery_driver_push_subscriptions_driver ON delivery_driver_push_subscriptions(driver_id)',
 ];
 
 export const db = sqliteDb ?? new Proxy({} as Database.Database, {
