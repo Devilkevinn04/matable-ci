@@ -24,8 +24,10 @@ export function getProductUnitPrice(product: Product, selectedModifiers?: string
   return basePrice + modifiersTotal;
 }
 
+const FCFA_FORMATTER = new Intl.NumberFormat('fr-FR');
+
 export function formatFCFA(amount: number): string {
-  return new Intl.NumberFormat('fr-FR').format(amount) + ' FCFA';
+  return FCFA_FORMATTER.format(amount) + ' FCFA';
 }
 
 export function cleanPhoneForWhatsApp(phone: string): string {
@@ -41,19 +43,19 @@ export function isValidWhatsAppPhone(phone: string): boolean {
   return /^(225)(01|05|07)\d{8}$/.test(cleanPhoneForWhatsApp(phone));
 }
 
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  wave: 'Wave souhaité',
+  mobile_money: 'Mobile Money souhaité',
+  cash: 'Espèces souhaitées',
+  to_confirm: 'À convenir avec le vendeur',
+};
+
 export function generateWhatsAppOrderReceipt(
   shop: Shop,
-  order: Pick<Order, 'customer_name' | 'customer_phone' | 'delivery_location' | 'delivery_note' | 'payment_method_preference' | 'items' | 'total_amount' | 'delivery_slot' | 'delivery_fee'>
+  order: Pick<Order, 'id' | 'customer_name' | 'customer_phone' | 'delivery_location' | 'delivery_note' | 'payment_method_preference' | 'items' | 'total_amount' | 'delivery_slot' | 'delivery_fee'>
 ): { text: string; url: string } {
-  const paymentLabels: Record<string, string> = {
-    wave: 'Wave souhaité',
-    mobile_money: 'Mobile Money souhaité',
-    cash: 'Espèces souhaitées',
-    to_confirm: 'À convenir avec le vendeur',
-  };
-
   const lines: string[] = [
-    `🛒 *COMMANDE MATABLE.CI*`,
+    `🛒 *COMMANDE MATABLE.CI #${order.id}*`,
     `🏪 *Boutique :* ${shop.name} (${getCategoryDefaults(shop.category).label})`,
     `----------------------------------------`,
     `👤 *Client :* ${order.customer_name.trim()}`,
@@ -71,7 +73,7 @@ export function generateWhatsAppOrderReceipt(
 
   lines.push(`💳 *Paiement :* à convenir directement avec le vendeur`);
   if (order.payment_method_preference) {
-    lines.push(`📲 *Mode souhaité :* ${paymentLabels[order.payment_method_preference] || order.payment_method_preference}`);
+    lines.push(`📲 *Mode souhaité :* ${PAYMENT_METHOD_LABELS[order.payment_method_preference] || order.payment_method_preference}`);
   }
   lines.push(`----------------------------------------`);
   lines.push(`📦 *ARTICLES COMMANDÉS :*`);
@@ -96,13 +98,14 @@ export function generateWhatsAppOrderReceipt(
 
   lines.push(`----------------------------------------`);
   const deliveryFee = Number(order.delivery_fee || 0);
+  const articlesTotal = Number(order.total_amount) || 0;
   if (deliveryFee > 0) {
     lines.push(`🛵 *Frais de livraison MaTable : ${formatFCFA(deliveryFee)}*`);
-    lines.push(`💰 *TOTAL À RÉGLER : ${formatFCFA(order.total_amount + deliveryFee)}*`);
+    lines.push(`💰 *TOTAL À RÉGLER : ${formatFCFA(articlesTotal + deliveryFee)}*`);
     lines.push(`📌 *Livraison organisée par MaTable : la course est créée et un livreur est recherché.*`);
     lines.push(`📌 *Le règlement des articles et des frais de livraison reste à convenir avec la boutique ou le livreur.*`);
   } else {
-    lines.push(`💰 *TOTAL INDICATIF : ${formatFCFA(order.total_amount)}*`);
+    lines.push(`💰 *TOTAL INDICATIF : ${formatFCFA(articlesTotal)}*`);
     lines.push(`📌 *Disponibilité, retrait ou livraison et frais éventuels à confirmer directement avec la boutique.*`);
     lines.push(`🚚 *MaTable ne fournit ni n’organise la livraison pour cette commande.*`);
   }

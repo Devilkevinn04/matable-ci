@@ -14,6 +14,13 @@ export interface SendTransactionalEmailOptions {
   from?: string;
 }
 
+const RECEIPT_DATE_FORMATTER = new Intl.DateTimeFormat('fr-FR', {
+  dateStyle: 'long',
+  timeStyle: 'short',
+  timeZone: 'Africa/Abidjan',
+});
+const RECEIPT_AMOUNT_FORMATTER = new Intl.NumberFormat('fr-FR');
+
 export function getResendEmailConfig(env: NodeJS.ProcessEnv = process.env): ResendEmailConfig | null {
   const apiKey = String(env.RESEND_API_KEY || '').trim();
   const from = String(env.RESEND_FROM_EMAIL || env.EMAIL_FROM || '').trim();
@@ -82,7 +89,7 @@ export async function sendMerchantWelcomeEmail(
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937;">
       <h2 style="margin-bottom: 12px; color: #0f4d3d;">Bienvenue sur MaTable.ci</h2>
       <p>Bonjour,</p>
-      <p>Votre boutique <strong>${params.shopName}</strong> a bien été créée sur MaTable.ci.</p>
+      <p>Votre boutique <strong>${escapeHtml(params.shopName)}</strong> a bien été créée sur MaTable.ci.</p>
       <p>Vous pouvez accéder à votre espace de gestion depuis le lien suivant :</p>
       <p><a href="${appUrl}/connexion" style="color: #0f4d3d;">Se connecter à mon compte</a></p>
       <p>Merci de faire grandir votre vitrine avec MaTable.ci.</p>
@@ -112,12 +119,8 @@ export async function sendMerchantSubscriptionReceiptEmail(
   fetchImplementation: typeof fetch = fetch,
 ): Promise<{ sent: boolean; id?: string; error?: string }> {
   const receiptNumber = params.paymentId;
-  const paidDate = new Intl.DateTimeFormat('fr-FR', {
-    dateStyle: 'long',
-    timeStyle: 'short',
-    timeZone: 'Africa/Abidjan',
-  }).format(new Date(params.paidAt));
-  const amount = new Intl.NumberFormat('fr-FR').format(params.amount);
+  const paidDate = RECEIPT_DATE_FORMATTER.format(new Date(params.paidAt));
+  const amount = RECEIPT_AMOUNT_FORMATTER.format(params.amount);
   const termLabel = params.term === 'annual' ? 'annuel' : 'mensuel';
   const subject = `Reçu de paiement MaTable.ci — ${receiptNumber}`;
   const text = [

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getResendEmailConfig, sendMerchantSubscriptionReceiptEmail, sendTransactionalEmail } from '../server/services/email.ts';
+import { getResendEmailConfig, sendMerchantSubscriptionReceiptEmail, sendMerchantWelcomeEmail, sendTransactionalEmail } from '../server/services/email.ts';
 
 test('Resend config requires both API key and sender address', () => {
   assert.equal(getResendEmailConfig({}), null);
@@ -86,5 +86,32 @@ test('subscription receipt email contains confirmed payment details and escapes 
     if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
     if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;
     if (previousNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previousNodeEnv;
+  }
+});
+
+test('welcome email escapes the merchant shop name in its HTML body', async () => {
+  const previousApiKey = process.env.RESEND_API_KEY;
+  const previousFrom = process.env.RESEND_FROM_EMAIL;
+  process.env.RESEND_API_KEY = 'resend-key';
+  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+
+  try {
+    let requestBody: any;
+    const result = await sendMerchantWelcomeEmail({
+      shopName: '<img src=x onerror=alert(1)> & Fils',
+      ownerEmail: 'merchant@example.com',
+    }, async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ id: 'email_welcome_123' }), { status: 200 });
+    });
+
+    assert.equal(result.sent, true);
+    assert.equal(requestBody.to[0], 'merchant@example.com');
+    assert.match(requestBody.html, /&lt;img src=x onerror=alert\(1\)&gt; &amp; Fils/);
+    assert.doesNotMatch(requestBody.html, /<img/);
+    assert.match(requestBody.text, /<img src=x onerror=alert\(1\)> & Fils/);
+  } finally {
+    if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
+    if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;
   }
 });

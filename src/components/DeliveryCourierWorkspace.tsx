@@ -47,7 +47,8 @@ interface DeliveryPaymentState {
   access_expires_at: string | null;
 }
 
-const money = (amount: number) => `${new Intl.NumberFormat('fr-FR').format(amount)} FCFA`;
+const MONEY_FORMATTER = new Intl.NumberFormat('fr-FR');
+const money = (amount: number) => `${MONEY_FORMATTER.format(amount)} FCFA`;
 const isDevEnvironment = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true;
 
 async function readJson<T>(response: Response): Promise<T & { error?: string }> {
