@@ -13,6 +13,8 @@ services:
         value: 3000
       - key: TRUST_PROXY_HOPS
         value: 1
+      - key: PG_POOL_MAX
+        value: 10
       - key: APP_URL
         sync: false
       - key: ADMIN_ACCESS_KEY
@@ -27,6 +29,8 @@ services:
         sync: false
       - key: DIDIT_WORKFLOW_ID
         value: 17e1d727-c4db-425b-a320-eadd52105735
+      - key: DIDIT_DRIVER_WORKFLOW_ID
+        sync: false
       - key: DIDIT_WEBHOOK_SECRET
         sync: false
       - key: GOOGLE_OAUTH_CLIENT_ID
@@ -55,6 +59,10 @@ services:
         sync: false
       - key: WHATSAPP_TEMPLATE_LANGUAGE
         value: fr
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
       - key: GENIUSPAY_API_KEY
         sync: false
       - key: GENIUSPAY_API_SECRET
@@ -64,7 +72,7 @@ services:
       - key: GENIUSPAY_API_URL
         value: https://geniuspay.ci/api/v1/merchant/payments
       # Active le parcours livreur et la facturation des frais de livraison au checkout.
-      # Laisser false jusqu’à ce que les migrations 039 et 040 soient appliquées sur la base cible.
+      # Laisser false jusqu’à ce que les migrations 036 à 042 soient appliquées sur la base cible.
       - key: DELIVERY_OPERATIONS_ENABLED
         value: false
       - key: DELIVERY_REQUIRE_PROOF

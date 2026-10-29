@@ -44,6 +44,7 @@ const migrationVersions = [
   '039_delivery_notifications',
   '040_delivery_order_fees',
   '041_analytics_intelligence',
+  '042_delivery_driver_didit_verification',
 ];
 const connectionString = process.env.DATABASE_URL;
 

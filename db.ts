@@ -93,6 +93,7 @@ const sqliteSchema = `
     email TEXT,
     pin_hash TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending'
       CHECK (status IN ('pending', 'active', 'suspended')),
+    identity_status TEXT NOT NULL DEFAULT 'pending',
     access_expires_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS delivery_driver_sessions (
@@ -366,6 +367,13 @@ const sqliteSchema = `
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_didit_sessions_shop_created ON didit_verification_sessions(shop_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS delivery_driver_identity_sessions (
+    session_id TEXT PRIMARY KEY, driver_id INTEGER NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    workflow_id TEXT NOT NULL, status TEXT NOT NULL, consent_at TEXT NOT NULL, consent_version TEXT NOT NULL,
+    last_webhook_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_delivery_driver_identity_sessions_driver_created
+    ON delivery_driver_identity_sessions(driver_id, created_at DESC);
   CREATE TABLE IF NOT EXISTS didit_webhook_events (
     event_id TEXT PRIMARY KEY, received_at TEXT NOT NULL
   );
@@ -512,6 +520,7 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('orders', 'status', "TEXT DEFAULT 'pending'");
   addColumn('orders', 'customer_user_id', 'INTEGER');
   addColumn('delivery_drivers', 'email', 'TEXT');
+  addColumn('delivery_drivers', 'identity_status', "TEXT NOT NULL DEFAULT 'pending'");
   addColumn('delivery_orders', 'ticket_number', 'TEXT');
   addColumn('delivery_driver_subscriptions', 'payment_intent_id', 'TEXT');
   connection.exec(`UPDATE delivery_orders SET ticket_number =
@@ -985,8 +994,17 @@ export const postgresMigrations = [
     id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL UNIQUE,
     pin_hash TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending'
       CHECK (status IN ('pending', 'active', 'suspended')),
+    identity_status TEXT NOT NULL DEFAULT 'pending',
     access_expires_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
+  "ALTER TABLE delivery_drivers ADD COLUMN IF NOT EXISTS identity_status TEXT NOT NULL DEFAULT 'pending'",
+  `CREATE TABLE IF NOT EXISTS delivery_driver_identity_sessions (
+    session_id TEXT PRIMARY KEY,
+    driver_id BIGINT NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
+    workflow_id TEXT NOT NULL, status TEXT NOT NULL, consent_at TEXT NOT NULL, consent_version TEXT NOT NULL,
+    last_webhook_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_delivery_driver_identity_sessions_driver_created ON delivery_driver_identity_sessions(driver_id, created_at DESC)',
   `CREATE TABLE IF NOT EXISTS delivery_driver_sessions (
     token_hash TEXT PRIMARY KEY, driver_id BIGINT NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
     expires_at BIGINT NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL
@@ -1126,6 +1144,42 @@ export async function initializeDatabase() {
     try {
       await client.query('BEGIN');
       for (const migration of postgresMigrations) await client.query(migration);
+      const analyticsBackfills = [
+        {
+          name: 'analytics_intelligence_v1',
+          statements: [
+            `UPDATE analytics_events
+              SET entity_type = 'shop', entity_id = shop_id, audience = 'public'
+              WHERE event_type = 'page_view' AND entity_id IS NULL AND shop_id IS NOT NULL`,
+            `UPDATE analytics_events
+              SET entity_type = 'page', audience = 'public'
+              WHERE event_type = 'page_view' AND entity_type IS NULL`,
+            `UPDATE analytics_events
+              SET entity_type = 'product', entity_id = CAST(substr(path, 10) AS INTEGER)
+              WHERE event_type IN ('product_view', 'product_click') AND entity_id IS NULL
+                AND path LIKE '/product/%' AND CAST(substr(path, 10) AS INTEGER) > 0`,
+          ],
+        },
+        {
+          name: 'analytics_intelligence_v2',
+          statements: [
+            `UPDATE analytics_events
+              SET audience = 'customer'
+              WHERE audience IS NULL AND event_type IN ('product_view', 'product_click', 'add_to_cart', 'remove_from_cart', 'checkout_start', 'order_created', 'whatsapp_click')`,
+            `UPDATE analytics_events SET audience = 'public' WHERE audience IS NULL`,
+          ],
+        },
+      ];
+      for (const backfill of analyticsBackfills) {
+        const applied = await client.query('SELECT name FROM didit_schema_migrations WHERE name = $1', [backfill.name]);
+        if (applied.rowCount === 0) {
+          for (const statement of backfill.statements) await client.query(statement);
+          await client.query(
+            'INSERT INTO didit_schema_migrations (name, applied_at) VALUES ($1, $2)',
+            [backfill.name, new Date().toISOString()],
+          );
+        }
+      }
       const migrationName = 'replace_legacy_kyc_with_didit';
       const migration = await client.query('SELECT name FROM didit_schema_migrations WHERE name = $1', [migrationName]);
       if (migration.rowCount === 0) {

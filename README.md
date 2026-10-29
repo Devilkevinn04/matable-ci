@@ -60,7 +60,7 @@ Le parcours est activé explicitement. Pour le développement et les tests :
 DELIVERY_TEST_MODE=true DELIVERY_SANDBOX_PAYMENTS=true MATABLE_DB_PATH=:memory: npm run dev
 ```
 
-Ouvrir ensuite `/__preview/delivery-courier` (ou `/livreur`, disponible dans tous les environnements). Le compte livreur est créé avec un PIN à six chiffres, puis le Super-admin l’active et lui attribue des zones dans la rubrique **Livraison**. Le livreur choisit ses zones autorisées puis active son forfait de 1 000 FCFA (24 h) : soit en mode simulé avec `DELIVERY_SANDBOX_PAYMENTS=true`, soit par Mobile Money GeniusPay lorsque `GENIUSPAY_API_KEY`, `GENIUSPAY_API_SECRET`, `GENIUSPAY_WEBHOOK_SECRET` et `APP_URL` sont configurés. Le commerçant peut demander un devis puis une course depuis une commande confirmée, après avoir sélectionné la zone de destination. Les coordonnées restent absentes de la file et ne sont révélées au livreur qu’après acceptation explicite; chaque révélation est auditée, limitée à cinq par compte et dix par IP sur dix minutes, et verrouillée lorsque la course ou la commande est terminée/annulée. Les sessions livreur expirées sont nettoyées avec les sessions applicatives.
+Ouvrir ensuite `/__preview/delivery-courier` ou accéder à `/livreur` depuis les menus publics. Le livreur crée son compte, donne son consentement explicite puis termine la vérification Didit hébergée. Le webhook Didit signé active automatiquement le compte après validation et lui attribue les zones actives; le livreur choisit ses zones, puis active son forfait GeniusPay de 1 000 FCFA valable 24 h. Le mode simulé reste réservé aux tests avec `DELIVERY_SANDBOX_PAYMENTS=true`; le paiement réel requiert `GENIUSPAY_API_KEY`, `GENIUSPAY_API_SECRET`, `GENIUSPAY_WEBHOOK_SECRET` et `APP_URL`. `DIDIT_DRIVER_WORKFLOW_ID` permet de configurer un workflow Didit spécifique aux livreurs; à défaut, `DIDIT_WORKFLOW_ID` est utilisé. Le commerçant peut demander un devis puis une course depuis une commande confirmée, après avoir sélectionné la zone de destination. Les coordonnées restent absentes de la file et ne sont révélées au livreur qu’après acceptation explicite; chaque révélation est auditée, limitée à cinq par compte et dix par IP sur dix minutes, et verrouillée lorsque la course ou la commande est terminée/annulée. Les sessions livreur expirées sont nettoyées avec les sessions applicatives.
 
 En production, activez les opérations avec `DELIVERY_OPERATIONS_ENABLED=true` après avoir appliqué les migrations. Les routes livreur et la facturation des frais au checkout sont alors montées ensemble, et l’espace livreur reste accessible sur `/livreur`. Le paiement simulé et les endpoints sandbox restent strictement réservés au mode test hors production.
 
@@ -74,10 +74,10 @@ En paiement réel, chaque forfait crée une intention `delivery_driver_payment_i
 
 #### Mise en production de la livraison
 
-1. Sauvegarder la base cible, puis appliquer les migrations dans l’ordre avec `DATABASE_URL=<url-directe> npm run migrate:neon` et vérifier que `036` à `040` sont enregistrées.
+1. Sauvegarder la base cible, puis appliquer les migrations dans l’ordre avec `DATABASE_URL=<url-directe> npm run migrate:neon` et vérifier que `036` à `042` sont enregistrées.
 2. Configurer `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` et `VAPID_SUBJECT` sur le service Render pour activer les notifications Push. Sans ces clés, les abonnements répondent `503` sans bloquer les courses.
 3. Renseigner `APP_URL` avec l’URL publique et vérifier les secrets GeniusPay si le forfait livreur est encaissé en ligne.
-4. Passer `DELIVERY_OPERATIONS_ENABLED` à `true`, redéployer, puis contrôler `/livreur`, la création d’un compte livreur, son activation par le Super-admin et l’apparition du choix de zone au checkout.
+4. Passer `DELIVERY_OPERATIONS_ENABLED` à `true`, redéployer, puis contrôler le lien public `/livreur`, le consentement et le retour Didit, l’activation après webhook signé, le checkout GeniusPay confirmé et le choix de zone au checkout client.
 5. Tester de bout en bout une commande avec livraison, la révélation des contacts, la preuve photo, la clôture, une annulation et une réaffectation admin. Exécuter aussi `npm run test:postgres` sur une base jetable avant d’ouvrir le parcours aux clients.
 
 Dans **Abonnements**, le Super-admin peut modifier les tarifs mensuels des formules. Les changements sont validés et journalisés; les pages commerçantes et les nouveaux paiements utilisent le tarif enregistré. Un paiement déjà confirmé et l’échéance qu’il a financée ne sont pas modifiés. Le tarif annuel correspond à 10 mensualités. Les paiements GeniusPay sont initiés manuellement par le commerçant, sans prélèvement automatique : programmer l’arrêt des droits à l’échéance ne bloque donc pas un renouvellement payé avant cette date. Il peut aussi accorder temporairement une formule ou suspendre les droits d’une boutique précise, jusqu’à une date choisie, avec un motif obligatoire. À cette date, l’état de facturation et les changements programmés reprennent automatiquement ; ces dérogations ne créent aucun paiement et ne désactivent pas la boutique. La dérogation peut aussi être retirée immédiatement pour rétablir l’automatisation.
@@ -117,6 +117,7 @@ AD_EVENT_SIGNING_SECRET=""
 ADVERTISING_BETA_ENABLED="false"
 DIDIT_API_KEY=""
 DIDIT_WORKFLOW_ID=""
+DIDIT_DRIVER_WORKFLOW_ID="" # facultatif : workflow distinct, sinon DIDIT_WORKFLOW_ID
 DIDIT_WEBHOOK_SECRET=""
 VAPID_PUBLIC_KEY=""
 VAPID_PRIVATE_KEY=""
@@ -283,6 +284,24 @@ Avant un déploiement réel, vérifiez bien les points suivants :
 9. Vérifier le comportement de stock avec un test de surcharge sur le dernier article disponible.
 10. Vérifier `npm audit` et corriger les vulnérabilités avant mise en production.
 11. Configurer `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID` et `DIDIT_WEBHOOK_SECRET` dans Render, puis déclarer l’URL webhook Didit et tester le parcours hébergé ainsi que les événements signés.
+
+### Contrôle de production
+
+Deux commandes encadrent la bascule. Elles se chargent de `.env` si le fichier existe et n’écrivent aucun secret dans la sortie.
+
+```sh
+# Avant le déploiement : variables, secrets et schéma PostgreSQL cible
+npm run check:prod
+
+# Après le déploiement : pages, API, santé, assets et en-têtes de sécurité
+npm run smoke:prod -- --url https://votre-domaine.com
+```
+
+`check:prod` bloque si `NODE_ENV` n’est pas `production`, si une variable obligatoire manque, si une clé est trop courte ou identique à l’autre, si `APP_URL` n’est pas une URL HTTPS publique, si `DATABASE_URL` n’utilise pas PostgreSQL, si une table ou une colonne récente manque, ou si une migration versionnée n’est pas enregistrée. Il signale en avertissement les intégrations facultatives incomplètes (Didit, GeniusPay, Resend, Push, WhatsApp, OAuth) et un `DELIVERY_OPERATIONS_ENABLED=true` prématuré. Utilisez `--json` pour un rapport machine et `--skip-database` pour un contrôle hors ligne.
+
+`smoke:prod` vérifie les pages publiques, `/health`, le refus `401` de `/api/admin/health`, les assets `/brand-kit/`, le manifeste PWA, `robots.txt`, `sitemap.xml` et les en-têtes de sécurité (`CSP`, `HSTS`, `nosniff`, `DENY`). En local derrière le serveur de production, ajoutez `SMOKE_FORWARDED_PROTO=https` pour satisfaire la redirection HTTPS.
+
+État validé sur PostgreSQL 16 vierge : `npm run test:postgres`, `npm run migrate:neon` (42/42 migrations), `npm run db:backup`, `npm run db:restore:validate`, `npm run check:prod` et `npm run smoke:prod` (47 contrôles) réussissent. Le déploiement Render et l’activation de la livraison restent subordonnés à la fourniture des secrets réels et à l’application des migrations sur la base cible.
 
 ## Déploiement rapide
 

@@ -5,6 +5,7 @@ import { normalizeCustomerPhone } from '../../src/utils/normalizeCustomerPhone.t
 import { getCustomerLoginLockSeconds, recordCustomerLoginFailure, clearLoginAttempts } from '../services/rateLimits.ts';
 import { checkContactRevealRateLimit, hashContactIp } from '../services/contactGuard.ts';
 import { createGeniusPayCheckout, GeniusPayApiError } from '../services/geniusPay.ts';
+import { DIDIT_UUID_PATTERN, isDiditSession, mapDiditStatus } from '../services/didit.ts';
 import {
   buildDeliveryTicket,
   deliveryQuoteSql,
@@ -60,6 +61,7 @@ interface DriverRow {
   phone: string;
   pin_hash: string;
   status: string;
+  identity_status: string;
   access_expires_at: string | null;
 }
 
@@ -234,7 +236,7 @@ export function createDeliveryRouter({
       return null;
     }
     const driver = await dbGet<DriverRow>(
-      'SELECT id, name, phone, pin_hash, status, access_expires_at FROM delivery_drivers WHERE id = ?',
+      'SELECT id, name, phone, pin_hash, status, identity_status, access_expires_at FROM delivery_drivers WHERE id = ?',
       [session.driver_id],
     );
     if (!driver || driver.status === 'suspended') {
@@ -265,8 +267,14 @@ export function createDeliveryRouter({
 
   const isAccessActive = (driver: DriverRow) =>
     driver.status === 'active'
+    && driver.identity_status === 'verified'
     && Boolean(driver.access_expires_at)
     && Date.parse(String(driver.access_expires_at)) > Date.now();
+
+  const getDriverDiditWorkflowId = () => {
+    const workflowId = String(process.env.DIDIT_DRIVER_WORKFLOW_ID || '').trim();
+    return process.env.DIDIT_API_KEY && DIDIT_UUID_PATTERN.test(workflowId) ? workflowId : null;
+  };
 
   const getQuote = (shopId: number, destinationZoneId: number) =>
     getDeliveryQuote(shopId, destinationZoneId);
@@ -311,12 +319,19 @@ export function createDeliveryRouter({
 
     const now = new Date().toISOString();
     const inserted = await dbGet<{ id: number | string }>(`INSERT INTO delivery_drivers
-      (name, phone, pin_hash, status, created_at, updated_at)
-      VALUES (?, ?, ?, 'pending', ?, ?) RETURNING id`,
+      (name, phone, pin_hash, status, identity_status, created_at, updated_at)
+      VALUES (?, ?, ?, 'pending', 'pending', ?, ?) RETURNING id`,
     [name, phone, hashPin(pin), now, now]);
     const driverId = inserted ? Number(inserted.id) : undefined;
     if (!driverId) throw new Error('Unable to allocate a delivery driver identifier.');
-    return res.status(201).json({ driver: { id: driverId, name, phone, status: 'pending' } });
+    const token = randomUUID();
+    const expiresAt = Date.now() + DRIVER_SESSION_DURATION_MS;
+    await dbRun(`INSERT INTO delivery_driver_sessions (token_hash, driver_id, expires_at, fingerprint, created_at)
+      VALUES (?, ?, ?, ?, ?)`,
+    [hashAccessToken(token), driverId, expiresAt, buildSessionFingerprint(req), now]);
+    setDriverCookie(res, token);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(201).json({ driver: { id: driverId, name, phone, status: 'pending', identity_status: 'pending' } });
   });
 
   router.post('/delivery/drivers/login', rateLimitPublicRequest(20), async (req, res) => {
@@ -328,7 +343,7 @@ export function createDeliveryRouter({
       return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
     }
     const driver = await dbGet<DriverRow>(
-      'SELECT id, name, phone, pin_hash, status, access_expires_at FROM delivery_drivers WHERE phone = ?',
+      'SELECT id, name, phone, pin_hash, status, identity_status, access_expires_at FROM delivery_drivers WHERE phone = ?',
       [phone],
     );
     if (!driver || !verifyPin(pin, driver.pin_hash) || driver.status === 'suspended') {
@@ -343,7 +358,7 @@ export function createDeliveryRouter({
     [hashAccessToken(token), driver.id, expiresAt, buildSessionFingerprint(req), new Date().toISOString()]);
     setDriverCookie(res, token);
     return res.json({
-      driver: { id: toId(driver.id), name: driver.name, phone: driver.phone, status: driver.status },
+      driver: { id: toId(driver.id), name: driver.name, phone: driver.phone, status: driver.status, identity_status: driver.identity_status },
       access_active: isAccessActive(driver),
     });
   });
@@ -351,15 +366,124 @@ export function createDeliveryRouter({
   router.get('/delivery/drivers/session', async (req, res) => {
     const session = await requireDriver(req, res);
     if (!session) return;
-    const zones = await getDriverZones(session.driver.id);
+    const [zones, identitySession] = await Promise.all([
+      getDriverZones(session.driver.id),
+      dbGet<{ session_id: string; status: string; created_at: string }>(
+        'SELECT session_id, status, created_at FROM delivery_driver_identity_sessions WHERE driver_id = ? ORDER BY created_at DESC LIMIT 1',
+        [session.driver.id],
+      ),
+    ]);
     return res.json({
-      driver: { id: toId(session.driver.id), name: session.driver.name, phone: session.driver.phone, status: session.driver.status },
+      driver: {
+        id: toId(session.driver.id), name: session.driver.name, phone: session.driver.phone,
+        status: session.driver.status, identity_status: session.driver.identity_status,
+      },
+      identity_provider_status: identitySession?.status || null,
+      identity_session_created_at: identitySession?.created_at || null,
+      didit_available: Boolean(getDriverDiditWorkflowId()),
       access_active: isAccessActive(session.driver),
       access_expires_at: session.driver.access_expires_at,
       zones: zones.map((zone) => ({ id: toId(zone.id), label: zone.label, is_active: Boolean(zone.is_active) })),
       sandbox_payments_enabled: sandboxPaymentsEnabled,
       provider_payments_available: isDeliveryProviderPaymentConfigured(),
       proof_required: requireProof,
+    });
+  });
+
+  router.post('/delivery/drivers/identity/session', rateLimitPublicRequest(5), async (req, res) => {
+    const session = await requireDriver(req, res);
+    if (!session) return;
+    if (session.driver.status === 'suspended') return res.status(403).json({ error: 'Le compte livreur est suspendu.' });
+    if (session.driver.identity_status === 'verified') return res.status(409).json({ error: 'Votre identité est déjà vérifiée.' });
+    if (req.body?.consent !== true) return res.status(400).json({ error: 'Votre consentement explicite est requis pour continuer avec Didit.' });
+
+    const workflowId = getDriverDiditWorkflowId();
+    const apiKey = String(process.env.DIDIT_API_KEY || '').trim();
+    if (!apiKey || !workflowId) {
+      return res.status(503).json({ error: 'La vérification Didit des livreurs n’est pas encore configurée.' });
+    }
+    const latestSession = await dbGet<{ status: string }>(
+      'SELECT status FROM delivery_driver_identity_sessions WHERE driver_id = ? ORDER BY created_at DESC LIMIT 1',
+      [session.driver.id],
+    );
+    if (latestSession && ['submitted', 'under_review'].includes(mapDiditStatus(latestSession.status))) {
+      return res.status(409).json({ error: 'Une vérification Didit est déjà en cours. Actualisez son statut ou contactez l’assistance.' });
+    }
+
+    const appUrl = String(process.env.APP_URL || '').trim();
+    let callback: string;
+    try {
+      const origin = new URL(appUrl);
+      if (process.env.NODE_ENV === 'production' && origin.protocol !== 'https:') throw new Error('APP_URL doit utiliser HTTPS.');
+      callback = new URL('/livreur?verification=complete', origin).toString();
+    } catch {
+      return res.status(503).json({ error: 'L’URL de retour Didit n’est pas correctement configurée.' });
+    }
+
+    const providerResponse = await fetch('https://verification.didit.me/v3/session/', {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workflow_id: workflowId,
+        vendor_data: `matable-driver-${toId(session.driver.id)}-${randomUUID()}`,
+        callback,
+        callback_method: 'both',
+        language: 'fr',
+        metadata: { driver_id: String(session.driver.id), verification_subject: 'delivery_driver' },
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const providerPayload: unknown = await providerResponse.json().catch(() => null);
+    if (!providerResponse.ok) {
+      console.error('Didit courier session creation failed:', providerResponse.status);
+      return res.status(providerResponse.status === 429 ? 503 : 502).json({
+        error: 'Didit n’a pas pu démarrer la vérification. Réessayez ou contactez l’assistance.',
+      });
+    }
+    if (!isDiditSession(providerPayload)) {
+      console.error('Didit returned an invalid courier session response.');
+      return res.status(502).json({ error: 'La réponse de Didit est invalide. Réessayez plus tard.' });
+    }
+
+    const consentAt = new Date().toISOString();
+    const result = await dbTransaction(async (transaction) => {
+      if (process.env.NODE_ENV === 'production') {
+        await transaction.get('SELECT id FROM delivery_drivers WHERE id = ? FOR UPDATE', [session.driver.id]);
+      }
+      const current = await transaction.get<{ identity_status: string; status: string }>(
+        'SELECT identity_status, status FROM delivery_drivers WHERE id = ?',
+        [session.driver.id],
+      );
+      if (!current) return 'driver_missing' as const;
+      if (current.status === 'suspended') return 'suspended' as const;
+      if (current.identity_status === 'verified') return 'already_verified' as const;
+      const latest = await transaction.get<{ created_at: string; status: string }>(
+        'SELECT created_at, status FROM delivery_driver_identity_sessions WHERE driver_id = ? ORDER BY created_at DESC LIMIT 1',
+        [session.driver.id],
+      );
+      if (latest && ['submitted', 'under_review'].includes(mapDiditStatus(latest.status))) return 'verification_in_progress' as const;
+      const createdAt = new Date(Math.max(Date.now(), latest ? Date.parse(latest.created_at) + 1 : 0)).toISOString();
+      const inserted = await transaction.run(`INSERT INTO delivery_driver_identity_sessions
+        (session_id, driver_id, workflow_id, status, consent_at, consent_version, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'didit-driver-v1', ?, ?) ON CONFLICT(session_id) DO NOTHING`,
+      [providerPayload.session_id, session.driver.id, workflowId, providerPayload.status, consentAt, createdAt, createdAt]);
+      if (inserted.changes !== 1) return 'duplicate_session' as const;
+      await transaction.run(`UPDATE delivery_drivers SET identity_status = ?, updated_at = ? WHERE id = ?`,
+        [mapDiditStatus(providerPayload.status), createdAt, session.driver.id]);
+      return 'created' as const;
+    });
+    if (result === 'driver_missing') return res.status(404).json({ error: 'Compte livreur introuvable.' });
+    if (result === 'suspended') return res.status(403).json({ error: 'Le compte livreur est suspendu.' });
+    if (result === 'already_verified') return res.status(409).json({ error: 'Votre identité est déjà vérifiée.' });
+    if (result === 'verification_in_progress') return res.status(409).json({ error: 'Une vérification Didit est déjà en cours.' });
+    if (result === 'duplicate_session') return res.status(502).json({ error: 'Didit a renvoyé une session invalide. Réessayez plus tard.' });
+
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(201).json({
+      session_id: providerPayload.session_id,
+      session_url: providerPayload.url,
+      status: mapDiditStatus(providerPayload.status),
+      submitted_at: consentAt,
     });
   });
 
@@ -419,7 +543,7 @@ export function createDeliveryRouter({
     if (!sandboxPaymentsEnabled) return res.status(404).json({ error: 'Le paiement de test n’est pas activé.' });
     const session = await requireDriver(req, res);
     if (!session) return;
-    if (session.driver.status !== 'active') return res.status(403).json({ error: 'Le compte livreur doit être activé par MaTable.' });
+    if (session.driver.identity_status !== 'verified' || session.driver.status !== 'active') return res.status(403).json({ error: 'La vérification Didit doit être terminée avant d’activer le forfait.' });
     const now = Date.now();
     const currentExpiry = session.driver.access_expires_at ? Date.parse(session.driver.access_expires_at) : 0;
     if (currentExpiry > now) return res.status(409).json({ error: 'Le forfait livreur est déjà actif.' });
@@ -451,7 +575,7 @@ export function createDeliveryRouter({
   router.post('/delivery/drivers/subscription/checkout', rateLimitPublicRequest(5), async (req, res) => {
     const session = await requireDriver(req, res);
     if (!session) return;
-    if (session.driver.status !== 'active') return res.status(403).json({ error: 'Le compte livreur doit être activé par MaTable.' });
+    if (session.driver.identity_status !== 'verified' || session.driver.status !== 'active') return res.status(403).json({ error: 'La vérification Didit doit être terminée avant d’activer le forfait.' });
     if (!isDeliveryProviderPaymentConfigured()) {
       return res.status(503).json({ error: 'Le paiement Mobile Money n’est pas encore configuré. Contactez MaTable.ci pour activer votre forfait livreur.' });
     }
@@ -527,7 +651,7 @@ export function createDeliveryRouter({
     const payment = await getDeliveryPaymentIntent(paymentId, Number(session.driver.id));
     if (!payment) return res.status(404).json({ error: 'Paiement introuvable.' });
     const driver = await dbGet<DriverRow>(
-      'SELECT id, name, phone, pin_hash, status, access_expires_at FROM delivery_drivers WHERE id = ?',
+      'SELECT id, name, phone, pin_hash, status, identity_status, access_expires_at FROM delivery_drivers WHERE id = ?',
       [session.driver.id],
     );
     res.setHeader('Cache-Control', 'no-store');
@@ -640,7 +764,7 @@ export function createDeliveryRouter({
     const now = new Date().toISOString();
     const accepted = await dbTransaction(async (transaction) => {
       const driver = await transaction.get<DriverRow>(
-        `SELECT id, name, phone, pin_hash, status, access_expires_at FROM delivery_drivers WHERE id = ?${mode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+        `SELECT id, name, phone, pin_hash, status, identity_status, access_expires_at FROM delivery_drivers WHERE id = ?${mode === 'postgresql' ? ' FOR UPDATE' : ''}`,
         [session.driver.id],
       );
       if (!driver || !isAccessActive(driver)) return 'inactive' as const;

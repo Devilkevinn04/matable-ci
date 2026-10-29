@@ -33,7 +33,7 @@ import {
   Tag,
   MapPin,
 } from 'lucide-react';
-import { AdminIdentityVerificationPanel } from './AdminIdentityVerificationPanel';
+import { AdminIdentityVerificationPanel, statusLabels as verificationStatusLabels } from './AdminIdentityVerificationPanel';
 import { AdminShopList } from './AdminShopList';
 import { AdminPushAnnouncements } from './AdminPushAnnouncements';
 import { AdminSubscriptionPlanPricing } from './AdminSubscriptionPlanPricing';
@@ -42,6 +42,7 @@ import { AdminHomepageMarketing } from './AdminHomepageMarketing';
 import { AdminProductPromotions } from './AdminProductPromotions';
 import { AdminDeliveryPricing } from './AdminDeliveryPricing';
 import { Link } from 'react-router-dom';
+import { getCategoryDefaults } from '../utils/categoryDefaults';
 const GuideChecklist = React.lazy(() => import('./UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
 import {
   audienceSourceLabels,
@@ -2604,8 +2605,8 @@ export const AdminDashboard: React.FC = () => {
                 <article key={shop.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <h3 className="truncate text-sm font-bold text-slate-900">{shop.name}</h3>
-                    <p className="mt-1 text-xs text-slate-500">{[shop.city, shop.category].filter(Boolean).join(' · ') || 'Localisation non renseignée'}</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-700">Identité : {shop.merchant_verification_status.replaceAll('_', ' ')}</p>
+                    <p className="mt-1 text-xs text-slate-500">{[shop.city, shop.category ? getCategoryDefaults(shop.category).label : null].filter(Boolean).join(' · ') || 'Localisation non renseignée'}</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-700">Identité : {verificationStatusLabels[shop.merchant_verification_status] || 'Statut inconnu'}</p>
                   </div>
                   <button type="button" onClick={() => focusVerificationShop(shop.id)} className="min-h-10 shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Examiner le dossier</button>
                 </article>

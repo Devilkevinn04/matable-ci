@@ -30,6 +30,7 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
           </p>
         </section>
 
+        <div className="space-y-5">
         <nav className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3 sm:gap-x-8" aria-label="Navigation et informations">
           <section aria-labelledby="footer-discover-title">
             <h2 id="footer-discover-title" className="text-xs font-black uppercase tracking-[0.14em] text-[#f0ba80]">Découvrir</h2>
@@ -38,6 +39,7 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
               <li><Link to="/promotions" className={linkClassName}>Promotions</Link></li>
               <li><Link to="/comment-ca-marche" className={linkClassName}>Comment ça marche</Link></li>
               <li><Link to="/faq" className={linkClassName}>Questions fréquentes</Link></li>
+              <li><Link to="/livreur" className={linkClassName}>Espace livreur</Link></li>
             </ul>
           </section>
 
@@ -47,11 +49,6 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
               <li><Link to="/commercants" className={linkClassName}>Espace commerçant</Link></li>
               <li><Link to="/guide" className={linkClassName}>Guide personnalisé</Link></li>
             </ul>
-            <Link to="/commercants" className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full bg-white px-4 text-xs font-extrabold text-[#065f46] transition hover:bg-[#fff0df] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0ba80] focus-visible:ring-offset-2 focus-visible:ring-offset-[#064e3b]">
-              <Store className="h-4 w-4" aria-hidden="true" />
-              Présenter ma boutique
-              <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </Link>
           </section>
 
           <section aria-labelledby="footer-legal-title" className="col-span-2 sm:col-span-1">
@@ -64,6 +61,12 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
             </ul>
           </section>
         </nav>
+          <Link to="/commercants" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full bg-white px-4 text-xs font-extrabold text-[#065f46] transition hover:bg-[#fff0df] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0ba80] focus-visible:ring-offset-2 focus-visible:ring-offset-[#064e3b]">
+            <Store className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Présenter ma boutique
+            <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          </Link>
+        </div>
       </div>
 
       <div className="mt-9 flex flex-col gap-2 border-t border-white/15 pt-5 text-xs text-white/65 sm:mt-10 sm:flex-row sm:items-center sm:justify-between">

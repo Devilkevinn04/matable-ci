@@ -1,6 +1,6 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
@@ -14,6 +14,7 @@ import Database from 'better-sqlite3';
 const TEST_DB_PATH = path.join(tmpdir(), `matable-delivery-payments-${Date.now()}.db`);
 const ADMIN_KEY = 'delivery-payments-test-super-admin-key';
 const WEBHOOK_SECRET = 'delivery-payments-test-webhook-secret';
+const DIDIT_WEBHOOK_SECRET = 'delivery-payments-test-didit-webhook-secret';
 let baseUrl = '';
 let serverProcess: ChildProcess | null = null;
 let providerServer: ReturnType<typeof createServer> | null = null;
@@ -87,18 +88,37 @@ async function sendWebhook(eventId: string, event: string, transaction: Record<s
   });
 }
 
-async function registerAndActivateDriver(phone: string, pin: string, adminCookie: string) {
+async function registerAndVerifyDriver(phone: string, pin: string) {
   const registration = await api<{ driver: { id: number } }>('/api/delivery/drivers/register', {
     method: 'POST',
     body: JSON.stringify({ name: `Livreur ${phone.slice(-4)}`, phone, pin }),
   });
   assert.equal(registration.response.status, 201);
   const driverId = registration.payload.driver.id;
-  const activation = await api(`/api/admin/delivery/drivers/${driverId}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ status: 'active' }),
-  }, adminCookie);
-  assert.equal(activation.response.status, 200);
+  const sessionId = randomUUID();
+  const workflowId = randomUUID();
+  const createdAt = new Date().toISOString();
+  const database = new Database(TEST_DB_PATH);
+  try {
+    database.prepare(`INSERT INTO delivery_driver_identity_sessions
+      (session_id, driver_id, workflow_id, status, consent_at, consent_version, created_at, updated_at)
+      VALUES (?, ?, ?, 'In Review', ?, 'didit-driver-v1', ?, ?)`)
+      .run(sessionId, driverId, workflowId, createdAt, createdAt, createdAt);
+  } finally {
+    database.close();
+  }
+  const timestamp = Math.floor(Date.now() / 1000);
+  const rawBody = JSON.stringify({ event_id: randomUUID(), session_id: sessionId, status: 'Approved', webhook_type: 'status.updated', timestamp });
+  const webhook = await fetch(`${baseUrl}/api/webhooks/didit`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-timestamp': String(timestamp),
+      'x-signature': createHmac('sha256', DIDIT_WEBHOOK_SECRET).update(rawBody).digest('hex'),
+    },
+    body: rawBody,
+  });
+  assert.equal(webhook.status, 204);
   const cookie = await loginCookie('/api/delivery/drivers/login', { phone, pin });
   return { driverId, cookie };
 }
@@ -157,6 +177,7 @@ before(async () => {
       GENIUSPAY_API_SECRET: 'sk_delivery_payments_test',
       GENIUSPAY_API_URL: `http://127.0.0.1:${providerPort}/api/v1/merchant/payments`,
       GENIUSPAY_WEBHOOK_SECRET: WEBHOOK_SECRET,
+      DIDIT_WEBHOOK_SECRET,
       NODE_ENV: 'test',
       DELIVERY_TEST_MODE: 'true',
       PORT: String(port),
@@ -181,10 +202,9 @@ after(async () => {
 });
 
 test('Mobile Money delivery checkout uses delivery metadata and a stable idempotency key', async () => {
-  const adminCookie = await loginCookie('/api/auth/admin-login', { key: ADMIN_KEY, role: 'super_admin' });
   const phone = '+2250788990201';
   const pin = '519264';
-  const { driverId, cookie } = await registerAndActivateDriver(phone, pin, adminCookie);
+  const { driverId, cookie } = await registerAndVerifyDriver(phone, pin);
 
   const session = await api<{ provider_payments_available: boolean; access_active: boolean }>(
     '/api/delivery/drivers/session',
@@ -296,10 +316,9 @@ test('Mobile Money delivery checkout uses delivery metadata and a stable idempot
 });
 
 test('failed delivery payment webhook keeps access inactive and can be retried with a fresh checkout', async () => {
-  const adminCookie = await loginCookie('/api/auth/admin-login', { key: ADMIN_KEY, role: 'super_admin' });
   const phone = '+2250788990202';
   const pin = '481375';
-  await registerAndActivateDriver(phone, pin, adminCookie);
+  await registerAndVerifyDriver(phone, pin);
 
   const cookie = await loginCookie('/api/delivery/drivers/login', { phone, pin });
   const checkout = await api<{ payment_id: string }>('/api/delivery/drivers/subscription/checkout', {

@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx server.ts",
     "dev:gateway": "node services/api-gateway/src/server.mjs",
@@ -14,6 +17,8 @@
     "test:postgres": "node scripts/run-postgres-tests.mjs",
     "db:backup": "node --import dotenv/config scripts/backup-postgres.mjs",
     "db:restore:validate": "node --import dotenv/config scripts/restore-validate-postgres.mjs",
+    "check:prod": "node scripts/check-production-readiness.mjs",
+    "smoke:prod": "node scripts/smoke-production.mjs",
     "lint": "tsc --noEmit",
     "migrate:neon": "node --import dotenv/config --import tsx scripts/migrate-neon.ts",
     "analytics:report": "node --import tsx scripts/analytics-report.ts",
@@ -57,6 +62,6 @@
     "vite": "^6.2.3"
   },
   "overrides": {
-    "qs": "6.16.0"
+    "qs": "6.17.1"
   }
 }

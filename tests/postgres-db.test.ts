@@ -10,7 +10,7 @@ test('PostgreSQL migrations and database adapter support parameterized transacti
   skip: !hasDatabaseUrl,
 }, async () => {
   process.env.NODE_ENV = 'production';
-  const { closeDatabase, dbGet, dbTransaction, initializeDatabase } = await import('../db.ts');
+  const { closeDatabase, dbAll, dbGet, dbTransaction, initializeDatabase } = await import('../db.ts');
 
   try {
     await initializeDatabase();
@@ -50,6 +50,29 @@ test('PostgreSQL migrations and database adapter support parameterized transacti
       WHERE conrelid = 'platform_settings'::regclass AND contype = 'c'
     `);
     assert.match(settingsConstraint?.constraint_definition ?? '', /id = 1/);
+
+    const analyticsColumns = await dbAll<{ column_name: string }>(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'analytics_events'
+        AND column_name IN ('audience', 'entity_type', 'entity_id', 'device', 'locale', 'metadata')
+      ORDER BY column_name
+    `);
+    assert.deepEqual(
+      analyticsColumns.map((column) => column.column_name),
+      ['audience', 'device', 'entity_id', 'entity_type', 'locale', 'metadata'],
+    );
+
+    const analyticsBackfills = await dbAll<{ name: string }>(`
+      SELECT name
+      FROM didit_schema_migrations
+      WHERE name IN ('analytics_intelligence_v1', 'analytics_intelligence_v2')
+      ORDER BY name
+    `);
+    assert.deepEqual(
+      analyticsBackfills.map((row) => row.name),
+      ['analytics_intelligence_v1', 'analytics_intelligence_v2'],
+    );
 
     const insertedId = await dbTransaction(async (query) => {
       await query.run('CREATE TEMP TABLE matable_pg_adapter_test (id BIGSERIAL PRIMARY KEY, value TEXT NOT NULL)');

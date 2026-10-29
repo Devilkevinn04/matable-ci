@@ -371,11 +371,12 @@ export function createDeliveryAdminRouter({ dbAll, dbGet, dbRun, dbTransaction, 
       name: string;
       phone: string;
       status: string;
+      identity_status: string;
       access_expires_at: string | null;
       zone_id: number | string | null;
       zone_label: string | null;
     }>(`
-      SELECT drivers.id, drivers.name, drivers.phone, drivers.status, drivers.access_expires_at,
+      SELECT drivers.id, drivers.name, drivers.phone, drivers.status, drivers.identity_status, drivers.access_expires_at,
         zones.id AS zone_id, zones.label AS zone_label
       FROM delivery_drivers AS drivers
       LEFT JOIN delivery_driver_zones AS driver_zones ON driver_zones.driver_id = drivers.id
@@ -387,6 +388,7 @@ export function createDeliveryAdminRouter({ dbAll, dbGet, dbRun, dbTransaction, 
       name: string;
       phone: string;
       status: string;
+      identity_status: string;
       access_expires_at: string | null;
       zone_ids: number[];
       zones: string[];
@@ -400,6 +402,7 @@ export function createDeliveryAdminRouter({ dbAll, dbGet, dbRun, dbTransaction, 
           name: row.name,
           phone: row.phone,
           status: row.status,
+          identity_status: row.identity_status,
           access_expires_at: row.access_expires_at,
           zone_ids: [],
           zones: [],
@@ -441,11 +444,14 @@ export function createDeliveryAdminRouter({ dbAll, dbGet, dbRun, dbTransaction, 
       }
     }
 
-    const current = await dbGet<{ id: number | string; status: string }>(
-      'SELECT id, status FROM delivery_drivers WHERE id = ?',
+    const current = await dbGet<{ id: number | string; status: string; identity_status: string }>(
+      'SELECT id, status, identity_status FROM delivery_drivers WHERE id = ?',
       [driverId],
     );
     if (!current) return res.status(404).json({ error: 'Livreur introuvable.' });
+    if (hasStatus && status === 'active' && current.identity_status !== 'verified') {
+      return res.status(409).json({ error: 'La vérification Didit doit être validée avant l’activation du livreur.' });
+    }
     const now = new Date().toISOString();
     await dbTransaction(async (transaction) => {
       if (hasStatus) {

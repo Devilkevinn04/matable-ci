@@ -14,7 +14,7 @@ interface VerificationItem {
 
 type VerificationFilter = 'all' | 'pending' | 'submitted' | 'under_review' | 'rejected' | 'verified';
 
-const statusLabels: Record<string, string> = {
+export const statusLabels: Record<string, string> = {
   pending: 'À vérifier',
   submitted: 'Vérification démarrée',
   under_review: 'En cours de revue',

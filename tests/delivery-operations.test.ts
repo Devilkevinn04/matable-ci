@@ -1,5 +1,6 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHmac, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
@@ -8,11 +9,13 @@ import { tmpdir } from 'node:os';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import Database from 'better-sqlite3';
 
 const TEST_DB_PATH = path.join(tmpdir(), `matable-delivery-operations-${Date.now()}.db`);
 const ADMIN_KEY = 'delivery-operations-test-super-admin-key';
 const VERIFICATION_KEY = 'delivery-operations-test-verification-key';
 const EVENT_SECRET = 'delivery-operations-test-signing-secret';
+const DIDIT_SECRET = 'delivery-operations-test-didit-secret';
 let baseUrl = '';
 let serverProcess: ChildProcess | null = null;
 
@@ -56,6 +59,36 @@ async function adminCookie(role: 'super_admin' | 'verification_admin', key: stri
   return cookie;
 }
 
+async function approveDriverWithDidit(driverId: number) {
+  const sessionId = randomUUID();
+  const workflowId = randomUUID();
+  const createdAt = new Date().toISOString();
+  const database = new Database(TEST_DB_PATH);
+  try {
+    database.prepare(`INSERT INTO delivery_driver_identity_sessions
+      (session_id, driver_id, workflow_id, status, consent_at, consent_version, created_at, updated_at)
+      VALUES (?, ?, ?, 'In Review', ?, 'didit-driver-v1', ?, ?)`)
+      .run(sessionId, driverId, workflowId, createdAt, createdAt, createdAt);
+  } finally {
+    database.close();
+  }
+  const timestamp = Math.floor(Date.now() / 1000);
+  const rawBody = JSON.stringify({
+    event_id: randomUUID(), session_id: sessionId, status: 'Approved',
+    webhook_type: 'status.updated', timestamp,
+  });
+  const response = await fetch(`${baseUrl}/api/webhooks/didit`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-timestamp': String(timestamp),
+      'x-signature': createHmac('sha256', DIDIT_SECRET).update(rawBody).digest('hex'),
+    },
+    body: rawBody,
+  });
+  assert.equal(response.status, 204);
+}
+
 before(async () => {
   const port = await reservePort();
   baseUrl = `http://127.0.0.1:${port}`;
@@ -66,6 +99,7 @@ before(async () => {
       ADMIN_ACCESS_KEY: ADMIN_KEY,
       VERIFICATION_ADMIN_ACCESS_KEY: VERIFICATION_KEY,
       AD_EVENT_SIGNING_SECRET: EVENT_SECRET,
+      DIDIT_WEBHOOK_SECRET: DIDIT_SECRET,
       NODE_ENV: 'test',
       DELIVERY_OPERATIONS_ENABLED: 'true',
       DELIVERY_TEST_MODE: 'false',
@@ -93,13 +127,14 @@ test('delivery operations can be enabled without exposing sandbox payments', asy
   assert.equal(zones.response.status, 200);
   assert.deepEqual(zones.payload.zones, []);
 
-  const registration = await api<{ driver: { id: number; status: string } }>('/api/delivery/drivers/register', {
+  const registration = await api<{ driver: { id: number; status: string; identity_status: string } }>('/api/delivery/drivers/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: 'Livreur Production', phone: '+2250700000042', pin: '482915' }),
   });
   assert.equal(registration.response.status, 201, JSON.stringify(registration.payload));
   assert.equal(registration.payload.driver.status, 'pending');
+  assert.equal(registration.payload.driver.identity_status, 'pending');
 
   const login = await api('/api/delivery/drivers/login', {
     method: 'POST',
@@ -117,6 +152,19 @@ test('delivery operations can be enabled without exposing sandbox payments', asy
   assert.equal(session.response.status, 200);
   assert.equal(session.payload.sandbox_payments_enabled, false);
   assert.equal(session.payload.proof_required, true);
+
+  const missingConsent = await api('/api/delivery/drivers/identity/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ consent: false }),
+  });
+  assert.equal(missingConsent.response.status, 400);
+  const missingDiditConfig = await api('/api/delivery/drivers/identity/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ consent: true }),
+  });
+  assert.equal(missingDiditConfig.response.status, 503);
 
   const sandbox = await api('/api/delivery/drivers/subscription/sandbox', {
     method: 'POST',
@@ -161,19 +209,28 @@ test('super admins can operate drivers and pickup zones without test mode', asyn
   assert.equal(driver.status, 'pending');
   assert.deepEqual(driver.zone_ids, []);
 
-  const activation = await api('/api/admin/delivery/drivers/' + driver.id, {
+  const bypass = await api('/api/admin/delivery/drivers/' + driver.id, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Cookie: superAdmin },
     body: JSON.stringify({ status: 'active', zone_ids: [zone.id] }),
   });
-  assert.equal(activation.response.status, 200, JSON.stringify(activation.payload));
+  assert.equal(bypass.response.status, 409);
 
-  const updated = await api<{ drivers: { id: number; status: string; zone_ids: number[] }[] }>('/api/admin/delivery/drivers', {
+  const assignedZones = await api('/api/admin/delivery/drivers/' + driver.id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Cookie: superAdmin },
+    body: JSON.stringify({ zone_ids: [zone.id] }),
+  });
+  assert.equal(assignedZones.response.status, 200, JSON.stringify(assignedZones.payload));
+  await approveDriverWithDidit(driver.id);
+
+  const updated = await api<{ drivers: { id: number; status: string; identity_status: string; zone_ids: number[] }[] }>('/api/admin/delivery/drivers', {
     headers: { Cookie: superAdmin },
   });
   assert.equal(updated.response.status, 200);
   const activeDriver = updated.payload.drivers.find((item) => item.id === driver.id);
   assert.equal(activeDriver?.status, 'active');
+  assert.equal(activeDriver?.identity_status, 'verified');
   assert.deepEqual(activeDriver?.zone_ids, [zone.id]);
 
   const login = await api('/api/delivery/drivers/login', {
@@ -185,12 +242,13 @@ test('super admins can operate drivers and pickup zones without test mode', asyn
   const cookie = login.response.headers.get('set-cookie')?.split(';')[0];
   assert.ok(cookie);
 
-  const session = await api<{ driver: { status: string }; zones: { id: number; label: string; is_active: boolean }[] }>(
+  const session = await api<{ driver: { status: string; identity_status: string }; zones: { id: number; label: string; is_active: boolean }[] }>(
     '/api/delivery/drivers/session',
     { headers: { Cookie: cookie } },
   );
   assert.equal(session.response.status, 200);
   assert.equal(session.payload.driver.status, 'active');
+  assert.equal(session.payload.driver.identity_status, 'verified');
   assert.deepEqual(session.payload.zones, [{ id: zone.id, label: 'Zone production', is_active: false }]);
 
   const selected = await api<{ zones: { id: number; label: string; is_active: boolean }[] }>('/api/delivery/drivers/zones', {

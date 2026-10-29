@@ -15,10 +15,19 @@ interface DeliveryDriver {
   name: string;
   phone: string;
   status: 'pending' | 'active' | 'suspended';
+  identity_status: string;
   access_expires_at: string | null;
   zone_ids: number[];
   zones: string[];
 }
+
+const driverIdentityLabels: Record<string, string> = {
+  pending: 'À vérifier',
+  submitted: 'Vérification démarrée',
+  under_review: 'En cours de revue',
+  verified: 'Vérifiée',
+  rejected: 'Non validée',
+};
 
 interface ShopOrigin {
   shop_id: number;
@@ -131,8 +140,7 @@ export function AdminDeliverySetup({ zones }: DeliverySetupProps) {
         <p className="text-xs font-bold uppercase text-[#0F6B54]">Exploitation de la livraison</p>
         <h3 id="delivery-setup-title" className="mt-1 text-sm font-black text-[#103E32]">Livreurs et zones de retrait</h3>
         <p className="mt-1 text-xs leading-5 text-[#0F6B54]">
-          Activez les comptes livreurs, autorisez leurs zones et rattachez chaque boutique à sa zone de retrait.
-          Le forfait livreur de 1 000 FCFA est réglé par Mobile Money lorsque GeniusPay est configuré.
+          Didit active automatiquement l’accès après vérification. Les livreurs choisissent ensuite leurs zones et règlent leur forfait de 24 heures avec GeniusPay.
         </p>
       </header>
 
@@ -154,6 +162,7 @@ export function AdminDeliverySetup({ zones }: DeliverySetupProps) {
                       <div>
                         <p className="text-sm font-black text-slate-900">{driver.name}</p>
                         <p className="text-xs text-slate-600">{driver.phone} · compte {driver.status}{driver.access_expires_at && Date.parse(driver.access_expires_at) > Date.now() ? ' · forfait actif' : ''}</p>
+                        <p className="mt-1 text-xs font-semibold text-slate-700">Identité Didit · {driverIdentityLabels[driver.identity_status] || 'Statut inconnu'}</p>
                       </div>
                       <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
                         Statut
@@ -164,7 +173,7 @@ export function AdminDeliverySetup({ zones }: DeliverySetupProps) {
                           className="min-h-9 rounded-lg border border-slate-300 bg-white px-2"
                         >
                           <option value="pending">En attente</option>
-                          <option value="active">Actif</option>
+                          <option value="active" disabled={driver.identity_status !== 'verified'}>Actif</option>
                           <option value="suspended">Suspendu</option>
                         </select>
                       </label>
@@ -193,7 +202,7 @@ export function AdminDeliverySetup({ zones }: DeliverySetupProps) {
                       </div>
                     </fieldset>
                     <button type="button" onClick={() => void saveDriver(driver)} disabled={Boolean(savingKey)} className="mt-3 min-h-10 rounded-lg bg-[#087F62] px-4 text-xs font-bold text-white transition-colors hover:bg-[#066B52] disabled:opacity-50">
-                      {savingKey === `driver-${driver.id}` ? 'Enregistrement…' : 'Enregistrer et activer'}
+                      {savingKey === `driver-${driver.id}` ? 'Enregistrement…' : 'Enregistrer'}
                     </button>
                   </article>
                 );

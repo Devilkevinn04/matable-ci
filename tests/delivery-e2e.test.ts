@@ -1,6 +1,6 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
@@ -15,6 +15,7 @@ const TEST_DB_PATH = path.join(tmpdir(), `matable-delivery-e2e-${Date.now()}.db`
 const ADMIN_KEY = 'delivery-e2e-test-super-admin-key';
 const VERIFICATION_KEY = 'delivery-e2e-test-verification-key';
 const EVENT_SECRET = 'delivery-e2e-test-signing-secret-32';
+const DIDIT_WEBHOOK_SECRET = 'delivery-e2e-test-didit-webhook-secret';
 // 1x1 transparent PNG used to exercise the proof upload contract.
 const PROOF_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const PROOF_SHA256 = createHash('sha256').update(Buffer.from(PROOF_BASE64, 'base64')).digest('hex');
@@ -64,6 +65,39 @@ async function loginCookie(pathName: string, body: object): Promise<string> {
   return cookie;
 }
 
+async function approveDriverWithDidit(driverId: number) {
+  const sessionId = randomUUID();
+  const workflowId = randomUUID();
+  const createdAt = new Date().toISOString();
+  const database = new Database(TEST_DB_PATH);
+  try {
+    database.prepare(`INSERT INTO delivery_driver_identity_sessions
+      (session_id, driver_id, workflow_id, status, consent_at, consent_version, created_at, updated_at)
+      VALUES (?, ?, ?, 'In Review', ?, 'didit-driver-v1', ?, ?)`)
+      .run(sessionId, driverId, workflowId, createdAt, createdAt, createdAt);
+  } finally {
+    database.close();
+  }
+  const timestamp = Math.floor(Date.now() / 1000);
+  const rawBody = JSON.stringify({
+    event_id: randomUUID(),
+    session_id: sessionId,
+    status: 'Approved',
+    webhook_type: 'status.updated',
+    timestamp,
+  });
+  const response = await fetch(`${baseUrl}/api/webhooks/didit`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-timestamp': String(timestamp),
+      'x-signature': createHmac('sha256', DIDIT_WEBHOOK_SECRET).update(rawBody).digest('hex'),
+    },
+    body: rawBody,
+  });
+  assert.equal(response.status, 204);
+}
+
 before(async () => {
   const port = await reservePort();
   baseUrl = `http://127.0.0.1:${port}`;
@@ -74,6 +108,7 @@ before(async () => {
       ADMIN_ACCESS_KEY: ADMIN_KEY,
       VERIFICATION_ADMIN_ACCESS_KEY: VERIFICATION_KEY,
       AD_EVENT_SIGNING_SECRET: EVENT_SECRET,
+      DIDIT_WEBHOOK_SECRET,
       NODE_ENV: 'test',
       DELIVERY_TEST_MODE: 'true',
       DELIVERY_SANDBOX_PAYMENTS: 'true',
@@ -133,15 +168,22 @@ test('local delivery flow covers account approval, sandbox fee, zone quote, cour
     method: 'POST',
   }, driverCookie);
   assert.equal(preApproval.response.status, 403);
-
-  const activated = await api('/api/admin/delivery/drivers/' + driverId, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      status: 'active',
-      zone_ids: [cocodyId, bingervilleId, abattaId, zonesByName.get('Palmeraie'), zonesByName.get('Angré')],
-    }),
-  }, admin);
-  assert.equal(activated.response.status, 200);
+  const missingConsent = await api('/api/delivery/drivers/identity/session', {
+    method: 'POST',
+    body: JSON.stringify({ consent: false }),
+  }, driverCookie);
+  assert.equal(missingConsent.response.status, 400);
+  await approveDriverWithDidit(driverId);
+  const verifiedSession = await api<{ driver: { status: string; identity_status: string }; zones: { id: number; is_active: boolean }[] }>(
+    '/api/delivery/drivers/session',
+    {},
+    driverCookie,
+  );
+  assert.equal(verifiedSession.response.status, 200);
+  assert.equal(verifiedSession.payload.driver.status, 'active');
+  assert.equal(verifiedSession.payload.driver.identity_status, 'verified');
+  assert.equal(verifiedSession.payload.zones.length, 5);
+  assert.ok(verifiedSession.payload.zones.every((zone) => !zone.is_active));
 
   const setOrigin = await api('/api/admin/delivery/shop-origins/1', {
     method: 'PUT',

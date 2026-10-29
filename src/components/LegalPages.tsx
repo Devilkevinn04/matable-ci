@@ -119,6 +119,10 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
               <p>MaTable.ci conserve l’identifiant de session Didit, le statut de vérification, l’identifiant du workflow, la version et la date du consentement ainsi que les dates techniques nécessaires au suivi. Les pièces et données biométriques ne sont pas conservées dans la base MaTable.ci. Les événements techniques de webhook sont conservés au maximum 30 jours pour éviter le traitement multiple d’une même notification. Une vérification positive est requise pour publier une boutique.</p>
             </section>
             <section>
+              <h2>Vérification d’identité des livreurs</h2>
+              <p>La création d’un compte livreur ne donne pas accès aux courses. Après consentement explicite, le livreur est redirigé vers le parcours hébergé de Didit pour la vérification d’identité, qui peut traiter des pièces et données biométriques selon les informations et conditions présentées par Didit. MaTable.ci conserve le nom, le téléphone, le code PIN sous forme hachée, le statut du compte, l’identifiant de session Didit, le statut reçu, l’identifiant du workflow ainsi que la version et la date du consentement; les pièces et données biométriques restent traitées par Didit et ne sont pas conservées par MaTable.ci. Le compte est activé uniquement après réception d’un webhook Didit signé indiquant une vérification positive. Le livreur peut ensuite choisir ses zones et lancer le paiement ponctuel de son forfait 24 heures avec GeniusPay; aucun prélèvement automatique n’est effectué.</p>
+            </section>
+            <section>
               <h2>Finalités et bases d’utilisation</h2>
               <p>Les données servent à créer et gérer les comptes, mémoriser les boutiques et produits favoris, afficher les mentions « J’aime » agrégées, traiter les commandes et leur suivi, assurer la vérification des commerçants, effectuer les renouvellements demandés, fournir l’assistance, protéger les comptes et prévenir les abus. Les statistiques de fréquentation ne sont enregistrées que si vous les autorisez dans la bannière ou sur la page Cookies. Les rappels automatiques d’échéance par WhatsApp ne sont envoyés qu’aux commerçants ayant activé cette option; le consentement peut être retiré dans les réglages de l’abonnement. Les données nécessaires à une fonctionnalité sont utilisées pour la fournir; les statistiques et les rappels reposent sur vos choix.</p>
             </section>
@@ -174,6 +178,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             <section>
               <h2>Contenus et responsabilité commerciale</h2>
               <p>Le commerçant répond de ses produits, prix, disponibilités, descriptions, livraisons et obligations envers le client. Le client doit vérifier les modalités avec le vendeur avant de finaliser la vente. Les utilisateurs s’engagent à ne pas publier de contenu illicite, trompeur, contrefaisant ou portant atteinte aux droits d’autrui. L’accès peut être suspendu en cas d’abus, de fraude, de risque de sécurité ou de violation des présentes conditions.</p>
+              <p>Le livreur doit fournir des informations exactes, consentir à la vérification Didit et respecter les zones et statuts de course affichés. L’accès aux courses est activé après confirmation de l’identité et du paiement ponctuel du forfait livreur. Chaque forfait couvre 24 heures et n’est pas renouvelé automatiquement.</p>
             </section>
           </div>
         )}

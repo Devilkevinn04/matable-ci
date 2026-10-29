@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { Store, ShieldCheck, ShoppingBag, Compass, CircleHelp, BookOpen, Menu, X, Sparkles, Search, Home, ArrowUpRight, BadgePercent } from 'lucide-react';
+import { Store, ShieldCheck, ShoppingBag, Compass, CircleHelp, BookOpen, Menu, X, Sparkles, Search, Home, ArrowUpRight, BadgePercent, Bike } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { CustomerUser } from './CustomerAuth';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../utils/categoryDefaults';
@@ -33,6 +33,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     { to: '/promotions', label: 'Promotions', icon: BadgePercent, active: isPromotionsPage },
     { to: '/comment-ca-marche', label: 'Comment ça marche', icon: CircleHelp, active: location.pathname === '/comment-ca-marche' },
     { to: '/commercants', label: 'Commerçants', icon: Store, active: isMerchantPlansPage },
+    { to: '/livreur', label: 'Livreurs', icon: Bike, active: location.pathname === '/livreur' },
   ];
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState(() => new URLSearchParams(location.search).get('q') || '');

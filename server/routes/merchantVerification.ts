@@ -1,8 +1,8 @@
-import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
 import { sendMerchantPush } from '../services/pushNotifications.ts';
+import { DIDIT_UUID_PATTERN, isDiditSession, mapDiditStatus, validateDiditWebhook } from '../services/didit.ts';
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CONSENT_VERSION = 'didit-v1';
 
 type DbRun = (sql: string, params?: unknown[]) => Promise<{ changes: number }>;
@@ -22,59 +22,6 @@ interface MerchantVerificationOptions {
   requireMerchantIdentityOwnShop: RequestHandler;
 }
 
-interface DiditSessionResponse {
-  session_id: string;
-  status: string;
-  url: string;
-}
-
-interface DiditWebhookEvent {
-  event_id: string;
-  session_id: string;
-  status: string;
-  webhook_type: string;
-  timestamp: number;
-}
-
-function sortedJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(sortedJson).join(',')}]`;
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
-    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${sortedJson(item)}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function signatureMatches(signature: string | undefined, payload: Buffer, secret: string, canonicalPayload?: string): boolean {
-  if (!signature) return false;
-  const expected = createHmac('sha256', secret)
-    .update(canonicalPayload ?? payload)
-    .digest('hex');
-  const expectedBuffer = Buffer.from(expected, 'hex');
-  const providedBuffer = Buffer.from(signature.trim().toLowerCase(), 'hex');
-  return expectedBuffer.length === providedBuffer.length && timingSafeEqual(expectedBuffer, providedBuffer);
-}
-
-export function mapDiditStatus(status: string): 'verified' | 'rejected' | 'under_review' | 'submitted' | 'pending' {
-  if (status === 'Approved') return 'verified';
-  if (status === 'Declined') return 'rejected';
-  if (status === 'In Review') return 'under_review';
-  if (['Expired', 'Kyc Expired', 'Abandoned'].includes(status)) return 'pending';
-  return 'submitted';
-}
-
-function isDiditSession(value: unknown): value is DiditSessionResponse {
-  if (!value || typeof value !== 'object') return false;
-  const session = value as Partial<DiditSessionResponse>;
-  if (typeof session.session_id !== 'string' || !UUID_PATTERN.test(session.session_id)) return false;
-  if (typeof session.status !== 'string' || typeof session.url !== 'string') return false;
-  try {
-    const url = new URL(session.url);
-    return url.protocol === 'https:' && url.hostname === 'verify.didit.me';
-  } catch {
-    return false;
-  }
-}
 
 export function createMerchantVerificationRouter(options: MerchantVerificationOptions) {
   const { dbRun, dbGet, dbAll, dbTransaction, requireMerchantIdentityOwnShop } = options;
@@ -120,7 +67,7 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
 
     const apiKey = String(process.env.DIDIT_API_KEY || '').trim();
     const workflowId = String(process.env.DIDIT_WORKFLOW_ID || '').trim();
-    if (!apiKey || !UUID_PATTERN.test(workflowId)) {
+    if (!apiKey || !DIDIT_UUID_PATTERN.test(workflowId)) {
       return res.status(503).json({ error: 'La vérification Didit n’est pas encore configurée.' });
     }
     const appUrl = String(process.env.APP_URL || '').trim();
@@ -233,40 +180,100 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
     res.json({ verifications: rows });
   });
 
-  webhookRouter.post('/', async (req, res) => {
+  webhookRouter.post('/', async (req, res, next) => {
     const secret = String(process.env.DIDIT_WEBHOOK_SECRET || '').trim();
-    if (!secret) return res.status(503).json({ error: 'Le webhook Didit n’est pas configuré.' });
-    if (!Buffer.isBuffer(req.body)) return res.status(400).json({ error: 'Corps webhook invalide.' });
-
-    const timestamp = Number(req.get('x-timestamp'));
-    if (!Number.isFinite(timestamp) || Math.abs(Date.now() / 1000 - timestamp) > 300) {
-      return res.status(401).json({ error: 'Horodatage webhook invalide ou expiré.' });
-    }
-    let event: DiditWebhookEvent;
-    try {
-      event = JSON.parse(req.body.toString('utf8')) as DiditWebhookEvent;
-    } catch {
-      return res.status(400).json({ error: 'Corps webhook JSON invalide.' });
-    }
-    if (!Number.isFinite(event.timestamp) || Math.abs(Date.now() / 1000 - event.timestamp) > 300) {
-      return res.status(401).json({ error: 'Horodatage signé du webhook invalide ou expiré.' });
-    }
-    const canonicalPayload = sortedJson(event);
-    const validSignature = signatureMatches(req.get('x-signature-v2'), req.body, secret, canonicalPayload)
-      || signatureMatches(req.get('x-signature'), req.body, secret);
-    if (!validSignature) return res.status(401).json({ error: 'Signature webhook Didit invalide.' });
-    if (event.webhook_type !== 'status.updated' || typeof event.event_id !== 'string' || !UUID_PATTERN.test(event.event_id)
+    const validation = validateDiditWebhook(
+      req.body,
+      req.get('x-timestamp'),
+      req.get('x-signature-v2'),
+      req.get('x-signature'),
+      secret,
+    );
+    if (validation.ok === false) return res.status(validation.status).json({ error: validation.error });
+    const { event, timestamp } = validation;
+    if (event.webhook_type !== 'status.updated' || typeof event.event_id !== 'string' || !DIDIT_UUID_PATTERN.test(event.event_id)
       || typeof event.session_id !== 'string' || typeof event.status !== 'string') {
       return res.status(204).end();
     }
 
     const receivedAt = new Date(timestamp * 1000).toISOString();
+    const possibleDriverSession = await dbGet<{ driver_id: number | string }>(
+      'SELECT driver_id FROM delivery_driver_identity_sessions WHERE session_id = ?',
+      [event.session_id],
+    );
+    const activeDeliveryZones = possibleDriverSession
+      ? await dbAll<{ id: number | string }>('SELECT id FROM delivery_zones WHERE is_active = 1 ORDER BY id')
+      : [];
     const webhookResult = await dbTransaction(async (transaction) => {
       const session = await transaction.get<{ session_id: string; shop_id: number; last_webhook_at: string | null }>(
         `SELECT session_id, shop_id, last_webhook_at FROM didit_verification_sessions WHERE session_id = ?${process.env.NODE_ENV === 'production' ? ' FOR UPDATE' : ''}`,
         [event.session_id],
       );
-      if (!session) return false;
+      if (!session) {
+        const driverSession = await transaction.get<{
+          session_id: string;
+          driver_id: number | string;
+          last_webhook_at: string | null;
+        }>(
+          `SELECT session_id, driver_id, last_webhook_at FROM delivery_driver_identity_sessions WHERE session_id = ?${process.env.NODE_ENV === 'production' ? ' FOR UPDATE' : ''}`,
+          [event.session_id],
+        );
+        if (!driverSession) return false;
+        if (process.env.NODE_ENV === 'production') {
+          await transaction.get('SELECT id FROM delivery_drivers WHERE id = ? FOR UPDATE', [driverSession.driver_id]);
+        }
+        const latestDriverSession = await transaction.get<{ session_id: string }>(
+          'SELECT session_id FROM delivery_driver_identity_sessions WHERE driver_id = ? ORDER BY created_at DESC LIMIT 1',
+          [driverSession.driver_id],
+        );
+        if (latestDriverSession?.session_id !== driverSession.session_id) return { kind: 'ignored' as const };
+        const inserted = await transaction.run(
+          'INSERT INTO didit_webhook_events (event_id, received_at) VALUES (?, ?) ON CONFLICT(event_id) DO NOTHING',
+          [event.event_id, new Date().toISOString()],
+        );
+        if (inserted.changes !== 1 || (driverSession.last_webhook_at && Date.parse(driverSession.last_webhook_at) > timestamp * 1000)) {
+          return { kind: 'ignored' as const };
+        }
+
+        const currentDriver = await transaction.get<{ status: string; identity_status: string }>(
+          'SELECT status, identity_status FROM delivery_drivers WHERE id = ?',
+          [driverSession.driver_id],
+        );
+        if (!currentDriver) return false;
+        const mappedStatus = mapDiditStatus(event.status);
+        const identityStatus = currentDriver.identity_status === 'verified' ? 'verified' : mappedStatus;
+        await transaction.run(
+          'UPDATE delivery_driver_identity_sessions SET status = ?, updated_at = ?, last_webhook_at = ? WHERE session_id = ?',
+          [event.status, receivedAt, receivedAt, driverSession.session_id],
+        );
+        await transaction.run(`UPDATE delivery_drivers SET identity_status = ?,
+          status = CASE WHEN status = 'suspended' THEN 'suspended' WHEN ? = 'verified' THEN 'active' ELSE 'pending' END,
+          updated_at = ? WHERE id = ?`, [identityStatus, identityStatus, receivedAt, driverSession.driver_id]);
+        if (identityStatus === 'verified') {
+          for (const zone of activeDeliveryZones) {
+            await transaction.run(`INSERT INTO delivery_driver_zones (driver_id, zone_id, is_active, assigned_at)
+              VALUES (?, ?, 0, ?) ON CONFLICT(driver_id, zone_id) DO NOTHING`,
+            [driverSession.driver_id, zone.id, receivedAt]);
+          }
+        }
+        if (currentDriver.identity_status !== identityStatus) {
+          await transaction.run(
+            'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+            ['didit_webhook', 'delivery_driver_identity_status_updated', null, JSON.stringify({
+              driver_id: Number(driverSession.driver_id),
+              previous_status: currentDriver.identity_status,
+              status: identityStatus,
+              event_id: event.event_id,
+            }), receivedAt],
+          );
+        }
+        return {
+          kind: 'driver' as const,
+          driverId: Number(driverSession.driver_id),
+          previousStatus: currentDriver.identity_status,
+          nextStatus: identityStatus,
+        };
+      }
       if (process.env.NODE_ENV === 'production') {
         await transaction.get('SELECT id FROM shops WHERE id = ? FOR UPDATE', [session.shop_id]);
       }
@@ -274,13 +281,13 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
         'SELECT session_id FROM didit_verification_sessions WHERE shop_id = ? ORDER BY created_at DESC LIMIT 1',
         [session.shop_id],
       );
-      if (latestSession?.session_id !== session.session_id) return { shopId: null, previousStatus: '', nextStatus: '' };
+      if (latestSession?.session_id !== session.session_id) return { kind: 'ignored' as const };
       const inserted = await transaction.run(
         'INSERT INTO didit_webhook_events (event_id, received_at) VALUES (?, ?) ON CONFLICT(event_id) DO NOTHING',
         [event.event_id, new Date().toISOString()],
       );
       if (inserted.changes !== 1 || (session.last_webhook_at && Date.parse(session.last_webhook_at) > timestamp * 1000)) {
-        return { shopId: null, previousStatus: '', nextStatus: '' };
+        return { kind: 'ignored' as const };
       }
 
       const merchantStatus = mapDiditStatus(event.status);
@@ -306,13 +313,14 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
         );
       }
       return {
+        kind: 'shop' as const,
         shopId: session.shop_id,
         previousStatus: currentShop?.merchant_verification_status || '',
         nextStatus: merchantStatus,
       };
     });
     if (!webhookResult) return res.status(503).json({ error: 'Session Didit inconnue, réessayez le webhook.' });
-    if (webhookResult.shopId && webhookResult.previousStatus !== webhookResult.nextStatus) {
+    if (webhookResult.kind === 'shop' && webhookResult.shopId && webhookResult.previousStatus !== webhookResult.nextStatus) {
       const verified = webhookResult.nextStatus === 'verified';
       void sendMerchantPush(webhookResult.shopId, {
         eventKey: `identity-${event.event_id}`,

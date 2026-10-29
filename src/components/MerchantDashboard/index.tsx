@@ -897,7 +897,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Lancement boutique</p>
-              <h2 id="setup-checklist-title" className="mt-1 text-xl font-black text-[#292d2a] sm:text-2xl">Votre vitrine est presque prête</h2>
+              <h2 id="setup-checklist-title" className="mt-1 text-xl font-black text-[#292d2a] sm:text-2xl">{isShopPublished ? 'Votre vitrine est prête' : 'Votre vitrine est presque prête'}</h2>
             </div>
             <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
               <Link to="/guide?role=merchant" state={{ guideAccountId: currentShop.id }} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[#047857] hover:bg-[#f3faf6]">

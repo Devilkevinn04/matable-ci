@@ -11,6 +11,7 @@ interface DriverProfile {
   name: string;
   phone: string;
   status: 'pending' | 'active' | 'suspended';
+  identity_status: 'pending' | 'submitted' | 'under_review' | 'verified' | 'rejected' | string;
 }
 
 interface DriverZone {
@@ -102,6 +103,9 @@ export function DeliveryCourierWorkspace() {
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
   const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [identityConsent, setIdentityConsent] = useState(false);
+  const [diditAvailable, setDiditAvailable] = useState(false);
+  const [identityProviderStatus, setIdentityProviderStatus] = useState<string | null>(null);
   const [accessActive, setAccessActive] = useState(false);
   const [accessExpiresAt, setAccessExpiresAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -138,6 +142,8 @@ export function DeliveryCourierWorkspace() {
           access_active?: boolean;
           access_expires_at?: string | null;
           zones?: DriverZone[];
+          identity_provider_status?: string | null;
+          didit_available?: boolean;
           sandbox_payments_enabled?: boolean;
           provider_payments_available?: boolean;
           proof_required?: boolean;
@@ -154,6 +160,8 @@ export function DeliveryCourierWorkspace() {
       setServiceAvailable(true);
       setDriver(sessionData.driver || null);
       setZones(sessionData.zones || []);
+      setIdentityProviderStatus(sessionData.identity_provider_status || null);
+      setDiditAvailable(Boolean(sessionData.didit_available));
       setSelectedZoneIds((sessionData.zones || []).filter((zone) => zone.is_active).map((zone) => zone.id));
       setAccessActive(Boolean(sessionData.access_active));
       setAccessExpiresAt(sessionData.access_expires_at || null);
@@ -245,6 +253,12 @@ export function DeliveryCourierWorkspace() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || new URLSearchParams(window.location.search).get('verification') !== 'complete') return;
+    window.history.replaceState({}, '', window.location.pathname);
+    setNotice('Retour de Didit reçu. Votre statut de vérification est actualisé automatiquement.');
+  }, []);
+
+  useEffect(() => {
     if (!activeDelivery) {
       setTimelineEvents([]);
       setTimelineError(null);
@@ -291,8 +305,9 @@ export function DeliveryCourierWorkspace() {
       if (!response.ok) throw new Error(data.error || 'Impossible de traiter cette demande.');
       if (mode === 'register') {
         trackSignup('courier', 'registration');
-        setMode('login');
-        setNotice('Inscription enregistrée. Connectez-vous, puis attendez l’activation du compte par MaTable.');
+        setDriver(data.driver || null);
+        setNotice('Compte créé. Confirmez votre identité avec Didit pour accéder aux courses.');
+        await loadSession();
       } else {
         trackLogin('courier', 'pin');
         setDriver(data.driver || null);
@@ -302,6 +317,26 @@ export function DeliveryCourierWorkspace() {
     } catch (accountError) {
       setError(accountError instanceof Error ? accountError.message : 'Impossible de traiter cette demande.');
     } finally {
+      setSaving(false);
+    }
+  };
+
+  const startIdentityVerification = async () => {
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch('/api/delivery/drivers/identity/session', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ consent: identityConsent }),
+      });
+      const data = await readJson<{ session_url?: string; status?: string }>(response);
+      if (!response.ok || !data.session_url) throw new Error(data.error || 'Impossible de démarrer la vérification Didit.');
+      window.location.assign(data.session_url);
+    } catch (verificationError) {
+      setError(verificationError instanceof Error ? verificationError.message : 'Impossible de démarrer la vérification Didit.');
       setSaving(false);
     }
   };
@@ -497,6 +532,9 @@ export function DeliveryCourierWorkspace() {
       return;
     }
     setDriver(null);
+    setIdentityConsent(false);
+    setIdentityProviderStatus(null);
+    setDiditAvailable(false);
     trackLogout('courier');
     setOffers([]);
     setActiveDelivery(null);
@@ -558,7 +596,7 @@ export function DeliveryCourierWorkspace() {
           <section className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-emerald-900"><Bike className="h-5 w-5" /></span>
             <h1 className="mt-3 text-xl font-black text-slate-950">Espace livreur MaTable</h1>
-            <p className="mt-1 text-sm leading-5 text-slate-600">{mode === 'login' ? 'Connectez-vous avec votre numéro et votre code PIN.' : 'Créez un compte livreur. MaTable devra l’activer avant l’accès aux courses.'}</p>
+            <p className="mt-1 text-sm leading-5 text-slate-600">{mode === 'login' ? 'Connectez-vous avec votre numéro et votre code PIN.' : 'Créez votre compte, puis vérifiez votre identité avec Didit pour activer l’accès aux courses.'}</p>
             <form className="mt-4 space-y-3" onSubmit={(event) => void submitAccount(event)}>
               {mode === 'register' && (
                 <label className="block text-xs font-bold text-slate-700">Nom complet
@@ -586,12 +624,44 @@ export function DeliveryCourierWorkspace() {
                 <p className="mt-2 text-xs text-emerald-100">{driver.phone} · compte {driver.status}{accessActive ? ' · forfait actif' : ''}</p>
               </header>
 
-              {driver.status === 'pending' ? (
+              {driver.status === 'suspended' ? (
                 <div className="p-4 sm:p-6">
-                  <h2 className="text-lg font-black text-slate-950">Compte en attente d’activation</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">Un super-admin doit activer ce compte et lui attribuer ses zones avant que le forfait et les courses soient accessibles.</p>
+                  <h2 className="text-lg font-black text-slate-950">Compte suspendu</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">Contactez l’assistance MaTable.ci pour obtenir des informations sur votre compte.</p>
                   <button type="button" onClick={() => void loadSession()} className="mt-4 min-h-10 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700">Actualiser le statut</button>
                 </div>
+              ) : driver.status !== 'active' || driver.identity_status !== 'verified' ? (
+                <section aria-labelledby="driver-identity-title" className="m-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 sm:m-6">
+                  <p className="text-xs font-bold uppercase text-emerald-900">Étape requise avant le forfait</p>
+                  <h2 id="driver-identity-title" className="mt-1 text-lg font-black text-emerald-950">
+                    {driver.identity_status === 'under_review' || driver.identity_status === 'submitted' ? 'Vérification Didit en cours' : 'Vérifier votre identité avec Didit'}
+                  </h2>
+                  {driver.identity_status === 'under_review' || driver.identity_status === 'submitted' ? (
+                    <>
+                      <p className="mt-2 text-sm leading-6 text-emerald-950">Didit traite votre vérification. Votre compte sera activé automatiquement après validation; vous pourrez ensuite choisir vos zones et payer votre forfait GeniusPay.</p>
+                      {identityProviderStatus && <p className="mt-2 text-xs text-emerald-900">Statut Didit : {identityProviderStatus}</p>}
+                      <button type="button" onClick={() => void loadSession()} disabled={saving} className="mt-3 min-h-10 rounded-lg border border-emerald-300 bg-white px-3 text-xs font-bold text-emerald-950 disabled:opacity-50">Actualiser le statut</button>
+                    </>
+                  ) : driver.identity_status === 'verified' ? (
+                    <p className="mt-2 text-sm leading-6 text-emerald-950">Votre identité est vérifiée. L’activation de l’accès est en cours; actualisez le statut dans un instant.</p>
+                  ) : (
+                    <>
+                      <p className="mt-2 text-sm leading-6 text-emerald-950">Didit vérifiera votre identité dans son parcours sécurisé. MaTable.ci conserve uniquement le statut, l’identifiant de session et la preuve de votre consentement; les pièces et données biométriques restent chez Didit.</p>
+                      {driver.identity_status === 'rejected' && <p role="status" className="mt-2 rounded-lg border border-amber-300 bg-white p-2.5 text-xs font-semibold text-amber-950">Didit n’a pas validé cette vérification. Consultez les indications affichées par Didit, puis réessayez.</p>}
+                      {!diditAvailable ? (
+                        <p role="status" className="mt-3 rounded-lg border border-amber-300 bg-white p-2.5 text-xs font-semibold text-amber-950">La vérification Didit des livreurs n’est pas encore configurée sur ce serveur. Contactez l’assistance.</p>
+                      ) : (
+                        <>
+                          <label className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-200 bg-white p-3 text-xs leading-5 text-slate-800">
+                            <input type="checkbox" checked={identityConsent} onChange={(event) => setIdentityConsent(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-800" />
+                            <span>J’accepte que mes données d’identité et, si le parcours le demande, mes données biométriques soient traitées directement par Didit pour vérifier mon identité. MaTable.ci recevra le résultat, pas mes pièces.</span>
+                          </label>
+                          <button type="button" onClick={() => void startIdentityVerification()} disabled={saving || !identityConsent} className="mt-3 min-h-11 w-full rounded-lg bg-emerald-900 px-4 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Connexion à Didit…' : 'Continuer avec Didit'}</button>
+                        </>
+                      )}
+                    </>
+                  )}
+                </section>
               ) : (
                 <div className="space-y-4 p-4 sm:p-6">
                   <section aria-labelledby="courier-zones-title" className="rounded-xl border border-slate-200 p-3">
