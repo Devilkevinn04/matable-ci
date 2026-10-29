@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
 import { databaseMode, dbTransaction } from '../../db.ts';
 import { addCalendarMonths } from '../../src/utils/subscriptionFeatures.ts';
+import { slugifyShopName } from '../../src/utils/shopSlug.ts';
 import { persistShopInTransaction } from '../repositories/shops.ts';
 import { sendMerchantWelcomeEmail } from '../services/email.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
@@ -111,8 +112,7 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     const categoryDefaults = getCategoryDefaults(shopCategory);
     const reservedShopId = await allocateShopId();
     const ownerAccessToken = randomUUID();
-    const slug = safeName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || `boutique-${Date.now()}`;
+    const slug = slugifyShopName(safeName);
     const uniqueSlug = slug;
     const mergedThemeConfig = {
       primary_color: categoryDefaults.primaryColor,

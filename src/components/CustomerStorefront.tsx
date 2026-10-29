@@ -362,7 +362,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const toggleCustomerFavorite = async (targetType: 'shop' | 'product', targetId: number) => {
     if (!customerUser) {
       toast.info('Connectez-vous pour enregistrer vos favoris.');
-      window.location.assign('/connexion');
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      window.location.assign(`/connexion?return_to=${encodeURIComponent(returnTo)}`);
       return;
     }
     try {

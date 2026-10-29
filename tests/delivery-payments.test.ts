@@ -214,6 +214,9 @@ test('Mobile Money delivery checkout uses delivery metadata and a stable idempot
     payment_type: 'delivery',
   });
   assert.equal(checkoutRequest.body.amount, 1000);
+  assert.match(String(checkoutRequest.body.success_url), /\/livreur\?payment_id=/);
+  assert.match(String(checkoutRequest.body.error_url), /\/livreur\?payment_id=/);
+  assert.doesNotMatch(String(checkoutRequest.body.success_url), /__preview/);
 
   const reused = await api<{ payment_id: string; reused: boolean; checkout_url: string }>(
     '/api/delivery/drivers/subscription/checkout',

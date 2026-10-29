@@ -141,7 +141,7 @@ async function notifyEligibleDrivers(context: DeliveryNotificationContext) {
     category: 'delivery',
     title: `Nouvelle course · ${deliveryLabel(context)}`,
     body: `${deliveryRouteLabel(context)} · ${formatMoney(context.quoted_amount)}. Ouvrez l’espace livreur pour accepter.`,
-    url: '/__preview/delivery-courier',
+    url: '/livreur',
     tag: `delivery-offer-${Number(context.id)}`,
   }, removeDriverSubscription);
 }
@@ -280,7 +280,7 @@ export async function dispatchDeliveryCancelledPush(
       tasks.push(sendToDriver(driverId, {
         title: 'Course annulée',
         body: `La course ${deliveryLabel(context)} (${deliveryRouteLabel(context)}) a été annulée ${reason}.`,
-        url: '/__preview/delivery-courier',
+        url: '/livreur',
         tag: `delivery-${Number(context.id)}-cancelled`,
       }));
     }

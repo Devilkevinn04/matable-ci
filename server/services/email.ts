@@ -179,7 +179,7 @@ export async function sendMerchantWelcomeEmail(
 ): Promise<{ sent: boolean; id?: string; error?: string }> {
   const appUrl = resolveAppUrl(params.appUrl);
   const subject = `Votre boutique MaTable.ci a bien été créée`;
-  const text = `Bonjour,\n\nVotre boutique ${params.shopName} a bien été créée sur MaTable.ci.\n\nVous pouvez vous connecter ici : ${appUrl}/connexion\n\nMerci de faire grandir votre vitrine avec MaTable.ci.`;
+  const text = `Bonjour,\n\nVotre boutique ${params.shopName} a bien été créée sur MaTable.ci.\n\nVous pouvez vous connecter ici : ${appUrl}/app\n\nMerci de faire grandir votre vitrine avec MaTable.ci.`;
   const html = renderBrandedEmail({
     title: 'Bienvenue sur MaTable.ci',
     preheader: `Votre boutique ${params.shopName} est prête sur MaTable.ci.`,
@@ -189,8 +189,8 @@ export async function sendMerchantWelcomeEmail(
       <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Bonjour,</p>
       <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Votre boutique <strong style="color:${BRAND.deep};">${escapeHtml(params.shopName)}</strong> a bien été créée sur MaTable.ci.</p>
       <p style="margin:0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Gérez votre catalogue, vos commandes et votre vitrine depuis votre espace de gestion.</p>
-      ${renderEmailButton('Accéder à mon espace', `${appUrl}/connexion`)}
-      <p style="margin:14px 0 0;font-family:${EMAIL_FONT};font-size:11px;line-height:1.6;color:${BRAND.faint};">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur : <a href="${appUrl}/connexion" style="color:${BRAND.green};">${appUrl}/connexion</a></p>
+      ${renderEmailButton('Accéder à mon espace', `${appUrl}/app`)}
+      <p style="margin:14px 0 0;font-family:${EMAIL_FONT};font-size:11px;line-height:1.6;color:${BRAND.faint};">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur : <a href="${appUrl}/app" style="color:${BRAND.green};">${appUrl}/app</a></p>
       <p style="margin:18px 0 0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Merci de faire grandir votre vitrine avec MaTable.ci.</p>
     `,
   });

@@ -538,10 +538,7 @@ export default function App() {
                         ? <CustomerAccount user={customerUser} onLogout={logoutCustomer} onBack={() => navigate('/')} onUserUpdated={setCustomerUser} />
                         : renderCustomerAuth('login')
                       } />
-                      <Route path="/app/*" element={normalizedPath === 'app' && !hasMerchantAccessToken && !hasAdminShopSession
-                        ? renderCustomerAuth('register')
-                        : <MerchantDashboard openRegistration={normalizedPath === 'app/creer-boutique'} onBackToDirectory={() => navigate('/')} onCustomerLogin={() => navigate('/connexion')} onOpenStorefront={(slug) => navigate(`/${slug}`)} />
-                      } />
+                      <Route path="/app/*" element={<MerchantDashboard openRegistration={normalizedPath === 'app/creer-boutique'} onBackToDirectory={() => navigate('/')} onCustomerLogin={() => navigate('/connexion')} onOpenStorefront={(slug) => navigate(`/${slug}`)} />} />
                       <Route path="/admin/*" element={<AdminDashboard />} />
                       <Route path="/:slug" element={<StorefrontRoute customerUser={customerUser} onCustomerAuthenticated={setCustomerUser} />} />
                       <Route path="*" element={<NotFoundPage />} />

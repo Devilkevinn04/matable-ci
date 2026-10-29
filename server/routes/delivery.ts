@@ -491,8 +491,8 @@ export function createDeliveryRouter({
           phone: session.driver.phone,
           country: 'CI',
         },
-        success_url: new URL(`/__preview/delivery-courier?payment_id=${encodeURIComponent(intent.id)}`, appUrl).toString(),
-        error_url: new URL(`/__preview/delivery-courier?payment_id=${encodeURIComponent(intent.id)}`, appUrl).toString(),
+        success_url: new URL(`/livreur?payment_id=${encodeURIComponent(intent.id)}`, appUrl).toString(),
+        error_url: new URL(`/livreur?payment_id=${encodeURIComponent(intent.id)}`, appUrl).toString(),
         metadata: { delivery_payment_id: intent.id, payment_type: 'delivery' },
       });
       await dbRun(`UPDATE delivery_driver_payment_intents

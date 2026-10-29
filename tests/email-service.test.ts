@@ -150,6 +150,10 @@ test('welcome email escapes the merchant shop name in its HTML body', async () =
     assert.doesNotMatch(requestBody.html, /<img[^>]*src=x/i);
     assert.equal((requestBody.html.match(/<img/gi) || []).length, 1);
     assert.match(requestBody.text, /<img src=x onerror=alert\(1\)> & Fils/);
+    assert.match(requestBody.text, /\/app\b/);
+    assert.doesNotMatch(requestBody.text, /\/connexion\b/);
+    assert.match(requestBody.html, /href="[^"]*\/app"/);
+    assert.doesNotMatch(requestBody.html, /\/connexion\b/);
   } finally {
     if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
     if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;
