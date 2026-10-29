@@ -14,6 +14,7 @@ interface Campaign {
   starts_at: string | null;
   ends_at: string | null;
   review_note: string | null;
+  metrics?: Record<string, number>;
 }
 
 interface CampaignResponse {
@@ -183,6 +184,14 @@ export const ProductOffersManager: React.FC<ProductOffersManagerProps> = ({ shop
               <p className="mt-1 text-xs text-slate-600">{statusLabels[campaign.status] || campaign.status} · {campaign.duration_days} jour(s)</p>
               {campaign.review_note && <p className="mt-1 text-xs text-slate-600">Note : {campaign.review_note}</p>}
               {campaign.starts_at && campaign.ends_at && <p className="mt-1 text-xs text-slate-500">{new Date(campaign.starts_at).toLocaleString('fr-FR')} – {new Date(campaign.ends_at).toLocaleString('fr-FR')}</p>}
+              {campaign.metrics && Object.values(campaign.metrics).some((value) => Number(value) > 0) && (
+                <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[#047857]">
+                  <span>{Number(campaign.metrics.impression || 0).toLocaleString('fr-FR')} impressions</span>
+                  <span>{Number(campaign.metrics.click || 0).toLocaleString('fr-FR')} clics</span>
+                  <span>{Number(campaign.metrics.shop_visit || 0).toLocaleString('fr-FR')} visites boutique</span>
+                  <span>{Number(campaign.metrics.contact_click || 0).toLocaleString('fr-FR')} contacts</span>
+                </p>
+              )}
             </div>
             {['pending_review', 'rejected', 'scheduled', 'active'].includes(campaign.status) && <button type="button" disabled={busy} onClick={() => void cancel(campaign.id)} className="min-h-10 rounded-full border border-slate-300 px-4 text-xs font-bold text-slate-700 disabled:opacity-50">Annuler</button>}
           </article>

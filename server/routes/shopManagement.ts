@@ -256,7 +256,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       ORDER BY views DESC, clicks DESC, p.id ASC
       LIMIT 10
     `, [shop.id, since]);
-    const [audienceRows, topPageRows, funnelRow, qrRow, deviceRows, coViewRows] = await Promise.all([
+    const [audienceRows, topPageRows, funnelRow, qrRow, deviceRows, coViewRows, campaignEventRows, campaignOrderRows, campaignWhatsappRows] = await Promise.all([
       dbAll<{ audience: string; events: number; sessions: number }>(`
         SELECT COALESCE(audience, 'unknown') AS audience, COUNT(*) AS events,
           COUNT(DISTINCT session_id) AS sessions
@@ -304,7 +304,82 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
         GROUP BY first.entity_id, second.entity_id, product_a.title, product_b.title
         ORDER BY sessions DESC LIMIT 10
       `, [shop.id, since, since]),
+      dbAll<{
+        campaign: string; visits: number; visitors: number; product_views: number;
+        product_clicks: number; cart_adds: number; checkouts: number; order_events: number;
+      }>(`
+        SELECT campaign,
+          COUNT(CASE WHEN event_type = 'page_view' THEN 1 END) AS visits,
+          COUNT(DISTINCT CASE WHEN event_type = 'page_view' THEN session_id END) AS visitors,
+          COUNT(CASE WHEN event_type = 'product_view' THEN 1 END) AS product_views,
+          COUNT(CASE WHEN event_type = 'product_click' THEN 1 END) AS product_clicks,
+          COUNT(DISTINCT CASE WHEN event_type = 'add_to_cart' THEN session_id END) AS cart_adds,
+          COUNT(DISTINCT CASE WHEN event_type = 'checkout_start' THEN session_id END) AS checkouts,
+          COUNT(DISTINCT CASE WHEN event_type = 'order_created' THEN session_id END) AS order_events
+        FROM analytics_events
+        WHERE shop_id = ? AND campaign IS NOT NULL AND created_at >= ?
+        GROUP BY campaign ORDER BY visits DESC, campaign ASC
+      `, [shop.id, since]),
+      dbAll<{ campaign: string; orders: number; sales: number }>(`
+        SELECT attribution_campaign AS campaign, COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
+        FROM orders
+        WHERE shop_id = ? AND attribution_campaign IS NOT NULL AND created_at >= ?
+          AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+        GROUP BY attribution_campaign
+      `, [shop.id, since]),
+      dbAll<{ campaign: string; whatsapp_clicks: number }>(`
+        SELECT orders.attribution_campaign AS campaign, COUNT(*) AS whatsapp_clicks
+        FROM orders
+        JOIN order_whatsapp_tracking ON order_whatsapp_tracking.order_id = orders.id
+        WHERE orders.shop_id = ? AND orders.attribution_campaign IS NOT NULL
+          AND order_whatsapp_tracking.clicked_at >= ?
+        GROUP BY orders.attribution_campaign
+      `, [shop.id, since]),
     ]);
+    const campaignTotals = new Map<string, {
+      campaign: string; visits: number; visitors: number; product_views: number;
+      product_clicks: number; cart_adds: number; checkouts: number; order_events: number;
+      orders: number; sales: number; whatsapp_clicks: number;
+    }>();
+    const ensureCampaign = (campaign: string) => {
+      const key = campaign || 'direct';
+      let entry = campaignTotals.get(key);
+      if (!entry) {
+        entry = {
+          campaign: key, visits: 0, visitors: 0, product_views: 0, product_clicks: 0,
+          cart_adds: 0, checkouts: 0, order_events: 0, orders: 0, sales: 0, whatsapp_clicks: 0,
+        };
+        campaignTotals.set(key, entry);
+      }
+      return entry;
+    };
+    for (const row of campaignEventRows) {
+      const entry = ensureCampaign(row.campaign);
+      entry.visits = Number(row.visits || 0);
+      entry.visitors = Number(row.visitors || 0);
+      entry.product_views = Number(row.product_views || 0);
+      entry.product_clicks = Number(row.product_clicks || 0);
+      entry.cart_adds = Number(row.cart_adds || 0);
+      entry.checkouts = Number(row.checkouts || 0);
+      entry.order_events = Number(row.order_events || 0);
+    }
+    for (const row of campaignOrderRows) {
+      const entry = ensureCampaign(row.campaign);
+      entry.orders = Number(row.orders || 0);
+      entry.sales = Number(row.sales || 0);
+    }
+    for (const row of campaignWhatsappRows) {
+      const entry = ensureCampaign(row.campaign);
+      entry.whatsapp_clicks = Number(row.whatsapp_clicks || 0);
+    }
+    const campaigns = Array.from(campaignTotals.values())
+      .map((entry) => ({
+        ...entry,
+        conversion_rate: entry.visitors
+          ? Number(((entry.orders / entry.visitors) * 100).toFixed(1))
+          : 0,
+      }))
+      .sort((left, right) => right.visits - left.visits || right.orders - left.orders || left.campaign.localeCompare(right.campaign));
     const orderRows = await dbAll<Record<string, unknown>>('SELECT * FROM orders WHERE shop_id = ? AND created_at >= ? AND status NOT IN (?, ?)', [
       shop.id, since, 'cancelled', 'expired',
     ]);
@@ -398,6 +473,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
         title_b: row.title_b || null,
         sessions: Number(row.sessions || 0),
       })),
+      campaigns,
     });
   });
 

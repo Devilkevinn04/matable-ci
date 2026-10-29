@@ -230,6 +230,7 @@ test('merchant analytics scope new sections to the shop', async () => {
     body: JSON.stringify({
       events: [
         { event_type: 'page_view', session_id: sessionId, path: `/${registrationBody.shop.slug}`, shop_id: shopId, audience: 'customer', device: 'tablet', campaign: 'qr', locale: 'fr-ci' },
+        { event_type: 'page_view', session_id: 'merchant-analytics-session-promo', path: `/${registrationBody.shop.slug}`, shop_id: shopId, audience: 'customer', device: 'mobile', campaign: 'promo' },
         { event_type: 'add_to_cart', session_id: sessionId, path: '/product/12', shop_id: shopId, audience: 'customer', device: 'tablet', entity_type: 'product', entity_id: 12, metadata: { cart_size: 1 } },
         { event_type: 'checkout_start', session_id: sessionId, path: `/${registrationBody.shop.slug}`, shop_id: shopId, audience: 'customer', device: 'tablet', metadata: { cart_size: 1, cart_value: 5000 } },
       ],
@@ -246,6 +247,11 @@ test('merchant analytics scope new sections to the shop', async () => {
     devices: Array<{ device: string }>;
     funnel: Array<{ step: string; count: number }>;
     co_viewed_products: unknown[];
+    campaigns: Array<{
+      campaign: string; visits: number; visitors: number; product_views: number;
+      product_clicks: number; cart_adds: number; orders: number; sales: number;
+      whatsapp_clicks: number; conversion_rate: number;
+    }>;
   };
   assert.equal(analytics.summary.qr_scans, 1);
   assert.equal(analytics.summary.qr_visitors, 1);
@@ -254,4 +260,12 @@ test('merchant analytics scope new sections to the shop', async () => {
   assert.ok(analytics.devices.some((row) => row.device === 'tablet'));
   assert.equal(analytics.funnel.find((step) => step.step === 'panier')?.count, 1);
   assert.ok(Array.isArray(analytics.co_viewed_products));
+  const qrCampaign = analytics.campaigns.find((row) => row.campaign === 'qr');
+  assert.equal(qrCampaign?.visits, 1);
+  assert.equal(qrCampaign?.visitors, 1);
+  const promoCampaign = analytics.campaigns.find((row) => row.campaign === 'promo');
+  assert.equal(promoCampaign?.visits, 1);
+  assert.equal(promoCampaign?.visitors, 1);
+  assert.equal(promoCampaign?.orders, 0);
+  assert.equal(promoCampaign?.conversion_rate, 0);
 });

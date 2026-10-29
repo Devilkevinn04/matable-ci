@@ -412,6 +412,12 @@ test('advertising beta enforces roles, merchant ownership, moderation, consented
 
   const updatedCampaigns = await api<{ campaigns: Array<{ id: string; metrics: Record<string, number> }> }>('/api/admin/advertising/campaigns', { headers: { Cookie: admin } });
   assert.equal(updatedCampaigns.payload.campaigns.find((campaign) => campaign.id === publicCampaign.id)?.metrics.impression, 2);
+  const merchantCampaigns = await api<{ campaigns: Array<{ id: string; metrics: Record<string, number> }> }>(
+    `/api/shops/${firstShop.shopId}/advertising-campaigns`,
+    { headers: { Cookie: firstShop.cookie } },
+  );
+  assert.equal(merchantCampaigns.response.status, 200);
+  assert.equal(merchantCampaigns.payload.campaigns.find((campaign) => campaign.id === publicCampaign.id)?.metrics.impression, 2);
 
   const suspended = await api(`/api/admin/advertising/campaigns/${publicCampaign.id}/review`, {
     method: 'POST',

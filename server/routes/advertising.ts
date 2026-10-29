@@ -342,10 +342,17 @@ export function createAdvertisingRouters({
     const shopId = Number(req.params.id);
     const shop = await getShopFromDatabase(shopId);
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-    const [beta, campaigns] = await Promise.all([
+    const [beta, campaigns, campaignEvents] = await Promise.all([
       getBetaSettings(),
       dbAll<CampaignRow>(
         `SELECT * FROM advertising_campaigns WHERE shop_id = ? ORDER BY created_at DESC`,
+        [shopId],
+      ),
+      dbAll<{ campaign_id: string; event_type: CampaignEventType; count: number }>(
+        `SELECT campaign_id, event_type, COUNT(*) AS count
+          FROM advertising_campaign_events
+          WHERE campaign_id IN (SELECT id FROM advertising_campaigns WHERE shop_id = ?)
+          GROUP BY campaign_id, event_type`,
         [shopId],
       ),
     ]);
@@ -377,7 +384,20 @@ export function createAdvertisingRouters({
       }
     }
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ beta: serializeBeta(beta), campaigns, eligibility: formatReasons });
+    const metricsByCampaign = new Map<string, Record<string, number>>();
+    for (const event of campaignEvents) {
+      const metrics = metricsByCampaign.get(event.campaign_id) || {};
+      metrics[event.event_type] = Number(event.count || 0);
+      metricsByCampaign.set(event.campaign_id, metrics);
+    }
+    return res.json({
+      beta: serializeBeta(beta),
+      campaigns: campaigns.map((campaign) => ({
+        ...campaign,
+        metrics: metricsByCampaign.get(String(campaign.id)) || {},
+      })),
+      eligibility: formatReasons,
+    });
   });
 
   merchantRouter.post('/:id/advertising-campaigns', rateLimitPublicRequest(20), requireMerchantOwnShop, async (req, res) => {

@@ -58,6 +58,34 @@ export interface AnalyticsReport {
     title_b: string | null;
     sessions: number;
   }>;
+  campaigns: Array<{
+    campaign: string;
+    visits: number;
+    visitors: number;
+    product_views: number;
+    product_clicks: number;
+    cart_adds: number;
+    checkouts: number;
+    order_events: number;
+    orders: number;
+    sales: number;
+    whatsapp_clicks: number;
+    conversion_rate: number;
+  }>;
+  advertising_campaigns: Array<{
+    campaign_id: string;
+    shop_id: number;
+    shop_name: string | null;
+    kind: string;
+    status: string;
+    headline: string;
+    starts_at: string | null;
+    ends_at: string | null;
+    impressions: number;
+    clicks: number;
+    shop_visits: number;
+    contact_clicks: number;
+  }>;
 }
 
 function parseArgs(argv: string[]): ReportOptions {
@@ -83,7 +111,7 @@ function share(part: number, total: number): number {
 
 export async function buildAnalyticsReport(days: number): Promise<AnalyticsReport> {
   const since = new Date(Date.now() - days * 86400000).toISOString();
-  const [traffic, sites, audiences, pages, logins, signups, devices, funnel, qrByShop, productClicks, coViewed, commerce] = await Promise.all([
+  const [traffic, sites, audiences, pages, logins, signups, devices, funnel, qrByShop, productClicks, coViewed, commerce, campaignEvents, campaignOrders, campaignWhatsapp, advertisingCampaigns] = await Promise.all([
     dbGet<{ page_views: number; visitors: number; sessions: number }>(`
       SELECT COUNT(*) AS page_views, COUNT(DISTINCT session_id) AS visitors,
         COUNT(DISTINCT session_id) AS sessions
@@ -171,6 +199,57 @@ export async function buildAnalyticsReport(days: number): Promise<AnalyticsRepor
       SELECT COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
       FROM orders WHERE created_at >= ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
     `, [since]),
+    dbAll<{
+      campaign: string; visits: number; visitors: number; product_views: number;
+      product_clicks: number; cart_adds: number; checkouts: number; order_events: number;
+    }>(`
+      SELECT campaign,
+        COUNT(CASE WHEN event_type = 'page_view' THEN 1 END) AS visits,
+        COUNT(DISTINCT CASE WHEN event_type = 'page_view' THEN session_id END) AS visitors,
+        COUNT(CASE WHEN event_type = 'product_view' THEN 1 END) AS product_views,
+        COUNT(CASE WHEN event_type = 'product_click' THEN 1 END) AS product_clicks,
+        COUNT(DISTINCT CASE WHEN event_type = 'add_to_cart' THEN session_id END) AS cart_adds,
+        COUNT(DISTINCT CASE WHEN event_type = 'checkout_start' THEN session_id END) AS checkouts,
+        COUNT(DISTINCT CASE WHEN event_type = 'order_created' THEN session_id END) AS order_events
+      FROM analytics_events
+      WHERE campaign IS NOT NULL AND created_at >= ?
+      GROUP BY campaign ORDER BY visits DESC, campaign ASC LIMIT 100
+    `, [since]),
+    dbAll<{ campaign: string; orders: number; sales: number }>(`
+      SELECT attribution_campaign AS campaign, COUNT(*) AS orders,
+        COALESCE(SUM(total_amount), 0) AS sales
+      FROM orders
+      WHERE attribution_campaign IS NOT NULL AND created_at >= ?
+        AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+      GROUP BY attribution_campaign
+    `, [since]),
+    dbAll<{ campaign: string; whatsapp_clicks: number }>(`
+      SELECT orders.attribution_campaign AS campaign, COUNT(*) AS whatsapp_clicks
+      FROM orders
+      JOIN order_whatsapp_tracking ON order_whatsapp_tracking.order_id = orders.id
+      WHERE orders.attribution_campaign IS NOT NULL AND order_whatsapp_tracking.clicked_at >= ?
+      GROUP BY orders.attribution_campaign
+    `, [since]),
+    dbAll<{
+      campaign_id: string; shop_id: number; shop_name: string | null; kind: string;
+      status: string; headline: string; starts_at: string | null; ends_at: string | null;
+      impressions: number; clicks: number; shop_visits: number; contact_clicks: number;
+    }>(`
+      SELECT campaigns.id AS campaign_id, campaigns.shop_id, shops.name AS shop_name,
+        campaigns.kind, campaigns.status, campaigns.headline, campaigns.starts_at, campaigns.ends_at,
+        COALESCE(SUM(CASE WHEN events.event_type = 'impression' THEN 1 ELSE 0 END), 0) AS impressions,
+        COALESCE(SUM(CASE WHEN events.event_type = 'click' THEN 1 ELSE 0 END), 0) AS clicks,
+        COALESCE(SUM(CASE WHEN events.event_type = 'shop_visit' THEN 1 ELSE 0 END), 0) AS shop_visits,
+        COALESCE(SUM(CASE WHEN events.event_type = 'contact_click' THEN 1 ELSE 0 END), 0) AS contact_clicks
+      FROM advertising_campaigns campaigns
+      LEFT JOIN shops ON shops.id = campaigns.shop_id
+      LEFT JOIN advertising_campaign_events events
+        ON events.campaign_id = campaigns.id AND events.created_at >= ?
+      WHERE campaigns.created_at >= ?
+      GROUP BY campaigns.id, campaigns.shop_id, shops.name, campaigns.kind, campaigns.status,
+        campaigns.headline, campaigns.starts_at, campaigns.ends_at, campaigns.created_at
+      ORDER BY campaigns.created_at DESC LIMIT 100
+    `, [since, since]),
   ]);
 
   const steps = [
@@ -180,6 +259,47 @@ export async function buildAnalyticsReport(days: number): Promise<AnalyticsRepor
     { step: 'commande_commencee', count: Number(funnel?.checkouts || 0) },
     { step: 'commande_creee', count: Number(funnel?.orders || 0) },
   ];
+
+  const campaignTotals = new Map<string, {
+    campaign: string; visits: number; visitors: number; product_views: number;
+    product_clicks: number; cart_adds: number; checkouts: number; order_events: number;
+    orders: number; sales: number; whatsapp_clicks: number;
+  }>();
+  const ensureCampaign = (campaign: string) => {
+    let entry = campaignTotals.get(campaign);
+    if (!entry) {
+      entry = {
+        campaign, visits: 0, visitors: 0, product_views: 0, product_clicks: 0,
+        cart_adds: 0, checkouts: 0, order_events: 0, orders: 0, sales: 0, whatsapp_clicks: 0,
+      };
+      campaignTotals.set(campaign, entry);
+    }
+    return entry;
+  };
+  for (const row of campaignEvents) {
+    const entry = ensureCampaign(row.campaign);
+    entry.visits = Number(row.visits || 0);
+    entry.visitors = Number(row.visitors || 0);
+    entry.product_views = Number(row.product_views || 0);
+    entry.product_clicks = Number(row.product_clicks || 0);
+    entry.cart_adds = Number(row.cart_adds || 0);
+    entry.checkouts = Number(row.checkouts || 0);
+    entry.order_events = Number(row.order_events || 0);
+  }
+  for (const row of campaignOrders) {
+    const entry = ensureCampaign(row.campaign);
+    entry.orders = Number(row.orders || 0);
+    entry.sales = Number(row.sales || 0);
+  }
+  for (const row of campaignWhatsapp) {
+    ensureCampaign(row.campaign).whatsapp_clicks = Number(row.whatsapp_clicks || 0);
+  }
+  const campaigns = Array.from(campaignTotals.values())
+    .map((entry) => ({
+      ...entry,
+      conversion_rate: entry.visitors ? Number(((entry.orders / entry.visitors) * 100).toFixed(1)) : 0,
+    }))
+    .sort((left, right) => right.visits - left.visits || right.orders - left.orders || left.campaign.localeCompare(right.campaign));
 
   return {
     generated_at: new Date().toISOString(),
@@ -249,6 +369,21 @@ export async function buildAnalyticsReport(days: number): Promise<AnalyticsRepor
       title_b: row.title_b || null,
       sessions: Number(row.sessions || 0),
     })),
+    campaigns,
+    advertising_campaigns: advertisingCampaigns.map((row) => ({
+      campaign_id: String(row.campaign_id),
+      shop_id: Number(row.shop_id),
+      shop_name: row.shop_name || null,
+      kind: String(row.kind),
+      status: String(row.status),
+      headline: String(row.headline),
+      starts_at: row.starts_at || null,
+      ends_at: row.ends_at || null,
+      impressions: Number(row.impressions || 0),
+      clicks: Number(row.clicks || 0),
+      shop_visits: Number(row.shop_visits || 0),
+      contact_clicks: Number(row.contact_clicks || 0),
+    })),
   };
 }
 
@@ -266,6 +401,18 @@ function toCsv(report: AnalyticsReport): string {
   for (const row of report.qr_scans.by_shop) rows.push(['qr_scan', String(row.shop_id), row.shop_name || '', String(row.scans), String(row.visitors), '']);
   for (const row of report.product_clicks) rows.push(['product_click', String(row.product_id), row.title || '', String(row.clicks), String(row.views), row.shop_id == null ? '' : String(row.shop_id)]);
   for (const row of report.co_viewed_products) rows.push(['co_view', `${row.product_a}+${row.product_b}`, `${row.title_a || ''} + ${row.title_b || ''}`, String(row.sessions), '', '']);
+  for (const row of report.campaigns) {
+    rows.push([
+      'campaign', row.campaign, row.campaign, String(row.visits), String(row.visitors),
+      `orders=${row.orders};sales=${row.sales};cart_adds=${row.cart_adds};checkouts=${row.checkouts};product_views=${row.product_views};product_clicks=${row.product_clicks};whatsapp_clicks=${row.whatsapp_clicks};conversion_rate=${row.conversion_rate}`,
+    ]);
+  }
+  for (const row of report.advertising_campaigns) {
+    rows.push([
+      'advertising_campaign', row.campaign_id, row.headline, String(row.impressions), String(row.clicks),
+      `shop=${row.shop_id};shop_name=${row.shop_name || ''};kind=${row.kind};status=${row.status};shop_visits=${row.shop_visits};contact_clicks=${row.contact_clicks}`,
+    ]);
+  }
   return rows.map((row) => row.map((cell) => {
     const value = String(cell ?? '');
     return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;

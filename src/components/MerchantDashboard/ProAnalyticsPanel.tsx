@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Eye, MousePointer2, Package, QrCode, RefreshCw, Route, ShoppingBag, Users, Wallet } from 'lucide-react';
+import { BarChart3, Eye, Megaphone, MousePointer2, Package, QrCode, RefreshCw, Route, ShoppingBag, Users, Wallet } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Shop } from '../../types';
 import { getSubscriptionAnalyticsDayLimit } from '../../utils/subscriptionFeatures';
@@ -32,6 +32,21 @@ type PageAnalytics = {
   visitors: number;
 };
 
+type CampaignAnalytics = {
+  campaign: string;
+  visits: number;
+  visitors: number;
+  product_views: number;
+  product_clicks: number;
+  cart_adds: number;
+  checkouts: number;
+  order_events: number;
+  orders: number;
+  sales: number;
+  whatsapp_clicks: number;
+  conversion_rate: number;
+};
+
 type ProAnalytics = {
   days: number;
   summary: {
@@ -56,6 +71,7 @@ type ProAnalytics = {
     title_b: string | null;
     sessions: number;
   }>;
+  campaigns?: CampaignAnalytics[];
 };
 
 const funnelLabels: Record<string, string> = {
@@ -65,6 +81,14 @@ const funnelLabels: Record<string, string> = {
   commande_commencee: 'Commande commencée',
   commande_creee: 'Commande envoyée',
 };
+
+const campaignLabels: Record<string, string> = {
+  qr: 'QR code',
+};
+
+function campaignLabel(campaign: string) {
+  return campaignLabels[campaign] || campaign;
+}
 
 const numberFormat = new Intl.NumberFormat('fr-FR');
 const currencyFormat = new Intl.NumberFormat('fr-FR');
@@ -429,6 +453,59 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
             </div>
           </div>
         </div>
+      </section>
+
+      <section aria-labelledby="merchant-campaigns-title" className="overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white">
+        <div className="border-b border-[#eee8dc] px-4 py-4 sm:px-5">
+          <div className="flex items-center gap-2"><Megaphone className="h-4 w-4 text-emerald-800" aria-hidden="true" /><h3 id="merchant-campaigns-title" className="font-extrabold text-[#183b31]">Campagnes et partages</h3></div>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Résultats des liens contenant <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">?src=campagne</code> et des scans de votre QR code. Les commandes sont rattachées lorsque le client a consenti au suivi.</p>
+        </div>
+        {(analytics?.campaigns || []).length ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-[760px] w-full text-left text-xs">
+              <thead className="bg-[#faf9f5] text-[10px] font-black uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th scope="col" className="px-4 py-3 sm:px-5">Campagne</th>
+                  <th scope="col" className="px-3 py-3 text-right">Visiteurs</th>
+                  <th scope="col" className="px-3 py-3 text-right">Articles</th>
+                  <th scope="col" className="px-3 py-3 text-right">Panier</th>
+                  <th scope="col" className="px-3 py-3 text-right">Commandes</th>
+                  <th scope="col" className="px-3 py-3 text-right">Ventes</th>
+                  <th scope="col" className="px-3 py-3 text-right">WhatsApp</th>
+                  <th scope="col" className="px-4 py-3 text-right sm:px-5">Conversion</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#f0eee8]">
+                {(analytics?.campaigns || []).map((campaign) => (
+                  <tr key={campaign.campaign} className="align-top">
+                    <th scope="row" className="px-4 py-3 font-bold text-[#183b31] sm:px-5">
+                      <span className="block">{campaignLabel(campaign.campaign)}</span>
+                      <code className="mt-0.5 block text-[10px] font-medium text-slate-500">src={campaign.campaign}</code>
+                    </th>
+                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">
+                      <span className="block font-bold text-[#183b31]">{numberFormat.format(campaign.visitors)}</span>
+                      <span className="text-[10px] text-slate-500">{numberFormat.format(campaign.visits)} vues</span>
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">
+                      <span className="block font-bold text-[#183b31]">{numberFormat.format(campaign.product_views)}</span>
+                      <span className="text-[10px] text-slate-500">{numberFormat.format(campaign.product_clicks)} clics</span>
+                    </td>
+                    <td className="px-3 py-3 text-right font-bold tabular-nums text-[#183b31]">{numberFormat.format(campaign.cart_adds)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">
+                      <span className="block font-bold text-[#183b31]">{numberFormat.format(campaign.orders)}</span>
+                      <span className="text-[10px] text-slate-500">{numberFormat.format(campaign.checkouts)} départs</span>
+                    </td>
+                    <td className="px-3 py-3 text-right font-bold tabular-nums text-[#183b31]">{formatCurrency(campaign.sales)}</td>
+                    <td className="px-3 py-3 text-right font-bold tabular-nums text-[#183b31]">{numberFormat.format(campaign.whatsapp_clicks)}</td>
+                    <td className="px-4 py-3 text-right font-black tabular-nums text-[#087c5b] sm:px-5">{campaign.conversion_rate.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="px-4 py-8 text-center text-sm text-slate-500">Aucune campagne mesurée sur cette période. Partagez un lien avec <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">?src=</code> ou utilisez votre QR code pour suivre les retombées.</p>
+        )}
       </section>
 
       <div className="flex items-start gap-3 rounded-2xl border border-[#eadfce] bg-[#fffaf2] p-4 text-xs leading-5 text-[#6b6255]">
