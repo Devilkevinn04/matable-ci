@@ -21,6 +21,101 @@ const RECEIPT_DATE_FORMATTER = new Intl.DateTimeFormat('fr-FR', {
 });
 const RECEIPT_AMOUNT_FORMATTER = new Intl.NumberFormat('fr-FR');
 
+const BRAND = {
+  green: '#087F62',
+  deep: '#103E32',
+  accent: '#F97316',
+  cream: '#FAF8F2',
+  line: '#E8E2D7',
+  muted: '#587067',
+  body: '#243029',
+  faint: '#8A948E',
+} as const;
+
+const EMAIL_FONT = 'Arial, Helvetica, sans-serif';
+
+function resolveAppUrl(explicit?: string): string {
+  return (explicit || process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+}
+
+function renderEmailDetailRows(rows: Array<[string, string]>): string {
+  return rows
+    .map(([label, valueHtml], index) => {
+      const separator = index === 0 ? '0' : `1px solid #EFEAE0`;
+      return `<tr>
+        <td style="padding:11px 0;border-top:${separator};font-family:${EMAIL_FONT};font-size:12px;line-height:1.5;color:${BRAND.muted};vertical-align:top;">${escapeHtml(label)}</td>
+        <td align="right" style="padding:11px 0 11px 14px;border-top:${separator};font-family:${EMAIL_FONT};font-size:13px;font-weight:700;line-height:1.5;color:#1B2620;vertical-align:top;">${valueHtml}</td>
+      </tr>`;
+    })
+    .join('');
+}
+
+/**
+ * Coque commune des emails transactionnels : bandeau vert, carte blanche,
+ * pied de page de marque. Mise en page en tables pour la compatibilité clients mail.
+ */
+function renderBrandedEmail(params: {
+  title: string;
+  preheader: string;
+  contentHtml: string;
+  appUrl: string;
+}): string {
+  const logoUrl = `${params.appUrl}/brand-kit/icon-192.png`;
+  return `<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(params.title)}</title>
+</head>
+<body style="margin:0;padding:0;background:${BRAND.cream};">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(params.preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background:${BRAND.cream};">
+  <tr>
+    <td align="center" style="padding:28px 14px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;background:#FFFFFF;border:1px solid ${BRAND.line};border-radius:20px;overflow:hidden;">
+        <tr>
+          <td style="background:${BRAND.green};padding:20px 26px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="vertical-align:middle;">
+                  <img src="${escapeHtml(logoUrl)}" width="34" height="34" alt="MaTable.ci" style="display:block;width:34px;height:34px;border:0;border-radius:9px;" />
+                </td>
+                <td style="vertical-align:middle;padding-left:12px;font-family:${EMAIL_FONT};">
+                  <div style="font-size:17px;font-weight:800;line-height:1.1;letter-spacing:-0.2px;color:#FFFFFF;">MaTable<span style="color:${BRAND.accent};">.ci</span></div>
+                  <div style="margin-top:3px;font-size:9px;font-weight:700;line-height:1.2;letter-spacing:1.6px;text-transform:uppercase;color:#B9DCCF;">Vos commerces, ici.</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:26px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">${params.contentHtml}</td>
+        </tr>
+        <tr>
+          <td style="padding:16px 26px 22px;border-top:1px solid #EFEAE0;font-family:${EMAIL_FONT};">
+            <p style="margin:0;font-size:11px;line-height:1.6;color:${BRAND.faint};">Cet email vous a été envoyé automatiquement par MaTable.ci. Merci de ne pas y répondre directement.</p>
+            <p style="margin:6px 0 0;font-size:11px;line-height:1.6;"><a href="${escapeHtml(params.appUrl)}" style="color:${BRAND.green};font-weight:700;text-decoration:none;">matable.ci</a><span style="color:#C6CDC8;"> · </span><span style="color:${BRAND.faint};">Vos commerces, ici.</span></p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+function renderEmailButton(label: string, href: string): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0 4px;">
+    <tr>
+      <td align="center" style="background:${BRAND.green};border-radius:12px;">
+        <a href="${escapeHtml(href)}" style="display:inline-block;padding:13px 24px;font-family:${EMAIL_FONT};font-size:14px;font-weight:700;line-height:1;color:#FFFFFF;text-decoration:none;border-radius:12px;">${escapeHtml(label)}</a>
+      </td>
+    </tr>
+  </table>`;
+}
+
 export function getResendEmailConfig(env: NodeJS.ProcessEnv = process.env): ResendEmailConfig | null {
   const apiKey = String(env.RESEND_API_KEY || '').trim();
   const from = String(env.RESEND_FROM_EMAIL || env.EMAIL_FROM || '').trim();
@@ -82,19 +177,23 @@ export async function sendMerchantWelcomeEmail(
   },
   fetchImplementation: typeof fetch = fetch,
 ): Promise<{ sent: boolean; id?: string; error?: string }> {
-  const appUrl = (params.appUrl || process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const appUrl = resolveAppUrl(params.appUrl);
   const subject = `Votre boutique MaTable.ci a bien été créée`;
   const text = `Bonjour,\n\nVotre boutique ${params.shopName} a bien été créée sur MaTable.ci.\n\nVous pouvez vous connecter ici : ${appUrl}/connexion\n\nMerci de faire grandir votre vitrine avec MaTable.ci.`;
-  const html = `
-    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937;">
-      <h2 style="margin-bottom: 12px; color: #0f4d3d;">Bienvenue sur MaTable.ci</h2>
-      <p>Bonjour,</p>
-      <p>Votre boutique <strong>${escapeHtml(params.shopName)}</strong> a bien été créée sur MaTable.ci.</p>
-      <p>Vous pouvez accéder à votre espace de gestion depuis le lien suivant :</p>
-      <p><a href="${appUrl}/connexion" style="color: #0f4d3d;">Se connecter à mon compte</a></p>
-      <p>Merci de faire grandir votre vitrine avec MaTable.ci.</p>
-    </div>
-  `;
+  const html = renderBrandedEmail({
+    title: 'Bienvenue sur MaTable.ci',
+    preheader: `Votre boutique ${params.shopName} est prête sur MaTable.ci.`,
+    appUrl,
+    contentHtml: `
+      <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">Bienvenue sur MaTable.ci</h1>
+      <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Bonjour,</p>
+      <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Votre boutique <strong style="color:${BRAND.deep};">${escapeHtml(params.shopName)}</strong> a bien été créée sur MaTable.ci.</p>
+      <p style="margin:0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Gérez votre catalogue, vos commandes et votre vitrine depuis votre espace de gestion.</p>
+      ${renderEmailButton('Accéder à mon espace', `${appUrl}/connexion`)}
+      <p style="margin:14px 0 0;font-family:${EMAIL_FONT};font-size:11px;line-height:1.6;color:${BRAND.faint};">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur : <a href="${appUrl}/connexion" style="color:${BRAND.green};">${appUrl}/connexion</a></p>
+      <p style="margin:18px 0 0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Merci de faire grandir votre vitrine avec MaTable.ci.</p>
+    `,
+  });
 
   return sendTransactionalEmail({
     to: params.ownerEmail,
@@ -115,6 +214,7 @@ export async function sendMerchantSubscriptionReceiptEmail(
     amount: number;
     currency: string;
     paidAt: string;
+    appUrl?: string;
   },
   fetchImplementation: typeof fetch = fetch,
 ): Promise<{ sent: boolean; id?: string; error?: string }> {
@@ -133,20 +233,37 @@ export async function sendMerchantSubscriptionReceiptEmail(
     `Référence de paiement : ${params.providerReference}`,
     `Numéro de reçu : ${receiptNumber}`,
   ].join('\n');
-  const html = `
-    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937;">
-      <h2 style="margin-bottom: 12px; color: #0f4d3d;">Reçu de paiement MaTable.ci</h2>
-      <p>Bonjour,</p>
-      <p>Votre paiement pour la boutique <strong>${escapeHtml(params.shopName)}</strong> a été confirmé.</p>
-      <table style="border-collapse: collapse; width: 100%;">
-        <tr><th align="left">Formule</th><td>${escapeHtml(params.tierLabel)} (${termLabel})</td></tr>
-        <tr><th align="left">Montant</th><td>${escapeHtml(amount)} ${escapeHtml(params.currency)}</td></tr>
-        <tr><th align="left">Date</th><td>${escapeHtml(paidDate)} (heure de Côte d’Ivoire)</td></tr>
-        <tr><th align="left">Référence de paiement</th><td>${escapeHtml(params.providerReference)}</td></tr>
-        <tr><th align="left">Numéro de reçu</th><td>${escapeHtml(receiptNumber)}</td></tr>
+  const html = renderBrandedEmail({
+    title: `Reçu de paiement MaTable.ci — ${receiptNumber}`,
+    preheader: `Paiement confirmé : ${amount} ${params.currency} pour ${params.shopName}.`,
+    appUrl: resolveAppUrl(params.appUrl),
+    contentHtml: `
+      <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">Reçu de paiement</h1>
+      <p style="margin:0 0 18px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Bonjour, le paiement de la boutique <strong style="color:${BRAND.deep};">${escapeHtml(params.shopName)}</strong> a été confirmé.</p>
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background:#F4F8F5;border:1px solid #DBE9E1;border-radius:16px;">
+        <tr>
+          <td style="padding:18px 20px;font-family:${EMAIL_FONT};">
+            <p style="margin:0;font-size:10px;font-weight:800;line-height:1.4;letter-spacing:1.2px;text-transform:uppercase;color:#0F6B54;">Montant réglé</p>
+            <p style="margin:8px 0 0;font-size:30px;font-weight:800;line-height:1.1;color:${BRAND.deep};">${escapeHtml(amount)} <span style="font-size:15px;font-weight:700;color:${BRAND.muted};">${escapeHtml(params.currency)}</span></p>
+            <p style="margin:8px 0 0;font-size:12px;line-height:1.5;color:${BRAND.muted};">Formule ${escapeHtml(params.tierLabel)} · engagement ${termLabel}</p>
+          </td>
+        </tr>
       </table>
-    </div>
-  `;
+
+      <p style="margin:22px 0 4px;font-family:${EMAIL_FONT};font-size:10px;font-weight:800;line-height:1.4;letter-spacing:1.4px;text-transform:uppercase;color:${BRAND.faint};">Détails du paiement</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
+        ${renderEmailDetailRows([
+          ['Formule', `${escapeHtml(params.tierLabel)} · ${termLabel}`],
+          ['Date', `${escapeHtml(paidDate)} <span style="font-weight:400;color:${BRAND.muted};">(heure de Côte d’Ivoire)</span>`],
+          ['Référence de paiement', escapeHtml(params.providerReference)],
+          ['Numéro de reçu', `<span style="font-family:'Courier New',Courier,monospace;font-size:12px;">${escapeHtml(receiptNumber)}</span>`],
+        ])}
+      </table>
+
+      <p style="margin:18px 0 0;font-family:${EMAIL_FONT};font-size:11px;line-height:1.6;color:${BRAND.faint};">Conservez ce reçu : il atteste du règlement de votre abonnement MaTable.ci.</p>
+    `,
+  });
 
   return sendTransactionalEmail({ to: params.ownerEmail, subject, html, text }, fetchImplementation);
 }

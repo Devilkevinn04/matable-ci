@@ -778,7 +778,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             ) : isShopPublished ? (
               <button
                 onClick={() => onOpenStorefront(currentShop.slug)}
-                className="flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#1D6B57] px-3 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-[#047857] sm:text-xs md:flex-none"
+                className="flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#087F62] px-3 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-[#047857] sm:text-xs md:flex-none"
               >
                 <span className="truncate">Voir ma vitrine</span>
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" />
@@ -791,7 +791,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <button
                 type="button"
                 onClick={() => void handlePublicationStatusChange('active')}
-                className="flex min-h-10 min-w-0 flex-1 items-center justify-center rounded-xl bg-[#1D6B57] px-3 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-[#047857] sm:text-xs md:flex-none"
+                className="flex min-h-10 min-w-0 flex-1 items-center justify-center rounded-xl bg-[#087F62] px-3 py-2 text-center text-[11px] font-bold text-white shadow-2xs transition-colors hover:bg-[#047857] sm:text-xs md:flex-none"
               >
                 <span className="truncate">Publier ma boutique</span>
               </button>
@@ -842,11 +842,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           </form>
           <div className="flex flex-col gap-4 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1D6B57]">Vue d’ensemble</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#087F62]">Vue d’ensemble</p>
               <h2 className="mt-1 text-2xl font-black tracking-tight text-[#047857]">Bonjour, {currentShop.name}</h2>
               <p className="mt-1 text-sm text-slate-600">Voici l’activité de votre boutique aujourd’hui.</p>
             </div>
-            <button type="button" onClick={() => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); }} disabled={dashboardCatalogFull} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1D6B57] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />{dashboardCatalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</button>
+            <button type="button" onClick={() => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); }} disabled={dashboardCatalogFull} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#087F62] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />{dashboardCatalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</button>
           </div>
           {currentShop.theme_config?.event_mode_enabled && (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950">
@@ -1076,10 +1076,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             <section className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {[
-                  { label: 'Commandes', value: orders.length, hint: `${actionableOrderCount} à traiter`, tone: 'text-[#b94c24]', icon: ShoppingBag },
-                  { label: 'Montant des commandes', value: formatFCFA(orderValue), hint: 'Paiements non suivis par MaTable.ci', tone: 'text-[#1D6B57]', icon: DollarSign },
-                  { label: 'Clients', value: uniqueCustomerCount, hint: 'Clients ayant commandé', tone: 'text-[#1D6B57]', icon: UserPlus },
-                  { label: 'Articles', value: `${products.length} / ${Number.isFinite(dashboardProductLimit) ? dashboardProductLimit : '∞'}`, hint: 'Dans votre catalogue', tone: 'text-[#1D6B57]', icon: Package },
+                  { label: 'Commandes', value: orders.length, hint: `${actionableOrderCount} à traiter`, tone: 'text-[#C2410C]', icon: ShoppingBag },
+                  { label: 'Montant des commandes', value: formatFCFA(orderValue), hint: 'Paiements non suivis par MaTable.ci', tone: 'text-[#087F62]', icon: DollarSign },
+                  { label: 'Clients', value: uniqueCustomerCount, hint: 'Clients ayant commandé', tone: 'text-[#087F62]', icon: UserPlus },
+                  { label: 'Articles', value: `${products.length} / ${Number.isFinite(dashboardProductLimit) ? dashboardProductLimit : '∞'}`, hint: 'Dans votre catalogue', tone: 'text-[#087F62]', icon: Package },
                 ].map((metric) => <div key={metric.label} className="flex min-h-[104px] items-start gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4"><span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f7f4ee] ${metric.tone}`}><metric.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="text-xs font-semibold text-slate-500">{metric.label}</p><strong className="mt-1 block truncate text-xl font-black text-[#292d2a]">{metric.value}</strong><p className="mt-1 truncate text-[11px] text-slate-500">{metric.hint}</p></div></div>)}
               </div>
               <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,0.9fr)]">

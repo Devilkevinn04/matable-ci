@@ -81,7 +81,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                       )}
                     </div>
                     <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#e8e5dc]" role="progressbar" aria-label="Utilisation de la capacité du catalogue" aria-valuemin={0} aria-valuemax={productLimit} aria-valuenow={Math.min(products.length, productLimit)}>
-                      <div className={`h-full rounded-full ${catalogFull ? 'bg-[#b94c24]' : 'bg-[#1D6B57]'}`} style={{ width: `${Math.min(100, (products.length / productLimit) * 100)}%` }} />
+                      <div className={`h-full rounded-full ${catalogFull ? 'bg-[#C2410C]' : 'bg-[#087F62]'}`} style={{ width: `${Math.min(100, (products.length / productLimit) * 100)}%` }} />
                     </div>
                   </div>
                 )}
@@ -92,7 +92,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                 onClick={handleOpenAddModal}
                 disabled={catalogFull}
                 title={catalogFull ? `La limite de votre formule est de ${productLimit} articles.` : undefined}
-                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-[#1D6B57] px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-[#087F62] px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
               >
                 <Plus className="w-4 h-4" />
                 <span>{catalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</span>

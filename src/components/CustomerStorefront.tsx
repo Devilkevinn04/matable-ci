@@ -1290,7 +1290,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             <div><p className="text-[10px] font-black uppercase text-slate-500">Informations pratiques</p><h3 className="mt-1 text-sm font-black text-slate-900">Horaires, remise & contact</h3></div>
             {shop.city && <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#52645c]"><MapPin className="h-3.5 w-3.5" />{shop.city}</span>}
           </summary>
-          {hoursSummary && <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="flex items-center gap-2 text-[11px] font-bold text-slate-700"><Clock className="h-3.5 w-3.5 text-[#1D6B57]" />Horaires</span><span className="text-right text-[11px] font-black text-slate-800">{hoursSummary}</span></div>}
+          {hoursSummary && <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="flex items-center gap-2 text-[11px] font-bold text-slate-700"><Clock className="h-3.5 w-3.5 text-[#087F62]" />Horaires</span><span className="text-right text-[11px] font-black text-slate-800">{hoursSummary}</span></div>}
           {shop.theme_config?.social_links && Object.values(shop.theme_config.social_links).some(Boolean) &&           <div className="mt-3 flex flex-wrap gap-2 border-b border-[#e5d9ca] pb-3">{shop.theme_config.social_links.instagram && <a href={shop.theme_config.social_links.instagram} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Instagram</a>}{shop.theme_config.social_links.facebook && <a href={shop.theme_config.social_links.facebook} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Facebook</a>}{shop.theme_config.social_links.website && <a href={shop.theme_config.social_links.website} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">Site web</a>}{shop.theme_config.social_links.whatsapp && <a href={shop.theme_config.social_links.whatsapp} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700">WhatsApp</a>}</div>}
           {shop.theme_config?.delivery_zones && shop.theme_config.delivery_zones.length > 0 && (
             <div className="mt-3">
@@ -1304,7 +1304,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     </div>
                     <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-600">
                       <span>{zone.description || 'Modalité à confirmer'}</span>
-                      <span className="font-black text-[#1D6B57]">{typeof zone.fee === 'number' ? zone.fee === 0 ? 'Offert' : `${zone.fee.toLocaleString('fr-FR')} FCFA` : 'Tarif à confirmer'}</span>
+                      <span className="font-black text-[#087F62]">{typeof zone.fee === 'number' ? zone.fee === 0 ? 'Offert' : `${zone.fee.toLocaleString('fr-FR')} FCFA` : 'Tarif à confirmer'}</span>
                     </div>
                   </div>
                 ))}
@@ -1396,7 +1396,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             id="floating-cart-btn"
             onClick={() => setIsCartOpen(true)}
             className="w-full text-white p-4 rounded-2xl shadow-[0_10px_25px_rgba(32,23,18,0.2)] flex items-center justify-between gap-3 active:scale-[0.99] transition-transform border-[2px] border-[#292d2a]"
-            style={{ background: 'linear-gradient(135deg, #1D6B57 0%, #E6572B 100%)', ...glowStyle }}
+            style={{ background: 'linear-gradient(135deg, #087F62 0%, #F97316 100%)', ...glowStyle }}
           >
             <div className="flex items-center gap-3">
               <div 
@@ -1459,13 +1459,18 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               {orderSuccess ? (
                 /* ORDER SUCCESS SCREEN WITH DIRECT WHATSAPP LAUNCH */
                 <div className="text-center py-6">
-                  <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
-                    <CheckCircle2 className="w-10 h-10" />
+                  <div className="success-mark w-16 h-16 bg-[#E3F1EA] text-[#087F62] rounded-full flex items-center justify-center mx-auto mb-4 ring-8 ring-[#F4F8F5]">
+                    <CheckCircle2 className="w-9 h-9" strokeWidth={2.4} />
                   </div>
-                  <h4 className="text-xl font-extrabold text-slate-900 mb-1">
-                    Demande enregistrée (N° {orderSuccess.orderId})
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8A948E]">Récapitulatif de commande</p>
+                  <h4 className="mt-1 text-xl font-extrabold text-[#103E32]">
+                    Demande enregistrée
                   </h4>
-                  <p className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full inline-block font-semibold mb-4">
+                  <div className="mt-2 inline-flex items-baseline gap-1.5 rounded-xl border border-[#E4D9C8] bg-[#FAF8F2] px-3 py-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A948E]">N°</span>
+                    <span className="font-mono text-sm font-black text-[#103E32]">{orderSuccess.orderId}</span>
+                  </div>
+                  <p className="mt-3 text-xs text-[#0F6B54] bg-[#E3F1EA] px-3 py-1.5 rounded-full inline-block font-semibold mb-4">
                     {orderSuccess.deliveryFee > 0 ? '✓ Articles réservés · livraison MaTable demandée' : '✓ Articles réservés · récapitulatif prêt'}
                   </p>
                   {orderSuccess.deliveryFee > 0 ? (
@@ -1501,7 +1506,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         }).catch(() => undefined);
                       }
                     }}
-                    className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base shadow-lg hover:shadow-emerald-600/30 flex items-center justify-center gap-3 transition-all"
+                    className="w-full py-4 px-6 rounded-2xl bg-[#087F62] hover:bg-[#066B52] text-white font-black text-base shadow-lg hover:shadow-[#087F62]/25 flex items-center justify-center gap-3 transition-all"
                   >
                     <Phone className="w-5 h-5 fill-white" />
                     <span>Contacter le commerçant sur WhatsApp</span>
@@ -1671,7 +1676,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         placeholder="Ex: Kouassi Ange, Fatou Traoré..."
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
-                        className="w-full text-sm px-3.5 py-2.5 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[#E6572B] bg-white"
+                        className="w-full text-sm px-3.5 py-2.5 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[#F97316] bg-white"
                       />
                     </div>
 
@@ -1691,7 +1696,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                           placeholder="07 00 11 22 33"
                           value={customerPhone}
                           onChange={(e) => setCustomerPhone(e.target.value)}
-                          className="w-full text-sm pl-20 pr-3.5 py-2.5 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[#E6572B] bg-white font-mono"
+                          className="w-full text-sm pl-20 pr-3.5 py-2.5 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[#F97316] bg-white font-mono"
                         />
                       </div>
                     </div>
@@ -1722,7 +1727,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                             aria-pressed={deliveryLocation === loc}
                             className={`py-2 px-2.5 rounded-lg font-medium border text-left flex items-center gap-1.5 transition-colors ${
                               deliveryLocation === loc
-                                ? 'bg-[#1D6B57] text-white border-[#154F41] shadow-[2px_2px_0_rgba(21,79,65,0.2)]'
+                                ? 'bg-[#087F62] text-white border-[#154F41] shadow-[2px_2px_0_rgba(21,79,65,0.2)]'
                                 : 'bg-[#F8F3EC] text-[#292d2a] border-[#E4D9C8] hover:bg-[#F5EADC]'
                             }`}
                           >
@@ -1743,7 +1748,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                             placeholder="Précisez la ville / quartier (ex: Bingerville, Bouaké, San Pedro...)"
                             value={customLocation}
                             onChange={(e) => setCustomLocation(e.target.value)}
-                            className="w-full text-sm px-3.5 py-2.5 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[#E6572B] bg-white"
+                            className="w-full text-sm px-3.5 py-2.5 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[#F97316] bg-white"
                           />
                         </label>
                       )}
@@ -1838,7 +1843,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         placeholder="Ex. : retrait sur place ou repère de quartier..."
                         value={deliveryNote}
                         onChange={(e) => setDeliveryNote(e.target.value)}
-                        className="w-full text-sm px-3.5 py-2 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[#E6572B] bg-white"
+                        className="w-full text-sm px-3.5 py-2 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[#F97316] bg-white"
                       />
                     </div>
 

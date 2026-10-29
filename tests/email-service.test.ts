@@ -89,6 +89,45 @@ test('subscription receipt email contains confirmed payment details and escapes 
   }
 });
 
+test('transactional emails share the MaTable.ci branded layout', async () => {
+  const previousApiKey = process.env.RESEND_API_KEY;
+  const previousFrom = process.env.RESEND_FROM_EMAIL;
+  process.env.RESEND_API_KEY = 'resend-key';
+  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+
+  try {
+    let requestBody: any;
+    const result = await sendMerchantSubscriptionReceiptEmail({
+      shopName: 'Chez Awa',
+      ownerEmail: 'merchant@example.com',
+      paymentId: 'payment-777',
+      providerReference: 'KDV-777',
+      tierLabel: 'Pro',
+      term: 'monthly',
+      amount: 12000,
+      currency: 'XOF',
+      paidAt: '2026-10-10T12:00:00.000Z',
+      appUrl: 'https://matable.ci',
+    }, async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ id: 'email_brand_123' }), { status: 200 });
+    });
+
+    assert.equal(result.sent, true);
+    assert.match(requestBody.html, /^<!doctype html>/i);
+    assert.match(requestBody.html, /https:\/\/matable\.ci\/brand-kit\/icon-192\.png/);
+    assert.match(requestBody.html, /#087F62/);
+    assert.match(requestBody.html, /Vos commerces, ici\./);
+    assert.match(requestBody.html, /Montant réglé/);
+    assert.match(requestBody.html, /12\s?000/);
+    assert.match(requestBody.html, /https:\/\/matable\.ci/);
+    assert.doesNotMatch(requestBody.html, /<script/i);
+  } finally {
+    if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
+    if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;
+  }
+});
+
 test('welcome email escapes the merchant shop name in its HTML body', async () => {
   const previousApiKey = process.env.RESEND_API_KEY;
   const previousFrom = process.env.RESEND_FROM_EMAIL;
@@ -108,7 +147,8 @@ test('welcome email escapes the merchant shop name in its HTML body', async () =
     assert.equal(result.sent, true);
     assert.equal(requestBody.to[0], 'merchant@example.com');
     assert.match(requestBody.html, /&lt;img src=x onerror=alert\(1\)&gt; &amp; Fils/);
-    assert.doesNotMatch(requestBody.html, /<img/);
+    assert.doesNotMatch(requestBody.html, /<img[^>]*src=x/i);
+    assert.equal((requestBody.html.match(/<img/gi) || []).length, 1);
     assert.match(requestBody.text, /<img src=x onerror=alert\(1\)> & Fils/);
   } finally {
     if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;

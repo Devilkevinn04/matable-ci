@@ -2760,7 +2760,7 @@ export const AdminDashboard: React.FC = () => {
           <aside id="admin-menu-drawer" role="dialog" aria-modal="true" aria-labelledby="admin-menu-title" className="absolute inset-x-0 bottom-0 max-h-[82dvh] overflow-y-auto rounded-t-3xl bg-[#fffdf8] p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-2xl">
             <div className="mb-4 flex items-center justify-between border-b border-[#e7dfd3] pb-4">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#1D6B57]">MaTable.ci</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#087F62]">MaTable.ci</p>
                 <h2 id="admin-menu-title" className="text-lg font-black text-[#292d2a]">Autres rubriques</h2>
               </div>
               <button type="button" aria-label="Fermer le menu" onClick={() => setIsAdminMenuOpen(false)} className="rounded-full border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50">

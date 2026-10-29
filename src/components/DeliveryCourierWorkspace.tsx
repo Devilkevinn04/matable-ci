@@ -49,6 +49,21 @@ interface DeliveryPaymentState {
 
 const MONEY_FORMATTER = new Intl.NumberFormat('fr-FR');
 const money = (amount: number) => `${MONEY_FORMATTER.format(amount)} FCFA`;
+
+const TICKET_DATE_FORMATTER = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+const formatTicketDate = (value: string) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : TICKET_DATE_FORMATTER.format(date);
+};
+
+const DELIVERY_STATUS_LABELS: Record<DeliveryCourse['status'], string> = {
+  requested: 'En attente d’un livreur',
+  accepted: 'Livreur assigné',
+  to_pickup: 'En route vers la boutique',
+  picked_up: 'En cours de livraison',
+  delivered: 'Livrée',
+  cancelled: 'Annulée',
+};
 const isDevEnvironment = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true;
 
 async function readJson<T>(response: Response): Promise<T & { error?: string }> {
@@ -503,7 +518,23 @@ export function DeliveryCourierWorkspace() {
 
   return (
     <main className="min-h-screen bg-[#f5f7f5] px-3 pb-10 pt-4 text-slate-900 sm:px-6 sm:pt-8">
-      <style>{`@media print { body * { visibility: hidden !important; } #delivery-ticket, #delivery-ticket * { visibility: visible !important; } #delivery-ticket { position: fixed; inset: 12mm; border: 1px dashed #065f46; background: #fff; padding: 12mm; } }`}</style>
+      <style>{`@page { size: A5 portrait; margin: 10mm; }
+@media print {
+  body * { visibility: hidden !important; }
+  #delivery-ticket, #delivery-ticket * { visibility: visible !important; }
+  #delivery-ticket {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    border: 1.5px solid #103E32 !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    padding: 8mm !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}`}</style>
       <div className="mx-auto max-w-4xl space-y-4">
         <header className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4">
           <div className="flex items-start gap-3">
@@ -552,7 +583,7 @@ export function DeliveryCourierWorkspace() {
         ) : (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
             <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <header className="bg-[#0d4c3b] px-4 py-5 text-white sm:px-6">
+              <header className="bg-[#103E32] px-4 py-5 text-white sm:px-6">
                 <p className="text-xs font-bold text-emerald-100">Bonjour, {driver.name}</p>
                 <h1 className="mt-1 text-xl font-black">Espace livreur</h1>
                 <p className="mt-2 text-xs text-emerald-100">{driver.phone} · compte {driver.status}{accessActive ? ' · forfait actif' : ''}</p>
@@ -629,18 +660,29 @@ export function DeliveryCourierWorkspace() {
                         <p><strong>Retrait · {activeDelivery.pickup_zone || 'Zone'}</strong><br />{activeDelivery.pickup_address || 'Adresse boutique à confirmer'}</p>
                         <p><strong>Destination · {activeDelivery.destination_zone || 'Zone'}</strong><br />{activeDelivery.delivery_location || 'Adresse client'}</p>
                       </div>
-                      <div id="delivery-ticket" className="mt-4 rounded-xl border border-dashed border-emerald-400 bg-white p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-800">Ticket de course</p>
-                          <button type="button" onClick={printTicket} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-emerald-300 px-2 text-[11px] font-bold text-emerald-950"><Printer className="h-3.5 w-3.5" />Imprimer</button>
+                      <div className="mt-4 space-y-2">
+                        <div id="delivery-ticket" className="rounded-xl border border-dashed border-[#B9DCCF] bg-white p-4">
+                          <div className="flex items-start justify-between gap-3 border-b border-[#EDE8DE] pb-3">
+                            <div className="flex items-center gap-2">
+                              <img src="/brand-kit/monogram.svg" alt="" width={32} height={32} className="h-8 w-8 shrink-0 rounded-lg" />
+                              <div>
+                                <p className="text-xs font-black leading-tight tracking-tight text-[#103E32]">MaTable<span className="text-[#F97316]">.ci</span></p>
+                                <p className="mt-0.5 text-[9px] font-bold uppercase leading-none tracking-[0.14em] text-[#8A948E]">Ticket de course</p>
+                              </div>
+                            </div>
+                            <p className="text-right text-[10px] leading-4 text-[#587067]">
+                              {activeDelivery.created_at ? formatTicketDate(activeDelivery.created_at) : ''}
+                            </p>
+                          </div>
+                          <p className="mt-3 break-words font-mono text-lg font-black tracking-[0.1em] text-[#103E32]">{activeDelivery.ticket_number || `COURSE-${activeDelivery.id}`}</p>
+                          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+                            <dt className="text-[#587067]">Course</dt><dd className="text-right font-bold text-[#1B2620]">#{activeDelivery.id}</dd>
+                            <dt className="text-[#587067]">Commande</dt><dd className="text-right font-bold text-[#1B2620]">#{activeDelivery.order_id}</dd>
+                            <dt className="text-[#587067]">Montant</dt><dd className="text-right font-bold text-[#1B2620]">{money(activeDelivery.quoted_amount)}</dd>
+                            <dt className="text-[#587067]">Statut</dt><dd className="text-right font-bold text-[#1B2620]">{DELIVERY_STATUS_LABELS[activeDelivery.status] || activeDelivery.status}</dd>
+                          </dl>
                         </div>
-                        <p className="mt-2 font-mono text-lg font-black tracking-wider text-slate-950">{activeDelivery.ticket_number || `COURSE-${activeDelivery.id}`}</p>
-                        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-600">
-                          <dt>Course</dt><dd className="text-right font-semibold">#{activeDelivery.id}</dd>
-                          <dt>Commande</dt><dd className="text-right font-semibold">#{activeDelivery.order_id}</dd>
-                          <dt>Montant</dt><dd className="text-right font-semibold">{money(activeDelivery.quoted_amount)}</dd>
-                          <dt>Statut</dt><dd className="text-right font-semibold">{activeDelivery.status}</dd>
-                        </dl>
+                        <button type="button" onClick={printTicket} className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-[#B9DCCF] bg-white px-3 text-[11px] font-bold text-[#103E32] transition-colors hover:bg-[#F4F8F5]"><Printer className="h-3.5 w-3.5" />Imprimer le ticket</button>
                       </div>
                       <div className="mt-4 rounded-lg bg-slate-50 p-3">
                         <p className="text-sm font-bold">{activeStep?.title}</p>

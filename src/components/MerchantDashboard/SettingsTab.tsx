@@ -162,12 +162,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
           <div className="max-w-5xl space-y-5">
             <header className="flex flex-col gap-4 rounded-3xl border border-[#e7dfd3] bg-white p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1D6B57]">{activeSettingsCopy.eyebrow} · Paramètres</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#087F62]">{activeSettingsCopy.eyebrow} · Paramètres</p>
                 <h2 className="mt-1 text-2xl font-black tracking-tight text-[#292d2a]">{activeSettingsCopy.title}</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{activeSettingsCopy.description}</p>
               </div>
               <span className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full border border-[#d8e9df] bg-[#eff7f1] px-3 py-1.5 text-xs font-bold text-[#047857]">
-                <span className={`h-2 w-2 rounded-full ${currentShop.is_open ? 'bg-[#1D6B57]' : 'bg-[#F97316]'}`} />
+                <span className={`h-2 w-2 rounded-full ${currentShop.is_open ? 'bg-[#087F62]' : 'bg-[#F97316]'}`} />
                 {currentShop.is_open ? 'Boutique ouverte' : 'Boutique fermée'}
               </span>
             </header>
@@ -258,7 +258,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                   </div>
                 </div>
                 </div>
-                <button type="submit" disabled={ownerEmailLoading || ownerProfileSaving} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[#1D6B57] px-5 text-sm font-extrabold text-white shadow-sm transition-colors hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60 sm:w-auto">
+                <button type="submit" disabled={ownerEmailLoading || ownerProfileSaving} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[#087F62] px-5 text-sm font-extrabold text-white shadow-sm transition-colors hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60 sm:w-auto">
                   {ownerProfileSaving ? 'Enregistrement…' : 'Enregistrer le profil'}
                 </button>
               </form>
@@ -346,7 +346,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
             {settingsSubTab === 'general' && (
               <form onSubmit={handleSaveGeneralSettings} className="space-y-5 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
                 <div className="flex items-center gap-3 border-b border-[#eee8df] pb-4">
-                  <span className="rounded-2xl bg-[#d1fae5] p-3 text-[#1D6B57]"><Store className="h-5 w-5" /></span>
+                  <span className="rounded-2xl bg-[#d1fae5] p-3 text-[#087F62]"><Store className="h-5 w-5" /></span>
                   <div>
                     <h3 className="font-extrabold text-[#292d2a] text-base">Informations publiques</h3>
                     <p className="mt-0.5 text-xs text-slate-500">Les détails que vos clients retrouvent sur votre vitrine.</p>
@@ -373,7 +373,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       maxLength={100}
                       value={settingsName}
                       onChange={(e) => setSettingsName(e.target.value)}
-                      className="min-h-11 w-full rounded-xl border border-[#ded7cd] bg-[#FFFFFF] px-3 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
+                      className="min-h-11 w-full rounded-xl border border-[#ded7cd] bg-[#FFFFFF] px-3 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#087F62]/25 focus:border-[#087F62]"
                     />
                   </div>
 
@@ -388,7 +388,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       value={settingsCity}
                       onChange={(e) => setSettingsCity(e.target.value)}
                       placeholder="Ex. : Abidjan"
-                      className="min-h-11 w-full rounded-xl border border-[#ded7cd] bg-[#FFFFFF] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
+                      className="min-h-11 w-full rounded-xl border border-[#ded7cd] bg-[#FFFFFF] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#087F62]/25 focus:border-[#087F62]"
                     />
                   </div>
                 </div>
@@ -405,7 +405,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                     value={settingsWelcome}
                     onChange={(e) => setSettingsWelcome(e.target.value)}
                     placeholder="Ex: Nuisettes soyeuses & lingerie fine. Livraison discrète à Abidjan..."
-                    className="min-h-24 w-full rounded-xl border border-[#ded7cd] bg-[#FFFFFF] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
+                    className="min-h-24 w-full rounded-xl border border-[#ded7cd] bg-[#FFFFFF] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#087F62]/25 focus:border-[#087F62]"
                   />
                   <p className="mt-1 text-right text-[11px] text-slate-500">{settingsWelcome.length}/500</p>
                 </div>
@@ -423,7 +423,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                     required
                     value={settingsPhone}
                     onChange={(e) => setSettingsPhone(e.target.value)}
-                    className="min-h-11 w-full rounded-xl border border-[#ded7cd] bg-[#FFFFFF] px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/25 focus:border-[#1D6B57]"
+                    className="min-h-11 w-full rounded-xl border border-[#ded7cd] bg-[#FFFFFF] px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#087F62]/25 focus:border-[#087F62]"
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
                     Les clients seront automatiquement redirigés vers ce numéro WhatsApp avec leur panier validé.
@@ -531,7 +531,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 <div className="pt-2">
                   <button
                     type="submit"
-                    className="min-h-11 w-full rounded-xl bg-[#1D6B57] px-5 text-sm font-extrabold text-white shadow-sm transition-colors hover:bg-[#047857] sm:w-auto"
+                    className="min-h-11 w-full rounded-xl bg-[#087F62] px-5 text-sm font-extrabold text-white shadow-sm transition-colors hover:bg-[#047857] sm:w-auto"
                   >
                     Enregistrer les coordonnées
                   </button>

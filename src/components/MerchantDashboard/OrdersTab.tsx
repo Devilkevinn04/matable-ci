@@ -320,7 +320,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
             {/* Orders Statistics Cards */}
             <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:grid-cols-3">
               <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4 min-[380px]:col-span-2 sm:col-span-1">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d1fae5] font-bold text-[#1D6B57]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d1fae5] font-bold text-[#087F62]">
                   <DollarSign className="w-5 h-5" />
                 </div>
                 <div>
@@ -334,7 +334,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
               </div>
 
               <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f7f4ee] font-bold text-[#1D6B57]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f7f4ee] font-bold text-[#087F62]">
                   <ShoppingBag className="w-5 h-5" />
                 </div>
                 <div>
@@ -348,7 +348,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
               </div>
 
               <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fff6ea] font-bold text-[#b94c24]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fff6ea] font-bold text-[#C2410C]">
                   <TrendingUp className="w-5 h-5" />
                 </div>
                 <div>
@@ -373,7 +373,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                   placeholder="Rechercher par client, tél ou #..."
                   value={orderSearch}
                   onChange={(e) => setOrderSearch(e.target.value)}
-                  className="min-h-11 w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#1D6B57]/20"
+                  className="min-h-11 w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#087F62]/20"
                 />
               </div>
                 <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-600 sm:w-56">

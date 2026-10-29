@@ -173,7 +173,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
             <div role="dialog" aria-modal="true" aria-labelledby="register-dialog-title" className="my-4 w-full max-w-xl overflow-hidden rounded-[18px] border border-[#ded8ce] bg-[#FFFFFF] shadow-[0_18px_45px_rgba(37,35,31,0.18)] sm:my-8">
               <div className="flex flex-col gap-3 bg-[#047857] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#ff6a3d] text-white">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F97316] text-white">
                     <Store className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
@@ -345,7 +345,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                   <button
                     type="submit"
                     disabled={regLoading}
-                    className="min-h-11 w-full rounded-xl border border-[#ff6a3d] bg-[#ff6a3d] px-6 py-3 text-sm font-black text-white shadow-[0_8px_18px_rgba(255,106,61,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                    className="min-h-11 w-full rounded-xl border border-[#F97316] bg-[#F97316] px-6 py-3 text-sm font-black text-white shadow-[0_8px_18px_rgba(249,115,22,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
                   >
                     {regLoading ? 'Création...' : 'Créer ma boutique'}
                   </button>

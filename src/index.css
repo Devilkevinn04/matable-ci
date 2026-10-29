@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --mt-primary: #059669;
-  --mt-primary-hover: #047857;
-  --mt-primary-deep: #065f46;
+  --mt-primary: #087F62;
+  --mt-primary-hover: #066B52;
+  --mt-primary-deep: #103E32;
   --mt-accent: #F97316;
   --mt-accent-deep: #c2410c;
   --mt-background: #FAF8F2;
@@ -271,7 +271,7 @@ body::before {
 }
 
 ::selection {
-  background: rgba(230, 87, 43, 0.18);
+  background: rgba(194, 65, 12, 0.18);
   color: var(--ink);
 }
 
@@ -311,7 +311,7 @@ h1, h2, h3, h4, .display-font {
   color: #fff7ee;
   font-weight: 900;
   border: 2px solid rgba(255,255,255,0.4);
-  box-shadow: 0 12px 22px rgba(255, 106, 61, 0.28);
+  box-shadow: 0 12px 22px rgba(249, 115, 22, 0.28);
 }
 
 .brand-mark-hero {
@@ -320,7 +320,7 @@ h1, h2, h3, h4, .display-font {
   border-radius: 1.25rem;
   font-size: 1.8rem;
   margin-bottom: 0.9rem;
-  box-shadow: 0 18px 32px rgba(255, 106, 61, 0.3);
+  box-shadow: 0 18px 32px rgba(249, 115, 22, 0.3);
 }
 
 .brand-mark-header {
@@ -347,7 +347,7 @@ h1, h2, h3, h4, .display-font {
 }
 
 .dashboard-chip-soft {
-  background: rgba(230, 87, 43, 0.12);
+  background: rgba(194, 65, 12, 0.12);
   border: 1px solid rgba(34, 32, 27, 0.38);
   color: var(--primary-deep);
 }
@@ -377,10 +377,10 @@ h1, h2, h3, h4, .display-font {
 }
 
 .nav-pill-strong {
-  background: linear-gradient(135deg, var(--primary) 0%, #f58c52 100%);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
   color: #fff;
   border: 2px solid rgba(33, 27, 23, 0.9);
-  box-shadow: 0 10px 22px rgba(255, 106, 61, 0.28);
+  box-shadow: 0 10px 22px rgba(249, 115, 22, 0.28);
 }
 
 .soft-card {
@@ -629,7 +629,7 @@ h1, h2, h3, h4, .display-font {
   border-radius: 999px;
   background: linear-gradient(135deg, var(--primary), var(--secondary));
   animation: pulseDot 1.2s ease-in-out infinite;
-  box-shadow: 0 6px 12px rgba(255, 106, 61, 0.2);
+  box-shadow: 0 6px 12px rgba(249, 115, 22, 0.2);
 }
 
 .loading-dots span:nth-child(2) {
@@ -1342,5 +1342,31 @@ button:hover {
 @media (min-width: 1024px) {
   .admin-sidebar section > h2 {
     display: none;
+  }
+}
+
+/* Confirmation de commande : apparition douce, jamais rebondissante. */
+.success-mark {
+  animation: success-mark-pop var(--mt-motion-deliberate) var(--mt-motion-ease-entrance) both;
+}
+
+@keyframes success-mark-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  62% {
+    opacity: 1;
+    transform: scale(1.035);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .success-mark {
+    animation: none;
   }
 }

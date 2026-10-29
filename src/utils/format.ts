@@ -50,69 +50,82 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   to_confirm: 'À convenir avec le vendeur',
 };
 
+/** Retire les caractères de mise en forme WhatsApp des données saisies par l’utilisateur. */
+function sanitizeWhatsAppText(value: string | null | undefined): string {
+  return String(value ?? '')
+    .replace(/[*_~`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function generateWhatsAppOrderReceipt(
   shop: Shop,
   order: Pick<Order, 'id' | 'customer_name' | 'customer_phone' | 'delivery_location' | 'delivery_note' | 'payment_method_preference' | 'items' | 'total_amount' | 'delivery_slot' | 'delivery_fee'>
 ): { text: string; url: string } {
-  const lines: string[] = [
-    `🛒 *COMMANDE MATABLE.CI #${order.id}*`,
-    `🏪 *Boutique :* ${shop.name} (${getCategoryDefaults(shop.category).label})`,
-    `----------------------------------------`,
-    `👤 *Client :* ${order.customer_name.trim()}`,
-    `📞 *Téléphone :* ${order.customer_phone.trim()}`,
-    `📍 *Commune / lieu souhaité :* ${order.delivery_location.trim()}`,
-  ];
-
-  if (order.delivery_slot) {
-    lines.push(`⏰ *Créneau souhaité :* ${order.delivery_slot}`);
-  }
-
-  if (order.delivery_note && order.delivery_note.trim().length > 0) {
-    lines.push(`ℹ️ *Précision repère :* ${order.delivery_note.trim()}`);
-  }
-
-  lines.push(`💳 *Paiement :* à convenir directement avec le vendeur`);
-  if (order.payment_method_preference) {
-    lines.push(`📲 *Mode souhaité :* ${PAYMENT_METHOD_LABELS[order.payment_method_preference] || order.payment_method_preference}`);
-  }
-  lines.push(`----------------------------------------`);
-  lines.push(`📦 *ARTICLES COMMANDÉS :*`);
-
-  (order.items || []).forEach((item, index) => {
-    const unitPrice = Number(item.unit_price);
-    const subtotal = Number(item.quantity) * unitPrice;
-    let itemLine = `${index + 1}. *${item.product_title || `Article #${item.product_id}`}*`;
-    if (item.selected_size) {
-      itemLine += ` [Taille: ${item.selected_size}]`;
-    }
-    if (item.selected_color) {
-      itemLine += ` [Couleur: ${item.selected_color}]`;
-    }
-    lines.push(itemLine);
-
-    if (item.selected_modifiers && item.selected_modifiers.length > 0) {
-      lines.push(`   _(Options/Sauces : ${item.selected_modifiers.join(', ')})_`);
-    }
-    lines.push(`   Quantité : ${item.quantity} x ${formatFCFA(unitPrice)} = *${formatFCFA(subtotal)}*`);
-  });
-
-  lines.push(`----------------------------------------`);
-  const deliveryFee = Number(order.delivery_fee || 0);
   const articlesTotal = Number(order.total_amount) || 0;
-  if (deliveryFee > 0) {
-    lines.push(`🛵 *Frais de livraison MaTable : ${formatFCFA(deliveryFee)}*`);
-    lines.push(`💰 *TOTAL À RÉGLER : ${formatFCFA(articlesTotal + deliveryFee)}*`);
-    lines.push(`📌 *Livraison organisée par MaTable : la course est créée et un livreur est recherché.*`);
-    lines.push(`📌 *Le règlement des articles et des frais de livraison reste à convenir avec la boutique ou le livreur.*`);
-  } else {
-    lines.push(`💰 *TOTAL INDICATIF : ${formatFCFA(articlesTotal)}*`);
-    lines.push(`📌 *Disponibilité, retrait ou livraison et frais éventuels à confirmer directement avec la boutique.*`);
-    lines.push(`🚚 *MaTable ne fournit ni n’organise la livraison pour cette commande.*`);
-  }
-  lines.push(`----------------------------------------`);
-  lines.push(`Merci de me confirmer la disponibilité, le montant final et le mode de paiement. ✨`);
+  const deliveryFee = Number(order.delivery_fee || 0);
+  const items = order.items || [];
+  const blocks: string[] = [];
 
-  const fullText = lines.join('\n');
+  blocks.push([
+    `🧾 *COMMANDE MATABLE.CI #${order.id}*`,
+    `${sanitizeWhatsAppText(shop.name)} · ${getCategoryDefaults(shop.category).label}`,
+  ].join('\n'));
+
+  const customerLines = ['*CLIENT*', sanitizeWhatsAppText(order.customer_name)];
+  const customerPhone = sanitizeWhatsAppText(order.customer_phone);
+  const deliveryLocation = sanitizeWhatsAppText(order.delivery_location);
+  if (customerPhone) customerLines.push(customerPhone);
+  if (deliveryLocation) customerLines.push(deliveryLocation);
+  if (order.delivery_slot) customerLines.push(`Créneau : ${sanitizeWhatsAppText(order.delivery_slot)}`);
+  const deliveryNote = sanitizeWhatsAppText(order.delivery_note);
+  if (deliveryNote) customerLines.push(`Repère : ${deliveryNote}`);
+  blocks.push(customerLines.filter((line, index) => line.length > 0 || index === 0).join('\n'));
+
+  const itemLines = ['*ARTICLES*'];
+  items.forEach((item, index) => {
+    itemLines.push('');
+    itemLines.push(`${index + 1}. *${sanitizeWhatsAppText(item.product_title) || `Article #${item.product_id}`}*`);
+    const options: string[] = [];
+    if (item.selected_size) options.push(`Taille ${sanitizeWhatsAppText(item.selected_size)}`);
+    if (item.selected_color) options.push(`Couleur ${sanitizeWhatsAppText(item.selected_color)}`);
+    if (item.selected_modifiers && item.selected_modifiers.length > 0) {
+      options.push(item.selected_modifiers.map((modifier) => sanitizeWhatsAppText(modifier)).filter(Boolean).join(', '));
+    }
+    if (options.length > 0) itemLines.push(options.join(' · '));
+    const unitPrice = Number(item.unit_price) || 0;
+    const quantity = Number(item.quantity) || 0;
+    itemLines.push(`${quantity} × ${formatFCFA(unitPrice)} = ${formatFCFA(quantity * unitPrice)}`);
+  });
+  blocks.push(itemLines.join('\n'));
+
+  const paymentLines = ['*RÈGLEMENT*', 'Paiement à convenir directement avec le vendeur'];
+  if (order.payment_method_preference) {
+    const preference = order.payment_method_preference;
+    paymentLines.push(`Mode souhaité : ${PAYMENT_METHOD_LABELS[preference] || sanitizeWhatsAppText(preference)}`);
+  }
+  blocks.push(paymentLines.join('\n'));
+
+  if (deliveryFee > 0) {
+    blocks.push([
+      '🛵 *LIVRAISON MATABLE*',
+      `Frais de livraison MaTable : ${formatFCFA(deliveryFee)}`,
+      'Course créée : un livreur est recherché.',
+      'Le règlement des articles et des frais de livraison reste à convenir avec la boutique ou le livreur.',
+    ].join('\n'));
+    blocks.push(`💰 *TOTAL À RÉGLER : ${formatFCFA(articlesTotal + deliveryFee)}*`);
+  } else {
+    blocks.push([
+      '📦 *RETRAIT / LIVRAISON*',
+      'Disponibilité, retrait ou livraison et frais éventuels à confirmer directement avec la boutique.',
+      'La livraison de cette commande n’est pas organisée par MaTable.',
+    ].join('\n'));
+    blocks.push(`💰 *TOTAL INDICATIF : ${formatFCFA(articlesTotal)}*`);
+  }
+
+  blocks.push('Merci de me confirmer la disponibilité, le montant final et le mode de paiement.');
+
+  const fullText = blocks.join('\n\n');
   const cleanPhone = cleanPhoneForWhatsApp(shop.whatsapp_number);
   const encodedText = encodeURIComponent(fullText);
   const url = `https://wa.me/${cleanPhone}?text=${encodedText}`;
