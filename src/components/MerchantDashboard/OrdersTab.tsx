@@ -4,6 +4,7 @@ import type { MerchantOrderFilter, MerchantState } from './useMerchant';
 import { formatFCFA } from '../../utils/format';
 import { OrderContactReveal } from '../OrderContactReveal';
 import { DeliveryTimeline, type DeliveryTimelineEvent } from '../DeliveryTimeline';
+import { DeliveryProgress, DeliveryStatusBadge } from '../deliveryStatus';
 import { PushOptIn } from '../PushOptIn';
 import { useVisibilityPolling } from '../../hooks/useVisibilityPolling';
 
@@ -215,30 +216,37 @@ function MerchantDeliveryRequest({ shopId, orderId, orderStatus }: {
   if (!isActiveOrder && !delivery) return null;
 
   return (
-    <section aria-label={`Livraison MaTable pour la commande ${orderId}`} className="rounded-xl border border-sky-200 bg-sky-50 p-3">
-      <div className="flex items-center gap-2 text-xs font-black text-sky-950"><MapPin className="h-4 w-4" />Livraison MaTable</div>
-      {loading ? <p role="status" className="mt-2 text-xs text-slate-600">Chargement des zones…</p> : delivery ? (
-        <div className="mt-2 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-slate-700">
-              <strong className="font-mono">{delivery.ticket_number || `COURSE-${delivery.id}`}</strong>
-              <br />{delivery.pickup_zone || 'Retrait'} → {delivery.destination_zone || 'Destination'} · <strong>{formatFCFA(delivery.quoted_amount)}</strong> · {delivery.status}
+    <section aria-label={`Livraison MaTable pour la commande ${orderId}`} className="overflow-hidden rounded-xl border border-[#CBE6DA] bg-white">
+      <div className="flex items-center justify-between gap-2 bg-[#F0FAF5] px-3 py-2.5">
+        <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#0F6B54]"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />Livraison MaTable</p>
+        {delivery && <DeliveryStatusBadge status={delivery.status} />}
+      </div>
+
+      {loading ? (
+        <p role="status" className="px-3 py-3 text-xs text-[#8A948E]">Chargement des zones…</p>
+      ) : delivery ? (
+        <div className="space-y-2.5 px-3 py-3">
+          <div>
+            <p className="font-mono text-sm font-black tracking-wide text-[#103E32]">{delivery.ticket_number || `COURSE-${delivery.id}`}</p>
+            <p className="mt-0.5 text-[11px] leading-5 text-[#587067]">
+              {delivery.pickup_zone || 'Retrait'} → {delivery.destination_zone || 'Destination'} · <strong className="tabular-nums text-[#103E32]">{formatFCFA(Number(delivery.quoted_amount) || 0)}</strong>
             </p>
-            <div className="flex flex-wrap gap-2">
-              {delivery.proof_available && !proofUrl && (
-                <button type="button" onClick={() => void loadProof()} disabled={proofLoading} className="min-h-9 rounded-lg border border-sky-300 bg-white px-3 text-xs font-bold text-sky-950 disabled:opacity-50">
-                  {proofLoading ? 'Chargement…' : 'Voir la preuve'}
-                </button>
-              )}
-              {isActiveOrder && ['requested', 'accepted', 'to_pickup'].includes(delivery.status) && (
-                <button type="button" onClick={() => void cancelDelivery()} disabled={saving} className="min-h-9 rounded-lg border border-rose-300 bg-white px-3 text-xs font-bold text-rose-800 disabled:opacity-50">Annuler la demande</button>
-              )}
-            </div>
+          </div>
+          <DeliveryProgress status={delivery.status} />
+          <div className="flex flex-wrap gap-2">
+            {delivery.proof_available && !proofUrl && (
+              <button type="button" onClick={() => void loadProof()} disabled={proofLoading} className="min-h-9 rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#0F6B54] transition-colors hover:bg-[#F0FAF5] disabled:opacity-50">
+                {proofLoading ? 'Chargement…' : 'Voir la preuve'}
+              </button>
+            )}
+            {isActiveOrder && ['requested', 'accepted', 'to_pickup'].includes(delivery.status) && (
+              <button type="button" onClick={() => void cancelDelivery()} disabled={saving} className="min-h-9 rounded-lg border border-rose-300 bg-white px-3 text-xs font-bold text-rose-800 disabled:opacity-50">Annuler la demande</button>
+            )}
           </div>
           {proofUrl && (
-            <figure className="rounded-lg border border-sky-200 bg-white p-2">
+            <figure className="rounded-lg border border-[#E4EDE8] bg-white p-2">
               <img src={proofUrl} alt={`Preuve de livraison de la course ${delivery.id}`} className="max-h-60 w-full rounded-md object-cover" />
-              <figcaption className="mt-1 text-[10px] text-slate-500">Preuve photo enregistrée · course #{delivery.id}</figcaption>
+              <figcaption className="mt-1 text-[10px] text-[#8A948E]">Preuve photo enregistrée · course #{delivery.id}</figcaption>
             </figure>
           )}
           <DeliveryTimeline
@@ -249,34 +257,34 @@ function MerchantDeliveryRequest({ shopId, orderId, orderStatus }: {
           />
         </div>
       ) : (
-        <div className="mt-2 space-y-2">
-          <p className="text-[11px] leading-5 text-slate-600">Choisissez la zone correspondant à l’adresse de livraison. Un devis n’est proposé que pour un tarif actif de 1 500 à 2 500 FCFA.</p>
+        <div className="space-y-2 px-3 py-3">
+          <p className="text-[11px] leading-5 text-[#587067]">Choisissez la zone correspondant à l’adresse de livraison. Un devis n’est proposé que pour un tarif actif de 1 500 à 2 500 FCFA.</p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="sr-only" htmlFor={`delivery-destination-${orderId}`}>Zone de destination pour la commande {orderId}</label>
             <select
               id={`delivery-destination-${orderId}`}
               value={destinationZoneId}
               onChange={(event) => { setDestinationZoneId(event.target.value); setQuote(null); }}
-              className="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800"
+              className="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 focus:border-[#087F62] focus:outline-none focus:ring-2 focus:ring-[#087F62]/20"
             >
               <option value="">Zone de destination</option>
               {zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.label}</option>)}
             </select>
             {!quote ? (
-              <button type="button" onClick={() => void loadQuote()} disabled={saving || !destinationZoneId} className="min-h-10 rounded-lg bg-sky-900 px-3 text-xs font-bold text-white disabled:opacity-50">
+              <button type="button" onClick={() => void loadQuote()} disabled={saving || !destinationZoneId} className="min-h-10 rounded-lg bg-[#087F62] px-3 text-xs font-bold text-white transition-colors hover:bg-[#066B52] disabled:opacity-50">
                 {saving ? 'Recherche…' : 'Afficher le devis'}
               </button>
             ) : (
-              <button type="button" onClick={() => void requestDelivery()} disabled={saving} className="min-h-10 rounded-lg bg-sky-900 px-3 text-xs font-bold text-white disabled:opacity-50">
+              <button type="button" onClick={() => void requestDelivery()} disabled={saving} className="min-h-10 rounded-lg bg-[#087F62] px-3 text-xs font-bold text-white transition-colors hover:bg-[#066B52] disabled:opacity-50">
                 Demander · {formatFCFA(quote.amount)}
               </button>
             )}
           </div>
-          {quote && <p role="status" className="text-xs font-semibold text-sky-950">{quote.origin_zone} → {quote.destination_zone} : {formatFCFA(quote.amount)}</p>}
+          {quote && <p role="status" className="text-xs font-semibold text-[#0F6B54]">{quote.origin_zone} → {quote.destination_zone} : {formatFCFA(quote.amount)}</p>}
         </div>
       )}
-      {error && <p role="alert" className="mt-2 text-xs font-semibold text-rose-800">{error}</p>}
-      {notice && <p role="status" className="mt-2 text-xs font-semibold text-emerald-800">{notice}</p>}
+      {error && <p role="alert" className="mx-3 mb-3 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2 text-xs font-semibold text-rose-800">{error}</p>}
+      {notice && <p role="status" className="mx-3 mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs font-semibold text-emerald-900">{notice}</p>}
     </section>
   );
 }

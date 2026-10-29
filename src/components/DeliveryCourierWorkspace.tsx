@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Bike, Camera, CheckCircle2, CreditCard, MapPin, Navigation, PackageCheck, Printer, ShieldCheck, UserRound } from 'lucide-react';
+import { Bike, Camera, CheckCircle2, CreditCard, MapPin, Navigation, PackageCheck, Printer, UserRound } from 'lucide-react';
 import { DeliveryTimeline, type DeliveryTimelineEvent } from './DeliveryTimeline';
+import { DeliveryStatusBadge, DELIVERY_STATUS_LABELS } from './deliveryStatus';
 import { PushOptIn } from './PushOptIn';
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 
@@ -56,14 +57,6 @@ const formatTicketDate = (value: string) => {
   return Number.isNaN(date.getTime()) ? '' : TICKET_DATE_FORMATTER.format(date);
 };
 
-const DELIVERY_STATUS_LABELS: Record<DeliveryCourse['status'], string> = {
-  requested: 'En attente d’un livreur',
-  accepted: 'Livreur assigné',
-  to_pickup: 'En route vers la boutique',
-  picked_up: 'En cours de livraison',
-  delivered: 'Livrée',
-  cancelled: 'Annulée',
-};
 const isDevEnvironment = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true;
 
 async function readJson<T>(response: Response): Promise<T & { error?: string }> {
@@ -536,15 +529,15 @@ export function DeliveryCourierWorkspace() {
   }
 }`}</style>
       <div className="mx-auto max-w-4xl space-y-4">
-        <header className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4">
+        <header className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-[#CBE6DA] bg-[#F0FAF5] p-4">
           <div className="flex items-start gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-900"><ShieldCheck className="h-5 w-5" /></span>
+            <img src="/brand-kit/monogram.svg" alt="" width={40} height={40} className="h-10 w-10 shrink-0 rounded-xl" />
             <div>
-              <p className="text-xs font-black uppercase tracking-wide text-sky-900">Espace livreur MaTable.ci</p>
-              <p className="mt-1 text-xs leading-5 text-sky-950">Recevez les courses de vos zones, révélez les contacts au bon moment et clôturez chaque livraison avec sa preuve photo.</p>
+              <p className="text-xs font-black uppercase tracking-wide text-[#0F6B54]">Espace livreur MaTable.ci</p>
+              <p className="mt-1 text-xs leading-5 text-[#103E32]">Recevez les courses de vos zones, révélez les contacts au bon moment et clôturez chaque livraison avec sa preuve photo.</p>
             </div>
           </div>
-          {driver && <button type="button" onClick={() => void logout()} className="min-h-9 rounded-lg border border-sky-300 bg-white px-3 text-xs font-bold text-sky-950">Déconnexion</button>}
+          {driver && <button type="button" onClick={() => void logout()} className="min-h-9 rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#103E32] transition-colors hover:bg-[#F4F8F5]">Déconnexion</button>}
         </header>
 
         {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-900">{error}</p>}
@@ -651,14 +644,18 @@ export function DeliveryCourierWorkspace() {
                       )}
                     </section>
                   ) : activeDelivery ? (
-                    <section aria-labelledby="active-delivery-title" className="rounded-xl border border-emerald-200 p-4">
+                    <section aria-labelledby="active-delivery-title" className="rounded-xl border border-[#CBE6DA] bg-white p-4">
                       <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div><p className="text-[11px] font-bold uppercase text-emerald-800">Course active · #{activeDelivery.id}</p><h2 id="active-delivery-title" className="mt-1 text-base font-black">{activeDelivery.shop_name || 'Boutique'}</h2></div>
-                        <strong className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-950">{money(activeDelivery.quoted_amount)}</strong>
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-bold uppercase tracking-wide text-[#0F6B54]">Course active · #{activeDelivery.id}</p>
+                          <h2 id="active-delivery-title" className="mt-1 truncate text-base font-black text-[#103E32]">{activeDelivery.shop_name || 'Boutique'}</h2>
+                          <div className="mt-1.5"><DeliveryStatusBadge status={activeDelivery.status} /></div>
+                        </div>
+                        <strong className="rounded-lg border border-[#B9DCCF] bg-[#F0FAF5] px-3 py-2 text-xs tabular-nums text-[#103E32]">{money(activeDelivery.quoted_amount)}</strong>
                       </div>
-                      <div className="mt-4 grid gap-2 text-xs text-slate-700 sm:grid-cols-2">
-                        <p><strong>Retrait · {activeDelivery.pickup_zone || 'Zone'}</strong><br />{activeDelivery.pickup_address || 'Adresse boutique à confirmer'}</p>
-                        <p><strong>Destination · {activeDelivery.destination_zone || 'Zone'}</strong><br />{activeDelivery.delivery_location || 'Adresse client'}</p>
+                      <div className="mt-4 grid gap-2 text-xs text-[#292d2a] sm:grid-cols-2">
+                        <p className="rounded-lg border border-[#E4EDE8] bg-[#FAF8F2] p-2.5"><strong className="text-[#103E32]">Retrait · {activeDelivery.pickup_zone || 'Zone'}</strong><br />{activeDelivery.pickup_address || 'Adresse boutique à confirmer'}</p>
+                        <p className="rounded-lg border border-[#E4EDE8] bg-[#FAF8F2] p-2.5"><strong className="text-[#103E32]">Destination · {activeDelivery.destination_zone || 'Zone'}</strong><br />{activeDelivery.delivery_location || 'Adresse client'}</p>
                       </div>
                       <div className="mt-4 space-y-2">
                         <div id="delivery-ticket" className="rounded-xl border border-dashed border-[#B9DCCF] bg-white p-4">

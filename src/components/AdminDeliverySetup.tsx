@@ -126,11 +126,11 @@ export function AdminDeliverySetup({ zones }: DeliverySetupProps) {
   };
 
   return (
-    <section aria-labelledby="delivery-setup-title" className="space-y-4 rounded-xl border border-sky-200 bg-sky-50 p-4">
+    <section aria-labelledby="delivery-setup-title" className="space-y-4 rounded-xl border border-[#E4EDE8] bg-white p-4">
       <header>
-        <p className="text-xs font-bold uppercase text-sky-900">Exploitation de la livraison</p>
-        <h3 id="delivery-setup-title" className="mt-1 text-sm font-black text-sky-950">Livreurs et zones de retrait</h3>
-        <p className="mt-1 text-xs leading-5 text-sky-900">
+        <p className="text-xs font-bold uppercase text-[#0F6B54]">Exploitation de la livraison</p>
+        <h3 id="delivery-setup-title" className="mt-1 text-sm font-black text-[#103E32]">Livreurs et zones de retrait</h3>
+        <p className="mt-1 text-xs leading-5 text-[#0F6B54]">
           Activez les comptes livreurs, autorisez leurs zones et rattachez chaque boutique à sa zone de retrait.
           Le forfait livreur de 1 000 FCFA est réglé par Mobile Money lorsque GeniusPay est configuré.
         </p>
@@ -138,18 +138,18 @@ export function AdminDeliverySetup({ zones }: DeliverySetupProps) {
 
       {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-900">{error}</p>}
       {notice && <p role="status" className="rounded-lg border border-emerald-200 bg-white p-3 text-xs font-semibold text-emerald-900">{notice}</p>}
-      {loading ? <p role="status" className="rounded-lg border border-sky-200 bg-white p-3 text-xs text-slate-600">Chargement des données livreurs…</p> : (
+      {loading ? <p role="status" className="rounded-lg border border-[#E4EDE8] bg-white p-3 text-xs text-slate-600">Chargement des données livreurs…</p> : (
         <>
           <div className="flex items-center justify-between gap-3">
             <h4 className="text-xs font-black text-slate-900">Comptes livreurs</h4>
-            <button type="button" onClick={() => void load()} disabled={Boolean(savingKey)} className="min-h-9 rounded-lg border border-sky-300 bg-white px-3 text-xs font-bold text-sky-950 disabled:opacity-50">Actualiser</button>
+            <button type="button" onClick={() => void load()} disabled={Boolean(savingKey)} className="min-h-9 rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#103E32] disabled:opacity-50">Actualiser</button>
           </div>
-          {drivers.length === 0 ? <p className="rounded-lg border border-sky-200 bg-white p-3 text-xs text-slate-600">Aucun livreur inscrit pour le moment. Le compte doit d’abord être créé depuis l’espace livreur sur <strong>/livreur</strong>.</p> : (
+          {drivers.length === 0 ? <p className="rounded-lg border border-[#E4EDE8] bg-white p-3 text-xs text-slate-600">Aucun livreur inscrit pour le moment. Le compte doit d’abord être créé depuis l’espace livreur sur <strong>/livreur</strong>.</p> : (
             <div className="space-y-3">
               {drivers.map((driver) => {
                 const draft = driverDrafts[driver.id] || { status: driver.status, zoneIds: driver.zone_ids };
                 return (
-                  <article key={driver.id} className="rounded-xl border border-sky-200 bg-white p-3">
+                  <article key={driver.id} className="rounded-xl border border-[#E4EDE8] bg-white p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <p className="text-sm font-black text-slate-900">{driver.name}</p>
@@ -192,7 +192,7 @@ export function AdminDeliverySetup({ zones }: DeliverySetupProps) {
                         ))}
                       </div>
                     </fieldset>
-                    <button type="button" onClick={() => void saveDriver(driver)} disabled={Boolean(savingKey)} className="mt-3 min-h-10 rounded-lg bg-sky-900 px-4 text-xs font-bold text-white disabled:opacity-50">
+                    <button type="button" onClick={() => void saveDriver(driver)} disabled={Boolean(savingKey)} className="mt-3 min-h-10 rounded-lg bg-[#087F62] px-4 text-xs font-bold text-white transition-colors hover:bg-[#066B52] disabled:opacity-50">
                       {savingKey === `driver-${driver.id}` ? 'Enregistrement…' : 'Enregistrer et activer'}
                     </button>
                   </article>
@@ -201,12 +201,12 @@ export function AdminDeliverySetup({ zones }: DeliverySetupProps) {
             </div>
           )}
 
-          <div className="border-t border-sky-200 pt-4">
+          <div className="border-t border-[#E4EDE8] pt-4">
             <h4 className="text-xs font-black text-slate-900">Zone de retrait des boutiques</h4>
             <p className="mt-1 text-xs leading-5 text-slate-600">Le devis est calculé depuis cette zone vers la zone de destination choisie par le marchand.</p>
             <div className="mt-3 space-y-2">
               {shops.map((shop) => (
-                <div key={shop.shop_id} className="flex flex-col gap-2 rounded-lg border border-sky-200 bg-white p-3 sm:flex-row sm:items-center">
+                <div key={shop.shop_id} className="flex flex-col gap-2 rounded-lg border border-[#E4EDE8] bg-white p-3 sm:flex-row sm:items-center">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-bold text-slate-800">{shop.shop_name}</p>
                     {shop.city && <p className="text-[11px] text-slate-500">{shop.city}</p>}
@@ -221,7 +221,7 @@ export function AdminDeliverySetup({ zones }: DeliverySetupProps) {
                     <option value="">Choisir une zone de retrait</option>
                     {zones.filter((zone) => zone.is_active).map((zone) => <option key={zone.id} value={zone.id}>{zone.label}</option>)}
                   </select>
-                  <button type="button" onClick={() => void saveOrigin(shop)} disabled={Boolean(savingKey) || !originDrafts[shop.shop_id]} className="min-h-10 rounded-lg border border-sky-300 px-3 text-xs font-bold text-sky-950 disabled:opacity-50">
+                  <button type="button" onClick={() => void saveOrigin(shop)} disabled={Boolean(savingKey) || !originDrafts[shop.shop_id]} className="min-h-10 rounded-lg border border-[#B9DCCF] px-3 text-xs font-bold text-[#103E32] transition-colors hover:bg-[#F0FAF5] disabled:opacity-50">
                     {savingKey === `shop-${shop.shop_id}` ? 'Enregistrement…' : 'Enregistrer'}
                   </button>
                 </div>

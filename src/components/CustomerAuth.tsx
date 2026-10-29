@@ -8,6 +8,8 @@ import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
 import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
 import { OrderContactReveal } from './OrderContactReveal';
 import { DeliveryTimeline, type DeliveryTimelineEvent } from './DeliveryTimeline';
+import { DeliveryProgress, DeliveryStatusBadge } from './deliveryStatus';
+import { formatFCFA } from '../utils/format';
 import { PushOptIn } from './PushOptIn';
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import { Link } from 'react-router-dom';
@@ -233,15 +235,6 @@ interface CustomerOrder {
   items?: { id: number; product_title?: string; quantity: number; unit_price: number; selected_size?: string; selected_color?: string; selected_modifiers?: string[] }[];
 }
 
-const CUSTOMER_DELIVERY_STATUS_LABELS: Record<string, string> = {
-  requested: 'En attente d’un livreur',
-  accepted: 'Livreur assigné',
-  to_pickup: 'En route vers la boutique',
-  picked_up: 'En cours de livraison',
-  delivered: 'Livrée',
-  cancelled: 'Annulée',
-};
-
 function CustomerDeliverySummary({ order }: { order: CustomerOrder }) {
   const delivery = order.delivery;
   const [proofUrl, setProofUrl] = useState<string | null>(null);
@@ -290,27 +283,38 @@ function CustomerDeliverySummary({ order }: { order: CustomerOrder }) {
   };
 
   return (
-    <section aria-label={`Livraison MaTable de la commande ${order.id}`} className="mt-3 rounded-xl border border-[#c7e5d8] bg-[#f0faf5] p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-[#065f46]"><Truck className="h-3.5 w-3.5" />Livraison MaTable</p>
-          <p className="mt-1 font-mono text-sm font-black tracking-wide text-[#1f3129]">{delivery.ticket_number || `COURSE-${delivery.id}`}</p>
-          <p className="mt-0.5 text-xs font-semibold text-[#47534b]">{CUSTOMER_DELIVERY_STATUS_LABELS[delivery.status] || delivery.status} · {delivery.quoted_amount.toLocaleString('fr-FR')} FCFA</p>
+    <section aria-label={`Livraison MaTable de la commande ${order.id}`} className="mt-3 overflow-hidden rounded-xl border border-[#CBE6DA] bg-white">
+      <div className="bg-[#F0FAF5] px-3 py-2.5">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#0F6B54]">
+              <Truck className="h-3.5 w-3.5" aria-hidden="true" />Livraison MaTable
+            </p>
+            <p className="mt-1 font-mono text-sm font-black tracking-wide text-[#103E32]">{delivery.ticket_number || `COURSE-${delivery.id}`}</p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <DeliveryStatusBadge status={delivery.status} />
+            <p className="text-xs font-black tabular-nums text-[#103E32]">{formatFCFA(Number(delivery.quoted_amount) || 0)}</p>
+          </div>
         </div>
+        <div className="mt-2.5">
+          <DeliveryProgress status={delivery.status} />
+        </div>
+      </div>
+
+      <div className="space-y-2 px-3 py-3">
         {delivery.proof_available && (
-          <button type="button" onClick={() => void loadProof()} disabled={proofLoading} className="min-h-9 rounded-lg border border-[#047857] bg-white px-3 text-xs font-bold text-[#065f46] disabled:opacity-50">
-            {proofLoading ? 'Chargement…' : proofUrl ? 'Preuve affichée' : 'Voir la preuve'}
+          <button type="button" onClick={() => void loadProof()} disabled={proofLoading} className="min-h-9 w-full rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#0F6B54] transition-colors hover:bg-[#F0FAF5] disabled:opacity-50">
+            {proofLoading ? 'Chargement…' : proofUrl ? 'Preuve affichée' : 'Voir la preuve photo'}
           </button>
         )}
-      </div>
-      {proofUrl && (
-        <figure className="mt-2 rounded-lg border border-[#c7e5d8] bg-white p-2">
-          <img src={proofUrl} alt={`Preuve de livraison de la commande ${order.id}`} className="max-h-60 w-full rounded-md object-cover" />
-          <figcaption className="mt-1 text-[10px] text-[#647067]">Photo enregistrée par le livreur.</figcaption>
-        </figure>
-      )}
-      {proofError && <p role="alert" className="mt-2 text-xs font-semibold text-[#9f1239]">{proofError}</p>}
-      <div className="mt-3">
+        {proofUrl && (
+          <figure className="rounded-lg border border-[#E4EDE8] bg-white p-2">
+            <img src={proofUrl} alt={`Preuve de livraison de la commande ${order.id}`} className="max-h-60 w-full rounded-md object-cover" />
+            <figcaption className="mt-1 text-[10px] text-[#8A948E]">Photo enregistrée par le livreur.</figcaption>
+          </figure>
+        )}
+        {proofError && <p role="alert" className="text-xs font-semibold text-rose-800">{proofError}</p>}
         <DeliveryTimeline
           events={timelineEvents}
           loading={timelineLoading}
