@@ -19,6 +19,14 @@ import {
   isOrderContactAvailable,
   maskContactPhone,
 } from '../services/contactGuard.ts';
+import {
+  buildDeliveryTicket,
+  deliveryQuoteSql,
+  MAX_DELIVERY_QUOTE,
+  MIN_DELIVERY_QUOTE,
+  type DeliveryQuote,
+} from '../services/deliveryQuoting.ts';
+import { dispatchDeliveryCreatedPush } from '../services/deliveryNotifications.ts';
 
 interface CustomerSession {
   authenticated: boolean;
@@ -42,6 +50,7 @@ interface OrderRouterOptions {
   timingSafeEqual: (left: string, right: string) => boolean;
   getValidSelectedModifiers: (product: ProductRecord, selectedModifiers: string[]) => string[];
   getProductUnitPriceWithModifiers: (product: ProductRecord, selectedModifiers: string[]) => number;
+  deliveryOperationsEnabled: boolean;
 }
 
 export function createOrderRouter({
@@ -56,11 +65,12 @@ export function createOrderRouter({
   timingSafeEqual,
   getValidSelectedModifiers,
   getProductUnitPriceWithModifiers,
+  deliveryOperationsEnabled,
 }: OrderRouterOptions) {
   const router = Router();
 
   router.post('/orders', rateLimitPublicRequest(30), async (req, res) => {
-    const { shop_id, customer_name, customer_phone, delivery_location, delivery_note, delivery_slot, payment_method_preference, items, website, form_started_at } = req.body;
+    const { shop_id, customer_name, customer_phone, delivery_location, delivery_note, delivery_slot, payment_method_preference, items, website, form_started_at, delivery_zone_id } = req.body;
     const attributionCampaign = normalizeAnalyticsCampaign(req.body?.attribution_campaign);
     if (String(website || '').trim()) return res.status(400).json({ error: 'Requête rejetée.' });
     if (form_started_at !== undefined) {
@@ -71,6 +81,16 @@ export function createOrderRouter({
     }
     if (!shop_id || !customer_name || !customer_phone || !delivery_location || !Array.isArray(items) || items.length === 0 || items.length > 50) {
       return res.status(400).json({ error: 'Champs requis manquants pour la commande.' });
+    }
+    const requestedDeliveryZoneId = delivery_zone_id === undefined || delivery_zone_id === null || delivery_zone_id === ''
+      ? null
+      : Number(delivery_zone_id);
+    if (requestedDeliveryZoneId !== null
+      && (!Number.isSafeInteger(requestedDeliveryZoneId) || requestedDeliveryZoneId <= 0)) {
+      return res.status(400).json({ error: 'Zone de livraison invalide.' });
+    }
+    if (requestedDeliveryZoneId !== null && !deliveryOperationsEnabled) {
+      return res.status(409).json({ error: 'La livraison MaTable n’est pas encore ouverte dans cette version. Convenez du retrait ou de la livraison directement avec la boutique.' });
     }
 
     const validatedCustomer = validateCustomerOrderInput({ customer_name, customer_phone, delivery_location, delivery_note });
@@ -108,7 +128,7 @@ export function createOrderRouter({
     const whatsappTrackingToken = crypto.randomUUID();
     const stockUpdates: { product: ProductRecord; previousStock: number; stock: number; isAvailable: boolean }[] = [];
     try {
-      const createdOrder = await dbTransaction(async (transaction) => {
+      const created = await dbTransaction(async (transaction) => {
         const orderIdRecord = await transaction.get<{ id: number }>(`
           INSERT INTO id_allocators (name, last_id)
           SELECT ?, COALESCE(MAX(id), 0) + 1 FROM orders WHERE TRUE
@@ -179,6 +199,18 @@ export function createOrderRouter({
           });
         }
 
+        const deliveryQuote = requestedDeliveryZoneId === null
+          ? null
+          : await transaction.get<DeliveryQuote>(
+            deliveryQuoteSql,
+            [requestedDeliveryZoneId, shop.id, MIN_DELIVERY_QUOTE, MAX_DELIVERY_QUOTE],
+          );
+        if (requestedDeliveryZoneId !== null && !deliveryQuote) {
+          throw Object.assign(new Error('Aucun tarif MaTable actif pour cette zone. Choisissez une autre zone ou convenez de la livraison avec la boutique.'), { statusCode: 409 });
+        }
+        const deliveryFee = deliveryQuote ? Number(deliveryQuote.amount) : 0;
+        const createdAt = new Date().toISOString();
+
         const newOrder: OrderRecord = {
           id: orderId,
           shop_id: shop.id,
@@ -191,7 +223,8 @@ export function createOrderRouter({
           delivery_slot,
           payment_method_preference: payment_method_preference || 'to_confirm',
           total_amount: calculatedTotal,
-          created_at: new Date().toISOString(),
+          delivery_fee: deliveryFee,
+          created_at: createdAt,
           status: 'confirmed',
           whatsapp_tracking_available: true,
           whatsapp_clicked_at: null,
@@ -200,19 +233,62 @@ export function createOrderRouter({
         await transaction.run(`
           INSERT INTO orders (
             id, shop_id, customer_name, customer_phone, delivery_location, delivery_note,
-            delivery_slot, payment_method_preference, total_amount, created_at, status, items, customer_user_id,
+            delivery_slot, payment_method_preference, total_amount, delivery_fee, created_at, status, items, customer_user_id,
             attribution_campaign
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [newOrder.id, newOrder.shop_id, newOrder.customer_name, newOrder.customer_phone, newOrder.delivery_location,
           newOrder.delivery_note ?? null, newOrder.delivery_slot ?? null, newOrder.payment_method_preference,
-          newOrder.total_amount, newOrder.created_at, newOrder.status, JSON.stringify(newOrder.items ?? []), newOrder.customer_user_id ?? null,
+          newOrder.total_amount, newOrder.delivery_fee, newOrder.created_at, newOrder.status, JSON.stringify(newOrder.items ?? []), newOrder.customer_user_id ?? null,
           newOrder.attribution_campaign ?? null]);
         await transaction.run(
           'INSERT INTO order_whatsapp_tracking (order_id, token_hash, clicked_at) VALUES (?, ?, NULL)',
           [orderId, hashAccessToken(whatsappTrackingToken)],
         );
-        return newOrder;
+
+        let createdDelivery: {
+          id: number;
+          order_id: number;
+          shop_id: number;
+          pickup_zone_id: number;
+          destination_zone_id: number;
+          quoted_amount: number;
+          status: string;
+          created_at: string;
+          ticket_number: string;
+        } | null = null;
+        if (deliveryQuote) {
+          const insertedDelivery = await transaction.get<{ id: number | string }>(`INSERT INTO delivery_orders
+            (order_id, shop_id, pickup_zone_id, destination_zone_id, quoted_amount, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'requested', ?)
+            RETURNING id`,
+          [orderId, shop.id, deliveryQuote.pickup_zone_id, deliveryQuote.destination_zone_id, deliveryQuote.amount, createdAt]);
+          if (!insertedDelivery) throw new Error('Impossible de créer la course de livraison.');
+          const deliveryId = Number(insertedDelivery.id);
+          if (!Number.isSafeInteger(deliveryId) || deliveryId <= 0) {
+            throw new Error('Invalid delivery identifier returned by the database.');
+          }
+          const ticketNumber = buildDeliveryTicket(deliveryId, createdAt);
+          await transaction.run('UPDATE delivery_orders SET ticket_number = ? WHERE id = ?', [ticketNumber, deliveryId]);
+          await transaction.run(`INSERT INTO delivery_course_events
+            (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
+            VALUES (?, 'admin', NULL, NULL, 'requested', ?)`,
+          [deliveryId, createdAt]);
+          createdDelivery = {
+            id: deliveryId,
+            order_id: orderId,
+            shop_id: shop.id,
+            pickup_zone_id: Number(deliveryQuote.pickup_zone_id),
+            destination_zone_id: Number(deliveryQuote.destination_zone_id),
+            quoted_amount: Number(deliveryQuote.amount),
+            status: 'requested',
+            created_at: createdAt,
+            ticket_number: ticketNumber,
+          };
+        }
+
+        return { order: newOrder, delivery: createdDelivery };
       });
+      const { order: createdOrder, delivery: createdDelivery } = created;
       for (const update of stockUpdates) {
         update.product.stock = update.stock;
         update.product.is_available = update.isAvailable;
@@ -222,18 +298,22 @@ export function createOrderRouter({
         eventKey: `order-${createdOrder.id}`,
         category: 'orders',
         title: 'Nouvelle commande',
-        body: `Une commande de ${createdOrder.total_amount.toLocaleString('fr-FR')} FCFA vient d’arriver.`,
+        body: `Une commande de ${(createdOrder.total_amount + Number(createdOrder.delivery_fee || 0)).toLocaleString('fr-FR')} FCFA vient d’arriver.`,
         url: '/app',
         tag: `order-${createdOrder.id}`,
       }).catch((error: unknown) => console.error(`Unable to queue order notification for shop ${shop.id}.`, error));
+      if (createdDelivery) void dispatchDeliveryCreatedPush(createdDelivery.id);
       for (const update of stockUpdates) {
         dispatchStockTransitionPush(shop.id, update.product, update.previousStock, update.stock, `stock-order-${createdOrder.id}-${update.product.id}`);
       }
       res.json({
         success: true,
         order: createdOrder,
+        delivery: createdDelivery,
         whatsapp_tracking_token: whatsappTrackingToken,
-        message: 'Commande acceptée automatiquement et stock réservé. Contactez le vendeur sur WhatsApp pour échanger sur la livraison et le paiement.',
+        message: createdDelivery
+          ? 'Commande acceptée et stock réservé. La livraison MaTable est en attente d’un livreur ; réglez les articles et les frais de livraison selon les modalités convenues avec la boutique.'
+          : 'Commande acceptée automatiquement et stock réservé. Contactez le vendeur sur WhatsApp pour échanger sur la livraison et le paiement.',
       });
     } catch (error: unknown) {
       const err = error as { message?: string; statusCode?: number; product_id?: number; stock?: number };
@@ -426,6 +506,7 @@ export function createOrderRouter({
         delivery_slot: row.delivery_slot == null ? undefined : String(row.delivery_slot),
         payment_method_preference: String(row.payment_method_preference || 'to_confirm'),
         total_amount: Number(row.total_amount),
+        delivery_fee: Number(row.delivery_fee || 0),
         created_at: String(row.created_at),
         status: String(row.status || 'pending'),
         whatsapp_tracking_available: Boolean(row.whatsapp_tracking_available),

@@ -150,6 +150,7 @@ export interface OrderRecord {
   delivery_slot?: string;
   payment_method_preference: 'wave' | 'mobile_money' | 'cash' | 'to_confirm';
   total_amount: number;
+  delivery_fee?: number;
   created_at: string;
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'expired';
   whatsapp_tracking_available?: boolean;

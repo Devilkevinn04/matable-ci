@@ -42,6 +42,7 @@ const migrationVersions = [
   '037_order_contact_audits',
   '038_delivery_tickets_proofs_payments',
   '039_delivery_notifications',
+  '040_delivery_order_fees',
 ];
 const connectionString = process.env.DATABASE_URL;
 

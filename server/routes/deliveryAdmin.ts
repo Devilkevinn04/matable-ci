@@ -287,8 +287,8 @@ export function createDeliveryAdminRouter({ dbAll, dbGet, dbRun, dbTransaction, 
     if (reason.length < 3) return res.status(400).json({ error: 'Un motif (au moins 3 caractères) est obligatoire.' });
     const now = new Date().toISOString();
     const result = await dbTransaction(async (transaction) => {
-      const course = await transaction.get<{ id: number | string; status: string; driver_id: number | string | null }>(
-        'SELECT id, status, driver_id FROM delivery_orders WHERE id = ?',
+      const course = await transaction.get<{ id: number | string; order_id: number | string; status: string; driver_id: number | string | null }>(
+        'SELECT id, order_id, status, driver_id FROM delivery_orders WHERE id = ?',
         [courseId],
       );
       if (!course) return 'missing' as const;
@@ -301,6 +301,7 @@ export function createDeliveryAdminRouter({ dbAll, dbGet, dbRun, dbTransaction, 
         (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
         VALUES (?, 'admin', NULL, ?, 'cancelled', ?)`,
       [courseId, course.status, now]);
+      await transaction.run('UPDATE orders SET delivery_fee = 0 WHERE id = ?', [course.order_id]);
       return {
         type: 'cancelled' as const,
         previousStatus: course.status,

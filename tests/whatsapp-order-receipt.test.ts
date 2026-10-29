@@ -52,3 +52,38 @@ test('WhatsApp receipt includes every server-confirmed item and its exact option
   assert.match(text, /MaTable ne fournit ni n’organise la livraison/);
   assert.equal(new URL(url).searchParams.get('text'), text);
 });
+
+test('WhatsApp receipt separates MaTable delivery fees from the articles total', () => {
+  const shop = {
+    name: 'Chez Awa',
+    category: 'food',
+    whatsapp_number: '+2250708091011',
+  } as Shop;
+  const order = {
+    customer_name: 'Awa Traoré',
+    customer_phone: '0708091011',
+    delivery_location: 'Bingerville',
+    payment_method_preference: 'cash',
+    total_amount: 6500,
+    delivery_fee: 2000,
+    items: [
+      {
+        id: 1,
+        order_id: 43,
+        product_id: 7,
+        product_title: 'Attiéké poisson',
+        quantity: 2,
+        unit_price: 3250,
+      },
+    ],
+  } satisfies Pick<Order, 'customer_name' | 'customer_phone' | 'delivery_location' | 'delivery_note' | 'payment_method_preference' | 'items' | 'total_amount' | 'delivery_slot' | 'delivery_fee'>;
+
+  const { text } = generateWhatsAppOrderReceipt(shop, order);
+
+  assert.match(text, /Frais de livraison MaTable : 2\s?000 FCFA/);
+  assert.match(text, /TOTAL À RÉGLER : 8\s?500 FCFA/);
+  assert.match(text, /règlement des articles et des frais de livraison/);
+  assert.match(text, /Livraison organisée par MaTable/);
+  assert.doesNotMatch(text, /TOTAL INDICATIF/);
+  assert.doesNotMatch(text, /MaTable ne fournit ni n’organise la livraison/);
+});

@@ -5,6 +5,13 @@ import { normalizeCustomerPhone } from '../../src/utils/normalizeCustomerPhone.t
 import { getCustomerLoginLockSeconds, recordCustomerLoginFailure, clearLoginAttempts } from '../services/rateLimits.ts';
 import { checkContactRevealRateLimit, hashContactIp } from '../services/contactGuard.ts';
 import { createGeniusPayCheckout, GeniusPayApiError } from '../services/geniusPay.ts';
+import {
+  buildDeliveryTicket,
+  deliveryQuoteSql,
+  getDeliveryQuote,
+  MAX_DELIVERY_QUOTE,
+  MIN_DELIVERY_QUOTE,
+} from '../services/deliveryQuoting.ts';
 import { getVapidConfiguration, parseBrowserPushSubscription } from '../services/pushNotifications.ts';
 import {
   dispatchDeliveryAssignedPush,
@@ -28,8 +35,6 @@ const DRIVER_SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const SUBSCRIPTION_DURATION_MS = 24 * 60 * 60 * 1000;
 const MAX_DAILY_COURSE_RELEASES = 3;
 const SANDBOX_SUBSCRIPTION_AMOUNT = 1000;
-const MIN_DELIVERY_QUOTE = 1500;
-const MAX_DELIVERY_QUOTE = 2500;
 const MAX_PROOF_BYTES = 307_200;
 const PROOF_CONTENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const ACTIVE_DELIVERY_STATES = new Set(['accepted', 'to_pickup', 'picked_up']);
@@ -134,15 +139,6 @@ function toPublicDelivery(row: DeliveryRow) {
     ...(row.pickup_zone ? { pickup_zone: row.pickup_zone } : {}),
     ...(row.destination_zone ? { destination_zone: row.destination_zone } : {}),
   };
-}
-
-function buildDeliveryTicket(deliveryId: number, createdAt: string): string {
-  const date = new Date(createdAt);
-  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
-  const year = String(safeDate.getUTCFullYear()).slice(-2);
-  const month = String(safeDate.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(safeDate.getUTCDate()).padStart(2, '0');
-  return `LIV-${year}${month}${day}-${String(deliveryId).padStart(6, '0')}`;
 }
 
 function decodeDeliveryProof(rawImage: unknown, rawContentType: unknown) {
@@ -272,29 +268,8 @@ export function createDeliveryRouter({
     && Boolean(driver.access_expires_at)
     && Date.parse(String(driver.access_expires_at)) > Date.now();
 
-  const deliveryQuoteSql = `
-    SELECT shop_origins.zone_id AS pickup_zone_id,
-      tariffs.destination_zone_id, tariffs.amount,
-      origin.label AS origin_label, destination.label AS destination_label
-    FROM delivery_shop_origins AS shop_origins
-    JOIN delivery_zones AS origin ON origin.id = shop_origins.zone_id AND origin.is_active = 1
-    JOIN delivery_zone_tariffs AS tariffs
-      ON tariffs.origin_zone_id = shop_origins.zone_id
-      AND tariffs.destination_zone_id = ?
-      AND tariffs.is_active = 1
-    JOIN delivery_zones AS destination
-      ON destination.id = tariffs.destination_zone_id AND destination.is_active = 1
-    WHERE shop_origins.shop_id = ?
-      AND tariffs.amount BETWEEN ? AND ?
-  `;
-
-  const getQuote = async (shopId: number, destinationZoneId: number) => dbGet<{
-    pickup_zone_id: number | string;
-    destination_zone_id: number | string;
-    amount: number;
-    origin_label: string;
-    destination_label: string;
-  }>(deliveryQuoteSql, [destinationZoneId, shopId, MIN_DELIVERY_QUOTE, MAX_DELIVERY_QUOTE]);
+  const getQuote = (shopId: number, destinationZoneId: number) =>
+    getDeliveryQuote(shopId, destinationZoneId);
 
   const listDeliveryEvents = async (deliveryId: number) => {
     const events = await dbAll<DeliveryEventRow>(`
@@ -1026,6 +1001,7 @@ export function createDeliveryRouter({
         (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
         VALUES (?, 'merchant', ?, NULL, 'requested', ?)`,
       [deliveryId, shopId, now]);
+      await transaction.run('UPDATE orders SET delivery_fee = ? WHERE id = ?', [Number(quote.amount), orderId]);
       return { type: 'created' as const, deliveryId, quote, ticketNumber };
     });
     if (creation.type === 'missing') return res.status(404).json({ error: 'Commande introuvable.' });
@@ -1128,6 +1104,7 @@ export function createDeliveryRouter({
         (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
         VALUES (?, 'merchant', ?, ?, 'cancelled', ?)`,
       [deliveryId, shopId, delivery.status, now]);
+      await transaction.run('UPDATE orders SET delivery_fee = 0 WHERE id = ?', [delivery.order_id]);
       return { type: 'cancelled' as const, previousStatus: delivery.status, driverId: toId(delivery.driver_id) };
     });
     if (result === 'missing') return res.status(404).json({ error: 'Course introuvable.' });

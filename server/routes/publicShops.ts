@@ -8,6 +8,7 @@ import { toDiscoveryCitySlug } from '../../src/utils/discoverySeo.ts';
 import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
 import { mapProductRow } from '../repositories/products.ts';
 import { mapShopRow } from '../repositories/shops.ts';
+import { listShopDeliveryOptionRows } from '../services/deliveryQuoting.ts';
 
 const publicShopColumns = `id, name, slug, theme_color, welcome_message, is_open, is_active,
   publication_status, featured_until, merchant_verification_status, selected_subscription_tier,
@@ -28,6 +29,7 @@ interface PublicShopsRouterOptions {
   isRequestFingerprintMatch: (session: { fingerprint?: string } | null | undefined, req: Request) => boolean;
   computeIsShopOpen: (shop: ShopRecord) => boolean;
   isAdminShopSession: (req: Request, shopId: number) => Promise<boolean>;
+  deliveryOperationsEnabled: boolean;
 }
 
 export function createPublicShopsRouter({
@@ -36,6 +38,7 @@ export function createPublicShopsRouter({
   isRequestFingerprintMatch,
   computeIsShopOpen,
   isAdminShopSession,
+  deliveryOperationsEnabled,
 }: PublicShopsRouterOptions) {
   const router = Router();
   const getProductLikeCounts = async (productIds: number[]) => {
@@ -268,6 +271,33 @@ export function createPublicShopsRouter({
           opening_hours: shop.opening_hours,
         };
       }));
+  });
+
+  router.get('/:id/delivery-options', async (req, res) => {
+    const shopId = Number(req.params.id);
+    if (!Number.isSafeInteger(shopId) || shopId <= 0) {
+      return res.status(400).json({ error: 'Identifiant de boutique invalide.' });
+    }
+    const shop = await dbGet<{ id: number | string }>(
+      'SELECT id FROM shops WHERE id = ? AND is_active = 1',
+      [shopId],
+    );
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (!deliveryOperationsEnabled) {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({ available: false, origin_zone: null, zones: [] });
+    }
+    const rows = await listShopDeliveryOptionRows(shopId);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      available: rows.length > 0,
+      origin_zone: rows[0]?.origin_zone ?? null,
+      zones: rows.map((row) => ({
+        id: Number(row.destination_zone_id),
+        label: row.destination_zone,
+        amount: Number(row.amount),
+      })),
+    });
   });
 
   router.get('/:slug', async (req, res) => {

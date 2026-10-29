@@ -14,6 +14,7 @@ export function parseOfferTtlMinutes(raw: unknown): number {
 
 interface StaleDeliveryRow {
   id: number | string;
+  order_id: number | string;
   order_status: string;
 }
 
@@ -29,7 +30,7 @@ export async function expireStaleRequestedCourses(
   const nowIso = now.toISOString();
   const cutoff = new Date(now.getTime() - ttl * 60_000).toISOString();
   const stale = await dbAll<StaleDeliveryRow>(`
-    SELECT deliveries.id, orders.status AS order_status
+    SELECT deliveries.id, deliveries.order_id, orders.status AS order_status
     FROM delivery_orders AS deliveries
     JOIN orders ON orders.id = deliveries.order_id
     WHERE deliveries.status = 'requested' AND deliveries.created_at < ?
@@ -54,6 +55,7 @@ export async function expireStaleRequestedCourses(
         (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
         VALUES (?, 'admin', NULL, 'requested', 'cancelled', ?)`,
       [deliveryId, nowIso]);
+      await transaction.run('UPDATE orders SET delivery_fee = 0 WHERE id = ?', [row.order_id]);
       return true;
     });
     if (!didCancel) continue;

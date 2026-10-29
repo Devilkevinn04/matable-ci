@@ -999,6 +999,7 @@ async function startServer() {
     computeIsShopOpen,
     isAdminShopSession: async (req, shopId) =>
       Number(req.params.slug) === shopId && Boolean(await getAdminSession(req)),
+    deliveryOperationsEnabled: DELIVERY_TEST_MODE,
   });
   app.use('/api/v1/catalog/storefronts', publicShopsRouter);
   app.use('/api/shops', publicShopsRouter);
@@ -1141,6 +1142,7 @@ async function startServer() {
     timingSafeEqual,
     getValidSelectedModifiers,
     getProductUnitPriceWithModifiers,
+    deliveryOperationsEnabled: DELIVERY_TEST_MODE,
   }));
 
   const {

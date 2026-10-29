@@ -48,6 +48,7 @@ function mapOrderRow(row: Record<string, unknown>): OrderRecord {
     delivery_slot: row.delivery_slot == null ? undefined : String(row.delivery_slot),
     payment_method_preference: String(row.payment_method_preference || 'to_confirm') as OrderRecord['payment_method_preference'],
     total_amount: Number(row.total_amount),
+    delivery_fee: Number(row.delivery_fee || 0),
     created_at: String(row.created_at),
     status: String(row.status || 'pending') as OrderRecord['status'],
     whatsapp_tracking_available: Boolean(row.whatsapp_tracking_available),
@@ -83,6 +84,7 @@ export function createMerchantOrdersRouter({
       ? shopOrders.map((order) => ({
         ...order,
         total_amount: 0,
+        delivery_fee: 0,
         items: order.items?.map((item) => ({ ...item, unit_price: 0 })),
       }))
       : shopOrders);
@@ -252,6 +254,9 @@ export function createMerchantOrdersRouter({
         }
 
         await transaction.run('UPDATE orders SET status = ? WHERE id = ? AND shop_id = ?', [status, order.id, shopId]);
+        if (['cancelled', 'expired'].includes(status)) {
+          await transaction.run('UPDATE orders SET delivery_fee = 0 WHERE id = ?', [order.id]);
+        }
         if (['cancelled', 'expired'].includes(status) && linkedDelivery
           && ['requested', 'accepted', 'to_pickup'].includes(linkedDelivery.status)) {
           const cancelledAt = new Date().toISOString();
@@ -279,6 +284,7 @@ export function createMerchantOrdersRouter({
           );
         }
         order.status = status as OrderRecord['status'];
+        if (['cancelled', 'expired'].includes(status)) order.delivery_fee = 0;
         return { order, previousStatus, unchanged: false };
       });
       if (!result) return res.status(404).json({ error: 'Commande introuvable.' });
@@ -290,11 +296,15 @@ export function createMerchantOrdersRouter({
         }
       }
       const cachedOrder = orders.find((candidate) => candidate.id === orderId && candidate.shop_id === shopId);
-      if (cachedOrder) cachedOrder.status = result.order.status;
+      if (cachedOrder) {
+        cachedOrder.status = result.order.status;
+        cachedOrder.delivery_fee = result.order.delivery_fee;
+      }
       const responseOrder = req.adminRole === 'verification_admin'
         ? {
           ...result.order,
           total_amount: 0,
+          delivery_fee: 0,
           items: result.order.items?.map((item) => ({ ...item, unit_price: 0 })),
         }
         : result.order;

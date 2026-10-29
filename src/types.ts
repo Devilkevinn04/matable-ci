@@ -160,6 +160,7 @@ export interface Order {
   delivery_slot?: string; // For food: "Midi 12h-13h", etc.
   payment_method_preference: 'wave' | 'mobile_money' | 'cash' | 'to_confirm';
   total_amount: number;
+  delivery_fee?: number;
   created_at: string;
   status: OrderStatus;
   whatsapp_tracking_available?: boolean;

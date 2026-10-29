@@ -588,6 +588,7 @@ test('local delivery flow covers account approval, sandbox fee, zone quote, cour
     adminCourses.payload.courses.map((course) => course.id).sort((left, right) => left - right),
     [deliveryId, secondDeliveryId].sort((left, right) => left - right),
   );
+
   const adminRelease = await api(`/api/admin/delivery/courses/${secondDeliveryId}/release`, {
     method: 'POST',
     body: JSON.stringify({ reason: 'Réaffectation de test' }),
@@ -769,6 +770,125 @@ test('local delivery flow covers account approval, sandbox fee, zone quote, cour
   assert.equal(expiredTimeline.response.status, 200);
   assert.deepEqual(expiredTimeline.payload.events.map((event) => event.next_status), ['requested', 'cancelled']);
   assert.equal(expiredTimeline.payload.events[1].actor_type, 'admin');
+
+  const checkoutOptions = await api<{
+    available: boolean;
+    origin_zone: string | null;
+    zones: { id: number; label: string; amount: number }[];
+  }>('/api/shops/1/delivery-options');
+  assert.equal(checkoutOptions.response.status, 200);
+  assert.equal(checkoutOptions.payload.available, true);
+  assert.equal(checkoutOptions.payload.origin_zone, 'Cocody');
+  assert.deepEqual(checkoutOptions.payload.zones, [{ id: bingervilleId, label: 'Bingerville', amount: 2000 }]);
+  assert.equal((await api('/api/shops/999999/delivery-options')).response.status, 404);
+
+  const openShopDb = new Database(TEST_DB_PATH);
+  try {
+    openShopDb.prepare('UPDATE shops SET opening_hours = NULL, is_open = 1 WHERE id = 1').run();
+  } finally {
+    openShopDb.close();
+  }
+
+  const checkoutOrder = await api<{
+    order: { id: number; total_amount: number; delivery_fee: number };
+    delivery: { id: number; ticket_number: string; quoted_amount: number; status: string };
+  }>('/api/orders', {
+    method: 'POST',
+    body: JSON.stringify({
+      shop_id: 1,
+      customer_name: 'Client Livraison',
+      customer_phone: '+2250788990170',
+      delivery_location: 'Bingerville centre',
+      payment_method_preference: 'cash',
+      age_confirmed: true,
+      delivery_zone_id: bingervilleId,
+      items: [{ product_id: 1, quantity: 1 }],
+    }),
+  });
+  assert.equal(checkoutOrder.response.status, 200, JSON.stringify(checkoutOrder.payload));
+  assert.equal(checkoutOrder.payload.order.total_amount, 14500);
+  assert.equal(checkoutOrder.payload.order.delivery_fee, 2000);
+  assert.equal(checkoutOrder.payload.delivery.status, 'requested');
+  assert.equal(checkoutOrder.payload.delivery.quoted_amount, 2000);
+  assert.match(checkoutOrder.payload.delivery.ticket_number, /^LIV-\d{6}-\d{6}$/);
+  const checkoutOrderId = checkoutOrder.payload.order.id;
+  const checkoutTimeline = await api<{ events: { next_status: string; actor_type: string }[] }>(
+    `/api/shops/1/deliveries/${checkoutOrder.payload.delivery.id}/events`,
+    {},
+    merchantCookie,
+  );
+  assert.equal(checkoutTimeline.response.status, 200);
+  assert.deepEqual(checkoutTimeline.payload.events.map((event) => event.next_status), ['requested']);
+  assert.equal(checkoutTimeline.payload.events[0].actor_type, 'admin');
+
+  const merchantOrdersWithFee = await api<{ id: number; delivery_fee: number }[]>(
+    '/api/shops/1/orders',
+    {},
+    merchantCookie,
+  );
+  assert.equal(merchantOrdersWithFee.response.status, 200);
+  assert.equal(merchantOrdersWithFee.payload.find((order) => order.id === checkoutOrderId)?.delivery_fee, 2000);
+
+  const countDb = new Database(TEST_DB_PATH);
+  let orderCountBefore: number;
+  try {
+    orderCountBefore = Number((countDb.prepare('SELECT COUNT(*) AS count FROM orders').get() as { count: number }).count);
+  } finally {
+    countDb.close();
+  }
+  const unavailableZone = await api('/api/orders', {
+    method: 'POST',
+    body: JSON.stringify({
+      shop_id: 1,
+      customer_name: 'Client Zone Inconnue',
+      customer_phone: '+2250788990171',
+      delivery_location: 'Palmeraie centre',
+      age_confirmed: true,
+      delivery_zone_id: palmeraieId,
+      items: [{ product_id: 1, quantity: 1 }],
+    }),
+  });
+  assert.equal(unavailableZone.response.status, 409);
+  const afterRejectedDb = new Database(TEST_DB_PATH);
+  try {
+    const orderCountAfter = Number((afterRejectedDb.prepare('SELECT COUNT(*) AS count FROM orders').get() as { count: number }).count);
+    assert.equal(orderCountAfter, orderCountBefore);
+  } finally {
+    afterRejectedDb.close();
+  }
+
+  const noDeliveryOrder = await api<{ order: { delivery_fee: number }; delivery: null }>('/api/orders', {
+    method: 'POST',
+    body: JSON.stringify({
+      shop_id: 1,
+      customer_name: 'Client Sans Livraison',
+      customer_phone: '+2250788990172',
+      delivery_location: 'Cocody Angré',
+      age_confirmed: true,
+      items: [{ product_id: 1, quantity: 1 }],
+    }),
+  });
+  assert.equal(noDeliveryOrder.response.status, 200, JSON.stringify(noDeliveryOrder.payload));
+  assert.equal(noDeliveryOrder.payload.order.delivery_fee, 0);
+  assert.equal(noDeliveryOrder.payload.delivery, null);
+
+  const cancelledCheckout = await api(`/api/shops/1/orders/${checkoutOrderId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'cancelled' }),
+  }, merchantCookie);
+  assert.equal(cancelledCheckout.response.status, 200);
+  const cancelledCheckoutDb = new Database(TEST_DB_PATH);
+  try {
+    const orderRow = cancelledCheckoutDb.prepare('SELECT delivery_fee, status FROM orders WHERE id = ?')
+      .get(checkoutOrderId) as { delivery_fee: number; status: string };
+    assert.equal(orderRow.delivery_fee, 0);
+    assert.equal(orderRow.status, 'cancelled');
+    const deliveryRow = cancelledCheckoutDb.prepare('SELECT status FROM delivery_orders WHERE id = ?')
+      .get(checkoutOrder.payload.delivery.id) as { status: string };
+    assert.equal(deliveryRow.status, 'cancelled');
+  } finally {
+    cancelledCheckoutDb.close();
+  }
 
   // This wrong-shop request invalidates the merchant session, so it must stay last.
   const wrongShopContact = await api('/api/shops/2/orders/101/contacts/customer', {}, merchantCookie);

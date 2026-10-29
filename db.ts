@@ -64,6 +64,7 @@ const sqliteSchema = `
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, customer_name TEXT NOT NULL,
     customer_phone TEXT NOT NULL, delivery_location TEXT NOT NULL, delivery_note TEXT,
     delivery_slot TEXT, payment_method_preference TEXT, total_amount INTEGER NOT NULL,
+    delivery_fee INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL, items TEXT, customer_user_id INTEGER, attribution_campaign TEXT
   );
   CREATE TABLE IF NOT EXISTS order_whatsapp_tracking (
@@ -519,6 +520,7 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('analytics_events', 'source', 'TEXT');
   addColumn('analytics_events', 'campaign', 'TEXT');
   addColumn('orders', 'attribution_campaign', 'TEXT');
+  addColumn('orders', 'delivery_fee', 'INTEGER NOT NULL DEFAULT 0');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_shop_created ON subscription_payment_intents(shop_id, created_at DESC)');
   connection.exec(`CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_reconcile
@@ -602,10 +604,12 @@ export const postgresMigrations = [
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, customer_name TEXT NOT NULL,
     customer_phone TEXT NOT NULL, delivery_location TEXT NOT NULL, delivery_note TEXT,
     delivery_slot TEXT, payment_method_preference TEXT, total_amount INTEGER NOT NULL,
+    delivery_fee INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', items JSONB,
     customer_user_id BIGINT, attribution_campaign TEXT
   )`,
   'ALTER TABLE orders ADD COLUMN IF NOT EXISTS attribution_campaign TEXT',
+  'ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_fee INTEGER NOT NULL DEFAULT 0',
   `CREATE TABLE IF NOT EXISTS order_whatsapp_tracking (
     order_id INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
     token_hash TEXT NOT NULL UNIQUE, clicked_at TEXT

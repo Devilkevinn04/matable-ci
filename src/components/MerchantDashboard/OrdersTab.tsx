@@ -405,7 +405,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
             </div>
 
             <p className="-mt-2 rounded-xl border border-slate-200 bg-[#fffdf8] px-3 py-2 text-[11px] leading-5 text-slate-600">
-              Les montants ci-dessus sont calculés à partir des commandes hors annulation et expiration, y compris les commandes livrées. MaTable.ci ne suit pas les encaissements : vérifiez directement le règlement auprès de vos clients. Le mode choisi ou un clic WhatsApp ne confirme pas le paiement.
+              Les montants ci-dessus sont calculés à partir des commandes hors annulation et expiration, y compris les commandes livrées. Ils regroupent les articles et excluent les frais de livraison MaTable, qui ne sont pas du chiffre d’affaires boutique. MaTable.ci ne suit pas les encaissements : vérifiez directement le règlement auprès de vos clients. Le mode choisi ou un clic WhatsApp ne confirme pas le paiement.
             </p>
 
             {/* Orders List */}
@@ -527,6 +527,12 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                         <span className="font-black text-lg text-slate-900 md:text-right">
                           {formatFCFA(order.total_amount)}
                         </span>
+                        {Number(order.delivery_fee) > 0 && (
+                          <span className="text-[10px] font-semibold leading-4 text-emerald-800 md:text-right">
+                            + {formatFCFA(Number(order.delivery_fee))} de livraison<br />
+                            Total client {formatFCFA(Number(order.total_amount) + Number(order.delivery_fee))}
+                          </span>
+                        )}
 
                         {/* Order status action buttons */}
                         <div className="flex flex-wrap items-center gap-2 md:justify-end">

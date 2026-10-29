@@ -43,7 +43,7 @@ export function isValidWhatsAppPhone(phone: string): boolean {
 
 export function generateWhatsAppOrderReceipt(
   shop: Shop,
-  order: Pick<Order, 'customer_name' | 'customer_phone' | 'delivery_location' | 'delivery_note' | 'payment_method_preference' | 'items' | 'total_amount' | 'delivery_slot'>
+  order: Pick<Order, 'customer_name' | 'customer_phone' | 'delivery_location' | 'delivery_note' | 'payment_method_preference' | 'items' | 'total_amount' | 'delivery_slot' | 'delivery_fee'>
 ): { text: string; url: string } {
   const paymentLabels: Record<string, string> = {
     wave: 'Wave souhaité',
@@ -95,9 +95,17 @@ export function generateWhatsAppOrderReceipt(
   });
 
   lines.push(`----------------------------------------`);
-  lines.push(`💰 *TOTAL INDICATIF : ${formatFCFA(order.total_amount)}*`);
-  lines.push(`📌 *Disponibilité, retrait ou livraison et frais éventuels à confirmer directement avec la boutique.*`);
-  lines.push(`🚚 *MaTable ne fournit ni n’organise la livraison.*`);
+  const deliveryFee = Number(order.delivery_fee || 0);
+  if (deliveryFee > 0) {
+    lines.push(`🛵 *Frais de livraison MaTable : ${formatFCFA(deliveryFee)}*`);
+    lines.push(`💰 *TOTAL À RÉGLER : ${formatFCFA(order.total_amount + deliveryFee)}*`);
+    lines.push(`📌 *Livraison organisée par MaTable : la course est créée et un livreur est recherché.*`);
+    lines.push(`📌 *Le règlement des articles et des frais de livraison reste à convenir avec la boutique ou le livreur.*`);
+  } else {
+    lines.push(`💰 *TOTAL INDICATIF : ${formatFCFA(order.total_amount)}*`);
+    lines.push(`📌 *Disponibilité, retrait ou livraison et frais éventuels à confirmer directement avec la boutique.*`);
+    lines.push(`🚚 *MaTable ne fournit ni n’organise la livraison pour cette commande.*`);
+  }
   lines.push(`----------------------------------------`);
   lines.push(`Merci de me confirmer la disponibilité, le montant final et le mode de paiement. ✨`);
 

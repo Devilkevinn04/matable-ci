@@ -132,12 +132,26 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [customLocation, setCustomLocation] = useState('');
   const [deliveryNote, setDeliveryNote] = useState('');
   const [deliverySlot, setDeliverySlot] = useState('Dès que prêt (30-45 min)');
+  const [deliveryOptions, setDeliveryOptions] = useState<{
+    available: boolean;
+    originZone: string | null;
+    zones: { id: number; label: string; amount: number }[];
+  } | null>(null);
+  const [deliveryZoneId, setDeliveryZoneId] = useState<number | null>(null);
+  const [deliveryOptionsLoading, setDeliveryOptionsLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<Order['payment_method_preference']>('to_confirm');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCheckoutAuth, setShowCheckoutAuth] = useState(false);
   const [trustTarget, setTrustTarget] = useState<{ type: 'shop' | 'product'; id: number; name: string } | null>(null);
   const [checkoutAuthUser, setCheckoutAuthUser] = useState<CustomerUser | null>(null);
-  const [orderSuccess, setOrderSuccess] = useState<{ orderId: number; whatsappUrl: string; whatsappText: string; whatsappTrackingToken: string } | null>(null);
+  const [orderSuccess, setOrderSuccess] = useState<{
+    orderId: number;
+    whatsappUrl: string;
+    whatsappText: string;
+    whatsappTrackingToken: string;
+    deliveryFee: number;
+    deliveryTicket: string | null;
+  } | null>(null);
   const [messageCopied, setMessageCopied] = useState(false);
   const [formStartedAt] = useState(() => Date.now());
   const [website, setWebsite] = useState('');
@@ -159,6 +173,45 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       return matchesSearch && matchesCategory;
     });
   }, [products, searchQuery, selectedCategory, ageVerified]);
+
+  useEffect(() => {
+    if (!shop?.id || !isCartOpen) return;
+    let cancelled = false;
+    setDeliveryOptionsLoading(true);
+    fetch(`/api/shops/${shop.id}/delivery-options`, { cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) {
+          if (!cancelled) setDeliveryOptions(null);
+          return;
+        }
+        const data = await response.json() as {
+          available?: boolean;
+          origin_zone?: string | null;
+          zones?: { id: number; label: string; amount: number }[];
+        };
+        const zones = Array.isArray(data.zones)
+          ? data.zones.filter((zone) => Number.isSafeInteger(zone.id) && Number.isFinite(zone.amount))
+          : [];
+        if (cancelled) return;
+        setDeliveryOptions({
+          available: Boolean(data.available) && zones.length > 0,
+          originZone: typeof data.origin_zone === 'string' ? data.origin_zone : null,
+          zones,
+        });
+        setDeliveryZoneId((current) => zones.some((zone) => zone.id === current) ? current : null);
+      })
+      .catch(() => {
+        if (!cancelled) setDeliveryOptions(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDeliveryOptionsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [shop?.id, isCartOpen]);
+
+  const selectedDeliveryOption = deliveryOptions?.zones.find((zone) => zone.id === deliveryZoneId) || null;
+  const deliveryFee = selectedDeliveryOption ? Number(selectedDeliveryOption.amount) : 0;
+  const orderTotalDue = totalCartAmount + deliveryFee;
 
   const fetchShopData = async (signal: AbortSignal, ageConfirmed = false): Promise<boolean> => {
     try {
@@ -590,6 +643,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           delivery_note: deliveryNote,
           delivery_slot: shop.category === 'food' ? deliverySlot : undefined,
           payment_method_preference: paymentMethod,
+          delivery_zone_id: deliveryZoneId ?? undefined,
           age_confirmed: ageVerified,
           items: cart.map(item => ({
             product_id: item.product.id,
@@ -626,9 +680,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         whatsappUrl: url,
         whatsappText: text,
         whatsappTrackingToken: String(data.whatsapp_tracking_token || ''),
+        deliveryFee: Number(data.order.delivery_fee || 0),
+        deliveryTicket: data.delivery?.ticket_number ?? null,
       });
       setMessageCopied(false);
-      toast.success('Demande enregistrée. Confirmez les modalités directement avec la boutique sur WhatsApp.');
+      toast.success(data.delivery
+        ? 'Commande enregistrée. Livraison MaTable en attente d’un livreur.'
+        : 'Demande enregistrée. Confirmez les modalités directement avec la boutique sur WhatsApp.');
 
       // Update only local stock so the confirmation screen stays mounted.
       const confirmedQuantities = new Map<number, number>();
@@ -896,7 +954,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             {[
               { number: '01', title: 'Choisissez vos articles', description: 'Ajoutez vos envies au panier.' },
               { number: '02', title: 'Écrivez à la boutique', description: 'Envoyez votre récapitulatif sur WhatsApp.' },
-              { number: '03', title: 'Convenez avec le commerçant', description: 'Retrait ou livraison et frais éventuels se règlent directement avec lui.' },
+              { number: '03', title: 'Convenez avec le commerçant', description: 'Retrait ou livraison : les modalités et frais sont confirmés avec lui.' },
             ].map((step) => (
               <div key={step.number} className="flex min-h-24 items-center gap-3 rounded-xl bg-[#f8f3ec] p-3 sm:min-h-28 sm:items-start sm:p-4">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#d1fae5] text-xs font-black text-[#065f46]">{step.number}</span>
@@ -909,7 +967,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           </div>
           <p className="mt-3 flex items-start gap-2 text-[11px] leading-5 text-[#647067]">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#047857]" />
-            MaTable met en relation le client et la boutique ; MaTable ne fournit ni n’organise de service de livraison.
+            MaTable met en relation le client et la boutique et peut organiser la livraison dans les zones couvertes, avec des frais affichés au moment de la commande.
           </p>
           </div>
         </details>
@@ -1251,7 +1309,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                   </div>
                 ))}
               </div>
-              <p className="mt-2 text-[11px] leading-5 text-slate-500">Ces indications et les frais éventuels sont à confirmer directement avec la boutique sur WhatsApp. MaTable n’assure ni n’organise le transport.</p>
+              <p className="mt-2 text-[11px] leading-5 text-slate-500">Ces indications de la boutique sont à confirmer directement avec elle. Si MaTable couvre votre zone, les frais de livraison sont calculés et ajoutés au total au moment de la commande.</p>
             </div>
           )}
         </details>
@@ -1302,7 +1360,23 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     <span className="text-sm font-bold text-[#47534b]">Total des articles</span>
                     <span className="text-base font-black text-[#292d2a]">{formatFCFA(totalCartAmount)}</span>
                   </div>
-                  <p className="mt-1 text-[10px] leading-4 text-[#647067]">Hors livraison et frais éventuels, à convenir directement avec la boutique.</p>
+                  {deliveryFee > 0 && (
+                    <div className="mt-1 flex items-center justify-between gap-3">
+                      <span className="text-xs font-bold text-[#065f46]">Livraison MaTable</span>
+                      <span className="text-sm font-black text-[#065f46]">{formatFCFA(deliveryFee)}</span>
+                    </div>
+                  )}
+                  {deliveryFee > 0 && (
+                    <div className="mt-1 flex items-center justify-between gap-3 border-t border-[#e5d9ca] pt-1">
+                      <span className="text-sm font-black text-[#292d2a]">Total à régler</span>
+                      <span className="text-base font-black text-[#292d2a]">{formatFCFA(orderTotalDue)}</span>
+                    </div>
+                  )}
+                  <p className="mt-1 text-[10px] leading-4 text-[#647067]">
+                    {deliveryFee > 0
+                      ? 'Règlement des articles et de la livraison à convenir avec la boutique ou le livreur.'
+                      : 'Hors livraison et frais éventuels, à convenir directement avec la boutique.'}
+                  </p>
                   <button type="button" onClick={() => setIsCartOpen(true)} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#065f46] px-4 text-sm font-black text-white transition hover:bg-[#047857]">
                     Préparer ma commande <ArrowRight className="h-4 w-4" />
                   </button>
@@ -1392,11 +1466,26 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     Demande enregistrée (N° {orderSuccess.orderId})
                   </h4>
                   <p className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full inline-block font-semibold mb-4">
-                    ✓ Articles réservés · récapitulatif prêt
+                    {orderSuccess.deliveryFee > 0 ? '✓ Articles réservés · livraison MaTable demandée' : '✓ Articles réservés · récapitulatif prêt'}
                   </p>
-                  <p className="text-sm text-slate-600 max-w-sm mx-auto mb-6 leading-relaxed">
-                    Envoyez votre récapitulatif au commerçant sur WhatsApp pour confirmer la disponibilité, le retrait ou la livraison et les frais éventuels. MaTable ne fournit pas la livraison.
-                  </p>
+                  {orderSuccess.deliveryFee > 0 ? (
+                    <div className="mx-auto mb-4 max-w-sm rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-left">
+                      <p className="text-xs font-black text-emerald-950">Livraison MaTable confirmée</p>
+                      <p className="mt-1 text-xs leading-5 text-emerald-900">
+                        {orderSuccess.deliveryTicket ? `Course ${orderSuccess.deliveryTicket} · ` : ''}
+                        frais de livraison {formatFCFA(orderSuccess.deliveryFee)} ajoutés au total. Un livreur va être recherché.{authenticatedCustomer ? ' Suivez la course depuis votre compte client.' : ' Conservez votre numéro de ticket pour le suivi.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-600 max-w-sm mx-auto mb-6 leading-relaxed">
+                      Envoyez votre récapitulatif au commerçant sur WhatsApp pour confirmer la disponibilité, le retrait ou la livraison et les frais éventuels.
+                    </p>
+                  )}
+                  {orderSuccess.deliveryFee > 0 && (
+                    <p className="text-sm text-slate-600 max-w-sm mx-auto mb-6 leading-relaxed">
+                      Confirmez le règlement des articles et des frais de livraison avec la boutique ou le livreur.
+                    </p>
+                  )}
 
                   <a
                     href={orderSuccess.whatsappUrl}
@@ -1659,12 +1748,63 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         </label>
                       )}
 
-                      <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 flex items-start gap-2">
-                        <Info className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                        <span>
-                          MaTable transmet ces indications au commerçant. MaTable ne gère ni la livraison ni les frais associés : convenez-en directement avec la boutique.
-                        </span>
-                      </div>
+                      {deliveryOptionsLoading && (
+                        <p role="status" className="mt-2.5 text-[11px] font-semibold text-slate-500">
+                          Vérification des zones de livraison MaTable…
+                        </p>
+                      )}
+
+                      {deliveryOptions?.available && (
+                        <div className="mt-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5">
+                          <p className="text-[11px] font-black text-emerald-950">Livraison MaTable (optionnel)</p>
+                          <p className="mt-0.5 text-[10px] leading-4 text-emerald-900">
+                            {deliveryOptions.originZone ? `Départ ${deliveryOptions.originZone}. ` : ''}
+                            Les frais sont ajoutés au total et la course est créée dès la commande.
+                          </p>
+                          <div role="radiogroup" aria-label="Zone de livraison MaTable" className="mt-2 grid gap-1.5">
+                            <button
+                              type="button"
+                              role="radio"
+                              aria-checked={deliveryZoneId === null}
+                              onClick={() => setDeliveryZoneId(null)}
+                              className={`flex min-h-10 items-center justify-between gap-2 rounded-lg border px-2.5 text-left text-[11px] font-semibold transition-colors ${
+                                deliveryZoneId === null
+                                  ? 'border-emerald-700 bg-white text-emerald-950 ring-1 ring-emerald-700'
+                                  : 'border-emerald-200 bg-white/70 text-emerald-900 hover:bg-white'
+                              }`}
+                            >
+                              <span>Je m’organise / à convenir</span>
+                              <span className="shrink-0 text-[10px] font-bold uppercase text-emerald-700">Sans frais MaTable</span>
+                            </button>
+                            {deliveryOptions.zones.map((zone) => (
+                              <button
+                                key={zone.id}
+                                type="button"
+                                role="radio"
+                                aria-checked={deliveryZoneId === zone.id}
+                                onClick={() => setDeliveryZoneId(zone.id)}
+                                className={`flex min-h-10 items-center justify-between gap-2 rounded-lg border px-2.5 text-left text-[11px] font-semibold transition-colors ${
+                                  deliveryZoneId === zone.id
+                                    ? 'border-emerald-700 bg-white text-emerald-950 ring-1 ring-emerald-700'
+                                    : 'border-emerald-200 bg-white/70 text-emerald-900 hover:bg-white'
+                                }`}
+                              >
+                                <span className="truncate">{zone.label}</span>
+                                <span className="shrink-0 font-black text-emerald-800">{formatFCFA(zone.amount)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {!deliveryOptionsLoading && !deliveryOptions?.available && (
+                        <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 flex items-start gap-2">
+                          <Info className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                          <span>
+                            MaTable transmet ces indications au commerçant. La livraison MaTable n’est pas disponible pour cette boutique : convenez du retrait ou de la livraison et des frais éventuels directement avec elle.
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Food Delivery Slot */}
@@ -1735,13 +1875,29 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     <div className="pt-4 border-t border-slate-200">
                       <div className="flex flex-col mb-4">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-bold text-slate-700">Total des articles :</span>
-                          <span className="text-xl font-black text-slate-900">
+                          <span className="text-sm font-bold text-slate-700">Articles :</span>
+                          <span className="text-sm font-black text-slate-900">
                             {formatFCFA(totalCartAmount)}
                           </span>
                         </div>
+                        {deliveryFee > 0 && (
+                          <div className="mt-1 flex items-center justify-between">
+                            <span className="text-sm font-bold text-emerald-800">Livraison MaTable ({selectedDeliveryOption?.label}) :</span>
+                            <span className="text-sm font-black text-emerald-800">
+                              {formatFCFA(deliveryFee)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2">
+                          <span className="text-sm font-black text-slate-900">Total à régler :</span>
+                          <span className="text-xl font-black text-slate-900">
+                            {formatFCFA(orderTotalDue)}
+                          </span>
+                        </div>
                         <span className="text-[10px] text-slate-400 mt-0.5">
-                          Remise ou livraison et frais éventuels à convenir directement avec la boutique sur WhatsApp. MaTable n’organise pas le transport.
+                          {deliveryFee > 0
+                            ? 'Le règlement des articles et des frais de livraison est à convenir avec la boutique ou le livreur. MaTable suit la course sans encaisser le paiement.'
+                            : 'Remise ou livraison et frais éventuels à convenir directement avec la boutique sur WhatsApp.'}
                         </span>
                       </div>
 

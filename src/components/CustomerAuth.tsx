@@ -223,6 +223,7 @@ interface CustomerOrderDelivery {
 interface CustomerOrder {
   id: number;
   total_amount: number;
+  delivery_fee?: number;
   status: string;
   created_at: string;
   shop_id: number;
@@ -694,7 +695,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="rounded-full bg-[#f1eee7] px-3 py-1.5 text-xs font-bold text-[#47534b]">{customerOrderStatusLabel(order.status)}</span>
-                      <strong className="whitespace-nowrap text-sm font-extrabold text-[#065f46]">{order.total_amount.toLocaleString('fr-FR')} F</strong>
+                      <strong className="whitespace-nowrap text-sm font-extrabold text-[#065f46]">{(order.total_amount + Number(order.delivery_fee || 0)).toLocaleString('fr-FR')} F</strong>
                     </div>
                   </article>)}
                 </div>}
@@ -814,7 +815,12 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                   </div>
                   <div className="flex flex-col items-start gap-2 sm:items-end">
                     <span className="rounded-full bg-[#f1eee7] px-3 py-1.5 text-xs font-bold text-[#47534b]">{customerOrderStatusLabel(order.status)}</span>
-                    <strong className="text-sm font-extrabold text-[#065f46]">{order.total_amount.toLocaleString('fr-FR')} FCFA</strong>
+                    <strong className="text-sm font-extrabold text-[#065f46]">{(order.total_amount + Number(order.delivery_fee || 0)).toLocaleString('fr-FR')} FCFA</strong>
+                    {Number(order.delivery_fee || 0) > 0 && (
+                      <span className="text-[10px] font-semibold text-[#647067] sm:text-right">
+                        {order.total_amount.toLocaleString('fr-FR')} FCFA d’articles<br />+ {Number(order.delivery_fee).toLocaleString('fr-FR')} FCFA de livraison
+                      </span>
+                    )}
                   </div>
                 </div>
                 {order.items?.length ? <ul className="mt-4 space-y-2 border-t border-[#eee6dd] pt-3">
