@@ -13,6 +13,7 @@ import { formatFCFA } from '../utils/format';
 import { PushOptIn } from './PushOptIn';
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import { Link } from 'react-router-dom';
+import { trackLogin, trackSignup } from '../utils/analyticsTracker';
 
 const GuideChecklist = React.lazy(() => import('./UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
 
@@ -112,6 +113,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Impossible de terminer la création du compte.');
+        trackSignup('customer', 'google');
         const returnTo = typeof data.return_to === 'string' && data.return_to.startsWith('/') && !data.return_to.startsWith('//') ? data.return_to : '/compte';
         window.location.assign(returnTo);
         return;
@@ -124,6 +126,8 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de terminer la demande.');
+      if (mode === 'login') trackLogin('customer', 'email');
+      else trackSignup('customer', 'email');
       onAuthenticated(data.user);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Une erreur est survenue.');

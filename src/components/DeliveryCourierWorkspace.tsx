@@ -4,6 +4,7 @@ import { DeliveryTimeline, type DeliveryTimelineEvent } from './DeliveryTimeline
 import { DeliveryStatusBadge, DELIVERY_STATUS_LABELS } from './deliveryStatus';
 import { PushOptIn } from './PushOptIn';
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
+import { trackLogin, trackLogout, trackSignup } from '../utils/analyticsTracker';
 
 interface DriverProfile {
   id: number;
@@ -289,9 +290,11 @@ export function DeliveryCourierWorkspace() {
       const data = await readJson<{ driver?: DriverProfile }>(response);
       if (!response.ok) throw new Error(data.error || 'Impossible de traiter cette demande.');
       if (mode === 'register') {
+        trackSignup('courier', 'registration');
         setMode('login');
         setNotice('Inscription enregistrée. Connectez-vous, puis attendez l’activation du compte par MaTable.');
       } else {
+        trackLogin('courier', 'pin');
         setDriver(data.driver || null);
         await loadSession();
         setNotice('Connexion livreur réussie.');
@@ -494,6 +497,7 @@ export function DeliveryCourierWorkspace() {
       return;
     }
     setDriver(null);
+    trackLogout('courier');
     setOffers([]);
     setActiveDelivery(null);
     setAccessActive(false);

@@ -4,6 +4,7 @@ import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDelive
 import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
 import { TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
 import { useMerchantProductEditor } from './useMerchantProductEditor';
+import { trackLogin, trackLogout, trackSignup } from '../../utils/analyticsTracker';
 
 export type MerchantOrderFilter = 'all' | 'actionable' | OrderStatus;
 
@@ -151,6 +152,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     const openSession = (data: { shop: Shop }) => {
       setCurrentShop(data.shop);
       syncShopSettings(data.shop);
+      trackLogin('merchant', 'access_token');
       loadShopData(data.shop.id).finally(() => setIsSessionLoading(false));
     };
 
@@ -301,6 +303,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       window.history.replaceState({}, '', '/app');
       setCurrentShop(data.shop);
       syncShopSettings(data.shop);
+      trackLogin('merchant', 'access_code');
       loadShopData(data.shop.id);
     } catch (err: unknown) {
       const error = err as Error;
@@ -339,6 +342,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
       setCurrentShop(data.shop);
       syncShopSettings(data.shop);
+      trackLogin('merchant', 'pin');
       loadShopData(data.shop.id);
     } catch (err: unknown) {
       const error = err as Error;
@@ -385,6 +389,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       setCurrentShop(data.shop);
       syncShopSettings(data.shop);
       setIsRegisterModalOpen(false);
+      trackSignup('merchant', 'registration');
       const publicUrl = `${window.location.origin}/${data.shop.slug}`;
       const privateUrl = `${window.location.origin}/app?access=${encodeURIComponent(data.owner_access_token)}`;
       const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable.ci. Votre essai Standard gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé et votre espace marchand est accessible immédiatement. Vous pouvez choisir une formule payante et la régler dès maintenant ou quand vous le souhaitez. Vérifiez votre identité pour publier la boutique et recevoir des commandes. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
@@ -473,6 +478,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       return;
     }
     fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+    trackLogout('merchant');
     setCurrentShop(null);
     setProducts([]);
     setOrders([]);

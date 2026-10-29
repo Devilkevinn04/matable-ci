@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Eye, MousePointer2, Package, RefreshCw, ShoppingBag, Users, Wallet } from 'lucide-react';
+import { BarChart3, Eye, MousePointer2, Package, QrCode, RefreshCw, Route, ShoppingBag, Users, Wallet } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Shop } from '../../types';
 import { getSubscriptionAnalyticsDayLimit } from '../../utils/subscriptionFeatures';
@@ -19,6 +19,19 @@ type ProductAnalytics = {
   clicks: number;
 };
 
+type FunnelStep = {
+  step: string;
+  count: number;
+  conversion_from_previous: number;
+  conversion_from_visit: number;
+};
+
+type PageAnalytics = {
+  path: string;
+  views: number;
+  visitors: number;
+};
+
 type ProAnalytics = {
   days: number;
   summary: {
@@ -29,9 +42,28 @@ type ProAnalytics = {
     whatsapp_clicks: number;
     product_views: number;
     product_clicks: number;
+    qr_scans?: number;
+    qr_visitors?: number;
   };
   daily: DailyAnalytics[];
   top_products: ProductAnalytics[];
+  funnel?: FunnelStep[];
+  top_pages?: PageAnalytics[];
+  co_viewed_products?: Array<{
+    product_a: number;
+    product_b: number;
+    title_a: string | null;
+    title_b: string | null;
+    sessions: number;
+  }>;
+};
+
+const funnelLabels: Record<string, string> = {
+  visite: 'Visite de la vitrine',
+  produit_vu: 'Article consulté',
+  panier: 'Ajout au panier',
+  commande_commencee: 'Commande commencée',
+  commande_creee: 'Commande envoyée',
 };
 
 const numberFormat = new Intl.NumberFormat('fr-FR');
@@ -352,6 +384,51 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
         ) : (
           <p className="px-4 py-8 text-center text-sm text-slate-500">Aucune vue produit mesurée sur cette période. Partagez votre vitrine pour commencer.</p>
         )}
+      </section>
+
+      <section aria-labelledby="merchant-funnel-title" className="overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white">
+        <div className="border-b border-[#eee8dc] px-4 py-4 sm:px-5">
+          <div className="flex items-center gap-2"><Route className="h-4 w-4 text-emerald-800" aria-hidden="true" /><h3 id="merchant-funnel-title" className="font-extrabold text-[#183b31]">Parcours jusqu’à la commande</h3></div>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Sessions anonymes ayant atteint chaque étape, avec consentement.</p>
+        </div>
+        <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
+          <div className="space-y-2.5">
+            {(analytics?.funnel || []).map((step) => (
+              <div key={step.step} className="flex items-center justify-between gap-3 rounded-xl bg-[#f7f6f1] px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-bold text-slate-700">{funnelLabels[step.step] || step.step}</p>
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-[#087c5b]" style={{ width: `${Math.min(100, step.conversion_from_visit)}%` }} /></div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-black tabular-nums text-[#183b31]">{numberFormat.format(step.count)}</p>
+                  <p className="text-[10px] text-slate-500">{step.conversion_from_visit.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} % des visites</p>
+                </div>
+              </div>
+            ))}
+            {!(analytics?.funnel || []).length && <p className="rounded-xl bg-[#faf9f5] p-4 text-xs leading-5 text-slate-500">Le parcours apparaîtra dès les premières visites consenties.</p>}
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 rounded-xl border border-[#e7dfd3] p-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><QrCode className="h-4 w-4" aria-hidden="true" /></span>
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500">Scans du QR code</p>
+                <p className="mt-0.5 font-black text-[#183b31]">{numberFormat.format(analytics?.summary.qr_scans ?? 0)} <span className="text-[10px] font-semibold text-slate-500">· {numberFormat.format(analytics?.summary.qr_visitors ?? 0)} visiteurs</span></p>
+              </div>
+            </div>
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Pages les plus vues</p>
+              <ul className="mt-2 space-y-1.5">
+                {(analytics?.top_pages || []).slice(0, 5).map((page) => (
+                  <li key={page.path} className="flex items-center justify-between gap-3 text-xs">
+                    <span className="truncate text-slate-600">{page.path}</span>
+                    <span className="shrink-0 font-bold tabular-nums text-[#183b31]">{numberFormat.format(page.views)}</span>
+                  </li>
+                ))}
+                {!(analytics?.top_pages || []).length && <li className="text-xs text-slate-500">Aucune page mesurée.</li>}
+              </ul>
+            </div>
+          </div>
+        </div>
       </section>
 
       <div className="flex items-start gap-3 rounded-2xl border border-[#eadfce] bg-[#fffaf2] p-4 text-xs leading-5 text-[#6b6255]">

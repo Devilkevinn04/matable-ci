@@ -687,7 +687,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
     const days = Number.isInteger(requestedDays) ? Math.min(Math.max(requestedDays, 7), 90) : 30;
     const since = new Date(Date.now() - days * 86400000).toISOString();
     const previousSince = new Date(Date.parse(since) - days * 86400000).toISOString();
-    const [dailyTraffic, dailyOrders, currentTraffic, previousTraffic, currentOrders, previousOrders, sourceRows, campaignRows, campaignOrderRows, campaignClickRows, trafficByShop, ordersByShop] = await Promise.all([
+    const [dailyTraffic, dailyOrders, currentTraffic, previousTraffic, currentOrders, previousOrders, sourceRows, campaignRows, campaignOrderRows, campaignClickRows, trafficByShop, ordersByShop, audienceRows, topPageRows, loginRows, signupRows, funnelRow, qrByShopRows, qrTotalRow, productRows, coViewRows] = await Promise.all([
       dbAll<{ date: string; page_views: number; unique_visitors: number }>(`
         SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS page_views,
           COUNT(DISTINCT session_id) AS unique_visitors
@@ -752,9 +752,79 @@ export function createAdminRouter(options: AdminRouterOptions) {
         FROM orders WHERE created_at >= ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
         GROUP BY shop_id
       `, [since]),
+      dbAll<{ audience: string; events: number; sessions: number }>(`
+        SELECT COALESCE(audience, 'unknown') AS audience, COUNT(*) AS events,
+          COUNT(DISTINCT session_id) AS sessions
+        FROM analytics_events WHERE created_at >= ?
+        GROUP BY COALESCE(audience, 'unknown') ORDER BY events DESC
+      `, [since]),
+      dbAll<{ path: string; views: number; visitors: number }>(`
+        SELECT path, COUNT(*) AS views, COUNT(DISTINCT session_id) AS visitors
+        FROM analytics_events WHERE event_type = 'page_view' AND created_at >= ?
+        GROUP BY path ORDER BY views DESC, path ASC LIMIT 20
+      `, [since]),
+      dbAll<{ audience: string; logins: number; sessions: number }>(`
+        SELECT COALESCE(audience, 'unknown') AS audience, COUNT(*) AS logins,
+          COUNT(DISTINCT session_id) AS sessions
+        FROM analytics_events WHERE event_type = 'login' AND created_at >= ?
+        GROUP BY COALESCE(audience, 'unknown') ORDER BY logins DESC
+      `, [since]),
+      dbAll<{ audience: string; signups: number; sessions: number }>(`
+        SELECT COALESCE(audience, 'unknown') AS audience, COUNT(*) AS signups,
+          COUNT(DISTINCT session_id) AS sessions
+        FROM analytics_events WHERE event_type = 'signup' AND created_at >= ?
+        GROUP BY COALESCE(audience, 'unknown') ORDER BY signups DESC
+      `, [since]),
+      dbGet<{ visits: number; product_views: number; cart_adds: number; checkouts: number; orders: number }>(`
+        SELECT
+          COUNT(DISTINCT CASE WHEN event_type = 'page_view' THEN session_id END) AS visits,
+          COUNT(DISTINCT CASE WHEN event_type = 'product_view' THEN session_id END) AS product_views,
+          COUNT(DISTINCT CASE WHEN event_type = 'add_to_cart' THEN session_id END) AS cart_adds,
+          COUNT(DISTINCT CASE WHEN event_type = 'checkout_start' THEN session_id END) AS checkouts,
+          COUNT(DISTINCT CASE WHEN event_type = 'order_created' THEN session_id END) AS orders
+        FROM analytics_events WHERE created_at >= ?
+      `, [since]),
+      dbAll<{ shop_id: number; scans: number; visitors: number }>(`
+        SELECT shop_id, COUNT(*) AS scans, COUNT(DISTINCT session_id) AS visitors
+        FROM analytics_events
+        WHERE event_type = 'page_view' AND campaign = 'qr' AND shop_id IS NOT NULL AND created_at >= ?
+        GROUP BY shop_id
+      `, [since]),
+      dbGet<{ scans: number; visitors: number }>(`
+        SELECT COUNT(*) AS scans, COUNT(DISTINCT session_id) AS visitors
+        FROM analytics_events
+        WHERE event_type = 'page_view' AND campaign = 'qr' AND created_at >= ?
+      `, [since]),
+      dbAll<{ product_id: number; shop_id: number; title: string | null; views: number; clicks: number }>(`
+        SELECT events.entity_id AS product_id, events.shop_id, products.title,
+          SUM(CASE WHEN events.event_type = 'product_view' THEN 1 ELSE 0 END) AS views,
+          SUM(CASE WHEN events.event_type = 'product_click' THEN 1 ELSE 0 END) AS clicks
+        FROM analytics_events events
+        LEFT JOIN products ON products.id = events.entity_id
+        WHERE events.event_type IN ('product_view', 'product_click')
+          AND events.entity_id IS NOT NULL AND events.created_at >= ?
+        GROUP BY events.entity_id, events.shop_id, products.title
+        ORDER BY clicks DESC, views DESC LIMIT 20
+      `, [since]),
+      dbAll<{ product_a: number; product_b: number; title_a: string | null; title_b: string | null; sessions: number }>(`
+        SELECT first.entity_id AS product_a, second.entity_id AS product_b,
+          product_a.title AS title_a, product_b.title AS title_b,
+          COUNT(DISTINCT first.session_id) AS sessions
+        FROM analytics_events first
+        JOIN analytics_events second
+          ON second.session_id = first.session_id AND second.event_type = 'product_view'
+          AND second.entity_id IS NOT NULL AND second.entity_id > first.entity_id
+        LEFT JOIN products product_a ON product_a.id = first.entity_id
+        LEFT JOIN products product_b ON product_b.id = second.entity_id
+        WHERE first.event_type = 'product_view' AND first.entity_id IS NOT NULL
+          AND first.created_at >= ? AND second.created_at >= ?
+        GROUP BY first.entity_id, second.entity_id, product_a.title, product_b.title
+        ORDER BY sessions DESC LIMIT 20
+      `, [since, since]),
     ]);
     const trafficByShopId = new Map(trafficByShop.map((row) => [Number(row.shop_id), row]));
     const ordersByShopId = new Map(ordersByShop.map((row) => [Number(row.shop_id), row]));
+    const qrByShopId = new Map(qrByShopRows.map((row) => [Number(row.shop_id), row]));
     const campaignOrdersByName = new Map(campaignOrderRows.map((row) => [row.campaign, row]));
     const campaignClicksByName = new Map(campaignClickRows.map((row) => [row.campaign, row]));
     const campaignNames = new Set([
@@ -784,11 +854,30 @@ export function createAdminRouter(options: AdminRouterOptions) {
       return {
         shop_id: shop.id, shop_name: shop.name, slug: shop.slug, page_views: pageViews,
         unique_visitors: uniqueVisitors, orders: shopOrders, sales: Number(commerce?.sales || 0),
+        qr_scans: Number(qrByShopId.get(shop.id)?.scans || 0),
         conversion_rate: uniqueVisitors ? Number(((shopOrders / uniqueVisitors) * 100).toFixed(1)) : 0,
       };
     }).sort((left, right) => right.page_views - left.page_views);
     const dailyTrafficByDate = new Map(dailyTraffic.map((row) => [row.date, row]));
     const dailyOrdersByDate = new Map(dailyOrders.map((row) => [row.date, row]));
+    const funnelSteps = [
+      { step: 'visite', count: Number(funnelRow?.visits || 0) },
+      { step: 'produit_vu', count: Number(funnelRow?.product_views || 0) },
+      { step: 'panier', count: Number(funnelRow?.cart_adds || 0) },
+      { step: 'commande_commencee', count: Number(funnelRow?.checkouts || 0) },
+      { step: 'commande_creee', count: Number(funnelRow?.orders || 0) },
+    ];
+    const funnel = funnelSteps.map((step, index) => ({
+      ...step,
+      conversion_from_previous: index === 0
+        ? 100
+        : funnelSteps[index - 1].count
+          ? Number(((step.count / funnelSteps[index - 1].count) * 100).toFixed(1))
+          : 0,
+      conversion_from_visit: funnelSteps[0].count
+        ? Number(((step.count / funnelSteps[0].count) * 100).toFixed(1))
+        : 0,
+    }));
     const daily = Array.from({ length: days }, (_, index) => {
       const date = new Date(Date.now() - (days - index - 1) * 86400000).toISOString().slice(0, 10);
       const traffic = dailyTrafficByDate.get(date);
@@ -817,6 +906,50 @@ export function createAdminRouter(options: AdminRouterOptions) {
       })),
       campaigns,
       by_shop: byShop,
+      audiences: audienceRows.map((row) => ({
+        audience: row.audience || 'unknown',
+        events: Number(row.events || 0),
+        sessions: Number(row.sessions || 0),
+      })),
+      top_pages: topPageRows.map((row) => ({
+        path: row.path || '/',
+        views: Number(row.views || 0),
+        visitors: Number(row.visitors || 0),
+      })),
+      logins: loginRows.map((row) => ({
+        audience: row.audience || 'unknown',
+        logins: Number(row.logins || 0),
+        sessions: Number(row.sessions || 0),
+      })),
+      signups: signupRows.map((row) => ({
+        audience: row.audience || 'unknown',
+        signups: Number(row.signups || 0),
+        sessions: Number(row.sessions || 0),
+      })),
+      funnel,
+      qr_scans: {
+        total: Number(qrTotalRow?.scans || 0),
+        visitors: Number(qrTotalRow?.visitors || 0),
+        by_shop: qrByShopRows.map((row) => ({
+          shop_id: Number(row.shop_id),
+          scans: Number(row.scans || 0),
+          visitors: Number(row.visitors || 0),
+        })),
+      },
+      top_products: productRows.map((row) => ({
+        product_id: Number(row.product_id),
+        shop_id: row.shop_id == null ? null : Number(row.shop_id),
+        title: row.title || null,
+        views: Number(row.views || 0),
+        clicks: Number(row.clicks || 0),
+      })),
+      co_viewed_products: coViewRows.map((row) => ({
+        product_a: Number(row.product_a),
+        product_b: Number(row.product_b),
+        title_a: row.title_a || null,
+        title_b: row.title_b || null,
+        sessions: Number(row.sessions || 0),
+      })),
       totals: {
         page_views: totalViews, unique_visitors: totalVisitors, orders: totalOrders,
         sales: totalSales,

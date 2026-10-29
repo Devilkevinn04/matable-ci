@@ -64,6 +64,7 @@ import type {
   AdminSubscriptions,
 } from './adminDashboardTypes';
 import type { SubscriptionTier } from '../types';
+import { trackLogin, trackLogout } from '../utils/analyticsTracker';
 
 const adminOrderTransitions: Record<AdminOrder['status'], AdminOrder['status'][]> = {
   pending: ['confirmed', 'cancelled'],
@@ -701,11 +702,13 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
     setAdminKey('');
+    trackLogin('admin', loginRole);
     await fetchAdminShops();
   };
 
   const handleAdminLogout = async () => {
     await fetch('/api/auth/admin-logout', { method: 'POST' });
+    trackLogout('admin');
     setIsAuthenticated(false);
     setAdminKey('');
     setAdminHealth(null);

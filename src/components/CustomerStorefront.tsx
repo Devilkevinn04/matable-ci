@@ -27,6 +27,15 @@ import { CategoryProductImage } from './CategoryProductImage';
 import { CustomerProductCard } from './CustomerProductCard';
 import { useToast } from './Toast';
 import { hasAnalyticsConsent } from './CookieBanner';
+import {
+  trackCartEvent,
+  trackCheckoutStart,
+  trackOrderCreated,
+  trackPageView,
+  trackProductClick,
+  trackProductView,
+  trackWhatsAppClick,
+} from '../utils/analyticsTracker';
 import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from '../utils/analyticsAttribution';
 import { CustomerUser } from './CustomerAuth';
 import { CustomerCheckoutAuth } from './CustomerCheckoutAuth';
@@ -55,14 +64,6 @@ const paymentPreferenceOptions: {
   { id: 'cash', label: 'Espèces', icon: '💵', explanation: 'Le paiement en espèces sera à convenir avec la boutique, au retrait ou à la remise.' },
   { id: 'to_confirm', label: 'À convenir', icon: '💬', explanation: 'Vous choisirez le mode de règlement avec la boutique sur WhatsApp.' },
 ];
-
-function getAnalyticsReferrerHost(): string {
-  try {
-    return document.referrer ? new URL(document.referrer).hostname : '';
-  } catch {
-    return '';
-  }
-}
 
 export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug, customerUser, onCustomerAuthenticated }) => {
   const toast = useToast();
@@ -426,53 +427,17 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   };
 
   useEffect(() => {
-    if (!shop?.id || !hasAnalyticsConsent()) return;
-    const storageKey = `matable_page_view_${shop.id}`;
-    if (sessionStorage.getItem(storageKey)) return;
-    const sessionId = sessionStorage.getItem('matable_analytics_session') || crypto.randomUUID();
-    sessionStorage.setItem('matable_analytics_session', sessionId);
-    sessionStorage.setItem(storageKey, '1');
-    let referrerHost = '';
-    try {
-      referrerHost = document.referrer ? new URL(document.referrer).hostname : '';
-    } catch {
-      referrerHost = '';
-    }
-    fetch('/api/analytics/page-view', {
-      method: 'POST',
-      keepalive: true,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shop_id: shop.id, session_id: sessionId, path: window.location.pathname, referrer_host: referrerHost }),
-    }).catch(() => undefined);
+    if (!shop?.id) return;
+    trackPageView(window.location.pathname, 'customer', shop.id);
   }, [shop?.id]);
 
   useEffect(() => {
-    if (!shop?.id || !hasAnalyticsConsent() || typeof IntersectionObserver === 'undefined') return;
-    const sessionId = sessionStorage.getItem('matable_analytics_session') || crypto.randomUUID();
-    sessionStorage.setItem('matable_analytics_session', sessionId);
-    const reportView = (productId: number) => {
-      if (!hasAnalyticsConsent()) return;
-      const viewKey = `matable_product_view_${shop.id}_${productId}`;
-      if (sessionStorage.getItem(viewKey)) return;
-      sessionStorage.setItem(viewKey, '1');
-      fetch('/api/analytics/product-event', {
-        method: 'POST',
-        keepalive: true,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shop_id: shop.id,
-          product_id: productId,
-          event_type: 'product_view',
-          session_id: sessionId,
-          referrer_host: getAnalyticsReferrerHost(),
-        }),
-      }).catch((error: unknown) => console.error('Unable to record product view analytics.', error));
-    };
+    if (!shop?.id || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
         const productId = Number((entry.target as HTMLElement).dataset.analyticsProductId);
-        if (Number.isInteger(productId)) reportView(productId);
+        if (Number.isInteger(productId)) trackProductView(shop.id, productId);
         observer.unobserve(entry.target);
       }
     }, { threshold: 0.5 });
@@ -481,21 +446,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   }, [filteredProducts, shop?.id]);
 
   const reportProductClick = (productId: number) => {
-    if (!shop?.id || !hasAnalyticsConsent()) return;
-    const sessionId = sessionStorage.getItem('matable_analytics_session') || crypto.randomUUID();
-    sessionStorage.setItem('matable_analytics_session', sessionId);
-    fetch('/api/analytics/product-event', {
-      method: 'POST',
-      keepalive: true,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        shop_id: shop.id,
-        product_id: productId,
-        event_type: 'product_click',
-        session_id: sessionId,
-        referrer_host: getAnalyticsReferrerHost(),
-      }),
-    }).catch((error: unknown) => console.error('Unable to record product click analytics.', error));
+    if (!shop?.id) return;
+    trackProductClick(shop.id, productId);
   };
 
   useEffect(() => {
@@ -602,6 +554,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!shop || cart.length === 0) return;
+    trackCheckoutStart(shop.id, totalCartCount, totalCartAmount);
     if (!ageVerified && cart.some((item) => isAgeRestrictedProduct(item.product))) {
       toast.error('Confirmez votre majorité avant de commander ces produits.');
       return;
@@ -685,6 +638,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         deliveryFee: Number(data.order.delivery_fee || 0),
         deliveryTicket: data.delivery?.ticket_number ?? null,
       });
+      trackOrderCreated(
+        shop.id,
+        Number(data.order.id),
+        totalCartCount,
+        Number(data.order.total_amount || totalCartAmount),
+        Number(data.order.delivery_fee || 0),
+      );
       setMessageCopied(false);
       toast.success(data.delivery
         ? 'Commande enregistrée. Livraison MaTable en attente d’un livreur.'
@@ -1214,7 +1174,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             <ShoppingBag className="mx-auto mb-3 h-10 w-10 text-slate-300" />
             <h3 className="text-base font-black text-slate-900">La sélection arrive bientôt</h3>
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">Cette boutique prépare son catalogue. Vous pouvez contacter le commerçant pour connaître les articles disponibles.</p>
-            <a href={`https://wa.me/${shop.whatsapp_number.replace(/\D/g, '')}?text=${encodeURIComponent(`Bonjour, je souhaite connaître les articles disponibles chez ${shop.name}.`)}`} target="_blank" rel="noreferrer" className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold text-white" style={{ backgroundColor: primaryColor }}><Phone className="h-4 w-4" />Demander le catalogue</a>
+            <a href={`https://wa.me/${shop.whatsapp_number.replace(/\D/g, '')}?text=${encodeURIComponent(`Bonjour, je souhaite connaître les articles disponibles chez ${shop.name}.`)}`} target="_blank" rel="noreferrer" onClick={() => trackWhatsAppClick(shop.id, 'catalog')} className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold text-white" style={{ backgroundColor: primaryColor }}><Phone className="h-4 w-4" />Demander le catalogue</a>
           </div>
         ) : filteredProducts.length === 0 ? (
           hasAgeRestrictedProducts && !ageVerified ? null : (
@@ -1278,8 +1238,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         return { ...previous, [product.id]: isSelected ? current.filter((value) => value !== optionLabel) : [...current, optionLabel] };
                       });
                     }}
-                    onAddToCart={() => { reportProductClick(product.id); addToCart(product); }}
-                    onDecreaseQuantity={() => { if (cartIndex > -1) updateQuantity(cartIndex, -1); }}
+                    onAddToCart={() => { reportProductClick(product.id); trackCartEvent('add_to_cart', shop.id, product.id, 1, totalCartCount + 1); addToCart(product); }}
+                    onDecreaseQuantity={() => { if (cartIndex > -1) { updateQuantity(cartIndex, -1); trackCartEvent('remove_from_cart', shop.id, product.id, 1, Math.max(0, totalCartCount - 1)); } }}
                   />
                 </div>
               );
@@ -1499,6 +1459,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => {
+                      trackWhatsAppClick(shop.id, 'order');
                       if (orderSuccess.whatsappTrackingToken) {
                         void fetch(`/api/orders/${orderSuccess.orderId}/whatsapp-click`, {
                           method: 'POST',

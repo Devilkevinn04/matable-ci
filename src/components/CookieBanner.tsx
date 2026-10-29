@@ -1,37 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { COOKIE_CONSENT_KEY, COOKIE_PREFERENCES_KEY, saveCookiePreferences } from '../utils/cookieConsent';
 
-const CONSENT_KEY = 'matable_cookie_consent';
-const PREFS_KEY = 'matable_cookie_preferences';
-
-export const hasAnalyticsConsent = (): boolean => {
-  try {
-    const prefsRaw = window.localStorage.getItem(PREFS_KEY);
-    if (prefsRaw) {
-      try {
-        const prefs = JSON.parse(prefsRaw);
-        return Boolean(prefs.analytics);
-      } catch {
-        // ignore invalid json and fall back to legacy value
-      }
-    }
-    return window.localStorage.getItem(CONSENT_KEY) === 'accepted';
-  } catch {
-    return false;
-  }
-};
-
-export const saveCookiePreferences = (analyticsEnabled: boolean): boolean => {
-  try {
-    window.localStorage.setItem(PREFS_KEY, JSON.stringify({ essential: true, analytics: analyticsEnabled }));
-    window.localStorage.setItem(CONSENT_KEY, analyticsEnabled ? 'accepted' : 'refused');
-    window.dispatchEvent(new Event('matable-cookie-preferences-updated'));
-    return true;
-  } catch {
-    return false;
-  }
-};
+export { hasAnalyticsConsent, saveCookiePreferences } from '../utils/cookieConsent';
 
 export const CookieBanner: React.FC = () => {
   const [visible, setVisible] = useState(false);
@@ -39,8 +11,8 @@ export const CookieBanner: React.FC = () => {
   useEffect(() => {
     const syncVisibility = () => {
       try {
-        const prefsRaw = window.localStorage.getItem(PREFS_KEY);
-        const hasUserChoice = Boolean(prefsRaw) || Boolean(window.localStorage.getItem(CONSENT_KEY));
+        const prefsRaw = window.localStorage.getItem(COOKIE_PREFERENCES_KEY);
+        const hasUserChoice = Boolean(prefsRaw) || Boolean(window.localStorage.getItem(COOKIE_CONSENT_KEY));
         setVisible(!hasUserChoice);
       } catch {
         setVisible(false);

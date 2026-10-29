@@ -16,6 +16,7 @@
     "db:restore:validate": "node --import dotenv/config scripts/restore-validate-postgres.mjs",
     "lint": "tsc --noEmit",
     "migrate:neon": "node --import dotenv/config --import tsx scripts/migrate-neon.ts",
+    "analytics:report": "node --import tsx scripts/analytics-report.ts",
     "test": "node --import tsx --test tests/*.test.ts services/api-gateway/test/*.test.mjs",
     "test:gateway": "node --test services/api-gateway/test/*.test.mjs",
     "lint:gateway": "node --check services/api-gateway/src/server.mjs"

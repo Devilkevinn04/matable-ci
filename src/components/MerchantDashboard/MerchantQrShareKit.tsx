@@ -81,7 +81,13 @@ function drawWrappedText(
 }
 
 export const MerchantQrShareKit: React.FC<MerchantQrShareKitProps> = ({ shop, onClose }) => {
-  const publicUrl = useMemo(() => new URL(`/${encodeURIComponent(shop.slug)}`, window.location.origin).toString(), [shop.slug]);
+  const displayUrl = useMemo(() => new URL(`/${encodeURIComponent(shop.slug)}`, window.location.origin).toString(), [shop.slug]);
+  // `src=qr` permet d'attribuer les scans sans ajouter de donnée personnelle à l'événement.
+  const publicUrl = useMemo(() => {
+    const url = new URL(displayUrl);
+    url.searchParams.set('src', 'qr');
+    return url.toString();
+  }, [displayUrl]);
   const brandColor = normalizeBrandColor(shop.theme_config?.primary_color || shop.theme_color);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [qrError, setQrError] = useState('');
@@ -160,7 +166,7 @@ export const MerchantQrShareKit: React.FC<MerchantQrShareKitProps> = ({ shop, on
       context.fillText('Scannez pour visiter', 540, 1180);
       context.fillStyle = '#52645B';
       context.font = '500 26px sans-serif';
-      context.fillText(publicUrl, 540, 1235, 920);
+      context.fillText(displayUrl, 540, 1235, 920);
       context.fillStyle = brandColor;
       context.fillRect(0, 1418, canvas.width, 22);
 
@@ -204,7 +210,7 @@ export const MerchantQrShareKit: React.FC<MerchantQrShareKitProps> = ({ shop, on
                 ? <img src={qrDataUrl} alt={`QR code vers la vitrine de ${shop.name}`} className="h-48 w-48" />
                 : <div role={qrError ? 'alert' : 'status'} className="flex h-48 w-48 items-center justify-center px-4 text-sm text-slate-600">{qrError || 'Génération du QR code…'}</div>}
             </div>
-            <p className="mt-3 break-all text-xs text-slate-600">{publicUrl}</p>
+            <p className="mt-3 break-all text-xs text-slate-600">{displayUrl}</p>
             <div className="mx-auto mt-3 h-1 w-16 rounded-full" style={{ backgroundColor: brandColor }} />
           </div>
 

@@ -230,7 +230,9 @@ const sqliteSchema = `
   );
   CREATE TABLE IF NOT EXISTS analytics_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, event_type TEXT NOT NULL,
-    session_id TEXT NOT NULL, path TEXT, source TEXT, created_at TEXT NOT NULL
+    session_id TEXT NOT NULL, path TEXT, source TEXT, campaign TEXT,
+    audience TEXT, entity_type TEXT, entity_id INTEGER, device TEXT, locale TEXT,
+    metadata TEXT, created_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS advertising_beta_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1), starts_at TEXT, ends_at TEXT,
@@ -519,6 +521,44 @@ function migrateSqlite(connection: Database.Database) {
   connection.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_delivery_orders_ticket_number ON delivery_orders(ticket_number)');
   addColumn('analytics_events', 'source', 'TEXT');
   addColumn('analytics_events', 'campaign', 'TEXT');
+  addColumn('analytics_events', 'audience', 'TEXT');
+  addColumn('analytics_events', 'entity_type', 'TEXT');
+  addColumn('analytics_events', 'entity_id', 'INTEGER');
+  addColumn('analytics_events', 'device', 'TEXT');
+  addColumn('analytics_events', 'locale', 'TEXT');
+  addColumn('analytics_events', 'metadata', 'TEXT');
+  connection.exec('CREATE INDEX IF NOT EXISTS idx_analytics_events_type_created ON analytics_events(event_type, created_at DESC)');
+  connection.exec('CREATE INDEX IF NOT EXISTS idx_analytics_events_entity_created ON analytics_events(entity_type, entity_id, created_at DESC)');
+  const analyticsBackfillName = 'analytics_intelligence_v1';
+  const analyticsBackfillApplied = connection.prepare('SELECT name FROM didit_schema_migrations WHERE name = ?').get(analyticsBackfillName);
+  if (!analyticsBackfillApplied) {
+    connection.transaction(() => {
+      connection.exec(`UPDATE analytics_events
+        SET entity_type = 'shop', entity_id = shop_id, audience = 'public'
+        WHERE event_type = 'page_view' AND entity_id IS NULL AND shop_id IS NOT NULL`);
+      connection.exec(`UPDATE analytics_events
+        SET entity_type = 'page', audience = 'public'
+        WHERE event_type = 'page_view' AND entity_type IS NULL`);
+      connection.exec(`UPDATE analytics_events
+        SET entity_type = 'product', entity_id = CAST(substr(path, 10) AS INTEGER)
+        WHERE event_type IN ('product_view', 'product_click') AND entity_id IS NULL
+          AND path LIKE '/product/%' AND CAST(substr(path, 10) AS INTEGER) > 0`);
+      connection.prepare('INSERT INTO didit_schema_migrations (name, applied_at) VALUES (?, ?)')
+        .run(analyticsBackfillName, new Date().toISOString());
+    })();
+  }
+  const analyticsAudienceBackfillName = 'analytics_intelligence_v2';
+  const analyticsAudienceBackfillApplied = connection.prepare('SELECT name FROM didit_schema_migrations WHERE name = ?').get(analyticsAudienceBackfillName);
+  if (!analyticsAudienceBackfillApplied) {
+    connection.transaction(() => {
+      connection.exec(`UPDATE analytics_events
+        SET audience = 'customer'
+        WHERE audience IS NULL AND event_type IN ('product_view', 'product_click', 'add_to_cart', 'remove_from_cart', 'checkout_start', 'order_created', 'whatsapp_click')`);
+      connection.exec(`UPDATE analytics_events SET audience = 'public' WHERE audience IS NULL`);
+      connection.prepare('INSERT INTO didit_schema_migrations (name, applied_at) VALUES (?, ?)')
+        .run(analyticsAudienceBackfillName, new Date().toISOString());
+    })();
+  }
   addColumn('orders', 'attribution_campaign', 'TEXT');
   addColumn('orders', 'delivery_fee', 'INTEGER NOT NULL DEFAULT 0');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)');
@@ -695,10 +735,17 @@ export const postgresMigrations = [
   )`,
   `CREATE TABLE IF NOT EXISTS analytics_events (
     id BIGSERIAL PRIMARY KEY, shop_id INTEGER, event_type TEXT NOT NULL,
-    session_id TEXT NOT NULL, path TEXT, source TEXT, campaign TEXT, created_at TEXT NOT NULL
+    session_id TEXT NOT NULL, path TEXT, source TEXT, campaign TEXT, created_at TEXT NOT NULL,
+    audience TEXT, entity_type TEXT, entity_id INTEGER, device TEXT, locale TEXT, metadata TEXT
   )`,
   'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS source TEXT',
   'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS campaign TEXT',
+  'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS audience TEXT',
+  'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS entity_type TEXT',
+  'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS entity_id INTEGER',
+  'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS device TEXT',
+  'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS locale TEXT',
+  'ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS metadata TEXT',
   `CREATE TABLE IF NOT EXISTS advertising_beta_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1), starts_at TEXT, ends_at TEXT,
     delivery_enabled INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
@@ -818,6 +865,8 @@ export const postgresMigrations = [
   'CREATE INDEX IF NOT EXISTS idx_orders_shop_created_at ON orders(shop_id, created_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_analytics_events_shop_created_at ON analytics_events(shop_id, created_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_analytics_events_created_at ON analytics_events(created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_analytics_events_type_created ON analytics_events(event_type, created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_analytics_events_entity_created ON analytics_events(entity_type, entity_id, created_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_merchant_sessions_shop_id ON merchant_sessions(shop_id)',
   `CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL,
