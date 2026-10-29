@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Bike, Camera, CheckCircle2, CreditCard, MapPin, Navigation, PackageCheck, Printer, UserRound } from 'lucide-react';
+import { Bike, Camera, CheckCircle2, CreditCard, MapPin, Navigation, PackageCheck, Printer, UserRound, ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { DeliveryTimeline, type DeliveryTimelineEvent } from './DeliveryTimeline';
 import { DeliveryStatusBadge, DELIVERY_STATUS_LABELS } from './deliveryStatus';
 import { PushOptIn } from './PushOptIn';
@@ -579,7 +580,12 @@ export function DeliveryCourierWorkspace() {
               <p className="mt-1 text-xs leading-5 text-[#103E32]">Recevez les courses de vos zones, révélez les contacts au bon moment et clôturez chaque livraison avec sa preuve photo.</p>
             </div>
           </div>
-          {driver && <button type="button" onClick={() => void logout()} className="min-h-9 rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#103E32] transition-colors hover:bg-[#F4F8F5]">Déconnexion</button>}
+          <div className="flex flex-wrap items-center gap-2">
+            <Link to="/" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#103E32] transition-colors hover:bg-[#F4F8F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />Retour au site
+            </Link>
+            {driver && <button type="button" onClick={() => void logout()} className="min-h-9 rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#103E32] transition-colors hover:bg-[#F4F8F5]">Déconnexion</button>}
+          </div>
         </header>
 
         {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-900">{error}</p>}

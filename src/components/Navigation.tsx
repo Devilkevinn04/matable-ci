@@ -28,7 +28,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   const isMerchantPlansPage = location.pathname.replace(/\/+$/, '') === '/commercants';
   const isPromotionsPage = location.pathname.replace(/\/+$/, '') === '/promotions';
   const publicNavigationLinks = [
-    { to: '/', label: 'Accueil', icon: Home, active: location.pathname === '/' && !location.hash },
+    { to: '/', label: 'Accueil', icon: Home, active: location.pathname === '/' },
     { to: '/boutiques', label: 'Boutiques', icon: Compass, active: location.pathname === '/boutiques' || location.pathname.startsWith('/boutiques/') },
     { to: '/promotions', label: 'Promotions', icon: BadgePercent, active: isPromotionsPage },
     { to: '/comment-ca-marche', label: 'Comment ça marche', icon: CircleHelp, active: location.pathname === '/comment-ca-marche' },
@@ -36,6 +36,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     { to: '/livreur', label: 'Livreurs', icon: Bike, active: location.pathname === '/livreur' },
   ];
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const [searchQuery, setSearchQuery] = useState(() => new URLSearchParams(location.search).get('q') || '');
   const prefersReducedMotion = useReducedMotion();
   React.useEffect(() => {
@@ -44,6 +45,16 @@ export const Navigation: React.FC<NavigationProps> = ({
   React.useEffect(() => {
     setSearchQuery(new URLSearchParams(location.search).get('q') || '');
   }, [location.search]);
+  React.useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMobileMenuOpen(false);
+      mobileMenuButtonRef.current?.focus();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [mobileMenuOpen]);
   const menuVariants = {
     closed: {
       opacity: 0,
@@ -103,6 +114,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         {isDirectory && headerSearch('hidden max-w-[320px] flex-1 2xl:flex')}
 
         <motion.button
+          ref={mobileMenuButtonRef}
           type="button"
           aria-label={mobileMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
           aria-expanded={mobileMenuOpen}

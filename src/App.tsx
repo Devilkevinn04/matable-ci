@@ -80,6 +80,26 @@ const recoveryMetadata = {
   title: 'Récupérer l’accès à votre compte | MaTable.ci',
   description: 'Contacter l’assistance pour récupérer l’accès à un compte client ou commerçant MaTable.ci.',
 };
+const customerLoginMetadata = {
+  title: 'Connexion client | MaTable.ci',
+  description: 'Connectez-vous à votre compte client MaTable.ci pour suivre vos commandes, retrouver vos favoris et gérer vos informations.',
+};
+const customerRegisterMetadata = {
+  title: 'Créer un compte client | MaTable.ci',
+  description: 'Créez votre compte client MaTable.ci pour commander auprès des boutiques locales et suivre vos livraisons.',
+};
+const customerAccountMetadata = {
+  title: 'Mon compte client | MaTable.ci',
+  description: 'Retrouvez vos commandes, vos favoris et les informations de votre compte client MaTable.ci.',
+};
+const merchantWorkspaceMetadata = {
+  title: 'Espace commerçant | MaTable.ci',
+  description: 'Gérez votre boutique, vos produits, vos commandes et vos campagnes depuis l’espace commerçant MaTable.ci.',
+};
+const adminWorkspaceMetadata = {
+  title: 'Administration | MaTable.ci',
+  description: 'Espace d’administration MaTable.ci réservé aux super-administrateurs.',
+};
 const merchantPlanPreviewShop: Shop = {
   id: 0,
   name: 'Atelier Awa',
@@ -448,6 +468,16 @@ export default function App() {
         ? faqMetadata
         : isRecoveryPage
           ? recoveryMetadata
+        : currentRole === 'admin'
+          ? adminWorkspaceMetadata
+        : currentRole === 'merchant'
+          ? merchantWorkspaceMetadata
+        : customerView === 'register'
+          ? customerRegisterMetadata
+        : customerView === 'account'
+          ? customerAccountMetadata
+        : customerView === 'auth'
+          ? customerLoginMetadata
         : isInvalidNestedRoute
           ? { title: 'Page introuvable | MaTable.ci', description: 'La page demandée est introuvable sur MaTable.ci.' }
           : defaultPageMetadata;

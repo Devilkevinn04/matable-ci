@@ -309,6 +309,8 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       : getCategoryDefaults(shop.category).bannerPlaceholderImageUrl);
   const getShopColor = (shop: DirectoryShop) => shop.theme_color || shop.theme_config?.primary_color || '#047857';
   const searchForm = <form
+    role="search"
+    aria-label={isShopDirectoryPage ? 'Rechercher une boutique' : 'Rechercher une boutique ou un produit'}
     onSubmit={(event) => {
       event.preventDefault();
       if (isLocalAdvertisingDemo) {
