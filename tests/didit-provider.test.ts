@@ -3,6 +3,19 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import express from 'express';
 import { createMerchantVerificationRouter } from '../server/routes/merchantVerification.ts';
+import { resolveDriverWorkflowId } from '../server/services/didit.ts';
+
+test('courier Didit workflow falls back to the merchant workflow when no dedicated workflow is set', () => {
+  const merchantWorkflow = randomUUID();
+  const driverWorkflow = randomUUID();
+
+  assert.equal(resolveDriverWorkflowId(undefined, merchantWorkflow), merchantWorkflow);
+  assert.equal(resolveDriverWorkflowId('', merchantWorkflow), merchantWorkflow);
+  assert.equal(resolveDriverWorkflowId('   ', merchantWorkflow), merchantWorkflow);
+  assert.equal(resolveDriverWorkflowId(driverWorkflow, merchantWorkflow), driverWorkflow);
+  assert.equal(resolveDriverWorkflowId('not-a-uuid', merchantWorkflow), null);
+  assert.equal(resolveDriverWorkflowId(undefined, undefined), null);
+});
 
 test('merchant session creation records consent and returns only Didit hosted verification URL', async () => {
   const previousEnvironment = {

@@ -5,7 +5,7 @@ import { normalizeCustomerPhone } from '../../src/utils/normalizeCustomerPhone.t
 import { getCustomerLoginLockSeconds, recordCustomerLoginFailure, clearLoginAttempts } from '../services/rateLimits.ts';
 import { checkContactRevealRateLimit, hashContactIp } from '../services/contactGuard.ts';
 import { createGeniusPayCheckout, GeniusPayApiError } from '../services/geniusPay.ts';
-import { DIDIT_UUID_PATTERN, isDiditSession, mapDiditStatus } from '../services/didit.ts';
+import { isDiditSession, mapDiditStatus, resolveDriverWorkflowId } from '../services/didit.ts';
 import {
   buildDeliveryTicket,
   deliveryQuoteSql,
@@ -272,8 +272,11 @@ export function createDeliveryRouter({
     && Date.parse(String(driver.access_expires_at)) > Date.now();
 
   const getDriverDiditWorkflowId = () => {
-    const workflowId = String(process.env.DIDIT_DRIVER_WORKFLOW_ID || '').trim();
-    return process.env.DIDIT_API_KEY && DIDIT_UUID_PATTERN.test(workflowId) ? workflowId : null;
+    const workflowId = resolveDriverWorkflowId(
+      process.env.DIDIT_DRIVER_WORKFLOW_ID,
+      process.env.DIDIT_WORKFLOW_ID,
+    );
+    return process.env.DIDIT_API_KEY && workflowId ? workflowId : null;
   };
 
   const getQuote = (shopId: number, destinationZoneId: number) =>

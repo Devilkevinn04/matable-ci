@@ -37,6 +37,13 @@ function signatureMatches(signature: string | undefined, payload: Buffer, secret
   return expectedBuffer.length === providedBuffer.length && timingSafeEqual(expectedBuffer, providedBuffer);
 }
 
+export function resolveDriverWorkflowId(driverWorkflowId?: string, merchantWorkflowId?: string): string | null {
+  const driver = String(driverWorkflowId ?? '').trim();
+  const merchant = String(merchantWorkflowId ?? '').trim();
+  const candidate = driver || merchant;
+  return DIDIT_UUID_PATTERN.test(candidate) ? candidate : null;
+}
+
 export function mapDiditStatus(status: string): 'verified' | 'rejected' | 'under_review' | 'submitted' | 'pending' {
   if (status === 'Approved') return 'verified';
   if (status === 'Declined') return 'rejected';
