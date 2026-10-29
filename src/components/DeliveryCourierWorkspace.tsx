@@ -48,9 +48,11 @@ interface DeliveryPaymentState {
 }
 
 const money = (amount: number) => `${new Intl.NumberFormat('fr-FR').format(amount)} FCFA`;
+const isDevEnvironment = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true;
 
 async function readJson<T>(response: Response): Promise<T & { error?: string }> {
-  return response.json() as Promise<T & { error?: string }>;
+  const payload = await response.json().catch(() => ({}));
+  return payload as T & { error?: string };
 }
 
 async function prepareProofPhoto(file: File): Promise<string> {
@@ -79,7 +81,7 @@ async function prepareProofPhoto(file: File): Promise<string> {
   throw new Error('La photo reste trop lourde. Reprenez une photo plus légère.');
 }
 
-export function DeliveryCourierTestWorkspace() {
+export function DeliveryCourierWorkspace() {
   const [driver, setDriver] = useState<DriverProfile | null>(null);
   const [zones, setZones] = useState<DriverZone[]>([]);
   const [selectedZoneIds, setSelectedZoneIds] = useState<number[]>([]);
@@ -302,12 +304,12 @@ export function DeliveryCourierTestWorkspace() {
         credentials: 'include',
       });
       const data = await readJson<{ expires_at?: string }>(response);
-      if (!response.ok) throw new Error(data.error || 'Le forfait de test n’a pas pu être activé.');
+      if (!response.ok) throw new Error(data.error || 'Le forfait livreur n’a pas pu être activé.');
       setAccessExpiresAt(data.expires_at || null);
       setNotice('Forfait simulé de 1 000 FCFA actif pendant 24 heures. Aucun paiement réel n’a été envoyé.');
       await loadSession();
     } catch (paymentError) {
-      setError(paymentError instanceof Error ? paymentError.message : 'Le forfait de test n’a pas pu être activé.');
+      setError(paymentError instanceof Error ? paymentError.message : 'Le forfait livreur n’a pas pu être activé.');
     } finally {
       setSaving(false);
     }
@@ -506,8 +508,8 @@ export function DeliveryCourierTestWorkspace() {
           <div className="flex items-start gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-900"><ShieldCheck className="h-5 w-5" /></span>
             <div>
-              <p className="text-xs font-black uppercase tracking-wide text-sky-900">Espace test local · données persistées</p>
-              <p className="mt-1 text-xs leading-5 text-sky-950">Le forfait peut être réglé par Mobile Money GeniusPay lorsqu’il est configuré, ou simulé en local. Cette interface n’est disponible qu’en développement avec le mode livraison de test activé.</p>
+              <p className="text-xs font-black uppercase tracking-wide text-sky-900">Espace livreur MaTable.ci</p>
+              <p className="mt-1 text-xs leading-5 text-sky-950">Recevez les courses de vos zones, révélez les contacts au bon moment et clôturez chaque livraison avec sa preuve photo.</p>
             </div>
           </div>
           {driver && <button type="button" onClick={() => void logout()} className="min-h-9 rounded-lg border border-sky-300 bg-white px-3 text-xs font-bold text-sky-950">Déconnexion</button>}
@@ -517,14 +519,17 @@ export function DeliveryCourierTestWorkspace() {
         {notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-950">{notice}</p>}
         {loading ? <p role="status" className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">Chargement de l’espace livreur…</p> : !serviceAvailable ? (
           <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-            <h1 className="text-lg font-black text-amber-950">Mode livraison de test non activé</h1>
-            <p className="mt-2 text-sm leading-6 text-amber-900">Démarrez le serveur local avec <code>DELIVERY_TEST_MODE=true</code>. Pour le paiement simulé uniquement, ajoutez <code>DELIVERY_SANDBOX_PAYMENTS=true</code>. Pour le paiement Mobile Money réel, configurez <code>GENIUSPAY_API_KEY</code>, <code>GENIUSPAY_API_SECRET</code>, <code>GENIUSPAY_WEBHOOK_SECRET</code> et <code>APP_URL</code>.</p>
+            <h1 className="text-lg font-black text-amber-950">Service de livraison indisponible</h1>
+            <p className="mt-2 text-sm leading-6 text-amber-900">Le service de livraison MaTable.ci n’est pas activé sur ce serveur. Contactez l’assistance MaTable.ci si vous pensez qu’il s’agit d’une erreur.</p>
+            {isDevEnvironment && (
+              <p className="mt-2 text-xs leading-5 text-amber-800">En local, démarrez le serveur avec <code>DELIVERY_TEST_MODE=true</code>. Pour le paiement simulé uniquement, ajoutez <code>DELIVERY_SANDBOX_PAYMENTS=true</code>.</p>
+            )}
           </section>
         ) : !driver ? (
           <section className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-emerald-900"><Bike className="h-5 w-5" /></span>
             <h1 className="mt-3 text-xl font-black text-slate-950">Espace livreur MaTable</h1>
-            <p className="mt-1 text-sm leading-5 text-slate-600">{mode === 'login' ? 'Connectez-vous avec votre numéro et votre code PIN.' : 'Créez un compte de test. MaTable devra l’activer avant l’accès aux courses.'}</p>
+            <p className="mt-1 text-sm leading-5 text-slate-600">{mode === 'login' ? 'Connectez-vous avec votre numéro et votre code PIN.' : 'Créez un compte livreur. MaTable devra l’activer avant l’accès aux courses.'}</p>
             <form className="mt-4 space-y-3" onSubmit={(event) => void submitAccount(event)}>
               {mode === 'register' && (
                 <label className="block text-xs font-bold text-slate-700">Nom complet
@@ -537,10 +542,10 @@ export function DeliveryCourierTestWorkspace() {
               <label className="block text-xs font-bold text-slate-700">Code PIN à 6 chiffres
                 <input type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} value={pin} onChange={(event) => setPin(event.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm" />
               </label>
-              <button type="submit" disabled={saving} className="min-h-11 w-full rounded-lg bg-emerald-800 px-4 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Patientez…' : mode === 'login' ? 'Se connecter' : 'Créer le compte test'}</button>
+              <button type="submit" disabled={saving} className="min-h-11 w-full rounded-lg bg-emerald-800 px-4 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Patientez…' : mode === 'login' ? 'Se connecter' : 'Créer mon compte livreur'}</button>
             </form>
             <button type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); setNotice(''); }} className="mt-3 min-h-10 w-full text-xs font-bold text-emerald-900 underline underline-offset-2">
-              {mode === 'login' ? 'Créer un compte livreur de test' : 'J’ai déjà un compte'}
+              {mode === 'login' ? 'Créer un compte livreur' : 'J’ai déjà un compte'}
             </button>
           </section>
         ) : (
@@ -598,7 +603,11 @@ export function DeliveryCourierTestWorkspace() {
                           {saving ? 'Préparation…' : 'Payer 1 000 FCFA par Mobile Money'}
                         </button>
                       ) : (
-                        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs font-semibold text-amber-950">Le paiement réel n’est pas configuré sur ce serveur. Utilisez le mode simulé ci-dessous.</p>
+                        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs font-semibold text-amber-950">
+                          {sandboxPaymentsEnabled
+                            ? 'Le paiement réel n’est pas configuré sur ce serveur. Utilisez le mode simulé ci-dessous.'
+                            : 'Le paiement Mobile Money n’est pas encore configuré. Contactez MaTable.ci pour activer votre forfait livreur.'}
+                        </p>
                       )}
                       {paymentState?.status === 'pending' && (
                         <button type="button" onClick={() => void checkPaymentStatus(paymentState.payment_id)} disabled={saving} className="mt-2 min-h-10 w-full rounded-lg border border-emerald-300 bg-white px-4 text-xs font-bold text-emerald-950 disabled:opacity-50">
@@ -741,7 +750,7 @@ export function DeliveryCourierTestWorkspace() {
 
             <aside className="space-y-3">
               <section className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="flex items-center gap-2"><UserRound className="h-4 w-4 text-emerald-800" /><h2 className="text-sm font-black">Mon compte test</h2></div>
+                <div className="flex items-center gap-2"><UserRound className="h-4 w-4 text-emerald-800" /><h2 className="text-sm font-black">Mon compte</h2></div>
                 <p className="mt-2 text-xs leading-5 text-slate-600">{driver.name}<br />{driver.phone}<br />Statut : {driver.status}</p>
                 {accessExpiresAt && <p className="mt-2 text-[11px] text-slate-500">Forfait jusqu’au {new Date(accessExpiresAt).toLocaleString('fr-FR')}</p>}
               </section>
@@ -753,7 +762,7 @@ export function DeliveryCourierTestWorkspace() {
                 tone="sky"
               />
               <section className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="flex items-center gap-2"><PackageCheck className="h-4 w-4 text-emerald-800" /><h2 className="text-sm font-black">Règles de test</h2></div>
+                <div className="flex items-center gap-2"><PackageCheck className="h-4 w-4 text-emerald-800" /><h2 className="text-sm font-black">Règles de course</h2></div>
                 <ul className="mt-2 space-y-2 text-xs leading-5 text-slate-600">
                   <li>Le retrait et la destination doivent être couverts par vos zones actives.</li>
                   <li>Le premier livreur qui accepte gagne la course.</li>

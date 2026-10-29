@@ -44,6 +44,7 @@ function MerchantDeliveryRequest({ shopId, orderId, orderStatus }: {
   const [quote, setQuote] = useState<DeliveryQuote | null>(null);
   const [delivery, setDelivery] = useState<MerchantDelivery | null>(null);
   const [loading, setLoading] = useState(true);
+  const [serviceAvailable, setServiceAvailable] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -64,8 +65,13 @@ function MerchantDeliveryRequest({ shopId, orderId, orderStatus }: {
         zonesResponse.json() as Promise<{ zones?: DeliveryZoneOption[]; error?: string }>,
         deliveriesResponse.json() as Promise<{ deliveries?: MerchantDelivery[]; error?: string }>,
       ]);
-      if (!zonesResponse.ok) throw new Error(zoneData.error || 'Service livraison de test indisponible.');
+      if (zonesResponse.status === 404 || deliveriesResponse.status === 404) {
+        setServiceAvailable(false);
+        return;
+      }
+      if (!zonesResponse.ok) throw new Error(zoneData.error || 'Service de livraison indisponible.');
       if (!deliveriesResponse.ok) throw new Error(deliveryData.error || 'Impossible de charger les demandes de livraison.');
+      setServiceAvailable(true);
       setZones(zoneData.zones || []);
       setDelivery((deliveryData.deliveries || []).find((item) => item.order_id === orderId) || null);
     } catch (loadError) {
@@ -205,7 +211,7 @@ function MerchantDeliveryRequest({ shopId, orderId, orderStatus }: {
   };
 
   const isActiveOrder = ['confirmed', 'preparing', 'ready'].includes(orderStatus);
-  if ((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV !== true) return null;
+  if (!serviceAvailable) return null;
   if (!isActiveOrder && !delivery) return null;
 
   return (

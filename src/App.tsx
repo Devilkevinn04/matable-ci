@@ -25,7 +25,7 @@ const MerchantPlansPage = React.lazy(() => import('./components/MerchantPlansPag
 const MerchantTrialOnboarding = React.lazy(() => import('./components/MerchantDashboard/MerchantTrialOnboarding').then((module) => ({ default: module.MerchantTrialOnboarding })));
 const MobileDashboardPreview = React.lazy(() => import('./components/MobileDashboardPreview'));
 const AdvertisingPreviewPage = React.lazy(() => import('./components/AdvertisingPreviewPage').then((module) => ({ default: module.AdvertisingPreviewPage })));
-const DeliveryCourierPreview = React.lazy(() => import('./components/DeliveryCourierTestWorkspace').then((module) => ({ default: module.DeliveryCourierTestWorkspace })));
+const DeliveryCourierWorkspace = React.lazy(() => import('./components/DeliveryCourierWorkspace').then((module) => ({ default: module.DeliveryCourierWorkspace })));
 
 const legalPageMap: Record<string, LegalPageKey> = {
   'mentions-legales': 'mentions-legales',
@@ -287,7 +287,8 @@ export default function App() {
   const isMobileDashboardPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/mobile';
   const isAdvertisingPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/advertising';
   const isDeliveryCourierPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/delivery-courier';
-  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isRecoveryPage || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierPreview;
+  const isDeliveryCourierWorkspace = isDeliveryCourierPreview || path === '/livreur';
+  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isRecoveryPage || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierWorkspace;
   const isAnimatedPublicRoute = currentRole === 'storefront'
     && customerView === 'none'
     && !isRecoveryPage
@@ -295,8 +296,8 @@ export default function App() {
     && !isMerchantPlansPreview
     && !isMobileDashboardPreview
     && !isAdvertisingPreview
-    && !isDeliveryCourierPreview;
-  const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !isShopDirectoryRoute && !isPromotionsPage && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && customerView === 'none';
+    && !isDeliveryCourierWorkspace;
+  const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !isShopDirectoryRoute && !isPromotionsPage && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && !isDeliveryCourierWorkspace && customerView === 'none';
   const isUnknownStorefront = isCustomerStorefront && !isLoadingShops && !availableShops.some((shop) => shop.slug === normalizedPath);
 
   useEffect(() => {
@@ -319,7 +320,7 @@ export default function App() {
       const isPrivateRoute = path === '/app' || path.startsWith('/app/')
         || path === '/admin' || path.startsWith('/admin/')
         || path === '/compte' || path === '/connexion' || path === '/inscription'
-        || isRecoveryPage || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierPreview || hasMerchantAccessToken || hasAdminShopSession;
+        || isRecoveryPage || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierWorkspace || hasMerchantAccessToken || hasAdminShopSession;
       if (isPrivateRoute || isUnknownStorefront || !hasAnalyticsConsent()) return;
 
       const sessionStorageKey = 'matable_analytics_session';
@@ -357,7 +358,7 @@ export default function App() {
   }, [path, location.search, isRecoveryPage, hasMerchantAccessToken, hasAdminShopSession, isUnknownStorefront]);
 
   useEffect(() => {
-    if (isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierPreview) {
+    if (isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierWorkspace) {
       setIsLoadingShops(false);
       return;
     }
@@ -380,22 +381,22 @@ export default function App() {
         if (isCurrentRequest) setIsLoadingShops(false);
       });
     return () => { isCurrentRequest = false; };
-  }, [shopsRetryKey, isMobileDashboardPreview, isAdvertisingPreview, isDeliveryCourierPreview]);
+  }, [shopsRetryKey, isMobileDashboardPreview, isAdvertisingPreview, isDeliveryCourierWorkspace]);
 
   useEffect(() => {
-    if (isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierPreview) return;
+    if (isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierWorkspace) return;
     fetch('/api/auth/customer-session', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (data.authenticated && data.user) setCustomerUser(data.user);
       })
       .catch(() => undefined);
-  }, [isMobileDashboardPreview, isAdvertisingPreview, isDeliveryCourierPreview]);
+  }, [isMobileDashboardPreview, isAdvertisingPreview, isDeliveryCourierWorkspace]);
 
   useEffect(() => {
     const isPrivateRoute = path === '/app' || path.startsWith('/app/') || path === '/admin' || path.startsWith('/admin/')
       || path === '/compte' || path === '/connexion' || path === '/inscription' || isRecoveryPage;
-    const isInvalidNestedRoute = (!legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && !isMerchantPlansPreview && !isMobileDashboardPreview && !isAdvertisingPreview && !isDeliveryCourierPreview && !isShopDirectoryRoute && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !discoveryPage && path.split('/').filter(Boolean).length > 1)
+    const isInvalidNestedRoute = (!legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && !isMerchantPlansPreview && !isMobileDashboardPreview && !isAdvertisingPreview && !isDeliveryCourierWorkspace && !isShopDirectoryRoute && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !discoveryPage && path.split('/').filter(Boolean).length > 1)
       || isUnknownStorefront;
     const metadata = isProductModalPreview
       ? { title: 'Aperçu du formulaire article | MaTable.ci', description: 'Prévisualisation locale du formulaire de création d’article.' }
@@ -404,7 +405,9 @@ export default function App() {
       : isAdvertisingPreview
        ? { title: 'Aperçu publicité | MaTable.ci', description: 'Aperçu local des campagnes publicitaires, des formulaires commerçants et de la modération MaTable.ci.' }
       : isDeliveryCourierPreview
-       ? { title: 'Espace test livreur | MaTable.ci', description: 'Parcours livreur local persistant avec forfait sandbox et courses de test MaTable.ci.' }
+       ? { title: 'Aperçu espace livreur | MaTable.ci', description: 'Prévisualisation locale du parcours livreur MaTable.ci, avec forfait sandbox et courses de test.' }
+      : isDeliveryCourierWorkspace
+       ? { title: 'Espace livreur | MaTable.ci', description: 'Connectez-vous à votre espace livreur MaTable.ci, consultez les courses de vos zones et clôturez vos livraisons.' }
       : isMerchantPlansPreview
        ? { title: 'Aperçu des formules commerçants | MaTable.ci', description: 'Comparaison des formules Standard, Premium et Pro pour les commerçants MaTable.ci.' }
       : legalPage
@@ -436,7 +439,7 @@ export default function App() {
     const canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (canonical) canonical.href = canonicalUrl;
     const robots = document.head.querySelector<HTMLMetaElement>('meta[name="robots"]');
-    if (robots) robots.content = isPrivateRoute || isInvalidNestedRoute || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierPreview ? 'noindex, nofollow' : 'index, follow, max-image-preview:large';
+    if (robots) robots.content = isPrivateRoute || isInvalidNestedRoute || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierWorkspace ? 'noindex, nofollow' : 'index, follow, max-image-preview:large';
     const openGraphTitle = document.head.querySelector<HTMLMetaElement>('meta[property="og:title"]');
     if (openGraphTitle) openGraphTitle.content = metadata.title;
     const openGraphDescription = document.head.querySelector<HTMLMetaElement>('meta[property="og:description"]');
@@ -496,14 +499,15 @@ export default function App() {
                   onLogoutCustomer={logoutCustomer}
                 />}
 
-                {!isMobileDashboardPreview && !isAdvertisingPreview && !isDeliveryCourierPreview && <CookieBanner />}
+                {!isMobileDashboardPreview && !isAdvertisingPreview && !isDeliveryCourierWorkspace && <CookieBanner />}
 
                 <div id="main-content" className="flex-1 app-shell" tabIndex={-1}>
                   <PublicRouteEnter enabled={isAnimatedPublicRoute} routeKey={isAnimatedPublicRoute ? path : 'persistent-app'}>
                     <React.Suspense fallback={isShopDirectoryRoute || isDiscoveryRoute ? <DirectoryPageLoading /> : <p role="status" className="p-6 text-center text-sm font-semibold text-slate-600">Chargement de la page…</p>}>
                       <Routes>
                       <Route path="/__preview/article-form" element={isProductModalPreview ? <ProductModalDevPreview /> : <NotFoundPage />} />
-                      <Route path="/__preview/delivery-courier" element={isDeliveryCourierPreview ? <DeliveryCourierPreview /> : <NotFoundPage />} />
+                      <Route path="/__preview/delivery-courier" element={isDeliveryCourierPreview ? <DeliveryCourierWorkspace /> : <NotFoundPage />} />
+                      <Route path="/livreur" element={<DeliveryCourierWorkspace />} />
                       <Route path="/__preview/merchant-plans" element={isMerchantPlansPreview
                         ? <React.Suspense fallback={<p role="status" className="p-6 text-center text-sm font-semibold text-slate-600">Chargement de la page…</p>}><MerchantTrialOnboarding shop={merchantPlanPreviewShop} isStarting={false} mode="plans" previewOnly onBack={() => navigate('/boutiques')} /></React.Suspense>
                         : <NotFoundPage />

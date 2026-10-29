@@ -453,7 +453,7 @@ export function createDeliveryRouter({
     if (!session) return;
     if (session.driver.status !== 'active') return res.status(403).json({ error: 'Le compte livreur doit être activé par MaTable.' });
     if (!isDeliveryProviderPaymentConfigured()) {
-      return res.status(503).json({ error: 'Le paiement Mobile Money n’est pas encore configuré. Utilisez le mode de test si disponible.' });
+      return res.status(503).json({ error: 'Le paiement Mobile Money n’est pas encore configuré. Contactez MaTable.ci pour activer votre forfait livreur.' });
     }
     if (isAccessActive(session.driver)) return res.status(409).json({ error: 'Le forfait livreur est déjà actif.' });
     const driverId = Number(session.driver.id);

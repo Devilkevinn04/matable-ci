@@ -68,6 +68,8 @@ before(async () => {
       VERIFICATION_ADMIN_ACCESS_KEY: VERIFICATION_KEY,
       AD_EVENT_SIGNING_SECRET: EVENT_SECRET,
       NODE_ENV: 'test',
+      DELIVERY_OPERATIONS_ENABLED: 'false',
+      DELIVERY_TEST_MODE: 'false',
       PORT: String(port),
       MATABLE_DB_PATH: TEST_DB_PATH,
       APP_URL: baseUrl,
@@ -227,4 +229,19 @@ test('delivery zones and directed tariffs are super-admin managed and remain unc
     body: JSON.stringify({ is_active: true }),
   });
   assert.equal(cannotReactivate.response.status, 409);
+});
+
+test('delivery operations stay off by default and expose no payable course', async () => {
+  const zones = await api('/api/delivery/zones');
+  assert.equal(zones.response.status, 404);
+
+  const options = await api<{ available: boolean; origin_zone: string | null; zones: unknown[] }>('/api/shops/1/delivery-options');
+  assert.equal(options.response.status, 200);
+  assert.equal(options.payload.available, false);
+  assert.equal(options.payload.origin_zone, null);
+  assert.deepEqual(options.payload.zones, []);
+
+  const courierPage = await fetch(`${baseUrl}/livreur`, { headers: { Accept: 'text/html' } });
+  assert.equal(courierPage.status, 200);
+  assert.match(await courierPage.text(), /noindex/);
 });

@@ -63,3 +63,17 @@ services:
         sync: false
       - key: GENIUSPAY_API_URL
         value: https://geniuspay.ci/api/v1/merchant/payments
+      # Active le parcours livreur et la facturation des frais de livraison au checkout.
+      # Laisser false jusqu’à ce que les migrations 039 et 040 soient appliquées sur la base cible.
+      - key: DELIVERY_OPERATIONS_ENABLED
+        value: false
+      - key: DELIVERY_REQUIRE_PROOF
+        value: true
+      - key: DELIVERY_OFFER_TTL_MINUTES
+        value: 120
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:assistance@matable.ci

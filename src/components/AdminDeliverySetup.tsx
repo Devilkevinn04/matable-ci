@@ -6,7 +6,7 @@ interface DeliveryZoneOption {
   is_active: boolean;
 }
 
-interface DeliveryTestControlsProps {
+interface DeliverySetupProps {
   zones: DeliveryZoneOption[];
 }
 
@@ -32,7 +32,7 @@ async function readJson<T>(response: Response): Promise<T & { error?: string }> 
   return response.json() as Promise<T & { error?: string }>;
 }
 
-export function AdminDeliveryTestControls({ zones }: DeliveryTestControlsProps) {
+export function AdminDeliverySetup({ zones }: DeliverySetupProps) {
   const [drivers, setDrivers] = useState<DeliveryDriver[]>([]);
   const [shops, setShops] = useState<ShopOrigin[]>([]);
   const [driverDrafts, setDriverDrafts] = useState<Record<number, { status: DeliveryDriver['status']; zoneIds: number[] }>>({});
@@ -54,7 +54,7 @@ export function AdminDeliveryTestControls({ zones }: DeliveryTestControlsProps) 
         readJson<{ drivers: DeliveryDriver[] }>(driversResponse),
         readJson<{ shops: ShopOrigin[] }>(shopsResponse),
       ]);
-      if (!driversResponse.ok) throw new Error(driverData.error || 'Impossible de charger les comptes livreurs de test.');
+      if (!driversResponse.ok) throw new Error(driverData.error || 'Impossible de charger les comptes livreurs.');
       if (!shopsResponse.ok) throw new Error(shopData.error || 'Impossible de charger les zones de retrait des boutiques.');
       setDrivers(driverData.drivers);
       setShops(shopData.shops);
@@ -126,25 +126,25 @@ export function AdminDeliveryTestControls({ zones }: DeliveryTestControlsProps) 
   };
 
   return (
-    <section aria-labelledby="delivery-test-controls-title" className="space-y-4 rounded-xl border border-sky-200 bg-sky-50 p-4">
+    <section aria-labelledby="delivery-setup-title" className="space-y-4 rounded-xl border border-sky-200 bg-sky-50 p-4">
       <header>
-        <p className="text-xs font-bold uppercase text-sky-900">Environnement local uniquement</p>
-        <h3 id="delivery-test-controls-title" className="mt-1 text-sm font-black text-sky-950">Livreurs et zones de retrait · test</h3>
+        <p className="text-xs font-bold uppercase text-sky-900">Exploitation de la livraison</p>
+        <h3 id="delivery-setup-title" className="mt-1 text-sm font-black text-sky-950">Livreurs et zones de retrait</h3>
         <p className="mt-1 text-xs leading-5 text-sky-900">
-          Activez les comptes de test, autorisez leurs zones et rattachez chaque boutique à sa vraie zone de retrait.
-          Cette interface n’active aucun paiement réel.
+          Activez les comptes livreurs, autorisez leurs zones et rattachez chaque boutique à sa zone de retrait.
+          Le forfait livreur de 1 000 FCFA est réglé par Mobile Money lorsque GeniusPay est configuré.
         </p>
       </header>
 
       {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-900">{error}</p>}
       {notice && <p role="status" className="rounded-lg border border-emerald-200 bg-white p-3 text-xs font-semibold text-emerald-900">{notice}</p>}
-      {loading ? <p role="status" className="rounded-lg border border-sky-200 bg-white p-3 text-xs text-slate-600">Chargement des données de test…</p> : (
+      {loading ? <p role="status" className="rounded-lg border border-sky-200 bg-white p-3 text-xs text-slate-600">Chargement des données livreurs…</p> : (
         <>
           <div className="flex items-center justify-between gap-3">
             <h4 className="text-xs font-black text-slate-900">Comptes livreurs</h4>
             <button type="button" onClick={() => void load()} disabled={Boolean(savingKey)} className="min-h-9 rounded-lg border border-sky-300 bg-white px-3 text-xs font-bold text-sky-950 disabled:opacity-50">Actualiser</button>
           </div>
-          {drivers.length === 0 ? <p className="rounded-lg border border-sky-200 bg-white p-3 text-xs text-slate-600">Aucun livreur inscrit pour le moment. Le compte doit d’abord être créé depuis l’espace livreur de test.</p> : (
+          {drivers.length === 0 ? <p className="rounded-lg border border-sky-200 bg-white p-3 text-xs text-slate-600">Aucun livreur inscrit pour le moment. Le compte doit d’abord être créé depuis l’espace livreur sur <strong>/livreur</strong>.</p> : (
             <div className="space-y-3">
               {drivers.map((driver) => {
                 const draft = driverDrafts[driver.id] || { status: driver.status, zoneIds: driver.zone_ids };

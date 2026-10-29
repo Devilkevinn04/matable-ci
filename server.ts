@@ -90,6 +90,8 @@ declare global {
 const DEMO_MODE = String(process.env.DEMO_MODE || '').trim().toLowerCase() === 'true';
 const DELIVERY_TEST_MODE = process.env.NODE_ENV !== 'production'
   && String(process.env.DELIVERY_TEST_MODE || '').trim().toLowerCase() === 'true';
+const DELIVERY_OPERATIONS_ENABLED = DELIVERY_TEST_MODE
+  || String(process.env.DELIVERY_OPERATIONS_ENABLED || '').trim().toLowerCase() === 'true';
 const DELIVERY_OFFER_TTL_MINUTES = parseOfferTtlMinutes(process.env.DELIVERY_OFFER_TTL_MINUTES);
 
 export function shouldSeedDemoData(): boolean {
@@ -999,7 +1001,7 @@ async function startServer() {
     computeIsShopOpen,
     isAdminShopSession: async (req, shopId) =>
       Number(req.params.slug) === shopId && Boolean(await getAdminSession(req)),
-    deliveryOperationsEnabled: DELIVERY_TEST_MODE,
+    deliveryOperationsEnabled: DELIVERY_OPERATIONS_ENABLED,
   });
   app.use('/api/v1/catalog/storefronts', publicShopsRouter);
   app.use('/api/shops', publicShopsRouter);
@@ -1102,7 +1104,7 @@ async function startServer() {
     summarizeOrderMetrics,
   }));
 
-  if (DELIVERY_TEST_MODE) {
+  if (DELIVERY_OPERATIONS_ENABLED) {
     app.use('/api', createDeliveryRouter({
       hashAccessToken,
       hashPin,
@@ -1112,7 +1114,7 @@ async function startServer() {
       isRequestFingerprintMatch,
       requireMerchantAccess,
       rateLimitPublicRequest,
-      sandboxPaymentsEnabled: process.env.NODE_ENV !== 'production'
+      sandboxPaymentsEnabled: DELIVERY_TEST_MODE
         && String(process.env.DELIVERY_SANDBOX_PAYMENTS || '').trim().toLowerCase() === 'true',
       requireProof: String(process.env.DELIVERY_REQUIRE_PROOF || '').trim().toLowerCase() !== 'false',
       getCustomerSessionState,
@@ -1142,8 +1144,12 @@ async function startServer() {
     timingSafeEqual,
     getValidSelectedModifiers,
     getProductUnitPriceWithModifiers,
-    deliveryOperationsEnabled: DELIVERY_TEST_MODE,
+    deliveryOperationsEnabled: DELIVERY_OPERATIONS_ENABLED,
   }));
+
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ error: 'Ressource API introuvable.' });
+  });
 
   const {
     getPublicOrigin,
@@ -1174,7 +1180,7 @@ async function startServer() {
   };
   const isPrivateSeoPath = (pathname: string) => {
     const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
-    return ['/app', '/admin', '/compte', '/connexion', '/inscription', '/recuperation-acces']
+    return ['/app', '/admin', '/compte', '/connexion', '/inscription', '/recuperation-acces', '/livreur']
       .some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`));
   };
   const isFrontendPagePath = (pathname: string) => pathname !== '/' && !pathname.startsWith('/api/') && !pathname.startsWith('/@') && !path.extname(pathname);

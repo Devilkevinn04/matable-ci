@@ -363,162 +363,162 @@ export function createDeliveryAdminRouter({ dbAll, dbGet, dbRun, dbTransaction, 
       await writeAuditLog(req, 'delivery_courses_expired', { ttl_minutes: ttlMinutes, cancelled });
       return res.json({ success: true, cancelled, ttl_minutes: ttlMinutes });
     });
-
-    router.get('/drivers', async (_req, res) => {
-      const rows = await dbAll<{
-        id: number | string;
-        name: string;
-        phone: string;
-        status: string;
-        access_expires_at: string | null;
-        zone_id: number | string | null;
-        zone_label: string | null;
-      }>(`
-        SELECT drivers.id, drivers.name, drivers.phone, drivers.status, drivers.access_expires_at,
-          zones.id AS zone_id, zones.label AS zone_label
-        FROM delivery_drivers AS drivers
-        LEFT JOIN delivery_driver_zones AS driver_zones ON driver_zones.driver_id = drivers.id
-        LEFT JOIN delivery_zones AS zones ON zones.id = driver_zones.zone_id
-        ORDER BY drivers.created_at DESC, drivers.id DESC, zones.label
-      `);
-      const drivers = new Map<number, {
-        id: number;
-        name: string;
-        phone: string;
-        status: string;
-        access_expires_at: string | null;
-        zone_ids: number[];
-        zones: string[];
-      }>();
-      for (const row of rows) {
-        const id = toSafeId(row.id);
-        let driver = drivers.get(id);
-        if (!driver) {
-          driver = {
-            id,
-            name: row.name,
-            phone: row.phone,
-            status: row.status,
-            access_expires_at: row.access_expires_at,
-            zone_ids: [],
-            zones: [],
-          };
-          drivers.set(id, driver);
-        }
-        if (row.zone_id !== null && row.zone_label) {
-          driver.zone_ids.push(toSafeId(row.zone_id));
-          driver.zones.push(row.zone_label);
-        }
-      }
-      return res.json({ drivers: [...drivers.values()] });
-    });
-
-    router.patch('/drivers/:id', async (req, res) => {
-      const driverId = Number(req.params.id);
-      if (!isPositiveSafeInteger(driverId)) return res.status(400).json({ error: 'Identifiant de livreur invalide.' });
-      const hasStatus = Object.hasOwn(req.body || {}, 'status');
-      const hasZones = Object.hasOwn(req.body || {}, 'zone_ids');
-      if (!hasStatus && !hasZones) return res.status(400).json({ error: 'Aucune modification à enregistrer.' });
-
-      const status = req.body?.status;
-      if (hasStatus && !['pending', 'active', 'suspended'].includes(status)) {
-        return res.status(400).json({ error: 'Statut de livreur invalide.' });
-      }
-      const zoneIds = req.body?.zone_ids;
-      if (hasZones && (!Array.isArray(zoneIds) || zoneIds.length > 30
-        || zoneIds.some((id: unknown) => !isPositiveSafeInteger(id)))) {
-        return res.status(400).json({ error: 'La sélection de zones attribuées est invalide.' });
-      }
-      const selectedZones: number[] = hasZones ? [...new Set<number>(zoneIds)] : [];
-      if (hasZones && selectedZones.length > 0) {
-        const activeZones = await dbAll<{ id: number | string }>(
-          `SELECT id FROM delivery_zones WHERE is_active = 1 AND id IN (${selectedZones.map(() => '?').join(',')})`,
-          selectedZones,
-        );
-        if (activeZones.length !== selectedZones.length) {
-          return res.status(400).json({ error: 'Toutes les zones attribuées doivent exister et être actives.' });
-        }
-      }
-
-      const current = await dbGet<{ id: number | string; status: string }>(
-        'SELECT id, status FROM delivery_drivers WHERE id = ?',
-        [driverId],
-      );
-      if (!current) return res.status(404).json({ error: 'Livreur introuvable.' });
-      const now = new Date().toISOString();
-      await dbTransaction(async (transaction) => {
-        if (hasStatus) {
-          await transaction.run('UPDATE delivery_drivers SET status = ?, updated_at = ? WHERE id = ?', [status, now, driverId]);
-        }
-        if (hasZones) {
-          await transaction.run('DELETE FROM delivery_driver_zones WHERE driver_id = ?', [driverId]);
-          for (const zoneId of selectedZones) {
-            await transaction.run(`INSERT INTO delivery_driver_zones
-              (driver_id, zone_id, is_active, assigned_at) VALUES (?, ?, 0, ?)`,
-            [driverId, zoneId, now]);
-          }
-        }
-      });
-      await writeAuditLog(req, 'delivery_driver_updated', {
-        driver_id: driverId,
-        previous_status: current.status,
-        status: hasStatus ? status : current.status,
-        zone_ids: hasZones ? selectedZones : undefined,
-      });
-      return res.json({ success: true });
-    });
-
-    router.get('/shop-origins', async (_req, res) => {
-      const origins = await dbAll<{
-        shop_id: number | string;
-        shop_name: string;
-        city: string | null;
-        zone_id: number | string | null;
-        zone_label: string | null;
-      }>(`
-        SELECT shops.id AS shop_id, shops.name AS shop_name, shops.city,
-          zones.id AS zone_id, zones.label AS zone_label
-        FROM shops
-        LEFT JOIN delivery_shop_origins AS origins ON origins.shop_id = shops.id
-        LEFT JOIN delivery_zones AS zones ON zones.id = origins.zone_id
-        WHERE shops.is_active = 1
-        ORDER BY shops.name
-      `);
-      return res.json({ shops: origins.map((origin) => ({
-        shop_id: toSafeId(origin.shop_id),
-        shop_name: origin.shop_name,
-        city: origin.city,
-        zone_id: origin.zone_id === null ? null : toSafeId(origin.zone_id),
-        zone_label: origin.zone_label,
-      })) });
-    });
-
-    router.put('/shop-origins/:shopId', async (req, res) => {
-      const shopId = Number(req.params.shopId);
-      const zoneId = req.body?.zone_id;
-      if (!isPositiveSafeInteger(shopId) || !isPositiveSafeInteger(zoneId)) {
-        return res.status(400).json({ error: 'Boutique ou zone invalide.' });
-      }
-      const shop = await dbGet<{ id: number }>('SELECT id FROM shops WHERE id = ? AND is_active = 1', [shopId]);
-      if (!shop) return res.status(404).json({ error: 'Boutique active introuvable.' });
-      const zone = await dbGet<{ id: number; label: string }>(
-        'SELECT id, label FROM delivery_zones WHERE id = ? AND is_active = 1',
-        [zoneId],
-      );
-      if (!zone) return res.status(400).json({ error: 'La zone de retrait doit être active.' });
-      const now = new Date().toISOString();
-      await dbRun(`INSERT INTO delivery_shop_origins (shop_id, zone_id, updated_at)
-        VALUES (?, ?, ?)
-        ON CONFLICT(shop_id) DO UPDATE SET zone_id = excluded.zone_id, updated_at = excluded.updated_at`,
-      [shopId, zoneId, now]);
-      await writeAuditLog(req, 'delivery_shop_origin_updated', {
-        shop_id: shopId,
-        zone_id: zoneId,
-        zone_label: zone.label,
-      });
-      return res.json({ success: true, shop_id: shopId, zone_id: zoneId, zone_label: zone.label });
-    });
   }
+
+  router.get('/drivers', async (_req, res) => {
+    const rows = await dbAll<{
+      id: number | string;
+      name: string;
+      phone: string;
+      status: string;
+      access_expires_at: string | null;
+      zone_id: number | string | null;
+      zone_label: string | null;
+    }>(`
+      SELECT drivers.id, drivers.name, drivers.phone, drivers.status, drivers.access_expires_at,
+        zones.id AS zone_id, zones.label AS zone_label
+      FROM delivery_drivers AS drivers
+      LEFT JOIN delivery_driver_zones AS driver_zones ON driver_zones.driver_id = drivers.id
+      LEFT JOIN delivery_zones AS zones ON zones.id = driver_zones.zone_id
+      ORDER BY drivers.created_at DESC, drivers.id DESC, zones.label
+    `);
+    const drivers = new Map<number, {
+      id: number;
+      name: string;
+      phone: string;
+      status: string;
+      access_expires_at: string | null;
+      zone_ids: number[];
+      zones: string[];
+    }>();
+    for (const row of rows) {
+      const id = toSafeId(row.id);
+      let driver = drivers.get(id);
+      if (!driver) {
+        driver = {
+          id,
+          name: row.name,
+          phone: row.phone,
+          status: row.status,
+          access_expires_at: row.access_expires_at,
+          zone_ids: [],
+          zones: [],
+        };
+        drivers.set(id, driver);
+      }
+      if (row.zone_id !== null && row.zone_label) {
+        driver.zone_ids.push(toSafeId(row.zone_id));
+        driver.zones.push(row.zone_label);
+      }
+    }
+    return res.json({ drivers: [...drivers.values()] });
+  });
+
+  router.patch('/drivers/:id', async (req, res) => {
+    const driverId = Number(req.params.id);
+    if (!isPositiveSafeInteger(driverId)) return res.status(400).json({ error: 'Identifiant de livreur invalide.' });
+    const hasStatus = Object.hasOwn(req.body || {}, 'status');
+    const hasZones = Object.hasOwn(req.body || {}, 'zone_ids');
+    if (!hasStatus && !hasZones) return res.status(400).json({ error: 'Aucune modification à enregistrer.' });
+
+    const status = req.body?.status;
+    if (hasStatus && !['pending', 'active', 'suspended'].includes(status)) {
+      return res.status(400).json({ error: 'Statut de livreur invalide.' });
+    }
+    const zoneIds = req.body?.zone_ids;
+    if (hasZones && (!Array.isArray(zoneIds) || zoneIds.length > 30
+      || zoneIds.some((id: unknown) => !isPositiveSafeInteger(id)))) {
+      return res.status(400).json({ error: 'La sélection de zones attribuées est invalide.' });
+    }
+    const selectedZones: number[] = hasZones ? [...new Set<number>(zoneIds)] : [];
+    if (hasZones && selectedZones.length > 0) {
+      const activeZones = await dbAll<{ id: number | string }>(
+        `SELECT id FROM delivery_zones WHERE is_active = 1 AND id IN (${selectedZones.map(() => '?').join(',')})`,
+        selectedZones,
+      );
+      if (activeZones.length !== selectedZones.length) {
+        return res.status(400).json({ error: 'Toutes les zones attribuées doivent exister et être actives.' });
+      }
+    }
+
+    const current = await dbGet<{ id: number | string; status: string }>(
+      'SELECT id, status FROM delivery_drivers WHERE id = ?',
+      [driverId],
+    );
+    if (!current) return res.status(404).json({ error: 'Livreur introuvable.' });
+    const now = new Date().toISOString();
+    await dbTransaction(async (transaction) => {
+      if (hasStatus) {
+        await transaction.run('UPDATE delivery_drivers SET status = ?, updated_at = ? WHERE id = ?', [status, now, driverId]);
+      }
+      if (hasZones) {
+        await transaction.run('DELETE FROM delivery_driver_zones WHERE driver_id = ?', [driverId]);
+        for (const zoneId of selectedZones) {
+          await transaction.run(`INSERT INTO delivery_driver_zones
+            (driver_id, zone_id, is_active, assigned_at) VALUES (?, ?, 0, ?)`,
+          [driverId, zoneId, now]);
+        }
+      }
+    });
+    await writeAuditLog(req, 'delivery_driver_updated', {
+      driver_id: driverId,
+      previous_status: current.status,
+      status: hasStatus ? status : current.status,
+      zone_ids: hasZones ? selectedZones : undefined,
+    });
+    return res.json({ success: true });
+  });
+
+  router.get('/shop-origins', async (_req, res) => {
+    const origins = await dbAll<{
+      shop_id: number | string;
+      shop_name: string;
+      city: string | null;
+      zone_id: number | string | null;
+      zone_label: string | null;
+    }>(`
+      SELECT shops.id AS shop_id, shops.name AS shop_name, shops.city,
+        zones.id AS zone_id, zones.label AS zone_label
+      FROM shops
+      LEFT JOIN delivery_shop_origins AS origins ON origins.shop_id = shops.id
+      LEFT JOIN delivery_zones AS zones ON zones.id = origins.zone_id
+      WHERE shops.is_active = 1
+      ORDER BY shops.name
+    `);
+    return res.json({ shops: origins.map((origin) => ({
+      shop_id: toSafeId(origin.shop_id),
+      shop_name: origin.shop_name,
+      city: origin.city,
+      zone_id: origin.zone_id === null ? null : toSafeId(origin.zone_id),
+      zone_label: origin.zone_label,
+    })) });
+  });
+
+  router.put('/shop-origins/:shopId', async (req, res) => {
+    const shopId = Number(req.params.shopId);
+    const zoneId = req.body?.zone_id;
+    if (!isPositiveSafeInteger(shopId) || !isPositiveSafeInteger(zoneId)) {
+      return res.status(400).json({ error: 'Boutique ou zone invalide.' });
+    }
+    const shop = await dbGet<{ id: number }>('SELECT id FROM shops WHERE id = ? AND is_active = 1', [shopId]);
+    if (!shop) return res.status(404).json({ error: 'Boutique active introuvable.' });
+    const zone = await dbGet<{ id: number; label: string }>(
+      'SELECT id, label FROM delivery_zones WHERE id = ? AND is_active = 1',
+      [zoneId],
+    );
+    if (!zone) return res.status(400).json({ error: 'La zone de retrait doit être active.' });
+    const now = new Date().toISOString();
+    await dbRun(`INSERT INTO delivery_shop_origins (shop_id, zone_id, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(shop_id) DO UPDATE SET zone_id = excluded.zone_id, updated_at = excluded.updated_at`,
+    [shopId, zoneId, now]);
+    await writeAuditLog(req, 'delivery_shop_origin_updated', {
+      shop_id: shopId,
+      zone_id: zoneId,
+      zone_label: zone.label,
+    });
+    return res.json({ success: true, shop_id: shopId, zone_id: zoneId, zone_label: zone.label });
+  });
 
   return router;
 }
