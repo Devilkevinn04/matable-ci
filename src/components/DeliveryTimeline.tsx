@@ -1,8 +1,6 @@
 import { AlertCircle, CheckCircle2, Clock3, Store, Truck, UserRound, XCircle } from 'lucide-react';
 import { DELIVERY_STATUS_LABELS } from './deliveryStatus';
 
-export { DELIVERY_STATUS_LABELS };
-
 export interface DeliveryTimelineEvent {
   id: number;
   actor_type: 'merchant' | 'driver' | 'admin' | string;

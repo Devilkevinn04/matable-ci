@@ -3,7 +3,7 @@ build/
 dist/
 coverage/
 .DS_Store
-.idea/caches/
+.idea/
 __MACOSX/
 *.zip
 *.log

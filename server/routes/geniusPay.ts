@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Router, type Request, type RequestHandler } from 'express';
 import { databaseMode, dbAll, dbGet, dbRun, dbTransaction } from '../../db.ts';
-import { computeIsShopOpen, getShopPublicationBlockReason, getSubscriptionPlanConfig, getSubscriptionState, normalizeSubscriptionTier, normalizeWhatsAppPhone } from '../services/businessRules.ts';
+import { computeIsShopOpen, getShopPublicationBlockReason, getSubscriptionPlanConfig, getSubscriptionState, normalizeWhatsAppPhone } from '../services/businessRules.ts';
 import { createGeniusPayCheckout, getGeniusPayPayment, getRenewedSubscriptionExpiry, GeniusPayApiError, isValidGeniusPaySignature } from '../services/geniusPay.ts';
 import {
   applyDeliveryPaymentStatus,
@@ -9,7 +9,7 @@ import {
   reconcilePendingDeliveryPayments,
 } from '../services/deliveryPayments.ts';
 import type { ShopRecord, SubscriptionTier } from '../types.ts';
-import { type SubscriptionTerm } from '../../src/utils/subscriptionFeatures.ts';
+import { normalizeSubscriptionTier, type SubscriptionTerm } from '../../src/utils/subscriptionFeatures.ts';
 import { getDefaultSubscriptionPrices, getSubscriptionPriceForTerm, parseSubscriptionPrices } from '../services/subscriptionPricing.ts';
 import { getShopFromDatabase, mapShopRow } from '../repositories/shops.ts';
 import { sendMerchantSubscriptionReceiptEmail } from '../services/email.ts';

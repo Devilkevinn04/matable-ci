@@ -26,7 +26,8 @@ import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDispla
 import { CategoryProductImage } from './CategoryProductImage';
 import { CustomerProductCard } from './CustomerProductCard';
 import { useToast } from './Toast';
-import { hasAnalyticsConsent } from './CookieBanner';
+import { hasAnalyticsConsent } from '../utils/cookieConsent';
+import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
 import {
   trackCartEvent,
   trackCheckoutStart,
@@ -540,16 +541,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
   const authenticatedCustomer = customerUser || checkoutAuthUser;
 
-  const normalizeCustomerPhoneValue = (value: string): string => {
-    const digits = String(value ?? '').replace(/\D/g, '');
-    if (!digits) return '';
-
-    const normalizedDigits = digits.startsWith('225') ? digits.slice(3) : digits;
-    const localNumber = normalizedDigits.startsWith('0') ? normalizedDigits : `0${normalizedDigits}`;
-    if (!/^0\d{9}$/.test(localNumber)) return '';
-    return `+225${localNumber}`;
-  };
-
   // Handle WhatsApp Checkout
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -561,7 +552,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     }
 
     const trimmedName = customerName.trim();
-    const normalizedPhone = normalizeCustomerPhoneValue(customerPhone);
+    const normalizedPhone = normalizeCustomerPhone(customerPhone);
     const digitsOnlyPhone = normalizedPhone.replace(/\D/g, '');
 
     if (!trimmedName || trimmedName.length < 2) {

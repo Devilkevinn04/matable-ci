@@ -1,15 +1,13 @@
-const CACHE_NAME = 'matable-ci-v4';
+const CACHE_NAME = 'matable-ci-v5';
 const APP_SHELL = [
   '/',
   '/index.html',
   '/offline.html',
   '/manifest.json',
-  '/icon-192.svg',
-  '/icon-512.svg',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/icon-maskable-512.png',
-  '/social-share.png'
+  '/brand-kit/icon-192.png',
+  '/brand-kit/icon-512.png',
+  '/brand-kit/icon-maskable-512.png',
+  '/brand-kit/social-share.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -43,8 +41,8 @@ self.addEventListener('push', (event) => {
     : '/merchant';
   event.waitUntil(self.registration.showNotification(title, {
     body,
-    icon: '/icon-192.svg',
-    badge: '/icon-192.svg',
+    icon: '/brand-kit/icon-192.png',
+    badge: '/brand-kit/icon-192.png',
     tag: typeof message.tag === 'string' ? message.tag : 'matable-notification',
     data: { url },
   }));

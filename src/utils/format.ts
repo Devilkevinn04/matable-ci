@@ -43,6 +43,12 @@ export function isValidWhatsAppPhone(phone: string): boolean {
   return /^(225)(01|05|07)\d{8}$/.test(cleanPhoneForWhatsApp(phone));
 }
 
+export function buildWhatsAppClickToChatUrl(to: string, body: string): string {
+  const normalized = cleanPhoneForWhatsApp(String(to ?? ''));
+  const cleanBody = String(body ?? '').trim();
+  return `https://wa.me/${normalized}?text=${encodeURIComponent(cleanBody)}`;
+}
+
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   wave: 'Wave souhaité',
   mobile_money: 'Mobile Money souhaité',

@@ -3,8 +3,6 @@ import { ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { COOKIE_CONSENT_KEY, COOKIE_PREFERENCES_KEY, saveCookiePreferences } from '../utils/cookieConsent';
 
-export { hasAnalyticsConsent, saveCookiePreferences } from '../utils/cookieConsent';
-
 export const CookieBanner: React.FC = () => {
   const [visible, setVisible] = useState(false);
 

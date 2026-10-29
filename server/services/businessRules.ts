@@ -5,6 +5,7 @@ import {
   getSubscriptionGraceCutoff,
   getSubscriptionPlanFeatures,
   isSubscriptionFeatureIncluded,
+  normalizeSubscriptionTier,
   SUBSCRIPTION_PLANS,
   type SubscriptionFeature,
   type SubscriptionProFeatures,
@@ -125,10 +126,6 @@ export function isWeakShopPin(pin: unknown): boolean {
 export function getSubscriptionPlanConfig(tier: SubscriptionTier | string): SubscriptionPlanConfig {
   const plan = SUBSCRIPTION_PLANS[normalizeSubscriptionTier(tier)];
   return { tier: plan.tier, amount: plan.price, label: plan.label, description: plan.description };
-}
-
-export function normalizeSubscriptionTier(tier?: SubscriptionTier | string): SubscriptionTier {
-  return tier === 'premium' || tier === 'pro' ? tier : 'standard';
 }
 
 function subscriptionExpiryCutoff(value: string): number {

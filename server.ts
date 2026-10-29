@@ -62,7 +62,8 @@ import {
   normalizeWhatsAppPhone,
   summarizeOrderMetrics,
 } from './server/services/businessRules.ts';
-export { getSubscriptionPlanConfig, normalizeSubscriptionTier, getSubscriptionState, summarizeOrderMetrics, escapeHtml } from './server/services/businessRules.ts';
+export { getSubscriptionPlanConfig, getSubscriptionState, summarizeOrderMetrics, escapeHtml } from './server/services/businessRules.ts';
+export { normalizeSubscriptionTier } from './src/utils/subscriptionFeatures.ts';
 export type { SubscriptionPlanConfig, SubscriptionState, SubscriptionStatus, SubscriptionTier } from './server/types.ts';
 export {
   deleteMerchantSessionRecord,

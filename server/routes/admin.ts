@@ -1,10 +1,11 @@
 import { Router, type RequestHandler } from 'express';
 import type { dbTransaction } from '../../db.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
-import { getSubscriptionState, isSubscriptionManualOverrideActive, normalizeSubscriptionTier } from '../services/businessRules.ts';
+import { getSubscriptionState, isSubscriptionManualOverrideActive } from '../services/businessRules.ts';
 import {
   DEFAULT_SUBSCRIPTION_PRO_FEATURES,
   getSubscriptionAccessCutoff,
+  normalizeSubscriptionTier,
   parseSubscriptionProFeatures,
   type SubscriptionProFeatures,
 } from '../../src/utils/subscriptionFeatures.ts';

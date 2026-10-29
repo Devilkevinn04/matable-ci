@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowLeft, FileText, LockKeyhole, ShieldCheck } from 'lucide-react';
-import { hasAnalyticsConsent, saveCookiePreferences } from './CookieBanner';
+import { hasAnalyticsConsent, saveCookiePreferences } from '../utils/cookieConsent';
 import { getSupportWhatsAppUrl, supportWhatsAppDisplayNumber } from '../utils/supportWhatsApp';
 import { Link } from 'react-router-dom';
 

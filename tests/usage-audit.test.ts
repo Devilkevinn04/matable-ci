@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildWhatsAppClickToChatUrl } from '../whatsapp';
+import { buildWhatsAppClickToChatUrl } from '../src/utils/format.ts';
 
 test('builds a valid WhatsApp click-to-chat fallback for customer and merchant journeys', () => {
   const customerLink = buildWhatsAppClickToChatUrl('+2250708091011', 'Bonjour, je souhaite commander.');
