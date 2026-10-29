@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
 import { LegalPages } from '../src/components/LegalPages';
 import { FAQ_SECTIONS } from '../src/utils/faqContent';
 import {
@@ -21,7 +22,9 @@ test('public subscription prices and catalog limits match the active plan config
     .find(({ question }) => question === 'Quelles sont les formules et les tarifs ?');
   assert.ok(faq, 'Subscription pricing question should be present in the FAQ.');
 
-  const terms = normalizeSpaces(renderToStaticMarkup(React.createElement(LegalPages, { page: 'cgu' })));
+  const terms = normalizeSpaces(renderToStaticMarkup(
+    React.createElement(MemoryRouter, null, React.createElement(LegalPages, { page: 'cgu' })),
+  ));
   const readme = normalizeSpaces(await readFile(new URL('../README.md', import.meta.url), 'utf8'));
   const faqAnswer = normalizeSpaces(faq.answer);
   const plansPagePrices = Object.values(SUBSCRIPTION_PLANS).map((plan) => plan.price);

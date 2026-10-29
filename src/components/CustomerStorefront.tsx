@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { 
   ShoppingBag, 
@@ -716,7 +717,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
   if (loading) {
     return (
-      <div className="page-loading-wrap">
+      <div className="page-loading-wrap" role="main">
         <div className="page-loading-shell">
           <div className="page-loading-orb page-loading-orb-1" />
           <div className="page-loading-orb page-loading-orb-2" />
@@ -742,14 +743,14 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
   if (error || !shop) {
     return (
-      <div className="not-found-page">
+      <div className="not-found-page" role="main">
         <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
         <p className="text-sm font-black uppercase tracking-[0.18em] text-[#047857]">Erreur 404</p>
-        <h2 className="text-2xl font-black text-slate-900">Cette page n’existe pas</h2>
+        <h1 className="text-2xl font-black text-slate-900">Cette page n’existe pas</h1>
         <p className="text-sm text-slate-600 mt-2 mb-6">
           La boutique ou l’adresse demandée n’existe pas ou a été déplacée.
         </p>
-        <a href="/" className="inline-flex items-center justify-center rounded-xl bg-[#047857] px-5 py-3 font-bold text-white">Retour aux boutiques</a>
+        <Link to="/" className="inline-flex items-center justify-center rounded-xl bg-[#047857] px-5 py-3 font-bold text-white">Retour aux boutiques</Link>
       </div>
     );
   }
@@ -757,7 +758,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   // If shop subscription is OFF
   if (!shop.is_active) {
     return (
-      <div className="max-w-lg mx-auto my-16 p-8 bg-white rounded-3xl border border-rose-100 shadow-xl text-center">
+      <div className="max-w-lg mx-auto my-16 p-8 bg-white rounded-3xl border border-rose-100 shadow-xl text-center" role="main">
         <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
           <Clock className="w-8 h-8" />
         </div>
@@ -816,7 +817,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       <header className="bg-[#FFFFFF]/95 backdrop-blur-md border-b border-[#ded8ce] sticky top-0 z-30 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-2 sm:py-3 flex items-center justify-between gap-2 sm:gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-            <a href="/" aria-label="Retour à l’annuaire" title="Retour à l’annuaire" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"><ArrowLeft className="h-4 w-4" /></a>
+            <Link to="/" aria-label="Retour à l’annuaire" title="Retour à l’annuaire" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"><ArrowLeft className="h-4 w-4" /></Link>
             {logoUrl ? (
               <img
                 src={logoUrl}
@@ -942,7 +943,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       )}
 
       {/* Main storefront content */}
-      <div className="max-w-6xl mx-auto px-4 pt-4">
+      <main className="max-w-6xl mx-auto px-4 pt-4">
         <details className="mb-5 rounded-2xl border border-[#ded8ce] bg-[#FFFFFF] px-4 py-3 shadow-[0_8px_24px_rgba(33,23,31,0.05)] sm:p-5">
           <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
             <span className="flex items-center justify-between gap-3">
@@ -1388,7 +1389,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         </aside>
         </div>
 
-      </div>
+      </main>
 
       {/* 4. FLOATING BOTTOM BAR (Cart Summary) */}
       {totalCartCount > 0 && !isCartOpen && (

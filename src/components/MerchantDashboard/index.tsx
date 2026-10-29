@@ -1071,7 +1071,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             </button>
           </nav>
 
-          <div className="min-w-0">
+          <div className="min-w-0" role="main">
           {activeTab === 'overview' && (
             <section className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

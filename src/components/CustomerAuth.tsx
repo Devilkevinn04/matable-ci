@@ -193,7 +193,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
           )}
           {error && <p role="alert" className="rounded-xl border border-[#F97316]/30 bg-[#fff0e8] px-3 py-2.5 text-sm font-semibold text-[#a33e24]">{error}</p>}
           <button type="submit" disabled={isSubmitting} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#065f46] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">{isSubmitting ? 'Vérification...' : pendingOAuthProfile ? 'Terminer mon inscription' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'} <ArrowRight className="h-4 w-4" /></button>
-          {mode === 'login' && <a href="/recuperation-acces?type=customer" className="block text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[#065f46]">Mot de passe oublié ?</a>}
+          {mode === 'login' && <Link to="/recuperation-acces?type=customer" className="block text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[#065f46]">Mot de passe oublié ?</Link>}
           <p className="flex items-center justify-center gap-2 pt-1 text-center text-xs text-[#778179]"><ShieldCheck className="h-4 w-4 text-[#047857]" /> Vos identifiants restent privés.</p>
         </form>
       )}

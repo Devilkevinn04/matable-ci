@@ -1007,7 +1007,7 @@ export const AdminDashboard: React.FC = () => {
 
   if (!isAuthenticated) {
     return (
-      <div className="admin-login min-h-screen flex items-center justify-center p-6">
+      <div className="admin-login min-h-screen flex items-center justify-center p-6" role="main">
         <motion.form
           onSubmit={handleAdminLogin}
           initial={{ opacity: 0, y: 18 }}

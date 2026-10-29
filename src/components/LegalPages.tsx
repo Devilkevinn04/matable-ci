@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowLeft, FileText, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { hasAnalyticsConsent, saveCookiePreferences } from './CookieBanner';
 import { getSupportWhatsAppUrl, supportWhatsAppDisplayNumber } from '../utils/supportWhatsApp';
+import { Link } from 'react-router-dom';
 
 export type LegalPageKey = 'mentions-legales' | 'confidentialite' | 'cgu' | 'cookies';
 
@@ -65,7 +66,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
   return (
     <main className="legal-page">
       <div className="legal-page-inner">
-        <a href="/" className="legal-back-link"><ArrowLeft className="h-4 w-4" /> Retour aux boutiques</a>
+        <Link to="/" className="legal-back-link"><ArrowLeft className="h-4 w-4" /> Retour aux boutiques</Link>
         <header className="legal-header">
           <div className="legal-icon">{content.icon}</div>
           <p className="legal-kicker">MaTable.ci · Côte d’Ivoire</p>

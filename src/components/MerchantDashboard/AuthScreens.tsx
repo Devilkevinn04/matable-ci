@@ -7,6 +7,7 @@ import { CATEGORY_DEFAULTS, SHOP_CATEGORIES } from '../../utils/categoryDefaults
 import { ABIDJAN_COMMUNES } from '../../utils/abidjanCommunes';
 import { AuthAudienceSwitcher, AuthExperienceLayout } from '../AuthExperienceLayout';
 import { MerchantRegistrationScreen } from './MerchantRegistrationScreen';
+import { Link } from 'react-router-dom';
 
 interface AuthScreensProps {
   state: MerchantState;
@@ -147,7 +148,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                 <ChevronRight className="w-4 h-4" />
               </button>
             </form>
-          <a href="/recuperation-acces?type=merchant" className="mt-3 block text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[#065f46]">PIN ou accès oublié ?</a>
+          <Link to="/recuperation-acces?type=merchant" className="mt-3 block text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[#065f46]">PIN ou accès oublié ?</Link>
           <div className="relative mt-5 pt-4 border-t-[2px] border-[#292d2a] text-center">
             <p className="text-xs text-[#47534b] max-w-sm mx-auto mb-3">
               Vous n’avez pas encore de boutique ? Créez-la ici. Pour vous reconnecter ensuite, utilisez le numéro WhatsApp et le code PIN choisis à la création.

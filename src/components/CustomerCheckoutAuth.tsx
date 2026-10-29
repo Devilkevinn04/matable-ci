@@ -4,6 +4,7 @@ import { CustomerUser } from './CustomerAuth';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
 import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
 import { TermsPrivacyConsent } from './TermsPrivacyConsent';
+import { Link } from 'react-router-dom';
 
 interface CustomerCheckoutAuthProps {
   onAuthenticated: (user: CustomerUser) => void;
@@ -202,9 +203,9 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
         </button>
 
         {mode === 'login' && (
-          <a href="/recuperation-acces?type=customer" className="block py-1 text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[#065f46]">
+          <Link to="/recuperation-acces?type=customer" className="block py-1 text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[#065f46]">
             Mot de passe oublié ?
-          </a>
+          </Link>
         )}
       </form>
     </section>

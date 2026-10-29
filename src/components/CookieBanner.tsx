@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const CONSENT_KEY = 'matable_cookie_consent';
 const PREFS_KEY = 'matable_cookie_preferences';
@@ -67,7 +68,7 @@ export const CookieBanner: React.FC = () => {
         <ShieldCheck className="h-5 w-5 shrink-0 text-[#047857]" aria-hidden="true" />
         <p>
           Cookies essentiels actifs. Autorisez-vous l’analyse d’audience facultative ?
-          <a href="/cookies"> Personnaliser</a>
+          <Link to="/cookies"> Personnaliser</Link>
         </p>
       </div>
       <div className="cookie-banner-actions">

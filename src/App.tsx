@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Link, Route, Routes, useLocation, useNavigate, useNavigationType, useParams } from 'react-router-dom';
 import { Navigation } from './components/Navigation';
 import { ToastProvider } from './components/Toast';
 import { Footer } from './components/Footer';
@@ -123,11 +123,11 @@ function StorefrontRoute({ customerUser, onCustomerAuthenticated }: {
 
 function NotFoundPage() {
   return (
-    <div className="not-found-page">
+    <div className="not-found-page" role="main">
       <p className="text-sm font-black uppercase tracking-[0.18em] text-[#176b55]">Erreur 404</p>
       <h1 className="text-2xl font-black text-slate-900">Cette page n’existe pas</h1>
       <p className="mt-2 mb-6 text-sm text-slate-600">Vérifiez l’adresse ou revenez à l’annuaire.</p>
-      <a href="/" className="inline-flex items-center justify-center rounded-xl bg-[#176b55] px-5 py-3 font-bold text-white">Retour aux boutiques</a>
+      <Link to="/" className="inline-flex items-center justify-center rounded-xl bg-[#176b55] px-5 py-3 font-bold text-white">Retour aux boutiques</Link>
     </div>
   );
 }
@@ -250,6 +250,7 @@ function ProductModalDevPreview() {
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
+  const navigationType = useNavigationType();
   const path = location.pathname;
   const normalizedPath = path.replace(/^\//, '').replace(/\/$/, '');
   const isShopDirectoryRoute = path.replace(/\/+$/, '') === '/boutiques';
@@ -300,20 +301,55 @@ export default function App() {
   const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !isShopDirectoryRoute && !isPromotionsPage && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && !isDeliveryCourierWorkspace && customerView === 'none';
   const isUnknownStorefront = isCustomerStorefront && !isLoadingShops && !availableShops.some((shop) => shop.slug === normalizedPath);
 
+  const scrollPositionsRef = useRef<Map<string, number>>(new Map());
+  const isRestoringScrollRef = useRef(false);
+
+  useEffect(() => {
+    const routeKey = `${location.pathname}${location.search}`;
+    const savePosition = () => {
+      if (isRestoringScrollRef.current) return;
+      scrollPositionsRef.current.set(routeKey, window.scrollY);
+    };
+    window.addEventListener('scroll', savePosition, { passive: true });
+    return () => window.removeEventListener('scroll', savePosition);
+  }, [location.pathname, location.search]);
+
   useEffect(() => {
     if (location.hash === '#decouvertes') return;
-    if (!location.hash) {
-      window.scrollTo(0, 0);
-      return;
+    if (location.hash) {
+      let frame = window.requestAnimationFrame(() => {
+        frame = window.requestAnimationFrame(() => {
+          document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
+        });
+      });
+      return () => window.cancelAnimationFrame(frame);
     }
 
-    let frame = window.requestAnimationFrame(() => {
-      frame = window.requestAnimationFrame(() => {
-        document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
-      });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [location.pathname, location.hash]);
+    if (navigationType === 'POP') {
+      // Retour/avant : on restaure la position de lecture mémorisée pour cette page.
+      const savedPosition = scrollPositionsRef.current.get(`${location.pathname}${location.search}`) ?? 0;
+      isRestoringScrollRef.current = true;
+      const restore = () => window.scrollTo({ top: savedPosition, behavior: 'instant' as ScrollBehavior });
+      const frame = window.requestAnimationFrame(() => window.requestAnimationFrame(restore));
+      const timer = window.setTimeout(() => {
+        restore();
+        isRestoringScrollRef.current = false;
+      }, 300);
+      return () => {
+        window.cancelAnimationFrame(frame);
+        window.clearTimeout(timer);
+        isRestoringScrollRef.current = false;
+      };
+    }
+
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+  }, [location.pathname, location.search, location.hash, navigationType]);
+
+  useEffect(() => {
+    if (navigationType === 'POP') return;
+    const mainContent = document.getElementById('main-content');
+    mainContent?.focus({ preventScroll: true });
+  }, [location.pathname, navigationType]);
 
   useEffect(() => {
     const trackPageView = () => {

@@ -1,13 +1,14 @@
 import React from 'react';
 import { ArrowLeft, ChevronDown, CircleHelp, Store } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { FAQ_SECTIONS } from '../utils/faqContent';
 
 export const FaqPage: React.FC = () => (
   <main className="min-h-[70vh] bg-[#f8f6f0] px-4 py-8 text-[#292d2a] sm:px-6 sm:py-12">
     <div className="mx-auto max-w-[1184px]">
-      <a href="/" className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[#047857] transition hover:text-[#F97316]">
+      <Link to="/" className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[#047857] transition hover:text-[#F97316]">
         <ArrowLeft className="h-4 w-4" /> Retour aux boutiques
-      </a>
+      </Link>
 
       <header className="relative mt-6 overflow-hidden rounded-3xl bg-[#065f46] p-5 text-white sm:mt-8 sm:p-8">
         <div aria-hidden="true" className="pointer-events-none absolute -right-14 -top-28 h-72 w-72 rounded-full border border-white/10 sm:right-12 sm:h-96 sm:w-96" />
@@ -47,7 +48,7 @@ export const FaqPage: React.FC = () => (
 
       <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-[#e7e1d7] bg-[#f1ede5] p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <p className="text-sm text-[#647067]">Vous avez encore une question sur une commande ?</p>
-        <a href="/" className="inline-flex min-h-10 items-center justify-center rounded-full bg-[#065f46] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#047857]">Trouver une boutique</a>
+        <Link to="/" className="inline-flex min-h-10 items-center justify-center rounded-full bg-[#065f46] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#047857]">Trouver une boutique</Link>
       </div>
     </div>
   </main>
