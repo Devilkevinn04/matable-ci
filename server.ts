@@ -1258,6 +1258,19 @@ async function startServer() {
         }
       }
 
+      if (['/__preview/article-form', '/__preview/advertising'].includes(req.path) && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(200)
+            .set({ 'Content-Type': 'text/html', 'Cache-Control': 'no-store' })
+            .end(injectNoIndexSeo(transformed, 'Aperçu local | MaTable.ci'));
+        } catch (error) {
+          return next(error);
+        }
+      }
+
       const seoShops = await loadShopsFromDatabase();
       const seoProducts = await loadProductsFromDatabase();
       const {
