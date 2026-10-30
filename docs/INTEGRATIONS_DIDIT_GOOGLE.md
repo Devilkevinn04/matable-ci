@@ -142,7 +142,9 @@ Migration à appliquer avant le déploiement :
 npm run migrate:neon
 ```
 
-Elle ajoute `session_url`, `decline_reasons`, `decision_fetched_at` et l’index de comptage (`migrations/043_didit_session_resume.sql`). Tests : `tests/didit-verification-improvements.test.ts`.
+Elle ajoute `session_url`, `decline_reasons`, `decision_fetched_at` et l’index de comptage (`migrations/043_didit_session_resume.sql`). Les colonnes sont aussi ajoutées automatiquement au démarrage via `postgresMigrations` dans `db.ts`. Tests : `tests/didit-verification-improvements.test.ts`.
+
+La récupération des raisons de refus appelle `GET /v3/session/{id}/decision/` : la clé `DIDIT_API_KEY` doit porter le droit `read:sessions`. En cas de `403`, le statut reste correct mais les conseils détaillés ne s’affichent pas.
 
 ## Crédits Didit — action requise
 
