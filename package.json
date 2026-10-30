@@ -18,6 +18,7 @@
     "db:backup": "node --import dotenv/config scripts/backup-postgres.mjs",
     "db:restore:validate": "node --import dotenv/config scripts/restore-validate-postgres.mjs",
     "check:prod": "node scripts/check-production-readiness.mjs",
+    "check:integrations": "node scripts/check-integrations.mjs",
     "smoke:prod": "node scripts/smoke-production.mjs",
     "lint": "tsc --noEmit",
     "migrate:neon": "node --import dotenv/config --import tsx scripts/migrate-neon.ts",

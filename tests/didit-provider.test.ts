@@ -122,6 +122,7 @@ test('merchant session creation records consent and returns only Didit hosted ve
     assert.ok(typeof storedParameters[4] === 'string' && Number.isFinite(Date.parse(storedParameters[4])));
     assert.equal(storedParameters[5], 'didit-v1');
     assert.equal(storedParameters[6], storedParameters[7]);
+    assert.equal(storedParameters[8], `https://verify.didit.me/session/${sessionId}`);
     assert.equal(webhookStatus.length, 2);
     assert.equal(JSON.stringify(payload).includes(apiKey), false);
 

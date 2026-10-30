@@ -836,7 +836,14 @@ async function startServer() {
 
   const app = express();
   const PORT = Number(process.env.PORT || 3000);
-  const verificationRouters = createMerchantVerificationRouter({ dbRun, dbGet, dbAll, dbTransaction, requireMerchantIdentityOwnShop });
+  const verificationRouters = createMerchantVerificationRouter({
+    dbRun,
+    dbGet,
+    dbAll,
+    dbTransaction,
+    requireMerchantIdentityOwnShop,
+    rateLimitPublicRequest,
+  });
 
   applySecurityHeaders(app);
 

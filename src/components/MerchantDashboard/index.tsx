@@ -226,6 +226,22 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     setPaymentIdToCheck(returnedPaymentId);
   }, []);
 
+  // Retour depuis Didit : ouvrir l’onglet de vérification et laisser le
+  // composant rafraîchir immédiatement puis toutes les 10 s pendant 2 minutes.
+  useEffect(() => {
+    const returnUrl = new URL(window.location.href);
+    if (returnUrl.searchParams.get('verification') !== 'complete') return;
+    returnUrl.searchParams.delete('verification');
+    window.history.replaceState(window.history.state, '', `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`);
+    try {
+      window.sessionStorage.setItem('matable:didit-return-at', String(Date.now()));
+    } catch {
+      // Stockage indisponible : le composant retombera sur le rafraîchissement normal.
+    }
+    setActiveTab('settings');
+    setSettingsSubTab('verification');
+  }, [setActiveTab, setSettingsSubTab]);
+
   useEffect(() => {
     if (!paymentIdToCheck || !currentShop || currentShop.admin_mode) return;
     let cancelled = false;

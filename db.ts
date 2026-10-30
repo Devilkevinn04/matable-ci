@@ -364,9 +364,11 @@ const sqliteSchema = `
   CREATE TABLE IF NOT EXISTS didit_verification_sessions (
     session_id TEXT PRIMARY KEY, shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
     workflow_id TEXT NOT NULL, status TEXT NOT NULL, consent_at TEXT NOT NULL, consent_version TEXT NOT NULL, last_webhook_at TEXT,
+    session_url TEXT, decline_reasons TEXT, decision_fetched_at TEXT,
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_didit_sessions_shop_created ON didit_verification_sessions(shop_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_didit_sessions_created ON didit_verification_sessions(created_at);
   CREATE TABLE IF NOT EXISTS delivery_driver_identity_sessions (
     session_id TEXT PRIMARY KEY, driver_id INTEGER NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
     workflow_id TEXT NOT NULL, status TEXT NOT NULL, consent_at TEXT NOT NULL, consent_version TEXT NOT NULL,
@@ -598,6 +600,10 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('didit_verification_sessions', 'consent_at', "TEXT NOT NULL DEFAULT ''");
   addColumn('didit_verification_sessions', 'consent_version', "TEXT NOT NULL DEFAULT ''");
   addColumn('didit_verification_sessions', 'last_webhook_at', 'TEXT');
+  addColumn('didit_verification_sessions', 'session_url', 'TEXT');
+  addColumn('didit_verification_sessions', 'decline_reasons', 'TEXT');
+  addColumn('didit_verification_sessions', 'decision_fetched_at', 'TEXT');
+  connection.exec('CREATE INDEX IF NOT EXISTS idx_didit_sessions_created ON didit_verification_sessions(created_at)');
   connection.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_shops_owner_email_unique ON shops (LOWER(owner_email)) WHERE owner_email IS NOT NULL AND owner_email <> ''");
 }
 
@@ -959,12 +965,17 @@ export const postgresMigrations = [
   `CREATE TABLE IF NOT EXISTS didit_verification_sessions (
     session_id TEXT PRIMARY KEY, shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
     workflow_id TEXT NOT NULL, status TEXT NOT NULL, consent_at TEXT NOT NULL, consent_version TEXT NOT NULL, last_webhook_at TEXT,
+    session_url TEXT, decline_reasons TEXT, decision_fetched_at TEXT,
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
   "ALTER TABLE didit_verification_sessions ADD COLUMN IF NOT EXISTS consent_at TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE didit_verification_sessions ADD COLUMN IF NOT EXISTS consent_version TEXT NOT NULL DEFAULT ''",
   'ALTER TABLE didit_verification_sessions ADD COLUMN IF NOT EXISTS last_webhook_at TEXT',
+  'ALTER TABLE didit_verification_sessions ADD COLUMN IF NOT EXISTS session_url TEXT',
+  'ALTER TABLE didit_verification_sessions ADD COLUMN IF NOT EXISTS decline_reasons TEXT',
+  'ALTER TABLE didit_verification_sessions ADD COLUMN IF NOT EXISTS decision_fetched_at TEXT',
   'CREATE INDEX IF NOT EXISTS idx_didit_sessions_shop_created ON didit_verification_sessions(shop_id, created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_didit_sessions_created ON didit_verification_sessions(created_at)',
   'CREATE TABLE IF NOT EXISTS didit_webhook_events (event_id TEXT PRIMARY KEY, received_at TEXT NOT NULL)',
   `CREATE TABLE IF NOT EXISTS geniuspay_webhook_events (
     event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, payment_intent_id TEXT,

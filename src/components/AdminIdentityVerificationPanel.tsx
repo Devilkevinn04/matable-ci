@@ -12,6 +12,15 @@ interface VerificationItem {
   updated_at: string | null;
 }
 
+interface VerificationUsage {
+  month: string;
+  merchant_finished: number;
+  courier_finished: number;
+  total_finished: number;
+  threshold: number;
+  alert: boolean;
+}
+
 type VerificationFilter = 'all' | 'pending' | 'submitted' | 'under_review' | 'rejected' | 'verified';
 
 export const statusLabels: Record<string, string> = {
@@ -37,6 +46,7 @@ export function AdminIdentityVerificationPanel({
   allowRequest = true,
 }: AdminIdentityVerificationPanelProps) {
   const [items, setItems] = useState<VerificationItem[]>([]);
+  const [usage, setUsage] = useState<VerificationUsage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,9 +58,10 @@ export function AdminIdentityVerificationPanel({
     setError('');
     try {
       const response = await fetch('/api/admin/identity-verifications', { cache: 'no-store' });
-      const data = await response.json() as { verifications?: VerificationItem[]; error?: string };
+      const data = await response.json() as { verifications?: VerificationItem[]; usage?: VerificationUsage; error?: string };
       if (!response.ok) throw new Error(data.error || 'Chargement des statuts impossible.');
       setItems(data.verifications || []);
+      setUsage(data.usage || null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Chargement des statuts impossible.');
     } finally {
@@ -85,6 +96,9 @@ export function AdminIdentityVerificationPanel({
   }, [items, searchQuery, statusFilter]);
   const openItemIndex = filteredItems.findIndex((item) => item.shop_id === openShopId);
   const openItem = openItemIndex >= 0 ? filteredItems[openItemIndex] : null;
+  const usageMonthLabel = usage
+    ? new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(new Date(`${usage.month}-01T00:00:00Z`))
+    : '';
 
   function moveOpenItem(direction: -1 | 1) {
     if (!filteredItems.length) return;
@@ -106,6 +120,13 @@ export function AdminIdentityVerificationPanel({
         </div>
         <button type="button" onClick={() => void refresh()} disabled={loading} aria-label="Actualiser les statuts" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
       </div>
+      {usage && (
+        <div className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold ${usage.alert ? 'bg-rose-50 text-rose-900' : 'bg-slate-50 text-slate-700'}`}>
+          Budget Didit · {usage.total_finished} session{usage.total_finished > 1 ? 's' : ''} terminée{usage.total_finished > 1 ? 's' : ''} en {usageMonthLabel}
+          {' '}({usage.merchant_finished} marchand{usage.merchant_finished > 1 ? 's' : ''}, {usage.courier_finished} livreur{usage.courier_finished > 1 ? 's' : ''}) · alerte à {usage.threshold}.
+          {usage.alert && ' Vérifiez le solde Didit ou contactez le support avant de relancer.'}
+        </div>
+      )}
       {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
       {loading ? <p className="mt-4 flex items-center gap-2 text-sm text-slate-500"><LoaderCircle className="h-4 w-4 animate-spin" />Chargement…</p>
         : items.length === 0 ? <p className="mt-4 text-sm text-slate-500">Aucune boutique à vérifier.</p>
