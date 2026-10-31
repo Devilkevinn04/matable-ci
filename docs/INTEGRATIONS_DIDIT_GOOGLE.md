@@ -16,6 +16,20 @@
 | Crédits Didit | Solde prépayé 0,00 $, mais création de session **OK** | `GET /v3/billing/balance/` → `0.0000` ; `POST /v3/session/` → **201** le 31/10/2026 (crédit mensuel du plan ou facturation à l’usage). Session de test supprimée aussitôt. |
 | Déploiement des améliorations | ⏳ **pas encore actif** | La prod sert encore l’ancien bundle (`MerchantIdentityVerification-D6o6L99C.js`, sans « Reprendre ma vérification ») alors que `main` est à `d6d9a94` |
 
+## URL publique et adresse de retour (décision du 31/10/2026)
+
+L’URL publique reste **`https://matable-ci.onrender.com`**. Le domaine `matable.ci` n’est pas encore résolu (NXDOMAIN au registre `.ci` le 31/10/2026) : aucune bascule n’est faite avant sa configuration dans Render.
+
+| Élément | Valeur vérifiée |
+|---|---|
+| `APP_URL` en production | `https://matable-ci.onrender.com` — lisible dans le `redirect_uri` Google renvoyé par `GET /api/auth/customer-oauth/google/start` |
+| Callback Didit marchand | `https://matable-ci.onrender.com/app?verification=complete` — construit avec `new URL('/app?verification=complete', APP_URL)` |
+| Callback Didit livreur | `https://matable-ci.onrender.com/livreur?verification=complete` — construit avec `new URL('/livreur?verification=complete', APP_URL)` |
+| Destination webhook Didit | `https://matable-ci.onrender.com/api/webhooks/didit` (v3, `status.updated`, activée) |
+| Domaines de retour Didit | `allowed_return_hosts: []` → les deux callbacks ci-dessus sont acceptés |
+
+Pour une future bascule vers `matable.ci`, suivre cet ordre : configurer le domaine dans Render, mettre à jour `APP_URL`, aligner les URL canoniques/OG/JSON-LD de `index.html`, puis changer la destination webhook et les URI de retour Google/Didit. Les bios TikTok/Google/réseaux et la carte de fin vidéo ne sont pas versionnées dans ce dépôt.
+
 ## Workflow Didit : résolu
 
 Le workflow référencé dans `render.yaml` était en brouillon. Il a été publié le 30/10/2026 via l’API de management (`PATCH /v3/workflows/17e1d727…/` avec `{"status":"published"}`).
