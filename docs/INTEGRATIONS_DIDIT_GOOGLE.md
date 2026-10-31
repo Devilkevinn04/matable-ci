@@ -13,7 +13,7 @@
 | `DIDIT_WEBHOOK_SECRET` | Configuré et **identique au secret Didit** | Sonde signée le 31/10 : `POST /api/webhooks/didit` → 503 « session inconnue » (signature acceptée), et 401 avec une signature invalide |
 | Destination webhook | Correcte, mais 35 % d’échecs sur 30 jours | `https://matable-ci.onrender.com/api/webhooks/didit`, v3, `status.updated`, enabled ; 24 échecs / 68 livraisons |
 | Domaines de retour | Aucune restriction | `allowed_return_hosts: []` → le callback `/app?verification=complete` est accepté |
-| Crédits Didit | ❌ **solde 0,00 $** | `GET /v3/billing/balance/` → `0.0000`, auto-refill désactivé (relevé du 31/10) |
+| Crédits Didit | Solde prépayé 0,00 $, mais création de session **OK** | `GET /v3/billing/balance/` → `0.0000` ; `POST /v3/session/` → **201** le 31/10/2026 (crédit mensuel du plan ou facturation à l’usage). Session de test supprimée aussitôt. |
 | Déploiement des améliorations | ⏳ **pas encore actif** | La prod sert encore l’ancien bundle (`MerchantIdentityVerification-D6o6L99C.js`, sans « Reprendre ma vérification ») alors que `main` est à `d6d9a94` |
 
 ## Workflow Didit : résolu
@@ -156,14 +156,13 @@ Le 31/10/2026, `main` est à `d6d9a94` mais la production sert encore l’ancien
 - Sinon : Render → service `matable-ci` → **Manual Deploy → Deploy latest commit**.
 - Après déploiement, vérifier que `/health` répond 200 et que le bundle contient « Reprendre ma vérification ». Les colonnes de la migration 043 sont appliquées au démarrage par `initializeDatabase()`.
 
-## Crédits Didit — action requise
+## Crédits Didit — surveillance
 
-Au 31/10/2026, le solde est de **0,00 $** avec l’auto-refill désactivé. La création de session renverra une erreur 400 « not enough credits » tant que le compte n’est pas approvisionné.
+Au 31/10/2026, le solde prépayé affiché est de **0,00 $** avec l’auto-refill désactivé. **Ce n’est pas bloquant** : une création de session réelle a répondu `201` le 31/10/2026, donc le compte dispose d’un crédit de plan ou d’une facturation à l’usage. La session de diagnostic a été supprimée via `DELETE /v3/session/{id}/delete/`.
 
-Deux options :
+Surveiller le solde et le budget mensuel (panneau admin, alerte à 25 sessions terminées). Pour recharger :
 
-1. **Attendre le 1er novembre 2026** : le plan gratuit inclut désormais **10 $ de crédit par mois** (pour les organisations inscrites avec un e-mail professionnel), soit environ 30 vérifications. Vérifier le solde ce jour-là.
-2. **Recharger immédiatement** : ouvrir [business.didit.me](https://business.didit.me) → **Billing**, ou créer un lien de paiement Stripe sans engagement :
+1. Ouvrir [business.didit.me](https://business.didit.me) → **Billing**, ou créer un lien de paiement Stripe sans engagement :
 
 ```bash
 curl -s -X POST https://verification.didit.me/v3/billing/top-up/ \
@@ -173,7 +172,7 @@ curl -s -X POST https://verification.didit.me/v3/billing/top-up/ \
        "cancel_url":"https://matable-ci.onrender.com/app?billing=cancelled"}'
 ```
 
-Le lien `checkout_session_url` renvoyé ne débite rien tant qu’il n’est pas payé. Vérifier ensuite :
+Le 31/10/2026, `POST /v3/billing/top-up/` a renvoyé une erreur 500 côté Didit : passer par la console si le rechargement est nécessaire. Vérifier ensuite :
 
 ```bash
 curl -s -H "x-api-key: $DIDIT_API_KEY" \
