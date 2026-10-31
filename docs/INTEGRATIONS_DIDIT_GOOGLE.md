@@ -1,6 +1,6 @@
 # Vérifier Didit et Google en production
 
-État constaté le 30/10/2026 sur `https://matable-ci.onrender.com`.
+État constaté le 31/10/2026 sur `https://matable-ci.onrender.com`.
 
 ## Ce qui est déjà en place
 
@@ -10,10 +10,11 @@
 | URI de retour Google | Acceptée par Google | `/start` redirige vers l’écran de connexion Google (pas de `redirect_uri_mismatch`) |
 | `DIDIT_WORKFLOW_ID` | **Publié** (corrigé le 30/10/2026) | UUID `17e1d727…` = « Free KYC », statut `published`, v1 |
 | `DIDIT_API_KEY` | Valide | `GET /v3/session/<uuid>/` → 404 (clé acceptée) |
-| `DIDIT_WEBHOOK_SECRET` | Configuré | `POST /api/webhooks/didit` → 401 (et non 503) |
-| Destination webhook | Correcte | `https://matable-ci.onrender.com/api/webhooks/didit`, v3, `status.updated`, enabled |
+| `DIDIT_WEBHOOK_SECRET` | Configuré et **identique au secret Didit** | Sonde signée le 31/10 : `POST /api/webhooks/didit` → 503 « session inconnue » (signature acceptée), et 401 avec une signature invalide |
+| Destination webhook | Correcte, mais 35 % d’échecs sur 30 jours | `https://matable-ci.onrender.com/api/webhooks/didit`, v3, `status.updated`, enabled ; 24 échecs / 68 livraisons |
 | Domaines de retour | Aucune restriction | `allowed_return_hosts: []` → le callback `/app?verification=complete` est accepté |
-| Crédits Didit | ❌ **solde 0,00 $** | `GET /v3/billing/balance/` → `0.0000`, auto-refill désactivé |
+| Crédits Didit | ❌ **solde 0,00 $** | `GET /v3/billing/balance/` → `0.0000`, auto-refill désactivé (relevé du 31/10) |
+| Déploiement des améliorations | ⏳ **pas encore actif** | La prod sert encore l’ancien bundle (`MerchantIdentityVerification-D6o6L99C.js`, sans « Reprendre ma vérification ») alors que `main` est à `d6d9a94` |
 
 ## Workflow Didit : résolu
 
@@ -146,13 +147,33 @@ Elle ajoute `session_url`, `decline_reasons`, `decision_fetched_at` et l’index
 
 La récupération des raisons de refus appelle `GET /v3/session/{id}/decision/` : la clé `DIDIT_API_KEY` doit porter le droit `read:sessions`. En cas de `403`, le statut reste correct mais les conseils détaillés ne s’affichent pas.
 
+## Déploiement Render — action requise
+
+Le 31/10/2026, `main` est à `d6d9a94` mais la production sert encore l’ancien bundle. Vérification : le chunk `MerchantIdentityVerification-D6o6L99C.js` ne contient pas « Reprendre ma vérification ».
+
+- Le build de `d6d9a94` a été rejoué depuis une archive propre : `tsc`, `vite build`, `esbuild` et les 227 tests passent. Le blocage n’est donc pas dans le code.
+- `render.yaml` déclare maintenant explicitement `branch: main` et `autoDeploy: true`. Si le service est piloté par un Blueprint Render, la synchronisation de ce fichier doit réactiver les déploiements.
+- Sinon : Render → service `matable-ci` → **Manual Deploy → Deploy latest commit**.
+- Après déploiement, vérifier que `/health` répond 200 et que le bundle contient « Reprendre ma vérification ». Les colonnes de la migration 043 sont appliquées au démarrage par `initializeDatabase()`.
+
 ## Crédits Didit — action requise
 
-Au 30/10/2026, le solde est de **0,00 $** avec l’auto-refill désactivé. La création de session renverra une erreur 400 « not enough credits » tant que le compte n’est pas approvisionné.
+Au 31/10/2026, le solde est de **0,00 $** avec l’auto-refill désactivé. La création de session renverra une erreur 400 « not enough credits » tant que le compte n’est pas approvisionné.
 
-1. Ouvrir [business.didit.me](https://business.didit.me) → **Billing**.
-2. Recharger entre **50 $ et 10 000 $** (minimum imposé par Didit), ou activer l’auto-refill.
-3. Vérifier ensuite :
+Deux options :
+
+1. **Attendre le 1er novembre 2026** : le plan gratuit inclut désormais **10 $ de crédit par mois** (pour les organisations inscrites avec un e-mail professionnel), soit environ 30 vérifications. Vérifier le solde ce jour-là.
+2. **Recharger immédiatement** : ouvrir [business.didit.me](https://business.didit.me) → **Billing**, ou créer un lien de paiement Stripe sans engagement :
+
+```bash
+curl -s -X POST https://verification.didit.me/v3/billing/top-up/ \
+  -H "x-api-key: $DIDIT_API_KEY" -H "Content-Type: application/json" \
+  -d '{"amount_in_dollars":50,
+       "success_url":"https://matable-ci.onrender.com/app?billing=success",
+       "cancel_url":"https://matable-ci.onrender.com/app?billing=cancelled"}'
+```
+
+Le lien `checkout_session_url` renvoyé ne débite rien tant qu’il n’est pas payé. Vérifier ensuite :
 
 ```bash
 curl -s -H "x-api-key: $DIDIT_API_KEY" \
@@ -163,7 +184,7 @@ curl -s -H "x-api-key: $DIDIT_API_KEY" \
 
 ## Rotation du secret webhook
 
-Le secret de destination doit rester identique à `DIDIT_WEBHOOK_SECRET` dans Render. En cas de rotation :
+Le secret de destination doit rester identique à `DIDIT_WEBHOOK_SECRET` dans Render. Au 31/10/2026, la sonde signée prouve que les deux correspondent. Une rotation reste recommandée puisque le secret a été affiché dans un journal de diagnostic ; l’API `PATCH /v3/webhook/destinations/{uuid}/` ne fait **pas** tourner le secret, la rotation se fait uniquement dans la console.
 
 1. Déployer d’abord la version qui accepte les en-têtes `X-Signature-V2-Previous` / `X-Signature-Previous` (ajoutée le 30/10/2026, testée dans `tests/didit-webhook-signature.test.ts`).
 2. Console Didit → destination « matable.ci » → faire tourner le secret.
