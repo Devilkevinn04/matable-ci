@@ -7,6 +7,10 @@ export interface AdminShopItem extends Shop {
   average_order_value: number;
   last_order_at: string | null;
   subscription_status?: string;
+  /** Merchant's answer to "Comment avez-vous connu MaTable ?" (null when skipped). */
+  acquisition_source?: string | null;
+  /** ?src= / utm_source of the sign-up visit, only when analytics consent was given. */
+  acquisition_campaign?: string | null;
 }
 
 export interface AdminAnalytics {

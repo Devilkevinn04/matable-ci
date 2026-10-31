@@ -5,6 +5,9 @@ import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
 import { TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
 import { useMerchantProductEditor } from './useMerchantProductEditor';
 import { trackLogin, trackLogout, trackSignup } from '../../utils/analyticsTracker';
+import { normalizeAcquisitionSource } from '../../utils/acquisitionSources';
+import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from '../../utils/analyticsAttribution';
+import { hasAnalyticsConsent } from '../../utils/cookieConsent';
 
 export type MerchantOrderFilter = 'all' | 'actionable' | OrderStatus;
 
@@ -38,6 +41,11 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [regEmail, setRegEmail] = useState('');
   const [regAcceptedTermsPrivacy, setRegAcceptedTermsPrivacy] = useState(false);
   const [regCategory, setRegCategory] = useState<ShopCategory>('fashion');
+  // Campaign from ?src= / utm_source, kept only when the visitor accepted audience analytics.
+  const [regTrackedCampaign] = useState(() => (typeof window !== 'undefined' && hasAnalyticsConsent()
+    ? getAnalyticsCampaignFromSearch(window.location.search) || getStoredAnalyticsCampaign()
+    : null));
+  const [regAcquisitionSource, setRegAcquisitionSource] = useState<string>(() => normalizeAcquisitionSource(regTrackedCampaign) || '');
   const [regLoading, setRegLoading] = useState(false);
   const [trialStarting, setTrialStarting] = useState(false);
   const [registrationLinks, setRegistrationLinks] = useState<{
@@ -377,6 +385,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
           category: regCategory,
           email: regEmail.trim(),
           accepted_terms_privacy: regAcceptedTermsPrivacy,
+          acquisition_source: regAcquisitionSource || null,
+          acquisition_campaign: regTrackedCampaign,
           welcome_message: CATEGORY_DEFAULTS[regCategory].welcomeMessage,
         }),
       });
@@ -822,6 +832,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     regEmail,
     regAcceptedTermsPrivacy,
     setRegAcceptedTermsPrivacy,
+    regAcquisitionSource,
+    setRegAcquisitionSource,
     regCategory,
     regLoading,
     trialStarting,

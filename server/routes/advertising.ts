@@ -5,6 +5,7 @@ import { isShopCategory } from '../../src/utils/categoryDefaults.ts';
 import { getCategoryDefaults, normalizeCustomBannerImage } from '../../src/utils/categoryDefaults.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import { isShopPubliclyVisible } from '../services/businessRules.ts';
+import { toPublicProductImageUrl } from '../services/publicProductImages.ts';
 
 const BETA_DURATION_DAYS = 30;
 const CAMPAIGN_DURATIONS_DAYS = [7] as const;
@@ -259,6 +260,9 @@ export function createAdvertisingRouters({
       const category = isShopCategory(shop.category) ? shop.category : 'other';
       const bannerUrl = normalizeCustomBannerImage(shop.theme_config?.custom_banner_url, category)
         || getCategoryDefaults(category).bannerPlaceholderImageUrl;
+      const publicProduct = product
+        ? { ...product, image_url: toPublicProductImageUrl(product.id, product.image_url) }
+        : undefined;
       publicCampaigns.push({
         id: campaign.id,
         kind: campaign.kind,
@@ -270,9 +274,9 @@ export function createAdvertisingRouters({
           slug: shop.slug,
           category,
           city: shop.city,
-          image_url: campaign.kind === 'banner' ? bannerUrl : product?.image_url || '',
+          image_url: campaign.kind === 'banner' ? bannerUrl : publicProduct?.image_url || '',
         },
-        ...(product ? { product } : {}),
+        ...(publicProduct ? { product: publicProduct } : {}),
       });
     }
     const payload = { campaigns: publicCampaigns };

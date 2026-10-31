@@ -3,6 +3,7 @@ import { Router, type RequestHandler } from 'express';
 import { databaseMode, dbTransaction } from '../../db.ts';
 import { addCalendarMonths } from '../../src/utils/subscriptionFeatures.ts';
 import { slugifyShopName } from '../../src/utils/shopSlug.ts';
+import { normalizeAcquisitionCampaign, normalizeAcquisitionSource } from '../../src/utils/acquisitionSources.ts';
 import { persistShopInTransaction } from '../repositories/shops.ts';
 import { sendMerchantWelcomeEmail } from '../services/email.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
@@ -55,6 +56,9 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     const { name, whatsapp_number, pin_code, pin, category, city, welcome_message, theme_config, opening_hours } = req.body;
     const ownerEmail = String(req.body?.email || '').trim().toLowerCase();
     const acceptedTermsPrivacy = req.body?.accepted_terms_privacy === true;
+    // Optional and never blocking: an unknown value is simply not recorded.
+    const declaredSource = normalizeAcquisitionSource(req.body?.acquisition_source);
+    const acquisitionCampaign = normalizeAcquisitionCampaign(req.body?.acquisition_campaign);
     const effectivePin = pin_code || pin;
     const safeName = sanitizeTextField(name, 100);
     const safeCity = sanitizeTextField(city || '', 100);
@@ -194,6 +198,12 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
         'INSERT INTO merchant_account_consents (shop_id, terms_document, privacy_document, accepted_at) VALUES (?, ?, ?, ?)',
         [newShop.id, '/cgu', '/confidentialite', now.toISOString()],
       );
+      if (declaredSource || acquisitionCampaign) {
+        await transaction.run(
+          'INSERT INTO shop_acquisitions (shop_id, declared_source, campaign, created_at) VALUES (?, ?, ?, ?)',
+          [newShop.id, declaredSource, acquisitionCampaign, now.toISOString()],
+        );
+      }
       return 'created';
     });
     if (registrationResult === 'duplicate_phone') {

@@ -7,6 +7,7 @@ import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts
 import { FAQ_SECTIONS } from '../../src/utils/faqContent.ts';
 import { SUBSCRIPTION_PLANS, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../../src/utils/subscriptionFeatures.ts';
 import type { SubscriptionPrices } from './subscriptionPricing.ts';
+import { toPublicProductImageUrl } from './publicProductImages.ts';
 
 interface SeoHtmlHelperOptions {
   shops: ShopRecord[];
@@ -252,7 +253,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
             '@type': 'Product',
             name: product.title,
             description: product.description || undefined,
-            image: product.image_url,
+            image: toPublicProductImageUrl(product.id, product.image_url, 0, origin) || undefined,
           },
         })),
       },

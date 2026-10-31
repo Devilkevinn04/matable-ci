@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowRight, BadgePercent, CheckCircle2, Clock3, MapPin, RotateCcw, Search, Store, X } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, BadgePercent, CheckCircle2, Clock3, MapPin, Megaphone, RotateCcw, Search, ShieldCheck, Store, X } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { MotionReveal } from './MotionSystem';
 import { getCategoryDefaults, getProductImageForDisplay, isShopCategory, normalizeCustomBannerImage, SHOP_CATEGORIES } from '../utils/categoryDefaults';
@@ -24,6 +24,7 @@ interface DirectoryShop {
   is_sponsored?: boolean;
   boost_placements?: string[];
   is_active?: boolean;
+  is_verified?: boolean;
   products_count?: number;
   welcome_message?: string | null;
   theme_color?: string;
@@ -59,6 +60,10 @@ const categoryTileColors: Record<string, string> = {
   automotive: '#e8e6e1',
   other: '#eee9df',
 };
+
+const MIN_CATEGORY_COUNT_SHOWN = 5;
+const MIN_DIRECTORY_COUNT_SHOWN = 20;
+const MAX_HERO_NEIGHBOURHOODS = 6;
 
 const homeTitleWords = [
   { text: 'Le', accent: false },
@@ -126,6 +131,74 @@ const DEMO_PRODUCTS: FeedProduct[] = DEMO_SHOPS.flatMap((shop, shopIndex) =>
   })),
 );
 
+const VerifiedBadge: React.FC = () => (
+  <span
+    className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[#e3f4ea] px-1.5 py-0.5 text-[9px] font-extrabold text-[#065f46] sm:text-[10px]"
+    title="Le commerçant a fait vérifier son identité"
+  >
+    <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Vérifié
+  </span>
+);
+
+const openPartnerRequest = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const requestForm = document.getElementById('public-partner-request');
+  if (!(requestForm instanceof HTMLDetailsElement)) return;
+  event.preventDefault();
+  requestForm.open = true;
+  requestForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[] }> = ({ shops }) => {
+  const highlighted = [...shops]
+    .filter((shop) => (shop.products_preview?.length || 0) > 0)
+    .sort((left, right) => Number(Boolean(right.is_verified)) - Number(Boolean(left.is_verified))
+      || Number(Boolean(right.is_featured)) - Number(Boolean(left.is_featured)))
+    .slice(0, 3);
+  const hasVerifiedShop = shops.some((shop) => shop.is_verified);
+  return (
+    <aside className="flex min-h-[230px] flex-col overflow-hidden rounded-[26px] border border-[#d6e5dc] bg-[linear-gradient(135deg,#f4faf6,#fffdf8_58%,#e6f2e9)] p-4 shadow-[0_8px_28px_rgba(20,40,30,.08)] sm:min-h-[300px] sm:rounded-[32px] sm:p-6 lg:min-h-[350px]" aria-labelledby="home-trust-title">
+      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#c2410c]">Commencez ici</p>
+      <h2 id="home-trust-title" className="mt-1 font-display text-xl font-extrabold leading-tight text-[#065f46] sm:text-2xl">Des boutiques près de chez vous, avec leurs vrais prix.</h2>
+      {highlighted.length > 0 && <ul className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
+        {highlighted.map((shop) => {
+          const product = shop.products_preview?.[0];
+          return <li key={shop.slug}>
+            <Link to={`/${encodeURIComponent(shop.slug)}`} className="group flex min-h-[64px] items-center gap-3 rounded-2xl border border-[#e3ece6] bg-white p-2 pr-3 transition hover:border-[#b9d5ca] hover:shadow-[0_8px_18px_rgba(20,40,30,.08)]">
+              <span className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-[#e9f5ee]">
+                {product && <img src={getProductImageForDisplay(product.image_url, shop.category)} alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate text-sm font-extrabold text-[#292d2a]">{shop.name}</span>
+                  {shop.is_verified && <VerifiedBadge />}
+                </span>
+                <span className="mt-0.5 block truncate text-[11px] text-[#647067]">
+                  {shop.city || 'Côte d’Ivoire'}{product ? ` · ${product.title} ${formatFCFA(product.price)}` : ''}
+                </span>
+              </span>
+              <ArrowRight className="h-4 w-4 shrink-0 text-[#059669] transition-transform group-hover:translate-x-1" aria-hidden="true" />
+            </Link>
+          </li>;
+        })}
+      </ul>}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        {hasVerifiedShop && <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#315548]"><ShieldCheck className="h-4 w-4 text-[#059669]" aria-hidden="true" /> « Vérifié » : identité du commerçant contrôlée</span>}
+        <Link to="/boutiques" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-[#065f46] hover:text-[#047857]">
+          Toutes les boutiques <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      </div>
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#f5d3b5] bg-[#fff6ec] px-3 py-2.5 sm:px-4" aria-label="Espace partenaires">
+        <span className="inline-flex min-w-0 items-center gap-2 text-xs font-bold text-[#8f351d] sm:text-sm">
+          <Megaphone className="h-4 w-4 shrink-0" aria-hidden="true" /> Votre marque ici ? Cet espace est réservé aux partenaires.
+        </span>
+        <button type="button" onClick={openPartnerRequest} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full bg-[#c2410c] px-4 text-xs font-extrabold text-white transition hover:bg-[#a53a1d]">
+          Proposer un partenariat <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      </div>
+    </aside>
+  );
+};
+
 export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoading, loadError, onRetry, onOpenShop, onOpenDirectory, discoveryPage, isShopDirectoryPage = false, isPromotionsPage = false }) => {
   const location = useLocation();
   const prefersReducedMotion = useReducedMotion();
@@ -134,6 +207,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
   const [directorySort, setDirectorySort] = useState<DirectorySort>('recommended');
   const [openOnly, setOpenOnly] = useState(false);
   const [campaignEligible, setCampaignEligible] = useState(false);
+  const [billboardHasCampaign, setBillboardHasCampaign] = useState(false);
   const [activeDemoShop, setActiveDemoShop] = useState<DirectoryShop | null>(null);
   const [demoBasket, setDemoBasket] = useState<Record<number, number>>({});
   const isLocalAdvertisingDemo = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true
@@ -424,7 +498,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               </div>
             </MotionReveal>
             <MotionReveal delay={0.1}>
-            <aside className="relative overflow-hidden rounded-[26px] border border-white/15 bg-[#FFFFFF] p-5 text-[#292d2a] shadow-[0_24px_70px_rgba(0,0,0,.2)] sm:p-6" aria-label="Repères de l’annuaire">
+            <aside className="relative hidden overflow-hidden rounded-[26px] border border-white/15 bg-[#FFFFFF] p-5 text-[#292d2a] shadow-[0_24px_70px_rgba(0,0,0,.2)] sm:block sm:p-6" aria-label="Repères de l’annuaire">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#c2410c]">Le commerce à portée de main</p>
@@ -433,7 +507,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#d1fae5] text-xl" aria-hidden="true">✳</span>
               </div>
               <p className="mt-2 text-sm leading-6 text-[#647067]">Trouvez votre prochain coup de cœur et prenez contact en direct.</p>
-              <div className="mt-5 grid grid-cols-2 divide-x divide-[#e7ddd0] rounded-2xl bg-[#FAF8F2] py-3">
+              {(directoryIsLoading || directoryShops.length >= MIN_DIRECTORY_COUNT_SHOWN) && <div className="mt-5 grid grid-cols-2 divide-x divide-[#e7ddd0] rounded-2xl bg-[#FAF8F2] py-3">
                 <div className="px-4">
                   <span className="block font-display text-2xl font-extrabold text-[#065f46]">{directoryIsLoading ? '…' : directoryShops.length}</span>
                   <span className="text-xs font-semibold text-[#647067]">adresses locales</span>
@@ -442,7 +516,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                   <span className="block font-display text-2xl font-extrabold text-[#065f46]">{directoryIsLoading ? '…' : categories.length}</span>
                   <span className="text-xs font-semibold text-[#647067]">univers à explorer</span>
                 </div>
-              </div>
+              </div>}
               {cityPages.length > 0 && <div className="mt-4 flex flex-wrap gap-2">
                 {cityPages.slice(0, 3).map((page) => <Link key={page.path} to={page.path} className="inline-flex items-center gap-1 rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[#065f46] transition hover:bg-[#d2e8dd]"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{page.city}</Link>)}
               </div>}
@@ -490,6 +564,19 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Échange direct</span>
               <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Retrait ou livraison à convenir</span>
             </motion.div>
+            {cityPages.length > 0 && <motion.nav aria-label="Boutiques par quartier" variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }} className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-[#47534b]">Près de chez vous :</span>
+              {cityPages.slice(0, MAX_HERO_NEIGHBOURHOODS).map((page) => (
+                <Link key={page.path} to={page.path} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#cfe3d8] bg-white px-3 text-xs font-bold text-[#065f46] transition hover:border-[#047857] hover:bg-[#f0f8f3]">
+                  <MapPin className="h-3.5 w-3.5" aria-hidden="true" />{page.city}
+                </Link>
+              ))}
+            </motion.nav>}
+            <motion.div variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }} className="mt-4">
+              <Link to="/commercants" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-extrabold text-[#c2410c] transition hover:text-[#a53a1d]">
+                Vous vendez ? Ajoutez votre boutique <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </motion.div>
           </motion.div>
           <motion.div
             initial={prefersReducedMotion ? false : { opacity: 0, y: 14, scale: 0.98 }}
@@ -497,13 +584,20 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             transition={{ duration: 0.55, delay: prefersReducedMotion ? 0 : 0.22, ease: 'easeOut' }}
             className="flex min-w-0 flex-col justify-center bg-[#fffdf8] p-4 sm:p-6 lg:p-7"
           >
-            <div className="mb-3 flex items-center justify-between gap-2">
+            {billboardHasCampaign && <div className="mb-3 flex items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff0df] px-3 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#8f351d] sm:text-[10px]">
                 <BadgePercent className="h-3.5 w-3.5" aria-hidden="true" /> Vitrine premium
               </span>
               <span className="text-[9px] font-bold uppercase tracking-wide text-[#647067] sm:text-[10px]">Sponsors & partenaires</span>
-            </div>
-            <PublicCampaignCarousel onOpenShop={handleOpenShop} eligible={campaignEligible} placement="billboard" previewCampaigns={demoContent?.campaigns} />
+            </div>}
+            <PublicCampaignCarousel
+              onOpenShop={handleOpenShop}
+              eligible={campaignEligible}
+              placement="billboard"
+              previewCampaigns={demoContent?.campaigns}
+              onCampaignVisibilityChange={setBillboardHasCampaign}
+              emptyBillboard={<HomeTrustBillboard shops={directoryShops} />}
+            />
           </motion.div>
         </div>
       </section>
@@ -537,13 +631,14 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         >
           {categories.map((item, index) => {
             const count = categoryCounts.get(item) || 0;
+            const showCount = count >= MIN_CATEGORY_COUNT_SHOWN;
             return <MotionReveal key={item} delay={index * 0.05} className="w-[46%] shrink-0 snap-start sm:w-[calc(33.333%-8px)] lg:w-[calc(20%-10px)]">
             <button type="button" aria-pressed={category === item} onClick={() => isLocalAdvertisingDemo ? setCategory(category === item ? 'all' : item) : onOpenDirectory(categoryLabel(item))} className={`motion-interactive group flex min-h-[112px] w-full flex-col items-start justify-between rounded-2xl border border-black/[.04] px-3 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(20,40,30,.08)] sm:px-4 ${category === item && isLocalAdvertisingDemo ? 'ring-2 ring-[#065f46] ring-offset-2' : ''}`} style={{ backgroundColor: categoryTileColors[item] || '#f1f5f2' }}>
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/80 text-xl" aria-hidden="true">{getCategoryDefaults(item).icon}</span>
               <span className="mt-2 flex w-full items-end justify-between gap-1">
                 <span className="min-w-0">
                   <span className="block truncate font-display text-xs font-extrabold text-[#292d2a] sm:text-sm">{categoryLabel(item)}</span>
-                  <span className="mt-0.5 block text-[9px] text-[#47534b]">{count} boutique{count === 1 ? '' : 's'}</span>
+                  {showCount && <span className="mt-0.5 block text-[9px] text-[#47534b]">{count} boutiques</span>}
                 </span>
                 <ArrowRight className="mb-0.5 h-3.5 w-3.5 shrink-0 text-[#047857] transition-transform group-hover:translate-x-1" aria-hidden="true" />
               </span>
@@ -595,7 +690,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col p-3 sm:p-3.5">
                       <span className="block truncate font-display text-sm font-extrabold text-[#292d2a] sm:text-base">{shop.name}</span>
-                      {shop.city && <span className="mt-1 flex items-center gap-1 truncate text-[10px] text-[#647067] sm:text-xs"><MapPin className="h-3 w-3 shrink-0 text-[#059669]" aria-hidden="true" />{shop.city}</span>}
+                      <span className="mt-1 flex min-w-0 items-center gap-2">
+                        {shop.city && <span className="flex min-w-0 items-center gap-1 truncate text-[10px] text-[#647067] sm:text-xs"><MapPin className="h-3 w-3 shrink-0 text-[#059669]" aria-hidden="true" />{shop.city}</span>}
+                        {shop.is_verified && <VerifiedBadge />}
+                      </span>
                       {shop.products_preview && shop.products_preview.length > 0 && <span className="mt-3 flex min-w-0 items-center gap-2 border-t border-[#eee8de] pt-2.5">
                         {shop.products_preview.slice(0, 2).map((product) => (
                           <span key={product.id} className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -789,7 +887,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                     </span>}
                     <h3 className="line-clamp-2 min-w-0 font-display text-base font-extrabold leading-tight tracking-tight text-[#292d2a] sm:text-xl lg:text-2xl">{shop.name}</h3>
                   </div>
-                  {shop.city && <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs font-semibold text-[#47534b] sm:mt-3 sm:gap-2 sm:text-sm"><MapPin className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden="true" /><span className="truncate">{shop.city}</span></p>}
+                  {(shop.city || shop.is_verified) && <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs font-semibold text-[#47534b] sm:mt-3 sm:gap-2 sm:text-sm">
+                    {shop.city && <><MapPin className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden="true" /><span className="truncate">{shop.city}</span></>}
+                    {shop.is_verified && <VerifiedBadge />}
+                  </p>}
                   <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#647067] sm:mt-3 sm:text-sm sm:leading-6">{shop.welcome_message || 'Une vitrine locale à découvrir et un commerçant à rencontrer.'}</p>
                   <div className="mt-auto flex flex-col items-start gap-2 border-t border-[#eee6dd] pt-3 sm:mt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:pt-4">
                     <span className="text-[10px] font-semibold leading-4 text-[#647067] sm:text-xs">

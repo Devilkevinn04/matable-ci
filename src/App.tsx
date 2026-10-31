@@ -552,7 +552,8 @@ export default function App() {
 
                 {!isMobileDashboardPreview && !isAdvertisingPreview && !isDeliveryCourierWorkspace && <CookieBanner />}
 
-                <div id="main-content" className="flex-1 app-shell" tabIndex={-1}>
+                {/* min-h keeps the footer below the fold while lazy pages and their data load (it was the main layout shift). */}
+                <div id="main-content" className="flex-1 app-shell min-h-[100svh]" tabIndex={-1}>
                   <PublicRouteEnter enabled={isAnimatedPublicRoute} routeKey={isAnimatedPublicRoute ? path : 'persistent-app'}>
                     <React.Suspense fallback={isShopDirectoryRoute || isDiscoveryRoute ? <DirectoryPageLoading /> : <p role="status" className="p-6 text-center text-sm font-semibold text-slate-600">Chargement de la page…</p>}>
                       <Routes>

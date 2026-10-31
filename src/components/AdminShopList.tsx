@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import { Clock, Download, Eye, Filter, Search, Star, Trash2 } from 'lucide-react';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
 import { subscriptionStatusLabels } from './adminDashboardTypes';
+import { ACQUISITION_SOURCES, getAcquisitionSourceLabel } from '../utils/acquisitionSources';
 import type { AdminShopItem } from './adminDashboardTypes';
 
 interface AdminShopListProps {
@@ -28,6 +29,21 @@ interface AdminShopListProps {
   canSeeFinancials?: boolean;
   canManageMerchantSpace?: boolean;
   canDeleteShops?: boolean;
+}
+
+/** How the listed shops heard about MaTable, e.g. "TikTok 4 · WhatsApp 2". */
+function AcquisitionSummary({ shops }: { shops: AdminShopItem[] }) {
+  const counts = ACQUISITION_SOURCES
+    .map((source) => ({ ...source, count: shops.filter((shop) => shop.acquisition_source === source.value).length }))
+    .filter((source) => source.count > 0);
+  const fromTikTokLink = shops.filter((shop) => shop.acquisition_campaign === 'tiktok').length;
+  if (counts.length === 0 && fromTikTokLink === 0) return null;
+  return (
+    <p className="mt-1 text-xs text-slate-600">
+      <strong>Origine déclarée :</strong> {counts.map((source) => `${source.label} ${source.count}`).join(' · ') || 'aucune réponse'}
+      {fromTikTokLink > 0 && <> · <strong>{fromTikTokLink}</strong> via le lien TikTok</>}
+    </p>
+  );
 }
 
 export function AdminShopList({
@@ -128,6 +144,7 @@ export function AdminShopList({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 p-4">
           <div>
             <h2 className="font-black text-slate-900 text-sm">Liste des commerçants</h2>
+            <AcquisitionSummary shops={shops} />
             {canSeeFinancials && <p className="mt-1 text-xs text-slate-500">Les montants correspondent aux commandes enregistrées ; les paiements des ventes ne sont pas suivis par MaTable.ci.</p>}
           </div>
           <button type="button" onClick={onExport} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
@@ -181,6 +198,7 @@ export function AdminShopList({
                     <span>📍 {shop.city || 'Ville non renseignée'}</span>
                     <span>📦 {shop.products_count} articles</span>
                     <span>🛒 {shop.orders_count} commandes</span>
+                    {(shop.acquisition_source || shop.acquisition_campaign) && <span>📣 {getAcquisitionSourceLabel(shop.acquisition_source)}{shop.acquisition_campaign ? ` · lien « ${shop.acquisition_campaign} »` : ''}</span>}
                     {canSeeFinancials && <span>💰 Commandes : {new Intl.NumberFormat('fr-FR').format(shop.total_sales)} FCFA</span>}
                   </div>
 

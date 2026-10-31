@@ -150,9 +150,9 @@ export function MerchantPlansPage() {
       <section className="border-y border-[#e9e3d8] bg-white">
         <div className="mx-auto grid max-w-[1280px] gap-4 px-5 py-5 sm:grid-cols-3 sm:px-8 sm:py-7">
           {[
-            { icon: Store, title: 'Votre vitrine en ligne', text: 'Vos informations et vos produits au même endroit.' },
-            { icon: MessageCircle, title: 'Le contact reste direct', text: 'Vos clients vous écrivent, vous gardez la relation.' },
-            { icon: MapPin, title: 'Commerce de proximité', text: 'Les visiteurs explorent les boutiques près de chez eux.' },
+            { icon: MapPin, title: 'Les clients du quartier vous trouvent', text: 'Votre vitrine apparaît dans l’annuaire de votre quartier, pas seulement derrière un lien.' },
+            { icon: MessageCircle, title: '0 % de commission', text: 'Les commandes arrivent sur WhatsApp ; MaTable ne prend rien sur vos ventes.' },
+            { icon: BadgeCheck, title: 'Badge « Vérifié »', text: 'Votre identité vérifiée rassure les clients qui craignent les arnaques.' },
           ].map(({ icon: Icon, title, text }) => (
             <div key={title} className="flex items-center gap-3 sm:justify-center">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#edf5ed] text-[#087c5b]"><Icon className="h-5 w-5" aria-hidden="true" /></span>

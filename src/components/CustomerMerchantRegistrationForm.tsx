@@ -5,6 +5,9 @@ import { getCategoryDefaults, SHOP_CATEGORIES } from '../utils/categoryDefaults'
 import { ABIDJAN_COMMUNES } from '../utils/abidjanCommunes';
 import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../utils/subscriptionFeatures';
 import { TermsPrivacyConsent } from './TermsPrivacyConsent';
+import { ACQUISITION_SOURCES, normalizeAcquisitionSource } from '../utils/acquisitionSources';
+import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from '../utils/analyticsAttribution';
+import { hasAnalyticsConsent } from '../utils/cookieConsent';
 import { MerchantRegistrationProgress, MerchantShopPreview } from './AuthExperienceLayout';
 
 interface CustomerMerchantRegistrationFormProps {
@@ -30,6 +33,11 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
   const [showPin, setShowPin] = useState(false);
   const [email, setEmail] = useState('');
   const [acceptedTermsPrivacy, setAcceptedTermsPrivacy] = useState(false);
+  // Campaign from ?src= / utm_source, kept only when the visitor accepted audience analytics.
+  const [trackedCampaign] = useState(() => (hasAnalyticsConsent()
+    ? getAnalyticsCampaignFromSearch(window.location.search) || getStoredAnalyticsCampaign()
+    : null));
+  const [acquisitionSource, setAcquisitionSource] = useState(() => normalizeAcquisitionSource(trackedCampaign) || '');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -55,6 +63,8 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
           category,
           email: email.trim(),
           accepted_terms_privacy: acceptedTermsPrivacy,
+          acquisition_source: acquisitionSource || null,
+          acquisition_campaign: trackedCampaign,
           welcome_message: getCategoryDefaults(category).welcomeMessage,
         }),
       });
@@ -142,6 +152,13 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
                 <input value={otherCity} onChange={(event) => setOtherCity(event.target.value)} required placeholder="Saisissez votre ville" className={fieldClass} />
               </label>
             )}
+            <label className="block text-sm font-semibold text-[#47534b]">
+              Comment avez-vous connu MaTable ? <span className="font-normal text-[#77736a]">(facultatif)</span>
+              <select value={acquisitionSource} onChange={(event) => setAcquisitionSource(event.target.value)} className={fieldClass}>
+                <option value="">Choisir une réponse</option>
+                {ACQUISITION_SOURCES.map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}
+              </select>
+            </label>
           </div>
         </div>
         </>}

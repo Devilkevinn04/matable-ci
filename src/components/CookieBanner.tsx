@@ -33,7 +33,7 @@ export const CookieBanner: React.FC = () => {
   if (!visible) return null;
 
   return (
-    <aside className="cookie-banner" role="dialog" aria-label="Préférences de cookies">
+    <section className="cookie-banner" aria-label="Préférences de cookies">
       <div className="cookie-banner-copy">
         <ShieldCheck className="h-5 w-5 shrink-0 text-[#047857]" aria-hidden="true" />
         <p>
@@ -45,6 +45,6 @@ export const CookieBanner: React.FC = () => {
         <button type="button" onClick={() => choose(false)} className="cookie-button cookie-button-secondary">Refuser tout</button>
         <button type="button" onClick={() => choose(true)} className="cookie-button cookie-button-primary">Accepter tout</button>
       </div>
-    </aside>
+    </section>
   );
 };

@@ -16,7 +16,8 @@ import {
   ArrowRight, 
   Info,
   Clock,
-  Search
+  Search,
+  ShieldCheck,
 } from 'lucide-react';
 import type { Order, Shop, Product } from '../types';
 import { formatFCFA, generateWhatsAppOrderReceipt, getProductUnitPrice } from '../utils/format';
@@ -27,6 +28,7 @@ import { CategoryProductImage } from './CategoryProductImage';
 import { CustomerProductCard } from './CustomerProductCard';
 import { useToast } from './Toast';
 import { hasAnalyticsConsent } from '../utils/cookieConsent';
+import { ABIDJAN_COMMUNES } from '../utils/abidjanCommunes';
 import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
 import {
   trackCartEvent,
@@ -726,6 +728,14 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
   // Dynamic Theme Variables
   const primaryColor = normalizeHex(shop.theme_config?.primary_color || shop.theme_color || '#0F172A');
+  // Every Abidjan commune, with the shop's own commune first since most buyers order nearby.
+  const shopCommune = ABIDJAN_COMMUNES.find((commune) => commune !== 'Autre ville / commune'
+    && (shop.city || '').toLowerCase().includes(commune.toLowerCase()));
+  const checkoutLocations = [
+    ...(shopCommune ? [shopCommune] : []),
+    ...ABIDJAN_COMMUNES.filter((commune) => commune !== 'Autre ville / commune' && commune !== shopCommune),
+    'Autre',
+  ];
   const secondaryColor = normalizeHex(shop.theme_config?.secondary_color || '#F8FAFC');
   const fontFamily = shop.theme_config?.font_family || 'Plus Jakarta Sans';
   const categoryDefaults = getCategoryDefaults(shop.category);
@@ -786,8 +796,15 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             <div className="min-w-0">
               <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-2">
                 <h1 className="max-w-full truncate text-sm font-black text-[#292d2a] sm:text-lg">{shop.name}</h1>
-                <span className={`shrink-0 text-[11px] font-semibold sm:text-xs ${shop.is_open ? 'text-[#047857]' : 'text-[#8a5a12]'}`}>
-                  {shop.is_open ? 'Ouverte' : 'Fermée'}
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className={`text-[11px] font-semibold sm:text-xs ${shop.is_open ? 'text-[#047857]' : 'text-[#8a5a12]'}`}>
+                    {shop.is_open ? 'Ouverte' : 'Fermée'}
+                  </span>
+                  {shop.merchant_verification_status === 'verified' && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-[#e3f4ea] px-1.5 py-0.5 text-[10px] font-extrabold text-[#065f46]" title="Le commerçant a fait vérifier son identité">
+                      <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Vérifié
+                    </span>
+                  )}
                 </span>
               </div>
               <div className="hidden min-w-0 items-center gap-2 truncate text-[11px] text-slate-500 sm:flex">
@@ -950,7 +967,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             <h2 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-[#292d2a] sm:text-3xl">À découvrir</h2>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-            <span className="rounded-full bg-[#eee9df] px-3 py-1.5 text-[11px] font-bold text-[#647067]">{products.length} pièce{products.length === 1 ? '' : 's'}</span>
+            <span className="rounded-full bg-[#eee9df] px-3 py-1.5 text-[11px] font-bold text-[#647067]">{products.length} {shop.category === 'food' || /rest/i.test(shop.category || '') ? 'plat' : 'article'}{products.length === 1 ? '' : 's'}</span>
             <button type="button" onClick={() => setTrustTarget({ type: 'shop', id: shop.id, name: shop.name })} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-[#c8dbd0] bg-white px-3 text-[11px] font-bold text-[#065f46] transition hover:bg-[#d1fae5]">
               <span aria-hidden="true">★</span>Avis boutique
             </button>
@@ -1664,16 +1681,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         Indiquez où vous souhaitez récupérer votre commande ou être contacté pour convenir de la livraison.
                       </p>
                       <div role="group" aria-labelledby="checkout-delivery-location-label" className="grid grid-cols-2 gap-2 text-xs">
-                        {[
-                          'Cocody Angré',
-                          'Cocody Riviera',
-                          'Marcory Zone 4',
-                          'Yopougon',
-                          'Treichville',
-                          'Plateau',
-                          'Koumassi',
-                          'Autre',
-                        ].map(loc => (
+                        {checkoutLocations.map(loc => (
                           <button
                             key={loc}
                             type="button"

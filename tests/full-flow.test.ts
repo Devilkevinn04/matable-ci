@@ -1565,6 +1565,9 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   assert.equal(ownerPublication.payload.publication_status, 'active');
   const publishedDirectory = await apiFetch('/api/shops');
   assert.equal(publishedDirectory.payload.some((shop: any) => shop.id === shopId), true);
+  const publishedShop = publishedDirectory.payload.find((shop: any) => shop.id === shopId);
+  assert.equal(publishedShop.is_verified, true);
+  assert.equal('merchant_verification_status' in publishedShop, false);
 
   const customerSessionCookies = cookieJar;
   cookieJar = '';

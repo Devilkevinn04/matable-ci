@@ -1735,6 +1735,10 @@ export function createAdminRouter(options: AdminRouterOptions) {
   });
 
   router.get('/shops', async (_req, res) => {
+    const acquisitions = await dbAll<{ shop_id: number; declared_source: string | null; campaign: string | null }>(
+      'SELECT shop_id, declared_source, campaign FROM shop_acquisitions',
+    );
+    const acquisitionByShop = new Map(acquisitions.map((row) => [Number(row.shop_id), row]));
     const [shops, productCounts, orderStats] = await Promise.all([
       loadShops(),
       dbAll<{ shop_id: number; count: number }>('SELECT shop_id, COUNT(*) AS count FROM products GROUP BY shop_id'),
@@ -1756,6 +1760,8 @@ export function createAdminRouter(options: AdminRouterOptions) {
         total_sales: isVerificationAdmin(_req) ? 0 : totalSales,
         average_order_value: isVerificationAdmin(_req) || !actionableOrderCount ? 0 : Math.round(totalSales / actionableOrderCount),
         last_order_at: stats?.last_order_at ?? null,
+        acquisition_source: acquisitionByShop.get(shop.id)?.declared_source ?? null,
+        acquisition_campaign: acquisitionByShop.get(shop.id)?.campaign ?? null,
         ...(isVerificationAdmin(_req) ? {
           selected_subscription_tier: undefined,
           subscription_status: undefined,

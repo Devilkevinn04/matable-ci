@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { AdminIdentityVerificationPanel, statusLabels as verificationStatusLabels } from './AdminIdentityVerificationPanel';
 import { AdminShopList } from './AdminShopList';
+import { getAcquisitionSourceLabel } from '../utils/acquisitionSources';
 import { AdminPushAnnouncements } from './AdminPushAnnouncements';
 import { AdminSubscriptionPlanPricing } from './AdminSubscriptionPlanPricing';
 import { AdminSubscriptionPlanFeatures } from './AdminSubscriptionPlanFeatures';
@@ -1247,11 +1248,11 @@ export const AdminDashboard: React.FC = () => {
 
   const exportShopsCsv = () => {
     const headers = adminRole === 'super_admin'
-      ? ['Boutique', 'Slug', 'Statut du compte', 'Montant des commandes FCFA (paiements non suivis)', 'Commandes', 'Panier moyen', 'Produits']
-      : ['Boutique', 'Slug', 'Statut', 'Commandes', 'Produits'];
+      ? ['Boutique', 'Slug', 'Statut du compte', 'Montant des commandes FCFA (paiements non suivis)', 'Commandes', 'Panier moyen', 'Produits', 'Origine déclarée', 'Lien de campagne']
+      : ['Boutique', 'Slug', 'Statut', 'Commandes', 'Produits', 'Origine déclarée', 'Lien de campagne'];
     const rows = filteredShops.map(shop => adminRole === 'super_admin'
-      ? [shop.name, shop.slug, shop.is_active ? 'active' : 'inactive', shop.total_sales, shop.orders_count, shop.average_order_value, shop.products_count]
-      : [shop.name, shop.slug, shop.is_active ? 'active' : 'inactive', shop.orders_count, shop.products_count]);
+      ? [shop.name, shop.slug, shop.is_active ? 'active' : 'inactive', shop.total_sales, shop.orders_count, shop.average_order_value, shop.products_count, getAcquisitionSourceLabel(shop.acquisition_source), shop.acquisition_campaign || '']
+      : [shop.name, shop.slug, shop.is_active ? 'active' : 'inactive', shop.orders_count, shop.products_count, getAcquisitionSourceLabel(shop.acquisition_source), shop.acquisition_campaign || '']);
     const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

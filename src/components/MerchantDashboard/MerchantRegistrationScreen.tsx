@@ -7,6 +7,7 @@ import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../../utils/subscrip
 import { AuthExperienceLayout, MerchantRegistrationProgress, MerchantShopPreview } from '../AuthExperienceLayout';
 import { MerchantState } from './useMerchant';
 import { TermsPrivacyConsent } from '../TermsPrivacyConsent';
+import { ACQUISITION_SOURCES } from '../../utils/acquisitionSources';
 
 interface MerchantRegistrationScreenProps {
   state: MerchantState;
@@ -21,6 +22,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
     regCityOther, setRegCityOther, regPhone, setRegPhone, regPin, setRegPin,
     showRegPin, setShowRegPin, regEmail, setRegEmail, regLoading,
     regAcceptedTermsPrivacy, setRegAcceptedTermsPrivacy,
+    regAcquisitionSource, setRegAcquisitionSource,
     handleRegisterShop, setIsRegisterModalOpen,
   } = state;
   const submitStep = (event: React.FormEvent<HTMLFormElement>) => {
@@ -33,9 +35,9 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
   };
 
   const benefits = [
-    { label: 'Vitrine locale', icon: Store },
+    { label: '0 % de commission', icon: Store },
     { label: 'Commandes WhatsApp', icon: MessageCircleMore },
-    { label: 'Sécurisé', icon: ShieldCheck },
+    { label: 'Badge Vérifié', icon: ShieldCheck },
   ];
 
   return (
@@ -70,16 +72,17 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
         <p className="text-sm leading-6 text-[#68756c]">{step === 1
           ? `Créez votre vitrine locale en deux étapes. Vous bénéficiez de ${TRIAL_DURATION_MONTHS} mois d’essai Standard gratuit à la création, avec jusqu’à ${TRIAL_CATALOG_LIMIT} produits. Vous pouvez aussi payer directement une formule.`
           : 'Ces informations permettent à vos clients de vous contacter et vous serviront à retrouver votre espace marchand.'}</p>
-        <div className="grid gap-2 sm:grid-cols-3">
+        {/* One compact row on phones so the form fields stay near the top of the screen. */}
+        {step === 1 && <div className="grid grid-cols-3 gap-2">
           {benefits.map(({ label, icon: Icon }) => (
-            <div key={label} className="flex items-center gap-2 rounded-2xl border border-[#e7e0d6] bg-[#FAF8F2] px-2.5 py-2.5 text-[11px] font-semibold text-[#47534b]">
+            <div key={label} className="flex flex-col items-center gap-1.5 rounded-2xl border border-[#e7e0d6] bg-[#FAF8F2] px-1.5 py-2 text-center text-[10px] font-semibold leading-tight text-[#47534b] sm:flex-row sm:gap-2 sm:px-2.5 sm:py-2.5 sm:text-left sm:text-[11px]">
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e9f3ec] text-[#065f46]">
                 <Icon className="h-3.5 w-3.5" />
               </span>
               {label}
             </div>
           ))}
-        </div>
+        </div>}
       </div>
 
       <form ref={formRef} onSubmit={submitStep} className="space-y-4">
@@ -105,13 +108,20 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
               <label className="block text-sm font-semibold text-[#47534b]">
                 Ville / commune
                 <select value={regCity} onChange={(event) => setRegCity(event.target.value)} required className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10">
-                  <option value="">Choisir une ville ou commune</option>
+                  <option value="">Choisir une commune</option>
                   <option value="Abidjan">Abidjan</option>
                   {ABIDJAN_COMMUNES.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
                 </select>
               </label>
             </div>
             {regCity === 'Autre ville / commune' && <label className="block text-sm font-semibold text-[#47534b]">Votre ville<input value={regCityOther} onChange={(event) => setRegCityOther(event.target.value)} required maxLength={100} placeholder="Saisissez votre ville" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" /></label>}
+            <label className="block text-sm font-semibold text-[#47534b]">
+              Comment avez-vous connu MaTable ? <span className="font-normal text-[#77736a]">(facultatif)</span>
+              <select value={regAcquisitionSource} onChange={(event) => setRegAcquisitionSource(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10">
+                <option value="">Choisir une réponse</option>
+                {ACQUISITION_SOURCES.map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}
+              </select>
+            </label>
           </div>
         </div>
         )}

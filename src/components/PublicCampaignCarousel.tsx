@@ -28,6 +28,8 @@ interface PublicCampaignCarouselProps {
   placement: 'billboard' | 'tiles' | 'feed';
   previewCampaigns?: PublicCampaign[];
   horizontalFeed?: boolean;
+  emptyBillboard?: React.ReactNode;
+  onCampaignVisibilityChange?: (visible: boolean) => void;
 }
 
 const CONSENT_KEY = 'matable-ad-measurement-consent-v1';
@@ -41,7 +43,7 @@ function getVisitorId(): string {
   return created;
 }
 
-export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ onOpenShop, eligible, placement, previewCampaigns, horizontalFeed = false }) => {
+export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ onOpenShop, eligible, placement, previewCampaigns, horizontalFeed = false, emptyBillboard, onCampaignVisibilityChange }) => {
   const [campaigns, setCampaigns] = useState<PublicCampaign[]>(previewCampaigns || []);
   const [campaignsLoaded, setCampaignsLoaded] = useState(false);
   const [measurementConsent, setMeasurementConsent] = useState(false);
@@ -97,6 +99,10 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
   const campaign = placement === 'billboard' ? bannerCampaign
     : placement === 'tiles' ? tileCampaigns[0]
       : feedCampaign;
+  const hasVisibleCampaign = Boolean(campaign);
+  useEffect(() => {
+    onCampaignVisibilityChange?.(hasVisibleCampaign);
+  }, [hasVisibleCampaign, onCampaignVisibilityChange]);
   const billboardCampaigns = Array.from(
     { length: Math.min(3, bannerCampaigns.length) },
     (_, index) => bannerCampaigns[(bannerIndex + index) % bannerCampaigns.length],
@@ -198,6 +204,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
   }, [eligible, isPreview, measurementConsent, campaign?.id, placement, visibleCampaigns.map((item) => item.id).join(',')]);
 
   if (placement === 'billboard' && !campaign && (!eligible || campaignsLoaded)) {
+    if (emptyBillboard) return <>{emptyBillboard}</>;
     return (
       <aside className="flex min-h-[230px] flex-col justify-between overflow-hidden rounded-[26px] border border-[#d6e5dc] bg-[radial-gradient(circle_at_85%_15%,rgba(249,115,22,.15),transparent_35%),linear-gradient(135deg,#f4faf6,#fffdf8_58%,#e6f2e9)] p-5 shadow-[0_8px_28px_rgba(20,40,30,.08)] sm:min-h-[300px] sm:rounded-[32px] sm:p-8 lg:min-h-[350px] lg:p-9" aria-label="Espace partenaires">
         <div>
@@ -211,7 +218,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
             Une vitrine premium pour rencontrer les boutiques et les clients de Côte d’Ivoire.
           </p>
         </div>
-        <button type="button" onClick={openPartnerRequest} className="mt-5 inline-flex min-h-11 w-fit items-center gap-2 rounded-full bg-[#f97316] px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-[#ea580c]">
+        <button type="button" onClick={openPartnerRequest} className="mt-5 inline-flex min-h-11 w-fit items-center gap-2 rounded-full bg-[#c2410c] px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-[#a53a1d]">
           Proposer un partenariat <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </aside>
@@ -219,6 +226,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
   }
   if ((!eligible && !isPreview) || (!campaign && !campaignsLoaded)) return null;
   if (!campaign && placement !== 'feed') return null;
+  if (!campaign && placement === 'feed' && !isPreview) return null;
   if (!campaign && placement === 'feed') {
     return (
       <li className={horizontalFeed

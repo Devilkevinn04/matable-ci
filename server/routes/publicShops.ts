@@ -9,6 +9,7 @@ import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts
 import { mapProductRow } from '../repositories/products.ts';
 import { mapShopRow } from '../repositories/shops.ts';
 import { listShopDeliveryOptionRows } from '../services/deliveryQuoting.ts';
+import { toPublicProductImageUrl, withPublicProductImages } from '../services/publicProductImages.ts';
 
 const publicShopColumns = `id, name, slug, theme_color, welcome_message, is_open, is_active,
   publication_status, featured_until, merchant_verification_status, selected_subscription_tier,
@@ -178,7 +179,7 @@ export function createPublicShopsRouter({
         const popularity = popularityByProductId.get(product.id) || { views: 0, clicks: 0 };
         return {
           ...product,
-          image_url: imageByProductId.get(product.id) || '',
+          image_url: toPublicProductImageUrl(product.id, imageByProductId.get(product.id) || ''),
           popularity,
           like_count: likeCounts.get(product.id) || 0,
           shop: {
@@ -226,7 +227,7 @@ export function createPublicShopsRouter({
       previews.push({
         id: Number(row.id),
         title: String(row.title),
-        image_url: String(row.image_url || ''),
+        image_url: toPublicProductImageUrl(Number(row.id), String(row.image_url || '')),
         price: Number(row.price),
       });
       productsPreviewByShop.set(shopId, previews);
@@ -265,6 +266,7 @@ export function createPublicShopsRouter({
           boost_placements: boostPlacementsByShop.get(shop.id) || [],
           is_active: shop.is_active,
           publication_status: shop.publication_status,
+          is_verified: shop.merchant_verification_status === 'verified',
           category: shop.category,
           city: shop.city,
           theme_config: shop.theme_config,
@@ -383,7 +385,11 @@ export function createPublicShopsRouter({
         ...(isAdminForShop ? { admin_mode: true } : {}),
       },
       has_age_restricted_products: hasAgeRestrictedProducts,
-      products: publicShopProducts.map((product) => ({ ...product, like_count: productLikeCounts.get(product.id) || 0 })),
+      // Merchants and admins keep the stored photos (the editor re-saves them); visitors get cacheable URLs.
+      products: publicShopProducts.map((product) => ({
+        ...(isMerchantForShop ? product : withPublicProductImages(product)),
+        like_count: productLikeCounts.get(product.id) || 0,
+      })),
     });
   });
 

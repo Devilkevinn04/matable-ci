@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { dbAll, dbGet, dbRun } from '../../db.ts';
 import { mapShopRow } from '../repositories/shops.ts';
 import { isShopPubliclyVisible } from '../services/businessRules.ts';
+import { toPublicProductImageUrl } from '../services/publicProductImages.ts';
 
 interface CustomerSession {
   authenticated: boolean;
@@ -78,7 +79,10 @@ export function createCustomerEngagementRouter({
         shop_id: Number(row.saved_product_shop_id),
         title: String(row.saved_product_title),
         price: Number(row.saved_product_price),
-        image_url: row.saved_product_image_url == null ? '' : String(row.saved_product_image_url),
+        image_url: toPublicProductImageUrl(
+          Number(row.saved_product_id),
+          row.saved_product_image_url == null ? '' : String(row.saved_product_image_url),
+        ),
         slug: shop.slug,
         shop_name: shop.name,
       }];

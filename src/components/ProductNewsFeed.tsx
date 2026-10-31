@@ -271,8 +271,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
             {...(isHorizontalRail ? productRail.handlers : {})}
             className={`mt-5 list-none items-stretch gap-3 p-0 sm:mt-6 sm:gap-4 ${isHorizontalRail ? 'carousel-rail flex snap-x snap-mandatory overflow-x-auto pb-2' : 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'}`}
             aria-label="Produits à découvrir"
-            aria-roledescription={isHorizontalRail ? 'carrousel' : undefined}
-            role={isHorizontalRail ? 'region' : undefined}
+            // Keeps native list semantics (role="region" on a <ul> orphaned its <li> items).
             tabIndex={isHorizontalRail ? 0 : undefined}
           >
             {products.map((product, index) => (

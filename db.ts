@@ -369,6 +369,11 @@ const sqliteSchema = `
   );
   CREATE INDEX IF NOT EXISTS idx_didit_sessions_shop_created ON didit_verification_sessions(shop_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_didit_sessions_created ON didit_verification_sessions(created_at);
+  CREATE TABLE IF NOT EXISTS shop_acquisitions (
+    shop_id INTEGER PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
+    declared_source TEXT, campaign TEXT, created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_shop_acquisitions_created ON shop_acquisitions(created_at);
   CREATE TABLE IF NOT EXISTS delivery_driver_identity_sessions (
     session_id TEXT PRIMARY KEY, driver_id INTEGER NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
     workflow_id TEXT NOT NULL, status TEXT NOT NULL, consent_at TEXT NOT NULL, consent_version TEXT NOT NULL,
@@ -977,6 +982,11 @@ export const postgresMigrations = [
   'CREATE INDEX IF NOT EXISTS idx_didit_sessions_shop_created ON didit_verification_sessions(shop_id, created_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_didit_sessions_created ON didit_verification_sessions(created_at)',
   'CREATE TABLE IF NOT EXISTS didit_webhook_events (event_id TEXT PRIMARY KEY, received_at TEXT NOT NULL)',
+  `CREATE TABLE IF NOT EXISTS shop_acquisitions (
+    shop_id BIGINT PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
+    declared_source TEXT, campaign TEXT, created_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_shop_acquisitions_created ON shop_acquisitions(created_at)',
   `CREATE TABLE IF NOT EXISTS geniuspay_webhook_events (
     event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, payment_intent_id TEXT,
     provider_reference TEXT, payload_sha256 TEXT NOT NULL,

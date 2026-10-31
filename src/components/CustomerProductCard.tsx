@@ -173,7 +173,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
             </button>
             <button type="button" onClick={onToggleLike} disabled={isLikePending} aria-busy={isLikePending} aria-pressed={isLiked} aria-label={`${isLikePending ? 'Mise à jour du J’aime' : isLiked ? 'Retirer votre mention J’aime' : 'Aimer ce produit'}${product.like_count ? `, ${product.like_count} mentions J’aime` : ''}`} title="J’aime" className={`flex h-9 min-w-9 items-center justify-center gap-1 rounded-full border border-white/70 px-2.5 shadow-sm backdrop-blur-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-wait disabled:opacity-70 ${isLiked ? 'bg-[#FFFFFF] text-[#c74445]' : 'bg-[#FFFFFF]/90 text-[#47534b] hover:bg-white'}`}>
               <Heart className={`h-4 w-4 ${isLiked ? 'fill-current' : ''}`} aria-hidden="true" />
-              <span className="text-xs font-bold tabular-nums">{product.like_count || 0}</span>
+              {product.like_count ? <span className="text-xs font-bold tabular-nums">{product.like_count}</span> : null}
             </button>
           </div>
         </div>

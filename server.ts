@@ -75,6 +75,7 @@ import { normalizeCustomerPhone } from './src/utils/normalizeCustomerPhone.ts';
 import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from './src/utils/subscriptionFeatures.ts';
 import type { ShopCategory } from './src/utils/categoryDefaults.ts';
 import { findPublicDiscoveryPage } from './src/utils/discoverySeo.ts';
+import { PUBLIC_PRODUCT_IMAGE_PATH, resolveProductImageRequest } from './server/services/publicProductImages.ts';
 
 export { buildSessionFingerprint, isRequestFingerprintMatch };
 
@@ -1010,6 +1011,24 @@ async function startServer() {
     isAdminShopSession: async (req, shopId) =>
       Number(req.params.slug) === shopId && Boolean(await getAdminSession(req)),
     deliveryOperationsEnabled: DELIVERY_OPERATIONS_ENABLED,
+  });
+  app.get(`${PUBLIC_PRODUCT_IMAGE_PATH}/:productId/:file`, async (req, res) => {
+    const productId = Number(req.params.productId);
+    if (!Number.isInteger(productId) || productId <= 0) return res.status(404).end();
+    const row = await dbGet<{ image_url: string | null; gallery_images: unknown; lookbook_image: string | null }>(
+      'SELECT image_url, gallery_images, lookbook_image FROM products WHERE id = ?',
+      [productId],
+    );
+    const image = resolveProductImageRequest(String(req.params.file), row);
+    if (!image) return res.status(404).end();
+    res.set({
+      'Content-Type': image.contentType,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      ETag: image.etag,
+      'X-Content-Type-Options': 'nosniff',
+    });
+    if (req.headers['if-none-match'] === image.etag) return res.status(304).end();
+    return res.send(image.body);
   });
   app.use('/api/v1/catalog/storefronts', publicShopsRouter);
   app.use('/api/shops', publicShopsRouter);

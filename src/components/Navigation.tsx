@@ -106,7 +106,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           <Link to="/" aria-label="MaTable.ci, accueil" className="flex items-center gap-2.5 text-left">
             <img src="/brand-kit/monogram.svg" alt="" className="h-10 w-10 shrink-0" />
             <span className="min-w-0">
-              <span className="block whitespace-nowrap text-xl font-black leading-5 tracking-tight text-[#103E32]">MaTable<span className="text-[#F97316]">.ci</span></span>
+              <span className="block whitespace-nowrap text-xl font-black leading-5 tracking-tight text-[#103E32]">MaTable<span className="text-[#ea580c]">.ci</span></span>
               <span className="mt-1 block whitespace-nowrap text-[8px] font-extrabold tracking-[0.09em] text-[#587067]">VOS COMMERCES, ICI.</span>
             </span>
           </Link>

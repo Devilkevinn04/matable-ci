@@ -269,3 +269,44 @@ test('merchant analytics scope new sections to the shop', async () => {
   assert.equal(promoCampaign?.orders, 0);
   assert.equal(promoCampaign?.conversion_rate, 0);
 });
+
+test('merchant sign-up records how the shop heard about MaTable', async () => {
+  const registration = await postJson('/api/shops', {
+    name: 'Atelier Acquisition',
+    whatsapp_number: '+2250700000012',
+    pin: '583926',
+    email: 'acquisition-test@example.com',
+    category: 'food',
+    city: 'Cocody',
+    accepted_terms_privacy: true,
+    acquisition_source: 'tiktok',
+    acquisition_campaign: 'TikTok',
+  });
+  assert.equal(registration.status, 200);
+  const { shop } = await registration.json() as { shop: { id: number } };
+
+  const ignored = await postJson('/api/shops', {
+    name: 'Atelier Sans Source',
+    whatsapp_number: '+2250700000013',
+    pin: '583927',
+    email: 'acquisition-none@example.com',
+    category: 'food',
+    city: 'Cocody',
+    accepted_terms_privacy: true,
+    acquisition_source: 'pas-une-option',
+    acquisition_campaign: '<script>',
+  });
+  assert.equal(ignored.status, 200, 'an unknown source must never block sign-up');
+  const { shop: ignoredShop } = await ignored.json() as { shop: { id: number } };
+
+  const database = new Database(TEST_DB_PATH, { readonly: true });
+  try {
+    assert.deepEqual(
+      database.prepare('SELECT declared_source, campaign FROM shop_acquisitions WHERE shop_id = ?').get(shop.id),
+      { declared_source: 'tiktok', campaign: 'tiktok' },
+    );
+    assert.equal(database.prepare('SELECT shop_id FROM shop_acquisitions WHERE shop_id = ?').get(ignoredShop.id), undefined);
+  } finally {
+    database.close();
+  }
+});
