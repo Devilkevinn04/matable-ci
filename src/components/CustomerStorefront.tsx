@@ -808,7 +808,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 </span>
               </div>
               <div className="hidden min-w-0 items-center gap-2 truncate text-[11px] text-slate-500 sm:flex">
-                <span>matable.ci/{shop.slug}</span>
+                <span>matable-ci.com/{shop.slug}</span>
                 {shop.city ? <span className="text-slate-300">•</span> : null}
                 {shop.city ? <span className="truncate">{shop.city}</span> : null}
               </div>

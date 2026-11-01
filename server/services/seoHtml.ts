@@ -17,7 +17,7 @@ interface SeoHtmlHelperOptions {
 }
 
 export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSubscriptionPrices }: SeoHtmlHelperOptions) {
-  const getPublicOrigin = (req: Request) => String(process.env.APP_URL || `${req.protocol || 'https'}://${req.get('host') || 'matable.ci'}`).replace(/\/$/, '');
+  const getPublicOrigin = (req: Request) => String(process.env.APP_URL || `${req.protocol || 'https'}://${req.get('host') || 'matable-ci.com'}`).replace(/\/$/, '');
 
   const injectNoIndexSeo = (html: string, title: string) => html
     .replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)}</title>`)

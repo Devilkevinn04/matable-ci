@@ -47,8 +47,9 @@ export function normalizePushUrl(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > 500 || !value.startsWith('/') || value.startsWith('//')
     || /[\u0000-\u001f\\]/.test(value)) return null;
   try {
-    const url = new URL(value, 'https://matable.ci');
-    if (url.origin !== 'https://matable.ci') return null;
+    const publicOrigin = new URL(process.env.APP_URL?.trim() || 'https://matable-ci.com');
+    const url = new URL(value, publicOrigin);
+    if (url.origin !== publicOrigin.origin) return null;
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return null;

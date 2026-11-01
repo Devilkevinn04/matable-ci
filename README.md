@@ -188,7 +188,7 @@ Exemple de configuration :
 NODE_ENV="production"
 PORT="3000"
 DATABASE_URL="postgresql://..."
-APP_URL="https://matable-ci.onrender.com"
+APP_URL="https://matable-ci.com"
 TRUST_PROXY_HOPS="1"
 ADMIN_ACCESS_KEY="<cle-tres-longue-et-securisee>"
 DIDIT_API_KEY="<cle-api-didit>"
@@ -198,7 +198,7 @@ DIDIT_WEBHOOK_SECRET="<secret-webhook-didit>"
 
 Dans la console Didit, configurez le webhook `https://<domaine-public>/api/webhooks/didit` pour les événements de changement de statut (`status.updated`). L’API key, l’identifiant du workflow et le secret du webhook restent dans les variables serveur Render et ne doivent jamais être exposés au navigateur. Le serveur refuse de démarrer une vérification tant que l’API key et l’identifiant de workflow ne sont pas configurés.
 
-Tant que le domaine personnalisé `matable.ci` n’est pas résolu et configuré dans Render, utilisez `https://matable-ci.onrender.com` comme `APP_URL`. Les URL canoniques et de partage dans `index.html` doivent également correspondre à l’adresse publique active ; remettez-les à `https://matable.ci` après validation du domaine personnalisé.
+L’URL publique principale est `https://matable-ci.com` (avec `www.matable-ci.com` redirigé vers le domaine racine). Conservez `https://matable-ci.onrender.com` comme adresse de secours. Configurez `APP_URL` et les URL canoniques, Open Graph et JSON-LD sur le domaine principal. Les URI de retour des fournisseurs doivent correspondre à `APP_URL`; les webhooks peuvent conserver temporairement l’alias Render tant que celui-ci reste actif.
 
 #### Audience et actions super-admin
 

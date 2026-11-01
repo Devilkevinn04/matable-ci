@@ -7,7 +7,7 @@
 | Élément | Statut | Preuve |
 |---|---|---|
 | `GOOGLE_OAUTH_CLIENT_ID` / `SECRET` | Configurés | `GET /api/auth/customer-oauth/providers` → `{"google":true}` |
-| URI de retour Google | Acceptée par Google | `/start` redirige vers l’écran de connexion Google (pas de `redirect_uri_mismatch`) |
+| URI de retour Google | Acceptée par Google | L’ancienne URI Render reste autorisée ; l’origine et le callback `matable-ci.com` ont été ajoutés le 01/11/2026 |
 | `DIDIT_WORKFLOW_ID` | **Publié** (corrigé le 30/10/2026) | UUID `17e1d727…` = « Free KYC », statut `published`, v1 |
 | `DIDIT_API_KEY` | Valide | `GET /v3/session/<uuid>/` → 404 (clé acceptée) |
 | `DIDIT_WEBHOOK_SECRET` | Configuré et **identique au secret Didit** | Sonde signée le 31/10 : `POST /api/webhooks/didit` → 503 « session inconnue » (signature acceptée), et 401 avec une signature invalide |
@@ -16,19 +16,23 @@
 | Crédits Didit | Solde prépayé 0,00 $, mais création de session **OK** | `GET /v3/billing/balance/` → `0.0000` ; `POST /v3/session/` → **201** le 31/10/2026 (crédit mensuel du plan ou facturation à l’usage). Session de test supprimée aussitôt. |
 | Déploiement des améliorations | ⏳ **pas encore actif** | La prod sert encore l’ancien bundle (`MerchantIdentityVerification-D6o6L99C.js`, sans « Reprendre ma vérification ») alors que `main` est à `d6d9a94` |
 
-## URL publique et adresse de retour (décision du 31/10/2026)
+## Domaine public actuel (01/11/2026)
 
-L’URL publique reste **`https://matable-ci.onrender.com`**. Le domaine `matable.ci` n’est pas encore résolu (NXDOMAIN au registre `.ci` le 31/10/2026) : aucune bascule n’est faite avant sa configuration dans Render.
+L’adresse principale est **`https://matable-ci.com`**. Le domaine racine et `www` sont vérifiés dans Render ; le certificat HTTPS est actif et `www.matable-ci.com` redirige vers le domaine racine. Chez Hostinger, le record A `@` pointe sur `216.24.57.1` et le CNAME `www` sur `matable-ci.onrender.com`. L’alias Render reste disponible comme solution de secours.
 
 | Élément | Valeur vérifiée |
 |---|---|
-| `APP_URL` en production | `https://matable-ci.onrender.com` — lisible dans le `redirect_uri` Google renvoyé par `GET /api/auth/customer-oauth/google/start` |
-| Callback Didit marchand | `https://matable-ci.onrender.com/app?verification=complete` — construit avec `new URL('/app?verification=complete', APP_URL)` |
-| Callback Didit livreur | `https://matable-ci.onrender.com/livreur?verification=complete` — construit avec `new URL('/livreur?verification=complete', APP_URL)` |
-| Destination webhook Didit | `https://matable-ci.onrender.com/api/webhooks/didit` (v3, `status.updated`, activée) |
+| `APP_URL` en production | `https://matable-ci.com` |
+| Callback Didit marchand | `https://matable-ci.com/app?verification=complete` — construit avec `new URL('/app?verification=complete', APP_URL)` |
+| Callback Didit livreur | `https://matable-ci.com/livreur?verification=complete` — construit avec `new URL('/livreur?verification=complete', APP_URL)` |
+| Destination webhook Didit | `https://matable-ci.onrender.com/api/webhooks/didit` (v3, `status.updated`, toujours active sur l’alias Render) |
 | Domaines de retour Didit | `allowed_return_hosts: []` → les deux callbacks ci-dessus sont acceptés |
 
-Pour une future bascule vers `matable.ci`, suivre cet ordre : configurer le domaine dans Render, mettre à jour `APP_URL`, aligner les URL canoniques/OG/JSON-LD de `index.html`, puis changer la destination webhook et les URI de retour Google/Didit. Les bios TikTok/Google/réseaux et la carte de fin vidéo ne sont pas versionnées dans ce dépôt.
+L’origine JavaScript et l’URI de callback Google de `https://matable-ci.com` ont été ajoutées en conservant celles de Render. La destination webhook Didit reste sur l’alias Render pour préserver le chemin de secours ; elle pourra être déplacée après validation indépendante. `matable.ci` (sans tiret) est un autre domaine et n’est pas l’adresse achetée ici.
+
+## URL publique avant la configuration du domaine (31/10/2026)
+
+À cette date, `https://matable-ci.onrender.com` était l’URL publique utilisée. Le domaine `matable.ci` (sans tiret) n’était pas résolu (NXDOMAIN au registre `.ci`) ; il s’agissait d’un domaine distinct de `matable-ci.com`.
 
 ## Workflow Didit : résolu
 
@@ -49,10 +53,10 @@ Attendu : `PASS Workflow Didit « Free KYC » publié`.
 URI de retour Google à conserver dans Google Cloud Console :
 
 ```
-https://matable-ci.onrender.com/api/auth/customer-oauth/google/callback
+https://matable-ci.com/api/auth/customer-oauth/google/callback
 ```
 
-URL de webhook à conserver dans la console Didit (destinations) :
+Destination webhook actuellement configurée dans la console Didit :
 
 ```
 https://matable-ci.onrender.com/api/webhooks/didit
@@ -90,7 +94,7 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 
 ## Test de bout en bout — Google (client)
 
-1. Ouvrir `https://matable-ci.onrender.com/connexion`.
+1. Ouvrir `https://matable-ci.com/connexion`.
 2. Cliquer sur **Continuer avec Google**, choisir un compte de test.
 3. Vérifier le retour sur `/compte` (ou `return_to`), sans paramètre `oauth=error`.
 4. Dans la base :
@@ -128,7 +132,7 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 # Sans signature : doit répondre 401
 curl -s -o /dev/null -w '%{http_code}\n' -X POST \
   -H 'Content-Type: application/json' -d '{}' \
-  https://matable-ci.onrender.com/api/webhooks/didit
+  https://matable-ci.com/api/webhooks/didit
 
 # Signature invalide : doit répondre 401
 curl -s -o /dev/null -w '%{http_code}\n' -X POST \
@@ -136,7 +140,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST \
   -H 'X-Timestamp: '$(date +%s) \
   -H 'X-Signature: deadbeef' \
   -d '{"event_id":"00000000-0000-4000-8000-000000000000","session_id":"00000000-0000-4000-8000-000000000000","status":"Approved","webhook_type":"status.updated","timestamp":'$(date +%s)'}' \
-  https://matable-ci.onrender.com/api/webhooks/didit
+  https://matable-ci.com/api/webhooks/didit
 ```
 
 ## Améliorations appliquées le 30/10/2026
@@ -182,8 +186,8 @@ Surveiller le solde et le budget mensuel (panneau admin, alerte à 25 sessions t
 curl -s -X POST https://verification.didit.me/v3/billing/top-up/ \
   -H "x-api-key: $DIDIT_API_KEY" -H "Content-Type: application/json" \
   -d '{"amount_in_dollars":50,
-       "success_url":"https://matable-ci.onrender.com/app?billing=success",
-       "cancel_url":"https://matable-ci.onrender.com/app?billing=cancelled"}'
+       "success_url":"https://matable-ci.com/app?billing=success",
+       "cancel_url":"https://matable-ci.com/app?billing=cancelled"}'
 ```
 
 Le 31/10/2026, `POST /v3/billing/top-up/` a renvoyé une erreur 500 côté Didit : passer par la console si le rechargement est nécessaire. Vérifier ensuite :

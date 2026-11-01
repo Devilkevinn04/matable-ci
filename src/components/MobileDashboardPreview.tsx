@@ -228,7 +228,7 @@ function MerchantPreview() {
               {isShopOpen ? 'Boutique ouverte' : 'Boutique fermée'}
             </button>
           </div>
-          <p className="mt-2 text-xs text-slate-500">Vitrine : matable.ci/atelier-awa</p>
+          <p className="mt-2 text-xs text-slate-500">Vitrine : matable-ci.com/atelier-awa</p>
           <div className="mt-4 grid grid-cols-3 gap-2">
             {[['Commandes', '12'], ['Produits', String(products.length)], ['À traiter', '3']].map(([label, value]) => (
               <div key={label} className="rounded-xl bg-[#f8f6f1] p-2.5">
