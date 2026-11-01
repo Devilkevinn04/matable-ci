@@ -68,6 +68,8 @@ export interface ShopRecord {
   last_notification_sent_at: string | null;
   whatsapp_subscription_reminders_enabled?: boolean;
   whatsapp_subscription_reminders_consent_at?: string | null;
+  email_subscription_reminders_enabled?: boolean;
+  email_subscription_reminders_consent_at?: string | null;
   created_at: string;
   category: ShopCategory;
   city?: string;

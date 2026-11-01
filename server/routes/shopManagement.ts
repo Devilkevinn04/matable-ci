@@ -102,15 +102,27 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     if (hasPinCode && (typeof req.body.pin_code !== 'string' || isWeakShopPin(pinCode))) {
       return res.status(400).json({ error: 'Le code PIN est trop simple ou invalide. Utilisez un PIN de 6 chiffres fort.' });
     }
+    const sameEmail = email === String(shop.owner_email || '').toLowerCase();
+    const emailRemindersEnabled = sameEmail && shop.email_subscription_reminders_enabled ? 1 : 0;
+    const emailRemindersConsentAt = sameEmail ? shop.email_subscription_reminders_consent_at ?? null : null;
     if (hasPinCode) {
       await dbRun(
-        'UPDATE shops SET owner_name = ?, owner_phone = ?, owner_email = ?, pin_code_hash = ? WHERE id = ?',
-        [name || null, phone, email, hashPin(pinCode), shop.id],
+        `UPDATE shops SET owner_name = ?, owner_phone = ?, owner_email = ?, pin_code_hash = ?,
+          email_subscription_reminders_enabled = ?, email_subscription_reminders_consent_at = ?
+          WHERE id = ?`,
+        [
+          name || null, phone, email, hashPin(pinCode),
+          emailRemindersEnabled,
+          emailRemindersConsentAt,
+          shop.id,
+        ],
       );
     } else {
       await dbRun(
-        'UPDATE shops SET owner_name = ?, owner_phone = ?, owner_email = ? WHERE id = ?',
-        [name || null, phone, email, shop.id],
+        `UPDATE shops SET owner_name = ?, owner_phone = ?, owner_email = ?,
+          email_subscription_reminders_enabled = ?, email_subscription_reminders_consent_at = ?
+          WHERE id = ?`,
+        [name || null, phone, email, emailRemindersEnabled, emailRemindersConsentAt, shop.id],
       );
     }
     res.setHeader('Cache-Control', 'no-store');
@@ -165,6 +177,22 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       enabled: shop.whatsapp_subscription_reminders_enabled,
       consent_at: shop.whatsapp_subscription_reminders_consent_at,
     });
+  });
+
+  router.patch('/:id/subscription-email-reminder-consent', requireMerchantOwnShop, async (req, res) => {
+    const shop = await getShopFromDatabase(Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'Le consentement doit être activé ou désactivé.' });
+    if (req.body.enabled && !shop.owner_email) {
+      return res.status(409).json({ error: 'Ajoutez d’abord une adresse e-mail dans le profil du responsable.' });
+    }
+
+    const consentAt = req.body.enabled ? new Date().toISOString() : null;
+    await dbRun(
+      'UPDATE shops SET email_subscription_reminders_enabled = ?, email_subscription_reminders_consent_at = ? WHERE id = ?',
+      [req.body.enabled ? 1 : 0, consentAt, shop.id],
+    );
+    return res.json({ success: true, enabled: req.body.enabled, consent_at: consentAt });
   });
 
   router.get('/:id/push/config', requireMerchantOwnShop, async (req, res) => {

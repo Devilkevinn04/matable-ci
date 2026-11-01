@@ -8,6 +8,7 @@ import { CookieBanner } from './components/CookieBanner';
 import { CustomerAccount, CustomerAuth, CustomerUser } from './components/CustomerAuth';
 import { FaqPage } from './components/FaqPage';
 import { AccountRecoveryPage } from './components/AccountRecoveryPage';
+import { CustomerPasswordResetPage } from './components/CustomerPasswordResetPage';
 import { ProductModal } from './components/MerchantDashboard/ProductModal';
 import { MotionSystemProvider, PublicRouteEnter } from './components/MotionSystem';
 import type { MerchantState } from './components/MerchantDashboard/useMerchant';
@@ -574,6 +575,7 @@ export default function App() {
                       <Route path="/commercants" element={<MerchantPlansPage />} />
                       <Route path="/faq" element={<FaqPage />} />
                       <Route path="/recuperation-acces" element={<AccountRecoveryPage initialAccountType={new URLSearchParams(location.search).get('type') === 'merchant' ? 'merchant' : 'customer'} onBack={() => navigate(new URLSearchParams(location.search).get('type') === 'merchant' ? '/app' : '/connexion')} />} />
+                      <Route path="/reinitialiser-mot-de-passe" element={<CustomerPasswordResetPage token={new URLSearchParams(location.search).get('token') || ''} onBack={() => navigate('/connexion')} />} />
                       <Route path="/mentions-legales" element={<LegalPages page="mentions-legales" />} />
                       <Route path="/confidentialite" element={<LegalPages page="confidentialite" />} />
                       <Route path="/cgu" element={<LegalPages page="cgu" />} />

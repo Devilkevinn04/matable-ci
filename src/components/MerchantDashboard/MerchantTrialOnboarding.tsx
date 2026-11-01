@@ -22,6 +22,7 @@ import {
 import { useSubscriptionPrices } from '../../utils/useSubscriptionPrices';
 import { getRenewedSubscriptionExpiry } from '../../utils/subscriptionExpiry';
 import { WhatsAppSubscriptionReminderConsent } from './WhatsAppSubscriptionReminderConsent';
+import { EmailSubscriptionReminderConsent } from './EmailSubscriptionReminderConsent';
 
 interface MerchantTrialOnboardingProps {
   shop: Shop;
@@ -368,7 +369,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
           <p>{previewOnly ? 'Aperçu de démonstration : comparez les formules librement. Aucun paiement ne sera lancé.' : isManualSubscriptionSuspension ? 'La suspension manuelle est prioritaire. Le paiement sera indisponible jusqu’à sa levée ou son expiration.' : paymentFlowActive ? isTrialActive ? 'Vous pouvez payer dès maintenant. Après confirmation, votre formule payante sera active immédiatement ; la durée restante de l’essai est conservée avant la nouvelle échéance.' : 'Vous gardez la main : le paiement est lancé uniquement après votre validation et votre formule est activée après confirmation sécurisée de GeniusPay. La publication de la boutique et sa vérification restent des étapes distinctes.' : `Votre essai gratuit de ${TRIAL_DURATION_MONTHS} mois commence lorsque vous le démarrez.`}</p>
         </aside>
 
-        {mode === 'expired' && <div className="mt-5 rounded-xl border border-slate-200 bg-white px-4"><WhatsAppSubscriptionReminderConsent shop={shop} /></div>}
+        {mode === 'expired' && <div className="mt-5 rounded-xl border border-slate-200 bg-white px-4"><WhatsAppSubscriptionReminderConsent shop={shop} /><EmailSubscriptionReminderConsent shop={shop} /></div>}
 
         <div className={`mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center ${mode === 'plans' ? 'rounded-[1.5rem] bg-[#e9efe8] p-4 sm:mt-4 sm:p-5' : ''}`}>
           {paymentFlowActive ? (

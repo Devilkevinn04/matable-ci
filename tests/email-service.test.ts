@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getResendEmailConfig, sendMerchantSubscriptionReceiptEmail, sendMerchantWelcomeEmail, sendTransactionalEmail } from '../server/services/email.ts';
+import {
+  getResendEmailConfig,
+  sendCustomerPasswordResetEmail,
+  sendCustomerWelcomeEmail,
+  sendMerchantSubscriptionReceiptEmail,
+  sendMerchantSubscriptionReminderEmail,
+  sendMerchantWelcomeEmail,
+  sendTransactionalEmail,
+} from '../server/services/email.ts';
 
 test('Resend config requires both API key and sender address', () => {
   assert.equal(getResendEmailConfig({}), null);
@@ -154,6 +162,90 @@ test('welcome email escapes the merchant shop name in its HTML body', async () =
     assert.doesNotMatch(requestBody.text, /\/connexion\b/);
     assert.match(requestBody.html, /href="[^"]*\/app"/);
     assert.doesNotMatch(requestBody.html, /\/connexion\b/);
+  } finally {
+    if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
+    if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;
+  }
+});
+
+test('customer welcome email escapes the name and links to the shop directory', async () => {
+  const previousApiKey = process.env.RESEND_API_KEY;
+  const previousFrom = process.env.RESEND_FROM_EMAIL;
+  process.env.RESEND_API_KEY = 'resend-key';
+  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  let requestBody: any;
+  try {
+    const result = await sendCustomerWelcomeEmail({
+      customerName: '<script>Client</script>',
+      customerEmail: 'customer@example.com',
+      appUrl: 'https://matable-ci.com',
+    }, async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ id: 'email_customer_welcome' }), { status: 200 });
+    });
+
+    assert.equal(result.sent, true);
+    assert.equal(requestBody.to[0], 'customer@example.com');
+    assert.match(requestBody.html, /&lt;script&gt;Client&lt;\/script&gt;/);
+    assert.doesNotMatch(requestBody.html, /<script>/);
+    assert.match(requestBody.html, /https:\/\/matable-ci\.com\/boutiques/);
+  } finally {
+    if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
+    if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;
+  }
+});
+
+test('password reset email includes the one-time token link and escapes customer input', async () => {
+  const previousApiKey = process.env.RESEND_API_KEY;
+  const previousFrom = process.env.RESEND_FROM_EMAIL;
+  process.env.RESEND_API_KEY = 'resend-key';
+  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  let requestBody: any;
+  try {
+    const result = await sendCustomerPasswordResetEmail({
+      customerName: '<img src=x onerror=alert(1)>',
+      customerEmail: 'customer@example.com',
+      token: 'secure-token',
+      appUrl: 'https://matable-ci.com',
+    }, async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ id: 'email_password_reset' }), { status: 200 });
+    });
+
+    assert.equal(result.sent, true);
+    assert.match(requestBody.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+    assert.doesNotMatch(requestBody.html, /<img[^>]*src=x/i);
+    assert.match(requestBody.html, /https:\/\/matable-ci\.com\/reinitialiser-mot-de-passe\?token=secure-token/);
+    assert.match(requestBody.text, /30 minutes/);
+  } finally {
+    if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
+    if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;
+  }
+});
+
+test('subscription reminder email includes the expiry and account link', async () => {
+  const previousApiKey = process.env.RESEND_API_KEY;
+  const previousFrom = process.env.RESEND_FROM_EMAIL;
+  process.env.RESEND_API_KEY = 'resend-key';
+  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  let requestBody: any;
+  try {
+    const result = await sendMerchantSubscriptionReminderEmail({
+      shopName: '<b>Chez Awa</b>',
+      ownerEmail: 'merchant@example.com',
+      expiresAt: '2026-10-10T12:00:00.000Z',
+      daysBefore: 3,
+      appUrl: 'https://matable-ci.com',
+    }, async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ id: 'email_subscription_reminder' }), { status: 200 });
+    });
+
+    assert.equal(result.sent, true);
+    assert.equal(requestBody.to[0], 'merchant@example.com');
+    assert.match(requestBody.subject, /dans 3 jours/);
+    assert.match(requestBody.html, /&lt;b&gt;Chez Awa&lt;\/b&gt;/);
+    assert.match(requestBody.html, /https:\/\/matable-ci\.com\/app/);
   } finally {
     if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
     if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;

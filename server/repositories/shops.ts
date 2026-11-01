@@ -25,6 +25,8 @@ export function mapShopRow(row: Record<string, unknown>): ShopRecord {
     last_notification_sent_at: row.last_notification_sent_at == null ? null : String(row.last_notification_sent_at),
     whatsapp_subscription_reminders_enabled: Boolean(row.whatsapp_subscription_reminders_enabled),
     whatsapp_subscription_reminders_consent_at: row.whatsapp_subscription_reminders_consent_at == null ? null : String(row.whatsapp_subscription_reminders_consent_at),
+    email_subscription_reminders_enabled: Boolean(row.email_subscription_reminders_enabled),
+    email_subscription_reminders_consent_at: row.email_subscription_reminders_consent_at == null ? null : String(row.email_subscription_reminders_consent_at),
     created_at: String(row.created_at),
     category: String(row.category) as ShopRecord['category'],
     city: row.city == null ? undefined : String(row.city),

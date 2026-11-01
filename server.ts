@@ -27,6 +27,7 @@ import { createPublicRateLimitMiddleware } from './server/services/rateLimits.ts
 import { buildSessionFingerprint, createAuthSessionHelpers, isRequestFingerprintMatch } from './server/services/authSessions.ts';
 import { createSeoHtmlHelpers } from './server/services/seoHtml.ts';
 import { getWhatsAppSubscriptionReminderConfig, sendWhatsAppSubscriptionReminder } from './server/services/whatsappNotifications.ts';
+import { getResendEmailConfig, sendMerchantSubscriptionReminderEmail } from './server/services/email.ts';
 import { getDefaultSubscriptionPrices, parseSubscriptionPrices } from './server/services/subscriptionPricing.ts';
 import {
   DEFAULT_SUBSCRIPTION_PRO_FEATURES,
@@ -133,6 +134,7 @@ async function processSubscriptionAutomation() {
     console.error('Automatic Push retry cycle failed.', error);
   }
   const reminderConfig = getWhatsAppSubscriptionReminderConfig();
+  const emailReminderConfigured = Boolean(getResendEmailConfig());
   const currentShops = await loadShopsFromDatabase();
   for (const shop of currentShops) {
     try {
@@ -151,6 +153,47 @@ async function processSubscriptionAutomation() {
         url: '/app',
         tag: `subscription-${expiresAt.slice(0, 10)}-${daysBefore}`,
       }).catch((error: unknown) => console.error(`Unable to queue subscription notification for shop ${shop.id}.`, error));
+
+      if (emailReminderConfigured && shop.email_subscription_reminders_enabled && shop.owner_email) {
+        const claimedAt = now.toISOString();
+        const retryBefore = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString();
+        const claim = await dbRun(`INSERT INTO subscription_email_reminder_deliveries
+          (shop_id, expires_at, days_before, attempted_at, attempts)
+          VALUES (?, ?, ?, ?, 1)
+          ON CONFLICT (shop_id, expires_at, days_before) DO UPDATE
+            SET attempted_at = excluded.attempted_at,
+                attempts = subscription_email_reminder_deliveries.attempts + 1
+            WHERE subscription_email_reminder_deliveries.sent_at IS NULL
+              AND subscription_email_reminder_deliveries.attempted_at <= ?`,
+        [shop.id, expiresAt, daysBefore, claimedAt, retryBefore]);
+        if (claim.changes === 1) {
+          const delivery = await sendMerchantSubscriptionReminderEmail({
+            shopName: shop.name,
+            ownerEmail: shop.owner_email,
+            expiresAt,
+            daysBefore,
+          });
+          if (!delivery.sent) {
+            await dbRun(`INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at)
+              VALUES (?, ?, ?, ?, ?)`, [
+              'system', 'subscription_reminder_failed', shop.id,
+              JSON.stringify({ expires_at: expiresAt, days_before: daysBefore, channel: 'email', error: delivery.error || 'unknown_error' }),
+              claimedAt,
+            ]);
+            console.error(`Automatic subscription email reminder failed for shop ${shop.id}: ${delivery.error || 'unknown_error'}`);
+          } else {
+            await dbRun(`UPDATE subscription_email_reminder_deliveries SET sent_at = ?
+              WHERE shop_id = ? AND expires_at = ? AND days_before = ? AND sent_at IS NULL`,
+            [claimedAt, shop.id, expiresAt, daysBefore]);
+            await dbRun(`INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at)
+              VALUES (?, ?, ?, ?, ?)`, [
+              'system', 'subscription_reminder_sent', shop.id,
+              JSON.stringify({ expires_at: expiresAt, days_before: daysBefore, channel: 'email' }), claimedAt,
+            ]);
+          }
+        }
+      }
+
       if (!reminderConfig || !shop.whatsapp_subscription_reminders_enabled) continue;
 
       const claimedAt = now.toISOString();
@@ -803,7 +846,7 @@ const toSafeShop = (shop: ShopRecord) => {
     subscription_features_effective_at: _subscriptionFeaturesEffectiveAt,
     ...safeShop
   } = shop;
-  return { ...safeShop, subscription };
+  return { ...safeShop, owner_email_configured: Boolean(shop.owner_email), subscription };
 };
 const verifyPin = (inputPin: string, storedHash: string) => {
   const pin = String(inputPin).trim();

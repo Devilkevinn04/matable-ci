@@ -1,4 +1,4 @@
-import { createHash, randomUUID, timingSafeEqual as cryptoTimingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual as cryptoTimingSafeEqual } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { createRemoteJWKSet, importPKCS8, jwtVerify, SignJWT } from 'jose';
 import { Router, type Request, type RequestHandler, type Response } from 'express';
@@ -8,6 +8,7 @@ import { dbAll, dbTransaction } from '../../db.ts';
 import { listCustomerSessionRecords, revokeOtherCustomerSessionRecords } from '../repositories/sessions.ts';
 import { clearLoginAttempts, getCustomerLoginLockSeconds, isLoginRateLimited, recordCustomerLoginFailure } from '../services/rateLimits.ts';
 import { getShopFromDatabase, loadShopsFromDatabase } from '../repositories/shops.ts';
+import { sendCustomerPasswordResetEmail, sendCustomerWelcomeEmail } from '../services/email.ts';
 
 interface MerchantSession {
   shopId: number;
@@ -555,6 +556,12 @@ export function createAuthRouter(options: AuthRouterOptions) {
         [user.id, TERMS_DOCUMENT, PRIVACY_DOCUMENT, new Date().toISOString()],
       );
     }
+    if (consentSaved) {
+      const welcomeEmail = await sendCustomerWelcomeEmail({ customerName: user.name, customerEmail: user.email });
+      if (!welcomeEmail.sent && welcomeEmail.error !== 'email_disabled_in_test') {
+        console.error(`Customer welcome email could not be sent: ${welcomeEmail.error || 'unknown_error'}`);
+      }
+    }
 
     pendingOAuthProfiles.delete(pendingId);
     const profile = await createCustomerSession(req, res, user);
@@ -606,7 +613,92 @@ export function createAuthRouter(options: AuthRouterOptions) {
     customerSessions.set(token, session);
     await saveCustomerSessionRecord(token, session);
     setCustomerSessionCookie(res, token, session.fingerprint);
+    const welcomeEmail = await sendCustomerWelcomeEmail({ customerName: user.name, customerEmail: user.email });
+    if (!welcomeEmail.sent && welcomeEmail.error !== 'email_disabled_in_test') {
+      console.error(`Customer welcome email could not be sent: ${welcomeEmail.error || 'unknown_error'}`);
+    }
     res.json({ success: true, user: toCustomerProfile(user) });
+  });
+
+  router.post('/customer-password-reset-request', rateLimitPublicRequest(8), async (req, res) => {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      return res.status(400).json({ error: 'Saisissez une adresse e-mail valide.' });
+    }
+
+    const responseMessage = 'Si un compte client correspond à cette adresse, un lien de réinitialisation va être envoyé.';
+    res.status(202).json({ success: true, message: responseMessage });
+    void (async () => {
+      const user = await dbGet<{ id: number; name: string; email: string; is_active: number }>(
+        'SELECT id, name, email, is_active FROM users WHERE email = ?',
+        [email],
+      );
+      if (!user?.is_active) return;
+
+      const token = randomBytes(32).toString('base64url');
+      const tokenHash = createHash('sha256').update(token).digest('hex');
+      const createdAt = new Date();
+      const expiresAt = new Date(createdAt.getTime() + 30 * 60 * 1000).toISOString();
+      await dbRun(
+        'DELETE FROM customer_password_reset_tokens WHERE user_id = ? OR expires_at <= ?',
+        [user.id, createdAt.toISOString()],
+      );
+      await dbRun(
+        'INSERT INTO customer_password_reset_tokens (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)',
+        [tokenHash, user.id, expiresAt, createdAt.toISOString()],
+      );
+      const emailResult = await sendCustomerPasswordResetEmail({
+        customerName: user.name,
+        customerEmail: user.email,
+        token,
+      });
+      if (!emailResult.sent) {
+        await dbRun('DELETE FROM customer_password_reset_tokens WHERE token_hash = ?', [tokenHash]);
+        if (emailResult.error !== 'email_disabled_in_test') {
+          console.error(`Customer password reset email could not be sent: ${emailResult.error || 'unknown_error'}`);
+        }
+      }
+    })().catch((error: unknown) => console.error('Customer password reset request processing failed.', error));
+    return undefined;
+  });
+
+  router.post('/customer-password-reset', rateLimitPublicRequest(10), async (req, res) => {
+    const token = typeof req.body?.token === 'string' ? req.body.token : '';
+    const newPassword = typeof req.body?.new_password === 'string' ? req.body.new_password : '';
+    if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
+      return res.status(400).json({ error: 'Ce lien de réinitialisation est invalide ou expiré.' });
+    }
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      return res.status(400).json({ error: 'Le nouveau mot de passe doit contenir entre 8 et 128 caractères.' });
+    }
+
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const now = new Date();
+    const passwordHash = bcrypt.hashSync(newPassword, 10);
+    const reset = await dbTransaction(async (transaction) => {
+      const record = await transaction.get<{ user_id: number; expires_at: string; used_at: string | null }>(
+        'SELECT user_id, expires_at, used_at FROM customer_password_reset_tokens WHERE token_hash = ?',
+        [tokenHash],
+      );
+      if (!record || record.used_at) return null;
+      const expiryTime = Date.parse(record.expires_at);
+      if (!Number.isFinite(expiryTime) || expiryTime <= now.getTime()) return null;
+
+      const consumed = await transaction.run(
+        'UPDATE customer_password_reset_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL',
+        [now.toISOString(), tokenHash],
+      );
+      if (consumed.changes !== 1) return null;
+      await transaction.run('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, record.user_id]);
+      await transaction.run('DELETE FROM user_sessions WHERE user_id = ?', [record.user_id]);
+      return Number(record.user_id);
+    });
+    if (!reset) return res.status(400).json({ error: 'Ce lien de réinitialisation est invalide ou expiré.' });
+
+    for (const [sessionToken, session] of customerSessions) {
+      if (session.userId === reset) customerSessions.delete(sessionToken);
+    }
+    return res.json({ success: true, message: 'Votre mot de passe a été modifié. Vous pouvez vous connecter.' });
   });
 
   router.post('/customer-login', rateLimitPublicRequest(20), async (req, res) => {

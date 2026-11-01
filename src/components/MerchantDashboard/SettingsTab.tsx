@@ -12,6 +12,7 @@ import {
   TRIAL_CATALOG_LIMIT,
 } from '../../utils/subscriptionFeatures';
 import { WhatsAppSubscriptionReminderConsent } from './WhatsAppSubscriptionReminderConsent';
+import { EmailSubscriptionReminderConsent } from './EmailSubscriptionReminderConsent';
 import { MerchantBoostPurchase } from './MerchantBoostPurchase';
 import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
 import { PushNotificationSettings } from './PushNotificationSettings';
@@ -123,6 +124,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
       setOwnerName(data.name || '');
       setOwnerPhone(data.phone || '');
       setOwnerEmail(data.email);
+      const emailChanged = data.email.toLowerCase() !== ownerEmail.trim().toLowerCase();
+      setCurrentShop((shop) => shop ? {
+        ...shop,
+        owner_email_configured: true,
+        email_subscription_reminders_enabled: emailChanged ? false : shop.email_subscription_reminders_enabled,
+        email_subscription_reminders_consent_at: emailChanged ? null : shop.email_subscription_reminders_consent_at,
+      } : shop);
       setSettingsNewPin('');
       toast.success(data.pin_updated ? 'Profil enregistré et code PIN modifié.' : 'Profil enregistré.');
     } catch (error) {
@@ -313,6 +321,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 </div>
                 <p className="text-xs leading-5 text-slate-600">Le paiement est ponctuel, sans prélèvement automatique. GeniusPay confirme le règlement au serveur avant toute activation. Le paiement des commandes clients reste directement convenu avec la boutique.</p>
                 <WhatsAppSubscriptionReminderConsent shop={currentShop} />
+                <EmailSubscriptionReminderConsent shop={currentShop} />
                 <div className="flex flex-col gap-3 rounded-xl border border-[#e3d9cc] bg-[#FAF8F2] p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm font-extrabold text-slate-900">Besoin d’autres fonctionnalités ?</p>

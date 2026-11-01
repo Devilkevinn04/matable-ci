@@ -163,6 +163,8 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       trial_end: trialEnd,
       subscription_expires_at: trialEnd,
       last_notification_sent_at: null,
+      email_subscription_reminders_enabled: false,
+      email_subscription_reminders_consent_at: null,
       created_at: now.toISOString(),
       category: shopCategory,
       city: safeCity,

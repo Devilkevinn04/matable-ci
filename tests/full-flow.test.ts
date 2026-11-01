@@ -1,6 +1,6 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { rm } from 'node:fs/promises';
@@ -1119,6 +1119,70 @@ test('customer registration and login are supported with email, phone, and passw
   const logout = await apiFetch('/api/auth/customer-logout', { method: 'POST' });
   assert.equal(logout.response.status, 200, `Unexpected logout response: ${JSON.stringify(logout.payload)}`);
   assert.equal(logout.payload.success, true);
+});
+
+test('customer password reset responses avoid account enumeration and tokens are single-use', async () => {
+  const customer = await registerCustomer('Réinitialisation', 'Compte');
+  const unknownAddress = await apiFetch('/api/auth/customer-password-reset-request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: `unknown-${Date.now()}@example.ci` }),
+  });
+  const secondUnknownAddress = await apiFetch('/api/auth/customer-password-reset-request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: `another-${Date.now()}@example.ci` }),
+  });
+  assert.equal(unknownAddress.response.status, 202);
+  assert.equal(secondUnknownAddress.response.status, 202);
+  assert.equal(unknownAddress.payload.message, secondUnknownAddress.payload.message);
+
+  const resetToken = randomBytes(32).toString('base64url');
+  const testDb = new Database(TEST_DB_PATH);
+  try {
+    const user = testDb.prepare('SELECT id FROM users WHERE email = ?').get(customer.email) as { id: number };
+    testDb.prepare(`INSERT INTO customer_password_reset_tokens (token_hash, user_id, expires_at, created_at)
+      VALUES (?, ?, ?, ?)`).run(
+      createHash('sha256').update(resetToken).digest('hex'),
+      user.id,
+      new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      new Date().toISOString(),
+    );
+  } finally {
+    testDb.close();
+  }
+
+  const newPassword = 'NouveauMotDePasse!456';
+  const reset = await apiFetch('/api/auth/customer-password-reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: resetToken, new_password: newPassword }),
+  });
+  assert.equal(reset.response.status, 200, JSON.stringify(reset.payload));
+  assert.equal(reset.payload.success, true);
+
+  const reusedToken = await apiFetch('/api/auth/customer-password-reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: resetToken, new_password: newPassword }),
+  });
+  assert.equal(reusedToken.response.status, 400);
+  const revokedSession = await apiFetch('/api/auth/customer-session');
+  assert.equal(revokedSession.payload.authenticated, false);
+
+  cookieJar = '';
+  const oldPasswordLogin = await apiFetch('/api/auth/customer-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: customer.email, password: 'MotDePasse!123' }),
+  });
+  assert.equal(oldPasswordLogin.response.status, 401);
+  const newPasswordLogin = await apiFetch('/api/auth/customer-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: customer.email, password: newPassword }),
+  });
+  assert.equal(newPasswordLogin.response.status, 200, JSON.stringify(newPasswordLogin.payload));
 });
 
 test('super-admin customer suspension is audited, revokes sessions permanently, and denies verification admins', async () => {
@@ -2404,6 +2468,16 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.ok(registration.payload.owner_access_token);
 
   const newShopId = registration.payload.shop.id;
+  assert.equal(registration.payload.shop.owner_email_configured, true);
+  assert.equal(registration.payload.shop.email_subscription_reminders_enabled, false);
+  const emailReminderConsent = await apiFetch(`/api/shops/${newShopId}/subscription-email-reminder-consent`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: true }),
+  });
+  assert.equal(emailReminderConsent.response.status, 200, JSON.stringify(emailReminderConsent.payload));
+  assert.equal(emailReminderConsent.payload.enabled, true);
+
   const ownerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`);
   assert.equal(ownerProfile.response.status, 200, JSON.stringify(ownerProfile.payload));
   assert.equal(ownerProfile.payload.name, '');
@@ -2447,6 +2521,16 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.equal(updatedOwnerProfile.payload.phone, '+2250700000000');
   assert.equal(updatedOwnerProfile.payload.email, billingEmail);
   assert.equal(updatedOwnerProfile.payload.pin_updated, true);
+  const consentResetDb = new Database(TEST_DB_PATH, { readonly: true });
+  try {
+    const updatedConsent = consentResetDb.prepare(
+      'SELECT email_subscription_reminders_enabled, email_subscription_reminders_consent_at FROM shops WHERE id = ?',
+    ).get(newShopId) as { email_subscription_reminders_enabled: number; email_subscription_reminders_consent_at: string | null };
+    assert.equal(updatedConsent.email_subscription_reminders_enabled, 0);
+    assert.equal(updatedConsent.email_subscription_reminders_consent_at, null);
+  } finally {
+    consentResetDb.close();
+  }
   const verifiedOwnerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`);
   assert.equal(verifiedOwnerProfile.payload.name, 'Responsable test');
   assert.equal(verifiedOwnerProfile.payload.phone, '+2250700000000');

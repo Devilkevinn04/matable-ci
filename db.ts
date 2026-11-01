@@ -42,7 +42,8 @@ const sqliteSchema = `
     subscription_features_snapshot TEXT, subscription_features_effective_at TEXT,
     subscription_status TEXT NOT NULL DEFAULT 'active', trial_start TEXT, trial_end TEXT,
     last_notification_sent_at TEXT, whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
-    whatsapp_subscription_reminders_consent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
+    whatsapp_subscription_reminders_consent_at TEXT, email_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
+    email_subscription_reminders_consent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
     city TEXT, owner_name TEXT, owner_phone TEXT, owner_email TEXT, subscription_tier TEXT NOT NULL, theme_config TEXT, opening_hours TEXT,
     owner_access_token_hash TEXT
   );
@@ -52,6 +53,12 @@ const sqliteSchema = `
     terms_document TEXT NOT NULL,
     privacy_document TEXT NOT NULL,
     accepted_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS subscription_email_reminder_deliveries (
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL, days_before INTEGER NOT NULL, attempted_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 1, sent_at TEXT,
+    PRIMARY KEY (shop_id, expires_at, days_before)
   );
   CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
@@ -312,6 +319,15 @@ const sqliteSchema = `
     email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, is_active INTEGER NOT NULL DEFAULT 1
   );
+  CREATE TABLE IF NOT EXISTS customer_password_reset_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    used_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_customer_password_reset_user
+    ON customer_password_reset_tokens(user_id, expires_at);
   CREATE TABLE IF NOT EXISTS customer_account_consents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -444,6 +460,8 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'subscription_admin_override_until', 'TEXT');
   addColumn('shops', 'whatsapp_subscription_reminders_enabled', 'INTEGER NOT NULL DEFAULT 0');
   addColumn('shops', 'whatsapp_subscription_reminders_consent_at', 'TEXT');
+  addColumn('shops', 'email_subscription_reminders_enabled', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('shops', 'email_subscription_reminders_consent_at', 'TEXT');
   connection.exec(`CREATE TABLE IF NOT EXISTS merchant_push_subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
@@ -516,6 +534,15 @@ function migrateSqlite(connection: Database.Database) {
     UNIQUE (shop_id, expires_at, days_before)
   )`);
   addColumn('subscription_reminder_deliveries', 'attempts', 'INTEGER NOT NULL DEFAULT 1');
+  connection.exec(`CREATE TABLE IF NOT EXISTS subscription_email_reminder_deliveries (
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    days_before INTEGER NOT NULL,
+    attempted_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 1,
+    sent_at TEXT,
+    PRIMARY KEY (shop_id, expires_at, days_before)
+  )`);
   if (!hadPublicationStatus) {
     connection.exec(`UPDATE shops SET publication_status = CASE
       WHEN is_active = 0 THEN 'suspended'
@@ -642,7 +669,8 @@ export const postgresMigrations = [
     subscription_admin_override_until TEXT,
     subscription_status TEXT NOT NULL DEFAULT 'active', trial_start TEXT, trial_end TEXT,
     last_notification_sent_at TEXT, whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
-    whatsapp_subscription_reminders_consent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
+    whatsapp_subscription_reminders_consent_at TEXT, email_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
+    email_subscription_reminders_consent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
     city TEXT, owner_name TEXT, owner_phone TEXT, owner_email TEXT, subscription_tier TEXT NOT NULL, theme_config JSONB, opening_hours JSONB,
     owner_access_token_hash TEXT
   )`,
@@ -652,6 +680,12 @@ export const postgresMigrations = [
     terms_document TEXT NOT NULL,
     privacy_document TEXT NOT NULL,
     accepted_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS subscription_email_reminder_deliveries (
+    shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL, days_before INTEGER NOT NULL, attempted_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 1, sent_at TEXT,
+    PRIMARY KEY (shop_id, expires_at, days_before)
   )`,
   `CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
@@ -894,6 +928,14 @@ export const postgresMigrations = [
     email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, is_active INTEGER NOT NULL DEFAULT 1
   )`,
+  `CREATE TABLE IF NOT EXISTS customer_password_reset_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    used_at TEXT
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_customer_password_reset_user ON customer_password_reset_tokens(user_id, expires_at)',
   `CREATE TABLE IF NOT EXISTS customer_account_consents (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -948,6 +990,8 @@ export const postgresMigrations = [
   "ALTER TABLE shops ADD COLUMN IF NOT EXISTS merchant_verification_status TEXT NOT NULL DEFAULT 'not_required'",
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS publication_status TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS featured_until TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS email_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS email_subscription_reminders_consent_at TEXT',
   `UPDATE shops SET publication_status = CASE
     WHEN is_active = 0 THEN 'suspended'
     WHEN merchant_verification_status IN ('pending', 'submitted', 'under_review', 'rejected') THEN 'draft'

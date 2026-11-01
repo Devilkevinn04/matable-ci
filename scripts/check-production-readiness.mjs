@@ -168,6 +168,8 @@ const requiredTables = [
   'delivery_zones',
   'delivery_course_events',
   'delivery_driver_identity_sessions',
+  'customer_password_reset_tokens',
+  'subscription_email_reminder_deliveries',
 ];
 
 const requiredColumns = {
@@ -176,6 +178,7 @@ const requiredColumns = {
   delivery_drivers: ['identity_status'],
   platform_settings: ['subscription_plan_prices', 'subscription_plan_features'],
   admin_sessions: ['role'],
+  shops: ['email_subscription_reminders_enabled', 'email_subscription_reminders_consent_at'],
 };
 
 let migrationFiles = [];
