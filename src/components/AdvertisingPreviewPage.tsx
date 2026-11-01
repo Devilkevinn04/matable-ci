@@ -125,7 +125,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-white/80">{previewCampaign.category} · {previewCampaign.city} · {previewCampaign.shop}</p>
                 <h3 className="mt-2 max-w-xl font-display text-3xl font-black leading-tight sm:text-5xl">{isBanner ? previewCampaign.headline : 'Les créations locales à découvrir cette semaine'}</h3>
                 <p className="mt-3 max-w-xl text-sm leading-6 text-white/90 sm:text-base">{isBanner ? previewCampaign.body : `À la une : ${previewCampaign.product} chez ${previewCampaign.shop}. Une campagne approuvée apparaît ici.`}</p>
-                <button type="button" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-extrabold text-[#8f351d]">
+                <button type="button" disabled title="Exemple visuel uniquement, aucune navigation réelle." className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-extrabold text-[#8f351d] disabled:cursor-not-allowed disabled:opacity-70">
                   Découvrir la boutique <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
@@ -241,7 +241,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
                 <input type="checkbox" defaultChecked className="mt-1 accent-[#047857]" />
                 <span>Je confirme l’exactitude des informations et respecte la charte de contenu. *</span>
               </label>
-              <button type="button" className="min-h-11 rounded-full bg-[#047857] px-5 text-sm font-bold text-white sm:col-span-2 sm:justify-self-start">Soumettre pour validation · aperçu</button>
+              <button type="button" disabled title="Aperçu uniquement, aucune campagne ne sera envoyée." className="min-h-11 rounded-full bg-[#047857] px-5 text-sm font-bold text-white sm:col-span-2 sm:justify-self-start disabled:cursor-not-allowed disabled:opacity-70">Soumettre pour validation · aperçu</button>
             </div>
             <div className="mt-5 rounded-2xl border border-[#d9e4dc] bg-white p-4">
               <h3 className="text-sm font-black">Mes campagnes</h3>
@@ -285,15 +285,15 @@ export const AdvertisingPreviewPage: React.FC = () => {
                 <input readOnly value="Exemple : visuel et description conformes à la charte." className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm" />
               </label>
               <div className="mt-4 flex flex-wrap gap-2">
-                <button type="button" className="min-h-10 rounded-lg bg-emerald-700 px-4 text-xs font-bold text-white">Approuver · aperçu</button>
-                <button type="button" className="min-h-10 rounded-lg border border-rose-300 px-4 text-xs font-bold text-rose-900">Refuser · aperçu</button>
+                <button type="button" disabled title="Aperçu uniquement, aucune décision ne sera appliquée." className="min-h-10 rounded-lg bg-emerald-700 px-4 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-70">Approuver · aperçu</button>
+                <button type="button" disabled title="Aperçu uniquement, aucune décision ne sera appliquée." className="min-h-10 rounded-lg border border-rose-300 px-4 text-xs font-bold text-rose-900 disabled:cursor-not-allowed disabled:opacity-70">Refuser · aperçu</button>
               </div>
             </article>
             <article className="rounded-3xl border border-[#e7dfd3] bg-white p-5 sm:p-6">
               <h3 className="text-lg font-black">Demande partenaire · exemple</h3>
               <p className="mt-1 text-sm text-[#647067]">Maison Ivoire · Partenariat · contact@maison-ivoire.example</p>
               <p className="mt-3 text-sm leading-6">« Nous souhaitons présenter une sélection de produits fabriqués localement. »</p>
-              <div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">En attente</span><button type="button" className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold">Marquer contactée · aperçu</button><button type="button" className="min-h-9 rounded-lg border border-rose-300 px-3 text-xs font-bold text-rose-900">Refuser · aperçu</button></div>
+              <div className="mt-4 flex flex-wrap gap-2"><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">En attente</span><button type="button" disabled title="Aperçu uniquement, aucune demande ne sera modifiée." className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-70">Marquer contactée · aperçu</button><button type="button" disabled title="Aperçu uniquement, aucune demande ne sera modifiée." className="min-h-9 rounded-lg border border-rose-300 px-3 text-xs font-bold text-rose-900 disabled:cursor-not-allowed disabled:opacity-70">Refuser · aperçu</button></div>
             </article>
           </section>
         )}

@@ -1633,8 +1633,24 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   assert.equal(publishedShop.is_verified, true);
   assert.equal('merchant_verification_status' in publishedShop, false);
 
+  const invalidOrderEmail = await apiFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shopId,
+      customer_name: 'Client invité',
+      customer_phone: uniquePhone(),
+      customer_email: 'adresse-invalide',
+      delivery_location: 'Cocody Angré',
+      items: [{ product_id: productId, quantity: 1 }],
+    }),
+  });
+  assert.equal(invalidOrderEmail.response.status, 400);
+  assert.match(invalidOrderEmail.payload.error, /Adresse e-mail invalide/);
+
   const customerSessionCookies = cookieJar;
   cookieJar = '';
+  const guestEmail = `commande-${Date.now()}@example.ci`;
   const guestOrder = await apiFetch('/api/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1642,6 +1658,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
       shop_id: shopId,
       customer_name: 'Client invité',
       customer_phone: uniquePhone(),
+      customer_email: guestEmail,
       delivery_location: 'Cocody Angré',
       total_amount: 1,
       attribution_campaign: 'launch_tiktok_1',
@@ -1650,6 +1667,8 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   });
   assert.equal(guestOrder.response.status, 200, JSON.stringify(guestOrder.payload));
   assert.equal(guestOrder.payload.order.customer_user_id, undefined);
+  assert.equal(guestOrder.payload.email_receipt_status, 'failed');
+  assert.equal('customer_email' in guestOrder.payload.order, false);
   assert.equal(guestOrder.payload.order.attribution_campaign, 'launch_tiktok_1');
   assert.equal(guestOrder.payload.order.total_amount, 2500);
   assert.equal(guestOrder.payload.order.payment_method_preference, 'to_confirm');
@@ -1677,6 +1696,8 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   assert.equal(accountOrder.payload.order.customer_user_id, customerRegistration.payload.user.id);
   assert.equal(accountOrder.payload.order.status, 'confirmed');
   assert.equal(accountOrder.payload.order.payment_method_preference, 'mobile_money');
+  assert.equal(accountOrder.payload.email_receipt_status, 'failed');
+  assert.equal('customer_email' in accountOrder.payload.order, false);
 
   const invalidTrackingClick = await apiFetch(`/api/orders/${accountOrder.payload.order.id}/whatsapp-click`, {
     method: 'POST',

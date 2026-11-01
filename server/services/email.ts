@@ -315,6 +315,118 @@ export async function sendMerchantSubscriptionReminderEmail(
   return sendTransactionalEmail({ to: params.ownerEmail, subject, html, text }, fetchImplementation);
 }
 
+export async function sendCustomerOrderReceiptEmail(
+  params: {
+    customerName: string;
+    customerEmail: string;
+    orderId: number;
+    shopName: string;
+    shopWhatsAppNumber?: string | null;
+    createdAt: string;
+    items: {
+      product_title?: string;
+      quantity: number;
+      unit_price: number;
+      selected_size?: string;
+      selected_color?: string;
+      selected_modifiers?: string[];
+    }[];
+    deliveryLocation: string;
+    deliverySlot?: string;
+    paymentMethod: 'wave' | 'mobile_money' | 'cash' | 'to_confirm';
+    totalAmount: number;
+    deliveryFee: number;
+    appUrl?: string;
+  },
+  fetchImplementation: typeof fetch = fetch,
+): Promise<{ sent: boolean; id?: string; error?: string }> {
+  const appUrl = resolveAppUrl(params.appUrl);
+  const orderNumber = `#${params.orderId}`;
+  const createdDate = RECEIPT_DATE_FORMATTER.format(new Date(params.createdAt));
+  const amount = RECEIPT_AMOUNT_FORMATTER.format(params.totalAmount + params.deliveryFee);
+  const itemRows = params.items.map((item) => {
+    const options = [
+      item.selected_size,
+      item.selected_color,
+      ...(item.selected_modifiers || []),
+    ].filter(Boolean).join(' · ');
+    const description = `${item.product_title || 'Article'} × ${item.quantity}`;
+    return `<tr>
+      <td style="padding:11px 0;border-top:1px solid #EFEAE0;font-family:${EMAIL_FONT};font-size:12px;line-height:1.5;color:${BRAND.body};vertical-align:top;">
+        ${escapeHtml(description)}${options ? `<br /><span style="font-size:11px;color:${BRAND.muted};">${escapeHtml(options)}</span>` : ''}
+      </td>
+      <td align="right" style="padding:11px 0 11px 14px;border-top:1px solid #EFEAE0;font-family:${EMAIL_FONT};font-size:12px;font-weight:700;line-height:1.5;color:#1B2620;vertical-align:top;">${escapeHtml(RECEIPT_AMOUNT_FORMATTER.format(item.unit_price * item.quantity))} FCFA</td>
+    </tr>`;
+  }).join('');
+  const paymentLabels = {
+    wave: 'Wave',
+    mobile_money: 'Mobile Money',
+    cash: 'Espèces',
+    to_confirm: 'À convenir avec la boutique',
+  } as const;
+  const phoneDigits = String(params.shopWhatsAppNumber || '').replace(/\D/g, '');
+  const whatsappUrl = phoneDigits ? `https://wa.me/${phoneDigits}` : null;
+  const subject = `Récapitulatif de votre commande ${orderNumber}`;
+  const textItems = params.items.map((item) => {
+    const options = [
+      item.selected_size,
+      item.selected_color,
+      ...(item.selected_modifiers || []),
+    ].filter(Boolean).join(' · ');
+    return `- ${item.product_title || 'Article'} × ${item.quantity}${options ? ` (${options})` : ''} : ${RECEIPT_AMOUNT_FORMATTER.format(item.unit_price * item.quantity)} FCFA`;
+  });
+  const text = [
+    `Bonjour ${params.customerName},`,
+    '',
+    `Votre demande de commande ${orderNumber} chez ${params.shopName} a bien été enregistrée.`,
+    `Date : ${createdDate} (heure de Côte d’Ivoire)`,
+    '',
+    'Articles :',
+    ...textItems,
+    ...(params.deliveryFee > 0 ? [`Frais de livraison MaTable : ${RECEIPT_AMOUNT_FORMATTER.format(params.deliveryFee)} FCFA`] : []),
+    `Total à régler : ${amount} FCFA`,
+    `Retrait / livraison : ${params.deliveryLocation}`,
+    ...(params.deliverySlot ? [`Créneau souhaité : ${params.deliverySlot}`] : []),
+    `Mode de règlement souhaité : ${paymentLabels[params.paymentMethod]}`,
+    '',
+    'Ce récapitulatif ne confirme pas un paiement. La disponibilité, la livraison et le règlement restent à convenir avec la boutique.',
+    ...(whatsappUrl ? [`Contactez la boutique sur WhatsApp : ${whatsappUrl}`] : []),
+  ].join('\n');
+  const html = renderBrandedEmail({
+    title: subject,
+    preheader: `Récapitulatif de votre commande ${orderNumber} chez ${params.shopName}.`,
+    appUrl,
+    contentHtml: `
+      <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">Votre commande est enregistrée</h1>
+      <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Bonjour ${escapeHtml(params.customerName)}, votre demande de commande chez <strong style="color:${BRAND.deep};">${escapeHtml(params.shopName)}</strong> a bien été enregistrée.</p>
+      <p style="margin:0 0 18px;font-family:${EMAIL_FONT};font-size:12px;line-height:1.5;color:${BRAND.muted};">Commande ${escapeHtml(orderNumber)} · ${escapeHtml(createdDate)} (heure de Côte d’Ivoire)</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
+        <tr>
+          <th align="left" style="padding:0 0 8px;font-family:${EMAIL_FONT};font-size:10px;letter-spacing:1px;text-transform:uppercase;color:${BRAND.faint};">Articles</th>
+          <th align="right" style="padding:0 0 8px;font-family:${EMAIL_FONT};font-size:10px;letter-spacing:1px;text-transform:uppercase;color:${BRAND.faint};">Montant</th>
+        </tr>
+        ${itemRows}
+        <tr>
+          <td style="padding:11px 0;border-top:1px solid #EFEAE0;font-family:${EMAIL_FONT};font-size:12px;color:${BRAND.muted};">Articles</td>
+          <td align="right" style="padding:11px 0;border-top:1px solid #EFEAE0;font-family:${EMAIL_FONT};font-size:12px;font-weight:700;color:${BRAND.body};">${escapeHtml(RECEIPT_AMOUNT_FORMATTER.format(params.totalAmount))} FCFA</td>
+        </tr>
+        ${params.deliveryFee > 0 ? `<tr>
+          <td style="padding:8px 0;font-family:${EMAIL_FONT};font-size:12px;color:${BRAND.muted};">Frais de livraison MaTable</td>
+          <td align="right" style="padding:8px 0;font-family:${EMAIL_FONT};font-size:12px;font-weight:700;color:${BRAND.body};">${escapeHtml(RECEIPT_AMOUNT_FORMATTER.format(params.deliveryFee))} FCFA</td>
+        </tr>` : ''}
+        <tr>
+          <td style="padding:12px 0;border-top:1px solid ${BRAND.line};font-family:${EMAIL_FONT};font-size:13px;font-weight:800;color:${BRAND.deep};">Total à régler</td>
+          <td align="right" style="padding:12px 0;border-top:1px solid ${BRAND.line};font-family:${EMAIL_FONT};font-size:14px;font-weight:800;color:${BRAND.deep};">${escapeHtml(amount)} FCFA</td>
+        </tr>
+      </table>
+      <p style="margin:16px 0 0;font-family:${EMAIL_FONT};font-size:12px;line-height:1.6;color:${BRAND.muted};">Retrait ou livraison : <strong>${escapeHtml(params.deliveryLocation)}</strong>${params.deliverySlot ? `<br />Créneau souhaité : <strong>${escapeHtml(params.deliverySlot)}</strong>` : ''}<br />Mode de règlement souhaité : <strong>${escapeHtml(paymentLabels[params.paymentMethod])}</strong></p>
+      <p style="margin:16px 0 0;padding:12px;border:1px solid #F3D7A5;border-radius:12px;background:#FFF8E9;font-family:${EMAIL_FONT};font-size:12px;line-height:1.6;color:#74551B;">Ce récapitulatif ne confirme pas un paiement. La disponibilité, la livraison et le règlement restent à convenir avec la boutique.</p>
+      ${whatsappUrl ? renderEmailButton('Contacter la boutique sur WhatsApp', whatsappUrl) : ''}
+    `,
+  });
+  return sendTransactionalEmail({ to: params.customerEmail, subject, html, text }, fetchImplementation);
+}
+
 export async function sendMerchantSubscriptionReceiptEmail(
   params: {
     shopName: string;

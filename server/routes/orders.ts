@@ -27,6 +27,7 @@ import {
   type DeliveryQuote,
 } from '../services/deliveryQuoting.ts';
 import { dispatchDeliveryCreatedPush } from '../services/deliveryNotifications.ts';
+import { sendCustomerOrderReceiptEmail } from '../services/email.ts';
 
 interface CustomerSession {
   authenticated: boolean;
@@ -71,6 +72,17 @@ export function createOrderRouter({
 
   router.post('/orders', rateLimitPublicRequest(30), async (req, res) => {
     const { shop_id, customer_name, customer_phone, delivery_location, delivery_note, delivery_slot, payment_method_preference, items, website, form_started_at, delivery_zone_id } = req.body;
+    const rawCustomerEmail = req.body?.customer_email;
+    if (rawCustomerEmail !== undefined && rawCustomerEmail !== null && typeof rawCustomerEmail !== 'string') {
+      return res.status(400).json({ error: 'Adresse e-mail invalide.' });
+    }
+    const submittedCustomerEmail = String(rawCustomerEmail || '').trim().toLowerCase();
+    if (submittedCustomerEmail && (
+      submittedCustomerEmail.length > 254
+      || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(submittedCustomerEmail)
+    )) {
+      return res.status(400).json({ error: 'Adresse e-mail invalide.' });
+    }
     const attributionCampaign = normalizeAnalyticsCampaign(req.body?.attribution_campaign);
     if (String(website || '').trim()) return res.status(400).json({ error: 'Requête rejetée.' });
     if (form_started_at !== undefined) {
@@ -125,6 +137,14 @@ export function createOrderRouter({
       return res.status(403).json({ error });
     }
     const customerUserId = customerSession.authenticated ? customerSession.user?.id : undefined;
+    let receiptEmail = submittedCustomerEmail;
+    if (customerUserId) {
+      const customer = await dbGet<{ email: string | null }>(
+        'SELECT email FROM users WHERE id = ? AND is_active = 1',
+        [customerUserId],
+      );
+      receiptEmail = String(customer?.email || '').trim().toLowerCase();
+    }
     const whatsappTrackingToken = crypto.randomUUID();
     const stockUpdates: { product: ProductRecord; previousStock: number; stock: number; isAvailable: boolean }[] = [];
     try {
@@ -306,11 +326,38 @@ export function createOrderRouter({
       for (const update of stockUpdates) {
         dispatchStockTransitionPush(shop.id, update.product, update.previousStock, update.stock, `stock-order-${createdOrder.id}-${update.product.id}`);
       }
+      let emailReceiptStatus: 'sent' | 'failed' | 'not_requested' = 'not_requested';
+      if (receiptEmail) {
+        try {
+          const emailResult = await sendCustomerOrderReceiptEmail({
+            customerName: createdOrder.customer_name,
+            customerEmail: receiptEmail,
+            orderId: createdOrder.id,
+            shopName: shop.name,
+            shopWhatsAppNumber: shop.whatsapp_number,
+            createdAt: createdOrder.created_at,
+            items: createdOrder.items || [],
+            deliveryLocation: createdOrder.delivery_location,
+            deliverySlot: createdOrder.delivery_slot,
+            paymentMethod: createdOrder.payment_method_preference,
+            totalAmount: createdOrder.total_amount,
+            deliveryFee: Number(createdOrder.delivery_fee || 0),
+          });
+          emailReceiptStatus = emailResult.sent ? 'sent' : 'failed';
+          if (!emailResult.sent && emailResult.error !== 'email_disabled_in_test') {
+            console.warn(`Customer order receipt skipped for order ${createdOrder.id}: ${emailResult.error || 'unknown_error'}`);
+          }
+        } catch (error) {
+          emailReceiptStatus = 'failed';
+          console.error(`Customer order receipt failed for order ${createdOrder.id}.`, error);
+        }
+      }
       res.json({
         success: true,
         order: createdOrder,
         delivery: createdDelivery,
         whatsapp_tracking_token: whatsappTrackingToken,
+        email_receipt_status: emailReceiptStatus,
         message: createdDelivery
           ? 'Commande acceptée et stock réservé. La livraison MaTable est en attente d’un livreur ; réglez les articles et les frais de livraison selon les modalités convenues avec la boutique.'
           : 'Commande acceptée automatiquement et stock réservé. Contactez le vendeur sur WhatsApp pour échanger sur la livraison et le paiement.',

@@ -473,7 +473,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                     <div className="p-2"><span className="block truncate text-[10px] font-semibold text-slate-800">Exemple d’article</span><span className="mt-1 block text-[10px] font-bold" style={{ color: themeConfig.primary_color }}>5 000 FCFA</span></div>
                   </div>)}
                 </div>
-                <button type="button" className="mt-3 w-full px-3 py-2 text-[10px] font-semibold text-white" style={{ backgroundColor: themeConfig.primary_color, borderRadius: previewRadius }}>Commander sur WhatsApp</button>
+                <button type="button" disabled title="Aperçu visuel uniquement, aucune commande ne sera envoyée." className="mt-3 w-full cursor-not-allowed px-3 py-2 text-[10px] font-semibold text-white opacity-70" style={{ backgroundColor: themeConfig.primary_color, borderRadius: previewRadius }}>Commander sur WhatsApp</button>
               </div>
             </div>
           </div>

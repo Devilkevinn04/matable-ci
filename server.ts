@@ -483,7 +483,7 @@ const products: ProductRecord[] = shouldSeedDemoData()
         description: 'Maintien ferme sans armature métallique blessante. Bonnet B et C. Dentelle florale brodée main. Teinte Rouge Passion intemporelle.',
         price: 9500,
         stock: 4,
-        image_url: 'https://images.unsplash.com/photo-1579613832125-5d34a13ffe0a?w=600&auto=format&fit=crop&q=80',
+        image_url: 'https://images.unsplash.com/photo-1582533561751-ef6f6ab93a2e?w=600&auto=format&fit=crop&q=80',
         is_available: true,
         sizes: ['S', 'M', 'L'],
         colors: [
@@ -1203,6 +1203,14 @@ async function startServer() {
         });
     };
     setInterval(runDeliveryExpiry, 10 * 60 * 1000).unref();
+  } else {
+    app.get('/api/delivery/zones', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ zones: [], available: false });
+    });
+    app.get('/api/shops/:id/deliveries', requireMerchantAccess, (_req, res) => {
+      res.json({ deliveries: [], available: false });
+    });
   }
 
   app.use('/api', createOrderRouter({

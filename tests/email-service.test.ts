@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   getResendEmailConfig,
   sendCustomerPasswordResetEmail,
+  sendCustomerOrderReceiptEmail,
   sendCustomerWelcomeEmail,
   sendMerchantPinResetEmail,
   sendMerchantSubscriptionReceiptEmail,
@@ -277,6 +278,56 @@ test('subscription reminder email includes the expiry and account link', async (
     assert.match(requestBody.subject, /dans 3 jours/);
     assert.match(requestBody.html, /&lt;b&gt;Chez Awa&lt;\/b&gt;/);
     assert.match(requestBody.html, /https:\/\/matable-ci\.com\/app/);
+  } finally {
+    if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
+    if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;
+  }
+});
+
+test('customer order receipt includes server totals and clarifies payment is not confirmed', async () => {
+  const previousApiKey = process.env.RESEND_API_KEY;
+  const previousFrom = process.env.RESEND_FROM_EMAIL;
+  process.env.RESEND_API_KEY = 'resend-key';
+  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  let requestBody: any;
+  try {
+    const result = await sendCustomerOrderReceiptEmail({
+      customerName: '<script>Client</script>',
+      customerEmail: 'customer@example.com',
+      orderId: 42,
+      shopName: '<b>Chez Awa</b>',
+      shopWhatsAppNumber: '+2250708091011',
+      createdAt: '2026-10-10T12:00:00.000Z',
+      items: [{
+        product_title: '<img src=x onerror=alert(1)>',
+        quantity: 2,
+        unit_price: 1250,
+        selected_size: 'Grand',
+        selected_modifiers: ['Piment doux'],
+      }],
+      deliveryLocation: '<i>Cocody</i>',
+      deliverySlot: 'Ce soir',
+      paymentMethod: 'cash',
+      totalAmount: 2500,
+      deliveryFee: 2000,
+      appUrl: 'https://matable-ci.com',
+    }, async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ id: 'email_order_receipt_42' }), { status: 200 });
+    });
+
+    assert.equal(result.sent, true);
+    assert.equal(requestBody.to[0], 'customer@example.com');
+    assert.match(requestBody.subject, /commande #42/);
+    assert.match(requestBody.html, /&lt;script&gt;Client&lt;\/script&gt;/);
+    assert.match(requestBody.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+    assert.match(requestBody.html, /&lt;i&gt;Cocody&lt;\/i&gt;/);
+    assert.match(requestBody.html, /https:\/\/wa\.me\/2250708091011/);
+    assert.match(requestBody.html, /2\s?500 FCFA/);
+    assert.match(requestBody.html, /2\s?000 FCFA/);
+    assert.match(requestBody.text, /Total à régler : 4\s?500 FCFA/);
+    assert.match(requestBody.text, /ne confirme pas un paiement/i);
+    assert.doesNotMatch(requestBody.html, /<script>|<img src=x|<i>Cocody/);
   } finally {
     if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
     if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;

@@ -232,8 +232,13 @@ test('delivery zones and directed tariffs are super-admin managed and remain unc
 });
 
 test('delivery operations stay off by default and expose no payable course', async () => {
-  const zones = await api('/api/delivery/zones');
-  assert.equal(zones.response.status, 404);
+  const zones = await api<{ available: boolean; zones: unknown[] }>('/api/delivery/zones');
+  assert.equal(zones.response.status, 200);
+  assert.equal(zones.payload.available, false);
+  assert.deepEqual(zones.payload.zones, []);
+
+  const deliveries = await api('/api/shops/1/deliveries');
+  assert.equal(deliveries.response.status, 401);
 
   const options = await api<{ available: boolean; origin_zone: string | null; zones: unknown[] }>('/api/shops/1/delivery-options');
   assert.equal(options.response.status, 200);

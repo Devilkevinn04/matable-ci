@@ -63,10 +63,11 @@ function MerchantDeliveryRequest({ shopId, orderId, orderStatus }: {
         fetch(`/api/shops/${shopId}/deliveries`, { credentials: 'include', cache: 'no-store' }),
       ]);
       const [zoneData, deliveryData] = await Promise.all([
-        zonesResponse.json() as Promise<{ zones?: DeliveryZoneOption[]; error?: string }>,
-        deliveriesResponse.json() as Promise<{ deliveries?: MerchantDelivery[]; error?: string }>,
+        zonesResponse.json() as Promise<{ zones?: DeliveryZoneOption[]; available?: boolean; error?: string }>,
+        deliveriesResponse.json() as Promise<{ deliveries?: MerchantDelivery[]; available?: boolean; error?: string }>,
       ]);
-      if (zonesResponse.status === 404 || deliveriesResponse.status === 404) {
+      if (zonesResponse.status === 404 || deliveriesResponse.status === 404
+        || zoneData.available === false || deliveryData.available === false) {
         setServiceAvailable(false);
         return;
       }
@@ -316,7 +317,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
               <p className="mt-1 text-xs leading-5 text-slate-500">Traitez les demandes clients et suivez leur progression.</p>
             </header>
 
-            {state.currentShop && (
+            {state.currentShop && !state.currentShop.admin_mode && (
               <PushOptIn
                 configUrl={`/api/shops/${state.currentShop.id}/push/config`}
                 subscriptionUrl={`/api/shops/${state.currentShop.id}/push/subscription`}

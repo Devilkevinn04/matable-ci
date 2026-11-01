@@ -133,6 +133,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   // Checkout form fields
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [deliveryLocation, setDeliveryLocation] = useState('');
   const [customLocation, setCustomLocation] = useState('');
   const [deliveryNote, setDeliveryNote] = useState('');
@@ -156,6 +157,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     whatsappTrackingToken: string;
     deliveryFee: number;
     deliveryTicket: string | null;
+    emailReceiptStatus: 'sent' | 'failed' | 'not_requested';
+    emailReceiptAddress: string;
   } | null>(null);
   const [messageCopied, setMessageCopied] = useState(false);
   const [formStartedAt] = useState(() => Date.now());
@@ -575,6 +578,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         : 'Veuillez choisir votre commune ou votre quartier.');
       return;
     }
+    const emailReceiptAddress = authenticatedCustomer?.email.trim() || customerEmail.trim();
 
     setIsSubmitting(true);
 
@@ -587,6 +591,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           shop_id: shop.id,
           customer_name: trimmedName,
           customer_phone: normalizedPhone,
+          customer_email: authenticatedCustomer ? undefined : customerEmail.trim() || undefined,
           delivery_location: finalLocation,
           delivery_note: deliveryNote,
           delivery_slot: shop.category === 'food' ? deliverySlot : undefined,
@@ -630,6 +635,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         whatsappTrackingToken: String(data.whatsapp_tracking_token || ''),
         deliveryFee: Number(data.order.delivery_fee || 0),
         deliveryTicket: data.delivery?.ticket_number ?? null,
+        emailReceiptStatus: data.email_receipt_status === 'sent'
+          ? 'sent'
+          : data.email_receipt_status === 'failed' ? 'failed' : 'not_requested',
+        emailReceiptAddress,
       });
       trackOrderCreated(
         shop.id,
@@ -1443,6 +1452,20 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                   <p className="mt-3 text-xs text-[#0F6B54] bg-[#E3F1EA] px-3 py-1.5 rounded-full inline-block font-semibold mb-4">
                     {orderSuccess.deliveryFee > 0 ? '✓ Articles réservés · livraison MaTable demandée' : '✓ Articles réservés · récapitulatif prêt'}
                   </p>
+                  {orderSuccess.emailReceiptStatus !== 'not_requested' && (
+                    <p
+                      role={orderSuccess.emailReceiptStatus === 'sent' ? 'status' : 'alert'}
+                      className={`mx-auto mb-4 max-w-sm rounded-xl border p-3 text-left text-xs leading-5 ${
+                        orderSuccess.emailReceiptStatus === 'sent'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                          : 'border-amber-200 bg-amber-50 text-amber-950'
+                      }`}
+                    >
+                      {orderSuccess.emailReceiptStatus === 'sent'
+                        ? `Le récapitulatif a été envoyé à ${orderSuccess.emailReceiptAddress}.`
+                        : `La commande est enregistrée, mais l’envoi du récapitulatif à ${orderSuccess.emailReceiptAddress} a échoué. Vous pouvez toujours utiliser WhatsApp.`}
+                    </p>
+                  )}
                   {orderSuccess.deliveryFee > 0 ? (
                     <div className="mx-auto mb-4 max-w-sm rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-left">
                       <p className="text-xs font-black text-emerald-950">Livraison MaTable confirmée</p>
@@ -1671,6 +1694,31 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         />
                       </div>
                     </div>
+
+                    {authenticatedCustomer ? (
+                      <p className="rounded-lg border border-[#E4EDE8] bg-[#F4F8F5] px-3 py-2 text-xs leading-5 text-[#47534b]">
+                        Le récapitulatif de commande sera envoyé à l’adresse de votre compte : <strong>{authenticatedCustomer.email}</strong>.
+                      </p>
+                    ) : (
+                      <div>
+                        <label htmlFor="checkout-customer-email" className="mb-1 block text-xs font-bold text-slate-700">
+                          Adresse e-mail pour le récapitulatif (facultatif)
+                        </label>
+                        <input
+                          id="checkout-customer-email"
+                          type="email"
+                          autoComplete="email"
+                          maxLength={254}
+                          placeholder="vous@exemple.ci"
+                          value={customerEmail}
+                          onChange={(event) => setCustomerEmail(event.target.value)}
+                          className="w-full rounded-xl border-[2px] border-[#E4D9C8] bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]"
+                        />
+                        <p className="mt-1 text-[11px] leading-4 text-slate-500">
+                          Utilisée uniquement pour vous envoyer le récapitulatif de cette commande.
+                        </p>
+                      </div>
+                    )}
 
                     {/* Delivery Location / Commune */}
                     <div>

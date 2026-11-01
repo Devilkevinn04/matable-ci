@@ -332,7 +332,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
               </section>
             ))}
 
-            {settingsSubTab === 'notifications' && currentShop && <PushNotificationSettings shop={currentShop} />}
+            {settingsSubTab === 'notifications' && currentShop && (
+              currentShop.admin_mode
+                ? <p role="status" className="max-w-3xl rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950">Les notifications propres à l’appareil du commerçant ne peuvent pas être gérées depuis l’accès super-admin.</p>
+                : <PushNotificationSettings shop={currentShop} />
+            )}
             {settingsSubTab === 'visibility' && currentShop && (
               <section className="max-w-3xl space-y-5 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">

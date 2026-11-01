@@ -132,7 +132,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
       return undefined;
     }
 
-    const controller = new AbortController();
+    let cancelled = false;
     const params = new URLSearchParams({ sort, limit: String(PAGE_SIZE), offset: String(offset) });
     if (category !== 'all') params.set('category', category);
 
@@ -141,27 +141,28 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
     if (offset === 0) setProducts([]);
     const feedUrl = `/api/v1/catalog/storefronts/feed?${params.toString()}`;
     cachedFetchJson<FeedResponse>(`product-feed:${feedUrl}`, async () => {
-      const response = await fetch(feedUrl, { signal: controller.signal });
+      const response = await fetch(feedUrl);
       if (!response.ok) throw new Error(`Product feed request failed: ${response.status}`);
       const payload = await response.json() as FeedResponse;
       if (!Array.isArray(payload.products)) throw new Error('Product feed response is invalid.');
       return payload;
     }, 30_000)
       .then((payload) => {
+        if (cancelled) return;
         setProducts((current) => deduplicateProductsById(offset === 0 ? payload.products : [...current, ...payload.products]));
         setHasMore(Boolean(payload.has_more));
         setRankingFallback(Boolean(payload.ranking_fallback));
       })
       .catch((loadError: unknown) => {
-        if (controller.signal.aborted) return;
+        if (cancelled) return;
         console.error('Unable to load the public product feed.', loadError);
         setError(true);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       });
 
-    return () => controller.abort();
+    return () => { cancelled = true; };
   }, [sort, category, offset, retryKey, demoProducts, demoCategory, demoSearch]);
 
   const changeFilter = (update: () => void) => {
