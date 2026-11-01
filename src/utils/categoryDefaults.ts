@@ -1,3 +1,5 @@
+import { normalizePublicMediaUrl, normalizeStoredMediaUrl } from './media';
+
 export const SHOP_CATEGORIES = [
   'fashion',
   'food',
@@ -360,9 +362,24 @@ export function isLegacyGenericProductImage(imageUrl: unknown): boolean {
   return typeof imageUrl === 'string' && LEGACY_PRODUCT_PLACEHOLDER_IMAGES.some((photoId) => imageUrl.includes(photoId));
 }
 
+export function normalizePublicImageUrl(imageUrl: unknown): string {
+  return normalizePublicMediaUrl(imageUrl);
+}
+
 export function normalizeProductImage(imageUrl: unknown): string {
-  if (typeof imageUrl !== 'string') return '';
-  const normalized = imageUrl.trim();
+  const normalized = normalizePublicMediaUrl(imageUrl);
+  if (!normalized) return '';
+  return isLegacyGenericProductImage(normalized) ? '' : normalized;
+}
+
+/**
+ * Storage variant used by merchant write paths: public URLs stay strict, but a
+ * bounded legacy base64 image is preserved so re-saving a product never wipes
+ * a photo that has not been migrated to object storage yet.
+ */
+export function normalizeStoredProductImage(imageUrl: unknown): string {
+  const normalized = normalizeStoredMediaUrl(imageUrl);
+  if (!normalized) return '';
   return isLegacyGenericProductImage(normalized) ? '' : normalized;
 }
 
@@ -378,16 +395,34 @@ const MAX_GALLERY_IMAGES = 6;
 export function sanitizeGalleryImages(images: unknown): string[] | undefined {
   if (!Array.isArray(images)) return undefined;
   const cleaned = images
-    .filter((image): image is string => typeof image === 'string' && image.trim().length > 0)
-    .map((image) => image.trim())
+    .map((image) => normalizePublicMediaUrl(image))
+    .filter((image): image is string => image.length > 0)
+    .filter((image) => !isLegacyGenericProductImage(image))
+    .slice(0, MAX_GALLERY_IMAGES);
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+export function sanitizeStoredGalleryImages(images: unknown): string[] | undefined {
+  if (!Array.isArray(images)) return undefined;
+  const cleaned = images
+    .map((image) => normalizeStoredMediaUrl(image))
+    .filter((image): image is string => image.length > 0)
     .filter((image) => !isLegacyGenericProductImage(image))
     .slice(0, MAX_GALLERY_IMAGES);
   return cleaned.length > 0 ? cleaned : undefined;
 }
 
 export function normalizeCustomBannerImage(imageUrl: unknown, category: unknown): string {
-  if (typeof imageUrl !== 'string') return '';
-  const normalized = imageUrl.trim();
+  const normalized = normalizePublicMediaUrl(imageUrl);
+  if (!normalized) return '';
+  return LEGACY_DEFAULT_BANNER_IMAGES.some((photoId) => normalized.includes(photoId))
+    ? ''
+    : normalized;
+}
+
+export function normalizeStoredCustomBannerImage(imageUrl: unknown, category: unknown): string {
+  const normalized = normalizeStoredMediaUrl(imageUrl);
+  if (!normalized) return '';
   return LEGACY_DEFAULT_BANNER_IMAGES.some((photoId) => normalized.includes(photoId))
     ? ''
     : normalized;

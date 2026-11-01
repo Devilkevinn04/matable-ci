@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Product, Shop } from '../../types';
-import { compressImageClientSide } from '../../utils/format';
+import { uploadPublicMediaFile } from '../../utils/media';
 import { buildProductSavePayload, createProductDraft, productToDraft } from './productForm';
 import type { ProductModifierGroupDraft } from './productForm';
 import { useToast } from '../Toast';
@@ -90,6 +90,11 @@ export function useMerchantProductEditor(
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (!currentShop?.id) {
+      toast.error('Ouvrez d’abord votre boutique pour téléverser des médias.');
+      event.target.value = '';
+      return;
+    }
     if (!file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) {
       toast.error('Choisissez une image de 8 Mo maximum.');
       event.target.value = '';
@@ -99,11 +104,11 @@ export function useMerchantProductEditor(
     try {
       setImageCompressing(true);
       setOriginalImageSizeKB(Math.round(file.size / 1024));
-      const { dataUrl, sizeKB } = await compressImageClientSide(file, 900, 100);
-      setProdImage(dataUrl);
-      setCompressedSizeKB(sizeKB);
-    } catch {
-      toast.error("Erreur lors de la compression de l'image.");
+      const publicUrl = await uploadPublicMediaFile(file, currentShop.id, { purpose: 'product-main', maxDimension: 900, maxSizeKB: 100 });
+      setProdImage(publicUrl);
+      setCompressedSizeKB(Math.round(file.size / 1024));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erreur lors du téléversement de l'image.");
     } finally {
       setImageCompressing(false);
       event.target.value = '';
@@ -113,6 +118,11 @@ export function useMerchantProductEditor(
   const handleLookbookImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (!currentShop?.id) {
+      toast.error('Ouvrez d’abord votre boutique pour téléverser des médias.');
+      event.target.value = '';
+      return;
+    }
     const photoLimit = currentShop?.admin_mode ? 6
       : currentShop?.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0
         ? getSubscriptionProductPhotoLimit('standard')
@@ -130,10 +140,10 @@ export function useMerchantProductEditor(
     }
 
     try {
-      const { dataUrl } = await compressImageClientSide(file, 900, 100);
-      setProdLookbookImage(dataUrl);
-    } catch {
-      toast.error("Erreur lors de la compression de l'image.");
+      const publicUrl = await uploadPublicMediaFile(file, currentShop.id, { purpose: 'lookbook', maxDimension: 900, maxSizeKB: 100 });
+      setProdLookbookImage(publicUrl);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erreur lors du téléversement de l'image.");
     }
     event.target.value = '';
   };
@@ -141,6 +151,11 @@ export function useMerchantProductEditor(
   const handleGalleryImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
+    if (!currentShop?.id) {
+      toast.error('Ouvrez d’abord votre boutique pour téléverser des médias.');
+      event.target.value = '';
+      return;
+    }
     const photoLimit = currentShop?.admin_mode ? 6
       : currentShop?.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0
         ? getSubscriptionProductPhotoLimit('standard')
@@ -162,10 +177,10 @@ export function useMerchantProductEditor(
     }
 
     try {
-      const compressed = await Promise.all(filesToProcess.map((file) => compressImageClientSide(file, 900, 100)));
-      setProdGalleryImages((previous) => [...previous, ...compressed.map((result) => result.dataUrl)]);
-    } catch {
-      toast.error("Erreur lors de la compression d'une photo.");
+      const uploadedUrls = await Promise.all(filesToProcess.map((file) => uploadPublicMediaFile(file, currentShop.id, { purpose: 'gallery', maxDimension: 900, maxSizeKB: 100 })));
+      setProdGalleryImages((previous) => [...previous, ...uploadedUrls]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erreur lors du téléversement d'une photo.");
     }
     event.target.value = '';
   };

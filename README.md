@@ -74,7 +74,7 @@ En paiement réel, chaque forfait crée une intention `delivery_driver_payment_i
 
 #### Mise en production de la livraison
 
-1. Sauvegarder la base cible, puis appliquer les migrations dans l’ordre avec `DATABASE_URL=<url-directe> npm run migrate:neon` et vérifier que `036` à `042` sont enregistrées.
+1. Sauvegarder la base cible, puis appliquer les migrations dans l’ordre avec `DATABASE_URL=<url-directe> npm run migrate:neon` et vérifier que `036` à `046` sont enregistrées.
 2. Configurer `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` et `VAPID_SUBJECT` sur le service Render pour activer les notifications Push. Sans ces clés, les abonnements répondent `503` sans bloquer les courses.
 3. Renseigner `APP_URL` avec l’URL publique et vérifier les secrets GeniusPay si le forfait livreur est encaissé en ligne.
 4. Passer `DELIVERY_OPERATIONS_ENABLED` à `true`, redéployer, puis contrôler le lien public `/livreur`, le consentement et le retour Didit, l’activation après webhook signé, le checkout GeniusPay confirmé et le choix de zone au checkout client.
@@ -145,6 +145,18 @@ En production, `NODE_ENV=production` sélectionne PostgreSQL et `DATABASE_URL`; 
 
 Le fil public interroge le catalogue par lots paginés côté base, au lieu de charger tous les produits à chaque visite. Le CDN peut ainsi mettre en cache les pages publiques sans que chaque rendu du fil transfère le catalogue entier depuis PostgreSQL.
 
+### Médias publics (Cloudflare R2)
+
+Les photos produits, logos et bannières sont compressés dans le navigateur puis téléversés directement vers Cloudflare R2 via une URL présignée (5 minutes). L’API ne reçoit que les métadonnées et signe aussi la taille du fichier. Variables à définir dans Render :
+
+- `R2_ENDPOINT` (par exemple `https://<account-id>.r2.cloudflarestorage.com`)
+- `R2_BUCKET`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_PUBLIC_BASE_URL` (domaine public du bucket, obligatoire : sans lui le téléversement est refusé en `503`)
+
+Formats acceptés : JPEG, PNG, WebP et GIF (SVG refusé), 8 Mo maximum. Le bucket doit autoriser les requêtes `PUT` présignées depuis l’origine publique de l’application et servir les objets en lecture publique avec `Cache-Control` immutable. Tant que R2 n’est pas configuré, l’interface reste utilisable : le client conserve une image base64 compressée, et les écritures marchandes préservent les images base64 existantes (bornées à 2 Mo) au lieu de les effacer. Ces données historiques restent affichables via `/media/products/...`; une migration vers R2 pourra être planifiée sans bloquer les commerçants. `npm run check:prod` signale une configuration R2 incomplète en avertissement.
+
 Le workflow GitHub Actions « PostgreSQL integration » exécute le lint, les tests et un test de migrations/adaptateur sur un PostgreSQL temporaire. Pour valider un environnement Neon séparément, exécutez `DATABASE_URL=<URL-de-la-base-de-test> npm run test:postgres`; n’utilisez jamais l’URL de production pour ce test.
 
 ### Sauvegarde PostgreSQL et validation de restauration
@@ -155,7 +167,7 @@ Le workflow GitHub Actions « PostgreSQL integration » exécute le lint, les te
 npm run db:backup -- --output backups/matable-prod-2026-10-10.dump
 ```
 
-Installez les outils client PostgreSQL (`pg_dump`, `pg_restore` et `psql`) dans l’environnement d’exécution, avec une version compatible avec le serveur. Le dossier local `backups/` est ignoré par Git et ne constitue pas un stockage durable. L’opérateur doit configurer séparément une planification (par exemple un ordonnanceur externe) et la copie chiffrée vers un stockage indépendant, avec rétention et contrôle d’accès adaptés. **Aucune planification ni destination de stockage externe n’est configurée par ce dépôt ; les sauvegardes ne sont donc pas déclarées opérationnelles tant que ces responsabilités externes ne sont pas mises en place et vérifiées.** Les fichiers de sauvegarde contiennent des données de production : ne les commitez pas et protégez-les comme des secrets.
+Installez les outils client PostgreSQL (`pg_dump`, `pg_restore` et `psql`) dans l’environnement d’exécution, avec une version compatible avec le serveur. Le dossier local `backups/` est ignoré par Git et ne constitue pas un stockage durable. L’opérateur doit configurer séparément une planification (par exemple un ordonnanceur externe) et la copie chiffrée vers un stockage indépendant, avec rétention et contrôle d’accès adaptés. **Le workflow `.github/workflows/db-backup.yml` fournit une planification quotidienne optionnelle : il s’exécute uniquement lorsque les secrets `DATABASE_URL` et `BACKUP_AGE_RECIPIENT` (clé publique `age`) sont configurés dans GitHub, chiffre l’archive avant de la téléverser comme artefact de 30 jours, et ignore silencieusement la sauvegarde dans le cas contraire. Les artefacts GitHub ne remplacent pas une destination durable : l’opérateur doit encore copier les archives chiffrées vers un stockage indépendant et tester une restauration. Générez la paire avec `age-keygen -o backup-key.txt` : conservez la clé privée hors de GitHub et n’y enregistrez que la clé publique dans `BACKUP_AGE_RECIPIENT`. Tant que ces responsabilités externes ne sont pas mises en place et vérifiées, les sauvegardes ne sont pas déclarées pleinement opérationnelles.** Les fichiers de sauvegarde contiennent des données de production : ne les commitez pas et protégez-les comme des secrets.
 
 Pour tester réellement une restauration, créez d’abord une base PostgreSQL jetable dont le schéma applicatif `public` est vide, distincte de la production. Le script exige la confirmation `--confirm-disposable`, vérifie le SHA-256, compare source et cible, autorise les schémas système du fournisseur mais refuse tout objet applicatif déjà présent dans `public`, restaure uniquement `public` sans supprimer d’objets existants et compare les nombres de lignes des tables métier principales avec la source. Lancez d’abord le préflight non destructif :
 
@@ -244,7 +256,7 @@ La bêta dure 30 jours et n’est pas lancée par défaut. Hors tests automatis�
 
 Après confirmation d’un abonnement par un webhook GeniusPay signé et vérifié, un reçu est généré et envoyé à l’adresse e-mail du propriétaire via Resend. Configurer `RESEND_API_KEY` et une adresse d’expédition vérifiée dans `RESEND_FROM_EMAIL` (ou `EMAIL_FROM`). Aucun reçu d’abonnement n’est émis à partir d’une simple déclaration de paiement côté navigateur. La validation locale ne prouve pas le fonctionnement d’un compte GeniusPay ou Resend en production : un paiement réel exige les identifiants et domaines vérifiés des fournisseurs.
 
-Resend sert également aux messages de bienvenue client et commerçant, ainsi qu’à la récupération de mot de passe client. Les liens de récupération expirent après 30 minutes, sont stockés sous forme hachée et ne peuvent être utilisés qu’une fois; leur utilisation révoque les sessions client existantes. Les rappels d’abonnement par e-mail sont distincts des rappels WhatsApp et restent désactivés tant que le commerçant n’a pas donné son accord dans les paramètres. Appliquer la migration `045_transactional_email_preferences` avant le déploiement. L’envoi réel reste inactif tant que la clé Resend et un expéditeur vérifié ne sont pas configurés dans Render.
+Resend sert également aux messages de bienvenue client et commerçant, ainsi qu’à la récupération de mot de passe client et à la réinitialisation du PIN marchand. Les liens de récupération expirent après 30 minutes, sont stockés sous forme hachée et ne peuvent être utilisés qu’une fois; leur utilisation révoque les sessions client existantes. La réinitialisation du PIN marchand (`/reinitialiser-pin-commercant`) envoie un lien à l’adresse e-mail du propriétaire, expire après 30 minutes, est à usage unique et déconnecte toutes les sessions commerçant de la boutique. Les rappels d’abonnement par e-mail sont distincts des rappels WhatsApp et restent désactivés tant que le commerçant n’a pas donné son accord dans les paramètres. Appliquer les migrations `045_transactional_email_preferences` et `046_merchant_pin_reset_tokens` avant le déploiement. L’envoi réel reste inactif tant que la clé Resend et un expéditeur vérifié ne sont pas configurés dans Render.
 
 ## Règles métier
 
@@ -299,11 +311,11 @@ npm run check:prod
 npm run smoke:prod -- --url https://votre-domaine.com
 ```
 
-`check:prod` bloque si `NODE_ENV` n’est pas `production`, si une variable obligatoire manque, si une clé est trop courte ou identique à l’autre, si `APP_URL` n’est pas une URL HTTPS publique, si `DATABASE_URL` n’utilise pas PostgreSQL, si une table ou une colonne récente manque, ou si une migration versionnée n’est pas enregistrée. Il signale en avertissement les intégrations facultatives incomplètes (Didit, GeniusPay, Resend, Push, WhatsApp, OAuth) et un `DELIVERY_OPERATIONS_ENABLED=true` prématuré. Utilisez `--json` pour un rapport machine et `--skip-database` pour un contrôle hors ligne.
+`check:prod` bloque si `NODE_ENV` n’est pas `production`, si une variable obligatoire manque, si une clé est trop courte ou identique à l’autre, si `APP_URL` n’est pas une URL HTTPS publique, si `DATABASE_URL` n’utilise pas PostgreSQL, si une table ou une colonne récente manque, ou si une migration versionnée n’est pas enregistrée. Il signale en avertissement les intégrations facultatives incomplètes (Didit, GeniusPay, Resend, R2, Push, WhatsApp, OAuth) et un `DELIVERY_OPERATIONS_ENABLED=true` prématuré. Utilisez `--json` pour un rapport machine et `--skip-database` pour un contrôle hors ligne.
 
 `smoke:prod` vérifie les pages publiques, `/health`, le refus `401` de `/api/admin/health`, les assets `/brand-kit/`, le manifeste PWA, `robots.txt`, `sitemap.xml` et les en-têtes de sécurité (`CSP`, `HSTS`, `nosniff`, `DENY`). En local derrière le serveur de production, ajoutez `SMOKE_FORWARDED_PROTO=https` pour satisfaire la redirection HTTPS.
 
-État validé sur PostgreSQL 16 vierge : `npm run test:postgres`, `npm run migrate:neon` (42/42 migrations), `npm run db:backup`, `npm run db:restore:validate`, `npm run check:prod` et `npm run smoke:prod` (47 contrôles) réussissent. Le déploiement Render et l’activation de la livraison restent subordonnés à la fourniture des secrets réels et à l’application des migrations sur la base cible.
+État validé sur PostgreSQL 16 vierge : `npm run test:postgres`, `npm run migrate:neon` (46/46 migrations), `npm run db:backup`, `npm run db:restore:validate`, `npm run check:prod` et `npm run smoke:prod` (47 contrôles) réussissent. Le déploiement Render et l’activation de la livraison restent subordonnés à la fourniture des secrets réels et à l’application des migrations sur la base cible.
 
 ## Déploiement rapide
 
@@ -326,9 +338,11 @@ npm start
 
 Cette version finale est un serveur Node/Express avec Neon PostgreSQL. Déployez-la sur Render, Railway, Fly.io ou un VPS et configurez `DATABASE_URL` avec une base PostgreSQL persistante.
 
+Le service Render décrit dans `render.yaml` exécute `npm ci --include=dev && npm run lint && npm run test:ci && npm run build` avant chaque déploiement : un test ou un contrôle TypeScript en échec bloque la mise en production. `test:ci` force `NODE_ENV=test` et neutralise `DATABASE_URL` afin que la suite n’ouvre jamais la base de production depuis le build. `autoDeploy` reste actif sur `main`, donc chaque push doit être vert localement au préalable. Il n’existe pas encore d’environnement de préproduction distinct.
+
 Vercel convient au frontend statique, mais ne doit pas héberger directement ce serveur Express avec une base locale. Une base PostgreSQL externe est nécessaire.
 
-Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `DATABASE_URL`, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` fortes, uniques et distinctes, `ADVERTISING_BETA_ENABLED=false`, les trois variables Didit et `TRUST_PROXY_HOPS` adapté au reverse proxy. `AD_EVENT_SIGNING_SECRET` est nécessaire uniquement si `ADVERTISING_BETA_ENABLED=true`; dans ce cas, configurez une clé forte, unique et d’au moins 32 caractères. Ne déverrouillez la bêta publicitaire qu’après les contrôles de préproduction décrits ci-dessus.
+Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `DATABASE_URL`, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` fortes, uniques et distinctes, `ADVERTISING_BETA_ENABLED=false`, les trois variables Didit et `TRUST_PROXY_HOPS` adapté au reverse proxy. Les cinq variables R2 (`R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_PUBLIC_BASE_URL`) sont facultatives au démarrage mais requises pour le téléversement d’images ; sans elles, l’interface bascule sur des images base64 compressées. `AD_EVENT_SIGNING_SECRET` est nécessaire uniquement si `ADVERTISING_BETA_ENABLED=true`; dans ce cas, configurez une clé forte, unique et d’au moins 32 caractères. Ne déverrouillez la bêta publicitaire qu’après les contrôles de préproduction décrits ci-dessus.
 
 ## Build production
 

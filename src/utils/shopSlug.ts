@@ -13,6 +13,7 @@ const RESERVED_SHOP_SLUGS = new Set([
   'compte',
   'livreur',
   'recuperation-acces',
+  'reinitialiser-mot-de-passe',
   'mentions-legales',
   'confidentialite',
   'cgu',

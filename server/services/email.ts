@@ -257,6 +257,34 @@ export async function sendCustomerPasswordResetEmail(
   return sendTransactionalEmail({ to: params.customerEmail, subject, html, text }, fetchImplementation);
 }
 
+export async function sendMerchantPinResetEmail(
+  params: {
+    shopName: string;
+    ownerEmail: string;
+    token: string;
+    appUrl?: string;
+  },
+  fetchImplementation: typeof fetch = fetch,
+): Promise<{ sent: boolean; id?: string; error?: string }> {
+  const appUrl = resolveAppUrl(params.appUrl);
+  const resetUrl = `${appUrl}/reinitialiser-pin-commercant?token=${encodeURIComponent(params.token)}`;
+  const subject = 'Réinitialisation du PIN de votre boutique MaTable.ci';
+  const text = `Bonjour,\n\nUne demande de réinitialisation du PIN de la boutique ${params.shopName} a été reçue. Le lien ci-dessous expire dans 30 minutes et ne peut être utilisé qu’une seule fois :\n${resetUrl}\n\nL’utilisation de ce lien confirme l’accès à cette adresse e-mail. Si vous n’êtes pas à l’origine de cette demande, ignorez cet email.`;
+  const html = renderBrandedEmail({
+    title: subject,
+    preheader: 'Confirmez votre adresse e-mail pour choisir un nouveau PIN commerçant.',
+    appUrl,
+    contentHtml: `
+      <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">Réinitialiser le PIN de votre boutique</h1>
+      <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Une demande de réinitialisation du PIN de la boutique <strong style="color:${BRAND.deep};">${escapeHtml(params.shopName)}</strong> a été reçue.</p>
+      <p style="margin:0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Ce lien confirme l’accès à cette adresse e-mail, expire dans 30 minutes et ne peut être utilisé qu’une seule fois.</p>
+      ${renderEmailButton('Choisir un nouveau PIN', resetUrl)}
+      <p style="margin:14px 0 0;font-family:${EMAIL_FONT};font-size:11px;line-height:1.6;color:${BRAND.faint};">Si vous n’êtes pas à l’origine de cette demande, ignorez cet email. Aucun changement ne sera effectué sans utilisation du lien.</p>
+    `,
+  });
+  return sendTransactionalEmail({ to: params.ownerEmail, subject, html, text }, fetchImplementation);
+}
+
 export async function sendMerchantSubscriptionReminderEmail(
   params: {
     shopName: string;

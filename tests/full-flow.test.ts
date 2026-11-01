@@ -2166,6 +2166,25 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal(login.payload.success, true);
   assert.equal(login.payload.shop.id, 1);
 
+  const svgUpload = await apiFetch('/api/shops/1/media/upload-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: 'logo.svg', contentType: 'image/svg+xml' }),
+  });
+  assert.equal(svgUpload.response.status, 400, JSON.stringify(svgUpload.payload));
+  const unknownPurposeUpload = await apiFetch('/api/shops/1/media/upload-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: 'logo.png', contentType: 'image/png', purpose: 'avatars' }),
+  });
+  assert.equal(unknownPurposeUpload.response.status, 400, JSON.stringify(unknownPurposeUpload.payload));
+  const oversizedUpload = await apiFetch('/api/shops/1/media/upload-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: 'logo.png', contentType: 'image/png', size: 9 * 1024 * 1024 }),
+  });
+  assert.equal(oversizedUpload.response.status, 400, JSON.stringify(oversizedUpload.payload));
+
   const missingDescription = await apiFetch('/api/shops/1/products', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2230,6 +2249,95 @@ test('existing merchant full flow: login, product management, order lifecycle, b
     body: JSON.stringify({ price: 2600, sale_price: 2600, sale_starts_at: new Date().toISOString(), sale_ends_at: new Date(Date.now() + 3600_000).toISOString() }),
   });
   assert.equal(invalidSale.response.status, 400);
+
+  // Regression: a product whose photo is still stored as a legacy base64 data URL
+  // must keep it when the merchant re-saves the form (the merchant API returns raw values).
+  const legacyBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  const legacyProductCreate = await apiFetch('/api/shops/1/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: 'Article photo héritée',
+      description: 'Article dont la photo est encore stockée en base64.',
+      price: 1500,
+      stock: 3,
+      image_url: legacyBase64,
+      lookbook_image: legacyBase64,
+      is_available: true,
+    }),
+  });
+  assert.equal(legacyProductCreate.response.status, 200, JSON.stringify(legacyProductCreate.payload));
+  const legacyProductId = legacyProductCreate.payload.product.id;
+  assert.equal(legacyProductCreate.payload.product.image_url, legacyBase64);
+  assert.equal(legacyProductCreate.payload.product.lookbook_image, legacyBase64);
+
+  const legacyProductRead = (await apiFetch('/api/shops/1/products')).payload
+    .find((product: any) => product.id === legacyProductId);
+  assert.ok(legacyProductRead, 'Legacy product should be listed for the merchant');
+  assert.equal(legacyProductRead.image_url, legacyBase64);
+
+  const legacyResave = await apiFetch(`/api/shops/1/products/${legacyProductId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: 'Article photo héritée modifié',
+      image_url: legacyProductRead.image_url,
+      lookbook_image: legacyProductRead.lookbook_image,
+    }),
+  });
+  assert.equal(legacyResave.response.status, 200, JSON.stringify(legacyResave.payload));
+  assert.equal(legacyResave.payload.product.image_url, legacyBase64);
+  assert.equal(legacyResave.payload.product.lookbook_image, legacyBase64);
+
+  // Gallery photos follow the same write path.
+  const legacyGalleryCreate = await apiFetch('/api/shops/1/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: 'Article galerie héritée',
+      description: 'Article dont la galerie est encore stockée en base64.',
+      price: 1500,
+      stock: 3,
+      gallery_images: [legacyBase64],
+      is_available: true,
+    }),
+  });
+  assert.equal(legacyGalleryCreate.response.status, 200, JSON.stringify(legacyGalleryCreate.payload));
+  const legacyGalleryId = legacyGalleryCreate.payload.product.id;
+  assert.deepEqual(legacyGalleryCreate.payload.product.gallery_images, [legacyBase64]);
+  const legacyGalleryResave = await apiFetch(`/api/shops/1/products/${legacyGalleryId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gallery_images: [legacyBase64] }),
+  });
+  assert.equal(legacyGalleryResave.response.status, 200, JSON.stringify(legacyGalleryResave.payload));
+  assert.deepEqual(legacyGalleryResave.payload.product.gallery_images, [legacyBase64]);
+
+  const invalidImageEdit = await apiFetch(`/api/shops/1/products/${legacyProductId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_url: 'javascript:alert(1)' }),
+  });
+  assert.equal(invalidImageEdit.response.status, 400, JSON.stringify(invalidImageEdit.payload));
+  assert.match(String(invalidImageEdit.payload.error), /image invalide/i);
+
+  const invalidImageCreate = await apiFetch('/api/shops/1/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: 'Article image invalide',
+      description: 'Cet article doit être refusé.',
+      price: 1500,
+      stock: 1,
+      image_url: 'not-a-public-url',
+    }),
+  });
+  assert.equal(invalidImageCreate.response.status, 400, JSON.stringify(invalidImageCreate.payload));
+
+  const deleteLegacyProduct = await apiFetch(`/api/shops/1/products/${legacyProductId}`, { method: 'DELETE' });
+  assert.equal(deleteLegacyProduct.response.status, 200, JSON.stringify(deleteLegacyProduct.payload));
+  const deleteLegacyGallery = await apiFetch(`/api/shops/1/products/${legacyGalleryId}`, { method: 'DELETE' });
+  assert.equal(deleteLegacyGallery.response.status, 200, JSON.stringify(deleteLegacyGallery.payload));
 
   const hideProduct = await apiFetch(`/api/shops/1/products/${createdProduct.id}/toggle-visibility`, { method: 'PATCH' });
   assert.equal(hideProduct.response.status, 200, JSON.stringify(hideProduct.payload));
@@ -2470,6 +2578,82 @@ test('new merchant registration flow is local and immediately usable', async () 
   const newShopId = registration.payload.shop.id;
   assert.equal(registration.payload.shop.owner_email_configured, true);
   assert.equal(registration.payload.shop.email_subscription_reminders_enabled, false);
+
+  const unknownMerchantReset = await apiFetch('/api/auth/merchant-pin-reset-request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: uniqueEmail() }),
+  });
+  const knownMerchantReset = await apiFetch('/api/auth/merchant-pin-reset-request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: merchantEmail }),
+  });
+  assert.equal(unknownMerchantReset.response.status, 202);
+  assert.equal(knownMerchantReset.response.status, 202);
+  assert.equal(knownMerchantReset.payload.message, unknownMerchantReset.payload.message);
+  await delay(100);
+
+  const resetToken = randomBytes(32).toString('base64url');
+  const resetTokenHash = createHash('sha256').update(resetToken).digest('hex');
+  const expiredResetToken = randomBytes(32).toString('base64url');
+  const expiredResetTokenHash = createHash('sha256').update(expiredResetToken).digest('hex');
+  const resetTokenDb = new Database(TEST_DB_PATH);
+  try {
+    const now = new Date();
+    resetTokenDb.prepare(
+      'INSERT INTO merchant_pin_reset_tokens (token_hash, shop_id, owner_email, expires_at, created_at) VALUES (?, ?, ?, ?, ?)',
+    ).run(resetTokenHash, newShopId, merchantEmail, new Date(now.getTime() + 30 * 60 * 1000).toISOString(), now.toISOString());
+    resetTokenDb.prepare(
+      'INSERT INTO merchant_pin_reset_tokens (token_hash, shop_id, owner_email, expires_at, created_at) VALUES (?, ?, ?, ?, ?)',
+    ).run(expiredResetTokenHash, newShopId, merchantEmail, new Date(now.getTime() - 1000).toISOString(), now.toISOString());
+  } finally {
+    resetTokenDb.close();
+  }
+  const weakPinReset = await apiFetch('/api/auth/merchant-pin-reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: resetToken, new_pin: '123456' }),
+  });
+  assert.equal(weakPinReset.response.status, 400);
+  const completedPinReset = await apiFetch('/api/auth/merchant-pin-reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: resetToken, new_pin: '387254' }),
+  });
+  assert.equal(completedPinReset.response.status, 200, JSON.stringify(completedPinReset.payload));
+  const resetSessionDb = new Database(TEST_DB_PATH, { readonly: true });
+  try {
+    const remainingSessions = resetSessionDb.prepare('SELECT COUNT(*) AS count FROM merchant_sessions WHERE shop_id = ?').get(newShopId) as { count: number };
+    assert.equal(remainingSessions.count, 0);
+  } finally {
+    resetSessionDb.close();
+  }
+  const reusedPinReset = await apiFetch('/api/auth/merchant-pin-reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: resetToken, new_pin: '245813' }),
+  });
+  assert.equal(reusedPinReset.response.status, 400);
+  const expiredPinReset = await apiFetch('/api/auth/merchant-pin-reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: expiredResetToken, new_pin: '245813' }),
+  });
+  assert.equal(expiredPinReset.response.status, 400);
+  const oldPinLogin = await apiFetch('/api/auth/merchant-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, pin: '654321' }),
+  });
+  assert.equal(oldPinLogin.response.status, 401);
+  const newPinLogin = await apiFetch('/api/auth/merchant-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, pin: '387254' }),
+  });
+  assert.equal(newPinLogin.response.status, 200);
+
   const emailReminderConsent = await apiFetch(`/api/shops/${newShopId}/subscription-email-reminder-consent`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

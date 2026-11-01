@@ -6,7 +6,7 @@ services:
     branch: main
     autoDeploy: true
     healthCheckPath: /health
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run lint && npm run test:ci && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -65,6 +65,18 @@ services:
         sync: false
       - key: RESEND_FROM_EMAIL
         sync: false
+      # Stockage des médias publics (photos produits, logos, bannières).
+      # R2_PUBLIC_BASE_URL doit pointer vers le domaine public du bucket.
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_PUBLIC_BASE_URL
+        sync: false
       - key: GENIUSPAY_API_KEY
         sync: false
       - key: GENIUSPAY_API_SECRET
@@ -74,7 +86,7 @@ services:
       - key: GENIUSPAY_API_URL
         value: https://geniuspay.ci/api/v1/merchant/payments
       # Active le parcours livreur et la facturation des frais de livraison au checkout.
-      # Laisser false jusqu’à ce que les migrations 036 à 042 soient appliquées sur la base cible.
+      # Laisser false jusqu’à ce que les migrations 036 à 046 soient appliquées sur la base cible.
       - key: DELIVERY_OPERATIONS_ENABLED
         value: false
       - key: DELIVERY_REQUIRE_PROOF

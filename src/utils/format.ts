@@ -147,7 +147,8 @@ export function generateWhatsAppOrderReceipt(
 export async function compressImageClientSide(
   file: File,
   maxDimension = 1000,
-  maxSizeKB = 100
+  maxSizeKB = 100,
+  outputType: 'image/jpeg' | 'image/webp' = 'image/jpeg'
 ): Promise<{ dataUrl: string; sizeKB: number }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -184,12 +185,12 @@ export async function compressImageClientSide(
 
         // Iterative compression to stay under maxSizeKB
         let quality = 0.85;
-        let dataUrl = canvas.toDataURL('image/jpeg', quality);
+        let dataUrl = canvas.toDataURL(outputType, quality);
         let sizeKB = Math.round((dataUrl.length * 3) / 4 / 1024);
 
         while (sizeKB > maxSizeKB && quality > 0.3) {
           quality -= 0.1;
-          dataUrl = canvas.toDataURL('image/jpeg', quality);
+          dataUrl = canvas.toDataURL(outputType, quality);
           sizeKB = Math.round((dataUrl.length * 3) / 4 / 1024);
         }
 

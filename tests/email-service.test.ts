@@ -4,6 +4,7 @@ import {
   getResendEmailConfig,
   sendCustomerPasswordResetEmail,
   sendCustomerWelcomeEmail,
+  sendMerchantPinResetEmail,
   sendMerchantSubscriptionReceiptEmail,
   sendMerchantSubscriptionReminderEmail,
   sendMerchantWelcomeEmail,
@@ -217,6 +218,36 @@ test('password reset email includes the one-time token link and escapes customer
     assert.doesNotMatch(requestBody.html, /<img[^>]*src=x/i);
     assert.match(requestBody.html, /https:\/\/matable-ci\.com\/reinitialiser-mot-de-passe\?token=secure-token/);
     assert.match(requestBody.text, /30 minutes/);
+  } finally {
+    if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
+    if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;
+  }
+});
+
+test('merchant PIN reset email links to the secure one-time flow', async () => {
+  const previousApiKey = process.env.RESEND_API_KEY;
+  const previousFrom = process.env.RESEND_FROM_EMAIL;
+  process.env.RESEND_API_KEY = 'resend-key';
+  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  let requestBody: any;
+  try {
+    const result = await sendMerchantPinResetEmail({
+      shopName: '<script>Boutique</script>',
+      ownerEmail: 'merchant@example.com',
+      token: 'secure-merchant-token',
+      appUrl: 'https://matable-ci.com',
+    }, async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ id: 'email_merchant_pin_reset' }), { status: 200 });
+    });
+
+    assert.equal(result.sent, true);
+    assert.equal(requestBody.to[0], 'merchant@example.com');
+    assert.match(requestBody.html, /&lt;script&gt;Boutique&lt;\/script&gt;/);
+    assert.doesNotMatch(requestBody.html, /<script>/);
+    assert.match(requestBody.html, /https:\/\/matable-ci\.com\/reinitialiser-pin-commercant\?token=secure-merchant-token/);
+    assert.match(requestBody.text, /30 minutes/);
+    assert.match(requestBody.text, /confirme l’accès à cette adresse e-mail/i);
   } finally {
     if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
     if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;

@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import type { Product } from '../types';
 import { formatFCFA } from '../utils/format';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
+import { cachedFetchJson } from '../utils/requestCache';
 
 export interface PublicCampaign {
   id: string;
@@ -70,13 +71,16 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
     }
     let cancelled = false;
     setCampaignsLoaded(false);
-    fetch('/api/advertising/campaigns')
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Advertising campaign request failed: ${response.status}`);
-        const payload = await response.json() as { campaigns?: PublicCampaign[] };
-        if (!Array.isArray(payload.campaigns)) throw new Error('Advertising campaign response is invalid.');
+    cachedFetchJson<{ campaigns?: PublicCampaign[] }>('public-campaigns:/api/advertising/campaigns', async () => {
+      const response = await fetch('/api/advertising/campaigns');
+      if (!response.ok) throw new Error(`Advertising campaign request failed: ${response.status}`);
+      const payload = await response.json() as { campaigns?: PublicCampaign[] };
+      if (!Array.isArray(payload.campaigns)) throw new Error('Advertising campaign response is invalid.');
+      return payload;
+    }, 30_000)
+      .then((payload) => {
         if (!cancelled) {
-          setCampaigns(payload.campaigns);
+          setCampaigns(payload.campaigns ?? []);
           setCampaignsLoaded(true);
         }
       })

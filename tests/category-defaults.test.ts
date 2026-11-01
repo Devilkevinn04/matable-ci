@@ -8,8 +8,14 @@ import {
   getWelcomeMessageForDisplay,
   isLegacyGenericProductImage,
   isShopCategory,
+  normalizeProductImage,
   normalizeWelcomeMessage,
   normalizeCustomBannerImage,
+  normalizePublicImageUrl,
+  normalizeStoredCustomBannerImage,
+  normalizeStoredProductImage,
+  sanitizeGalleryImages,
+  sanitizeStoredGalleryImages,
   SHOP_CATEGORIES,
 } from '../src/utils/categoryDefaults';
 import { getAllPresetsForCategory } from '../src/utils/themePresets';
@@ -76,12 +82,14 @@ test('uses the Other defaults for null, undefined, and unknown categories', () =
 test('renders the category placeholder for an empty or legacy generic product image without persisting it', () => {
   const legacyUrl = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600';
   const oldFoodPlaceholder = 'https://images.unsplash.com/photo-1544025162-d76694265947?w=600';
+  const base64Image = 'data:image/webp;base64,AAAA';
   assert.equal(isLegacyGenericProductImage(legacyUrl), true);
   assert.equal(isLegacyGenericProductImage(oldFoodPlaceholder), true);
   assert.equal(getProductImageForDisplay('', 'beauty'), CATEGORY_DEFAULTS.beauty.productPlaceholderImageUrl);
   assert.equal(getProductImageForDisplay(null, 'automotive'), CATEGORY_DEFAULTS.automotive.productPlaceholderImageUrl);
   assert.equal(getProductImageForDisplay(legacyUrl, 'food'), CATEGORY_DEFAULTS.food.productPlaceholderImageUrl);
   assert.equal(getProductImageForDisplay(oldFoodPlaceholder, 'beauty'), CATEGORY_DEFAULTS.beauty.productPlaceholderImageUrl);
+  assert.equal(getProductImageForDisplay(base64Image, 'food'), CATEGORY_DEFAULTS.food.productPlaceholderImageUrl);
   assert.equal(getProductImageForDisplay('https://example.com/real.jpg', 'food'), 'https://example.com/real.jpg');
 });
 
@@ -90,4 +98,41 @@ test('does not treat prior category banner defaults as merchant-owned banner pho
   assert.equal(normalizeCustomBannerImage(oldFashionBanner, 'health'), '');
   assert.equal(getBannerImageForDisplay(oldFashionBanner, 'health'), CATEGORY_DEFAULTS.health.bannerPlaceholderImageUrl);
   assert.equal(normalizeCustomBannerImage('https://example.com/store.jpg', 'health'), 'https://example.com/store.jpg');
+});
+
+test('rejects embedded image payloads before they are treated as valid storefront media', () => {
+  assert.equal(normalizePublicImageUrl('data:image/webp;base64,AAA'), '');
+  assert.equal(normalizePublicImageUrl('blob:https://example.com/abc'), '');
+  assert.equal(normalizePublicImageUrl('https://example.com/logo.png'), 'https://example.com/logo.png');
+  assert.equal(normalizeProductImage('data:image/png;base64,AAAA'), '');
+  assert.equal(normalizeProductImage('blob:https://example.com/product.jpg'), '');
+  assert.equal(normalizeProductImage('https://example.com/product.jpg'), 'https://example.com/product.jpg');
+  assert.equal(normalizeCustomBannerImage('data:image/png;base64,AAAA', 'food'), '');
+});
+
+test('stored media normalizers keep bounded legacy base64 photos on merchant writes', () => {
+  const legacyProduct = 'data:image/webp;base64,AAAA';
+  const legacyBanner = 'data:image/jpeg;base64,BBBB';
+
+  // Display paths stay strict.
+  assert.equal(getProductImageForDisplay(legacyProduct, 'food'), CATEGORY_DEFAULTS.food.productPlaceholderImageUrl);
+  assert.equal(getBannerImageForDisplay(legacyBanner, 'food'), CATEGORY_DEFAULTS.food.bannerPlaceholderImageUrl);
+
+  // Write paths preserve the existing photo instead of wiping it.
+  assert.equal(normalizeStoredProductImage(legacyProduct), legacyProduct);
+  assert.equal(normalizeStoredProductImage('https://example.com/product.jpg'), 'https://example.com/product.jpg');
+  assert.equal(normalizeStoredProductImage('blob:https://example.com/product.jpg'), '');
+  assert.equal(normalizeStoredCustomBannerImage(legacyBanner, 'food'), legacyBanner);
+
+  assert.deepEqual(sanitizeStoredGalleryImages(['data:image/png;base64,CCCC', 'https://example.com/g.jpg', '']), [
+    'data:image/png;base64,CCCC',
+    'https://example.com/g.jpg',
+  ]);
+  assert.equal(sanitizeGalleryImages(['data:image/png;base64,CCCC']), undefined);
+
+  // Legacy category placeholders are still cleared on write.
+  assert.equal(
+    normalizeStoredProductImage('https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600'),
+    '',
+  );
 });

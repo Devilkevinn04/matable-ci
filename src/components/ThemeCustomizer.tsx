@@ -13,7 +13,7 @@ import { BrandDirection, Shop, ThemeConfig } from '../types';
 import { SAFE_THEME_COLORS, estimateDominantColorFromPixels, getContrastTextColor, mixHexColors, normalizeHex } from '../utils/color';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
 import { getAllPresetsForCategory, ThemePreset } from '../utils/themePresets';
-import { compressImageClientSide } from '../utils/format';
+import { normalizeStoredMediaUrl, uploadPublicMediaFile } from '../utils/media';
 import { isSubscriptionFeatureIncluded } from '../utils/subscriptionFeatures';
 import { SHOP_EVENT_TYPES, SHOP_EVENT_VISUALS, normalizeShopEventType } from '../utils/shopEventVisuals';
 
@@ -183,19 +183,21 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
     }));
   };
 
-  const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/') || file.size > 4 * 1024 * 1024) {
+      setSaveError('Choisissez une image de 4 Mo maximum pour votre logo.');
+      event.target.value = '';
       return;
     }
 
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const source = String(reader.result || '');
 
       const image = new Image();
-      image.onload = () => {
+      image.onload = async () => {
         const maxSize = 512;
         const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
         const canvas = document.createElement('canvas');
@@ -203,20 +205,30 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
         canvas.height = Math.max(1, Math.round(image.height * scale));
 
         const context = canvas.getContext('2d');
-        if (!context) return;
+        if (!context) {
+          event.target.value = '';
+          return;
+        }
 
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        const optimizedLogo = canvas.toDataURL('image/webp', 0.86);
         const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
         const dominant = estimateDominantColorFromPixels(data, canvas.width, canvas.height);
         const secondary = mixHexColors(dominant, '#FFFFFF', 0.8);
 
-        updateCustomTheme((prev) => ({
-          ...prev,
-          logo_url: optimizedLogo,
-          primary_color: normalizeHex(dominant),
-          secondary_color: normalizeHex(secondary),
-        }));
+        try {
+          const uploadedUrl = await uploadPublicMediaFile(file, shop.id, { purpose: 'logo', maxDimension: 512, maxSizeKB: 80 });
+          updateCustomTheme((prev) => ({
+            ...prev,
+            logo_url: uploadedUrl,
+            primary_color: normalizeHex(dominant),
+            secondary_color: normalizeHex(secondary),
+          }));
+          setSaveError(null);
+        } catch (error) {
+          setSaveError(error instanceof Error ? error.message : 'Le logo n’a pas pu être téléversé.');
+        } finally {
+          event.target.value = '';
+        }
       };
       image.src = source;
     };
@@ -232,11 +244,11 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
       return;
     }
     try {
-      const { dataUrl } = await compressImageClientSide(file, 1600, 350);
-      updateCustomTheme((current) => ({ ...current, custom_banner_url: dataUrl }));
+      const uploadedUrl = await uploadPublicMediaFile(file, shop.id, { purpose: 'banner', maxDimension: 1600, maxSizeKB: 300 });
+      updateCustomTheme((current) => ({ ...current, custom_banner_url: uploadedUrl }));
       setSaveError(null);
-    } catch {
-      setSaveError("La photo n'a pas pu être optimisée. Essayez un autre fichier.");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "La photo n'a pas pu être téléversée. Essayez un autre fichier.");
     }
     event.target.value = '';
   };
@@ -262,17 +274,23 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
   const handleSaveTheme = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaveError(null);
+    const safeThemeConfig = {
+      ...themeConfig,
+      custom_banner_url: normalizeStoredMediaUrl(themeConfig.custom_banner_url),
+      logo_url: normalizeStoredMediaUrl(themeConfig.logo_url),
+    };
     try {
       setSaving(true);
       const res = await fetch(`/api/shops/${shop.id}/theme`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ theme_config: themeConfig }),
+        body: JSON.stringify({ theme_config: safeThemeConfig }),
       });
       if (res.ok) {
         const data = await res.json();
+        setThemeConfig(safeThemeConfig);
         onUpdateShop(data.shop);
-        setSavedThemeConfig({ ...themeConfig });
+        setSavedThemeConfig({ ...safeThemeConfig });
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 3000);
       } else {

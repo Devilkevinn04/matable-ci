@@ -1,8 +1,10 @@
 import { Router, type RequestHandler } from 'express';
 import { dbGet, dbRun } from '../../db.ts';
 import { addCalendarMonths, getSubscriptionAnalyticsDayLimit } from '../../src/utils/subscriptionFeatures.ts';
-import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
+import { type ShopCategory } from '../../src/utils/categoryDefaults.ts';
+import { normalizeStoredMediaUrl } from '../../src/utils/media.ts';
 import { canUseSubscriptionFeature, getShopPublicationBlockReason, getSubscriptionPlanConfig, getSubscriptionState } from '../services/businessRules.ts';
+import { MediaStorageUnavailableError, MediaUploadValidationError, createMediaUploadUrl, validateMediaUploadRequest } from '../services/mediaStorage.ts';
 import { getVapidConfiguration, isAllowedPushEndpoint } from '../services/pushNotifications.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import { getDefaultSubscriptionPrices, parseSubscriptionPrices } from '../services/subscriptionPricing.ts';
@@ -124,6 +126,9 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
           WHERE id = ?`,
         [name || null, phone, email, emailRemindersEnabled, emailRemindersConsentAt, shop.id],
       );
+    }
+    if (hasPinCode || !sameEmail) {
+      await dbRun('DELETE FROM merchant_pin_reset_tokens WHERE shop_id = ?', [shop.id]);
     }
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, name: name || '', phone: phone || '', email, pin_updated: hasPinCode });
@@ -551,6 +556,39 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     });
   });
 
+  router.post('/:id/media/upload-url', requireMerchantOwnShop, async (req, res) => {
+    const shop = await getShopFromDatabase(Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable' });
+
+    let request: ReturnType<typeof validateMediaUploadRequest>;
+    try {
+      request = validateMediaUploadRequest(req.body);
+    } catch (error) {
+      if (error instanceof MediaUploadValidationError) {
+        return res.status(400).json({ error: error.message });
+      }
+      throw error;
+    }
+
+    try {
+      const upload = await createMediaUploadUrl({
+        shopId: shop.id,
+        filename: request.filename,
+        contentType: request.contentType,
+        purpose: request.purpose,
+        folder: request.folder,
+        size: request.size,
+      });
+      return res.json(upload);
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : 'Le dépôt de médias n’est pas disponible.';
+      if (error instanceof MediaStorageUnavailableError) {
+        return res.status(503).json({ error: message, code: error.code });
+      }
+      return res.status(503).json({ error: message });
+    }
+  });
+
   router.put('/:id/theme', requireMerchantOwnShop, async (req, res) => {
     const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable' });
@@ -583,6 +621,9 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
         ...(requestedBrandDirection ? { brand_direction: requestedBrandDirection } : {}),
         ...(typeof requestedThemeConfig.custom_banner_url === 'string'
           ? { custom_banner_url: normalizeCustomBannerImage(requestedThemeConfig.custom_banner_url, shop.category) }
+          : {}),
+        ...(typeof requestedThemeConfig.logo_url === 'string'
+          ? { logo_url: normalizeStoredMediaUrl(requestedThemeConfig.logo_url) }
           : {}),
       };
       if (requestedThemeConfig.primary_color) shop.theme_color = requestedThemeConfig.primary_color;
@@ -656,6 +697,9 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
         ...(requestedBrandDirection ? { brand_direction: requestedBrandDirection } : {}),
         ...(typeof requestedThemeConfig.custom_banner_url === 'string'
           ? { custom_banner_url: normalizeCustomBannerImage(requestedThemeConfig.custom_banner_url, shop.category) }
+          : {}),
+        ...(typeof requestedThemeConfig.logo_url === 'string'
+          ? { logo_url: normalizeStoredMediaUrl(requestedThemeConfig.logo_url) }
           : {}),
         social_links: {
           instagram: typeof requestedThemeConfig.social_links?.instagram === 'string' ? sanitizeTextField(String(requestedThemeConfig.social_links.instagram), 300) : (shop.theme_config.social_links?.instagram || ''),

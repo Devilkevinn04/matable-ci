@@ -9,6 +9,7 @@ import { CustomerAccount, CustomerAuth, CustomerUser } from './components/Custom
 import { FaqPage } from './components/FaqPage';
 import { AccountRecoveryPage } from './components/AccountRecoveryPage';
 import { CustomerPasswordResetPage } from './components/CustomerPasswordResetPage';
+import { MerchantPinResetPage } from './components/MerchantPinResetPage';
 import { ProductModal } from './components/MerchantDashboard/ProductModal';
 import { MotionSystemProvider, PublicRouteEnter } from './components/MotionSystem';
 import type { MerchantState } from './components/MerchantDashboard/useMerchant';
@@ -79,7 +80,7 @@ const promotionsMetadata = {
 };
 const recoveryMetadata = {
   title: 'Récupérer l’accès à votre compte | MaTable.ci',
-  description: 'Contacter l’assistance pour récupérer l’accès à un compte client ou commerçant MaTable.ci.',
+  description: 'Récupérez l’accès à un compte client ou commerçant MaTable.ci avec un lien sécurisé envoyé par e-mail.',
 };
 const customerLoginMetadata = {
   title: 'Connexion client | MaTable.ci',
@@ -576,6 +577,7 @@ export default function App() {
                       <Route path="/faq" element={<FaqPage />} />
                       <Route path="/recuperation-acces" element={<AccountRecoveryPage initialAccountType={new URLSearchParams(location.search).get('type') === 'merchant' ? 'merchant' : 'customer'} onBack={() => navigate(new URLSearchParams(location.search).get('type') === 'merchant' ? '/app' : '/connexion')} />} />
                       <Route path="/reinitialiser-mot-de-passe" element={<CustomerPasswordResetPage token={new URLSearchParams(location.search).get('token') || ''} onBack={() => navigate('/connexion')} />} />
+                      <Route path="/reinitialiser-pin-commercant" element={<MerchantPinResetPage token={new URLSearchParams(location.search).get('token') || ''} onBack={() => navigate('/app')} />} />
                       <Route path="/mentions-legales" element={<LegalPages page="mentions-legales" />} />
                       <Route path="/confidentialite" element={<LegalPages page="confidentialite" />} />
                       <Route path="/cgu" element={<LegalPages page="cgu" />} />

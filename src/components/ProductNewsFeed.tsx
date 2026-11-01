@@ -11,6 +11,7 @@ import { MotionReveal } from './MotionSystem';
 import { PublicCampaignCarousel, type PublicCampaign } from './PublicCampaignCarousel';
 import { PublicPartnerRequestForm } from './PublicPartnerRequestForm';
 import { useAutoScrollRail } from '../hooks/useAutoScrollRail';
+import { cachedFetchJson } from '../utils/requestCache';
 
 interface FeedShop {
   id: number;
@@ -138,11 +139,15 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
     setIsLoading(true);
     setError(false);
     if (offset === 0) setProducts([]);
-    fetch(`/api/v1/catalog/storefronts/feed?${params.toString()}`, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Product feed request failed: ${response.status}`);
-        const payload = await response.json() as FeedResponse;
-        if (!Array.isArray(payload.products)) throw new Error('Product feed response is invalid.');
+    const feedUrl = `/api/v1/catalog/storefronts/feed?${params.toString()}`;
+    cachedFetchJson<FeedResponse>(`product-feed:${feedUrl}`, async () => {
+      const response = await fetch(feedUrl, { signal: controller.signal });
+      if (!response.ok) throw new Error(`Product feed request failed: ${response.status}`);
+      const payload = await response.json() as FeedResponse;
+      if (!Array.isArray(payload.products)) throw new Error('Product feed response is invalid.');
+      return payload;
+    }, 30_000)
+      .then((payload) => {
         setProducts((current) => deduplicateProductsById(offset === 0 ? payload.products : [...current, ...payload.products]));
         setHasMore(Boolean(payload.has_more));
         setRankingFallback(Boolean(payload.ranking_fallback));

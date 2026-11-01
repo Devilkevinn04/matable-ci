@@ -1,0 +1,56 @@
+name: PostgreSQL backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check backup secrets
+        id: config
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$BACKUP_AGE_RECIPIENT" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Sauvegarde ignorée : DATABASE_URL ou BACKUP_AGE_RECIPIENT n'est pas configuré."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install PostgreSQL client and age
+        if: steps.config.outputs.ready == 'true'
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client age
+
+      - name: Dump and encrypt database
+        if: steps.config.outputs.ready == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+        run: |
+          set -euo pipefail
+          mkdir -p backups
+          dump="backups/matable-$(date -u +%Y%m%dT%H%M%SZ).dump"
+          node scripts/backup-postgres.mjs --output "$dump"
+          age --recipient "$BACKUP_AGE_RECIPIENT" --output "${dump}.age" "$dump"
+          sha256sum "${dump}.age" > "${dump}.age.sha256"
+          rm -f "$dump" "${dump}.sha256"
+
+      - name: Upload encrypted backup
+        if: steps.config.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-backup-${{ github.run_id }}
+          path: backups/*.age*
+          retention-days: 30
+          if-no-files-found: error

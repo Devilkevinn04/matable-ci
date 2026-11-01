@@ -71,7 +71,7 @@ export {
   getMerchantSessionRecord,
   saveMerchantSessionRecord,
 } from './server/repositories/sessions.ts';
-import { getCategoryDefaults, isShopCategory, normalizeCustomBannerImage, normalizeProductImage, normalizeWelcomeMessage, sanitizeGalleryImages } from './src/utils/categoryDefaults.ts';
+import { getCategoryDefaults, isShopCategory, normalizeCustomBannerImage, normalizeStoredCustomBannerImage, normalizeStoredProductImage, normalizeWelcomeMessage, sanitizeStoredGalleryImages } from './src/utils/categoryDefaults.ts';
 import { normalizeCustomerPhone } from './src/utils/normalizeCustomerPhone.ts';
 import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from './src/utils/subscriptionFeatures.ts';
 import type { ShopCategory } from './src/utils/categoryDefaults.ts';
@@ -1087,7 +1087,7 @@ async function startServer() {
     isWeakShopPin,
     hashPin,
     isShopCategory,
-    normalizeCustomBannerImage,
+    normalizeCustomBannerImage: normalizeStoredCustomBannerImage,
     sanitizeTextField,
   }));
   app.use('/api/shops', verificationRouters.merchantRouter);
@@ -1120,6 +1120,8 @@ async function startServer() {
     rateLimitPublicRequest,
     getRateLimitClientAddress,
     verifyPin,
+    hashPin,
+    isWeakShopPin,
     toSafeShop,
     createMerchantSession,
     getCookie,
@@ -1157,8 +1159,8 @@ async function startServer() {
     allocateProductId: () => allocateRecordId('products'),
     persistProduct,
     sanitizeTextField,
-    normalizeProductImage,
-    sanitizeGalleryImages,
+    normalizeProductImage: normalizeStoredProductImage,
+    sanitizeGalleryImages: sanitizeStoredGalleryImages,
     sanitizeProductAttributes,
     trialProductLimit: TRIAL_CATALOG_LIMIT,
   }));

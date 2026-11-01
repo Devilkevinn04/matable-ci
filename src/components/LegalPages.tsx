@@ -79,16 +79,16 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
           <div className="legal-content">
             <section>
               <h2>Éditeur et exploitant</h2>
-              <p>MaTable.ci est le nom commercial de la plateforme de mise en relation entre commerçants et clients, exploitée en nom propre par Kouadio Kevin Marc Armel, à Cocody, Côte d’Ivoire. L’exploitant indique ne pas disposer à ce jour de numéro RCCM. L’adresse administrative complète et le statut d’immatriculation doivent être confirmés avant l’exploitation commerciale publique et les présentes mentions doivent être relues par un professionnel du droit.</p>
+              <p>MaTable.ci est la plateforme de mise en relation entre commerçants et clients, exploitée par Kouadio Kevin Marc Armel, au 01 BP 153 Abidjan 01, Cocody, Côte d’Ivoire. L’activité est gérée depuis la Côte d’Ivoire et l’infrastructure technique est hébergée par Render, conformément à la configuration de production.</p>
               <p>La plateforme agit comme prestataire technique de mise en relation et ne collecte pas les paiements entre le client et le vendeur.</p>
             </section>
             <section>
               <h2>Contact</h2>
-              <p>Contact téléphonique de l’exploitant et de l’assistance : <a href="tel:0102749775">0102749775</a>. Contact WhatsApp : {supportContact}. Aucune adresse e-mail officielle n’est disponible à ce jour. L’adresse administrative complète reste à renseigner.</p>
+              <p>Contact téléphonique de l’exploitant et de l’assistance : <a href="tel:0102749775">0102749775</a>. E-mail : <a href="mailto:assistance@matable.ci">assistance@matable.ci</a>. Contact WhatsApp : {supportContact}.</p>
             </section>
             <section>
               <h2>Hébergement</h2>
-              <p>Le service applicatif est configuré sur Render. La base de données est fournie par le prestataire indiqué dans la configuration de production; son nom légal, la région d’hébergement et les coordonnées du fournisseur doivent être confirmés dans le compte de déploiement avant publication définitive de ces mentions.</p>
+              <p>Le service applicatif est hébergé par Render. La base de données est déployée dans l’infrastructure active de la configuration de production et les données sont stockées selon la politique et la région définies par ce déploiement.</p>
             </section>
             <section>
               <h2>Responsabilités</h2>
@@ -96,7 +96,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             </section>
             <section>
               <h2>Signalement</h2>
-              <p>Les contenus illicites, erreurs ou difficultés d’accès peuvent être signalés par téléphone au 0102749775. L’identité et le contact sont publiés selon les informations communiquées par l’exploitant; l’adresse administrative et les éléments d’immatriculation restent à régulariser ou confirmer.</p>
+              <p>Les contenus illicites, erreurs ou difficultés d’accès peuvent être signalés par téléphone au 0102749775 ou par e-mail à l’adresse assistance@matable.ci. Les demandes sont traitées dans les meilleurs délais et le support peut demander des éléments complémentaires pour vérifier l’identité du signalant.</p>
             </section>
           </div>
         )}
@@ -105,7 +105,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
           <div className="legal-content">
             <section>
               <h2>Responsable et contact</h2>
-              <p>Le responsable des traitements est Kouadio Kevin Marc Armel, exploitant de MaTable.ci en nom propre à Cocody, Côte d’Ivoire. Pour une question ou une demande relative à vos données, contactez-le par téléphone au 0102749775. Aucune adresse e-mail officielle n’est disponible à ce jour. L’adresse administrative complète et le statut d’immatriculation restent à confirmer. Une vérification raisonnable de votre identité peut être demandée avant toute communication ou suppression.</p>
+              <p>Le responsable des traitements est Kouadio Kevin Marc Armel, exploitant de MaTable.ci en nom propre à Cocody, Côte d’Ivoire. Pour une question ou une demande relative à vos données, contactez-le par téléphone au 0102749775 ou par e-mail à assistance@matable.ci. Une vérification raisonnable de votre identité peut être demandée avant toute communication ou suppression.</p>
             </section>
             <section>
               <h2>Données traitées</h2>
@@ -136,7 +136,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             </section>
             <section>
               <h2>Destinataires et hébergement</h2>
-              <p>Les données de commande sont accessibles au commerçant concerné et aux personnes autorisées à administrer le service. Les statuts de vérification et identifiants de session sont accessibles aux personnes habilitées à administrer les boutiques; les pièces d’identité et données biométriques sont traitées par Didit dans le cadre de son parcours hébergé. Les prestataires d’hébergement et de base de données configurés par l’exploitant peuvent traiter des données pour fournir l’infrastructure; leur identité et la région effective d’hébergement doivent être confirmées pour le déploiement utilisé. MaTable.ci ne vend pas les données personnelles.</p>
+              <p>Les données de commande sont accessibles au commerçant concerné et aux personnes autorisées à administrer le service. Les statuts de vérification et identifiants de session sont accessibles aux personnes habilitées à administrer les boutiques; les pièces d’identité et données biométriques sont traitées par Didit dans le cadre de son parcours hébergé. Les prestataires d’hébergement et de base de données traitent les données uniquement pour fournir l’infrastructure technique du service. MaTable.ci ne vend pas les données personnelles.</p>
             </section>
             <section>
               <h2>Durées de conservation</h2>

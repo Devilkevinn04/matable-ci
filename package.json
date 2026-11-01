@@ -24,10 +24,13 @@
     "migrate:neon": "node --import dotenv/config --import tsx scripts/migrate-neon.ts",
     "analytics:report": "node --import tsx scripts/analytics-report.ts",
     "test": "node --import tsx --test tests/*.test.ts services/api-gateway/test/*.test.mjs",
+    "test:ci": "NODE_ENV=test DATABASE_URL= node --import tsx --test tests/*.test.ts services/api-gateway/test/*.test.mjs",
     "test:gateway": "node --test services/api-gateway/test/*.test.mjs",
     "lint:gateway": "node --check services/api-gateway/src/server.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1160.0",
+    "@aws-sdk/s3-request-presigner": "^3.1160.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "bcryptjs": "^3.0.0",

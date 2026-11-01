@@ -9,6 +9,7 @@ import { getProductFromDatabase } from '../repositories/products.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import { getSubscriptionState } from '../services/businessRules.ts';
 import { dispatchStockTransitionPush } from '../services/pushNotifications.ts';
+import { isStorableMediaUrl } from '../../src/utils/media.ts';
 import { validateProductSale } from '../../src/utils/productPricing.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
 import type { ProductRecord } from '../types.ts';
@@ -23,6 +24,22 @@ interface ProductRouterOptions {
   sanitizeGalleryImages: (value: unknown) => string[];
   sanitizeProductAttributes: (value: unknown, category: ShopCategory) => Record<string, string> | undefined;
   trialProductLimit: number;
+}
+
+/**
+ * Media values are validated on write: an explicitly provided value must be a
+ * public URL or a bounded legacy base64 image. Empty values clear the photo.
+ */
+function hasInvalidMediaValue(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value !== 'string') return true;
+  const trimmed = value.trim();
+  return trimmed.length > 0 && !isStorableMediaUrl(trimmed);
+}
+
+function hasInvalidMediaCollection(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  return value.some((item) => typeof item === 'string' && item.trim().length > 0 && !isStorableMediaUrl(item));
 }
 
 export function createProductRouter({
@@ -65,6 +82,9 @@ export function createProductRouter({
       : getSubscriptionProductPhotoLimit(subscription.plan, subscription.planFeatures);
 
     const { title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
+    if (hasInvalidMediaValue(image_url) || hasInvalidMediaValue(lookbook_image) || hasInvalidMediaCollection(gallery_images)) {
+      return res.status(400).json({ error: 'Image invalide. Utilisez un fichier téléversé ou une URL publique https.' });
+    }
     const safeTitle = sanitizeTextField(title, 120);
     const safeDescription = sanitizeTextField(description, 500);
     const numericPrice = Number(price);
@@ -91,7 +111,7 @@ export function createProductRouter({
       category: category ? String(category).trim() : undefined,
       sizes: Array.isArray(sizes) ? sizes : undefined,
       colors: Array.isArray(colors) ? colors : undefined,
-      lookbook_image: lookbook_image || undefined,
+      lookbook_image: lookbook_image ? normalizeProductImage(lookbook_image) : undefined,
       gallery_images: sanitizeGalleryImages(gallery_images),
       prep_time: prep_time !== undefined ? Number(prep_time) : undefined,
       modifier_groups: Array.isArray(modifier_groups) ? modifier_groups : undefined,
@@ -160,6 +180,9 @@ export function createProductRouter({
     const product = { ...currentProduct };
 
     const { title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
+    if (hasInvalidMediaValue(image_url) || hasInvalidMediaValue(lookbook_image) || hasInvalidMediaCollection(gallery_images)) {
+      return res.status(400).json({ error: 'Image invalide. Utilisez un fichier téléversé ou une URL publique https.' });
+    }
     const shop = await getShopFromDatabase(shopId);
     if (shop && !req.adminShopAccess) {
       const subscription = getSubscriptionState(shop);
@@ -210,7 +233,7 @@ export function createProductRouter({
     if (category !== undefined) product.category = category ? String(category).trim() : undefined;
     if (sizes !== undefined) product.sizes = Array.isArray(sizes) ? sizes : undefined;
     if (colors !== undefined) product.colors = Array.isArray(colors) ? colors : undefined;
-    if (lookbook_image !== undefined) product.lookbook_image = lookbook_image;
+    if (lookbook_image !== undefined) product.lookbook_image = lookbook_image ? normalizeProductImage(lookbook_image) : '';
     if (gallery_images !== undefined) product.gallery_images = sanitizeGalleryImages(gallery_images);
     if (prep_time !== undefined) product.prep_time = Number(prep_time);
     if (modifier_groups !== undefined) product.modifier_groups = Array.isArray(modifier_groups) ? modifier_groups : undefined;

@@ -328,6 +328,16 @@ const sqliteSchema = `
   );
   CREATE INDEX IF NOT EXISTS idx_customer_password_reset_user
     ON customer_password_reset_tokens(user_id, expires_at);
+  CREATE TABLE IF NOT EXISTS merchant_pin_reset_tokens (
+    token_hash TEXT PRIMARY KEY,
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    owner_email TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    used_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_merchant_pin_reset_shop
+    ON merchant_pin_reset_tokens(shop_id, expires_at);
   CREATE TABLE IF NOT EXISTS customer_account_consents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -936,6 +946,15 @@ export const postgresMigrations = [
     used_at TEXT
   )`,
   'CREATE INDEX IF NOT EXISTS idx_customer_password_reset_user ON customer_password_reset_tokens(user_id, expires_at)',
+  `CREATE TABLE IF NOT EXISTS merchant_pin_reset_tokens (
+    token_hash TEXT PRIMARY KEY,
+    shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    owner_email TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    used_at TEXT
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_merchant_pin_reset_shop ON merchant_pin_reset_tokens(shop_id, expires_at)',
   `CREATE TABLE IF NOT EXISTS customer_account_consents (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

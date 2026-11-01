@@ -142,6 +142,7 @@ checkOptionalGroup('Rappels WhatsApp', [
   'WHATSAPP_SUBSCRIPTION_REMINDER_TEMPLATE',
   'WHATSAPP_GRAPH_API_VERSION',
 ]);
+checkOptionalGroup('Stockage public R2', ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_PUBLIC_BASE_URL']);
 checkOptionalGroup('Connexion Google', ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET']);
 checkOptionalGroup('Connexion Apple', ['APPLE_SERVICE_ID', 'APPLE_TEAM_ID', 'APPLE_KEY_ID', 'APPLE_PRIVATE_KEY']);
 

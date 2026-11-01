@@ -48,6 +48,7 @@ const migrationVersions = [
   '043_didit_session_resume',
   '044_shop_acquisitions',
   '045_transactional_email_preferences',
+  '046_merchant_pin_reset_tokens',
 ];
 const connectionString = process.env.DATABASE_URL;
 

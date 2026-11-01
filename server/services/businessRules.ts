@@ -13,7 +13,7 @@ import {
 import { getActiveProductPrice } from '../../src/utils/productPricing.ts';
 export { escapeHtml } from '../../src/utils/escapeHtml.ts';
 
-export function computeIsShopOpen(shop: ShopRecord): boolean {
+export function computeIsShopOpen(shop: ShopRecord, currentDate = new Date()): boolean {
   if (shop.opening_hours && shop.opening_hours.enabled && !shop.opening_hours.manual_override) {
     const { open_time: openTime, close_time: closeTime, days } = shop.opening_hours;
     const isValidTime = (value: string) => {
@@ -24,9 +24,8 @@ export function computeIsShopOpen(shop: ShopRecord): boolean {
     if (!isValidTime(openTime) || !isValidTime(closeTime) || !days?.length || days.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) {
       return false;
     }
-    const now = new Date();
-    const abidjanNow = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Abidjan' }));
-    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Abidjan', weekday: 'short' }).format(now);
+    const abidjanNow = new Date(currentDate.toLocaleString('en-US', { timeZone: 'Africa/Abidjan' }));
+    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Abidjan', weekday: 'short' }).format(currentDate);
     const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
     const currentMinutes = abidjanNow.getHours() * 60 + abidjanNow.getMinutes();
     const currentDay = dayMap[weekday] ?? abidjanNow.getDay();
@@ -36,9 +35,10 @@ export function computeIsShopOpen(shop: ShopRecord): boolean {
     const [closeHour, closeMinute] = closeTime.split(':').map(Number);
     const openAt = (openHour || 0) * 60 + (openMinute || 0);
     const closeAt = (closeHour || 0) * 60 + (closeMinute || 0);
-    return closeAt >= openAt
-      ? currentMinutes >= openAt && currentMinutes <= closeAt
-      : currentMinutes >= openAt || currentMinutes <= closeAt;
+    if (closeAt > openAt) {
+      return currentMinutes >= openAt && currentMinutes < closeAt;
+    }
+    return currentMinutes >= openAt || currentMinutes < closeAt;
   }
   return Boolean(shop.is_open);
 }

@@ -8,7 +8,7 @@ import { dbAll, dbTransaction } from '../../db.ts';
 import { listCustomerSessionRecords, revokeOtherCustomerSessionRecords } from '../repositories/sessions.ts';
 import { clearLoginAttempts, getCustomerLoginLockSeconds, isLoginRateLimited, recordCustomerLoginFailure } from '../services/rateLimits.ts';
 import { getShopFromDatabase, loadShopsFromDatabase } from '../repositories/shops.ts';
-import { sendCustomerPasswordResetEmail, sendCustomerWelcomeEmail } from '../services/email.ts';
+import { sendCustomerPasswordResetEmail, sendCustomerWelcomeEmail, sendMerchantPinResetEmail } from '../services/email.ts';
 
 interface MerchantSession {
   shopId: number;
@@ -76,6 +76,8 @@ interface AuthRouterOptions {
   rateLimitPublicRequest: (limit?: number) => RequestHandler;
   getRateLimitClientAddress: (req: Pick<Request, 'ip' | 'socket'>) => string;
   verifyPin: (inputPin: string, storedHash: string) => boolean;
+  hashPin: (pin: string) => string;
+  isWeakShopPin: (pin: unknown) => boolean;
   toSafeShop: (shop: ShopRecord) => object;
   createMerchantSession: (res: Response, shopId: number, req: Request) => Promise<void>;
   getCookie: (req: Request, name: string) => string | null;
@@ -118,6 +120,8 @@ export function createAuthRouter(options: AuthRouterOptions) {
     rateLimitPublicRequest,
     getRateLimitClientAddress,
     verifyPin,
+    hashPin,
+    isWeakShopPin,
     toSafeShop,
     createMerchantSession,
     getCookie,
@@ -699,6 +703,99 @@ export function createAuthRouter(options: AuthRouterOptions) {
       if (session.userId === reset) customerSessions.delete(sessionToken);
     }
     return res.json({ success: true, message: 'Votre mot de passe a été modifié. Vous pouvez vous connecter.' });
+  });
+
+  router.post('/merchant-pin-reset-request', rateLimitPublicRequest(8), async (req, res) => {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      return res.status(400).json({ error: 'Saisissez une adresse e-mail valide.' });
+    }
+
+    res.status(202).json({
+      success: true,
+      message: 'Si une boutique correspond à cette adresse, un lien de réinitialisation va être envoyé.',
+    });
+    void (async () => {
+      const shop = await dbGet<{ id: number; name: string; owner_email: string }>(
+        'SELECT id, name, owner_email FROM shops WHERE LOWER(owner_email) = ?',
+        [email],
+      );
+      if (!shop?.owner_email) return;
+
+      const token = randomBytes(32).toString('base64url');
+      const tokenHash = createHash('sha256').update(token).digest('hex');
+      const createdAt = new Date();
+      const expiresAt = new Date(createdAt.getTime() + 30 * 60 * 1000).toISOString();
+      await dbRun(
+        'DELETE FROM merchant_pin_reset_tokens WHERE shop_id = ? OR expires_at <= ?',
+        [shop.id, createdAt.toISOString()],
+      );
+      await dbRun(
+        'INSERT INTO merchant_pin_reset_tokens (token_hash, shop_id, owner_email, expires_at, created_at) VALUES (?, ?, ?, ?, ?)',
+        [tokenHash, shop.id, shop.owner_email, expiresAt, createdAt.toISOString()],
+      );
+      const emailResult = await sendMerchantPinResetEmail({
+        shopName: shop.name,
+        ownerEmail: shop.owner_email,
+        token,
+      });
+      if (!emailResult.sent) {
+        await dbRun('DELETE FROM merchant_pin_reset_tokens WHERE token_hash = ?', [tokenHash]);
+        if (emailResult.error !== 'email_disabled_in_test') {
+          console.error(`Merchant PIN reset email could not be sent: ${emailResult.error || 'unknown_error'}`);
+        }
+      }
+    })().catch((error: unknown) => console.error('Merchant PIN reset request processing failed.', error));
+    return undefined;
+  });
+
+  router.post('/merchant-pin-reset', rateLimitPublicRequest(10), async (req, res) => {
+    const token = typeof req.body?.token === 'string' ? req.body.token : '';
+    const newPin = typeof req.body?.new_pin === 'string' ? req.body.new_pin : '';
+    if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
+      return res.status(400).json({ error: 'Ce lien de réinitialisation est invalide ou expiré.' });
+    }
+    if (isWeakShopPin(newPin)) {
+      return res.status(400).json({ error: 'Le nouveau PIN doit contenir 6 chiffres et être difficile à deviner.' });
+    }
+
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const now = new Date();
+    const pinHash = hashPin(newPin);
+    const reset = await dbTransaction(async (transaction) => {
+      const record = await transaction.get<{
+        shop_id: number;
+        owner_email: string;
+        expires_at: string;
+        used_at: string | null;
+      }>(
+        'SELECT shop_id, owner_email, expires_at, used_at FROM merchant_pin_reset_tokens WHERE token_hash = ?',
+        [tokenHash],
+      );
+      if (!record || record.used_at) return null;
+      const expiryTime = Date.parse(record.expires_at);
+      if (!Number.isFinite(expiryTime) || expiryTime <= now.getTime()) return null;
+
+      const consumed = await transaction.run(
+        'UPDATE merchant_pin_reset_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL',
+        [now.toISOString(), tokenHash],
+      );
+      if (consumed.changes !== 1) return null;
+      const updatedShop = await transaction.run(
+        'UPDATE shops SET pin_code_hash = ? WHERE id = ? AND LOWER(owner_email) = LOWER(?)',
+        [pinHash, record.shop_id, record.owner_email],
+      );
+      if (updatedShop.changes !== 1) return null;
+      await transaction.run('DELETE FROM merchant_sessions WHERE shop_id = ?', [record.shop_id]);
+      await transaction.run('DELETE FROM merchant_pin_reset_tokens WHERE shop_id = ?', [record.shop_id]);
+      return Number(record.shop_id);
+    });
+    if (!reset) return res.status(400).json({ error: 'Ce lien de réinitialisation est invalide ou expiré.' });
+
+    for (const [sessionToken, session] of merchantSessions) {
+      if (session.shopId === reset) merchantSessions.delete(sessionToken);
+    }
+    return res.json({ success: true, message: 'Votre PIN a été modifié. Toutes les sessions commerçant ont été déconnectées.' });
   });
 
   router.post('/customer-login', rateLimitPublicRequest(20), async (req, res) => {

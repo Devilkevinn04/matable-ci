@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ShopRecord } from '../server/types';
 import { getShopVisibilityScore, rankShopsByVisibility } from '../server/services/visibility';
-import { canReceiveShopOrders, canUseSubscriptionFeature, getSubscriptionState, isShopPubliclyVisible } from '../server/services/businessRules';
+import { canReceiveShopOrders, canUseSubscriptionFeature, computeIsShopOpen, getSubscriptionState, isShopPubliclyVisible } from '../server/services/businessRules';
 import {
   getSubscriptionAnalyticsDayLimit,
   getSubscriptionPrice,
@@ -90,6 +90,18 @@ test('open shops lead and equal visibility rotates every three hours', () => {
   const rotated = rankShopsByVisibility(shops, new Map(), isOpen, now + interval);
   assert.deepEqual(initial.map(({ shop }) => shop.id), [1, 2, 3]);
   assert.deepEqual(rotated.map(({ shop }) => shop.id), [2, 1, 3]);
+});
+
+test('opening hours close exactly at the configured closing time and remain open before it', () => {
+  const monday = 1;
+  const shop = makeShop(42, {
+    is_open: true,
+    opening_hours: { enabled: true, open_time: '08:00', close_time: '22:00', days: [monday], manual_override: false },
+  });
+
+  assert.equal(computeIsShopOpen(shop, new Date('2026-10-05T21:59:00.000Z')), true);
+  assert.equal(computeIsShopOpen(shop, new Date('2026-10-05T22:00:00.000Z')), false);
+  assert.equal(computeIsShopOpen(shop, new Date('2026-10-05T22:01:00.000Z')), false);
 });
 
 test('subscription features follow the selected tier and are disabled after expiry', () => {
