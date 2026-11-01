@@ -5,6 +5,8 @@ import { getSubscriptionState, isSubscriptionManualOverrideActive } from '../ser
 import {
   DEFAULT_SUBSCRIPTION_PRO_FEATURES,
   getSubscriptionAccessCutoff,
+  MIN_PRO_PRODUCT_PHOTO_LIMIT,
+  normalizeSubscriptionProFeatures,
   normalizeSubscriptionTier,
   parseSubscriptionProFeatures,
   type SubscriptionProFeatures,
@@ -493,7 +495,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       'SELECT subscription_plan_features FROM platform_settings WHERE id = 1',
     );
     const proFeatures = settings?.subscription_plan_features
-      ? parseSubscriptionProFeatures(settings.subscription_plan_features)
+      ? normalizeSubscriptionProFeatures(parseSubscriptionProFeatures(settings.subscription_plan_features))
       : DEFAULT_SUBSCRIPTION_PRO_FEATURES;
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ pro_features: proFeatures });
@@ -508,13 +510,18 @@ export function createAdminRouter(options: AdminRouterOptions) {
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : 'Les avantages Pro fournis sont invalides.' });
     }
+    if (proFeatures.productPhotoLimit < MIN_PRO_PRODUCT_PHOTO_LIMIT) {
+      return res.status(400).json({
+        error: `La limite de photos Pro doit être supérieure ou égale à celle de Premium (${MIN_PRO_PRODUCT_PHOTO_LIMIT} photos par article).`,
+      });
+    }
     const updatedAt = new Date().toISOString();
     const result = await dbTransaction(async ({ all, get, run }) => {
       const settings = await get<{ subscription_plan_features: string }>(
         'SELECT subscription_plan_features FROM platform_settings WHERE id = 1',
       );
       const previousFeatures = settings?.subscription_plan_features
-        ? parseSubscriptionProFeatures(settings.subscription_plan_features)
+        ? normalizeSubscriptionProFeatures(parseSubscriptionProFeatures(settings.subscription_plan_features))
         : DEFAULT_SUBSCRIPTION_PRO_FEATURES;
       if (Object.keys(expectedFeatures).some((key) =>
         previousFeatures[key as keyof SubscriptionProFeatures] !== expectedFeatures[key as keyof SubscriptionProFeatures])) {

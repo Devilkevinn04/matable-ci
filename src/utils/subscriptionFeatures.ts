@@ -28,6 +28,15 @@ export const SUBSCRIPTION_PRODUCT_PHOTO_LIMITS: Record<SubscriptionTier, number>
   pro: 6,
 };
 
+// Pro inclut « Tout Premium » : sa limite de photos ne peut pas être inférieure à celle de Premium.
+export const MIN_PRO_PRODUCT_PHOTO_LIMIT = SUBSCRIPTION_PRODUCT_PHOTO_LIMITS.premium;
+
+export function normalizeSubscriptionProFeatures(features: SubscriptionProFeatures): SubscriptionProFeatures {
+  return features.productPhotoLimit >= MIN_PRO_PRODUCT_PHOTO_LIMIT
+    ? features
+    : { ...features, productPhotoLimit: MIN_PRO_PRODUCT_PHOTO_LIMIT };
+}
+
 export const SUBSCRIPTION_ANALYTICS_DAY_LIMITS: Record<SubscriptionTier, number> = {
   standard: 7,
   premium: 30,
@@ -125,7 +134,7 @@ export function getSubscriptionPlanFeatures(
   tier: string | null | undefined,
   proFeatures: SubscriptionProFeatures = DEFAULT_SUBSCRIPTION_PRO_FEATURES,
 ): SubscriptionProFeatures {
-  if (tier === 'pro') return proFeatures;
+  if (tier === 'pro') return normalizeSubscriptionProFeatures(proFeatures);
   const normalizedTier = normalizeSubscriptionTier(tier);
   return {
     productLimit: Number.isFinite(SUBSCRIPTION_PRODUCT_LIMITS[normalizedTier])
@@ -142,13 +151,14 @@ export function getSubscriptionPlanBenefits(
   proFeatures: SubscriptionProFeatures = DEFAULT_SUBSCRIPTION_PRO_FEATURES,
 ): string[] {
   if (tier !== 'pro') return [...SUBSCRIPTION_PLANS[tier].benefits];
+  const effectiveFeatures = normalizeSubscriptionProFeatures(proFeatures);
   return [
     'Tout Premium',
-    `${proFeatures.productLimit === null ? 'Articles illimités' : `Jusqu’à ${proFeatures.productLimit} articles`} et jusqu’à ${proFeatures.productPhotoLimit} photos par article`,
-    `Statistiques détaillées sur ${proFeatures.analyticsDayLimit} jours`,
+    `${effectiveFeatures.productLimit === null ? 'Articles illimités' : `Jusqu’à ${effectiveFeatures.productLimit} articles`} et jusqu’à ${effectiveFeatures.productPhotoLimit} photos par article`,
+    `Statistiques détaillées sur ${effectiveFeatures.analyticsDayLimit} jours`,
     'Meilleure visibilité naturelle dans l’annuaire',
-    ...(proFeatures.boostDiscountPercent > 0
-      ? [`Réduction de ${proFeatures.boostDiscountPercent}% sur les boosts payants`]
+    ...(effectiveFeatures.boostDiscountPercent > 0
+      ? [`Réduction de ${effectiveFeatures.boostDiscountPercent}% sur les boosts payants`]
       : []),
   ];
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  MIN_PRO_PRODUCT_PHOTO_LIMIT,
   parseSubscriptionProFeatures,
   type SubscriptionProFeatures,
 } from '../utils/subscriptionFeatures';
@@ -130,7 +131,7 @@ export function AdminSubscriptionPlanFeatures() {
               Photos maximum par article
               <input
                 type="number"
-                min={1}
+                min={MIN_PRO_PRODUCT_PHOTO_LIMIT}
                 max={20}
                 step={1}
                 required
@@ -138,6 +139,7 @@ export function AdminSubscriptionPlanFeatures() {
                 onChange={(event) => setDrafts((current) => ({ ...current, productPhotoLimit: event.target.value }))}
                 className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-900"
               />
+              <span className="mt-1 block text-[10px] font-normal leading-4 text-slate-500">Minimum {MIN_PRO_PRODUCT_PHOTO_LIMIT}, comme Premium.</span>
             </label>
             <label className="block text-xs font-bold text-slate-700">
               Historique des statistiques (jours)

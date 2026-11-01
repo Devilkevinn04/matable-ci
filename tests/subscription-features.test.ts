@@ -4,6 +4,8 @@ import {
   DEFAULT_SUBSCRIPTION_PRO_FEATURES,
   getSubscriptionPlanBenefits,
   getSubscriptionProductLimit,
+  getSubscriptionProductPhotoLimit,
+  normalizeSubscriptionProFeatures,
   parseSubscriptionProFeatures,
 } from '../src/utils/subscriptionFeatures.ts';
 import { getSubscriptionState } from '../server/services/businessRules.ts';
@@ -30,6 +32,17 @@ test('Pro product limits and displayed benefits follow the configured values', (
   assert.ok(getSubscriptionPlanBenefits('pro', proFeatures).includes('Réduction de 20% sur les boosts payants'));
   assert.equal(getBoostPrice(1, proFeatures.boostDiscountPercent), 800);
   assert.equal(getBoostPrice(1, 0), 1000);
+});
+
+test('Pro photo limit is never displayed below the Premium limit', () => {
+  const legacyProFeatures = { ...DEFAULT_SUBSCRIPTION_PRO_FEATURES, productPhotoLimit: 2 };
+  const normalized = normalizeSubscriptionProFeatures(legacyProFeatures);
+
+  assert.equal(normalized.productPhotoLimit, 5);
+  assert.equal(getSubscriptionProductPhotoLimit('pro', legacyProFeatures), 5);
+  const legacyBenefits = getSubscriptionPlanBenefits('pro', legacyProFeatures);
+  assert.ok(legacyBenefits.some((benefit) => benefit.includes('jusqu’à 5 photos par article')));
+  assert.equal(getSubscriptionProductPhotoLimit('pro', { ...legacyProFeatures, productPhotoLimit: 6 }), 6);
 });
 
 test('existing Pro features remain unchanged until their subscription renewal boundary', () => {

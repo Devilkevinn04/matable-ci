@@ -1,3 +1,5 @@
+import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from './subscriptionFeatures';
+
 export interface FaqQuestion {
   question: string;
   answer: string;
@@ -72,7 +74,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         question: 'Quelles sont les formules et les tarifs ?',
-        answer: 'Standard permet jusqu’à 20 articles, Premium et Pro un catalogue illimité. Consultez les tarifs mensuels et annuels à jour sur la page Formules commerçants; le tarif affiché au moment du paiement est appliqué. Le paiement annuel correspond à 10 mensualités pour 12 mois de service. Un essai Standard gratuit de 7 jours est proposé, avec un maximum de 2 produits; vous pouvez aussi payer directement une formule.',
+        answer: `Standard permet jusqu’à 20 articles, Premium et Pro un catalogue illimité. Consultez les tarifs mensuels et annuels à jour sur la page Formules commerçants; le tarif affiché au moment du paiement est appliqué. Le paiement annuel correspond à 10 mensualités pour 12 mois de service. Un essai Standard gratuit de ${TRIAL_DURATION_MONTHS} mois est proposé, avec un maximum de ${TRIAL_CATALOG_LIMIT} produits; vous pouvez aussi payer directement une formule.`,
       },
       {
         question: 'Comment fonctionne la mise en avant payante ?',

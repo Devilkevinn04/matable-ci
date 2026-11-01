@@ -49,6 +49,7 @@ const migrationVersions = [
   '044_shop_acquisitions',
   '045_transactional_email_preferences',
   '046_merchant_pin_reset_tokens',
+  '047_align_pro_photo_limit',
 ];
 const connectionString = process.env.DATABASE_URL;
 

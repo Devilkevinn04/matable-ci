@@ -37,7 +37,7 @@ actives y sont identifiées et affichées avant les produits.
 
 Le dashboard propose les vues Accueil, Produits, Commandes et Statistiques, avec une navigation mobile à cinq onglets ; les réglages, le partage, l’abonnement, les boosts et l’assistance sont regroupés dans « Plus ». Le catalogue, le suivi des commandes, les horaires, l’apparence, la vérification, les rappels d’échéance consentis et les statistiques sont disponibles selon l’état de la boutique et le forfait.
 
-Les limites sont vérifiées côté serveur : Standard permet 20 produits et 2 photos par produit, Premium un nombre illimité de produits et 5 photos, Pro un nombre illimité de produits et jusqu’à 6 photos. Les statistiques couvrent respectivement 7, 30 et 90 jours. L’essai reste limité à 2 produits et bénéficie des statistiques sur 7 jours.
+Les limites sont vérifiées côté serveur : Standard permet 20 produits et 2 photos par produit, Premium un nombre illimité de produits et 5 photos, Pro un nombre illimité de produits et jusqu’à 6 photos. Pro incluant « Tout Premium », une configuration Pro ne peut pas descendre sous 5 photos par article. Les statistiques couvrent respectivement 7, 30 et 90 jours. L’essai reste limité à 2 produits et bénéficie des statistiques sur 7 jours.
 
 Le menu « Partage » génère un QR code PNG et une affiche PNG personnalisée avec le nom, la catégorie et la couleur de la boutique. Le QR code ne contient que le lien public et reste désactivé tant que la vitrine n’est pas publiée. Les fonctions suivantes ne sont pas encore disponibles dans le dashboard : comptes d’équipe, import CSV des produits, export CSV des commandes, codes promotionnels et programme de parrainage.
 
@@ -74,7 +74,7 @@ En paiement réel, chaque forfait crée une intention `delivery_driver_payment_i
 
 #### Mise en production de la livraison
 
-1. Sauvegarder la base cible, puis appliquer les migrations dans l’ordre avec `DATABASE_URL=<url-directe> npm run migrate:neon` et vérifier que `036` à `046` sont enregistrées.
+1. Sauvegarder la base cible, puis appliquer les migrations dans l’ordre avec `DATABASE_URL=<url-directe> npm run migrate:neon` et vérifier que `036` à `047` sont enregistrées.
 2. Configurer `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` et `VAPID_SUBJECT` sur le service Render pour activer les notifications Push. Sans ces clés, les abonnements répondent `503` sans bloquer les courses.
 3. Renseigner `APP_URL` avec l’URL publique et vérifier les secrets GeniusPay si le forfait livreur est encaissé en ligne.
 4. Passer `DELIVERY_OPERATIONS_ENABLED` à `true`, redéployer, puis contrôler le lien public `/livreur`, le consentement et le retour Didit, l’activation après webhook signé, le checkout GeniusPay confirmé et le choix de zone au checkout client.
@@ -315,7 +315,7 @@ npm run smoke:prod -- --url https://votre-domaine.com
 
 `smoke:prod` vérifie les pages publiques, `/health`, le refus `401` de `/api/admin/health`, les assets `/brand-kit/`, le manifeste PWA, `robots.txt`, `sitemap.xml` et les en-têtes de sécurité (`CSP`, `HSTS`, `nosniff`, `DENY`). En local derrière le serveur de production, ajoutez `SMOKE_FORWARDED_PROTO=https` pour satisfaire la redirection HTTPS.
 
-État validé sur PostgreSQL 16 vierge : `npm run test:postgres`, `npm run migrate:neon` (46/46 migrations), `npm run db:backup`, `npm run db:restore:validate`, `npm run check:prod` et `npm run smoke:prod` (47 contrôles) réussissent. Le déploiement Render et l’activation de la livraison restent subordonnés à la fourniture des secrets réels et à l’application des migrations sur la base cible.
+État validé sur PostgreSQL 16 vierge : `npm run test:postgres`, `npm run migrate:neon` (47/47 migrations), `npm run db:backup`, `npm run db:restore:validate`, `npm run check:prod` et `npm run smoke:prod` (47 contrôles) réussissent. Le déploiement Render et l’activation de la livraison restent subordonnés à la fourniture des secrets réels et à l’application des migrations sur la base cible.
 
 ## Déploiement rapide
 

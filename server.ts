@@ -31,6 +31,7 @@ import { getResendEmailConfig, sendMerchantSubscriptionReminderEmail } from './s
 import { getDefaultSubscriptionPrices, parseSubscriptionPrices } from './server/services/subscriptionPricing.ts';
 import {
   DEFAULT_SUBSCRIPTION_PRO_FEATURES,
+  normalizeSubscriptionProFeatures,
   parseSubscriptionProFeatures,
 } from './src/utils/subscriptionFeatures.ts';
 import { retryPendingMerchantPushes, sendMerchantPush } from './server/services/pushNotifications.ts';
@@ -1014,7 +1015,7 @@ async function startServer() {
       ? parseSubscriptionPrices(settings.subscription_plan_prices)
       : getDefaultSubscriptionPrices();
     const proFeatures = settings?.subscription_plan_features
-      ? parseSubscriptionProFeatures(settings.subscription_plan_features)
+      ? normalizeSubscriptionProFeatures(parseSubscriptionProFeatures(settings.subscription_plan_features))
       : DEFAULT_SUBSCRIPTION_PRO_FEATURES;
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ prices, pro_features: proFeatures });
