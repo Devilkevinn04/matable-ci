@@ -78,7 +78,8 @@ import { normalizeCustomerPhone } from './src/utils/normalizeCustomerPhone.ts';
 import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from './src/utils/subscriptionFeatures.ts';
 import type { ShopCategory } from './src/utils/categoryDefaults.ts';
 import { findPublicDiscoveryPage } from './src/utils/discoverySeo.ts';
-import { PUBLIC_PRODUCT_IMAGE_PATH, resolveProductImageRequest } from './server/services/publicProductImages.ts';
+import { getPublicDomainRedirect } from './server/services/hostRedirect.ts';
+import { PUBLIC_PRODUCT_IMAGE_PATH, parseRequestedImageWidth, resizeProductImage, resolveProductImageRequest } from './server/services/publicProductImages.ts';
 
 export { buildSessionFingerprint, isRequestFingerprintMatch };
 
@@ -897,6 +898,19 @@ async function startServer() {
   app.set('trust proxy', Number.isInteger(trustedProxyHops) && trustedProxyHops > 0 ? trustedProxyHops : false);
 
   app.use((req: Request, res: Response, next: express.NextFunction) => {
+    const redirectTo = getPublicDomainRedirect({
+      nodeEnv: process.env.NODE_ENV,
+      appUrl: process.env.APP_URL,
+      host: req.get('host'),
+      method: req.method,
+      path: req.path,
+      originalUrl: req.originalUrl,
+    });
+    if (redirectTo) return res.redirect(301, redirectTo);
+    next();
+  });
+
+  app.use((req: Request, res: Response, next: express.NextFunction) => {
     const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
     const isSecureRequest = req.secure || forwardedProto === 'https';
     if (process.env.NODE_ENV === 'production' && !isSecureRequest) {
@@ -1074,8 +1088,10 @@ async function startServer() {
       'SELECT image_url, thumbnail_url, gallery_images, lookbook_image FROM products WHERE id = ?',
       [productId],
     );
-    const image = resolveProductImageRequest(String(req.params.file), row);
-    if (!image) return res.status(404).end();
+    const original = resolveProductImageRequest(String(req.params.file), row);
+    if (!original) return res.status(404).end();
+    const requestedWidth = parseRequestedImageWidth(req.query.w);
+    const image = requestedWidth ? await resizeProductImage(original, requestedWidth) : original;
     res.set({
       'Content-Type': image.contentType,
       'Cache-Control': 'public, max-age=31536000, immutable',

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Store, ShieldCheck, ShoppingBag, Compass, CircleHelp, BookOpen, Menu, X, Sparkles, Search, Home, ArrowUpRight, BadgePercent, Bike } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-import { CustomerUser } from './CustomerAuth';
+import type { CustomerUser } from './CustomerAuth';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../utils/categoryDefaults';
 
 interface NavigationProps {

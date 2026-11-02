@@ -40,7 +40,7 @@ import {
   trackWhatsAppClick,
 } from '../utils/analyticsTracker';
 import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from '../utils/analyticsAttribution';
-import { CustomerUser } from './CustomerAuth';
+import type { CustomerUser } from './CustomerAuth';
 import { CustomerCheckoutAuth } from './CustomerCheckoutAuth';
 import { CustomerTrustPanel } from './CustomerTrustPanel';
 import { getCanonicalOrigin } from '../utils/seoCanonical';
@@ -1326,6 +1326,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         imageUrl={item.product.image_url}
                         category={shop.category}
                         title={item.product.title}
+                        sizes="48px"
                         className="h-12 w-12 shrink-0 rounded-lg"
                       />
                       <div className="min-w-0 flex-1">
@@ -1558,6 +1559,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                           imageUrl={item.product.image_url}
                           category={shop.category}
                           title={item.product.title}
+                          sizes="48px"
                           className="h-12 w-12 shrink-0 rounded-lg"
                         />
                         <div className="min-w-0 flex-1">

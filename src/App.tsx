@@ -3,20 +3,24 @@ import { Link, Route, Routes, useLocation, useNavigate, useNavigationType, usePa
 import { Navigation } from './components/Navigation';
 import { ToastProvider } from './components/Toast';
 import { Footer } from './components/Footer';
-import { LegalPageKey, LegalPages } from './components/LegalPages';
+import type { LegalPageKey } from './components/LegalPages';
 import { CookieBanner } from './components/CookieBanner';
-import { CustomerAccount, CustomerAuth, CustomerUser } from './components/CustomerAuth';
-import { FaqPage } from './components/FaqPage';
-import { AccountRecoveryPage } from './components/AccountRecoveryPage';
-import { CustomerPasswordResetPage } from './components/CustomerPasswordResetPage';
-import { MerchantPinResetPage } from './components/MerchantPinResetPage';
-import { ProductModal } from './components/MerchantDashboard/ProductModal';
+import type { CustomerUser } from './components/CustomerAuth';
 import type { MerchantState } from './components/MerchantDashboard/useMerchant';
 import type { Shop } from './types';
 import { findPublicDiscoveryPage } from './utils/discoverySeo';
 import { getCanonicalOrigin } from './utils/seoCanonical';
 import { trackPageView, trackLogout } from './utils/analyticsTracker';
 
+// Pages most visitors never open stay out of the first JavaScript download.
+const LegalPages = React.lazy(() => import('./components/LegalPages').then((module) => ({ default: module.LegalPages })));
+const CustomerAuth = React.lazy(() => import('./components/CustomerAuth').then((module) => ({ default: module.CustomerAuth })));
+const CustomerAccount = React.lazy(() => import('./components/CustomerAuth').then((module) => ({ default: module.CustomerAccount })));
+const FaqPage = React.lazy(() => import('./components/FaqPage').then((module) => ({ default: module.FaqPage })));
+const AccountRecoveryPage = React.lazy(() => import('./components/AccountRecoveryPage').then((module) => ({ default: module.AccountRecoveryPage })));
+const CustomerPasswordResetPage = React.lazy(() => import('./components/CustomerPasswordResetPage').then((module) => ({ default: module.CustomerPasswordResetPage })));
+const MerchantPinResetPage = React.lazy(() => import('./components/MerchantPinResetPage').then((module) => ({ default: module.MerchantPinResetPage })));
+const ProductModal = React.lazy(() => import('./components/MerchantDashboard/ProductModal').then((module) => ({ default: module.ProductModal })));
 const CustomerStorefront = React.lazy(() => import('./components/CustomerStorefront').then((module) => ({ default: module.CustomerStorefront })));
 const MerchantDashboard = React.lazy(() => import('./components/MerchantDashboard/index').then((module) => ({ default: module.MerchantDashboard })));
 const AdminDashboard = React.lazy(() => import('./components/AdminDashboard').then((module) => ({ default: module.AdminDashboard })));

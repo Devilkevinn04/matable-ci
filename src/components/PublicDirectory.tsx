@@ -4,11 +4,12 @@ import { ArrowRight, ArrowUpRight, BadgePercent, CheckCircle2, Clock3, MapPin, M
 import { MotionReveal } from './MotionSystem';
 import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDisplay, isShopCategory, SHOP_CATEGORIES } from '../utils/categoryDefaults';
 import { shopMatchesDirectorySearch } from '../utils/directorySearch';
-import { getPublicDiscoveryPages, toDiscoveryCitySlug, type DiscoveryPage } from '../utils/discoverySeo';
+import { getDiscoveryCityLabel, getPublicDiscoveryPages, toDiscoveryCitySlug, type DiscoveryPage } from '../utils/discoverySeo';
 import { ProductNewsFeed, type FeedProduct } from './ProductNewsFeed';
 import { PublicCampaignCarousel, type PublicCampaign } from './PublicCampaignCarousel';
 import { PublicPartnerCarousel, type PublicPermanentPartner } from './PublicPartnerCarousel';
 import { formatFCFA } from '../utils/format';
+import { getResponsiveImageProps } from '../utils/responsiveImages';
 import { useAutoScrollRail } from '../hooks/useAutoScrollRail';
 
 interface DirectoryShop {
@@ -147,7 +148,7 @@ const openPartnerRequest = (event: React.MouseEvent<HTMLButtonElement>) => {
   requestForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
 };
 
-const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[]; isLoading: boolean }> = ({ shops, isLoading }) => {
+const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[]; isLoading?: boolean }> = ({ shops, isLoading = false }) => {
   const highlighted = [...shops]
     .filter((shop) => (shop.products_preview?.length || 0) > 0)
     .sort((left, right) => Number(Boolean(right.is_verified)) - Number(Boolean(left.is_verified))
@@ -166,7 +167,7 @@ const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[]; isLoading: boolean 
           return <li key={shop.slug}>
             <Link to={`/${encodeURIComponent(shop.slug)}`} className="group flex min-h-[64px] items-center gap-3 rounded-2xl border border-[#e3ece6] bg-white p-2 pr-3 transition hover:border-[#b9d5ca] hover:shadow-[0_8px_18px_rgba(20,40,30,.08)]">
               <span className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-[#e9f5ee]">
-                {product && <img src={getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category)} alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />}
+                {product && <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), shop.category), 320)} sizes="64px" alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -183,7 +184,7 @@ const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[]; isLoading: boolean 
         })}
       </ul>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        {hasVerifiedShop && <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#315548]"><ShieldCheck className="h-4 w-4 text-[#059669]" aria-hidden="true" /> « Vérifié » : identité du commerçant contrôlée</span>}
+        {(hasVerifiedShop || isLoading) && <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#315548] ${isLoading ? 'invisible' : ''}`}><ShieldCheck className="h-4 w-4 text-[#059669]" aria-hidden="true" /> « Vérifié » : identité du commerçant contrôlée</span>}
         <Link to="/boutiques" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-[#065f46] hover:text-[#047857]">
           Toutes les boutiques <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Link>
@@ -235,6 +236,24 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
   const categories = SHOP_CATEGORIES.filter((item) => availableCategories.has(item));
   const discoveryPages = getPublicDiscoveryPages(directoryShops);
   const cityPages = discoveryPages.filter((page) => page.city);
+  // Hero shortcuts: every commune with at least one shop. Communes with a single shop have no
+  // SEO landing page (too thin), so their chip opens the directory search instead.
+  const heroNeighbourhoods = (() => {
+    const byLabel = new Map<string, { label: string; path: string; count: number }>();
+    for (const shop of directoryShops) {
+      const label = shop.city ? getDiscoveryCityLabel(shop.city) : '';
+      const slug = label ? toDiscoveryCitySlug(label) : '';
+      if (!label || !slug || ['cote-d-ivoire', 'cote-divoire'].includes(slug)) continue;
+      const page = cityPages.find((candidate) => candidate.citySlug === slug);
+      const existing = byLabel.get(slug);
+      byLabel.set(slug, {
+        label: existing?.label || label,
+        path: page?.path || `/boutiques?q=${encodeURIComponent(label)}`,
+        count: (existing?.count || 0) + 1,
+      });
+    }
+    return [...byLabel.values()].sort((left, right) => right.count - left.count).slice(0, MAX_HERO_NEIGHBOURHOODS);
+  })();
   const relatedDiscoveryPages = discoveryPage?.city
     ? discoveryPages.filter((page) => page.category)
     : cityPages;
@@ -550,11 +569,11 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Échange direct</span>
               <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Retrait ou livraison à convenir</span>
             </div>
-            {cityPages.length > 0 && <nav aria-label="Boutiques par quartier" className="mt-4 flex flex-wrap items-center gap-2">
+            {heroNeighbourhoods.length > 0 && <nav aria-label="Boutiques par quartier" className="mt-4 flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold text-[#47534b]">Près de chez vous :</span>
-              {cityPages.slice(0, MAX_HERO_NEIGHBOURHOODS).map((page) => (
-                <Link key={page.path} to={page.path} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#cfe3d8] bg-white px-3 text-xs font-bold text-[#065f46] transition hover:border-[#047857] hover:bg-[#f0f8f3]">
-                  <MapPin className="h-3.5 w-3.5" aria-hidden="true" />{page.city}
+              {heroNeighbourhoods.map((neighbourhood) => (
+                <Link key={neighbourhood.path} to={neighbourhood.path} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#cfe3d8] bg-white px-3 text-xs font-bold text-[#065f46] transition hover:border-[#047857] hover:bg-[#f0f8f3]">
+                  <MapPin className="h-3.5 w-3.5" aria-hidden="true" />{neighbourhood.label}
                 </Link>
               ))}
             </nav>}
@@ -665,7 +684,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <MotionReveal key={shop.slug} delay={index * 0.04} className="h-[336px] min-w-[78%] snap-start sm:min-w-[44%] lg:min-w-[calc(25%-12px)]">
                   <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className="motion-interactive group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white shadow-[0_2px_12px_rgba(20,40,30,.05)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.1)]">
                     <span className="relative block aspect-[1.45] overflow-hidden bg-[#e9f5ee]">
-                      <img src={getShopImage(shop)} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" onError={(event) => { event.currentTarget.hidden = true; }} />
+                      <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" onError={(event) => { event.currentTarget.hidden = true; }} />
                       <span className="absolute left-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-[8px] font-black uppercase tracking-wide text-[#8f351d] sm:text-[9px]">{categoryLabel(shop.category)}</span>
                       {(shop.is_sponsored || shop.is_featured) && <span className="absolute right-2 top-2 rounded-full bg-[#065f46]/95 px-2.5 py-1 text-[8px] font-black uppercase tracking-wide text-white">À la une</span>}
                     </span>
@@ -679,7 +698,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                         {shop.products_preview.slice(0, 2).map((product) => (
                           <span key={product.id} className="flex min-w-0 flex-1 items-center gap-1.5">
                             <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#e9f5ee]">
-                              <img src={getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category)} alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />
+                              <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), shop.category), 320)} sizes="64px" alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />
                             </span>
                             <span className="min-w-0">
                               <span className="block truncate text-[9px] font-semibold text-[#47534b]">{product.title}</span>
@@ -848,7 +867,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045} className={filteredShops.length === 1 ? 'mx-auto w-full max-w-[760px]' : undefined}>
               <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className="motion-interactive group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[#FFFFFF] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2 sm:rounded-[24px]">
                 <div className="relative aspect-[1.35] shrink-0 overflow-hidden sm:aspect-[1.65]" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
-                  <img src={getShopImage(shop)} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
+                  <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
                   <span className="absolute inset-0 bg-gradient-to-t from-[#17211f]/75 via-transparent to-[#17211f]/5" />
                   <span className="absolute bottom-3 left-3 rounded-full bg-[#FFFFFF]/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#065f46] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
                 </div>

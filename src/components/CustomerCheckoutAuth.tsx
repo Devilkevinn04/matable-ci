@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ArrowRight, CheckCircle2, Eye, EyeOff, Lock, Mail, ShieldCheck, Sparkles } from 'lucide-react';
-import { CustomerUser } from './CustomerAuth';
+import type { CustomerUser } from './CustomerAuth';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
 import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
 import { TermsPrivacyConsent } from './TermsPrivacyConsent';

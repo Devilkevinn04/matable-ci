@@ -269,6 +269,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
                 title={selectedImage.alt}
                 showFallbackTitle={false}
                 imageFit="contain"
+                sizes="100vw"
                 className="h-full max-h-full w-full max-w-full"
               />
               {productImages.length > 1 && (
