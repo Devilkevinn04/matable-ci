@@ -310,7 +310,7 @@ export function createPublicShopsRouter({
         publication_status, featured_until, merchant_verification_status, selected_subscription_tier,
         subscription_status, trial_start, trial_end, subscription_expires_at,
         subscription_admin_override_status, subscription_admin_override_tier, subscription_admin_override_until,
-        created_at, category, city, theme_config, opening_hours
+        created_at, catalog_updated_at, category, city, theme_config, opening_hours
        FROM shops WHERE slug = ? OR CAST(id AS TEXT) = ? LIMIT 1`,
       [slug, slug],
     );
@@ -380,6 +380,7 @@ export function createPublicShopsRouter({
         ...(isMerchantForShop ? { subscription: getSubscriptionState(shop) } : {}),
         category: shop.category,
         city: shop.city,
+        catalog_updated_at: shop.catalog_updated_at,
         theme_config: shop.theme_config,
         opening_hours: shop.opening_hours,
         ...(isAdminForShop ? { admin_mode: true } : {}),

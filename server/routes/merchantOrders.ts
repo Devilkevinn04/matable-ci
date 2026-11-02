@@ -1,5 +1,7 @@
 import { Router, type RequestHandler } from 'express';
 import { databaseMode, dbAll, dbGet, dbTransaction } from '../../db.ts';
+import { stringifyCsv } from '../../src/utils/csv.ts';
+import { CUSTOMER_LOYALTY_REWARD_THRESHOLD } from '../../src/utils/customerLoyalty.ts';
 import { mapProductRow } from '../repositories/products.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
@@ -10,7 +12,14 @@ import {
   isOrderContactAvailable,
   maskContactPhone,
 } from '../services/contactGuard.ts';
-import { dispatchDeliveryCancelledPush } from '../services/deliveryNotifications.ts';
+import {
+  dispatchDeliveryCancelledPush,
+  dispatchDeliveryCreatedPush,
+} from '../services/deliveryNotifications.ts';
+import {
+  expirePendingOrderInTransaction,
+  restoreReservedOrderStock,
+} from '../services/orderLifecycle.ts';
 
 interface MerchantOrdersOptions {
   shops: ShopRecord[];
@@ -69,6 +78,39 @@ export function createMerchantOrdersRouter({
 }: MerchantOrdersOptions) {
   const router = Router({ mergeParams: true });
 
+  router.get('/:id/orders/export.csv', requireMerchantAccess, async (req, res) => {
+    if (req.adminRole === 'verification_admin') {
+      return res.status(403).json({ error: 'L’export des commandes est réservé au commerçant et aux administrateurs autorisés.' });
+    }
+    const shopId = Number(req.params.id);
+    const rows = await dbAll<Record<string, unknown>>(
+      'SELECT * FROM orders WHERE shop_id = ? ORDER BY created_at DESC, id DESC',
+      [shopId],
+    );
+    const ordersToExport = rows.map(mapOrderRow);
+    const csvRows = [
+      ['id', 'created_at', 'status', 'customer_name', 'customer_phone', 'delivery_location', 'delivery_note', 'delivery_slot', 'payment_method_preference', 'total_amount', 'delivery_fee', 'items'],
+      ...ordersToExport.map((order) => [
+        order.id,
+        order.created_at,
+        order.status,
+        order.customer_name,
+        order.customer_phone,
+        order.delivery_location,
+        order.delivery_note,
+        order.delivery_slot,
+        order.payment_method_preference,
+        order.total_amount,
+        order.delivery_fee || 0,
+        JSON.stringify(order.items || []),
+      ]),
+    ];
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="commandes-${shopId}.csv"`);
+    res.send(`\uFEFF${stringifyCsv(csvRows)}`);
+  });
+
   router.get('/:id/orders', requireMerchantAccess, async (req, res) => {
     const shopId = Number(req.params.id);
     res.setHeader('Cache-Control', 'no-store');
@@ -76,9 +118,49 @@ export function createMerchantOrdersRouter({
       order_whatsapp_tracking.clicked_at AS whatsapp_clicked_at
       FROM orders LEFT JOIN order_whatsapp_tracking ON order_whatsapp_tracking.order_id = orders.id
       WHERE orders.shop_id = ? ORDER BY orders.created_at DESC, orders.id DESC`, [shopId]);
+    const customerIds = req.adminRole === 'verification_admin'
+      ? []
+      : [...new Set(rows
+        .map((row) => Number(row.customer_user_id))
+        .filter((userId) => Number.isSafeInteger(userId) && userId > 0))];
+    const customerIdSet = new Set(customerIds);
+    const loyaltyCounts = customerIds.length > 0
+      ? await dbAll<{ customer_user_id: number | string; delivered_orders: number | string }>(
+        `SELECT customer_user_id, COUNT(*) AS delivered_orders FROM orders
+         WHERE shop_id = ? AND status = 'delivered' AND customer_user_id IS NOT NULL
+         GROUP BY customer_user_id`,
+        [shopId],
+      )
+      : [];
+    const redemptionCounts = customerIds.length > 0
+      ? await dbAll<{ user_id: number | string; count: number | string }>(
+        `SELECT user_id, COUNT(*) AS count FROM customer_loyalty_redemptions
+         WHERE shop_id = ?
+         GROUP BY user_id`,
+        [shopId],
+      )
+      : [];
+    const deliveredByCustomer = new Map(
+      loyaltyCounts.map((row) => [Number(row.customer_user_id), Number(row.delivered_orders) || 0]),
+    );
+    const redeemedByCustomer = new Map(
+      redemptionCounts.map((row) => [Number(row.user_id), Number(row.count) || 0]),
+    );
     const shopOrders = rows.map((row) => {
       const order = mapOrderRow(row);
-      return { ...order, customer_phone: maskContactPhone(order.customer_phone) };
+      const customerUserId = Number(row.customer_user_id);
+      const deliveredOrders = deliveredByCustomer.get(customerUserId) || 0;
+      const availableRewards = Math.max(
+        0,
+        Math.floor(deliveredOrders / CUSTOMER_LOYALTY_REWARD_THRESHOLD) - (redeemedByCustomer.get(customerUserId) || 0),
+      );
+      return {
+        ...order,
+        customer_phone: maskContactPhone(order.customer_phone),
+        ...(customerIdSet.has(customerUserId) ? {
+          loyalty: { delivered_orders: deliveredOrders, available_rewards: availableRewards },
+        } : {}),
+      };
     });
     res.json(req.adminRole === 'verification_admin'
       ? shopOrders.map((order) => ({
@@ -88,6 +170,74 @@ export function createMerchantOrdersRouter({
         items: order.items?.map((item) => ({ ...item, unit_price: 0 })),
       }))
       : shopOrders);
+  });
+
+  router.post('/:id/orders/:orderId/loyalty/redeem', requireMerchantAccess, async (req, res) => {
+    if (req.adminShopAccess || req.adminRole === 'verification_admin') {
+      return res.status(403).json({ error: 'Seul le commerçant peut enregistrer la remise d’une récompense.' });
+    }
+    const shopId = Number(req.params.id);
+    const orderId = Number(req.params.orderId);
+    if (!Number.isSafeInteger(shopId) || shopId <= 0 || !Number.isSafeInteger(orderId) || orderId <= 0) {
+      return res.status(400).json({ error: 'Boutique ou commande invalide.' });
+    }
+    const now = new Date().toISOString();
+    const result = await dbTransaction(async (transaction) => {
+      await transaction.get(
+        `SELECT id FROM shops WHERE id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+        [shopId],
+      );
+      const order = await transaction.get<{ id: number | string; customer_user_id: number | string | null; status: string }>(
+        `SELECT id, customer_user_id, status FROM orders
+         WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+        [orderId, shopId],
+      );
+      if (!order) return { type: 'missing' as const };
+      if (order.status !== 'delivered') return { type: 'not_delivered' as const };
+      if (order.customer_user_id == null) return { type: 'guest' as const };
+      const userId = Number(order.customer_user_id);
+      const delivered = await transaction.get<{ count: number | string }>(
+        `SELECT COUNT(*) AS count FROM orders
+         WHERE shop_id = ? AND customer_user_id = ? AND status = 'delivered'`,
+        [shopId, userId],
+      );
+      const redeemed = await transaction.all<{ qualifying_order_count: number | string }>(
+        'SELECT qualifying_order_count FROM customer_loyalty_redemptions WHERE shop_id = ? AND user_id = ?',
+        [shopId, userId],
+      );
+      const deliveredCount = Number(delivered?.count || 0);
+      const redeemedMilestones = new Set(redeemed.map((row) => Number(row.qualifying_order_count)));
+      const earnedRewards = Math.floor(deliveredCount / CUSTOMER_LOYALTY_REWARD_THRESHOLD);
+      let qualifyingOrderCount = 0;
+      for (let rewardNumber = 1; rewardNumber <= earnedRewards; rewardNumber += 1) {
+        const milestone = rewardNumber * CUSTOMER_LOYALTY_REWARD_THRESHOLD;
+        if (!redeemedMilestones.has(milestone)) {
+          qualifyingOrderCount = milestone;
+          break;
+        }
+      }
+      if (!qualifyingOrderCount) return { type: 'no_reward' as const };
+      await transaction.run(
+        `INSERT INTO customer_loyalty_redemptions
+          (shop_id, user_id, qualifying_order_count, redeemed_at, redeemed_by)
+         VALUES (?, ?, ?, ?, ?)`,
+        [shopId, userId, qualifyingOrderCount, now, 'merchant'],
+      );
+      return {
+        type: 'redeemed' as const,
+        qualifyingOrderCount,
+        availableRewards: Math.max(0, earnedRewards - redeemedMilestones.size - 1),
+      };
+    });
+    if (result.type === 'missing') return res.status(404).json({ error: 'Commande introuvable.' });
+    if (result.type === 'not_delivered') return res.status(409).json({ error: 'Seules les commandes livrées comptent pour la fidélité.' });
+    if (result.type === 'guest') return res.status(409).json({ error: 'Cette commande n’est pas liée à un compte client.' });
+    if (result.type === 'no_reward') return res.status(409).json({ error: 'Aucune récompense de fidélité n’est disponible pour ce client.' });
+    return res.json({
+      success: true,
+      qualifying_order_count: result.qualifyingOrderCount,
+      available_rewards: result.availableRewards,
+    });
   });
 
   router.get('/:id/orders/:orderId/contacts/customer', requireMerchantAccess, rateLimitPublicRequest(60), async (req, res) => {
@@ -162,9 +312,9 @@ export function createMerchantOrdersRouter({
     const shopId = Number(req.params.id);
     const orderId = Number(req.params.orderId);
     const { status } = req.body;
-    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'expired'];
+    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'rejected', 'expired'];
     if (!status || !validStatuses.includes(status)) {
-      return res.status(400).json({ error: 'Statut invalide. Valeurs possibles : pending, confirmed, preparing, ready, delivered, cancelled, expired.' });
+      return res.status(400).json({ error: 'Statut invalide. Valeurs possibles : pending, confirmed, preparing, ready, delivered, cancelled, rejected, expired.' });
     }
     const adminReason = typeof req.body?.reason === 'string'
       ? req.body.reason.trim().replace(/[\u0000-\u001F\u007F]/g, '').slice(0, 500)
@@ -174,16 +324,19 @@ export function createMerchantOrdersRouter({
     }
 
     const allowedTransitions: Record<string, string[]> = {
-      pending: ['confirmed', 'cancelled'],
+      pending: ['confirmed', 'rejected'],
       confirmed: ['preparing', 'delivered', 'cancelled'],
       preparing: ['ready', 'cancelled'],
       ready: ['delivered', 'cancelled'],
       delivered: [],
       cancelled: ['pending', 'confirmed'],
+      rejected: [],
       expired: [],
     };
     const stockUpdates: { productId: number; stock: number; isAvailable: boolean }[] = [];
     let cancelledDelivery: { id: number; previousStatus: string; driverId: number | null } | null = null;
+    let expiredDelivery: { id: number; previousStatus: string; driverId: number | null } | undefined;
+    let deliveryToDispatch: number | null = null;
     try {
       const result = await dbTransaction(async (transaction) => {
         const row = await transaction.get<Record<string, unknown>>(
@@ -197,6 +350,21 @@ export function createMerchantOrdersRouter({
         if (!allowedTransitions[previousStatus]?.includes(status) && !req.adminShopAccess) {
           throw Object.assign(new Error(`Transition impossible : ${previousStatus} → ${status}.`), { statusCode: 409 });
         }
+        if (previousStatus === 'pending') {
+          const expiration = await expirePendingOrderInTransaction(transaction, order.id);
+          if (expiration?.type === 'blockedByDelivery') {
+            throw Object.assign(new Error('La commande ne peut pas être traitée après récupération du colis par le livreur.'), { statusCode: 409 });
+          }
+          if (expiration?.type === 'expired') {
+            expiredDelivery = expiration.order.cancelledDelivery;
+            stockUpdates.push(...expiration.order.stockUpdates.map((update) => ({
+              productId: update.productId,
+              stock: update.stock,
+              isAvailable: update.isAvailable,
+            })));
+            return { order: { ...order, status: 'expired' as const, delivery_fee: 0 }, previousStatus, expired: true as const };
+          }
+        }
         const linkedDelivery = await transaction.get<{ id: number | string; status: string; driver_id: number | string | null }>(
           `SELECT id, status, driver_id FROM delivery_orders WHERE order_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
           [order.id],
@@ -204,36 +372,27 @@ export function createMerchantOrdersRouter({
         if (status === 'delivered' && linkedDelivery && linkedDelivery.status !== 'delivered') {
           throw Object.assign(new Error('La course MaTable doit être terminée par le livreur avant de clôturer la commande.'), { statusCode: 409 });
         }
-        if (['cancelled', 'expired'].includes(status) && linkedDelivery?.status === 'picked_up') {
+        if (['cancelled', 'rejected', 'expired'].includes(status) && linkedDelivery?.status === 'picked_up') {
           throw Object.assign(new Error('La commande ne peut plus être annulée après récupération du colis par le livreur.'), { statusCode: 409 });
         }
 
-        const quantities = new Map<number, number>();
-        for (const item of order.items || []) {
-          if (!Number.isSafeInteger(item.product_id) || !Number.isSafeInteger(item.quantity) || item.quantity < 1) {
-            throw Object.assign(new Error('Les articles de cette commande sont incohérents.'), { statusCode: 409 });
-          }
-          quantities.set(item.product_id, (quantities.get(item.product_id) || 0) + item.quantity);
-        }
-        const stockReservedStatuses = new Set(['confirmed', 'preparing', 'ready', 'delivered']);
+        const stockReservedStatuses = new Set(['pending', 'confirmed', 'preparing', 'ready', 'delivered']);
         const wasStockReserved = stockReservedStatuses.has(previousStatus);
         const willReserveStock = stockReservedStatuses.has(status);
 
         if (wasStockReserved && !willReserveStock) {
-          for (const [productId, quantity] of quantities) {
-            const stockRow = await transaction.get<{ id: number; stock: number; is_visible: number | boolean }>(
-              `SELECT id, stock, is_visible FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
-              [productId, shopId],
-            );
-            if (!stockRow) continue;
-            const stock = Number(stockRow.stock) + quantity;
-            const isAvailable = stock > 0 && Boolean(stockRow.is_visible);
-            await transaction.run('UPDATE products SET stock = ?, is_available = ? WHERE id = ? AND shop_id = ?', [stock, isAvailable ? 1 : 0, productId, shopId]);
-            stockUpdates.push({ productId, stock, isAvailable });
-          }
+          stockUpdates.push(...(await restoreReservedOrderStock(transaction, order, shopId))
+            .map(({ productId, stock, isAvailable }) => ({ productId, stock, isAvailable })));
         }
 
         if (willReserveStock && !wasStockReserved) {
+          const quantities = new Map<number, number>();
+          for (const item of order.items || []) {
+            if (!Number.isSafeInteger(item.product_id) || !Number.isSafeInteger(item.quantity) || item.quantity < 1) {
+              throw Object.assign(new Error('Les articles de cette commande sont incohérents.'), { statusCode: 409 });
+            }
+            quantities.set(item.product_id, (quantities.get(item.product_id) || 0) + item.quantity);
+          }
           for (const [productId, quantity] of quantities) {
             const product = await transaction.get<{ id: number; stock: number; title: string; is_visible: number | boolean }>(
               `SELECT id, stock, title, is_visible FROM products WHERE id = ? AND shop_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
@@ -253,11 +412,14 @@ export function createMerchantOrdersRouter({
           }
         }
 
-        await transaction.run('UPDATE orders SET status = ? WHERE id = ? AND shop_id = ?', [status, order.id, shopId]);
-        if (['cancelled', 'expired'].includes(status)) {
+        await transaction.run(
+          'UPDATE orders SET status = ?, pending_since = ? WHERE id = ? AND shop_id = ?',
+          [status, status === 'pending' ? new Date().toISOString() : null, order.id, shopId],
+        );
+        if (['cancelled', 'rejected', 'expired'].includes(status)) {
           await transaction.run('UPDATE orders SET delivery_fee = 0 WHERE id = ?', [order.id]);
         }
-        if (['cancelled', 'expired'].includes(status) && linkedDelivery
+        if (['cancelled', 'rejected', 'expired'].includes(status) && linkedDelivery
           && ['requested', 'accepted', 'to_pickup'].includes(linkedDelivery.status)) {
           const cancelledAt = new Date().toISOString();
           await transaction.run(`UPDATE delivery_orders SET status = 'cancelled', cancelled_at = ?
@@ -284,7 +446,10 @@ export function createMerchantOrdersRouter({
           );
         }
         order.status = status as OrderRecord['status'];
-        if (['cancelled', 'expired'].includes(status)) order.delivery_fee = 0;
+        if (['cancelled', 'rejected', 'expired'].includes(status)) order.delivery_fee = 0;
+        if (status === 'confirmed' && previousStatus === 'pending' && linkedDelivery?.status === 'requested') {
+          deliveryToDispatch = Number(linkedDelivery.id);
+        }
         return { order, previousStatus, unchanged: false };
       });
       if (!result) return res.status(404).json({ error: 'Commande introuvable.' });
@@ -309,6 +474,18 @@ export function createMerchantOrdersRouter({
         }
         : result.order;
       if (result.unchanged) return res.json({ success: true, order: responseOrder });
+      if ('expired' in result && result.expired) {
+        if (cachedOrder) cachedOrder.status = 'expired';
+        if (expiredDelivery) {
+          void dispatchDeliveryCancelledPush(
+            expiredDelivery.id,
+            expiredDelivery.previousStatus,
+            expiredDelivery.driverId,
+            'admin',
+          );
+        }
+        return res.status(409).json({ error: 'Le délai de 2 heures est dépassé. La demande a expiré et le stock a été libéré.' });
+      }
       if (cancelledDelivery) {
         void dispatchDeliveryCancelledPush(
           cancelledDelivery.id,
@@ -317,13 +494,16 @@ export function createMerchantOrdersRouter({
           req.adminShopAccess ? 'admin' : 'merchant',
         );
       }
+      if (deliveryToDispatch !== null) void dispatchDeliveryCreatedPush(deliveryToDispatch);
       res.json({
         success: true,
         order: responseOrder,
         message: status === 'confirmed' && result.previousStatus === 'pending'
-          ? 'Commande confirmée et stock réservé.'
-          : status === 'cancelled'
-            ? 'Demande annulée.'
+          ? 'Commande acceptée. Le stock était déjà réservé et la livraison MaTable peut être lancée.'
+          : status === 'rejected'
+            ? 'Demande refusée et stock libéré.'
+            : status === 'cancelled'
+              ? 'Demande annulée.'
             : `Statut mis à jour (${status}).`,
       });
     } catch (error: unknown) {
@@ -354,7 +534,7 @@ export function createMerchantOrdersRouter({
     ]);
     const currentOrders = orderRows.map(mapOrderRow);
     const shopOrders = currentOrders.filter((order) => isSameBusinessDay(order.created_at));
-    const valueOrders = shopOrders.filter((order) => !['cancelled', 'expired'].includes(order.status || 'pending'));
+    const valueOrders = shopOrders.filter((order) => !['cancelled', 'rejected', 'expired'].includes(order.status || 'pending'));
     const metrics = summarizeOrderMetrics(currentOrders, shopId);
     const productSalesMap: Record<number, { title: string; quantity: number; revenue: number }> = {};
     valueOrders.forEach((order) => {
@@ -388,7 +568,7 @@ export function createMerchantOrdersRouter({
       `🚚 *Valeur des commandes terminées :* ${new Intl.NumberFormat('fr-FR').format(metrics.ca_delivered)} FCFA`,
       `🧺 *Panier moyen livré :* ${new Intl.NumberFormat('fr-FR').format(metrics.panier_moyen_livre)} FCFA`,
       '----------------------------------------',
-      'ℹ️ *MaTable.ci ne collecte aucun paiement.* Les paiements sont convenus directement entre le client et le vendeur.',
+      'ℹ️ *MaTable-ci.com ne collecte aucun paiement.* Les paiements sont convenus directement entre le client et le vendeur.',
     ];
     if (topSellingProducts.length > 0) {
       lines.push('🏆 *ARTICLES LES PLUS VENDUS :*');

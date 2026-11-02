@@ -380,11 +380,22 @@ const sqliteSchema = `
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_review', 'resolved', 'dismissed')),
     created_at TEXT NOT NULL, reviewed_at TEXT
   );
+  CREATE TABLE IF NOT EXISTS customer_loyalty_redemptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    qualifying_order_count INTEGER NOT NULL CHECK (qualifying_order_count > 0),
+    redeemed_at TEXT NOT NULL,
+    redeemed_by TEXT NOT NULL,
+    UNIQUE (shop_id, user_id, qualifying_order_count)
+  );
   CREATE INDEX IF NOT EXISTS idx_customer_favorites_user_created ON customer_favorites(user_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_customer_product_likes_product ON customer_product_likes(product_id);
   CREATE INDEX IF NOT EXISTS idx_customer_oauth_user_id ON customer_oauth_identities(user_id);
   CREATE INDEX IF NOT EXISTS idx_customer_reviews_public ON customer_reviews(target_type, target_id, status, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_customer_reports_moderation ON customer_reports(status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_customer_loyalty_redemptions_user_shop
+    ON customer_loyalty_redemptions(user_id, shop_id, qualifying_order_count);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_reports_one_open_per_target
     ON customer_reports(user_id, target_type, target_id) WHERE status IN ('pending', 'in_review');
   CREATE TABLE IF NOT EXISTS didit_verification_sessions (
@@ -447,6 +458,7 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'publication_status', "TEXT NOT NULL DEFAULT 'draft'");
   addColumn('shops', 'featured_until', 'TEXT');
   addColumn('shops', 'opening_hours', 'TEXT');
+  addColumn('shops', 'catalog_updated_at', 'TEXT');
   addColumn('shops', 'owner_email', 'TEXT');
   addColumn('advertising_campaigns', 'charter_accepted_at', 'TEXT');
   addColumn('shops', 'owner_name', 'TEXT');
@@ -468,10 +480,26 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'subscription_admin_override_status', 'TEXT');
   addColumn('shops', 'subscription_admin_override_tier', 'TEXT');
   addColumn('shops', 'subscription_admin_override_until', 'TEXT');
+  addColumn('orders', 'pending_since', 'TEXT');
   addColumn('shops', 'whatsapp_subscription_reminders_enabled', 'INTEGER NOT NULL DEFAULT 0');
   addColumn('shops', 'whatsapp_subscription_reminders_consent_at', 'TEXT');
   addColumn('shops', 'email_subscription_reminders_enabled', 'INTEGER NOT NULL DEFAULT 0');
   addColumn('shops', 'email_subscription_reminders_consent_at', 'TEXT');
+  connection.exec(`UPDATE shops
+    SET catalog_updated_at = (SELECT MAX(created_at) FROM products WHERE products.shop_id = shops.id)
+    WHERE catalog_updated_at IS NULL`);
+  connection.exec(`CREATE TRIGGER IF NOT EXISTS products_catalog_freshness_after_insert
+    AFTER INSERT ON products BEGIN
+      UPDATE shops SET catalog_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = NEW.shop_id;
+    END`);
+  connection.exec(`CREATE TRIGGER IF NOT EXISTS products_catalog_freshness_after_update
+    AFTER UPDATE ON products BEGIN
+      UPDATE shops SET catalog_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = NEW.shop_id;
+    END`);
+  connection.exec(`CREATE TRIGGER IF NOT EXISTS products_catalog_freshness_after_delete
+    AFTER DELETE ON products BEGIN
+      UPDATE shops SET catalog_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = OLD.shop_id;
+    END`);
   connection.exec(`CREATE TABLE IF NOT EXISTS merchant_push_subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
@@ -563,6 +591,7 @@ function migrateSqlite(connection: Database.Database) {
   }
   addColumn('orders', 'status', "TEXT DEFAULT 'pending'");
   addColumn('orders', 'customer_user_id', 'INTEGER');
+  connection.exec("UPDATE orders SET pending_since = created_at WHERE status = 'pending' AND pending_since IS NULL");
   addColumn('delivery_drivers', 'email', 'TEXT');
   addColumn('delivery_drivers', 'identity_status', "TEXT NOT NULL DEFAULT 'pending'");
   addColumn('delivery_orders', 'ticket_number', 'TEXT');
@@ -615,6 +644,7 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('orders', 'attribution_campaign', 'TEXT');
   addColumn('orders', 'delivery_fee', 'INTEGER NOT NULL DEFAULT 0');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)');
+  connection.exec('CREATE INDEX IF NOT EXISTS idx_orders_pending_expiry ON orders(status, pending_since)');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_shop_created ON subscription_payment_intents(shop_id, created_at DESC)');
   connection.exec(`CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_reconcile
     ON subscription_payment_intents(status, provider_checked_at, created_at)
@@ -704,6 +734,26 @@ export const postgresMigrations = [
     is_available INTEGER NOT NULL DEFAULT 1, is_visible INTEGER NOT NULL DEFAULT 1, category TEXT, sizes JSONB, colors JSONB, created_at TEXT,
     lookbook_image TEXT, gallery_images JSONB, prep_time INTEGER, modifier_groups JSONB, attributes JSONB
   )`,
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS catalog_updated_at TEXT',
+  `UPDATE shops
+    SET catalog_updated_at = (
+      SELECT MAX(created_at) FROM products WHERE products.shop_id = shops.id
+    )
+    WHERE catalog_updated_at IS NULL`,
+  `CREATE OR REPLACE FUNCTION update_shop_catalog_updated_at() RETURNS TRIGGER AS $$
+    BEGIN
+      IF TG_OP = 'DELETE' THEN
+        UPDATE shops SET catalog_updated_at = to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') WHERE id = OLD.shop_id;
+        RETURN OLD;
+      END IF;
+      UPDATE shops SET catalog_updated_at = to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') WHERE id = NEW.shop_id;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql`,
+  'DROP TRIGGER IF EXISTS products_catalog_freshness ON products',
+  `CREATE TRIGGER products_catalog_freshness
+    AFTER INSERT OR UPDATE OR DELETE ON products
+    FOR EACH ROW EXECUTE FUNCTION update_shop_catalog_updated_at()`,
   `CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, customer_name TEXT NOT NULL,
     customer_phone TEXT NOT NULL, delivery_location TEXT NOT NULL, delivery_note TEXT,
@@ -891,6 +941,9 @@ export const postgresMigrations = [
   'CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_shop_created ON admin_audit_logs(shop_id, created_at DESC)',
   'ALTER TABLE orders ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT \'pending\'',
   'ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_user_id BIGINT',
+  'ALTER TABLE orders ADD COLUMN IF NOT EXISTS pending_since TEXT',
+  "UPDATE orders SET pending_since = created_at WHERE status = 'pending' AND pending_since IS NULL",
+  'CREATE INDEX IF NOT EXISTS idx_orders_pending_expiry ON orders(status, pending_since)',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS sizes JSONB',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS colors JSONB',
@@ -997,10 +1050,20 @@ export const postgresMigrations = [
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_review', 'resolved', 'dismissed')),
     created_at TEXT NOT NULL, reviewed_at TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS customer_loyalty_redemptions (
+    id BIGSERIAL PRIMARY KEY,
+    shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    qualifying_order_count INTEGER NOT NULL CHECK (qualifying_order_count > 0),
+    redeemed_at TEXT NOT NULL,
+    redeemed_by TEXT NOT NULL,
+    UNIQUE (shop_id, user_id, qualifying_order_count)
+  )`,
   'CREATE INDEX IF NOT EXISTS idx_customer_favorites_user_created ON customer_favorites(user_id, created_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_customer_product_likes_product ON customer_product_likes(product_id)',
   'CREATE INDEX IF NOT EXISTS idx_customer_reviews_public ON customer_reviews(target_type, target_id, status, created_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_customer_reports_moderation ON customer_reports(status, created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_customer_loyalty_redemptions_user_shop ON customer_loyalty_redemptions(user_id, shop_id, qualifying_order_count)',
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_reports_one_open_per_target ON customer_reports(user_id, target_type, target_id) WHERE status IN ('pending', 'in_review')",
   'CREATE INDEX IF NOT EXISTS idx_customer_oauth_user_id ON customer_oauth_identities(user_id)',
   'ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_user_id BIGINT',
@@ -1320,11 +1383,13 @@ export async function dbRun(sql: string, params: unknown[] = []): Promise<{ chan
   return { changes: result.changes, lastInsertRowid: Number(result.lastInsertRowid) };
 }
 
-export async function dbTransaction<T>(operation: (query: {
+export interface DatabaseTransaction {
   get: <Row = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<Row | undefined>;
   all: <Row = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<Row[]>;
   run: (sql: string, params?: unknown[]) => Promise<{ changes: number; lastInsertRowid?: number }>;
-}) => Promise<T>): Promise<T> {
+}
+
+export async function dbTransaction<T>(operation: (query: DatabaseTransaction) => Promise<T>): Promise<T> {
   if (postgresPool) {
     const client = await postgresPool.connect();
     const query = {

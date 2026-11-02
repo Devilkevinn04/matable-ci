@@ -474,7 +474,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       element.content = content;
     };
 
-    document.title = `${shop.name} — Boutique locale en Côte d’Ivoire | MaTable.ci`;
+    document.title = `${shop.name} — Boutique locale en Côte d’Ivoire | MaTable-ci.com`;
     upsertMeta('meta[name="description"]', 'name', 'description', description);
     upsertMeta('meta[name="robots"]', 'name', 'robots', 'index, follow, max-image-preview:large');
     upsertMeta('meta[property="og:title"]', 'property', 'og:title', document.title);
@@ -530,8 +530,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     });
 
     return () => {
-      document.title = 'Produits locaux à découvrir en Côte d’Ivoire | MaTable.ci';
-      const defaultDescription = 'Découvrez les produits des commerces locaux en Côte d’Ivoire, explorez les boutiques par ville et commandez directement sur WhatsApp avec MaTable.ci.';
+      document.title = 'Produits locaux à découvrir en Côte d’Ivoire | MaTable-ci.com';
+      const defaultDescription = 'Découvrez les produits des commerces locaux en Côte d’Ivoire, explorez les boutiques par ville et commandez directement sur WhatsApp avec MaTable-ci.com.';
       const descriptionMeta = document.head.querySelector<HTMLMetaElement>('meta[name="description"]');
       if (descriptionMeta) descriptionMeta.content = defaultDescription;
       const defaultCanonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
@@ -649,8 +649,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       );
       setMessageCopied(false);
       toast.success(data.delivery
-        ? 'Commande enregistrée. Livraison MaTable en attente d’un livreur.'
-        : 'Demande enregistrée. Confirmez les modalités directement avec la boutique sur WhatsApp.');
+        ? 'Demande envoyée. La boutique doit l’accepter avant la recherche d’un livreur.'
+        : 'Demande envoyée. La boutique doit l’accepter ou la refuser sous 2 heures.');
 
       // Update only local stock so the confirmation screen stays mounted.
       const confirmedQuantities = new Map<number, number>();
@@ -685,7 +685,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           <div className="page-loading-orb page-loading-orb-2" />
           <div className="brand-mark brand-mark-hero">M</div>
           <div className="page-loading-copy">
-            <span className="eyebrow">MaTable.ci</span>
+            <span className="eyebrow">MaTable-ci.com</span>
             <h2>Chargement de la vitrine…</h2>
             <div className="loading-progress">
               <div className="loading-progress-bar" />
@@ -765,6 +765,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const glowStyle = shop.theme_config?.advanced_css?.accentGlow ? { boxShadow: `0 0 20px ${primaryColor}40` } : {};
 
   const openingHours = shop.opening_hours;
+  const catalogUpdatedAt = shop.catalog_updated_at ? Date.parse(shop.catalog_updated_at) : Number.NaN;
+  const catalogUpdatedLabel = Number.isFinite(catalogUpdatedAt)
+    ? new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(catalogUpdatedAt)
+    : null;
   const hoursRange = openingHours?.open_time && openingHours.close_time
     ? `${openingHours.open_time}–${openingHours.close_time}`
     : '';
@@ -816,10 +820,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                   )}
                 </span>
               </div>
-              <div className="hidden min-w-0 items-center gap-2 truncate text-[11px] text-slate-500 sm:flex">
-                <span>matable-ci.com/{shop.slug}</span>
-                {shop.city ? <span className="text-slate-300">•</span> : null}
-                {shop.city ? <span className="truncate">{shop.city}</span> : null}
+              <div className="min-w-0 text-[10px] text-slate-500 sm:text-[11px]">
+                {catalogUpdatedLabel && <p>Catalogue actualisé le {catalogUpdatedLabel}</p>}
+                <div className="hidden items-center gap-2 truncate sm:flex">
+                  <span>matable-ci.com/{shop.slug}</span>
+                  {shop.city ? <span className="text-slate-300">•</span> : null}
+                  {shop.city ? <span className="truncate">{shop.city}</span> : null}
+                </div>
               </div>
             </div>
           </div>
@@ -1450,7 +1457,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     <span className="font-mono text-sm font-black text-[#103E32]">{orderSuccess.orderId}</span>
                   </div>
                   <p className="mt-3 text-xs text-[#0F6B54] bg-[#E3F1EA] px-3 py-1.5 rounded-full inline-block font-semibold mb-4">
-                    {orderSuccess.deliveryFee > 0 ? '✓ Articles réservés · livraison MaTable demandée' : '✓ Articles réservés · récapitulatif prêt'}
+                    ✓ Demande en attente · articles réservés pendant 2 heures
                   </p>
                   {orderSuccess.emailReceiptStatus !== 'not_requested' && (
                     <p
@@ -1463,20 +1470,20 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     >
                       {orderSuccess.emailReceiptStatus === 'sent'
                         ? `Le récapitulatif a été envoyé à ${orderSuccess.emailReceiptAddress}.`
-                        : `La commande est enregistrée, mais l’envoi du récapitulatif à ${orderSuccess.emailReceiptAddress} a échoué. Vous pouvez toujours utiliser WhatsApp.`}
+                        : `La demande est enregistrée, mais l’envoi du récapitulatif à ${orderSuccess.emailReceiptAddress} a échoué. Vous pouvez toujours utiliser WhatsApp.`}
                     </p>
                   )}
                   {orderSuccess.deliveryFee > 0 ? (
                     <div className="mx-auto mb-4 max-w-sm rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-left">
-                      <p className="text-xs font-black text-emerald-950">Livraison MaTable confirmée</p>
+                      <p className="text-xs font-black text-emerald-950">Livraison MaTable demandée</p>
                       <p className="mt-1 text-xs leading-5 text-emerald-900">
                         {orderSuccess.deliveryTicket ? `Course ${orderSuccess.deliveryTicket} · ` : ''}
-                        frais de livraison {formatFCFA(orderSuccess.deliveryFee)} ajoutés au total. Un livreur va être recherché.{authenticatedCustomer ? ' Suivez la course depuis votre compte client.' : ' Conservez votre numéro de ticket pour le suivi.'}
+                        frais de livraison {formatFCFA(orderSuccess.deliveryFee)} ajoutés au récapitulatif. Un livreur sera recherché après acceptation de la demande par la boutique.{authenticatedCustomer ? ' Suivez son statut depuis votre compte client.' : ' Contactez la boutique sur WhatsApp pour le suivi.'}
                       </p>
                     </div>
                   ) : (
                     <p className="text-sm text-slate-600 max-w-sm mx-auto mb-6 leading-relaxed">
-                      Envoyez votre récapitulatif au commerçant sur WhatsApp pour confirmer la disponibilité, le retrait ou la livraison et les frais éventuels.
+                      La boutique doit confirmer la disponibilité sous 2 heures. Envoyez aussi votre récapitulatif sur WhatsApp pour échanger sur le retrait, la livraison et le règlement.
                     </p>
                   )}
                   {orderSuccess.deliveryFee > 0 && (
@@ -1506,7 +1513,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     <span>Contacter le commerçant sur WhatsApp</span>
                   </a>
                   <p className="mt-2 text-[11px] leading-5 text-slate-500">
-                    La boutique verra si vous cliquez sur ce bouton. MaTable.ci ne peut pas confirmer l’ouverture de WhatsApp ni l’envoi du message.
+                    La boutique verra si vous cliquez sur ce bouton. MaTable-ci.com ne peut pas confirmer l’ouverture de WhatsApp ni l’envoi du message.
                   </p>
 
                   <button
@@ -1882,7 +1889,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     <p className="mt-2 text-xs font-semibold text-slate-700">{paymentPreferenceOptions.find((option) => option.id === paymentMethod)?.explanation}</p>
                     <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] leading-4 text-amber-950">
                       <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      Ce choix est une préférence uniquement : aucun paiement en ligne n’est effectué ni confirmé par MaTable.ci.
+                      Ce choix est une préférence uniquement : aucun paiement en ligne n’est effectué ni confirmé par MaTable-ci.com.
                     </p>
                     </div>
 

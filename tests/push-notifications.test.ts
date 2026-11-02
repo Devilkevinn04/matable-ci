@@ -20,16 +20,16 @@ test('VAPID configuration stays disabled until every server value is present', (
   assert.deepEqual(getVapidConfiguration({
     VAPID_PUBLIC_KEY: publicKey,
     VAPID_PRIVATE_KEY: privateKey,
-    VAPID_SUBJECT: 'mailto:assistance@matable.ci',
+    VAPID_SUBJECT: 'mailto:assistance@matable-ci.com',
   }), {
     publicKey,
     privateKey,
-    subject: 'mailto:assistance@matable.ci',
+    subject: 'mailto:assistance@matable-ci.com',
   });
   assert.equal(getVapidConfiguration({
     VAPID_PUBLIC_KEY: publicKey,
     VAPID_PRIVATE_KEY: privateKey,
-    VAPID_SUBJECT: 'http://matable.ci',
+    VAPID_SUBJECT: 'http://matable-ci.com',
   }), null);
 });
 

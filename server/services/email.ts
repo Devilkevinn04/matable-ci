@@ -79,10 +79,10 @@ function renderBrandedEmail(params: {
             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
               <tr>
                 <td style="vertical-align:middle;">
-                  <img src="${escapeHtml(logoUrl)}" width="34" height="34" alt="MaTable.ci" style="display:block;width:34px;height:34px;border:0;border-radius:9px;" />
+                  <img src="${escapeHtml(logoUrl)}" width="34" height="34" alt="MaTable-ci.com" style="display:block;width:34px;height:34px;border:0;border-radius:9px;" />
                 </td>
                 <td style="vertical-align:middle;padding-left:12px;font-family:${EMAIL_FONT};">
-                  <div style="font-size:17px;font-weight:800;line-height:1.1;letter-spacing:-0.2px;color:#FFFFFF;">MaTable<span style="color:${BRAND.accent};">.ci</span></div>
+                  <div style="font-size:17px;font-weight:800;line-height:1.1;letter-spacing:-0.2px;color:#FFFFFF;">MaTable<span style="color:${BRAND.accent};">-ci.com</span></div>
                   <div style="margin-top:3px;font-size:9px;font-weight:700;line-height:1.2;letter-spacing:1.6px;text-transform:uppercase;color:#B9DCCF;">Vos commerces, ici.</div>
                 </td>
               </tr>
@@ -94,8 +94,8 @@ function renderBrandedEmail(params: {
         </tr>
         <tr>
           <td style="padding:16px 26px 22px;border-top:1px solid #EFEAE0;font-family:${EMAIL_FONT};">
-            <p style="margin:0;font-size:11px;line-height:1.6;color:${BRAND.faint};">Cet email vous a été envoyé automatiquement par MaTable.ci. Merci de ne pas y répondre directement.</p>
-            <p style="margin:6px 0 0;font-size:11px;line-height:1.6;"><a href="${escapeHtml(params.appUrl)}" style="color:${BRAND.green};font-weight:700;text-decoration:none;">matable.ci</a><span style="color:#C6CDC8;"> · </span><span style="color:${BRAND.faint};">Vos commerces, ici.</span></p>
+            <p style="margin:0;font-size:11px;line-height:1.6;color:${BRAND.faint};">Cet email vous a été envoyé automatiquement par MaTable-ci.com. Merci de ne pas y répondre directement.</p>
+            <p style="margin:6px 0 0;font-size:11px;line-height:1.6;"><a href="${escapeHtml(params.appUrl)}" style="color:${BRAND.green};font-weight:700;text-decoration:none;">matable-ci.com</a><span style="color:#C6CDC8;"> · </span><span style="color:${BRAND.faint};">Vos commerces, ici.</span></p>
           </td>
         </tr>
       </table>
@@ -178,20 +178,20 @@ export async function sendMerchantWelcomeEmail(
   fetchImplementation: typeof fetch = fetch,
 ): Promise<{ sent: boolean; id?: string; error?: string }> {
   const appUrl = resolveAppUrl(params.appUrl);
-  const subject = `Votre boutique MaTable.ci a bien été créée`;
-  const text = `Bonjour,\n\nVotre boutique ${params.shopName} a bien été créée sur MaTable.ci.\n\nVous pouvez vous connecter ici : ${appUrl}/app\n\nMerci de faire grandir votre vitrine avec MaTable.ci.`;
+  const subject = `Votre boutique MaTable-ci.com a bien été créée`;
+  const text = `Bonjour,\n\nVotre boutique ${params.shopName} a bien été créée sur MaTable-ci.com.\n\nVous pouvez vous connecter ici : ${appUrl}/app\n\nMerci de faire grandir votre vitrine avec MaTable-ci.com.`;
   const html = renderBrandedEmail({
-    title: 'Bienvenue sur MaTable.ci',
-    preheader: `Votre boutique ${params.shopName} est prête sur MaTable.ci.`,
+    title: 'Bienvenue sur MaTable-ci.com',
+    preheader: `Votre boutique ${params.shopName} est prête sur MaTable-ci.com.`,
     appUrl,
     contentHtml: `
-      <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">Bienvenue sur MaTable.ci</h1>
+      <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">Bienvenue sur MaTable-ci.com</h1>
       <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Bonjour,</p>
-      <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Votre boutique <strong style="color:${BRAND.deep};">${escapeHtml(params.shopName)}</strong> a bien été créée sur MaTable.ci.</p>
+      <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Votre boutique <strong style="color:${BRAND.deep};">${escapeHtml(params.shopName)}</strong> a bien été créée sur MaTable-ci.com.</p>
       <p style="margin:0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Gérez votre catalogue, vos commandes et votre vitrine depuis votre espace de gestion.</p>
       ${renderEmailButton('Accéder à mon espace', `${appUrl}/app`)}
       <p style="margin:14px 0 0;font-family:${EMAIL_FONT};font-size:11px;line-height:1.6;color:${BRAND.faint};">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur : <a href="${appUrl}/app" style="color:${BRAND.green};">${appUrl}/app</a></p>
-      <p style="margin:18px 0 0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Merci de faire grandir votre vitrine avec MaTable.ci.</p>
+      <p style="margin:18px 0 0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Merci de faire grandir votre vitrine avec MaTable-ci.com.</p>
     `,
   });
 
@@ -212,14 +212,14 @@ export async function sendCustomerWelcomeEmail(
   fetchImplementation: typeof fetch = fetch,
 ): Promise<{ sent: boolean; id?: string; error?: string }> {
   const appUrl = resolveAppUrl(params.appUrl);
-  const subject = 'Bienvenue sur MaTable.ci';
-  const text = `Bonjour ${params.customerName},\n\nVotre compte client MaTable.ci est prêt. Retrouvez les boutiques et suivez vos favoris ici : ${appUrl}/boutiques\n\nÀ bientôt sur MaTable.ci.`;
+  const subject = 'Bienvenue sur MaTable-ci.com';
+  const text = `Bonjour ${params.customerName},\n\nVotre compte client MaTable-ci.com est prêt. Retrouvez les boutiques et suivez vos favoris ici : ${appUrl}/boutiques\n\nÀ bientôt sur MaTable-ci.com.`;
   const html = renderBrandedEmail({
     title: subject,
-    preheader: 'Votre compte client MaTable.ci est prêt.',
+    preheader: 'Votre compte client MaTable-ci.com est prêt.',
     appUrl,
     contentHtml: `
-      <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">Bienvenue sur MaTable.ci</h1>
+      <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">Bienvenue sur MaTable-ci.com</h1>
       <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Bonjour ${escapeHtml(params.customerName)},</p>
       <p style="margin:0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Votre compte client est prêt. Découvrez les boutiques locales et retrouvez vos favoris à tout moment.</p>
       ${renderEmailButton('Découvrir les boutiques', `${appUrl}/boutiques`)}
@@ -240,8 +240,8 @@ export async function sendCustomerPasswordResetEmail(
 ): Promise<{ sent: boolean; id?: string; error?: string }> {
   const appUrl = resolveAppUrl(params.appUrl);
   const resetUrl = `${appUrl}/reinitialiser-mot-de-passe?token=${encodeURIComponent(params.token)}`;
-  const subject = 'Réinitialisation de votre mot de passe MaTable.ci';
-  const text = `Bonjour ${params.customerName},\n\nUne demande de réinitialisation du mot de passe de votre compte MaTable.ci a été reçue. Ce lien expire dans 30 minutes et ne peut être utilisé qu’une seule fois :\n${resetUrl}\n\nSi vous n’êtes pas à l’origine de cette demande, ignorez cet email.`;
+  const subject = 'Réinitialisation de votre mot de passe MaTable-ci.com';
+  const text = `Bonjour ${params.customerName},\n\nUne demande de réinitialisation du mot de passe de votre compte MaTable-ci.com a été reçue. Ce lien expire dans 30 minutes et ne peut être utilisé qu’une seule fois :\n${resetUrl}\n\nSi vous n’êtes pas à l’origine de cette demande, ignorez cet email.`;
   const html = renderBrandedEmail({
     title: subject,
     preheader: 'Un lien sécurisé vous permet de choisir un nouveau mot de passe.',
@@ -249,7 +249,7 @@ export async function sendCustomerPasswordResetEmail(
     contentHtml: `
       <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">Réinitialiser votre mot de passe</h1>
       <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Bonjour ${escapeHtml(params.customerName)},</p>
-      <p style="margin:0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Une demande de réinitialisation du mot de passe de votre compte MaTable.ci a été reçue. Le lien ci-dessous expire dans 30 minutes et ne peut être utilisé qu’une seule fois.</p>
+      <p style="margin:0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Une demande de réinitialisation du mot de passe de votre compte MaTable-ci.com a été reçue. Le lien ci-dessous expire dans 30 minutes et ne peut être utilisé qu’une seule fois.</p>
       ${renderEmailButton('Choisir un nouveau mot de passe', resetUrl)}
       <p style="margin:14px 0 0;font-family:${EMAIL_FONT};font-size:11px;line-height:1.6;color:${BRAND.faint};">Si vous n’êtes pas à l’origine de cette demande, ignorez cet email. Aucun changement ne sera effectué sans utilisation du lien.</p>
     `,
@@ -268,7 +268,7 @@ export async function sendMerchantPinResetEmail(
 ): Promise<{ sent: boolean; id?: string; error?: string }> {
   const appUrl = resolveAppUrl(params.appUrl);
   const resetUrl = `${appUrl}/reinitialiser-pin-commercant?token=${encodeURIComponent(params.token)}`;
-  const subject = 'Réinitialisation du PIN de votre boutique MaTable.ci';
+  const subject = 'Réinitialisation du PIN de votre boutique MaTable-ci.com';
   const text = `Bonjour,\n\nUne demande de réinitialisation du PIN de la boutique ${params.shopName} a été reçue. Le lien ci-dessous expire dans 30 minutes et ne peut être utilisé qu’une seule fois :\n${resetUrl}\n\nL’utilisation de ce lien confirme l’accès à cette adresse e-mail. Si vous n’êtes pas à l’origine de cette demande, ignorez cet email.`;
   const html = renderBrandedEmail({
     title: subject,
@@ -298,7 +298,7 @@ export async function sendMerchantSubscriptionReminderEmail(
   const appUrl = resolveAppUrl(params.appUrl);
   const expiryDate = RECEIPT_DATE_FORMATTER.format(new Date(params.expiresAt));
   const dueText = params.daysBefore === 1 ? 'demain' : `dans ${params.daysBefore} jours`;
-  const subject = `Échéance de votre abonnement MaTable.ci ${dueText}`;
+  const subject = `Échéance de votre abonnement MaTable-ci.com ${dueText}`;
   const text = `Bonjour,\n\nL’abonnement de la boutique ${params.shopName} arrive à échéance ${dueText} (${expiryDate}). Renouvelez votre formule depuis votre espace commerçant : ${appUrl}/app\n\nVous pouvez désactiver ces rappels dans les paramètres de votre abonnement.`;
   const html = renderBrandedEmail({
     title: subject,
@@ -389,7 +389,7 @@ export async function sendCustomerOrderReceiptEmail(
     ...(params.deliverySlot ? [`Créneau souhaité : ${params.deliverySlot}`] : []),
     `Mode de règlement souhaité : ${paymentLabels[params.paymentMethod]}`,
     '',
-    'Ce récapitulatif ne confirme pas un paiement. La disponibilité, la livraison et le règlement restent à convenir avec la boutique.',
+    'Votre demande attend la réponse de la boutique. Sans réponse sous 2 heures, elle expirera et les articles réservés seront remis en stock. Ce récapitulatif ne confirme pas un paiement.',
     ...(whatsappUrl ? [`Contactez la boutique sur WhatsApp : ${whatsappUrl}`] : []),
   ].join('\n');
   const html = renderBrandedEmail({
@@ -420,7 +420,7 @@ export async function sendCustomerOrderReceiptEmail(
         </tr>
       </table>
       <p style="margin:16px 0 0;font-family:${EMAIL_FONT};font-size:12px;line-height:1.6;color:${BRAND.muted};">Retrait ou livraison : <strong>${escapeHtml(params.deliveryLocation)}</strong>${params.deliverySlot ? `<br />Créneau souhaité : <strong>${escapeHtml(params.deliverySlot)}</strong>` : ''}<br />Mode de règlement souhaité : <strong>${escapeHtml(paymentLabels[params.paymentMethod])}</strong></p>
-      <p style="margin:16px 0 0;padding:12px;border:1px solid #F3D7A5;border-radius:12px;background:#FFF8E9;font-family:${EMAIL_FONT};font-size:12px;line-height:1.6;color:#74551B;">Ce récapitulatif ne confirme pas un paiement. La disponibilité, la livraison et le règlement restent à convenir avec la boutique.</p>
+      <p style="margin:16px 0 0;padding:12px;border:1px solid #F3D7A5;border-radius:12px;background:#FFF8E9;font-family:${EMAIL_FONT};font-size:12px;line-height:1.6;color:#74551B;">Votre demande attend la réponse de la boutique. Sans réponse sous 2 heures, elle expirera et les articles réservés seront remis en stock. Ce récapitulatif ne confirme pas un paiement.</p>
       ${whatsappUrl ? renderEmailButton('Contacter la boutique sur WhatsApp', whatsappUrl) : ''}
     `,
   });
@@ -446,11 +446,11 @@ export async function sendMerchantSubscriptionReceiptEmail(
   const paidDate = RECEIPT_DATE_FORMATTER.format(new Date(params.paidAt));
   const amount = RECEIPT_AMOUNT_FORMATTER.format(params.amount);
   const termLabel = params.term === 'annual' ? 'annuel' : 'mensuel';
-  const subject = `Reçu de paiement MaTable.ci — ${receiptNumber}`;
+  const subject = `Reçu de paiement MaTable-ci.com — ${receiptNumber}`;
   const text = [
     'Bonjour,',
     '',
-    `Votre paiement MaTable.ci pour la boutique ${params.shopName} a été confirmé.`,
+    `Votre paiement MaTable-ci.com pour la boutique ${params.shopName} a été confirmé.`,
     `Formule : ${params.tierLabel} (${termLabel})`,
     `Montant : ${amount} ${params.currency}`,
     `Date : ${paidDate} (heure de Côte d’Ivoire)`,
@@ -458,7 +458,7 @@ export async function sendMerchantSubscriptionReceiptEmail(
     `Numéro de reçu : ${receiptNumber}`,
   ].join('\n');
   const html = renderBrandedEmail({
-    title: `Reçu de paiement MaTable.ci — ${receiptNumber}`,
+    title: `Reçu de paiement MaTable-ci.com — ${receiptNumber}`,
     preheader: `Paiement confirmé : ${amount} ${params.currency} pour ${params.shopName}.`,
     appUrl: resolveAppUrl(params.appUrl),
     contentHtml: `
@@ -485,7 +485,7 @@ export async function sendMerchantSubscriptionReceiptEmail(
         ])}
       </table>
 
-      <p style="margin:18px 0 0;font-family:${EMAIL_FONT};font-size:11px;line-height:1.6;color:${BRAND.faint};">Conservez ce reçu : il atteste du règlement de votre abonnement MaTable.ci.</p>
+      <p style="margin:18px 0 0;font-family:${EMAIL_FONT};font-size:11px;line-height:1.6;color:${BRAND.faint};">Conservez ce reçu : il atteste du règlement de votre abonnement MaTable-ci.com.</p>
     `,
   });
 

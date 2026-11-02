@@ -28,11 +28,11 @@ L’adresse principale est **`https://matable-ci.com`**. Le domaine racine et `w
 | Destination webhook Didit | `https://matable-ci.onrender.com/api/webhooks/didit` (v3, `status.updated`, toujours active sur l’alias Render) |
 | Domaines de retour Didit | `allowed_return_hosts: []` → les deux callbacks ci-dessus sont acceptés |
 
-L’origine JavaScript et l’URI de callback Google de `https://matable-ci.com` ont été ajoutées en conservant celles de Render. La destination webhook Didit reste sur l’alias Render pour préserver le chemin de secours ; elle pourra être déplacée après validation indépendante. `matable.ci` (sans tiret) est un autre domaine et n’est pas l’adresse achetée ici.
+L’origine JavaScript et l’URI de callback Google de `https://matable-ci.com` ont été ajoutées en conservant celles de Render. La destination webhook Didit reste sur l’alias Render pour préserver le chemin de secours ; elle pourra être déplacée après validation indépendante. `matable-ci.com` (sans tiret) est un autre domaine et n’est pas l’adresse achetée ici.
 
 ## URL publique avant la configuration du domaine (31/10/2026)
 
-À cette date, `https://matable-ci.onrender.com` était l’URL publique utilisée. Le domaine `matable.ci` (sans tiret) n’était pas résolu (NXDOMAIN au registre `.ci`) ; il s’agissait d’un domaine distinct de `matable-ci.com`.
+À cette date, `https://matable-ci.onrender.com` était l’URL publique utilisée. L’adresse publique officielle est désormais `https://matable-ci.com`.
 
 ## Workflow Didit : résolu
 
@@ -204,7 +204,7 @@ curl -s -H "x-api-key: $DIDIT_API_KEY" \
 Le secret de destination doit rester identique à `DIDIT_WEBHOOK_SECRET` dans Render. Au 31/10/2026, la sonde signée prouve que les deux correspondent. Une rotation reste recommandée puisque le secret a été affiché dans un journal de diagnostic ; l’API `PATCH /v3/webhook/destinations/{uuid}/` ne fait **pas** tourner le secret, la rotation se fait uniquement dans la console.
 
 1. Déployer d’abord la version qui accepte les en-têtes `X-Signature-V2-Previous` / `X-Signature-Previous` (ajoutée le 30/10/2026, testée dans `tests/didit-webhook-signature.test.ts`).
-2. Console Didit → destination « matable.ci » → faire tourner le secret.
+2. Console Didit → destination « matable-ci.com » → faire tourner le secret.
 3. Copier le nouveau secret dans Render → `DIDIT_WEBHOOK_SECRET`, puis redéployer **dans les 24 h**.
 4. Pendant l’intervalle, le serveur accepte les signatures `-Previous` signées avec l’ancien secret, donc aucune livraison n’est perdue.
 

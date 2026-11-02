@@ -103,7 +103,7 @@ function PreviewPageHeader({ title, subtitle }: { title: string; subtitle: strin
       <div className="flex min-w-0 items-center gap-3">
         <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#047857] text-base font-black text-white">M</span>
         <div className="min-w-0">
-          <p className="truncate text-[10px] font-black uppercase tracking-[0.14em] text-[#047857]">MaTable.ci · {title}</p>
+          <p className="truncate text-[10px] font-black uppercase tracking-[0.14em] text-[#047857]">MaTable-ci.com · {title}</p>
           <p className="truncate text-xs text-slate-500">{subtitle}</p>
         </div>
       </div>
@@ -161,7 +161,7 @@ function MerchantPreview() {
     setOrderNotice(`Commande #${orderId} mise à jour dans l’aperçu uniquement. Aucun client n’a été contacté.`);
   };
   const nextOrderAction: Record<string, { label: string; next: string }> = {
-    pending: { label: 'Accepter la commande', next: 'confirmed' },
+    pending: { label: 'Accepter la demande', next: 'confirmed' },
     confirmed: { label: 'Préparer', next: 'preparing' },
     preparing: { label: 'Marquer prête', next: 'ready' },
     ready: { label: 'Marquer livrée', next: 'delivered' },
@@ -348,10 +348,10 @@ function MerchantPreview() {
             <article key={orderId} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div><h2 className="text-sm font-black text-slate-900">Commande #{orderId}</h2><p className="mt-1 text-xs text-slate-600">{customer} · {amount} FCFA</p></div>
-                <span className="rounded-full bg-[#d1fae5] px-2 py-1 text-[10px] font-bold capitalize text-[#047857]">{status === 'pending' ? 'À confirmer' : status === 'delivered' ? 'Livrée' : status === 'ready' ? 'Prête' : status === 'preparing' ? 'En préparation' : 'Acceptée'}</span>
+                <span className="rounded-full bg-[#d1fae5] px-2 py-1 text-[10px] font-bold capitalize text-[#047857]">{status === 'pending' ? 'À traiter' : status === 'rejected' ? 'Refusée' : status === 'cancelled' ? 'Annulée' : status === 'delivered' ? 'Livrée' : status === 'ready' ? 'Prête' : status === 'preparing' ? 'En préparation' : 'Acceptée'}</span>
               </div>
               {nextAction && <button type="button" onClick={() => updateDemoOrderStatus(orderId, nextAction.next)} className="min-h-11 w-full rounded-xl bg-[#047857] px-3 text-sm font-bold text-white">{nextAction.label}</button>}
-              {['pending', 'confirmed', 'preparing', 'ready'].includes(status) && <button type="button" onClick={() => updateDemoOrderStatus(orderId, 'cancelled')} className="min-h-10 w-full rounded-xl border border-rose-200 bg-rose-50 text-xs font-bold text-rose-800">Annuler la commande (démo)</button>}
+              {(status === 'pending' || ['confirmed', 'preparing', 'ready'].includes(status)) && <button type="button" onClick={() => updateDemoOrderStatus(orderId, status === 'pending' ? 'rejected' : 'cancelled')} className="min-h-10 w-full rounded-xl border border-rose-200 bg-rose-50 text-xs font-bold text-rose-800">{status === 'pending' ? 'Refuser la demande (démo)' : 'Annuler la commande (démo)'}</button>}
               {status === 'cancelled' && <button type="button" onClick={() => updateDemoOrderStatus(orderId, 'pending')} className="min-h-10 w-full rounded-xl border border-slate-300 text-xs font-bold text-slate-700">Réactiver (démo)</button>}
               {status === 'delivered' && <p className="text-xs font-bold text-emerald-800">Commande terminée</p>}
             </article>

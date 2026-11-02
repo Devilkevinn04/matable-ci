@@ -98,4 +98,4 @@ services:
       - key: VAPID_PRIVATE_KEY
         sync: false
       - key: VAPID_SUBJECT
-        value: mailto:assistance@matable.ci
+        value: mailto:assistance@matable-ci.com

@@ -425,7 +425,7 @@ test('rejects unsafe production configuration', () => {
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
     process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
     process.env.AD_EVENT_SIGNING_SECRET = 'production-ad-event-signing-secret-2026-strong';
-    process.env.APP_URL = 'https://matable.ci';
+    process.env.APP_URL = 'https://matable-ci.com';
     process.env.PORT = '3000';
     process.env.MATABLE_DB_PATH = './data/matable.db';
 
@@ -440,7 +440,7 @@ test('rejects unsafe production configuration', () => {
     process.env.APP_URL = 'not-a-valid-url';
     assert.throws(() => validateRuntimeConfig(), /APP_URL.*URL publique/i);
 
-    process.env.APP_URL = 'https://matable.ci';
+    process.env.APP_URL = 'https://matable-ci.com';
     process.env.PORT = '0';
     assert.throws(() => validateRuntimeConfig(), /PORT .* 1 et 65535|PORT doit être/i);
   } finally {
@@ -474,7 +474,7 @@ test('requires the ad event signing secret only when advertising delivery is ena
     process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
     process.env.AD_EVENT_SIGNING_SECRET = '';
     process.env.ADVERTISING_BETA_ENABLED = 'false';
-    process.env.APP_URL = 'https://matable.ci';
+    process.env.APP_URL = 'https://matable-ci.com';
     process.env.PORT = '3000';
 
     assert.doesNotThrow(() => validateRuntimeConfig());

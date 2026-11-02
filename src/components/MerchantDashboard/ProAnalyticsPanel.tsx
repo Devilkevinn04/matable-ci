@@ -298,7 +298,7 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
             </div>
           </div>
         )}
-        {analytics && <p className="mt-3 border-t border-slate-100 pt-3 text-[10px] leading-4 text-slate-500">Les montants des commandes ne signifient pas que le paiement a été encaissé sur MaTable.ci.</p>}
+        {analytics && <p className="mt-3 border-t border-slate-100 pt-3 text-[10px] leading-4 text-slate-500">Les montants des commandes ne signifient pas que le paiement a été encaissé sur MaTable-ci.com.</p>}
       </section>
     );
   }
@@ -510,7 +510,7 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
 
       <div className="flex items-start gap-3 rounded-2xl border border-[#eadfce] bg-[#fffaf2] p-4 text-xs leading-5 text-[#6b6255]">
         <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-[#93602e]" aria-hidden="true" />
-        <p><span className="font-bold text-[#4c4031]">À propos des montants :</span> les commandes affichées sont les demandes enregistrées sur MaTable.ci. Leur valeur n’indique pas qu’un paiement a été encaissé ni confirmé.</p>
+        <p><span className="font-bold text-[#4c4031]">À propos des montants :</span> les commandes affichées sont les demandes enregistrées sur MaTable-ci.com. Leur valeur n’indique pas qu’un paiement a été encaissé ni confirmé.</p>
       </div>
 
     </section>

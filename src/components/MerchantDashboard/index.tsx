@@ -463,14 +463,14 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     </>;
   }
   // 2. AUTHENTICATED -> MERCHANT DASHBOARD
-  const valuedOrders = orders.filter((order) => !['cancelled', 'expired'].includes(order.status || 'pending'));
+  const valuedOrders = orders.filter((order) => !['cancelled', 'rejected', 'expired'].includes(order.status || 'pending'));
   const orderValue = valuedOrders.reduce((sum, order) => sum + order.total_amount, 0);
   const dashboardSupportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour la boutique ${currentShop.name}.`);
   const avgBasket = valuedOrders.length > 0 ? Math.round(orderValue / valuedOrders.length) : 0;
   const lowStockCount = products.filter(p => p.stock > 0 && p.stock <= 3).length;
   const outOfStockCount = products.filter(p => p.stock === 0).length;
   const actionableOrderCount = orders.filter((order) =>
-    !['delivered', 'cancelled', 'expired'].includes(order.status || 'pending'),
+    !['delivered', 'cancelled', 'rejected', 'expired'].includes(order.status || 'pending'),
   ).length;
   const isShopVerified = !currentShop.merchant_verification_status || ['not_required', 'verified'].includes(currentShop.merchant_verification_status);
   const hasPublicationSubscriptionAccess = hasShopPublicationSubscriptionAccess(currentShop.subscription);
@@ -585,7 +585,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     // Status filter
     const currentStatus = o.status || 'pending';
     if (orderStatusFilter === 'actionable') {
-      if (['delivered', 'cancelled', 'expired'].includes(currentStatus)) return false;
+      if (['delivered', 'cancelled', 'rejected', 'expired'].includes(currentStatus)) return false;
     } else if (orderStatusFilter !== 'all' && currentStatus !== orderStatusFilter) {
       return false;
     }
@@ -678,7 +678,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   }
 
   const identityAlertCopy = identityStatus === 'rejected'
-    ? { title: 'Vérification à reprendre', description: 'Didit n’a pas transmis le motif détaillé à MaTable.ci. Consultez les indications affichées par Didit ou contactez l’assistance.' }
+    ? { title: 'Vérification à reprendre', description: 'Didit n’a pas transmis le motif détaillé à MaTable-ci.com. Consultez les indications affichées par Didit ou contactez l’assistance.' }
     : ['submitted', 'under_review'].includes(identityStatus)
       ? { title: 'Vérification en cours', description: 'La vérification est en cours. Votre boutique sera publiable une fois l’identité confirmée.' }
       : { title: 'Vérifiez votre identité', description: 'Cette étape est nécessaire pour publier votre boutique et recevoir des commandes.' };
@@ -698,6 +698,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     ready: 'Prête',
     delivered: 'Livrée',
     cancelled: 'Annulée',
+    rejected: 'Refusée',
     expired: 'Expirée',
   };
   const uniqueCustomerCount = new Set(orders.map((order) => order.customer_phone || order.customer_name.trim().toLocaleLowerCase()).filter(Boolean)).size;
@@ -1038,7 +1039,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         <div className="grid gap-6 lg:grid-cols-1 lg:items-start">
           <nav aria-label="Navigation principale commerçant" className="merchant-sidebar hidden min-w-0 flex-col gap-1 overflow-y-auto p-4 lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-64">
             <div className="mb-5 px-3 pt-3">
-              <p className="text-2xl font-black tracking-tight text-white">MaTable.ci</p>
+              <p className="text-2xl font-black tracking-tight text-white">MaTable-ci.com</p>
               <p className="mt-1 text-sm text-white/70">Espace commerçant</p>
             </div>
             {[
@@ -1093,7 +1094,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {[
                   { label: 'Commandes', value: orders.length, hint: `${actionableOrderCount} à traiter`, tone: 'text-[#C2410C]', icon: ShoppingBag },
-                  { label: 'Montant des commandes', value: formatFCFA(orderValue), hint: 'Paiements non suivis par MaTable.ci', tone: 'text-[#087F62]', icon: DollarSign },
+                  { label: 'Montant des commandes', value: formatFCFA(orderValue), hint: 'Paiements non suivis par MaTable-ci.com', tone: 'text-[#087F62]', icon: DollarSign },
                   { label: 'Clients', value: uniqueCustomerCount, hint: 'Clients ayant commandé', tone: 'text-[#087F62]', icon: UserPlus },
                   { label: 'Articles', value: `${products.length} / ${Number.isFinite(dashboardProductLimit) ? dashboardProductLimit : '∞'}`, hint: 'Dans votre catalogue', tone: 'text-[#087F62]', icon: Package },
                 ].map((metric) => <div key={metric.label} className="flex min-h-[104px] items-start gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4"><span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f7f4ee] ${metric.tone}`}><metric.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="text-xs font-semibold text-slate-500">{metric.label}</p><strong className="mt-1 block truncate text-xl font-black text-[#292d2a]">{metric.value}</strong><p className="mt-1 truncate text-[11px] text-slate-500">{metric.hint}</p></div></div>)}
@@ -1280,7 +1281,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           <button type="button" aria-label="Fermer le menu" onClick={() => setIsSettingsDrawerOpen(false)} className="absolute inset-0 bg-[#292d2a]/55" />
           <aside id="merchant-menu-drawer" aria-labelledby="merchant-menu-title" className="absolute inset-x-0 top-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] flex h-auto w-full flex-col overflow-y-auto bg-[#FFFFFF] p-4 sm:p-5">
             <header className="flex items-start justify-between gap-3 border-b border-[#ded8ce] pb-4">
-              <div><p className="text-[10px] font-black uppercase text-[#F97316]">MaTable.ci</p><h2 id="merchant-menu-title" className="mt-1 text-xl font-black text-[#292d2a]">Plus</h2></div>
+              <div><p className="text-[10px] font-black uppercase text-[#F97316]">MaTable-ci.com</p><h2 id="merchant-menu-title" className="mt-1 text-xl font-black text-[#292d2a]">Plus</h2></div>
               <button type="button" onClick={() => setIsSettingsDrawerOpen(false)} aria-label="Fermer le menu" className="rounded-lg border border-slate-300 bg-white p-2 text-slate-700"><X className="h-4 w-4" /></button>
             </header>
             <nav className="mt-4 space-y-4" aria-label="Navigation et réglages commerçant">

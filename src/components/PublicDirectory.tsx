@@ -459,7 +459,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           </nav>
           <p className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-[#c2410c] sm:text-sm">Commerce local · Côte d’Ivoire</p>
           <h1 className="max-w-3xl font-display text-3xl font-extrabold leading-tight tracking-[-0.04em] sm:text-5xl">{discoveryPage.heading}</h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-[#5f5a55] sm:text-lg">{discoveryPage.description.replace(' | MaTable.ci', '')}</p>
+          <p className="mt-4 max-w-2xl text-base leading-7 text-[#5f5a55] sm:text-lg">{discoveryPage.description.replace(' | MaTable-ci.com', '')}</p>
           {relatedDiscoveryPages.length > 0 && (
             <nav aria-label={discoveryPage.city ? 'Découvrir par catégorie' : 'Découvrir par ville'} className="mt-6 flex flex-wrap gap-2">
               <span className="self-center pr-1 text-sm font-bold text-[#47534b]">{discoveryPage.city ? 'Explorer les catégories :' : 'Explorer par ville :'}</span>
@@ -911,7 +911,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         <div className="flex flex-col items-start justify-between gap-6 overflow-hidden rounded-[24px] bg-[#065f46] px-6 py-8 text-white sm:flex-row sm:items-center sm:px-10 sm:py-10">
           <div className="max-w-2xl">
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#f0ba80]">Vous vendez en Côte d’Ivoire ?</p>
-            <h2 className="mt-2 font-display text-2xl font-extrabold leading-tight sm:text-3xl">Présentez votre commerce sur MaTable.ci.</h2>
+            <h2 className="mt-2 font-display text-2xl font-extrabold leading-tight sm:text-3xl">Présentez votre commerce sur MaTable-ci.com.</h2>
             <p className="mt-2 text-sm leading-6 text-[#e0eae3]">Découvrez les outils, les étapes de création et les formules pour commerçants.</p>
           </div>
           <Link to="/commercants" className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-full bg-[#FFFFFF] px-6 text-sm font-bold text-[#065f46] transition hover:bg-[#f6eadc]">Espace commerçant <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>

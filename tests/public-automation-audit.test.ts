@@ -276,7 +276,7 @@ test('shop directory page exposes indexable SEO metadata in the initial HTML res
   });
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /<title>Boutiques locales en Côte d’Ivoire \| MaTable\.ci<\/title>/);
+  assert.match(html, /<title>Boutiques locales en Côte d’Ivoire \| MaTable-ci\.com<\/title>/);
   assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:43124\/boutiques" \/>/);
   assert.match(html, /<meta name="robots" content="index, follow, max-image-preview:large" \/>/);
   assert.match(html, /"@type":"CollectionPage"/);
@@ -290,11 +290,11 @@ test('how-it-works guide exposes indexable metadata and crawlable tutorial steps
   });
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /<title>Comment ça marche \? \| MaTable\.ci<\/title>/);
+  assert.match(html, /<title>Comment ça marche \? \| MaTable-ci\.com<\/title>/);
   assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:43124\/comment-ca-marche" \/>/);
   assert.match(html, /"@type":"HowTo"/);
   assert.match(html, /"@type":"HowToStep"/);
-  assert.match(html, /<noscript><main><h1>Comment ça marche sur MaTable\.ci \?<\/h1>/);
+  assert.match(html, /<noscript><main><h1>Comment ça marche sur MaTable-ci\.com \?<\/h1>/);
   assert.match(html, /Trouvez une boutique ou un produit/);
   assert.equal((html.match(/property="og:title"/g) || []).length, 1);
 });
@@ -303,13 +303,13 @@ test('promotions and personal guide routes are directly accessible and indexable
   const publicPages = [
     {
       path: '/promotions',
-      title: 'Promotions en cours | MaTable.ci',
+      title: 'Promotions en cours | MaTable-ci.com',
       description: 'Découvrez les promotions temporaires des boutiques locales en Côte d’Ivoire',
     },
     {
       path: '/guide',
-      title: 'Guide personnel | MaTable.ci',
-      description: 'Votre guide pratique MaTable.ci',
+      title: 'Guide personnel | MaTable-ci.com',
+      description: 'Votre guide pratique MaTable-ci.com',
     },
   ];
 
@@ -332,7 +332,7 @@ test('merchant plans page exposes current prices and indexable SEO metadata', as
   });
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /<title>Formules commerçants et tarifs \| MaTable\.ci<\/title>/);
+  assert.match(html, /<title>Formules commerçants et tarifs \| MaTable-ci\.com<\/title>/);
   assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:43124\/commercants" \/>/);
   assert.match(html, /"@type":"OfferCatalog"/);
   assert.match(html, /"price":3000/);
@@ -364,7 +364,7 @@ test('FAQ and private routes expose indexability metadata in the initial HTML re
   const missing = await fetch(`${BASE_URL}/page-seo-inexistante`, { headers: { 'User-Agent': 'Googlebot', Accept: 'text/html' } });
   assert.equal(missing.status, 404);
   const missingHtml = await missing.text();
-  assert.match(missingHtml, /<title>Page introuvable \| MaTable\.ci<\/title>/);
+  assert.match(missingHtml, /<title>Page introuvable \| MaTable-ci\.com<\/title>/);
   assert.match(missingHtml, /<meta name="robots" content="noindex, nofollow" \/>/);
 });
 
@@ -374,7 +374,7 @@ test('category landing pages expose server-rendered SEO metadata to social crawl
   });
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /<title>Boutiques de mode en Côte d’Ivoire \| MaTable\.ci<\/title>/);
+  assert.match(html, /<title>Boutiques de mode en Côte d’Ivoire \| MaTable-ci\.com<\/title>/);
   assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:43124\/boutiques\/categorie\/fashion" \/>/);
   assert.match(html, /<script type="application\/ld\+json">\{"@context":"https:\/\/schema\.org","@type":"CollectionPage"/);
   assert.equal((html.match(/property="og:title"/g) || []).length, 1);
@@ -1099,7 +1099,7 @@ test('shop pages expose canonical SEO metadata for social sharing and indexing',
   const publicPage = await fetch(`${BASE_URL}/${encodeURIComponent(createdPayload.shop.slug)}`);
   assert.equal(publicPage.status, 200);
   const html = await publicPage.text();
-  assert.match(html, /<title>.*Boutique SEO Test.*MaTable\.ci.*<\/title>/i);
+  assert.match(html, /<title>.*Boutique SEO Test.*MaTable-ci\.com.*<\/title>/i);
   assert.match(html, /<meta name="description"/i);
   assert.match(html, /<link rel="canonical" href=".*\/boutique-seo-test"/i);
   assert.match(html, /og:title|og:image|twitter:card/i);

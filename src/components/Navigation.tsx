@@ -103,10 +103,10 @@ export const Navigation: React.FC<NavigationProps> = ({
     <header className="sticky top-0 z-50 border-b border-[#e5d9ca] bg-[#FFFFFF]/95 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-2 px-4 py-2.5 sm:gap-3 sm:px-8 sm:py-4">
         <div className="flex min-w-0 items-center gap-3">
-          <Link to="/" aria-label="MaTable.ci, accueil" className="flex items-center gap-2.5 text-left">
+          <Link to="/" aria-label="MaTable-ci.com, accueil" className="flex items-center gap-2.5 text-left">
             <img src="/brand-kit/monogram.svg" alt="" className="h-10 w-10 shrink-0" />
             <span className="min-w-0">
-              <span className="block whitespace-nowrap text-xl font-black leading-5 tracking-tight text-[#103E32]">MaTable<span className="text-[#ea580c]">.ci</span></span>
+              <span className="block whitespace-nowrap text-xl font-black leading-5 tracking-tight text-[#103E32]">MaTable<span className="text-[#ea580c]">-ci.com</span></span>
               <span className="mt-1 block whitespace-nowrap text-[8px] font-extrabold tracking-[0.09em] text-[#587067]">VOS COMMERCES, ICI.</span>
             </span>
           </Link>
@@ -209,7 +209,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                   <span aria-hidden="true" className="absolute -right-6 -top-10 -z-10 h-32 w-32 rounded-full border-[18px] border-white/10" />
                   <span aria-hidden="true" className="absolute right-9 top-7 -z-10 h-12 w-12 rounded-full bg-[#efc781]/25 blur-xl" />
                   <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#f3dcae]">
-                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> {isMerchantPlansPage ? 'Espace commerçant' : 'MaTable.ci'}
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> {isMerchantPlansPage ? 'Espace commerçant' : 'MaTable-ci.com'}
                   </div>
                   <p className="mt-2 max-w-[18rem] text-lg font-black leading-tight">{isMerchantPlansPage ? 'Développez votre commerce, étape par étape.' : 'Votre prochain coup de cœur est tout près.'}</p>
                 </motion.div>

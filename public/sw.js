@@ -31,9 +31,9 @@ self.addEventListener('push', (event) => {
   try {
     message = event.data ? event.data.json() : {};
   } catch {
-    message = { title: 'MaTable.ci', body: event.data?.text() || 'Vous avez une nouvelle notification.' };
+    message = { title: 'MaTable-ci.com', body: event.data?.text() || 'Vous avez une nouvelle notification.' };
   }
-  const title = typeof message.title === 'string' ? message.title : 'MaTable.ci';
+  const title = typeof message.title === 'string' ? message.title : 'MaTable-ci.com';
   const body = typeof message.body === 'string' ? message.body : 'Vous avez une nouvelle notification.';
   const requestedUrl = typeof message.url === 'string' ? message.url : '/merchant';
   const url = requestedUrl.startsWith('/') && !requestedUrl.startsWith('//') && !requestedUrl.includes('\\')

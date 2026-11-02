@@ -704,7 +704,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       `, [since]),
       dbAll<{ date: string; orders: number; sales: number }>(`
         SELECT substr(created_at, 1, 10) AS date, COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
-        FROM orders WHERE created_at >= ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+        FROM orders WHERE created_at >= ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'rejected', 'expired')
         GROUP BY date ORDER BY date ASC
       `, [since]),
       dbGet<{ page_views: number; unique_visitors: number }>(`
@@ -717,11 +717,11 @@ export function createAdminRouter(options: AdminRouterOptions) {
       `, [previousSince, since]),
       dbGet<{ orders: number; sales: number }>(`
         SELECT COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
-        FROM orders WHERE created_at >= ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+        FROM orders WHERE created_at >= ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'rejected', 'expired')
       `, [since]),
       dbGet<{ orders: number; sales: number }>(`
         SELECT COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
-        FROM orders WHERE created_at >= ? AND created_at < ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+        FROM orders WHERE created_at >= ? AND created_at < ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'rejected', 'expired')
       `, [previousSince, since]),
       dbAll<{ source: string; visits: number; visitors: number }>(`
         SELECT COALESCE(source, 'unknown') AS source, COUNT(*) AS visits, COUNT(DISTINCT session_id) AS visitors
@@ -740,7 +740,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
           COALESCE(SUM(total_amount), 0) AS sales
         FROM orders
         WHERE attribution_campaign IS NOT NULL AND created_at >= ?
-          AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+          AND COALESCE(status, 'pending') NOT IN ('cancelled', 'rejected', 'expired')
         GROUP BY attribution_campaign
       `, [since]),
       dbAll<{ campaign: string; whatsapp_clicks: number }>(`
@@ -757,7 +757,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       `, [since]),
       dbAll<{ shop_id: number; orders: number; sales: number }>(`
         SELECT shop_id, COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
-        FROM orders WHERE created_at >= ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+        FROM orders WHERE created_at >= ? AND COALESCE(status, 'pending') NOT IN ('cancelled', 'rejected', 'expired')
         GROUP BY shop_id
       `, [since]),
       dbAll<{ audience: string; events: number; sessions: number }>(`
@@ -1133,7 +1133,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       dbAll<{ shop_id: number; count: number }>('SELECT shop_id, COUNT(*) AS count FROM products GROUP BY shop_id'),
       dbAll<{ shop_id: number; count: number; last_order_at: string | null }>(`
         SELECT shop_id, COUNT(*) AS count, MAX(created_at) AS last_order_at
-        FROM orders WHERE COALESCE(status, 'pending') NOT IN ('cancelled', 'expired') GROUP BY shop_id
+        FROM orders WHERE COALESCE(status, 'pending') NOT IN ('cancelled', 'rejected', 'expired') GROUP BY shop_id
       `),
     ]);
     const productCountByShop = new Map(productCounts.map((row) => [Number(row.shop_id), Number(row.count)]));
@@ -1751,7 +1751,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       dbAll<{ shop_id: number; count: number }>('SELECT shop_id, COUNT(*) AS count FROM products GROUP BY shop_id'),
       dbAll<{ shop_id: number; count: number; total_sales: number; last_order_at: string | null }>(`
         SELECT shop_id, COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total_sales, MAX(created_at) AS last_order_at
-        FROM orders WHERE COALESCE(status, 'pending') NOT IN ('cancelled', 'expired') GROUP BY shop_id
+        FROM orders WHERE COALESCE(status, 'pending') NOT IN ('cancelled', 'rejected', 'expired') GROUP BY shop_id
       `),
     ]);
     const productCountByShop = new Map(productCounts.map((row) => [Number(row.shop_id), Number(row.count)]));
@@ -1814,7 +1814,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
     const requestedOffset = Number(req.query.offset);
     const offset = Number.isInteger(requestedOffset) ? Math.max(0, requestedOffset) : 0;
     const requestedStatus = String(req.query.status || 'all');
-    const allowedStatuses = new Set(['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'expired']);
+    const allowedStatuses = new Set(['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'rejected', 'expired']);
     if (requestedStatus !== 'all' && !allowedStatuses.has(requestedStatus)) {
       return res.status(400).json({ error: 'Filtre de statut de commande invalide.' });
     }
@@ -1889,7 +1889,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
         SELECT users.id, users.first_name, users.last_name, users.name, users.email, users.phone,
           users.created_at, users.is_active,
           COUNT(orders.id) AS orders_count,
-          COALESCE(SUM(CASE WHEN COALESCE(orders.status, 'pending') NOT IN ('cancelled', 'expired')
+          COALESCE(SUM(CASE WHEN COALESCE(orders.status, 'pending') NOT IN ('cancelled', 'rejected', 'expired')
             THEN orders.total_amount ELSE 0 END), 0) AS order_value,
           MAX(orders.created_at) AS last_order_at
         FROM users LEFT JOIN orders ON orders.customer_user_id = users.id
@@ -2260,18 +2260,18 @@ export function createAdminRouter(options: AdminRouterOptions) {
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const template = String(req.body?.template || '').trim();
     const templates: Record<string, string> = {
-      welcome: `Bonjour ${shop.name}, votre espace MaTable.ci est prêt. Pensez à compléter votre catalogue et à partager votre vitrine avec vos clients.`,
-      catalog: `Bonjour ${shop.name}, pensez à vérifier vos articles, vos prix et vos disponibilités afin que votre vitrine MaTable.ci reste à jour.`,
-      orders: `Bonjour ${shop.name}, pensez à consulter vos nouvelles commandes et à confirmer rapidement les demandes reçues via MaTable.ci.`,
-      support: `Bonjour ${shop.name}, nous vous contactons au sujet de votre boutique MaTable.ci. Répondez à ce message si vous avez besoin d’aide.`,
-      trial_expiring: `Bonjour ${shop.name}, votre essai MaTable.ci arrive à échéance. Connectez-vous à votre espace commerçant pour choisir une formule et garder votre vitrine visible. L’équipe MaTable.ci reste disponible si besoin.`,
+      welcome: `Bonjour ${shop.name}, votre espace MaTable-ci.com est prêt. Pensez à compléter votre catalogue et à partager votre vitrine avec vos clients.`,
+      catalog: `Bonjour ${shop.name}, pensez à vérifier vos articles, vos prix et vos disponibilités afin que votre vitrine MaTable-ci.com reste à jour.`,
+      orders: `Bonjour ${shop.name}, pensez à consulter vos nouvelles commandes et à confirmer rapidement les demandes reçues via MaTable-ci.com.`,
+      support: `Bonjour ${shop.name}, nous vous contactons au sujet de votre boutique MaTable-ci.com. Répondez à ce message si vous avez besoin d’aide.`,
+      trial_expiring: `Bonjour ${shop.name}, votre essai MaTable-ci.com arrive à échéance. Connectez-vous à votre espace commerçant pour choisir une formule et garder votre vitrine visible. L’équipe MaTable-ci.com reste disponible si besoin.`,
     };
     if (template === 'identity_verification') {
       const messageTemplate = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
       if (req.body?.message !== undefined && (!messageTemplate || messageTemplate.length > 2000)) {
         return res.status(400).json({ error: 'Le message doit contenir entre 1 et 2 000 caractères.' });
       }
-      templates.identity_verification = messageTemplate || `Bonjour {boutique}, votre boutique MaTable.ci est actuellement en veille et n’apparaît pas sur le site, car votre identité n’a pas encore été vérifiée. Pour la faire réapparaître, connectez-vous à votre tableau de bord marchand : {dashboard}, puis ouvrez « Vérification d’identité » et suivez les étapes de Didit. Après la vérification, la remise en ligne pourra être finalisée si les autres critères de publication sont remplis. Répondez à ce message si vous avez besoin d’aide.`;
+      templates.identity_verification = messageTemplate || `Bonjour {boutique}, votre boutique MaTable-ci.com est actuellement en veille et n’apparaît pas sur le site, car votre identité n’a pas encore été vérifiée. Pour la faire réapparaître, connectez-vous à votre tableau de bord marchand : {dashboard}, puis ouvrez « Vérification d’identité » et suivez les étapes de Didit. Après la vérification, la remise en ligne pourra être finalisée si les autres critères de publication sont remplis. Répondez à ce message si vous avez besoin d’aide.`;
       if (shop.merchant_verification_status === 'verified'
         || shop.merchant_verification_status === 'not_required'
         || shop.publication_status === 'active') {

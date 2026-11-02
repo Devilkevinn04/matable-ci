@@ -127,7 +127,7 @@ export const PushNotificationSettings: React.FC<PushNotificationSettingsProps> =
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#d1fae5] text-[#047857]"><Bell className="h-5 w-5" /></span>
         <div className="min-w-0 flex-1">
           <h3 className="text-base font-extrabold text-[#292d2a]">Notifications sur cet appareil</h3>
-          <p className="mt-1 text-sm leading-6 text-slate-600">Recevez les nouvelles commandes, les alertes de stock, les échéances d’abonnement, les changements de vérification et les annonces de MaTable.ci.</p>
+          <p className="mt-1 text-sm leading-6 text-slate-600">Recevez les nouvelles commandes, les alertes de stock, les échéances d’abonnement, les changements de vérification et les annonces de MaTable-ci.com.</p>
         </div>
       </div>
 

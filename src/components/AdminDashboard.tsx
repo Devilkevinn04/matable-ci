@@ -69,12 +69,13 @@ import type { SubscriptionTier } from '../types';
 import { trackLogin, trackLogout } from '../utils/analyticsTracker';
 
 const adminOrderTransitions: Record<AdminOrder['status'], AdminOrder['status'][]> = {
-  pending: ['confirmed', 'cancelled'],
+  pending: ['confirmed', 'rejected'],
   confirmed: ['preparing', 'delivered', 'cancelled'],
   preparing: ['ready', 'cancelled'],
   ready: ['delivered', 'cancelled'],
   delivered: [],
   cancelled: ['pending', 'confirmed'],
+  rejected: [],
   expired: [],
 };
 
@@ -303,7 +304,7 @@ export const AdminDashboard: React.FC = () => {
   const [identityCampaignIndex, setIdentityCampaignIndex] = useState(0);
   const [identityCampaignLoading, setIdentityCampaignLoading] = useState(false);
   const [identityCampaignMessage, setIdentityCampaignMessage] = useState(
-    'Bonjour {boutique}, votre boutique MaTable.ci est actuellement en veille et n’apparaît pas sur le site, car votre identité n’a pas encore été vérifiée. Pour la faire réapparaître, connectez-vous à votre tableau de bord marchand : {dashboard}, puis ouvrez « Vérification d’identité » et suivez les étapes de Didit. Après la vérification, la remise en ligne pourra être finalisée si les autres critères de publication sont remplis. Répondez à ce message si vous avez besoin d’aide.',
+    'Bonjour {boutique}, votre boutique MaTable-ci.com est actuellement en veille et n’apparaît pas sur le site, car votre identité n’a pas encore été vérifiée. Pour la faire réapparaître, connectez-vous à votre tableau de bord marchand : {dashboard}, puis ouvrez « Vérification d’identité » et suivez les étapes de Didit. Après la vérification, la remise en ligne pourra être finalisée si les autres critères de publication sont remplis. Répondez à ce message si vous avez besoin d’aide.',
   );
   const [selectedVerificationShopId, setSelectedVerificationShopId] = useState<number | null>(null);
   const [featuredActionShopId, setFeaturedActionShopId] = useState<number | null>(null);
@@ -942,7 +943,7 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
     const confirmation = action === 'cancel_at_period_end'
-      ? `Les droits resteront actifs jusqu’au ${shop.subscription_expires_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(shop.subscription_expires_at)) : 'terme de l’abonnement'}. MaTable.ci ne prélève pas automatiquement : le commerçant pourra encore payer un renouvellement GeniusPay avant cette date pour conserver son accès.`
+      ? `Les droits resteront actifs jusqu’au ${shop.subscription_expires_at ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' }).format(new Date(shop.subscription_expires_at)) : 'terme de l’abonnement'}. MaTable-ci.com ne prélève pas automatiquement : le commerçant pourra encore payer un renouvellement GeniusPay avant cette date pour conserver son accès.`
       : action === 'suspend'
         ? 'Les droits et la publication liés à l’abonnement seront suspendus immédiatement. Cela ne désactivera pas la boutique ni ne modifiera les paiements.'
         : action === 'reactivate'
@@ -1022,7 +1023,7 @@ export const AdminDashboard: React.FC = () => {
           <div className="mb-5 flex items-center gap-3">
             <div className="brand-mark">M</div>
             <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">MaTable.ci</div>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">MaTable-ci.com</div>
               <h1 className="text-xl font-black text-slate-900">
                 {loginRole === 'verification_admin' ? 'Accès vérification' : 'Accès super-admin'}
               </h1>
@@ -1440,7 +1441,7 @@ export const AdminDashboard: React.FC = () => {
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="min-w-0 break-words text-lg font-black tracking-tight text-[#292d2a] sm:text-xl">{adminRole === 'super_admin' ? 'Super-Admin MaTable.ci' : 'Administration MaTable.ci'}</h1>
+                  <h1 className="min-w-0 break-words text-lg font-black tracking-tight text-[#292d2a] sm:text-xl">{adminRole === 'super_admin' ? 'Super-Admin MaTable-ci.com' : 'Administration MaTable-ci.com'}</h1>
                   <span className="dashboard-chip dashboard-chip-soft">{adminRole === 'super_admin' ? 'Tour de contrôle' : 'Espace vérification'}</span>
                 </div>
                 <p className="text-[11px] text-[#47534b] mt-0.5 leading-4 max-w-xl">
@@ -1545,7 +1546,7 @@ export const AdminDashboard: React.FC = () => {
         <div className="grid min-w-0 gap-3 sm:gap-4 lg:grid-cols-1 lg:items-start">
         <nav aria-label={adminRole === 'super_admin' ? 'Navigation super-admin' : 'Navigation administration'} className="admin-sidebar hidden min-w-0 flex-col gap-1 overflow-y-auto p-4 lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-64 lg:overflow-x-hidden lg:rounded-none lg:border-0 lg:px-4 lg:py-6">
           <div className="mb-3 hidden px-3 pt-2 lg:block">
-            <p className="text-2xl font-black tracking-tight text-white">MaTable.ci</p>
+            <p className="text-2xl font-black tracking-tight text-white">MaTable-ci.com</p>
             <p className="mt-1 text-sm text-white/70">{adminRole === 'super_admin' ? 'Super-Admin · Tour de contrôle' : 'Espace vérification'}</p>
           </div>
           {adminNavigationGroups.map((group) => (
@@ -1655,7 +1656,7 @@ export const AdminDashboard: React.FC = () => {
                 <p className="mt-1 text-xs text-slate-500">{analytics ? `${formatAudienceChange(analytics.totals.conversion_rate, analytics.previous.conversion_rate, true)} par rapport à la période précédente` : 'Chargement des données…'}</p>
               </section>
             )}
-            {adminRole === 'super_admin' && <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-600">« Compte boutique actif » ne signifie pas que sa vitrine est publiquement visible. Les montants agrègent les commandes hors annulation et expiration : les paiements des ventes ne sont pas suivis par MaTable.ci. Les visites ne comptent que les sessions ayant accepté les statistiques.</p>}
+            {adminRole === 'super_admin' && <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-600">« Compte boutique actif » ne signifie pas que sa vitrine est publiquement visible. Les montants agrègent les commandes hors annulation et expiration : les paiements des ventes ne sont pas suivis par MaTable-ci.com. Les visites ne comptent que les sessions ayant accepté les statistiques.</p>}
             {analytics && adminRole === 'super_admin' && (
               <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]">
                 <section aria-labelledby="admin-sales-chart-title" className="min-w-0 chart-panel p-4 md:p-5">
@@ -1731,7 +1732,7 @@ export const AdminDashboard: React.FC = () => {
               <label className="relative block"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input type="search" value={orderSearch} onChange={(event) => { setOrderSearch(event.target.value); setOrderPage(0); }} placeholder="Rechercher boutique, client, téléphone ou numéro" className="min-h-10 w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-sky-700" /></label>
               <select value={orderStatusFilter} onChange={(event) => { setOrderStatusFilter(event.target.value); setOrderPage(0); }} aria-label="Filtrer les commandes par statut" className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
                 <option value="all">Tous les statuts</option>
-                {['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'expired'].map((status) => <option key={status} value={status}>{status}</option>)}
+                {['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'rejected', 'expired'].map((status) => <option key={status} value={status}>{status}</option>)}
               </select>
             </div>
             <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
@@ -1981,7 +1982,7 @@ export const AdminDashboard: React.FC = () => {
         {adminView === 'finance' && adminRole === 'super_admin' && (
           <section aria-labelledby="admin-finance-title" className="space-y-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div><p className="text-xs font-bold uppercase text-emerald-800">Recettes MaTable.ci</p><h2 id="admin-finance-title" className="mt-1 text-xl font-black text-slate-900">Argent</h2><p className="mt-1 text-xs text-slate-500">MRR estimé des abonnements au statut actif : paiement annuel réparti sur 12 mois, tarif catalogue utilisé si aucun paiement n’est enregistré. Les encaissements ne comptent que les confirmations GeniusPay.</p></div>
+              <div><p className="text-xs font-bold uppercase text-emerald-800">Recettes MaTable-ci.com</p><h2 id="admin-finance-title" className="mt-1 text-xl font-black text-slate-900">Argent</h2><p className="mt-1 text-xs text-slate-500">MRR estimé des abonnements au statut actif : paiement annuel réparti sur 12 mois, tarif catalogue utilisé si aucun paiement n’est enregistré. Les encaissements ne comptent que les confirmations GeniusPay.</p></div>
               <select aria-label="Période du journal financier" value={financeDays} onChange={(event) => { setFinanceDays(Number(event.target.value)); setFinancePaymentsPage(0); }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">
                 <option value={30}>30 derniers jours</option>
                 <option value={90}>90 derniers jours</option>
@@ -2765,7 +2766,7 @@ export const AdminDashboard: React.FC = () => {
           <aside id="admin-menu-drawer" role="dialog" aria-modal="true" aria-labelledby="admin-menu-title" className="absolute inset-x-0 bottom-0 max-h-[82dvh] overflow-y-auto rounded-t-3xl bg-[#fffdf8] p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-2xl">
             <div className="mb-4 flex items-center justify-between border-b border-[#e7dfd3] pb-4">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#087F62]">MaTable.ci</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#087F62]">MaTable-ci.com</p>
                 <h2 id="admin-menu-title" className="text-lg font-black text-[#292d2a]">Autres rubriques</h2>
               </div>
               <button type="button" aria-label="Fermer le menu" onClick={() => setIsAdminMenuOpen(false)} className="rounded-full border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50">

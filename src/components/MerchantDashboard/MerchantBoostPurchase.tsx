@@ -128,7 +128,7 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
           {needsBillingEmail && (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <label htmlFor="merchant-boost-billing-email" className="block text-sm font-bold text-amber-950">E-mail de facturation</label>
-              <p className="mt-1 text-xs leading-5 text-amber-900">GeniusPay utilise cet e-mail pour préparer le paiement. MaTable.ci l’utilisera aussi pour vous envoyer le reçu après confirmation.</p>
+              <p className="mt-1 text-xs leading-5 text-amber-900">GeniusPay utilise cet e-mail pour préparer le paiement. MaTable-ci.com l’utilisera aussi pour vous envoyer le reçu après confirmation.</p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <input
                   id="merchant-boost-billing-email"

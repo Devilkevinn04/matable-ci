@@ -14,9 +14,9 @@ import {
 
 test('Resend config requires both API key and sender address', () => {
   assert.equal(getResendEmailConfig({}), null);
-  assert.deepEqual(getResendEmailConfig({ RESEND_API_KEY: 'key', RESEND_FROM_EMAIL: 'MaTable.ci <welcome@matable.ci>' }), {
+  assert.deepEqual(getResendEmailConfig({ RESEND_API_KEY: 'key', RESEND_FROM_EMAIL: 'MaTable <welcome@matable-ci.com>' }), {
     apiKey: 'key',
-    from: 'MaTable.ci <welcome@matable.ci>',
+    from: 'MaTable <welcome@matable-ci.com>',
   });
 });
 
@@ -24,7 +24,7 @@ test('transactional email posts the payload to the Resend API', async () => {
   const previousApiKey = process.env.RESEND_API_KEY;
   const previousFrom = process.env.RESEND_FROM_EMAIL;
   process.env.RESEND_API_KEY = 'resend-key';
-  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';
 
   try {
     let requestedUrl = '';
@@ -33,10 +33,10 @@ test('transactional email posts the payload to the Resend API', async () => {
 
     const result = await sendTransactionalEmail({
       to: 'merchant@example.com',
-      subject: 'Bienvenue chez MaTable.ci',
+      subject: 'Bienvenue chez MaTable-ci.com',
       html: '<p>Bonjour</p>',
       text: 'Bonjour',
-      replyTo: 'support@matable.ci',
+      replyTo: 'support@matable-ci.com',
     }, async (input, init) => {
       requestedUrl = String(input);
       requestedHeaders = new Headers(init?.headers);
@@ -52,8 +52,8 @@ test('transactional email posts the payload to the Resend API', async () => {
     assert.equal(requestedUrl, 'https://api.resend.com/emails');
     assert.equal(requestedHeaders?.get('authorization'), 'Bearer resend-key');
     assert.deepEqual(requestBody.to, ['merchant@example.com']);
-    assert.equal(requestBody.reply_to, 'support@matable.ci');
-    assert.equal(requestBody.from, 'MaTable.ci <welcome@matable.ci>');
+    assert.equal(requestBody.reply_to, 'support@matable-ci.com');
+    assert.equal(requestBody.from, 'MaTable <welcome@matable-ci.com>');
   } finally {
     if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
     if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;
@@ -65,7 +65,7 @@ test('subscription receipt email contains confirmed payment details and escapes 
   const previousFrom = process.env.RESEND_FROM_EMAIL;
   const previousNodeEnv = process.env.NODE_ENV;
   process.env.RESEND_API_KEY = 'resend-key';
-  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';
   delete process.env.NODE_ENV;
 
   try {
@@ -99,11 +99,11 @@ test('subscription receipt email contains confirmed payment details and escapes 
   }
 });
 
-test('transactional emails share the MaTable.ci branded layout', async () => {
+test('transactional emails share the MaTable-ci.com branded layout', async () => {
   const previousApiKey = process.env.RESEND_API_KEY;
   const previousFrom = process.env.RESEND_FROM_EMAIL;
   process.env.RESEND_API_KEY = 'resend-key';
-  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';
 
   try {
     let requestBody: any;
@@ -117,7 +117,7 @@ test('transactional emails share the MaTable.ci branded layout', async () => {
       amount: 12000,
       currency: 'XOF',
       paidAt: '2026-10-10T12:00:00.000Z',
-      appUrl: 'https://matable.ci',
+      appUrl: 'https://matable-ci.com',
     }, async (_input, init) => {
       requestBody = JSON.parse(String(init?.body));
       return new Response(JSON.stringify({ id: 'email_brand_123' }), { status: 200 });
@@ -125,12 +125,12 @@ test('transactional emails share the MaTable.ci branded layout', async () => {
 
     assert.equal(result.sent, true);
     assert.match(requestBody.html, /^<!doctype html>/i);
-    assert.match(requestBody.html, /https:\/\/matable\.ci\/brand-kit\/icon-192\.png/);
+    assert.match(requestBody.html, /https:\/\/matable-ci\.com\/brand-kit\/icon-192\.png/);
     assert.match(requestBody.html, /#087F62/);
     assert.match(requestBody.html, /Vos commerces, ici\./);
     assert.match(requestBody.html, /Montant réglé/);
     assert.match(requestBody.html, /12\s?000/);
-    assert.match(requestBody.html, /https:\/\/matable\.ci/);
+    assert.match(requestBody.html, /https:\/\/matable-ci\.com/);
     assert.doesNotMatch(requestBody.html, /<script/i);
   } finally {
     if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
@@ -142,7 +142,7 @@ test('welcome email escapes the merchant shop name in its HTML body', async () =
   const previousApiKey = process.env.RESEND_API_KEY;
   const previousFrom = process.env.RESEND_FROM_EMAIL;
   process.env.RESEND_API_KEY = 'resend-key';
-  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';
 
   try {
     let requestBody: any;
@@ -174,7 +174,7 @@ test('customer welcome email escapes the name and links to the shop directory', 
   const previousApiKey = process.env.RESEND_API_KEY;
   const previousFrom = process.env.RESEND_FROM_EMAIL;
   process.env.RESEND_API_KEY = 'resend-key';
-  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';
   let requestBody: any;
   try {
     const result = await sendCustomerWelcomeEmail({
@@ -201,7 +201,7 @@ test('password reset email includes the one-time token link and escapes customer
   const previousApiKey = process.env.RESEND_API_KEY;
   const previousFrom = process.env.RESEND_FROM_EMAIL;
   process.env.RESEND_API_KEY = 'resend-key';
-  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';
   let requestBody: any;
   try {
     const result = await sendCustomerPasswordResetEmail({
@@ -229,7 +229,7 @@ test('merchant PIN reset email links to the secure one-time flow', async () => {
   const previousApiKey = process.env.RESEND_API_KEY;
   const previousFrom = process.env.RESEND_FROM_EMAIL;
   process.env.RESEND_API_KEY = 'resend-key';
-  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';
   let requestBody: any;
   try {
     const result = await sendMerchantPinResetEmail({
@@ -259,7 +259,7 @@ test('subscription reminder email includes the expiry and account link', async (
   const previousApiKey = process.env.RESEND_API_KEY;
   const previousFrom = process.env.RESEND_FROM_EMAIL;
   process.env.RESEND_API_KEY = 'resend-key';
-  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';
   let requestBody: any;
   try {
     const result = await sendMerchantSubscriptionReminderEmail({
@@ -284,11 +284,11 @@ test('subscription reminder email includes the expiry and account link', async (
   }
 });
 
-test('customer order receipt includes server totals and clarifies payment is not confirmed', async () => {
+test('customer order receipt includes server totals and explains the pending response window', async () => {
   const previousApiKey = process.env.RESEND_API_KEY;
   const previousFrom = process.env.RESEND_FROM_EMAIL;
   process.env.RESEND_API_KEY = 'resend-key';
-  process.env.RESEND_FROM_EMAIL = 'MaTable.ci <welcome@matable.ci>';
+  process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';
   let requestBody: any;
   try {
     const result = await sendCustomerOrderReceiptEmail({
@@ -327,6 +327,7 @@ test('customer order receipt includes server totals and clarifies payment is not
     assert.match(requestBody.html, /2\s?000 FCFA/);
     assert.match(requestBody.text, /Total à régler : 4\s?500 FCFA/);
     assert.match(requestBody.text, /ne confirme pas un paiement/i);
+    assert.match(requestBody.text, /sans réponse sous 2 heures/i);
     assert.doesNotMatch(requestBody.html, /<script>|<img src=x|<i>Cocody/);
   } finally {
     if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;

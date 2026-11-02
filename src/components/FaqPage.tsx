@@ -16,7 +16,7 @@ export const FaqPage: React.FC = () => (
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-[#f0ba80]">
             <CircleHelp className="h-5 w-5" />
           </div>
-          <p className="mt-5 text-xs font-bold uppercase tracking-[0.14em] text-[#f0ba80]">MaTable.ci · Aide</p>
+          <p className="mt-5 text-xs font-bold uppercase tracking-[0.14em] text-[#f0ba80]">MaTable-ci.com · Aide</p>
           <h1 className="mt-2 font-display text-3xl font-extrabold tracking-[-.035em] sm:text-4xl">Questions fréquentes</h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-white/80 sm:text-base">
             Les réponses utiles pour découvrir une boutique, commander et gérer votre compte.

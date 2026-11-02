@@ -76,7 +76,7 @@ const HowItWorksPage: React.FC = () => {
             transition={{ duration: 0.5, ease: 'easeOut' }}
             className="max-w-3xl"
           >
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#f0ba80] sm:text-sm">La vision MaTable.ci</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#f0ba80] sm:text-sm">La vision MaTable-ci.com</p>
             <h1 className="mt-3 font-display text-3xl font-extrabold leading-[1.04] tracking-[-0.045em] sm:mt-4 sm:text-6xl">
               Le commerce local, <span className="text-[#f0ba80]">plus proche.</span>
             </h1>
@@ -95,7 +95,7 @@ const HowItWorksPage: React.FC = () => {
               Voir le parcours étape par étape
             </a>
           </motion.div>
-          <div className="mt-5 flex snap-x gap-2 overflow-x-auto pb-1 sm:mt-9 sm:grid sm:grid-cols-3 sm:gap-3 sm:overflow-visible sm:pb-0" aria-label="Les principes de MaTable.ci">
+          <div className="mt-5 flex snap-x gap-2 overflow-x-auto pb-1 sm:mt-9 sm:grid sm:grid-cols-3 sm:gap-3 sm:overflow-visible sm:pb-0" aria-label="Les principes de MaTable-ci.com">
             {[
               { icon: Heart, title: 'Mettre en lumière', text: 'Les commerces de proximité' },
               { icon: MessageCircle, title: 'Créer le lien', text: 'Client et commerçant en direct' },
@@ -132,7 +132,7 @@ const HowItWorksPage: React.FC = () => {
             <div className="relative z-10 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-[#065f46]"><ShoppingBag className="h-5 w-5" aria-hidden="true" /></span>
-                <span><strong className="block text-xs font-black tracking-tight text-white">MaTable<span className="text-[#f0ba80]">.ci</span></strong><span className="block text-[9px] font-medium text-white/55">Le commerce local en mouvement</span></span>
+                <span><strong className="block text-xs font-black tracking-tight text-white">MaTable<span className="text-[#f0ba80]">-ci.com</span></strong><span className="block text-[9px] font-medium text-white/55">Le commerce local en mouvement</span></span>
               </div>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.07] px-3 py-1.5 text-[9px] font-bold text-white/80"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#86efac]" /> VISITE EN DIRECT</span>
             </div>
@@ -167,7 +167,7 @@ const HowItWorksPage: React.FC = () => {
                 <div className="overflow-hidden rounded-[27px] bg-[#f8f6f0] text-[#292d2a]">
                   <div className="flex h-9 items-center justify-between px-4 pt-1 text-[9px] font-bold text-[#52615a]"><span>9:41</span><span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm border border-[#52615a]" /><span className="h-2 w-2 rounded-full bg-[#52615a]" /></span></div>
                   <div className="flex items-center justify-between border-b border-[#e9e3d9] bg-white px-4 py-2.5">
-                    <div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#e9f5ee] text-[#065f46]"><ShoppingBag className="h-4 w-4" aria-hidden="true" /></span><strong className="text-xs">MaTable<span className="text-[#047857]">.ci</span></strong></div>
+                    <div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#e9f5ee] text-[#065f46]"><ShoppingBag className="h-4 w-4" aria-hidden="true" /></span><strong className="text-xs">MaTable<span className="text-[#047857]">-ci.com</span></strong></div>
                     <span className="rounded-full bg-[#f4f1eb] px-2.5 py-1 text-[8px] font-bold text-[#647067]">Abidjan</span>
                   </div>
 
@@ -260,7 +260,7 @@ const HowItWorksPage: React.FC = () => {
                       </motion.div>
                     </AnimatePresence>
                   </div>
-                  <div className="flex items-center justify-between border-t border-[#e9e3d9] bg-white px-4 py-2.5"><span className="text-[8px] font-semibold text-[#8a8176]">Votre prochaine belle adresse</span><span className="flex items-center gap-1 text-[8px] font-black text-[#047857]">MATABLE.CI <ArrowRight className="h-3 w-3" /></span></div>
+                  <div className="flex items-center justify-between border-t border-[#e9e3d9] bg-white px-4 py-2.5"><span className="text-[8px] font-semibold text-[#8a8176]">Votre prochaine belle adresse</span><span className="flex items-center gap-1 text-[8px] font-black text-[#047857]">MATABLE-CI.COM <ArrowRight className="h-3 w-3" /></span></div>
                 </div>
                 <span className="absolute bottom-1 left-1/2 h-1 w-16 -translate-x-1/2 rounded-full bg-white/70" />
               </div>
@@ -324,7 +324,7 @@ const HowItWorksPage: React.FC = () => {
                 <h3 className="mt-2 font-display text-2xl font-extrabold leading-tight sm:text-3xl">{active.title}</h3>
                 <p className="mt-3 text-sm leading-6 text-[#647067]">{active.description}</p>
                 <div className="mt-5 rounded-2xl border border-[#e7ddd0] bg-[#FAF8F2] p-4">
-                  <p className="text-xs font-bold text-[#47534b]">L’esprit MaTable.ci</p>
+                  <p className="text-xs font-bold text-[#47534b]">L’esprit MaTable-ci.com</p>
                   <p className="mt-1 text-xs leading-5 text-[#647067]">Découvrir le commerce local, rapprocher les personnes et laisser les commerçants maîtres de leurs échanges.</p>
                 </div>
               </motion.div>

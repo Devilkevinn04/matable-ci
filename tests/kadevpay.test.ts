@@ -249,8 +249,8 @@ test('GeniusPay checkout rejects HTTPS URLs outside the provider domain', async 
       amount: 3000,
       description: 'Test payment',
       customer: { name: 'Test Shop', email: 'shop@example.com', phone: '+2250700000000', country: 'CI' },
-      success_url: 'https://matable.ci/app',
-      error_url: 'https://matable.ci/app',
+      success_url: 'https://matable-ci.com/app',
+      error_url: 'https://matable-ci.com/app',
       metadata: { subscription_payment_id: 'payment-id', payment_type: 'subscription' },
     }, async () => new Response(JSON.stringify({
       success: true,
@@ -274,10 +274,10 @@ test('GeniusPay creation sends documented idempotency fields and parses the nest
     let checkoutRequest: Record<string, unknown> | null = null;
     const checkout = await createGeniusPayCheckout({
       amount: 5000,
-      description: 'Abonnement MaTable.ci',
+      description: 'Abonnement MaTable-ci.com',
       customer: { name: 'Boutique test', email: 'shop@example.ci', phone: '+2250700000001', country: 'CI' },
-      success_url: 'https://matable.ci/app?payment_id=intent-contract-test',
-      error_url: 'https://matable.ci/app?payment_id=intent-contract-test',
+      success_url: 'https://matable-ci.com/app?payment_id=intent-contract-test',
+      error_url: 'https://matable-ci.com/app?payment_id=intent-contract-test',
       metadata: { subscription_payment_id: paymentId, payment_type: 'subscription' },
     }, async (_input, init) => {
       const headers = new Headers(init?.headers);

@@ -147,7 +147,7 @@ export interface AdminOrder {
   customer_phone: string;
   delivery_location: string;
   total_amount: number;
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'expired';
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'rejected' | 'expired';
   created_at: string;
   items_count: number;
 }

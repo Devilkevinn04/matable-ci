@@ -26,8 +26,13 @@ import {
   MIN_DELIVERY_QUOTE,
   type DeliveryQuote,
 } from '../services/deliveryQuoting.ts';
-import { dispatchDeliveryCreatedPush } from '../services/deliveryNotifications.ts';
+import { dispatchDeliveryCancelledPush } from '../services/deliveryNotifications.ts';
 import { sendCustomerOrderReceiptEmail } from '../services/email.ts';
+import { CUSTOMER_LOYALTY_REWARD_THRESHOLD } from '../../src/utils/customerLoyalty.ts';
+import {
+  expirePendingOrderInTransaction,
+  restoreReservedOrderStock,
+} from '../services/orderLifecycle.ts';
 
 interface CustomerSession {
   authenticated: boolean;
@@ -245,7 +250,7 @@ export function createOrderRouter({
           total_amount: calculatedTotal,
           delivery_fee: deliveryFee,
           created_at: createdAt,
-          status: 'confirmed',
+          status: 'pending',
           whatsapp_tracking_available: true,
           whatsapp_clicked_at: null,
           items: orderItemRecords,
@@ -254,12 +259,12 @@ export function createOrderRouter({
           INSERT INTO orders (
             id, shop_id, customer_name, customer_phone, delivery_location, delivery_note,
             delivery_slot, payment_method_preference, total_amount, delivery_fee, created_at, status, items, customer_user_id,
-            attribution_campaign
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            attribution_campaign, pending_since
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [newOrder.id, newOrder.shop_id, newOrder.customer_name, newOrder.customer_phone, newOrder.delivery_location,
           newOrder.delivery_note ?? null, newOrder.delivery_slot ?? null, newOrder.payment_method_preference,
           newOrder.total_amount, newOrder.delivery_fee, newOrder.created_at, newOrder.status, JSON.stringify(newOrder.items ?? []), newOrder.customer_user_id ?? null,
-          newOrder.attribution_campaign ?? null]);
+          newOrder.attribution_campaign ?? null, newOrder.created_at]);
         await transaction.run(
           'INSERT INTO order_whatsapp_tracking (order_id, token_hash, clicked_at) VALUES (?, ?, NULL)',
           [orderId, hashAccessToken(whatsappTrackingToken)],
@@ -322,7 +327,6 @@ export function createOrderRouter({
         url: '/app',
         tag: `order-${createdOrder.id}`,
       }).catch((error: unknown) => console.error(`Unable to queue order notification for shop ${shop.id}.`, error));
-      if (createdDelivery) void dispatchDeliveryCreatedPush(createdDelivery.id);
       for (const update of stockUpdates) {
         dispatchStockTransitionPush(shop.id, update.product, update.previousStock, update.stock, `stock-order-${createdOrder.id}-${update.product.id}`);
       }
@@ -359,8 +363,8 @@ export function createOrderRouter({
         whatsapp_tracking_token: whatsappTrackingToken,
         email_receipt_status: emailReceiptStatus,
         message: createdDelivery
-          ? 'Commande acceptée et stock réservé. La livraison MaTable est en attente d’un livreur ; réglez les articles et les frais de livraison selon les modalités convenues avec la boutique.'
-          : 'Commande acceptée automatiquement et stock réservé. Contactez le vendeur sur WhatsApp pour échanger sur la livraison et le paiement.',
+          ? 'Demande envoyée au commerçant. Les articles sont réservés pendant 2 heures ; la recherche d’un livreur commencera après son acceptation.'
+          : 'Demande envoyée au commerçant. Les articles sont réservés pendant 2 heures, le temps qu’il accepte ou refuse. Contactez-le sur WhatsApp pour échanger sur la livraison et le paiement.',
       });
     } catch (error: unknown) {
       const err = error as { message?: string; statusCode?: number; product_id?: number; stock?: number };
@@ -369,6 +373,122 @@ export function createOrderRouter({
       if (err.stock !== undefined) payload.stock = err.stock;
       res.status(Number(err.statusCode) || 409).json(payload);
     }
+  });
+
+  router.patch('/customers/orders/:id/cancel', rateLimitPublicRequest(30), async (req, res) => {
+    const orderId = Number(req.params.id);
+    if (!Number.isSafeInteger(orderId) || orderId <= 0) {
+      return res.status(400).json({ error: 'Identifiant de commande invalide.' });
+    }
+    const customerSession = await getCustomerSessionState(req, res);
+    if (!customerSession.authenticated || !customerSession.user) {
+      return res.status(401).json({ error: 'Authentification client requise.' });
+    }
+
+    const now = new Date().toISOString();
+    const result = await dbTransaction(async (transaction) => {
+      const order = await transaction.get<{
+        id: number | string;
+        shop_id: number | string;
+        customer_user_id: number | string;
+        status: string;
+        items: string | OrderRecord['items'];
+      }>(`
+        SELECT id, shop_id, customer_user_id, status, items FROM orders
+        WHERE id = ? AND customer_user_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}
+      `, [orderId, customerSession.user?.id]);
+      if (!order) return { type: 'missing' as const };
+      if (order.status !== 'pending') return { type: 'not_pending' as const, status: order.status };
+
+      const expiration = await expirePendingOrderInTransaction(transaction, orderId, now);
+      if (expiration?.type === 'blockedByDelivery') return { type: 'blocked' as const };
+      if (expiration?.type === 'expired') return { type: 'expired' as const, expiration: expiration.order };
+
+      const items = typeof order.items === 'string' ? JSON.parse(order.items) as OrderRecord['items'] : order.items;
+      if (!Array.isArray(items)) throw new Error(`Invalid order items for order ${orderId}.`);
+      const shopId = Number(order.shop_id);
+      const stockUpdates = await restoreReservedOrderStock(transaction, { items }, shopId);
+      const update = await transaction.run(
+        "UPDATE orders SET status = 'cancelled', delivery_fee = 0, pending_since = NULL WHERE id = ? AND status = 'pending'",
+        [orderId],
+      );
+      if (update.changes !== 1) throw new Error(`Pending order ${orderId} changed while cancelling.`);
+
+      const delivery = await transaction.get<{
+        id: number | string;
+        status: string;
+        driver_id: number | string | null;
+      }>(`
+        SELECT id, status, driver_id FROM delivery_orders
+        WHERE order_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}
+      `, [orderId]);
+      let cancelledDelivery: { id: number; previousStatus: string; driverId: number | null } | undefined;
+      if (delivery && ['requested', 'accepted', 'to_pickup'].includes(delivery.status)) {
+        await transaction.run(
+          "UPDATE delivery_orders SET status = 'cancelled', cancelled_at = ? WHERE id = ? AND status = ?",
+          [now, delivery.id, delivery.status],
+        );
+        await transaction.run(`INSERT INTO delivery_course_events
+          (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
+          VALUES (?, 'admin', NULL, ?, 'cancelled', ?)`,
+        [delivery.id, delivery.status, now]);
+        cancelledDelivery = {
+          id: Number(delivery.id),
+          previousStatus: delivery.status,
+          driverId: delivery.driver_id === null ? null : Number(delivery.driver_id),
+        };
+      }
+      return { type: 'cancelled' as const, shopId, stockUpdates, cancelledDelivery };
+    });
+
+    if (result.type === 'missing') return res.status(404).json({ error: 'Commande introuvable.' });
+    if (result.type === 'not_pending') return res.status(409).json({ error: `Cette commande ne peut plus être annulée (statut : ${result.status}).` });
+    if (result.type === 'blocked') return res.status(409).json({ error: 'La commande ne peut plus être annulée après récupération du colis par le livreur.' });
+    if (result.type === 'expired') {
+      for (const update of result.expiration.stockUpdates) {
+        const product = products.find((candidate) => candidate.id === update.productId && candidate.shop_id === update.shopId);
+        if (product) {
+          product.stock = update.stock;
+          product.is_available = update.isAvailable;
+        }
+      }
+      const cachedOrder = orders.find((candidate) => candidate.id === orderId);
+      if (cachedOrder) {
+        cachedOrder.status = 'expired';
+        cachedOrder.delivery_fee = 0;
+      }
+      if (result.expiration.cancelledDelivery) {
+        void dispatchDeliveryCancelledPush(
+          result.expiration.cancelledDelivery.id,
+          result.expiration.cancelledDelivery.previousStatus,
+          result.expiration.cancelledDelivery.driverId,
+          'admin',
+        );
+      }
+      return res.status(409).json({ error: 'Le délai de 2 heures est dépassé. La demande a expiré et le stock a été libéré.' });
+    }
+
+    for (const update of result.stockUpdates) {
+      const product = products.find((candidate) => candidate.id === update.productId && candidate.shop_id === result.shopId);
+      if (product) {
+        product.stock = update.stock;
+        product.is_available = update.isAvailable;
+      }
+    }
+    const cachedOrder = orders.find((candidate) => candidate.id === orderId);
+    if (cachedOrder) {
+      cachedOrder.status = 'cancelled';
+      cachedOrder.delivery_fee = 0;
+    }
+    if (result.cancelledDelivery) {
+      void dispatchDeliveryCancelledPush(
+        result.cancelledDelivery.id,
+        result.cancelledDelivery.previousStatus,
+        result.cancelledDelivery.driverId,
+        'admin',
+      );
+    }
+    return res.json({ success: true, message: 'Commande annulée et stock libéré.' });
   });
 
   router.get('/customers/orders/:id/contacts/merchant', rateLimitPublicRequest(60), async (req, res) => {
@@ -534,6 +654,45 @@ export function createOrderRouter({
       'SELECT order_id, target_type, target_id FROM customer_reviews WHERE user_id = ? ORDER BY target_type, target_id',
       [customerSession.user.id],
     );
+    const loyaltyRows = await dbAll<{
+      shop_id: number | string;
+      shop_name: string;
+      shop_slug: string;
+      delivered_orders: number | string;
+    }>(`SELECT orders.shop_id, shops.name AS shop_name, shops.slug AS shop_slug,
+      COUNT(*) AS delivered_orders
+      FROM orders JOIN shops ON shops.id = orders.shop_id
+      WHERE orders.customer_user_id = ? AND orders.status = 'delivered'
+      GROUP BY orders.shop_id, shops.name, shops.slug
+      ORDER BY MAX(orders.created_at) DESC`, [customerSession.user.id]);
+    const loyaltyRedemptions = await dbAll<{ shop_id: number | string; count: number | string }>(
+      'SELECT shop_id, COUNT(*) AS count FROM customer_loyalty_redemptions WHERE user_id = ? GROUP BY shop_id',
+      [customerSession.user.id],
+    );
+    const redeemedRewardsByShop = new Map(
+      loyaltyRedemptions.map((row) => [Number(row.shop_id), Number(row.count) || 0]),
+    );
+    const customerLoyalty = loyaltyRows.map((row) => {
+      const shopId = Number(row.shop_id);
+      const deliveredOrders = Number(row.delivered_orders) || 0;
+      const availableRewards = Math.max(
+        0,
+        Math.floor(deliveredOrders / CUSTOMER_LOYALTY_REWARD_THRESHOLD) - (redeemedRewardsByShop.get(shopId) || 0),
+      );
+      return {
+        shop_id: shopId,
+        shop_name: String(row.shop_name),
+        shop_slug: String(row.shop_slug),
+        delivered_orders: deliveredOrders,
+        available_rewards: availableRewards,
+        orders_toward_next_reward: availableRewards > 0
+          ? CUSTOMER_LOYALTY_REWARD_THRESHOLD
+          : deliveredOrders % CUSTOMER_LOYALTY_REWARD_THRESHOLD,
+        orders_to_next_reward: availableRewards > 0
+          ? 0
+          : CUSTOMER_LOYALTY_REWARD_THRESHOLD - (deliveredOrders % CUSTOMER_LOYALTY_REWARD_THRESHOLD),
+      };
+    });
     const reviewsByOrder = new Map<number, { target_type: string; target_id: number }[]>();
     for (const review of reviewRows) {
       const orderReviews = reviewsByOrder.get(Number(review.order_id)) || [];
@@ -573,7 +732,7 @@ export function createOrderRouter({
       };
     });
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ orders: customerOrders });
+    res.json({ orders: customerOrders, loyalty: customerLoyalty });
   });
 
   return router;

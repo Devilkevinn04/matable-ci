@@ -38,69 +38,69 @@ const legalPageMap: Record<string, LegalPageKey> = {
 };
 const legalMetadata: Record<LegalPageKey, { title: string; description: string }> = {
   'mentions-legales': {
-    title: 'Mentions légales | MaTable.ci',
-    description: 'Mentions légales et responsabilités de la plateforme MaTable.ci.',
+    title: 'Mentions légales | MaTable-ci.com',
+    description: 'Mentions légales et responsabilités de la plateforme MaTable-ci.com.',
   },
   confidentialite: {
-    title: 'Politique de confidentialité | MaTable.ci',
-    description: 'Politique de confidentialité et traitement des données sur MaTable.ci.',
+    title: 'Politique de confidentialité | MaTable-ci.com',
+    description: 'Politique de confidentialité et traitement des données sur MaTable-ci.com.',
   },
   cgu: {
-    title: 'Conditions générales d’utilisation | MaTable.ci',
-    description: 'Conditions générales d’utilisation des vitrines et services MaTable.ci.',
+    title: 'Conditions générales d’utilisation | MaTable-ci.com',
+    description: 'Conditions générales d’utilisation des vitrines et services MaTable-ci.com.',
   },
   cookies: {
-    title: 'Politique relative aux cookies | MaTable.ci',
-    description: 'Informations sur les cookies et traceurs utilisés par MaTable.ci.',
+    title: 'Politique relative aux cookies | MaTable-ci.com',
+    description: 'Informations sur les cookies et traceurs utilisés par MaTable-ci.com.',
   },
 };
 const defaultPageMetadata = {
-  title: 'Produits locaux à découvrir en Côte d’Ivoire | MaTable.ci',
-  description: 'Découvrez les produits des commerces locaux en Côte d’Ivoire, explorez les boutiques par ville et commandez directement sur WhatsApp avec MaTable.ci.',
+  title: 'Produits locaux à découvrir en Côte d’Ivoire | MaTable-ci.com',
+  description: 'Découvrez les produits des commerces locaux en Côte d’Ivoire, explorez les boutiques par ville et commandez directement sur WhatsApp avec MaTable-ci.com.',
 };
 const shopDirectoryMetadata = {
-  title: 'Boutiques locales en Côte d’Ivoire | MaTable.ci',
+  title: 'Boutiques locales en Côte d’Ivoire | MaTable-ci.com',
   description: 'Découvrez les boutiques locales en Côte d’Ivoire, explorez les commerces par catégorie ou par ville et contactez directement les commerçants.',
 };
 const howItWorksMetadata = {
-  title: 'Comment ça marche ? | MaTable.ci',
+  title: 'Comment ça marche ? | MaTable-ci.com',
   description: 'Le guide pour découvrir une boutique locale, consulter sa vitrine, commander directement auprès du commerçant et convenir du retrait ou de la livraison.',
 };
 const userGuideMetadata = {
-  title: 'Guide personnel | MaTable.ci',
-  description: 'Votre guide pratique MaTable.ci, adapté à votre espace client, marchand ou administration.',
+  title: 'Guide personnel | MaTable-ci.com',
+  description: 'Votre guide pratique MaTable-ci.com, adapté à votre espace client, marchand ou administration.',
 };
 const faqMetadata = {
-  title: 'Questions fréquentes | MaTable.ci',
-  description: 'Réponses aux questions fréquentes sur les commandes, les comptes clients et les boutiques MaTable.ci.',
+  title: 'Questions fréquentes | MaTable-ci.com',
+  description: 'Réponses aux questions fréquentes sur les commandes, les comptes clients et les boutiques MaTable-ci.com.',
 };
 const promotionsMetadata = {
-  title: 'Promotions en cours | MaTable.ci',
+  title: 'Promotions en cours | MaTable-ci.com',
   description: 'Découvrez les promotions temporaires des boutiques locales en Côte d’Ivoire et profitez de prix réduits pendant leur période de validité.',
 };
 const recoveryMetadata = {
-  title: 'Récupérer l’accès à votre compte | MaTable.ci',
-  description: 'Récupérez l’accès à un compte client ou commerçant MaTable.ci avec un lien sécurisé envoyé par e-mail.',
+  title: 'Récupérer l’accès à votre compte | MaTable-ci.com',
+  description: 'Récupérez l’accès à un compte client ou commerçant MaTable-ci.com avec un lien sécurisé envoyé par e-mail.',
 };
 const customerLoginMetadata = {
-  title: 'Connexion client | MaTable.ci',
-  description: 'Connectez-vous à votre compte client MaTable.ci pour suivre vos commandes, retrouver vos favoris et gérer vos informations.',
+  title: 'Connexion client | MaTable-ci.com',
+  description: 'Connectez-vous à votre compte client MaTable-ci.com pour suivre vos commandes, retrouver vos favoris et gérer vos informations.',
 };
 const customerRegisterMetadata = {
-  title: 'Créer un compte client | MaTable.ci',
-  description: 'Créez votre compte client MaTable.ci pour commander auprès des boutiques locales et suivre vos livraisons.',
+  title: 'Créer un compte client | MaTable-ci.com',
+  description: 'Créez votre compte client MaTable-ci.com pour commander auprès des boutiques locales et suivre vos livraisons.',
 };
 const customerAccountMetadata = {
-  title: 'Mon compte client | MaTable.ci',
-  description: 'Retrouvez vos commandes, vos favoris et les informations de votre compte client MaTable.ci.',
+  title: 'Mon compte client | MaTable-ci.com',
+  description: 'Retrouvez vos commandes, vos favoris et les informations de votre compte client MaTable-ci.com.',
 };
 const merchantWorkspaceMetadata = {
-  title: 'Espace commerçant | MaTable.ci',
-  description: 'Gérez votre boutique, vos produits, vos commandes et vos campagnes depuis l’espace commerçant MaTable.ci.',
+  title: 'Espace commerçant | MaTable-ci.com',
+  description: 'Gérez votre boutique, vos produits, vos commandes et vos campagnes depuis l’espace commerçant MaTable-ci.com.',
 };
 const adminWorkspaceMetadata = {
-  title: 'Administration | MaTable.ci',
-  description: 'Espace d’administration MaTable.ci réservé aux super-administrateurs.',
+  title: 'Administration | MaTable-ci.com',
+  description: 'Espace d’administration MaTable-ci.com réservé aux super-administrateurs.',
 };
 const merchantPlanPreviewShop: Shop = {
   id: 0,
@@ -441,17 +441,17 @@ export default function App() {
     const isInvalidNestedRoute = (!legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && !isMerchantPlansPreview && !isMobileDashboardPreview && !isAdvertisingPreview && !isDeliveryCourierWorkspace && !isShopDirectoryRoute && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !discoveryPage && path.split('/').filter(Boolean).length > 1)
       || isUnknownStorefront;
     const metadata = isProductModalPreview
-      ? { title: 'Aperçu du formulaire article | MaTable.ci', description: 'Prévisualisation locale du formulaire de création d’article.' }
+      ? { title: 'Aperçu du formulaire article | MaTable-ci.com', description: 'Prévisualisation locale du formulaire de création d’article.' }
       : isMobileDashboardPreview
-       ? { title: 'Aperçus mobiles | MaTable.ci', description: 'Aperçus de test des espaces commerçant et administration MaTable.ci.' }
+       ? { title: 'Aperçus mobiles | MaTable-ci.com', description: 'Aperçus de test des espaces commerçant et administration MaTable-ci.com.' }
       : isAdvertisingPreview
-       ? { title: 'Aperçu publicité | MaTable.ci', description: 'Aperçu local des campagnes publicitaires, des formulaires commerçants et de la modération MaTable.ci.' }
+       ? { title: 'Aperçu publicité | MaTable-ci.com', description: 'Aperçu local des campagnes publicitaires, des formulaires commerçants et de la modération MaTable-ci.com.' }
       : isDeliveryCourierPreview
-       ? { title: 'Aperçu espace livreur | MaTable.ci', description: 'Prévisualisation locale du parcours livreur MaTable.ci, avec forfait sandbox et courses de test.' }
+       ? { title: 'Aperçu espace livreur | MaTable-ci.com', description: 'Prévisualisation locale du parcours livreur MaTable-ci.com, avec forfait sandbox et courses de test.' }
       : isDeliveryCourierWorkspace
-       ? { title: 'Espace livreur | MaTable.ci', description: 'Connectez-vous à votre espace livreur MaTable.ci, consultez les courses de vos zones et clôturez vos livraisons.' }
+       ? { title: 'Espace livreur | MaTable-ci.com', description: 'Connectez-vous à votre espace livreur MaTable-ci.com, consultez les courses de vos zones et clôturez vos livraisons.' }
       : isMerchantPlansPreview
-       ? { title: 'Aperçu des formules commerçants | MaTable.ci', description: 'Comparaison des formules Standard, Premium et Pro pour les commerçants MaTable.ci.' }
+       ? { title: 'Aperçu des formules commerçants | MaTable-ci.com', description: 'Comparaison des formules Standard, Premium et Pro pour les commerçants MaTable-ci.com.' }
       : legalPage
       ? legalMetadata[legalPage]
       : isPromotionsPage
@@ -459,7 +459,7 @@ export default function App() {
       : isShopDirectoryRoute
         ? shopDirectoryMetadata
       : isMerchantPlansPage
-        ? { title: 'Formules commerçants et tarifs | MaTable.ci', description: 'Comparez les formules Standard, Premium et Pro de MaTable.ci. Créez votre vitrine avec un essai gratuit de deux mois ou choisissez directement une formule payante.' }
+        ? { title: 'Formules commerçants et tarifs | MaTable-ci.com', description: 'Comparez les formules Standard, Premium et Pro de MaTable-ci.com. Créez votre vitrine avec un essai gratuit de deux mois ou choisissez directement une formule payante.' }
       : isHowItWorksRoute
         ? howItWorksMetadata
       : isUserGuideRoute
@@ -481,7 +481,7 @@ export default function App() {
         : customerView === 'auth'
           ? customerLoginMetadata
         : isInvalidNestedRoute
-          ? { title: 'Page introuvable | MaTable.ci', description: 'La page demandée est introuvable sur MaTable.ci.' }
+          ? { title: 'Page introuvable | MaTable-ci.com', description: 'La page demandée est introuvable sur MaTable-ci.com.' }
           : defaultPageMetadata;
     const canonicalPath = path.length > 1 ? path.replace(/\/+$/, '') : path;
     const canonicalUrl = `${getCanonicalOrigin(window.location.origin)}${canonicalPath || '/'}`;

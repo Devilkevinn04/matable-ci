@@ -1,4 +1,4 @@
-# Audit publicité et partenariats — MaTable.ci
+# Audit publicité et partenariats — MaTable-ci.com
 
 Date : 25 octobre 2026
 Périmètre : audit local du worktree, sans connexion à la production ni aux
@@ -135,7 +135,7 @@ restent requis.**
 
 ## Décisions commerciales intégrées
 
-- **Annonceurs :** commerçants MaTable.ci vérifiés; partenaires externes sur
+- **Annonceurs :** commerçants MaTable-ci.com vérifiés; partenaires externes sur
   demande, étudiés manuellement.
 - **Formats :** boost boutique conservé; produit sponsorisé et bannière gratuits
   pour les boutiques sélectionnées pendant une bêta de 30 jours.

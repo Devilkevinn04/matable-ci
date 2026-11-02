@@ -580,7 +580,7 @@ export function createDeliveryRouter({
     if (!session) return;
     if (session.driver.identity_status !== 'verified' || session.driver.status !== 'active') return res.status(403).json({ error: 'La vérification Didit doit être terminée avant d’activer le forfait.' });
     if (!isDeliveryProviderPaymentConfigured()) {
-      return res.status(503).json({ error: 'Le paiement Mobile Money n’est pas encore configuré. Contactez MaTable.ci pour activer votre forfait livreur.' });
+      return res.status(503).json({ error: 'Le paiement Mobile Money n’est pas encore configuré. Contactez MaTable-ci.com pour activer votre forfait livreur.' });
     }
     if (isAccessActive(session.driver)) return res.status(409).json({ error: 'Le forfait livreur est déjà actif.' });
     const driverId = Number(session.driver.id);
@@ -611,10 +611,10 @@ export function createDeliveryRouter({
     try {
       const checkout = await createGeniusPayCheckout({
         amount: Number(intent.amount),
-        description: 'Forfait livreur MaTable.ci (24 h)',
+        description: 'Forfait livreur MaTable-ci.com (24 h)',
         customer: {
           name: session.driver.name,
-          email: driverContact?.email || `livreur-${driverId}@matable.ci`,
+          email: driverContact?.email || `livreur-${driverId}@matable-ci.com`,
           phone: session.driver.phone,
           country: 'CI',
         },
@@ -908,7 +908,7 @@ export function createDeliveryRouter({
         `SELECT status FROM orders WHERE id = ?${mode === 'postgresql' ? ' FOR UPDATE' : ''}`,
         [delivery.order_id],
       );
-      if (!order || ['delivered', 'cancelled', 'expired', 'refunded'].includes(order.status)) return 'order_terminal' as const;
+      if (!order || ['delivered', 'cancelled', 'rejected', 'expired', 'refunded'].includes(order.status)) return 'order_terminal' as const;
       const timeColumn = requestedStatus === 'to_pickup' ? 'to_pickup_at'
         : requestedStatus === 'picked_up' ? 'picked_up_at' : 'delivered_at';
       await transaction.run(
@@ -1031,7 +1031,7 @@ export function createDeliveryRouter({
       `, [deliveryId, session.driver.id]);
       if (!row) return { type: 'missing' as const };
       if (!ACTIVE_DELIVERY_STATES.has(row.status)
-        || ['delivered', 'cancelled', 'expired', 'refunded'].includes(row.order_status)) {
+        || ['delivered', 'cancelled', 'rejected', 'expired', 'refunded'].includes(row.order_status)) {
         return { type: 'terminal' as const };
       }
       const allowed = await checkContactRevealRateLimit(transaction, {

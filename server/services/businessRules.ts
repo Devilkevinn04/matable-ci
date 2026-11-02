@@ -323,7 +323,7 @@ export function summarizeOrderMetrics<T extends Pick<OrderRecord, 'shop_id' | 't
   const delivered = filteredOrders.filter((order) => order.status === 'delivered').length;
   const cancelled = filteredOrders.filter((order) => order.status === 'cancelled').length;
   const caOrdered = filteredOrders
-    .filter((order) => !['cancelled', 'expired'].includes(order.status || 'pending'))
+    .filter((order) => !['cancelled', 'rejected', 'expired'].includes(order.status || 'pending'))
     .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
   const caConfirmed = filteredOrders.filter((order) => order.status === 'confirmed').reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
   const caDelivered = filteredOrders.filter((order) => order.status === 'delivered').reduce((sum, order) => sum + Number(order.total_amount || 0), 0);

@@ -7,7 +7,7 @@ interface ContactTransaction {
 export type OrderContactActorType = 'customer' | 'merchant';
 type ContactRevealActorType = OrderContactActorType | 'driver';
 
-export const TERMINAL_ORDER_CONTACT_STATUSES = new Set(['delivered', 'cancelled', 'expired', 'refunded']);
+export const TERMINAL_ORDER_CONTACT_STATUSES = new Set(['delivered', 'cancelled', 'rejected', 'expired', 'refunded']);
 
 export function isOrderContactAvailable(status: string): boolean {
   return !TERMINAL_ORDER_CONTACT_STATUSES.has(status.trim().toLowerCase());

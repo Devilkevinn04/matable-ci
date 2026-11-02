@@ -44,7 +44,7 @@ export const CustomerPasswordResetPage: React.FC<CustomerPasswordResetPageProps>
       eyebrow="Sécurité du compte"
       title="Choisissez un nouveau mot de passe."
       description="Le lien de réinitialisation est temporaire et ne peut être utilisé qu’une seule fois."
-      imageAlt="Sécurisation d’un compte client MaTable.ci"
+      imageAlt="Sécurisation d’un compte client MaTable-ci.com"
       onBack={onBack}
       topPrompt=""
       topActionLabel=""

@@ -165,7 +165,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
           </div>
 
           <p className="text-center text-[11px] text-slate-400 mt-4">
-            MaTable.ci • Espace boutique professionnel
+            MaTable-ci.com • Espace boutique professionnel
           </p>
         </div>
 

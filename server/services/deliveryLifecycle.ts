@@ -4,7 +4,7 @@ import { dispatchDeliveryCancelledPush } from './deliveryNotifications.ts';
 export const DEFAULT_DELIVERY_OFFER_TTL_MINUTES = 120;
 const MAX_DELIVERY_OFFER_TTL_MINUTES = 7 * 24 * 60;
 const EXPIRY_BATCH_SIZE = 200;
-const TERMINAL_ORDER_STATUSES = new Set(['delivered', 'cancelled', 'expired', 'refunded']);
+const TERMINAL_ORDER_STATUSES = new Set(['delivered', 'cancelled', 'rejected', 'expired', 'refunded']);
 
 export function parseOfferTtlMinutes(raw: unknown): number {
   const parsed = Number(raw);

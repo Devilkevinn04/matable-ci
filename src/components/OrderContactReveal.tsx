@@ -18,7 +18,7 @@ interface OrderContactRevealProps {
   orderStatus: string;
 }
 
-const TERMINAL_STATUSES = new Set(['delivered', 'cancelled', 'expired', 'refunded']);
+const TERMINAL_STATUSES = new Set(['delivered', 'cancelled', 'rejected', 'expired', 'refunded']);
 
 export const OrderContactReveal: React.FC<OrderContactRevealProps> = ({ endpoint, contactLabel, orderStatus }) => {
   const [preview, setPreview] = useState<ContactPreview | null>(null);

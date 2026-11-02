@@ -749,7 +749,7 @@ before(async () => {
       APPLE_PRIVATE_KEY: '',
       VAPID_PUBLIC_KEY: 'A'.repeat(87),
       VAPID_PRIVATE_KEY: 'B'.repeat(43),
-      VAPID_SUBJECT: 'mailto:assistance@matable.ci',
+      VAPID_SUBJECT: 'mailto:assistance@matable-ci.com',
       NODE_ENV: 'test',
       PORT: String(TEST_PORT),
       MATABLE_DB_PATH: TEST_DB_PATH,
@@ -945,6 +945,8 @@ test('verification admin is limited to identity follow-up and content moderation
     body: JSON.stringify({ status: 'confirmed' }),
   });
   assert.equal(forbiddenOrderUpdate.response.status, 403, JSON.stringify(forbiddenOrderUpdate.payload));
+  const forbiddenOrderExport = await apiFetch('/api/shops/1/orders/export.csv');
+  assert.equal(forbiddenOrderExport.response.status, 403, JSON.stringify(forbiddenOrderExport.payload));
 
   const generalNotification = await apiFetch('/api/admin/shops/1/notification', {
     method: 'POST',
@@ -1666,6 +1668,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
     }),
   });
   assert.equal(guestOrder.response.status, 200, JSON.stringify(guestOrder.payload));
+  assert.equal(guestOrder.payload.order.status, 'pending');
   assert.equal(guestOrder.payload.order.customer_user_id, undefined);
   assert.equal(guestOrder.payload.email_receipt_status, 'failed');
   assert.equal('customer_email' in guestOrder.payload.order, false);
@@ -1694,10 +1697,17 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   });
   assert.equal(accountOrder.response.status, 200, JSON.stringify(accountOrder.payload));
   assert.equal(accountOrder.payload.order.customer_user_id, customerRegistration.payload.user.id);
-  assert.equal(accountOrder.payload.order.status, 'confirmed');
+  assert.equal(accountOrder.payload.order.status, 'pending');
   assert.equal(accountOrder.payload.order.payment_method_preference, 'mobile_money');
   assert.equal(accountOrder.payload.email_receipt_status, 'failed');
   assert.equal('customer_email' in accountOrder.payload.order, false);
+  const customerCookies = cookieJar;
+  cookieJar = '';
+  const unauthenticatedCancellation = await apiFetch(`/api/customers/orders/${accountOrder.payload.order.id}/cancel`, {
+    method: 'PATCH',
+  });
+  assert.equal(unauthenticatedCancellation.response.status, 401);
+  cookieJar = customerCookies;
 
   const invalidTrackingClick = await apiFetch(`/api/orders/${accountOrder.payload.order.id}/whatsapp-click`, {
     method: 'POST',
@@ -1722,6 +1732,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   assert.equal(customerHistory.response.status, 200, JSON.stringify(customerHistory.payload));
   assert.deepEqual(customerHistory.payload.orders.map((order: any) => order.id), [accountOrder.payload.order.id]);
   assert.equal(customerHistory.payload.orders[0].shop_name, 'Boutique Parcours Client');
+  assert.equal(customerHistory.payload.orders[0].status, 'pending');
 
   const merchantOrders = await apiFetch(`/api/shops/${shopId}/orders`);
   assert.equal(merchantOrders.response.status, 200, JSON.stringify(merchantOrders.payload));
@@ -1735,6 +1746,21 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   const stockAfterOrderCreation = await apiFetch(`/api/shops/${shopId}/products`);
   assert.equal(stockAfterOrderCreation.payload[0].stock, 2);
 
+  const acceptedOrder = await apiFetch(`/api/shops/${shopId}/orders/${accountOrder.payload.order.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'confirmed' }),
+  });
+  assert.equal(acceptedOrder.response.status, 200, JSON.stringify(acceptedOrder.payload));
+  assert.equal(acceptedOrder.payload.order.status, 'confirmed');
+  const stockAfterAcceptance = await apiFetch(`/api/shops/${shopId}/products`);
+  assert.equal(stockAfterAcceptance.payload[0].stock, 2, 'accepting a pending order must not reserve its stock twice');
+
+  const cancelAcceptedOrder = await apiFetch(`/api/customers/orders/${accountOrder.payload.order.id}/cancel`, {
+    method: 'PATCH',
+  });
+  assert.equal(cancelAcceptedOrder.response.status, 409);
+
   const cancelled = await apiFetch(`/api/shops/${shopId}/orders/${accountOrder.payload.order.id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -1743,6 +1769,71 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   assert.equal(cancelled.response.status, 200, JSON.stringify(cancelled.payload));
   const stockAfterCancellation = await apiFetch(`/api/shops/${shopId}/products`);
   assert.equal(stockAfterCancellation.payload[0].stock, 5);
+
+  const customerCancelledOrder = await apiFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shopId,
+      customer_name: 'Client annulation',
+      customer_phone: uniquePhone(),
+      delivery_location: 'Marcory Résidentiel',
+      items: [{ product_id: productId, quantity: 1 }],
+    }),
+  });
+  assert.equal(customerCancelledOrder.response.status, 200, JSON.stringify(customerCancelledOrder.payload));
+  const customerCancellation = await apiFetch(`/api/customers/orders/${customerCancelledOrder.payload.order.id}/cancel`, {
+    method: 'PATCH',
+  });
+  assert.equal(customerCancellation.response.status, 200, JSON.stringify(customerCancellation.payload));
+  assert.equal((await apiFetch(`/api/shops/${shopId}/products`)).payload[0].stock, 5);
+
+  const rejectedOrder = await apiFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shopId,
+      customer_name: 'Client refus',
+      customer_phone: uniquePhone(),
+      delivery_location: 'Marcory Résidentiel',
+      items: [{ product_id: productId, quantity: 1 }],
+    }),
+  });
+  assert.equal(rejectedOrder.response.status, 200, JSON.stringify(rejectedOrder.payload));
+  const merchantRejection = await apiFetch(`/api/shops/${shopId}/orders/${rejectedOrder.payload.order.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'rejected' }),
+  });
+  assert.equal(merchantRejection.response.status, 200, JSON.stringify(merchantRejection.payload));
+  assert.equal(merchantRejection.payload.order.status, 'rejected');
+  assert.equal((await apiFetch(`/api/shops/${shopId}/products`)).payload[0].stock, 5);
+
+  const staleOrder = await apiFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shopId,
+      customer_name: 'Client expiration',
+      customer_phone: uniquePhone(),
+      delivery_location: 'Marcory Résidentiel',
+      items: [{ product_id: productId, quantity: 1 }],
+    }),
+  });
+  assert.equal(staleOrder.response.status, 200, JSON.stringify(staleOrder.payload));
+  const expiryDb = new Database(TEST_DB_PATH);
+  const staleCreatedAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+  expiryDb.prepare('UPDATE orders SET created_at = ?, pending_since = ? WHERE id = ?')
+    .run(staleCreatedAt, staleCreatedAt, staleOrder.payload.order.id);
+  expiryDb.close();
+  const lateAcceptance = await apiFetch(`/api/shops/${shopId}/orders/${staleOrder.payload.order.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'confirmed' }),
+  });
+  assert.equal(lateAcceptance.response.status, 409);
+  assert.match(lateAcceptance.payload.error, /2 heures/);
+  assert.equal((await apiFetch(`/api/shops/${shopId}/products`)).payload[0].stock, 5);
 
   const reviewOrderResponse = await apiFetch('/api/orders', {
     method: 'POST',
@@ -1757,12 +1848,90 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   });
   assert.equal(reviewOrderResponse.response.status, 200, JSON.stringify(reviewOrderResponse.payload));
   const reviewOrderId = reviewOrderResponse.payload.order.id;
+  const acceptReviewOrder = await apiFetch(`/api/shops/${shopId}/orders/${reviewOrderId}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'confirmed' }),
+  });
+  assert.equal(acceptReviewOrder.response.status, 200, JSON.stringify(acceptReviewOrder.payload));
   const deliveredReviewOrder = await apiFetch(`/api/shops/${shopId}/orders/${reviewOrderId}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: 'delivered' }),
   });
   assert.equal(deliveredReviewOrder.response.status, 200, JSON.stringify(deliveredReviewOrder.payload));
+  const firstLoyaltyProgress = await apiFetch('/api/auth/customer-orders');
+  const firstLoyaltyCard = firstLoyaltyProgress.payload.loyalty.find((card: any) => card.shop_id === shopId);
+  assert.equal(firstLoyaltyCard.delivered_orders, 1);
+  assert.equal(firstLoyaltyCard.available_rewards, 0);
+  assert.equal(firstLoyaltyCard.orders_to_next_reward, 4);
+  const prematureReward = await apiFetch(`/api/shops/${shopId}/orders/${reviewOrderId}/loyalty/redeem`, { method: 'POST' });
+  assert.equal(prematureReward.response.status, 409);
+
+  const guestAccepted = await apiFetch(`/api/shops/${shopId}/orders/${guestOrder.payload.order.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'confirmed' }),
+  });
+  assert.equal(guestAccepted.response.status, 200, JSON.stringify(guestAccepted.payload));
+  const guestDelivered = await apiFetch(`/api/shops/${shopId}/orders/${guestOrder.payload.order.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'delivered' }),
+  });
+  assert.equal(guestDelivered.response.status, 200, JSON.stringify(guestDelivered.payload));
+
+  const additionalLoyaltyOrderIds: number[] = [];
+  for (let index = 0; index < 4; index += 1) {
+    const loyaltyOrder = await apiFetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shop_id: shopId,
+        customer_name: 'Client fidélité',
+        customer_phone: customerPhone,
+        delivery_location: 'Marcory Résidentiel',
+        items: [{ product_id: productId, quantity: 1 }],
+      }),
+    });
+    assert.equal(loyaltyOrder.response.status, 200, JSON.stringify(loyaltyOrder.payload));
+    const loyaltyOrderId = loyaltyOrder.payload.order.id;
+    additionalLoyaltyOrderIds.push(loyaltyOrderId);
+    for (const status of ['confirmed', 'delivered']) {
+      const update = await apiFetch(`/api/shops/${shopId}/orders/${loyaltyOrderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      assert.equal(update.response.status, 200, JSON.stringify(update.payload));
+    }
+  }
+  const earnedLoyalty = await apiFetch('/api/auth/customer-orders');
+  const earnedCard = earnedLoyalty.payload.loyalty.find((card: any) => card.shop_id === shopId);
+  assert.equal(earnedCard.delivered_orders, 5, 'the delivered guest order must not count');
+  assert.equal(earnedCard.available_rewards, 1);
+  assert.equal(earnedCard.orders_to_next_reward, 0);
+
+  const merchantLoyaltyOrders = await apiFetch(`/api/shops/${shopId}/orders`);
+  const merchantLoyaltyOrder = merchantLoyaltyOrders.payload.find((order: any) => order.id === reviewOrderId);
+  assert.equal(merchantLoyaltyOrder.loyalty.delivered_orders, 5);
+  assert.equal(merchantLoyaltyOrder.loyalty.available_rewards, 1);
+  const redeemedReward = await apiFetch(`/api/shops/${shopId}/orders/${reviewOrderId}/loyalty/redeem`, { method: 'POST' });
+  assert.equal(redeemedReward.response.status, 200, JSON.stringify(redeemedReward.payload));
+  assert.equal(redeemedReward.payload.qualifying_order_count, 5);
+  assert.equal(redeemedReward.payload.available_rewards, 0);
+  const duplicateReward = await apiFetch(`/api/shops/${shopId}/orders/${additionalLoyaltyOrderIds[0]}/loyalty/redeem`, { method: 'POST' });
+  assert.equal(duplicateReward.response.status, 409);
+  const guestReward = await apiFetch(`/api/shops/${shopId}/orders/${guestOrder.payload.order.id}/loyalty/redeem`, { method: 'POST' });
+  assert.equal(guestReward.response.status, 409);
+  const cancelledReward = await apiFetch(`/api/shops/${shopId}/orders/${accountOrder.payload.order.id}/loyalty/redeem`, { method: 'POST' });
+  assert.equal(cancelledReward.response.status, 409);
+  const redeemedCustomerHistory = await apiFetch('/api/auth/customer-orders');
+  assert.equal(redeemedCustomerHistory.payload.loyalty.find((card: any) => card.shop_id === shopId).available_rewards, 0);
+  const customerDataExport = await apiFetch('/api/auth/customer-data-export');
+  assert.equal(customerDataExport.response.status, 200);
+  assert.deepEqual(customerDataExport.payload.loyalty_redemptions.map((entry: any) => entry.qualifying_order_count), [5]);
+
   const guestReviewAttempt = await apiFetch('/api/customer-engagement/reviews', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2131,8 +2300,8 @@ test('concurrent single-item orders cannot oversell the last unit', async () => 
   ]);
 
   const successfulOrders = orderAttempts.filter((attempt) => attempt.response.status === 200).length;
-  assert.equal(successfulOrders, 1, `Expected one of three auto-accepted orders to reserve the last unit, got ${successfulOrders}`);
-  assert.equal(orderAttempts.find((attempt) => attempt.response.status === 200)?.payload.order.status, 'confirmed');
+  assert.equal(successfulOrders, 1, `Expected one of three pending order requests to reserve the last unit, got ${successfulOrders}`);
+  assert.equal(orderAttempts.find((attempt) => attempt.response.status === 200)?.payload.order.status, 'pending');
 
   const productAfter = await apiFetch(`/api/shops/1/products`);
   assert.equal(productAfter.response.status, 200);
@@ -2171,7 +2340,7 @@ test('concurrent single-item orders cannot oversell the last unit', async () => 
     }),
   });
   assert.equal(duplicateOrder.response.status, 200, JSON.stringify(duplicateOrder.payload));
-  assert.equal(duplicateOrder.payload.order.status, 'confirmed');
+  assert.equal(duplicateOrder.payload.order.status, 'pending');
   const duplicateProductAfter = await apiFetch(`/api/shops/1/products`);
   const duplicateProductState = duplicateProductAfter.payload.find((item: any) => item.id === duplicateProduct.id);
   assert.equal(duplicateProductState.stock, 1);
@@ -2232,10 +2401,56 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal(productCreate.response.status, 200, `Product creation failed: ${JSON.stringify(productCreate.payload)}`);
   const createdProduct = productCreate.payload.product;
   assert.ok(createdProduct.id);
+  const freshnessDb = new Database(TEST_DB_PATH);
+  freshnessDb.prepare("UPDATE shops SET catalog_updated_at = '2000-01-01T00:00:00.000Z' WHERE id = 1").run();
+  freshnessDb.close();
 
   const productList = await apiFetch('/api/shops/1/products');
   assert.equal(productList.response.status, 200);
   assert.ok(productList.payload.some((product: any) => product.id === createdProduct.id));
+
+  const csvImport = `id,title,description,price,stock
+${createdProduct.id},"Test produit flux marchand","Produit de test pour validation du cycle complet",2500,5
+,"Article CSV importé","Produit créé depuis un import CSV",1500,2`;
+  const csvPreview = await apiFetch('/api/shops/1/products/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ csv: csvImport, apply: false }),
+  });
+  assert.equal(csvPreview.response.status, 200, JSON.stringify(csvPreview.payload));
+  assert.equal(csvPreview.payload.created_count, 1);
+  assert.equal(csvPreview.payload.updated_count, 1);
+  const invalidCsvImport = await apiFetch('/api/shops/1/products/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      csv: `id,title,description,price,stock\n${createdProduct.id},"Ne pas enregistrer","Produit existant",2500,5\n,"Article invalide","",1500,2`,
+      apply: true,
+    }),
+  });
+  assert.equal(invalidCsvImport.response.status, 400);
+  const productsAfterInvalidCsv = await apiFetch('/api/shops/1/products');
+  assert.equal(
+    productsAfterInvalidCsv.payload.find((product: any) => product.id === createdProduct.id)?.title,
+    'Test produit flux marchand',
+  );
+  const csvApplied = await apiFetch('/api/shops/1/products/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ csv: csvImport, apply: true }),
+  });
+  assert.equal(csvApplied.response.status, 200, JSON.stringify(csvApplied.payload));
+  assert.equal(csvApplied.payload.products.length, 2);
+  const importedProduct = csvApplied.payload.products.find((product: any) => product.title === 'Article CSV importé');
+  assert.ok(importedProduct?.id);
+  const catalogCsv = await apiFetch('/api/shops/1/products/export.csv');
+  assert.equal(catalogCsv.response.status, 200);
+  assert.match(String(catalogCsv.payload), /"id","title","description","price"/);
+  const deleteImportedProduct = await apiFetch(`/api/shops/1/products/${importedProduct.id}`, { method: 'DELETE' });
+  assert.equal(deleteImportedProduct.response.status, 200, JSON.stringify(deleteImportedProduct.payload));
+  const ordersCsv = await apiFetch('/api/shops/1/orders/export.csv');
+  assert.equal(ordersCsv.response.status, 200);
+  assert.match(String(ordersCsv.payload), /"customer_phone","delivery_location"/);
 
   const productEdit = await apiFetch(`/api/shops/1/products/${createdProduct.id}`, {
     method: 'PUT',
@@ -2252,6 +2467,21 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal(productEdit.response.status, 200, JSON.stringify(productEdit.payload));
   assert.equal(productEdit.payload.product.title, 'Produit marchand modifié');
   assert.equal(productEdit.payload.product.sale_price, 1800);
+  const shopAfterCatalogEdit = await apiFetch('/api/shops/1');
+  assert.equal(shopAfterCatalogEdit.response.status, 200, JSON.stringify(shopAfterCatalogEdit.payload));
+  assert.ok(Date.parse(shopAfterCatalogEdit.payload.shop.catalog_updated_at) > Date.parse('2000-01-01T00:00:00.000Z'));
+  const freshnessBeforeHoursEdit = new Database(TEST_DB_PATH);
+  freshnessBeforeHoursEdit.prepare("UPDATE shops SET catalog_updated_at = '2000-01-01T00:00:00.000Z' WHERE id = 1").run();
+  freshnessBeforeHoursEdit.close();
+  const hoursEdit = await apiFetch('/api/shops/1', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      opening_hours: { enabled: true, open_time: '00:00', close_time: '23:59', days: [0, 1, 2, 3, 4, 5, 6] },
+    }),
+  });
+  assert.equal(hoursEdit.response.status, 200, JSON.stringify(hoursEdit.payload));
+  assert.ok(Date.parse(hoursEdit.payload.shop.catalog_updated_at) > Date.parse('2000-01-01T00:00:00.000Z'));
   const emptyDescriptionEdit = await apiFetch(`/api/shops/1/products/${createdProduct.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -2419,7 +2649,7 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   assert.equal(order.payload.success, true);
   const orderId = order.payload.order.id;
 
-  assert.equal(order.payload.order.status, 'confirmed');
+  assert.equal(order.payload.order.status, 'pending');
   assert.equal(order.payload.order.total_amount, 3600);
   assert.equal(order.payload.order.items[0].unit_price, 1800);
   assert.equal(order.payload.order.items[0].product_title, 'Produit actualisé sur une autre instance');
@@ -2464,25 +2694,6 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   const showRestockedReservedProduct = await apiFetch(`/api/shops/1/products/${createdProduct.id}/toggle-visibility`, { method: 'PATCH' });
   assert.equal(showRestockedReservedProduct.payload.is_available, true);
 
-  const reactivatedPending = await apiFetch(`/api/shops/1/orders/${orderId}/status`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'pending' }),
-  });
-  assert.equal(reactivatedPending.response.status, 200, JSON.stringify(reactivatedPending.payload));
-  assert.equal(reactivatedPending.payload.order.status, 'pending');
-  const stockAfterReactivation = await apiFetch('/api/shops/1/products');
-  assert.equal(stockAfterReactivation.payload.find((item: any) => item.id === createdProduct.id).stock, 5);
-
-  const cancelledAgain = await apiFetch(`/api/shops/1/orders/${orderId}/status`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'cancelled' }),
-  });
-  assert.equal(cancelledAgain.response.status, 200, JSON.stringify(cancelledAgain.payload));
-  const stockAfterRepeatedCancellation = await apiFetch('/api/shops/1/products');
-  assert.equal(stockAfterRepeatedCancellation.payload.find((item: any) => item.id === createdProduct.id).stock, 5);
-
   const competingOrder = await apiFetch('/api/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2496,7 +2707,7 @@ test('existing merchant full flow: login, product management, order lifecycle, b
     }),
   });
   assert.equal(competingOrder.response.status, 200, JSON.stringify(competingOrder.payload));
-  assert.equal(competingOrder.payload.order.status, 'confirmed');
+  assert.equal(competingOrder.payload.order.status, 'pending');
 
   const unsafeReactivation = await apiFetch(`/api/shops/1/orders/${orderId}/status`, {
     method: 'PATCH',
@@ -2515,14 +2726,14 @@ test('existing merchant full flow: login, product management, order lifecycle, b
   const adminReopenOrder = await apiFetch(`/api/shops/1/orders/${competingOrder.payload.order.id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'pending' }),
+    body: JSON.stringify({ status: 'confirmed' }),
   });
   assert.equal(adminReopenOrder.response.status, 400);
   assert.match(String(adminReopenOrder.payload.error), /motif admin/i);
   const auditedAdminReopenOrder = await apiFetch(`/api/shops/1/orders/${competingOrder.payload.order.id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'pending', reason: 'Correction du statut après contrôle' }),
+    body: JSON.stringify({ status: 'confirmed', reason: 'Correction du statut après contrôle' }),
   });
   assert.equal(auditedAdminReopenOrder.response.status, 200, JSON.stringify(auditedAdminReopenOrder.payload));
   const orderStatusAudit = await apiFetch('/api/admin/subscriptions');
@@ -2530,7 +2741,7 @@ test('existing merchant full flow: login, product management, order lifecycle, b
     entry.action === 'admin_order_status_updated' && entry.shop_id === 1 && entry.details.includes('Correction du statut après contrôle'));
   assert.ok(orderAuditEntry, 'admin order status change must be recorded with its reason');
   const stockAfterAdminReopen = await apiFetch('/api/shops/1/products');
-  assert.equal(stockAfterAdminReopen.payload.find((item: any) => item.id === createdProduct.id).stock, 5);
+  assert.equal(stockAfterAdminReopen.payload.find((item: any) => item.id === createdProduct.id).stock, 0);
   const adminLogoutAfterRepair = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
   assert.equal(adminLogoutAfterRepair.response.status, 200);
 
@@ -3250,6 +3461,7 @@ test('merchant A cannot access merchant B products, orders, or settings', async 
     apiFetch(`/api/shops/${merchantBShopId}/products/${productId}/toggle-visibility`, { method: 'PATCH' }),
     apiFetch(`/api/shops/${merchantBShopId}/products/${productId}`, { method: 'DELETE' }),
     apiFetch(`/api/shops/${merchantBShopId}/orders`),
+    apiFetch(`/api/shops/${merchantBShopId}/orders/export.csv`),
     apiFetch(`/api/shops/${merchantBShopId}/flash-bilan`),
   ]);
 

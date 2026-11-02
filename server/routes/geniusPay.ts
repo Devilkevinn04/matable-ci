@@ -583,7 +583,7 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       try {
         checkout = await createGeniusPayCheckout({
           amount: intent.amount,
-          description: `Abonnement ${getSubscriptionPlanConfig(intent.tier).label} (${intent.subscription_term === 'annual' ? 'annuel' : 'mensuel'}) MaTable.ci`,
+          description: `Abonnement ${getSubscriptionPlanConfig(intent.tier).label} (${intent.subscription_term === 'annual' ? 'annuel' : 'mensuel'}) MaTable-ci.com`,
           customer: { name: shop.name, email: billingEmail.email, phone: customerPhone, country: 'CI' },
           success_url: new URL(`/app?payment_id=${encodeURIComponent(intent.id)}`, appUrl).toString(),
           error_url: new URL(`/app?payment_id=${encodeURIComponent(intent.id)}`, appUrl).toString(),
@@ -699,7 +699,7 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
     try {
       checkout = await createGeniusPayCheckout({
         amount: reservation.price,
-        description: `Boost MaTable.ci (${durationDays} jour${durationDays > 1 ? 's' : ''})`,
+        description: `Boost MaTable-ci.com (${durationDays} jour${durationDays > 1 ? 's' : ''})`,
         customer: { name: shop.name, email: billingEmail.email, phone: customerPhone, country: 'CI' },
         success_url: new URL(`/app?payment_id=${encodeURIComponent(paymentId)}`, appUrl).toString(),
         error_url: new URL(`/app?payment_id=${encodeURIComponent(paymentId)}`, appUrl).toString(),

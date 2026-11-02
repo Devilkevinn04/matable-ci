@@ -915,7 +915,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     const session = await getCustomerSessionState(req, res);
     if (!session.authenticated || !session.user) return res.status(401).json({ error: 'Authentification client requise.' });
     const userId = session.user.id;
-    const [profile, orders, favorites, likes, reviews, reports, consents] = await Promise.all([
+    const [profile, orders, favorites, likes, reviews, reports, consents, loyaltyRedemptions] = await Promise.all([
       dbGet<CustomerProfileRow>(
         'SELECT id, name, first_name, last_name, phone, email, created_at FROM users WHERE id = ?',
         [userId],
@@ -946,6 +946,10 @@ export function createAuthRouter(options: AuthRouterOptions) {
         'SELECT terms_document, privacy_document, accepted_at FROM customer_account_consents WHERE user_id = ? ORDER BY accepted_at',
         [userId],
       ),
+      dbAll<Record<string, unknown>>(
+        'SELECT shop_id, qualifying_order_count, redeemed_at FROM customer_loyalty_redemptions WHERE user_id = ? ORDER BY redeemed_at DESC',
+        [userId],
+      ),
     ]);
     if (!profile) return res.status(404).json({ error: 'Compte client introuvable.' });
     res.setHeader('Cache-Control', 'no-store');
@@ -962,6 +966,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
       reviews,
       reports,
       account_consents: consents,
+      loyalty_redemptions: loyaltyRedemptions,
     });
   });
 
@@ -1012,7 +1017,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     res.setHeader('Content-Disposition', `attachment; filename="matable-donnees-boutique-${shopId}.json"`);
     res.json({
       exported_at: new Date().toISOString(),
-      scope: 'Données MaTable.ci enregistrées pour cette boutique. Les fichiers et données conservés directement par les prestataires externes ne sont pas inclus.',
+      scope: 'Données MaTable-ci.com enregistrées pour cette boutique. Les fichiers et données conservés directement par les prestataires externes ne sont pas inclus.',
       shop,
       products,
       orders: orders.map((order) => ({

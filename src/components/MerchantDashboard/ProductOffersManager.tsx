@@ -167,7 +167,7 @@ export const ProductOffersManager: React.FC<ProductOffersManagerProps> = ({ shop
         </label>
         <label className="flex items-start gap-2 text-xs leading-5 text-slate-600 sm:col-span-2">
           <input name="charter_accepted" type="checkbox" required className="mt-1 h-5 w-5 shrink-0 accent-[#047857] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2" />
-          <span>Je confirme l’exactitude des informations et respecte la charte : pas de promesse trompeuse, contenu illicite ou image sans droit d’usage. La campagne est soumise à validation MaTable.ci. *</span>
+          <span>Je confirme l’exactitude des informations et respecte la charte : pas de promesse trompeuse, contenu illicite ou image sans droit d’usage. La campagne est soumise à validation MaTable-ci.com. *</span>
         </label>
         <button type="submit" disabled={!canSubmit || busy || (kind === 'product' && availableProducts.length === 0) || (kind === 'banner' && !hasCustomBanner)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#047857] px-5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-2">
           {busy ? <RotateCcw className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}

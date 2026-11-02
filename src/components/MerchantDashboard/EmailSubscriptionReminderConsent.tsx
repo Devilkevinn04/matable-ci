@@ -51,7 +51,7 @@ export const EmailSubscriptionReminderConsent: React.FC<EmailSubscriptionReminde
         <span>
           <strong className="block text-sm text-slate-900">Recevoir les rappels d’abonnement par e-mail</strong>
           <span className="mt-1 block text-xs leading-5 text-slate-600">
-            En cas d’activation, MaTable.ci pourra vous prévenir à J−14, J−7, J−3 et J−1 avant l’échéance. Vous pouvez retirer votre accord ici à tout moment.
+            En cas d’activation, MaTable-ci.com pourra vous prévenir à J−14, J−7, J−3 et J−1 avant l’échéance. Vous pouvez retirer votre accord ici à tout moment.
             {!shop.owner_email_configured && ' Ajoutez d’abord une adresse e-mail dans le profil du responsable.'}
           </span>
           {enabled && consentAt && <span className="mt-1 block text-[11px] text-slate-500">Accord donné le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(consentAt))}.</span>}

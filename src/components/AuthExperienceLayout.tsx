@@ -104,7 +104,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
         <div className="flex items-center gap-3">
           <BrandMark className="bg-white/95" />
           <div>
-            <p className="text-[19px] font-extrabold leading-none tracking-tight">MaTable<span className="text-[#f0ba80]">.ci</span></p>
+            <p className="text-[19px] font-extrabold leading-none tracking-tight">MaTable<span className="text-[#f0ba80]">-ci.com</span></p>
             <p className="mt-1 text-[10px] font-medium text-white/75">Le commerce local, en lien direct</p>
           </div>
         </div>

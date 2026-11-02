@@ -75,6 +75,7 @@ export interface Shop {
   email_subscription_reminders_consent_at?: string | null;
   owner_email_configured?: boolean;
   created_at: string;
+  catalog_updated_at?: string | null;
   category: ShopCategory;
   city?: string;
   subscription?: {
@@ -113,7 +114,7 @@ export interface ProductModifierGroup {
   options: ProductModifierOption[];
 }
 
-export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'expired';
+export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'rejected' | 'expired';
 
 export interface Product {
   id: number;
@@ -156,6 +157,7 @@ export interface OrderItem {
 export interface Order {
   id: number;
   shop_id: number;
+  customer_user_id?: number;
   customer_name: string;
   customer_phone: string;
   delivery_location: string;
@@ -168,6 +170,10 @@ export interface Order {
   status: OrderStatus;
   whatsapp_tracking_available?: boolean;
   whatsapp_clicked_at?: string | null;
+  loyalty?: {
+    delivered_orders: number;
+    available_rewards: number;
+  };
   items?: OrderItem[];
 }
 

@@ -402,12 +402,12 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       trackSignup('merchant', 'registration');
       const publicUrl = `${window.location.origin}/${data.shop.slug}`;
       const privateUrl = `${window.location.origin}/app?access=${encodeURIComponent(data.owner_access_token)}`;
-      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable.ci. Votre essai Standard gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé et votre espace marchand est accessible immédiatement. Vous pouvez choisir une formule payante et la régler dès maintenant ou quand vous le souhaitez. Vérifiez votre identité pour publier la boutique et recevoir des commandes. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
+      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable-ci.com. Votre essai Standard gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé et votre espace marchand est accessible immédiatement. Vous pouvez choisir une formule payante et la régler dès maintenant ou quand vous le souhaitez. Vérifiez votre identité pour publier la boutique et recevoir des commandes. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
       setRegistrationLinks({
         publicUrl,
         privateUrl,
         whatsappUrl: `https://wa.me/${data.shop.whatsapp_number.replace(/\D/g, '')}?text=${encodeURIComponent(accessMessage)}`,
-        emailUrl: `mailto:${regEmail.trim()}?subject=${encodeURIComponent(`Accès MaTable.ci - ${data.shop.name}`)}&body=${encodeURIComponent(accessMessage)}`,
+        emailUrl: `mailto:${regEmail.trim()}?subject=${encodeURIComponent(`Accès MaTable-ci.com - ${data.shop.name}`)}&body=${encodeURIComponent(accessMessage)}`,
       });
       loadShopData(data.shop.id);
     } catch (err: unknown) {
@@ -703,6 +703,15 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       if (!res.ok) throw new Error(data.error || 'Erreur de mise à jour du statut.');
 
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      if (newStatus === 'delivered') {
+        const ordersRes = await fetch(`/api/shops/${currentShop.id}/orders`);
+        if (!ordersRes.ok) {
+          throw new Error('Commande livrée, mais impossible d’actualiser les cartes de fidélité.');
+        }
+        const ordersData = await ordersRes.json();
+        const shopOrders = Array.isArray(ordersData) ? ordersData : (ordersData.orders || []);
+        setOrders(shopOrders.filter((order: Order) => order.shop_id === currentShop.id));
+      }
       toast.success(data.message || 'Statut mis à jour.');
 
       // Refresh products to sync restocked quantities
@@ -721,9 +730,11 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const handleUpdateOrderStatus = (orderId: number, newStatus: OrderStatus) => {
     if (!currentShop) return;
 
-    if (newStatus === 'cancelled') {
+    if (newStatus === 'cancelled' || newStatus === 'rejected') {
       setConfirmModal({
-        message: 'Annuler cette commande ? Les articles seront automatiquement remis en stock.',
+        message: newStatus === 'rejected'
+          ? 'Refuser cette demande ? Les articles réservés seront automatiquement remis en stock.'
+          : 'Annuler cette commande ? Les articles seront automatiquement remis en stock.',
         onConfirm: () => executeUpdateOrderStatus(orderId, newStatus),
       });
       return;

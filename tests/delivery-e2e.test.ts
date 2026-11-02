@@ -832,7 +832,7 @@ test('local delivery flow covers account approval, sandbox fee, zone quote, cour
   }
 
   const checkoutOrder = await api<{
-    order: { id: number; total_amount: number; delivery_fee: number };
+    order: { id: number; status: string; total_amount: number; delivery_fee: number };
     delivery: { id: number; ticket_number: string; quoted_amount: number; status: string };
   }>('/api/orders', {
     method: 'POST',
@@ -848,6 +848,7 @@ test('local delivery flow covers account approval, sandbox fee, zone quote, cour
     }),
   });
   assert.equal(checkoutOrder.response.status, 200, JSON.stringify(checkoutOrder.payload));
+  assert.equal(checkoutOrder.payload.order.status, 'pending');
   assert.equal(checkoutOrder.payload.order.total_amount, 14500);
   assert.equal(checkoutOrder.payload.order.delivery_fee, 2000);
   assert.equal(checkoutOrder.payload.delivery.status, 'requested');
@@ -870,6 +871,12 @@ test('local delivery flow covers account approval, sandbox fee, zone quote, cour
   );
   assert.equal(merchantOrdersWithFee.response.status, 200);
   assert.equal(merchantOrdersWithFee.payload.find((order) => order.id === checkoutOrderId)?.delivery_fee, 2000);
+
+  const acceptCheckout = await api(`/api/shops/1/orders/${checkoutOrderId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'confirmed' }),
+  }, merchantCookie);
+  assert.equal(acceptCheckout.response.status, 200, JSON.stringify(acceptCheckout.payload));
 
   const countDb = new Database(TEST_DB_PATH);
   let orderCountBefore: number;

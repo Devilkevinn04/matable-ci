@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShoppingBag, Check, ExternalLink, Search, TrendingUp, DollarSign, MapPin } from 'lucide-react';
+import { ShoppingBag, Check, ExternalLink, Search, TrendingUp, DollarSign, MapPin, Download, Gift } from 'lucide-react';
 import type { MerchantOrderFilter, MerchantState } from './useMerchant';
 import { formatFCFA } from '../../utils/format';
 import { OrderContactReveal } from '../OrderContactReveal';
@@ -33,6 +33,57 @@ interface MerchantDelivery {
   proof_available?: boolean;
   pickup_zone?: string;
   destination_zone?: string;
+}
+
+function MerchantLoyaltyReward({ shopId, orderId, deliveredOrders, availableRewards, onRedeemed }: {
+  shopId: number;
+  orderId: number;
+  deliveredOrders: number;
+  availableRewards: number;
+  onRedeemed: () => Promise<void>;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const redeemReward = async () => {
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch(`/api/shops/${shopId}/orders/${orderId}/loyalty/redeem`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Impossible d’enregistrer cette récompense.');
+      setNotice('Récompense remise et enregistrée.');
+      await onRedeemed();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Impossible d’enregistrer cette récompense.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2.5">
+      <div className="flex min-w-0 items-center gap-2 text-xs text-emerald-900">
+        <Gift className="h-4 w-4 shrink-0" />
+        <span>{deliveredOrders} commandes livrées · {availableRewards} récompense{availableRewards === 1 ? '' : 's'} disponible{availableRewards === 1 ? '' : 's'}</span>
+      </div>
+      <button
+        type="button"
+        onClick={() => void redeemReward()}
+        disabled={saving}
+        className="min-h-10 rounded-lg bg-emerald-700 px-3 text-xs font-bold text-white transition hover:bg-emerald-800 disabled:opacity-50"
+      >
+        {saving ? 'Enregistrement…' : 'Remettre une récompense'}
+      </button>
+      {error && <p role="alert" className="w-full text-xs font-semibold text-rose-700">{error}</p>}
+      {notice && <p role="status" className="w-full text-xs font-semibold text-emerald-800">{notice}</p>}
+    </div>
+  );
 }
 
 function MerchantDeliveryRequest({ shopId, orderId, orderStatus }: {
@@ -233,6 +284,7 @@ function MerchantDeliveryRequest({ shopId, orderId, orderStatus }: {
               {delivery.pickup_zone || 'Retrait'} → {delivery.destination_zone || 'Destination'} · <strong className="tabular-nums text-[#103E32]">{formatFCFA(Number(delivery.quoted_amount) || 0)}</strong>
             </p>
           </div>
+          {orderStatus === 'pending' && <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-900">La demande attend votre décision. La recherche d’un livreur commencera après acceptation.</p>}
           <DeliveryProgress status={delivery.status} />
           <div className="flex flex-wrap gap-2">
             {delivery.proof_available && !proofUrl && (
@@ -295,15 +347,43 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
     orders, orderSearch, setOrderSearch, orderPaymentFilter, setOrderPaymentFilter, orderStatusFilter, setOrderStatusFilter,
     handleUpdateOrderStatus, copyOwnerLink
   } = state;
+  const [csvExportBusy, setCsvExportBusy] = useState(false);
+  const [csvExportError, setCsvExportError] = useState('');
+  const downloadOrdersCsv = async () => {
+    if (!state.currentShop) return;
+    setCsvExportBusy(true);
+    setCsvExportError('');
+    try {
+      const response = await fetch(`/api/shops/${state.currentShop.id}/orders/export.csv`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        const data = await response.json() as { error?: string };
+        throw new Error(data.error || 'Impossible de télécharger les commandes.');
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `commandes-${state.currentShop.id}.csv`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      setCsvExportError(error instanceof Error ? error.message : 'Impossible de télécharger les commandes.');
+    } finally {
+      setCsvExportBusy(false);
+    }
+  };
   const orderStatusOptions: { id: MerchantOrderFilter; label: string; count: number }[] = [
     { id: 'all', label: 'Toutes', count: orders.length },
-    { id: 'actionable', label: 'À traiter', count: orders.filter(o => !['delivered', 'cancelled', 'expired'].includes(o.status || 'pending')).length },
+    { id: 'actionable', label: 'À traiter', count: orders.filter(o => !['delivered', 'cancelled', 'rejected', 'expired'].includes(o.status || 'pending')).length },
     { id: 'pending', label: 'En attente', count: orders.filter(o => (o.status || 'pending') === 'pending').length },
     { id: 'confirmed', label: 'Acceptées', count: orders.filter(o => o.status === 'confirmed').length },
     { id: 'preparing', label: 'En préparation', count: orders.filter(o => o.status === 'preparing').length },
     { id: 'ready', label: 'Prêtes', count: orders.filter(o => o.status === 'ready').length },
     { id: 'delivered', label: 'Livrées', count: orders.filter(o => o.status === 'delivered').length },
     { id: 'cancelled', label: 'Annulées', count: orders.filter(o => o.status === 'cancelled').length },
+    { id: 'rejected', label: 'Refusées', count: orders.filter(o => o.status === 'rejected').length },
   ];
 
   return (
@@ -311,10 +391,23 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
 {/* TAB 2: ORDERS MANAGEMENT */}
 
           <div className="space-y-4">
-            <header>
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-800">Espace de vente</p>
-              <h2 className="mt-1 text-xl font-black text-slate-900">Commandes</h2>
-              <p className="mt-1 text-xs leading-5 text-slate-500">Traitez les demandes clients et suivez leur progression.</p>
+            <header className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-800">Espace de vente</p>
+                <h2 className="mt-1 text-xl font-black text-slate-900">Commandes</h2>
+                <p className="mt-1 text-xs leading-5 text-slate-500">Traitez les demandes clients et suivez leur progression.</p>
+              </div>
+              <div className="sm:text-right">
+                <button
+                  type="button"
+                  onClick={() => void downloadOrdersCsv()}
+                  disabled={csvExportBusy || !state.currentShop}
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-[#d9d5cd] bg-white px-3 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4" /> {csvExportBusy ? 'Préparation…' : 'Exporter les commandes CSV'}
+                </button>
+                {csvExportError && <p role="alert" className="mt-1 text-xs font-semibold text-rose-700">{csvExportError}</p>}
+              </div>
             </header>
 
             {state.currentShop && !state.currentShop.admin_mode && (
@@ -420,7 +513,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
             </div>
 
             <p className="-mt-2 rounded-xl border border-slate-200 bg-[#fffdf8] px-3 py-2 text-[11px] leading-5 text-slate-600">
-              Les montants ci-dessus sont calculés à partir des commandes hors annulation et expiration, y compris les commandes livrées. Ils regroupent les articles et excluent les frais de livraison MaTable, qui ne sont pas du chiffre d’affaires boutique. MaTable.ci ne suit pas les encaissements : vérifiez directement le règlement auprès de vos clients. Le mode choisi ou un clic WhatsApp ne confirme pas le paiement.
+              Les montants ci-dessus sont calculés à partir des commandes hors annulation et expiration, y compris les commandes livrées. Ils regroupent les articles et excluent les frais de livraison MaTable, qui ne sont pas du chiffre d’affaires boutique. MaTable-ci.com ne suit pas les encaissements : vérifiez directement le règlement auprès de vos clients. Le mode choisi ou un clic WhatsApp ne confirme pas le paiement.
             </p>
 
             {/* Orders List */}
@@ -442,11 +535,15 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
             ) : (
               <div className="space-y-3">
                 {filteredOrders.map(order => {
+                  const pendingDeadline = Date.parse(order.created_at) + 2 * 60 * 60 * 1000;
+                  const pendingDeadlineLabel = Number.isFinite(pendingDeadline)
+                    ? new Date(pendingDeadline).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+                    : null;
                   return (
                     <div
                       key={order.id}
                       className={`bg-white rounded-2xl border p-4 sm:p-5 shadow-2xs transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
-                        order.status === 'cancelled'
+                        ['cancelled', 'rejected'].includes(order.status)
                           ? 'border-rose-200 bg-rose-50/20 opacity-80'
                           : 'border-slate-200 hover:border-slate-300'
                       }`}
@@ -492,9 +589,14 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                               ✕ Demande annulée
                             </span>
                           )}
+                          {order.status === 'rejected' && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                              ✕ Demande refusée · stock libéré
+                            </span>
+                          )}
                           {(!order.status || order.status === 'pending') && (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                              ⏳ En attente
+                                ⏳ À traiter avant {pendingDeadlineLabel || 'expiration sous 2 h'} · stock réservé
                             </span>
                           )}
                           {order.whatsapp_tracking_available && (
@@ -536,6 +638,16 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                             orderStatus={order.status || 'pending'}
                           />
                         )}
+                        {state.currentShop && !state.currentShop.admin_mode && order.status === 'delivered'
+                          && order.customer_user_id && order.loyalty?.available_rewards > 0 && (
+                            <MerchantLoyaltyReward
+                              shopId={state.currentShop.id}
+                              orderId={order.id}
+                              deliveredOrders={order.loyalty.delivered_orders}
+                              availableRewards={order.loyalty.available_rewards}
+                              onRedeemed={() => state.loadShopData(order.shop_id)}
+                            />
+                          )}
                       </div>
 
                       <div className="flex min-w-0 flex-col gap-2.5 border-t border-slate-100 pt-3 md:w-56 md:shrink-0 md:items-end md:justify-between md:border-t-0 md:pt-0">
@@ -565,14 +677,14 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                                 onClick={() => handleUpdateOrderStatus(order.id, 'confirmed')}
                                 className="min-h-11 flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-700 sm:flex-none"
                               >
-                                Confirmer
+                                Accepter
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+                                onClick={() => handleUpdateOrderStatus(order.id, 'rejected')}
                                 className="min-h-11 flex-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100 sm:flex-none"
                               >
-                                Annuler
+                                Refuser
                               </button>
                             </>
                           )}

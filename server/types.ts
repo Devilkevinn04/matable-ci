@@ -71,6 +71,7 @@ export interface ShopRecord {
   email_subscription_reminders_enabled?: boolean;
   email_subscription_reminders_consent_at?: string | null;
   created_at: string;
+  catalog_updated_at?: string | null;
   category: ShopCategory;
   city?: string;
   owner_name?: string | null;
@@ -154,7 +155,7 @@ export interface OrderRecord {
   total_amount: number;
   delivery_fee?: number;
   created_at: string;
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'expired';
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'rejected' | 'expired';
   whatsapp_tracking_available?: boolean;
   whatsapp_clicked_at?: string | null;
   items?: {

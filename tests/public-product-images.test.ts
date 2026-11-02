@@ -15,7 +15,7 @@ test('data URL photos become short cacheable URLs; other values are untouched', 
   assert.equal(url, `${PUBLIC_PRODUCT_IMAGE_PATH}/42/0-${productImageFingerprint(pixel)}.png`);
   assert.equal(toPublicProductImageUrl(42, 'https://images.example.com/a.jpg'), 'https://images.example.com/a.jpg');
   assert.equal(toPublicProductImageUrl(42, ''), '');
-  assert.equal(toPublicProductImageUrl(42, pixel, 0, 'https://matable.ci'), `https://matable.ci${url}`);
+  assert.equal(toPublicProductImageUrl(42, pixel, 0, 'https://matable-ci.com'), `https://matable-ci.com${url}`);
 });
 
 test('gallery photos get their own slot', () => {

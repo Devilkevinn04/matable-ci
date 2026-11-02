@@ -74,9 +74,10 @@ export function generateWhatsAppOrderReceipt(
   const blocks: string[] = [];
 
   blocks.push([
-    `🧾 *COMMANDE MATABLE.CI #${order.id}*`,
+    `🧾 *COMMANDE MATABLE-CI.COM #${order.id}*`,
     `${sanitizeWhatsAppText(shop.name)} · ${getCategoryDefaults(shop.category).label}`,
   ].join('\n'));
+  blocks.push('⏳ *DEMANDE EN ATTENTE* · La boutique doit accepter ou refuser sous 2 heures ; les articles sont réservés pendant ce délai.');
 
   const customerLines = ['*CLIENT*', sanitizeWhatsAppText(order.customer_name)];
   const customerPhone = sanitizeWhatsAppText(order.customer_phone);
@@ -116,7 +117,7 @@ export function generateWhatsAppOrderReceipt(
     blocks.push([
       '🛵 *LIVRAISON MATABLE*',
       `Frais de livraison MaTable : ${formatFCFA(deliveryFee)}`,
-      'Course créée : un livreur est recherché.',
+      'La recherche d’un livreur commencera après acceptation de la demande par la boutique.',
       'Le règlement des articles et des frais de livraison reste à convenir avec la boutique ou le livreur.',
     ].join('\n'));
     blocks.push(`💰 *TOTAL À RÉGLER : ${formatFCFA(articlesTotal + deliveryFee)}*`);

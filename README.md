@@ -1,11 +1,11 @@
-# MaTable.ci
+# MaTable-ci.com
 
 Le backend Express existant reste la source de vérité métier. La fondation de
 passerelle multiservice est documentée dans
 [docs/MULTISERVICE_MIGRATION.md](./docs/MULTISERVICE_MIGRATION.md) ; elle ne
 déplace aucune route métier pour l’instant.
 
-Application React + Vite + Express pour la gestion de vitrines locales, de commandes WhatsApp et de tableaux de bord MaTable.ci.
+Application React + Vite + Express pour la gestion de vitrines locales, de commandes WhatsApp et de tableaux de bord MaTable-ci.com.
 
 ## Identité visuelle du frontend
 
@@ -23,7 +23,10 @@ actives y sont identifiées et affichées avant les produits.
 ## État actuel
 
 - Les demandes de commande utilisent le click-to-chat WhatsApp (`wa.me`) : le mode sélectionné au checkout est une préférence transmise à la boutique, pas un paiement en ligne. Les paiements d’abonnement et de boosts utilisent l’API et le checkout hébergé GeniusPay, qui achemine les paiements vers ses passerelles; les rappels d’échéance WhatsApp Business nécessitent une configuration fournisseur et le consentement du commerçant.
-- Une commande client est enregistrée localement. Le client peut ouvrir manuellement son récapitulatif prérempli vers le WhatsApp du vendeur et recevoir un récapitulatif par e-mail s’il est connecté ou fournit une adresse facultative au checkout invité. Ce reçu confirme l’enregistrement de la demande, pas le paiement.
+- Une commande client commence en attente de réponse du commerçant. Le stock est réservé pendant deux heures ; le commerçant peut accepter ou refuser dans son dashboard, et le système expire automatiquement les demandes sans réponse en libérant le stock. Un client connecté peut annuler une demande encore en attente depuis son compte. Les invités suivent leur demande par WhatsApp ; leur adresse e-mail facultative sert uniquement à l’envoi du récapitulatif.
+- Le compte client suit une carte de fidélité par boutique : cinq commandes livrées liées à ce compte ouvrent une récompense. Le commerçant la remet et l’enregistre depuis une commande livrée ; aucun rabais n’est appliqué automatiquement. Les commandes invitées ne sont pas comptabilisées.
+- La vitrine publique indique la date de dernière actualisation du catalogue. Cette date suit les changements de produits et de stock ainsi que les mises à jour des horaires.
+- Une livraison MaTable demandée au checkout reste en attente de l’acceptation de la boutique ; les livreurs ne sont notifiés qu’après cette acceptation. Les demandes de commande et les ajustements de stock sont transactionnels.
 - Le prix d’une commande est recalculé côté serveur à partir du catalogue et des options sélectionnées.
 - La publication (`publication_status`) est distincte de l’ouverture (`is_open`). Une boutique n’est publique que si elle est publiée, éligible KYC et couverte par un essai ou un abonnement actif, ou encore dans ses deux jours de grâce après échéance. Elle est masquée ensuite sans suppression de ses données ni blocage de l’accès marchand ; `is_open` contrôle uniquement la prise de commandes.
 - Le stockage local et les tests utilisent SQLite (`better-sqlite3`). En production (`NODE_ENV=production`), le serveur utilise PostgreSQL via `DATABASE_URL` (Neon recommandé). Les écritures de commandes et de stock sont transactionnelles.
@@ -39,7 +42,7 @@ Le dashboard propose les vues Accueil, Produits, Commandes et Statistiques, avec
 
 Les limites sont vérifiées côté serveur : Standard permet 20 produits et 2 photos par produit, Premium un nombre illimité de produits et 5 photos, Pro un nombre illimité de produits et jusqu’à 6 photos. Pro incluant « Tout Premium », une configuration Pro ne peut pas descendre sous 5 photos par article. Les statistiques couvrent respectivement 7, 30 et 90 jours. L’essai reste limité à 2 produits et bénéficie des statistiques sur 7 jours.
 
-Le menu « Partage » génère un QR code PNG et une affiche PNG personnalisée avec le nom, la catégorie et la couleur de la boutique. Le QR code ne contient que le lien public et reste désactivé tant que la vitrine n’est pas publiée. Les fonctions suivantes ne sont pas encore disponibles dans le dashboard : comptes d’équipe, import CSV des produits, export CSV des commandes, codes promotionnels et programme de parrainage.
+Le menu « Partage » génère un QR code PNG et une affiche PNG personnalisée avec le nom, la catégorie et la couleur de la boutique. Le QR code ne contient que le lien public et reste désactivé tant que la vitrine n’est pas publiée. Le dashboard propose l’export CSV du catalogue, l’import avec aperçu (ID MaTable renseigné pour modifier, ID vide pour créer; les cellules vides conservent les valeurs existantes) et l’export des commandes de la boutique. Les comptes d’équipe, codes promotionnels et programmes de parrainage ne sont pas encore disponibles.
 
 ## Administration
 
@@ -121,7 +124,7 @@ DIDIT_DRIVER_WORKFLOW_ID="" # facultatif : workflow distinct, sinon DIDIT_WORKFL
 DIDIT_WEBHOOK_SECRET=""
 VAPID_PUBLIC_KEY=""
 VAPID_PRIVATE_KEY=""
-VAPID_SUBJECT="mailto:assistance@matable.ci"
+VAPID_SUBJECT="mailto:assistance@matable-ci.com"
 GOOGLE_OAUTH_CLIENT_ID=""
 GOOGLE_OAUTH_CLIENT_SECRET=""
 APPLE_SERVICE_ID=""
@@ -131,8 +134,8 @@ APPLE_PRIVATE_KEY=""
 
 VITE_WHATSAPP_ADMIN_PHONE=""
 RESEND_API_KEY=""
-RESEND_FROM_EMAIL="MaTable.ci <welcome@exemple.com>"
-EMAIL_FROM="MaTable.ci <welcome@exemple.com>"
+RESEND_FROM_EMAIL="MaTable-ci.com <welcome@exemple.com>"
+EMAIL_FROM="MaTable-ci.com <welcome@exemple.com>"
 GENIUSPAY_API_KEY=""
 GENIUSPAY_API_SECRET=""
 GENIUSPAY_WEBHOOK_SECRET=""
@@ -225,7 +228,7 @@ Créer le projet Neon puis configurer `DATABASE_URL` dans Render. Le service Ren
 
 ### Paiements GeniusPay
 
-MaTable utilise l’API marchande et le checkout hébergé GeniusPay pour les abonnements mensuels/annuels et les boosts. GeniusPay se décrit comme facilitateur d’intégration technique et non comme établissement de paiement, PSP ou agrégateur; les transactions sont acheminées par les passerelles proposées dans son checkout. L’annuel facture 10 mensualités pour 12 mois de service. Les commandes clients restent réglées directement auprès des boutiques. Le dashboard crée une intention côté serveur et redirige vers le checkout; au retour sur `/app`, il vérifie le statut du paiement et affiche le résultat, quel que soit l’écran marchand ouvert. Une ancienne boutique sans adresse e-mail peut la renseigner au paiement; elle est enregistrée sur la boutique et utilisée pour envoyer le reçu MaTable.ci après confirmation. Ne remplacez pas cette adresse par une valeur fictive.
+MaTable utilise l’API marchande et le checkout hébergé GeniusPay pour les abonnements mensuels/annuels et les boosts. GeniusPay se décrit comme facilitateur d’intégration technique et non comme établissement de paiement, PSP ou agrégateur; les transactions sont acheminées par les passerelles proposées dans son checkout. L’annuel facture 10 mensualités pour 12 mois de service. Les commandes clients restent réglées directement auprès des boutiques. Le dashboard crée une intention côté serveur et redirige vers le checkout; au retour sur `/app`, il vérifie le statut du paiement et affiche le résultat, quel que soit l’écran marchand ouvert. Une ancienne boutique sans adresse e-mail peut la renseigner au paiement; elle est enregistrée sur la boutique et utilisée pour envoyer le reçu MaTable-ci.com après confirmation. Ne remplacez pas cette adresse par une valeur fictive.
 
 Configurer `GENIUSPAY_API_KEY`, `GENIUSPAY_API_SECRET`, `GENIUSPAY_WEBHOOK_SECRET` et `GENIUSPAY_API_URL` côté serveur. L’URL documentée V3 est `https://geniuspay.ci/api/v1/merchant/payments`; l’application refuse les hôtes hors `geniuspay.ci` en dehors des tests. Les créations transmettent l’ID de l’intent dans `Idempotency-Key` pour éviter les doublons lors d’un retry réseau, sans envoyer simultanément `external_reference`. Déclarer `https://<domaine-public>/api/webhooks/geniuspay` dans les webhooks GeniusPay et s’abonner à `payment.success`, `payment.failed`, `payment.cancelled`, `payment.expired` et `payment.refunded`. L’implémentation vérifie la signature HMAC-SHA256 documentée sur `timestamp + "." + corps JSON brut`, rejette les horodatages de plus de cinq minutes, journalise l’ID et un hash du webhook sans garder son corps, et n’active que les paiements dont l’intention, le type, la référence et le montant correspondent.
 
@@ -235,7 +238,7 @@ Les intents d’abonnement expirent localement après 24 heures, mais l’URL de
 
 Un paiement confirmé active les droits d’abonnement, mais ne réactive pas une boutique désactivée ou non publiée et ne contourne pas la vérification d’identité. Une suspension manuelle active empêche la création d’un nouveau checkout GeniusPay. Si un checkout avait déjà été ouvert avant cette suspension et est réglé ensuite, le paiement est enregistré, mais les droits restent suspendus jusqu’à la levée ou à l’expiration de la dérogation; l’espace commerçant l’indique au retour du paiement.
 
-Le checkout exige une adresse e-mail de facturation. MaTable.ci ne collecte ni ne stocke de données de carte et ne déclenche aucun prélèvement automatique : le commerçant initie et confirme chaque paiement. Voir la [documentation API GeniusPay](https://geniuspay.ci/docs/api) pour les détails officiels du contrat marchand et des webhooks.
+Le checkout exige une adresse e-mail de facturation. MaTable-ci.com ne collecte ni ne stocke de données de carte et ne déclenche aucun prélèvement automatique : le commerçant initie et confirme chaque paiement. Voir la [documentation API GeniusPay](https://geniuspay.ci/docs/api) pour les détails officiels du contrat marchand et des webhooks.
 
 
 Les échéances restent actives jusqu’à la fin de leur date civile en Côte d’Ivoire; l’écran de renouvellement apparaît le lendemain. Le statut effectif passe à `past_due` pendant le délai de grâce, puis `suspended` et la boutique est masquée publiquement. Les données et l’accès marchand sont conservés afin de permettre le renouvellement. Si les secrets WhatsApp Business sont configurés, le serveur envoie les rappels à J−14, J−7, J−3 et J−1 uniquement aux commerçants ayant activé l’opt-in dans « Mon forfait ». Chaque échéance et chaque palier sont enregistrés pour éviter les doublons; un échec fournisseur est journalisé et peut être retenté. Changer le numéro WhatsApp révoque l’accord. Configurer dans Render `WHATSAPP_CLOUD_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_SUBSCRIPTION_REMINDER_TEMPLATE` et `WHATSAPP_GRAPH_API_VERSION`. Le modèle Meta doit être approuvé comme modèle utilitaire et contenir deux paramètres de corps : le nom de la boutique et sa date d’échéance. L’envoi automatique dépend de ces identifiants secrets Meta et de l’approbation du modèle; aucune valeur secrète ne doit être placée dans le dépôt. Le code ne déclenche aucun prélèvement automatique : le commerçant doit toujours ouvrir le checkout GeniusPay et confirmer le paiement.
@@ -260,7 +263,7 @@ Resend sert également aux messages de bienvenue client et commerçant, aux réc
 
 ## Règles métier
 
-L’essai marchand Standard reste gratuit pendant deux mois calendaires et permet deux produits. Le commerçant peut payer une formule à tout moment, y compris dès la création de sa boutique. Les tarifs mensuels par formule sont configurables par le Super-admin et affichés sur la page Formules; l’annuel coûte 10 mensualités pour 12 mois de service. Le délai de grâce avant masquage est de deux jours. Un boost de 24 h, 3 jours ou 7 jours coûte respectivement 1 000, 1 500 ou 2 000 FCFA; Pro donne 15 % de remise. Chaque achat choisit un seul emplacement au même tarif : accueil, haut de catégorie ou boutiques de la ville. Cinq créneaux simultanés sont disponibles sur l’accueil, par catégorie ou par ville selon l’emplacement; les réservations payées débutent au premier créneau libre. Une boutique doit être vérifiée, ouverte et présenter au moins deux produits. Le bilan d’un boost présente les visites consenties de la vitrine et les clics WhatsApp suivis sur sa période; il ne s’agit pas d’une mesure de ventes ni d’une garantie de portée. Les boosts courent pendant leur durée prévue même si la vitrine est masquée. Après activation, les paiements ne sont pas remboursables, sauf impossibilité de MaTable.ci d’activer le service payé, auquel cas le commerçant peut demander un remboursement à l’assistance.
+L’essai marchand Standard reste gratuit pendant deux mois calendaires et permet deux produits. Le commerçant peut payer une formule à tout moment, y compris dès la création de sa boutique. Les tarifs mensuels par formule sont configurables par le Super-admin et affichés sur la page Formules; l’annuel coûte 10 mensualités pour 12 mois de service. Le délai de grâce avant masquage est de deux jours. Un boost de 24 h, 3 jours ou 7 jours coûte respectivement 1 000, 1 500 ou 2 000 FCFA; Pro donne 15 % de remise. Chaque achat choisit un seul emplacement au même tarif : accueil, haut de catégorie ou boutiques de la ville. Cinq créneaux simultanés sont disponibles sur l’accueil, par catégorie ou par ville selon l’emplacement; les réservations payées débutent au premier créneau libre. Une boutique doit être vérifiée, ouverte et présenter au moins deux produits. Le bilan d’un boost présente les visites consenties de la vitrine et les clics WhatsApp suivis sur sa période; il ne s’agit pas d’une mesure de ventes ni d’une garantie de portée. Les boosts courent pendant leur durée prévue même si la vitrine est masquée. Après activation, les paiements ne sont pas remboursables, sauf impossibilité de MaTable-ci.com d’activer le service payé, auquel cas le commerçant peut demander un remboursement à l’assistance.
 
 Les valeurs initiales de catégorie (message, présentation, exemples de produits, palette et illustrations) sont centralisées dans `src/utils/categoryDefaults.ts`. Les illustrations produit sont des placeholders d’affichage : `image_url` reste vide tant qu’aucune photo réelle n’est fournie. Les anciennes valeurs génériques connues sont remplacées à l’affichage, sans migration automatique des boutiques ou produits existants.
 
@@ -281,7 +284,7 @@ Les jetons OIDC sont vérifiés côté serveur avec issuer, audience, nonce, PKC
 - Les routes marchand exigent une session `HttpOnly`, son empreinte de requête et une boutique active.
 - Les routes admin exigent une session admin séparée.
 - Express ne fait confiance aux en-têtes proxy que si `TRUST_PROXY_HOPS` est explicitement configuré pour l’infrastructure réelle.
-- La vérification d’identité des commerçants est effectuée sur le parcours hébergé de Didit après consentement explicite. Seuls l’identifiant de session, le statut fourni par Didit et les éléments techniques nécessaires au traitement idempotent des webhooks sont conservés par MaTable.ci. Le serveur authentifie les webhooks et aucune décision d’identité ne peut être saisie manuellement par un administrateur.
+- La vérification d’identité des commerçants est effectuée sur le parcours hébergé de Didit après consentement explicite. Seuls l’identifiant de session, le statut fourni par Didit et les éléments techniques nécessaires au traitement idempotent des webhooks sont conservés par MaTable-ci.com. Le serveur authentifie les webhooks et aucune décision d’identité ne peut être saisie manuellement par un administrateur.
 
 ## Checklist de production
 

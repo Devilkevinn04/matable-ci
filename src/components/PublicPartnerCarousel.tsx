@@ -61,7 +61,7 @@ export const PublicPartnerCarousel: React.FC<PublicPartnerCarouselProps> = ({ pr
   return (
     <section
       className="group mx-auto w-full max-w-[1280px] px-4 py-4 sm:px-8 sm:py-5 lg:px-10"
-      aria-label="Partenaires permanents de MaTable.ci"
+      aria-label="Partenaires permanents de MaTable-ci.com"
       aria-roledescription="carrousel"
       {...handlers}
     >

@@ -183,7 +183,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
             {settingsSubTab === 'profile' && <section className="flex flex-col gap-4 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
               <div className="max-w-2xl">
                 <h3 className="text-sm font-extrabold text-[#292d2a]">Mes données</h3>
-                <p className="mt-1 text-xs leading-5 text-slate-600">Téléchargez les données MaTable.ci enregistrées pour cette boutique. Les données conservées directement par des prestataires externes ne sont pas incluses. Pour demander la suppression du compte, contactez l’assistance.</p>
+                <p className="mt-1 text-xs leading-5 text-slate-600">Téléchargez les données MaTable-ci.com enregistrées pour cette boutique. Les données conservées directement par des prestataires externes ne sont pas incluses. Pour demander la suppression du compte, contactez l’assistance.</p>
               </div>
               <button type="button" onClick={exportMerchantData} disabled={merchantDataExporting} className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#d9cfc2] px-4 text-sm font-bold text-[#47534b] disabled:opacity-50">
                 {merchantDataExporting ? 'Préparation…' : 'Télécharger mes données'}

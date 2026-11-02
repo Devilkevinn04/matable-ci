@@ -357,7 +357,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
         SELECT attribution_campaign AS campaign, COUNT(*) AS orders, COALESCE(SUM(total_amount), 0) AS sales
         FROM orders
         WHERE shop_id = ? AND attribution_campaign IS NOT NULL AND created_at >= ?
-          AND COALESCE(status, 'pending') NOT IN ('cancelled', 'expired')
+          AND COALESCE(status, 'pending') NOT IN ('cancelled', 'rejected', 'expired')
         GROUP BY attribution_campaign
       `, [shop.id, since]),
       dbAll<{ campaign: string; whatsapp_clicks: number }>(`
@@ -413,8 +413,8 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
           : 0,
       }))
       .sort((left, right) => right.visits - left.visits || right.orders - left.orders || left.campaign.localeCompare(right.campaign));
-    const orderRows = await dbAll<Record<string, unknown>>('SELECT * FROM orders WHERE shop_id = ? AND created_at >= ? AND status NOT IN (?, ?)', [
-      shop.id, since, 'cancelled', 'expired',
+    const orderRows = await dbAll<Record<string, unknown>>('SELECT * FROM orders WHERE shop_id = ? AND created_at >= ? AND status NOT IN (?, ?, ?)', [
+      shop.id, since, 'cancelled', 'rejected', 'expired',
     ]);
     const whatsappClicks = await dbAll<{ count: number | string }>(`
       SELECT COUNT(*) AS count FROM order_whatsapp_tracking tracking
@@ -741,6 +741,11 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     }
 
     await persistShop(shop);
+    if (opening_hours !== undefined) {
+      const catalogUpdatedAt = new Date().toISOString();
+      await dbRun('UPDATE shops SET catalog_updated_at = ? WHERE id = ?', [catalogUpdatedAt, shop.id]);
+      shop.catalog_updated_at = catalogUpdatedAt;
+    }
     res.json({ success: true, shop: toSafeShop(shop) });
   });
 

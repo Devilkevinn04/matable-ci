@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, CalendarDays, Check, ChevronRight, Clock3, Eye, EyeOff, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MapPin, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, Truck, UserRound } from 'lucide-react';
+import { ArrowRight, CalendarDays, Check, ChevronRight, Clock3, Eye, EyeOff, Gift, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MapPin, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, Truck, UserRound } from 'lucide-react';
 import { AuthAudienceSwitcher, AuthExperienceLayout } from './AuthExperienceLayout';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
 import { CustomerMerchantRegistrationForm } from './CustomerMerchantRegistrationForm';
@@ -147,13 +147,13 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
   return (
     <AuthExperienceLayout
       eyebrow={mode === 'register' && accountType === 'merchant' ? 'Votre commerce, en ligne' : 'Du local, tout simplement'}
-      title={mode === 'register' && accountType === 'merchant' ? 'Faites découvrir votre boutique.' : mode === 'login' ? 'Bienvenue sur MaTable.ci' : 'Rejoignez la communauté MaTable.ci'}
+      title={mode === 'register' && accountType === 'merchant' ? 'Faites découvrir votre boutique.' : mode === 'login' ? 'Bienvenue sur MaTable-ci.com' : 'Rejoignez la communauté MaTable-ci.com'}
       description={mode === 'register' && accountType === 'merchant'
         ? 'Créez votre vitrine locale et recevez les commandes de vos clients directement sur WhatsApp.'
         : mode === 'login'
           ? 'Connectez-vous pour retrouver les boutiques que vous aimez et commander en toute simplicité.'
           : 'Créez votre compte et commencez à découvrir, soutenir et suivre les commerces de votre quartier.'}
-      imageAlt={mode === 'register' && accountType === 'merchant' ? 'Aperçu de la création de votre vitrine locale' : 'Illustration MaTable.ci sur le commerce local'}
+      imageAlt={mode === 'register' && accountType === 'merchant' ? 'Aperçu de la création de votre vitrine locale' : 'Illustration MaTable-ci.com sur le commerce local'}
       onBack={onBack}
       topPrompt={mode === 'register' && accountType === 'merchant' ? 'Déjà commerçant ?' : mode === 'login' ? 'Pas encore de compte ?' : 'Déjà un compte ?'}
       topActionLabel={mode === 'register' && accountType === 'merchant' ? 'Se connecter' : mode === 'login' ? 'Créer un compte' : 'Se connecter'}
@@ -169,7 +169,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
         )}
         <p className="text-sm font-bold text-[#F97316]">{pendingOAuthProfile ? 'Presque terminé' : mode === 'login' ? 'Votre espace personnel' : 'Inscription gratuite'}</p>
         <h2 className="mt-1 text-[30px] font-extrabold leading-tight text-[#292d2a]">{pendingOAuthProfile ? 'Finaliser le compte' : mode === 'login' ? 'Connexion' : accountType === 'merchant' ? 'Créer ma boutique' : 'Créer un compte'}</h2>
-        <p className="mt-2 text-sm leading-6 text-[#667168]">{pendingOAuthProfile ? `Compte associé à ${pendingOAuthProfile.email}. Ajoutez votre téléphone pour commander.` : mode === 'login' ? 'Accédez à votre compte MaTable.ci.' : accountType === 'merchant' ? 'Renseignez les informations de votre boutique pour démarrer.' : 'Rejoignez MaTable.ci en quelques secondes.'}</p>
+        <p className="mt-2 text-sm leading-6 text-[#667168]">{pendingOAuthProfile ? `Compte associé à ${pendingOAuthProfile.email}. Ajoutez votre téléphone pour commander.` : mode === 'login' ? 'Accédez à votre compte MaTable-ci.com.' : accountType === 'merchant' ? 'Renseignez les informations de votre boutique pour démarrer.' : 'Rejoignez MaTable-ci.com en quelques secondes.'}</p>
       </div>
 
       {mode === 'register' && !pendingOAuthProfile && (
@@ -297,10 +297,13 @@ function CustomerDeliverySummary({ order }: { order: CustomerOrder }) {
             <p className="mt-1 font-mono text-sm font-black tracking-wide text-[#103E32]">{delivery.ticket_number || `COURSE-${delivery.id}`}</p>
           </div>
           <div className="flex flex-col items-end gap-1">
-            <DeliveryStatusBadge status={delivery.status} />
+            {order.status === 'pending'
+              ? <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-900">En attente de la boutique</span>
+              : <DeliveryStatusBadge status={delivery.status} />}
             <p className="text-xs font-black tabular-nums text-[#103E32]">{formatFCFA(Number(delivery.quoted_amount) || 0)}</p>
           </div>
         </div>
+        {order.status === 'pending' && <p className="mt-2 text-[11px] leading-5 text-amber-900">La recherche d’un livreur commencera après acceptation de la commande.</p>}
         <div className="mt-2.5">
           <DeliveryProgress status={delivery.status} />
         </div>
@@ -330,7 +333,17 @@ function CustomerDeliverySummary({ order }: { order: CustomerOrder }) {
   );
 }
 
-type CustomerAccountSection = 'overview' | 'orders' | 'favorites' | 'profile' | 'security';
+type CustomerAccountSection = 'overview' | 'orders' | 'favorites' | 'loyalty' | 'profile' | 'security';
+
+interface CustomerLoyaltyCard {
+  shop_id: number;
+  shop_name: string;
+  shop_slug: string;
+  delivered_orders: number;
+  available_rewards: number;
+  orders_toward_next_reward: number;
+  orders_to_next_reward: number;
+}
 
 interface CustomerSavedState {
   shops: { id: number; name: string; slug: string; category: string; city?: string }[];
@@ -339,9 +352,12 @@ interface CustomerSavedState {
 
 const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout, onBack, onUserUpdated }) => {
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
+  const [loyaltyCards, setLoyaltyCards] = useState<CustomerLoyaltyCard[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState<string | null>(null);
   const [ordersRefresh, setOrdersRefresh] = useState(0);
+  const [orderActionError, setOrderActionError] = useState('');
+  const [cancellingOrderId, setCancellingOrderId] = useState<number | null>(null);
   const ordersLoadedRef = useRef(false);
   const [savedState, setSavedState] = useState<CustomerSavedState>({ shops: [], products: [] });
   const [savedLoading, setSavedLoading] = useState(true);
@@ -370,7 +386,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
   const [accountDeletePassword, setAccountDeletePassword] = useState('');
   const [accountDeleteError, setAccountDeleteError] = useState('');
   const [accountDeleting, setAccountDeleting] = useState(false);
-  const supportUrl = getSupportWhatsAppUrl('Bonjour, j’ai besoin d’aide pour mon compte client MaTable.ci.');
+  const supportUrl = getSupportWhatsAppUrl('Bonjour, j’ai besoin d’aide pour mon compte client MaTable-ci.com.');
 
   useEffect(() => {
     setFirstName(user.first_name);
@@ -391,7 +407,11 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
         }
         return response.json();
       })
-      .then((data) => { if (isActive) setOrders(Array.isArray(data.orders) ? data.orders : []); })
+      .then((data) => {
+        if (!isActive) return;
+        setOrders(Array.isArray(data.orders) ? data.orders : []);
+        setLoyaltyCards(Array.isArray(data.loyalty) ? data.loyalty : []);
+      })
       .catch((error: unknown) => {
         if (isActive) setOrdersError(error instanceof Error ? error.message : 'Impossible de charger vos commandes. Réessayez.');
       })
@@ -406,11 +426,32 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
 
   const hasActiveDelivery = orders.some((order) => order.delivery
     && !['delivered', 'cancelled'].includes(order.delivery.status));
+  const hasTrackableOrder = orders.some((order) => ['pending', 'confirmed', 'preparing', 'ready'].includes(order.status));
   useVisibilityPolling(
     () => setOrdersRefresh((value) => value + 1),
     20_000,
-    hasActiveDelivery,
+    hasActiveDelivery || hasTrackableOrder,
   );
+
+  const cancelPendingOrder = async (orderId: number) => {
+    if (!window.confirm('Annuler cette demande de commande ? Le stock réservé sera libéré.')) return;
+    setCancellingOrderId(orderId);
+    setOrderActionError('');
+    try {
+      const response = await fetch(`/api/customers/orders/${orderId}/cancel`, {
+        method: 'PATCH',
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible d’annuler cette demande.');
+      setOrdersRefresh((value) => value + 1);
+    } catch (error) {
+      setOrderActionError(error instanceof Error ? error.message : 'Impossible d’annuler cette demande.');
+      setOrdersRefresh((value) => value + 1);
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
 
   useEffect(() => {
     let isActive = true;
@@ -582,10 +623,12 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
     { id: 'overview', label: 'Vue d’ensemble', mobileLabel: 'Accueil', description: 'Résumé de votre compte', icon: LayoutDashboard },
     { id: 'orders', label: 'Mes commandes', mobileLabel: 'Commandes', description: 'Historique et détails', icon: ShoppingBag },
     { id: 'favorites', label: 'Mes favoris', mobileLabel: 'Favoris', description: 'Boutiques et produits gardés', icon: Heart },
+    { id: 'loyalty', label: 'Ma fidélité', mobileLabel: 'Fidélité', description: 'Récompenses par boutique', icon: Gift },
     { id: 'profile', label: 'Mes informations', mobileLabel: 'Profil', description: 'Coordonnées du compte', icon: UserRound },
     { id: 'security', label: 'Sécurité', mobileLabel: 'Sécurité', description: 'Mot de passe et accès', icon: KeyRound },
   ];
   const activeOrdersCount = orders.filter((order) => ['pending', 'confirmed', 'preparing', 'ready'].includes(order.status)).length;
+  const availableRewardsCount = loyaltyCards.reduce((sum, card) => sum + card.available_rewards, 0);
 
   return (
     <main className="min-h-screen bg-[#FAF8F2] pb-24 text-[#292d2a] lg:pb-0">
@@ -593,7 +636,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
         <div className="mx-auto flex max-w-[1184px] flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-8">
           <Link to="/" className="inline-flex items-center gap-3 font-display text-lg font-extrabold tracking-tight text-[#292d2a]">
             <img src="/brand-kit/monogram.svg" alt="" className="h-10 w-10 shrink-0" />
-            <span>MaTable<span className="text-[#047857]">.ci</span></span>
+            <span>MaTable<span className="text-[#047857]">-ci.com</span></span>
           </Link>
           <div className="flex items-center gap-2">
             <button type="button" onClick={onBack} aria-label="Découvrir les boutiques" className="inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm font-bold text-[#47534b] transition hover:bg-[#d1fae5] sm:px-4"><ShoppingBag className="h-4 w-4" /><span className="sr-only sm:not-sr-only">Découvrir</span></button>
@@ -656,7 +699,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
               </React.Suspense>
             </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-2 sm:mt-6 sm:gap-3">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:mt-6 sm:grid-cols-4 sm:gap-3">
               <button type="button" onClick={() => setActiveSection('orders')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#c8dbd0] hover:bg-[#f8fcf9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] sm:p-4">
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#d1fae5] text-[#065f46] sm:h-10 sm:w-10"><ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5" /></span>
                 <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{ordersLoading ? '…' : orders.length}</span>
@@ -671,6 +714,11 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#fff2df] text-[#c2410c] sm:h-10 sm:w-10"><Heart className="h-4 w-4 sm:h-5 sm:w-5" /></span>
                 <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{savedLoading ? '…' : savedState.shops.length + savedState.products.length}</span>
                 <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#647067] sm:text-sm">Favoris</span>
+              </button>
+              <button type="button" onClick={() => setActiveSection('loyalty')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#c8dbd0] hover:bg-[#f8fcf9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] sm:p-4">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#d1fae5] text-[#065f46] sm:h-10 sm:w-10"><Gift className="h-4 w-4 sm:h-5 sm:w-5" /></span>
+                <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{ordersLoading ? '…' : availableRewardsCount}</span>
+                <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#647067] sm:text-sm">Récompenses</span>
               </button>
             </div>
 
@@ -717,7 +765,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                   </span>
                   <div className="min-w-0">
                     <p className="truncate font-bold text-[#292d2a]">{user.first_name} {user.last_name}</p>
-                    <p className="truncate text-xs text-[#647067]">Compte client MaTable.ci</p>
+                    <p className="truncate text-xs text-[#647067]">Compte client MaTable-ci.com</p>
                   </div>
                 </div>
                 <dl className="mt-5 space-y-3 border-t border-[#e2dbd0] pt-4 text-sm">
@@ -805,6 +853,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
               description="Recevez une alerte quand un livreur accepte votre course, récupère le colis, arrive ou dépose la photo de preuve."
               className="mt-4"
             />
+            {orderActionError && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">{orderActionError}</p>}
             {ordersLoading && <div role="status" className="mt-6 space-y-3"><span className="sr-only">Chargement de vos commandes…</span>{[0, 1].map((item) => <div key={item} className="h-28 animate-pulse rounded-2xl bg-[#f1eee7]" />)}</div>}
             {ordersError && <div role="alert" className="mt-6 rounded-2xl border border-[#e8c69a] bg-[#fff8ec] p-4 text-sm text-[#704d16]"><p>{ordersError}</p><button type="button" onClick={() => setOrdersRefresh((value) => value + 1)} className="mt-2 font-bold underline underline-offset-2">Réessayer</button></div>}
             {!ordersLoading && !ordersError && orders.length === 0 && <div className="mt-6 rounded-2xl border border-dashed border-[#d9cfc2] bg-[#f9f6f0] p-7 text-center">
@@ -838,6 +887,12 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                   </li>)}
                 </ul> : null}
                 {order.delivery_location && <p className="mt-3 flex items-center gap-2 border-t border-[#eee6dd] pt-3 text-xs text-[#647067]"><MapPin className="h-3.5 w-3.5 shrink-0 text-[#047857]" />{order.delivery_location}</p>}
+                {order.status === 'pending' && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-[#eee6dd] pt-3">
+                  <p className="text-xs leading-5 text-[#647067]">En attente de la boutique. Sans réponse sous 2 heures, la demande expire et le stock est libéré.</p>
+                  <button type="button" onClick={() => void cancelPendingOrder(order.id)} disabled={cancellingOrderId === order.id} className="min-h-10 rounded-full border border-rose-200 bg-rose-50 px-4 text-xs font-bold text-rose-800 transition hover:bg-rose-100 disabled:opacity-50">
+                    {cancellingOrderId === order.id ? 'Annulation…' : 'Annuler la demande'}
+                  </button>
+                </div>}
                 <CustomerDeliverySummary order={order} />
                 <div className="mt-3 border-t border-[#eee6dd] pt-3">
                   <OrderContactReveal
@@ -847,6 +902,45 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                   />
                 </div>
               </article>)}
+            </div>}
+          </>}
+
+          {activeSection === 'loyalty' && <>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#c2410c]">Vos avantages</p>
+                <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Ma fidélité</h2>
+                <p className="mt-2 text-sm leading-6 text-[#647067]">Chaque boutique suit séparément vos commandes livrées. Une récompense est disponible tous les cinq achats livrés.</p>
+              </div>
+              <span className="rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[#065f46]">{availableRewardsCount} récompense{availableRewardsCount === 1 ? '' : 's'} disponible{availableRewardsCount === 1 ? '' : 's'}</span>
+            </div>
+            {loyaltyCards.length === 0 && <div className="mt-6 rounded-2xl border border-dashed border-[#d9cfc2] bg-[#f9f6f0] p-7 text-center">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#d1fae5] text-[#065f46]"><Gift className="h-6 w-6" /></span>
+              <h3 className="mt-3 font-display text-lg font-bold">Votre fidélité commence ici</h3>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#647067]">Connectez-vous avant de commander. Vos achats livrés auprès de chaque boutique alimenteront leur propre carte de fidélité.</p>
+            </div>}
+            {loyaltyCards.length > 0 && <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              {loyaltyCards.map((card) => {
+                const progress = card.available_rewards > 0 ? 100 : card.orders_toward_next_reward * 20;
+                return <article key={card.shop_id} className="rounded-2xl border border-[#e8e0d6] bg-white p-4 sm:p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#c2410c]">Carte de fidélité</p>
+                      <h3 className="mt-1 truncate font-display text-lg font-extrabold">{card.shop_name}</h3>
+                    </div>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#d1fae5] text-[#065f46]"><Gift className="h-5 w-5" /></span>
+                  </div>
+                  <div className="mt-4 flex items-baseline justify-between gap-2">
+                    <span className="text-sm font-bold text-[#292d2a]">{card.delivered_orders} commande{card.delivered_orders === 1 ? '' : 's'} livrée{card.delivered_orders === 1 ? '' : 's'}</span>
+                    <span className="text-xs font-semibold text-[#647067]">{card.available_rewards > 0 ? `${card.available_rewards} récompense${card.available_rewards === 1 ? '' : 's'} à réclamer` : `${card.orders_to_next_reward} avant la prochaine`}</span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#f1eee7]" role="progressbar" aria-label={`Progression fidélité chez ${card.shop_name}`} aria-valuemin={0} aria-valuemax={5} aria-valuenow={card.available_rewards > 0 ? 5 : card.orders_toward_next_reward}>
+                    <div className="h-full rounded-full bg-[#047857] transition-all" style={{ width: `${progress}%` }} />
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-[#647067]">{card.available_rewards > 0 ? 'Présentez-vous à la boutique pour recevoir votre récompense. Elle est remise par le commerçant et ne modifie pas automatiquement le prix des commandes.' : 'Une récompense est acquise après cinq commandes livrées auprès de cette boutique.'}</p>
+                  <a href={`/${encodeURIComponent(card.shop_slug)}`} className="mt-3 inline-flex min-h-10 items-center gap-1 text-sm font-bold text-[#065f46]">Voir la boutique <ChevronRight className="h-4 w-4" /></a>
+                </article>;
+              })}
             </div>}
           </>}
 
@@ -955,12 +1049,13 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
 
 function customerOrderStatusLabel(status: string) {
   const labels: Record<string, string> = {
-    pending: 'À confirmer',
+    pending: 'En attente de la boutique',
     confirmed: 'Confirmée',
     preparing: 'En préparation',
     ready: 'Prête',
     delivered: 'Livrée',
     cancelled: 'Annulée',
+    rejected: 'Refusée par la boutique',
     expired: 'Expirée',
   };
   return labels[status] || status;

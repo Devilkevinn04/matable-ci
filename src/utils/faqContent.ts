@@ -16,7 +16,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
     questions: [
       {
         question: 'Comment passer une commande ?',
-        answer: 'Ouvrez une boutique, choisissez vos articles et options, puis indiquez les informations demandées. MaTable.ci enregistre automatiquement la commande et réserve le stock disponible. Cela confirme l’enregistrement de votre demande, pas le paiement ni les modalités de livraison : contactez le commerçant sur WhatsApp pour les convenir ensemble. Le commerçant peut annuler la commande depuis son dashboard.',
+        answer: 'Ouvrez une boutique, choisissez vos articles et options, puis indiquez les informations demandées. MaTable-ci.com enregistre automatiquement la commande et réserve le stock disponible. Cela confirme l’enregistrement de votre demande, pas le paiement ni les modalités de livraison : contactez le commerçant sur WhatsApp pour les convenir ensemble. Le commerçant peut annuler la commande depuis son dashboard.',
       },
       {
         question: 'Les options avec un supplément changent-elles le prix ?',
@@ -45,11 +45,11 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         question: 'Comment demander une copie ou la suppression des données de ma boutique ?',
-        answer: 'Téléchargez les données MaTable.ci de votre boutique depuis Paramètres, rubrique « Mes données ». Les fichiers ou données conservés directement par des prestataires externes ne sont pas inclus. La suppression d’un compte commerçant n’est pas proposée en libre-service : contactez l’assistance depuis la page de récupération d’accès; une vérification du compte peut être nécessaire.',
+        answer: 'Téléchargez les données MaTable-ci.com de votre boutique depuis Paramètres, rubrique « Mes données ». Les fichiers ou données conservés directement par des prestataires externes ne sont pas inclus. La suppression d’un compte commerçant n’est pas proposée en libre-service : contactez l’assistance depuis la page de récupération d’accès; une vérification du compte peut être nécessaire.',
       },
       {
-        question: 'MaTable.ci encaisse-t-il le paiement ?',
-        answer: 'Non. MaTable.ci ne collecte pas le paiement de la vente. Le client et le commerçant conviennent directement du montant final, de la livraison et du moyen de paiement.',
+        question: 'MaTable-ci.com encaisse-t-il le paiement ?',
+        answer: 'Non. MaTable-ci.com ne collecte pas le paiement de la vente. Le client et le commerçant conviennent directement du montant final, de la livraison et du moyen de paiement.',
       },
       {
         question: 'À qui m’adresser en cas de problème avec un article ?',

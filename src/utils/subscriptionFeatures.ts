@@ -95,7 +95,7 @@ export const SUBSCRIPTION_PLANS = {
       'Jusqu’à 20 articles et 2 photos par article',
       'Un QR code général pour partager votre vitrine',
       'Commandes directes sur WhatsApp',
-      'Présence dans l’annuaire MaTable.ci',
+      'Présence dans l’annuaire MaTable-ci.com',
       'Statistiques de base sur 7 jours',
     ],
   },

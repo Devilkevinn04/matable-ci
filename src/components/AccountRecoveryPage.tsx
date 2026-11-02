@@ -51,7 +51,7 @@ export const AccountRecoveryPage: React.FC<AccountRecoveryPageProps> = ({ initia
       description={accountType === 'customer'
         ? 'Recevez un lien sécurisé pour choisir un nouveau mot de passe client.'
         : 'Recevez un lien sécurisé à l’adresse enregistrée pour vérifier votre boîte mail et choisir un nouveau PIN.'}
-      imageAlt="Assistance MaTable.ci pour les comptes clients et commerçants"
+      imageAlt="Assistance MaTable-ci.com pour les comptes clients et commerçants"
       onBack={onBack}
       topPrompt=""
       topActionLabel=""

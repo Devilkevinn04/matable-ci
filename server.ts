@@ -22,6 +22,7 @@ import { createGeniusPayRouter } from './server/routes/geniusPay.ts';
 import { createDeliveryAdminRouter } from './server/routes/deliveryAdmin.ts';
 import { createDeliveryRouter } from './server/routes/delivery.ts';
 import { expireStaleRequestedCourses, parseOfferTtlMinutes } from './server/services/deliveryLifecycle.ts';
+import { expireStalePendingOrders } from './server/services/orderLifecycle.ts';
 import { createAdvertisingRouters } from './server/routes/advertising.ts';
 import { createPublicRateLimitMiddleware } from './server/services/rateLimits.ts';
 import { buildSessionFingerprint, createAuthSessionHelpers, isRequestFingerprintMatch } from './server/services/authSessions.ts';
@@ -1213,6 +1214,32 @@ async function startServer() {
     });
   }
 
+  const runPendingOrderExpiry = () => {
+    void expireStalePendingOrders()
+      .then((expiredOrders) => {
+        for (const expired of expiredOrders) {
+          const cachedOrder = orders.find((order) => order.id === expired.orderId);
+          if (cachedOrder) {
+            cachedOrder.status = 'expired';
+            cachedOrder.delivery_fee = 0;
+          }
+          for (const update of expired.stockUpdates) {
+            const product = products.find((candidate) => candidate.id === update.productId && candidate.shop_id === update.shopId);
+            if (product) {
+              product.stock = update.stock;
+              product.is_available = update.isAvailable;
+            }
+          }
+        }
+        if (expiredOrders.length > 0) console.info(`Expired ${expiredOrders.length} pending order(s) after the response window.`);
+      })
+      .catch((error: unknown) => {
+        console.error('Scheduled pending order expiry failed.', error);
+      });
+  };
+  runPendingOrderExpiry();
+  setInterval(runPendingOrderExpiry, 60 * 1000).unref();
+
   app.use('/api', createOrderRouter({
     shops,
     products,
@@ -1267,12 +1294,12 @@ async function startServer() {
   const isFrontendPagePath = (pathname: string) => pathname !== '/' && !pathname.startsWith('/api/') && !pathname.startsWith('/@') && !path.extname(pathname);
   const publicPageSeoMetadata: Record<string, { title: string; description: string }> = {
     '/promotions': {
-      title: 'Promotions en cours | MaTable.ci',
+      title: 'Promotions en cours | MaTable-ci.com',
       description: 'Découvrez les promotions temporaires des boutiques locales en Côte d’Ivoire et profitez de prix réduits pendant leur période de validité.',
     },
     '/guide': {
-      title: 'Guide personnel | MaTable.ci',
-      description: 'Votre guide pratique MaTable.ci, adapté à votre espace client, marchand ou administration.',
+      title: 'Guide personnel | MaTable-ci.com',
+      description: 'Votre guide pratique MaTable-ci.com, adapté à votre espace client, marchand ou administration.',
     },
   };
 
@@ -1298,7 +1325,7 @@ async function startServer() {
             'Content-Type': 'text/html',
             'Cache-Control': 'no-store',
             'Referrer-Policy': 'no-referrer',
-          }).end(injectNoIndexSeo(transformed, 'Espace commerçant | MaTable.ci'));
+          }).end(injectNoIndexSeo(transformed, 'Espace commerçant | MaTable-ci.com'));
         } catch (error) {
           return next(error);
         }
@@ -1309,7 +1336,7 @@ async function startServer() {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Aperçu des formules commerçants | MaTable.ci'));
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Aperçu des formules commerçants | MaTable-ci.com'));
         } catch (error) {
           return next(error);
         }
@@ -1320,7 +1347,7 @@ async function startServer() {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Aperçus mobiles | MaTable.ci'));
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Aperçus mobiles | MaTable-ci.com'));
         } catch (error) {
           return next(error);
         }
@@ -1333,7 +1360,7 @@ async function startServer() {
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
           return res.status(200)
             .set({ 'Content-Type': 'text/html', 'Cache-Control': 'no-store' })
-            .end(injectNoIndexSeo(transformed, 'Aperçu test livreur | MaTable.ci'));
+            .end(injectNoIndexSeo(transformed, 'Aperçu test livreur | MaTable-ci.com'));
         } catch (error) {
           return next(error);
         }
@@ -1346,7 +1373,7 @@ async function startServer() {
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
           return res.status(200)
             .set({ 'Content-Type': 'text/html', 'Cache-Control': 'no-store' })
-            .end(injectNoIndexSeo(transformed, 'Aperçu local | MaTable.ci'));
+            .end(injectNoIndexSeo(transformed, 'Aperçu local | MaTable-ci.com'));
         } catch (error) {
           return next(error);
         }
@@ -1472,7 +1499,7 @@ async function startServer() {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Espace MaTable.ci'));
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Espace MaTable-ci.com'));
         } catch (error) {
           return next(error);
         }
@@ -1482,7 +1509,7 @@ async function startServer() {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          return res.status(404).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Page introuvable | MaTable.ci'));
+          return res.status(404).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Page introuvable | MaTable-ci.com'));
         } catch (error) {
           return next(error);
         }
@@ -1509,7 +1536,7 @@ async function startServer() {
             'Content-Type': 'text/html',
             'Cache-Control': 'no-store',
             'Referrer-Policy': 'no-referrer',
-          }).send(injectNoIndexSeo(baseHtml, 'Espace commerçant | MaTable.ci'));
+          }).send(injectNoIndexSeo(baseHtml, 'Espace commerçant | MaTable-ci.com'));
       }
 
       const seoShops = await loadShopsFromDatabase();
@@ -1575,17 +1602,17 @@ async function startServer() {
       }
 
       if (isPrivateSeoPath(req.path) && baseHtml && shouldServePublicHtml(req)) {
-        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectNoIndexSeo(baseHtml, 'Espace MaTable.ci'));
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectNoIndexSeo(baseHtml, 'Espace MaTable-ci.com'));
       }
       if (isFrontendPagePath(req.path) && shouldServePublicHtml(req)) {
-        return res.status(404).set({ 'Content-Type': 'text/html' }).send(injectNoIndexSeo(baseHtml, 'Page introuvable | MaTable.ci'));
+        return res.status(404).set({ 'Content-Type': 'text/html' }).send(injectNoIndexSeo(baseHtml, 'Page introuvable | MaTable-ci.com'));
       }
       return res.sendFile(indexHtmlPath);
     });
   }
 
   app.listen(PORT, process.env.HOST || '0.0.0.0', () => {
-    console.log(`Server MaTable.ci running on port ${PORT}`);
+    console.log(`Server MaTable-ci.com running on port ${PORT}`);
     void processSubscriptionAutomation();
   });
 }

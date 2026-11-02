@@ -145,7 +145,7 @@ export function AdminShopList({
           <div>
             <h2 className="font-black text-slate-900 text-sm">Liste des commerçants</h2>
             <AcquisitionSummary shops={shops} />
-            {canSeeFinancials && <p className="mt-1 text-xs text-slate-500">Les montants correspondent aux commandes enregistrées ; les paiements des ventes ne sont pas suivis par MaTable.ci.</p>}
+            {canSeeFinancials && <p className="mt-1 text-xs text-slate-500">Les montants correspondent aux commandes enregistrées ; les paiements des ventes ne sont pas suivis par MaTable-ci.com.</p>}
           </div>
           <button type="button" onClick={onExport} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
         </div>

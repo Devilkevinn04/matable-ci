@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Package, Plus, Edit3, Trash2, Clock, Search, Eye, EyeOff, Minus } from 'lucide-react';
+import { Package, Plus, Edit3, Trash2, Clock, Search, Eye, EyeOff, Minus, Download, Upload } from 'lucide-react';
 import { MerchantState } from './useMerchant';
 import { formatFCFA } from '../../utils/format';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
@@ -30,6 +30,11 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
     handleDeleteProduct,
   } = state;
   const [saleNow, setSaleNow] = useState(Date.now());
+  const [csvText, setCsvText] = useState('');
+  const [csvPreview, setCsvPreview] = useState<{ created_count: number; updated_count: number } | null>(null);
+  const [csvBusy, setCsvBusy] = useState(false);
+  const [csvError, setCsvError] = useState('');
+  const [csvNotice, setCsvNotice] = useState('');
   useEffect(() => {
     const nextBoundary = products
       .flatMap((product) => [product.sale_starts_at, product.sale_ends_at])
@@ -55,6 +60,96 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
     { id: 'hidden' as const, label: 'Masqués', count: products.filter(product => product.is_available === false).length },
     { id: 'promotions' as const, label: 'Avec promotion', count: promotionCount },
   ];
+
+  const downloadCatalogCsv = async () => {
+    setCsvBusy(true);
+    setCsvError('');
+    setCsvNotice('');
+    try {
+      const response = await fetch(`/api/shops/${currentShop.id}/products/export.csv`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        const data = await response.json() as { error?: string };
+        throw new Error(data.error || 'Impossible de télécharger le catalogue.');
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `catalogue-${currentShop.id}.csv`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      setCsvError(error instanceof Error ? error.message : 'Impossible de télécharger le catalogue.');
+    } finally {
+      setCsvBusy(false);
+    }
+  };
+
+  const previewCatalogImport = async (file?: File) => {
+    if (!file) return;
+    setCsvBusy(true);
+    setCsvError('');
+    setCsvNotice('');
+    setCsvPreview(null);
+    try {
+      if (file.size > 1024 * 1024) throw new Error('Le fichier CSV ne peut pas dépasser 1 Mo.');
+      const text = await file.text();
+      const response = await fetch(`/api/shops/${currentShop.id}/products/import`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csv: text, apply: false }),
+      });
+      const data = await response.json() as { error?: string; created_count?: number; updated_count?: number };
+      if (!response.ok) throw new Error(data.error || 'Impossible de vérifier ce fichier CSV.');
+      setCsvText(text);
+      setCsvPreview({
+        created_count: Number(data.created_count) || 0,
+        updated_count: Number(data.updated_count) || 0,
+      });
+    } catch (error) {
+      setCsvError(error instanceof Error ? error.message : 'Impossible de vérifier ce fichier CSV.');
+    } finally {
+      setCsvBusy(false);
+    }
+  };
+
+  const applyCatalogImport = async () => {
+    if (!csvText) return;
+    setCsvBusy(true);
+    setCsvError('');
+    setCsvNotice('');
+    try {
+      const response = await fetch(`/api/shops/${currentShop.id}/products/import`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csv: csvText, apply: true }),
+      });
+      const data = await response.json() as {
+        error?: string;
+        created_count?: number;
+        updated_count?: number;
+        products?: typeof products;
+      };
+      if (!response.ok) throw new Error(data.error || 'Impossible d’importer ce fichier CSV.');
+      const importedProducts = data.products || [];
+      state.setProducts((current) => {
+        const byId = new Map(current.map((product) => [product.id, product]));
+        for (const product of importedProducts) byId.set(product.id, product);
+        return Array.from(byId.values()).sort((left, right) => left.id - right.id);
+      });
+      setCsvPreview(null);
+      setCsvText('');
+      setCsvNotice(`${Number(data.created_count) || 0} article(s) ajouté(s), ${Number(data.updated_count) || 0} mis à jour.`);
+    } catch (error) {
+      setCsvError(error instanceof Error ? error.message : 'Impossible d’importer ce fichier CSV.');
+    } finally {
+      setCsvBusy(false);
+    }
+  };
 
   return (
     <>
@@ -87,17 +182,65 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                 )}
               </div>
 
-              <button
-                id="add-product-modal-btn"
-                onClick={handleOpenAddModal}
-                disabled={catalogFull}
-                title={catalogFull ? `La limite de votre formule est de ${productLimit} articles.` : undefined}
-                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-[#087F62] px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
-              >
-                <Plus className="w-4 h-4" />
-                <span>{catalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</span>
-              </button>
+              <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex">
+                <button
+                  type="button"
+                  onClick={() => void downloadCatalogCsv()}
+                  disabled={csvBusy}
+                  className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[#d9d5cd] bg-white px-3 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4" /> Exporter CSV
+                </button>
+                <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[#d9d5cd] bg-white px-3 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50">
+                  <Upload className="h-4 w-4" /> Importer CSV
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="sr-only"
+                    disabled={csvBusy}
+                    onChange={(event) => {
+                      void previewCatalogImport(event.currentTarget.files?.[0]);
+                      event.currentTarget.value = '';
+                    }}
+                  />
+                </label>
+                <button
+                  id="add-product-modal-btn"
+                  onClick={handleOpenAddModal}
+                  disabled={catalogFull}
+                  title={catalogFull ? `La limite de votre formule est de ${productLimit} articles.` : undefined}
+                  className="col-span-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[#087F62] px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-45 sm:col-span-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{catalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</span>
+                </button>
+              </div>
             </div>
+
+            {(csvPreview || csvError || csvNotice) && (
+              <section className="rounded-xl border border-[#d9d5cd] bg-white p-3" aria-label="Import et export CSV">
+                <p className="text-xs leading-5 text-slate-600">
+                  ID MaTable renseigné : mise à jour de l’article. ID vide : création. Une cellule vide conserve la valeur actuelle.
+                </p>
+                {csvPreview && (
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-bold text-slate-800">
+                      Aperçu : {csvPreview.created_count} ajout(s), {csvPreview.updated_count} mise(s) à jour.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void applyCatalogImport()}
+                      disabled={csvBusy}
+                      className="min-h-10 rounded-lg bg-[#087F62] px-3 text-xs font-bold text-white disabled:opacity-50"
+                    >
+                      {csvBusy ? 'Import en cours…' : 'Confirmer l’import'}
+                    </button>
+                  </div>
+                )}
+                {csvError && <p role="alert" className="mt-2 text-xs font-semibold text-rose-700">{csvError}</p>}
+                {csvNotice && <p role="status" className="mt-2 text-xs font-semibold text-emerald-800">{csvNotice}</p>}
+              </section>
+            )}
 
             {/* Filter pills & search bar */}
             <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-3 shadow-sm sm:flex-row">
