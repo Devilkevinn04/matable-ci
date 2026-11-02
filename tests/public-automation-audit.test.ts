@@ -264,10 +264,27 @@ test('robots and sitemap routes are served by the SEO router', async () => {
   assert.match(sitemapXml, /<urlset/);
   assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/faq<\/loc>/);
   assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/boutiques<\/loc>/);
+  assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/promotions<\/loc>/);
   assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/commercants<\/loc>/);
   assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/comment-ca-marche<\/loc>/);
+  assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/guide<\/loc>/);
   assert.match(sitemapXml, /\/boutiques\/categorie\/fashion/);
   assert.match(sitemapXml, /\/boutiques\/ville\/abidjan/);
+});
+
+test('homepage identifies MaTable-ci.com as a local business directory', async () => {
+  const response = await fetch(`${BASE_URL}/`, {
+    headers: { 'User-Agent': 'Googlebot', Accept: 'text/html' },
+  });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<title>Annuaire de boutiques locales en Côte d’Ivoire \| MaTable-ci\.com<\/title>/);
+  assert.match(html, /name="description" content="MaTable-ci\.com est l’annuaire en ligne des boutiques locales en Côte d’Ivoire/);
+  assert.match(html, /<link rel="icon" href="\/brand-kit\/favicon-48\.png" type="image\/png" sizes="48x48" \/>/);
+  assert.match(html, /"@type":\s*"Organization"/);
+  assert.match(html, /"@id":\s*"https:\/\/matable-ci\.com\/#organization"/);
+  assert.match(html, /Plateforme numérique ivoirienne de découverte des boutiques locales/);
+  assert.match(html, /"publisher":\s*\{\s*"@id":\s*"https:\/\/matable-ci\.com\/#organization"/);
 });
 
 test('shop directory page exposes indexable SEO metadata in the initial HTML response', async () => {

@@ -22,9 +22,11 @@ export function createSeoRouter({ getPublicOrigin, escapeHtml }: SeoRouterOption
     const urls = [
       `${origin}/`,
       `${origin}/boutiques`,
+      `${origin}/promotions`,
       `${origin}/commercants`,
       `${origin}/comment-ca-marche`,
       `${origin}/faq`,
+      `${origin}/guide`,
       ...publicShops.map((shop) => `${origin}/${encodeURIComponent(shop.slug)}`),
       ...getPublicDiscoveryPages(publicShops).map((page) => `${origin}${page.path}`),
     ];

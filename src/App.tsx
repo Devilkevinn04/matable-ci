@@ -54,8 +54,8 @@ const legalMetadata: Record<LegalPageKey, { title: string; description: string }
   },
 };
 const defaultPageMetadata = {
-  title: 'Produits locaux à découvrir en Côte d’Ivoire | MaTable-ci.com',
-  description: 'Découvrez les produits des commerces locaux en Côte d’Ivoire, explorez les boutiques par ville et commandez directement sur WhatsApp avec MaTable-ci.com.',
+  title: 'Annuaire de boutiques locales en Côte d’Ivoire | MaTable-ci.com',
+  description: 'MaTable-ci.com est l’annuaire en ligne des boutiques locales en Côte d’Ivoire. Explorez leurs produits et contactez directement chaque commerçant sur WhatsApp.',
 };
 const shopDirectoryMetadata = {
   title: 'Boutiques locales en Côte d’Ivoire | MaTable-ci.com',
@@ -319,9 +319,16 @@ export default function App() {
     && !isDeliveryCourierWorkspace;
   const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !isShopDirectoryRoute && !isPromotionsPage && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && !isDeliveryCourierWorkspace && customerView === 'none';
   const isUnknownStorefront = isCustomerStorefront && !isLoadingShops && !availableShops.some((shop) => shop.slug === normalizedPath);
+  const isSingleSegmentStorefrontRoute = isCustomerStorefront
+    && path.split('/').filter(Boolean).length === 1
+    && !['/reinitialiser-mot-de-passe', '/reinitialiser-pin-commercant'].includes(path);
+  const shouldLoadShopCatalog = path === '/' || isShopDirectoryRoute || isPromotionsPage || isDiscoveryRoute || isSingleSegmentStorefrontRoute;
+  const shouldLoadCustomerSession = customerView === 'account'
+    || (currentRole === 'storefront' && !hasStandaloneAccountFlow && (!isCustomerStorefront || isSingleSegmentStorefrontRoute));
 
   const scrollPositionsRef = useRef<Map<string, number>>(new Map());
   const isRestoringScrollRef = useRef(false);
+  const hasLoadedShopCatalogRef = useRef(false);
 
   useEffect(() => {
     const routeKey = `${location.pathname}${location.search}`;
@@ -399,7 +406,11 @@ export default function App() {
   }, [path, currentRole, isRecoveryPage, isUnknownStorefront, isCustomerStorefront, isMobileDashboardPreview, isAdvertisingPreview, isDeliveryCourierPreview, isDeliveryCourierWorkspace]);
 
   useEffect(() => {
-    if (isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierWorkspace) {
+    if (!shouldLoadShopCatalog) {
+      setIsLoadingShops(false);
+      return;
+    }
+    if (hasLoadedShopCatalogRef.current) {
       setIsLoadingShops(false);
       return;
     }
@@ -413,7 +424,10 @@ export default function App() {
       })
       .then(data => {
         if (!Array.isArray(data)) throw new Error('Shop directory response is invalid.');
-        if (isCurrentRequest) setAvailableShops(data);
+        if (isCurrentRequest) {
+          hasLoadedShopCatalogRef.current = true;
+          setAvailableShops(data);
+        }
       })
       .catch(() => {
         if (isCurrentRequest) setShopsLoadError(true);
@@ -422,17 +436,17 @@ export default function App() {
         if (isCurrentRequest) setIsLoadingShops(false);
       });
     return () => { isCurrentRequest = false; };
-  }, [shopsRetryKey, isMobileDashboardPreview, isAdvertisingPreview, isDeliveryCourierWorkspace]);
+  }, [shopsRetryKey, shouldLoadShopCatalog]);
 
   useEffect(() => {
-    if (isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierWorkspace) return;
+    if (!shouldLoadCustomerSession) return;
     fetch('/api/auth/customer-session', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (data.authenticated && data.user) setCustomerUser(data.user);
       })
       .catch(() => undefined);
-  }, [isMobileDashboardPreview, isAdvertisingPreview, isDeliveryCourierWorkspace]);
+  }, [shouldLoadCustomerSession]);
 
   useEffect(() => {
     const isPrivateRoute = path === '/app' || path.startsWith('/app/') || path === '/admin' || path.startsWith('/admin/')

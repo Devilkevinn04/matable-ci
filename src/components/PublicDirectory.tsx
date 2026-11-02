@@ -540,7 +540,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               ))}
             </h1>
             <p className="mt-3 max-w-[480px] text-sm leading-6 text-[#47534b] sm:text-[15px]">
-              Parcourez les boutiques, repérez leurs produits et contactez directement les commerçants de Côte d’Ivoire.
+              MaTable-ci.com est l’annuaire en ligne des boutiques locales en Côte d’Ivoire. Explorez leurs produits et contactez directement chaque commerçant.
             </p>
             <div>
               {searchForm}
