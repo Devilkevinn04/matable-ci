@@ -128,6 +128,7 @@ export interface Product {
   sale_ends_at?: string | null;
   stock: number;
   image_url: string;
+  thumbnail_url?: string;
   is_available: boolean;
   like_count?: number;
   category?: string;

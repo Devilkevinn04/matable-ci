@@ -2,7 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { Router, type Request, type RequestHandler } from 'express';
 import { dbAll, dbGet, dbRun, dbTransaction } from '../../db.ts';
 import { isShopCategory } from '../../src/utils/categoryDefaults.ts';
-import { getCategoryDefaults, normalizeCustomBannerImage } from '../../src/utils/categoryDefaults.ts';
+import { getBannerImageForDisplay, normalizeCustomBannerImage } from '../../src/utils/categoryDefaults.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import { isShopPubliclyVisible } from '../services/businessRules.ts';
 import { toPublicProductImageUrl } from '../services/publicProductImages.ts';
@@ -248,20 +248,23 @@ export function createAdvertisingRouters({
     for (const campaign of campaigns) {
       const shop = await getShopFromDatabase(campaign.shop_id);
       if (!shop || !isShopPubliclyVisible(shop) || shop.merchant_verification_status !== 'verified') continue;
-      let product: { id: number; title: string; price: number; sale_price: number | null; sale_starts_at: string | null; sale_ends_at: string | null; image_url: string; stock: number } | undefined;
+      let product: { id: number; title: string; price: number; sale_price: number | null; sale_starts_at: string | null; sale_ends_at: string | null; image_url: string; thumbnail_url: string | null; stock: number } | undefined;
       if (campaign.kind === 'product' && campaign.product_id !== null) {
         product = await dbGet(
-          `SELECT id, title, price, sale_price, sale_starts_at, sale_ends_at, image_url, stock FROM products
+          `SELECT id, title, price, sale_price, sale_starts_at, sale_ends_at, image_url, thumbnail_url, stock FROM products
             WHERE id = ? AND shop_id = ? AND is_available = 1 AND stock > 0`,
           [campaign.product_id, shop.id],
         );
         if (!product) continue;
       }
       const category = isShopCategory(shop.category) ? shop.category : 'other';
-      const bannerUrl = normalizeCustomBannerImage(shop.theme_config?.custom_banner_url, category)
-        || getCategoryDefaults(category).bannerPlaceholderImageUrl;
+      const bannerUrl = getBannerImageForDisplay(shop.theme_config?.custom_banner_url, category);
       const publicProduct = product
-        ? { ...product, image_url: toPublicProductImageUrl(product.id, product.image_url) }
+        ? {
+          ...product,
+          image_url: toPublicProductImageUrl(product.id, product.image_url),
+          thumbnail_url: toPublicProductImageUrl(product.id, product.thumbnail_url || product.image_url, 998),
+        }
         : undefined;
       publicCampaigns.push({
         id: campaign.id,

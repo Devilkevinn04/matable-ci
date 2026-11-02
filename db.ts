@@ -62,7 +62,7 @@ const sqliteSchema = `
   );
   CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
-    price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT,
+    price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT, thumbnail_url TEXT,
     sale_price INTEGER, sale_starts_at TEXT, sale_ends_at TEXT,
     is_available INTEGER NOT NULL DEFAULT 1, is_visible INTEGER NOT NULL DEFAULT 1, sizes TEXT, colors TEXT, lookbook_image TEXT, created_at TEXT,
     gallery_images TEXT, prep_time INTEGER, modifier_groups TEXT, attributes TEXT
@@ -658,6 +658,7 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('products', 'sale_price', 'INTEGER');
   addColumn('products', 'sale_starts_at', 'TEXT');
   addColumn('products', 'sale_ends_at', 'TEXT');
+  addColumn('products', 'thumbnail_url', 'TEXT');
   addColumn('users', 'phone', 'TEXT');
   addColumn('users', 'first_name', "TEXT NOT NULL DEFAULT ''");
   addColumn('users', 'last_name', "TEXT NOT NULL DEFAULT ''");
@@ -729,7 +730,7 @@ export const postgresMigrations = [
   )`,
   `CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY, shop_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT,
-    price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT,
+    price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, image_url TEXT, thumbnail_url TEXT,
     sale_price INTEGER, sale_starts_at TEXT, sale_ends_at TEXT,
     is_available INTEGER NOT NULL DEFAULT 1, is_visible INTEGER NOT NULL DEFAULT 1, category TEXT, sizes JSONB, colors JSONB, created_at TEXT,
     lookbook_image TEXT, gallery_images JSONB, prep_time INTEGER, modifier_groups JSONB, attributes JSONB
@@ -949,6 +950,7 @@ export const postgresMigrations = [
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS colors JSONB',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS lookbook_image TEXT',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS gallery_images JSONB',
+  'ALTER TABLE products ADD COLUMN IF NOT EXISTS thumbnail_url TEXT',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS prep_time INTEGER',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS modifier_groups JSONB',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT \'approved\'',

@@ -78,9 +78,9 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   const selectedModifierTotal = selectedUnitPrice - activeBasePrice;
   const isPromotion = activeBasePrice < product.price;
   const productImages = [
-    ...(product.image_url ? [{ src: product.image_url, alt: productTitle, fit: category === 'fashion' ? 'contain' as const : 'cover' as const }] : []),
-    ...(product.lookbook_image ? [{ src: product.lookbook_image, alt: `Lookbook de ${productTitle}`, fit: 'cover' as const }] : []),
-    ...(product.gallery_images || []).map((src, index) => ({ src, alt: `Photo ${index + 1} de ${productTitle}`, fit: category === 'fashion' ? 'contain' as const : 'cover' as const })),
+    ...(product.image_url ? [{ src: product.image_url, thumbnailSrc: product.thumbnail_url || product.image_url, alt: productTitle, fit: category === 'fashion' ? 'contain' as const : 'cover' as const }] : []),
+    ...(product.lookbook_image ? [{ src: product.lookbook_image, thumbnailSrc: product.lookbook_image, alt: `Lookbook de ${productTitle}`, fit: 'cover' as const }] : []),
+    ...(product.gallery_images || []).map((src, index) => ({ src, thumbnailSrc: src, alt: `Photo ${index + 1} de ${productTitle}`, fit: category === 'fashion' ? 'contain' as const : 'cover' as const })),
   ];
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
@@ -157,7 +157,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
               aria-label={`Agrandir la photo ${selectedImageIndex + 1} de ${productTitle}`}
               className="group absolute inset-0 z-0 rounded-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
             >
-              <CategoryProductImage imageUrl={selectedImage.src} category={category} title={selectedImage.alt} showFallbackTitle={false} imageFit={selectedImage.fit} className={`h-full w-full transition-transform duration-500 group-hover:scale-105 ${selectedImage.fit === 'contain' ? 'p-1' : ''}`} />
+              <CategoryProductImage imageUrl={selectedImage.thumbnailSrc} category={category} title={selectedImage.alt} showFallbackTitle={false} imageFit={selectedImage.fit} className={`h-full w-full transition-transform duration-500 group-hover:scale-105 ${selectedImage.fit === 'contain' ? 'p-1' : ''}`} />
               <span className="pointer-events-none absolute bottom-2 right-2 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-slate-950/65 text-white shadow-sm backdrop-blur-sm">
                 <Expand className="h-4 w-4" aria-hidden="true" />
               </span>
@@ -179,9 +179,9 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
         </div>
         {productImages.length > 1 && (
           <div aria-label={`Photos de ${productTitle}`} className="absolute bottom-2 left-2 z-20 flex max-w-[calc(100%-1rem)] gap-1 overflow-x-auto rounded-lg bg-slate-950/35 p-1 backdrop-blur-sm">
-            {productImages.map(({ src, alt, fit }, index) => (
+            {productImages.map(({ thumbnailSrc, alt, fit }, index) => (
               <button key={`${product.id}-photo-${index}`} type="button" aria-label={`Afficher ${alt}`} aria-pressed={selectedImageIndex === index} onClick={() => setSelectedImageIndex(index)} className={`h-8 w-8 shrink-0 overflow-hidden rounded-md border bg-[#f4f1ea] p-0.5 sm:h-10 sm:w-10 ${selectedImageIndex === index ? 'border-white ring-1 ring-white' : 'border-white/40'}`}>
-                <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" className={`h-full w-full ${fit === 'contain' ? 'object-contain' : 'object-cover'}`} onError={(event) => { event.currentTarget.closest('button')?.remove(); }} />
+                <img src={thumbnailSrc} alt="" loading="lazy" referrerPolicy="no-referrer" className={`h-full w-full ${fit === 'contain' ? 'object-contain' : 'object-cover'}`} onError={(event) => { event.currentTarget.closest('button')?.remove(); }} />
               </button>
             ))}
           </div>

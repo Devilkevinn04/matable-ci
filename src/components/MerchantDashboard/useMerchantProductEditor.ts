@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Product, Shop } from '../../types';
-import { uploadPublicMediaFile } from '../../utils/media';
+import { uploadPublicMediaFile, uploadPublicMediaVariants } from '../../utils/media';
 import { buildProductSavePayload, createProductDraft, productToDraft } from './productForm';
 import type { ProductModifierGroupDraft } from './productForm';
 import { useToast } from '../Toast';
@@ -25,6 +25,7 @@ export function useMerchantProductEditor(
   const [prodSaleEndsAt, setProdSaleEndsAt] = useState('');
   const [prodStock, setProdStock] = useState<number | ''>(10);
   const [prodImage, setProdImage] = useState('');
+  const [prodThumbnail, setProdThumbnail] = useState('');
   const [prodLookbookImage, setProdLookbookImage] = useState('');
   const [prodGalleryImages, setProdGalleryImages] = useState<string[]>([]);
   const [prodSizes, setProdSizes] = useState('');
@@ -50,6 +51,7 @@ export function useMerchantProductEditor(
     setProdStock(draft.stock);
     setProdLookbookImage(draft.lookbook_image);
     setProdImage(draft.image_url);
+    setProdThumbnail(draft.thumbnail_url);
     setProdGalleryImages(draft.gallery_images);
     setProdSizes(draft.sizes);
     setProdColors(draft.colors);
@@ -74,6 +76,7 @@ export function useMerchantProductEditor(
     setProdSaleEndsAt(draft.sale_ends_at);
     setProdStock(draft.stock);
     setProdImage(draft.image_url);
+    setProdThumbnail(draft.thumbnail_url);
     setProdLookbookImage(draft.lookbook_image);
     setProdGalleryImages(draft.gallery_images);
     setProdSizes(draft.sizes);
@@ -104,8 +107,15 @@ export function useMerchantProductEditor(
     try {
       setImageCompressing(true);
       setOriginalImageSizeKB(Math.round(file.size / 1024));
-      const publicUrl = await uploadPublicMediaFile(file, currentShop.id, { purpose: 'product-main', maxDimension: 900, maxSizeKB: 100 });
-      setProdImage(publicUrl);
+      const { imageUrl, thumbnailUrl } = await uploadPublicMediaVariants(file, currentShop.id, {
+        purpose: 'product-main',
+        maxDimension: 900,
+        maxSizeKB: 100,
+        thumbnailDimension: 480,
+        thumbnailSizeKB: 35,
+      });
+      setProdImage(imageUrl);
+      setProdThumbnail(thumbnailUrl);
       setCompressedSizeKB(Math.round(file.size / 1024));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur lors du téléversement de l'image.");
@@ -207,6 +217,7 @@ export function useMerchantProductEditor(
       sale_ends_at: prodSaleEndsAt,
       stock: prodStock,
       image_url: prodImage,
+      thumbnail_url: prodThumbnail,
       lookbook_image: prodLookbookImage,
       gallery_images: prodGalleryImages,
       sizes: prodSizes,
@@ -284,6 +295,7 @@ export function useMerchantProductEditor(
     prodSaleEndsAt,
     prodStock,
     prodImage,
+    prodThumbnail,
     prodLookbookImage,
     prodGalleryImages,
     prodSizes,
@@ -306,6 +318,7 @@ export function useMerchantProductEditor(
     setProdSaleEndsAt,
     setProdStock,
     setProdImage,
+    setProdThumbnail,
     setProdLookbookImage,
     setProdGalleryImages,
     setProdSizes,

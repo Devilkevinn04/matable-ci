@@ -902,6 +902,16 @@ async function startServer() {
     if (process.env.NODE_ENV === 'production' && !isSecureRequest) {
       return res.redirect(308, `https://${req.get('host')}${req.originalUrl}`);
     }
+    const host = String(req.headers.host || '').toLowerCase().split(':')[0];
+    const acceptsHtml = String(req.headers.accept || '').includes('text/html');
+    if (
+      host === 'matable-ci.onrender.com'
+      && (req.method === 'GET' || req.method === 'HEAD')
+      && acceptsHtml
+    ) {
+      const canonicalOrigin = new URL(String(process.env.APP_URL)).origin;
+      return res.redirect(308, `${canonicalOrigin}${req.originalUrl}`);
+    }
     next();
   });
 
@@ -1060,8 +1070,8 @@ async function startServer() {
   app.get(`${PUBLIC_PRODUCT_IMAGE_PATH}/:productId/:file`, async (req, res) => {
     const productId = Number(req.params.productId);
     if (!Number.isInteger(productId) || productId <= 0) return res.status(404).end();
-    const row = await dbGet<{ image_url: string | null; gallery_images: unknown; lookbook_image: string | null }>(
-      'SELECT image_url, gallery_images, lookbook_image FROM products WHERE id = ?',
+    const row = await dbGet<{ image_url: string | null; thumbnail_url: string | null; gallery_images: unknown; lookbook_image: string | null }>(
+      'SELECT image_url, thumbnail_url, gallery_images, lookbook_image FROM products WHERE id = ?',
       [productId],
     );
     const image = resolveProductImageRequest(String(req.params.file), row);

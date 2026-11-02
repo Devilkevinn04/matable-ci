@@ -986,7 +986,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
         [shopId],
       ),
       dbAll<Record<string, unknown>>(
-        `SELECT id, title, description, price, stock, image_url, is_available, is_visible, sizes, colors,
+        `SELECT id, title, description, price, stock, image_url, thumbnail_url, is_available, is_visible, sizes, colors,
           lookbook_image, created_at, gallery_images, prep_time, modifier_groups, attributes
          FROM products WHERE shop_id = ? ORDER BY id`,
         [shopId],

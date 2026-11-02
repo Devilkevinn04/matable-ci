@@ -162,13 +162,14 @@ export function createPublicShopsRouter({
     const [likeCounts, imageRows] = await Promise.all([
       getProductLikeCounts(pageProductIds),
       pageProductIds.length > 0
-        ? dbAll<{ id: number; image_url: string | null }>(
-          `SELECT id, image_url FROM products WHERE id IN (${pageProductIds.map(() => '?').join(', ')})`,
+        ? dbAll<{ id: number; image_url: string | null; thumbnail_url: string | null }>(
+          `SELECT id, image_url, thumbnail_url FROM products WHERE id IN (${pageProductIds.map(() => '?').join(', ')})`,
           pageProductIds,
         )
         : Promise.resolve([]),
     ]);
     const imageByProductId = new Map(imageRows.map((row) => [Number(row.id), row.image_url || '']));
+    const thumbnailByProductId = new Map(imageRows.map((row) => [Number(row.id), row.thumbnail_url || '']));
     res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
     res.json({
       sort,
@@ -180,6 +181,7 @@ export function createPublicShopsRouter({
         return {
           ...product,
           image_url: toPublicProductImageUrl(product.id, imageByProductId.get(product.id) || ''),
+          thumbnail_url: toPublicProductImageUrl(product.id, thumbnailByProductId.get(product.id) || imageByProductId.get(product.id) || '', 998),
           popularity,
           like_count: likeCounts.get(product.id) || 0,
           shop: {
@@ -208,8 +210,8 @@ export function createPublicShopsRouter({
           publicShopIds,
         ),
         dbAll<Record<string, unknown>>(
-          `SELECT id, shop_id, title, description, image_url, price FROM (
-             SELECT id, shop_id, title, description, image_url, price,
+          `SELECT id, shop_id, title, description, image_url, thumbnail_url, price FROM (
+             SELECT id, shop_id, title, description, image_url, thumbnail_url, price,
                ROW_NUMBER() OVER (PARTITION BY shop_id ORDER BY id) AS preview_rank
              FROM products
              WHERE shop_id IN (${publicShopIds.map(() => '?').join(', ')}) AND is_available = 1 AND stock > 0
@@ -219,7 +221,7 @@ export function createPublicShopsRouter({
       ])
       : [[], []];
     const productCounts = new Map(productCountRows.map((row) => [Number(row.shop_id), Number(row.count) || 0]));
-    const productsPreviewByShop = new Map<number, { id: number; title: string; image_url: string; price: number }[]>();
+    const productsPreviewByShop = new Map<number, { id: number; title: string; image_url: string; thumbnail_url: string; price: number }[]>();
     for (const row of previewRows) {
       if (isAgeRestrictedProduct({ title: String(row.title || ''), description: String(row.description || '') })) continue;
       const shopId = Number(row.shop_id);
@@ -228,6 +230,7 @@ export function createPublicShopsRouter({
         id: Number(row.id),
         title: String(row.title),
         image_url: toPublicProductImageUrl(Number(row.id), String(row.image_url || '')),
+        thumbnail_url: toPublicProductImageUrl(Number(row.id), String(row.thumbnail_url || row.image_url || ''), 998),
         price: Number(row.price),
       });
       productsPreviewByShop.set(shopId, previews);

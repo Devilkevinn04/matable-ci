@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowUpRight, ArrowRight, Megaphone } from 'lucide-react';
-import { useReducedMotion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import type { Product } from '../types';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { formatFCFA } from '../utils/format';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
 import { cachedFetchJson } from '../utils/requestCache';
@@ -20,7 +20,7 @@ export interface PublicCampaign {
     category?: string;
     city?: string;
   };
-  product?: Pick<Product, 'id' | 'title' | 'price' | 'sale_price' | 'sale_starts_at' | 'sale_ends_at' | 'image_url' | 'stock'>;
+  product?: Pick<Product, 'id' | 'title' | 'price' | 'sale_price' | 'sale_starts_at' | 'sale_ends_at' | 'image_url' | 'thumbnail_url' | 'stock'>;
 }
 
 interface PublicCampaignCarouselProps {
@@ -55,7 +55,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
   const campaignElement = useRef<HTMLElement | null>(null);
   const recordedImpressions = useRef(new Set<string>());
   const isPreview = previewCampaigns !== undefined;
-  const prefersReducedMotion = useReducedMotion();
+  const prefersReducedMotion = usePrefersReducedMotion();
   const billboardInteracting = billboardHovered || billboardFocused || billboardPointerDown;
 
   useEffect(() => {
@@ -372,7 +372,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
     >
       <button type="button" onClick={() => { void sendEvent('click'); onOpenShop(campaign.shop.slug); }} className="group flex h-full w-full flex-col text-left">
         <span className="relative aspect-[4/3] w-full overflow-hidden bg-[#d1fae5]">
-          <img src={product.image_url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
+          <img src={product.thumbnail_url || product.image_url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
           <span className="absolute left-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-black uppercase text-[#8f351d]">Sponsorisé</span>
           <span className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold text-[#065f46]">{formatFCFA(product.price)}</span>
         </span>

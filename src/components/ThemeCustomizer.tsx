@@ -244,7 +244,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
       return;
     }
     try {
-      const uploadedUrl = await uploadPublicMediaFile(file, shop.id, { purpose: 'banner', maxDimension: 1600, maxSizeKB: 300 });
+      const uploadedUrl = await uploadPublicMediaFile(file, shop.id, { purpose: 'banner', maxDimension: 1000, maxSizeKB: 120 });
       updateCustomTheme((current) => ({ ...current, custom_banner_url: uploadedUrl }));
       setSaveError(null);
     } catch (error) {

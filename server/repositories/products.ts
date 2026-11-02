@@ -14,6 +14,7 @@ export function mapProductRow(row: Record<string, unknown>): ProductRecord {
     sale_ends_at: row.sale_ends_at == null ? null : String(row.sale_ends_at),
     stock: Number(row.stock),
     image_url: String(row.image_url ?? ''),
+    thumbnail_url: row.thumbnail_url == null ? undefined : String(row.thumbnail_url),
     is_available: Boolean(row.is_available),
     is_visible: row.is_visible == null ? Boolean(row.is_available) || Number(row.stock) === 0 : Boolean(row.is_visible),
     category: row.category ? String(row.category) : undefined,
@@ -39,22 +40,22 @@ export async function getProductFromDatabase(productId: number): Promise<Product
 
 export async function persistProduct(product: ProductRecord): Promise<void> {
   await dbRun(`
-    INSERT INTO products (id, shop_id, title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, is_available, is_visible, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes, created_at)
+    INSERT INTO products (id, shop_id, title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, thumbnail_url, is_available, is_visible, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes, created_at)
     VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
       COALESCE(?, CURRENT_TIMESTAMP)
     )
     ON CONFLICT(id) DO UPDATE SET shop_id=excluded.shop_id, title=excluded.title, description=excluded.description,
       price=excluded.price, sale_price=excluded.sale_price, sale_starts_at=excluded.sale_starts_at,
-      sale_ends_at=excluded.sale_ends_at, stock=excluded.stock, image_url=excluded.image_url, is_available=excluded.is_available,
+      sale_ends_at=excluded.sale_ends_at, stock=excluded.stock, image_url=excluded.image_url, thumbnail_url=excluded.thumbnail_url, is_available=excluded.is_available,
       is_visible=excluded.is_visible,
       category=excluded.category, sizes=excluded.sizes, colors=excluded.colors, lookbook_image=excluded.lookbook_image, gallery_images=excluded.gallery_images, prep_time=excluded.prep_time,
       modifier_groups=excluded.modifier_groups, attributes=excluded.attributes
   `, [
     product.id, product.shop_id, product.title, product.description ?? null, product.price, product.sale_price ?? null,
     product.sale_starts_at ?? null, product.sale_ends_at ?? null, product.stock, product.image_url,
-    product.is_available ? 1 : 0, product.is_visible === false ? 0 : 1, product.category ?? null, product.sizes ? JSON.stringify(product.sizes) : null, product.colors ? JSON.stringify(product.colors) : null,
+    product.thumbnail_url ?? null, product.is_available ? 1 : 0, product.is_visible === false ? 0 : 1, product.category ?? null, product.sizes ? JSON.stringify(product.sizes) : null, product.colors ? JSON.stringify(product.colors) : null,
     product.lookbook_image ?? null, product.gallery_images && product.gallery_images.length > 0 ? JSON.stringify(product.gallery_images) : null, product.prep_time ?? null, product.modifier_groups ? JSON.stringify(product.modifier_groups) : null,
     product.attributes && Object.keys(product.attributes).length > 0 ? JSON.stringify(product.attributes) : null,
     product.created_at ?? null,

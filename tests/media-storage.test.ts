@@ -79,6 +79,10 @@ test('upload validation enforces purpose, folder, format and size', async () => 
     validateMediaUploadRequest({ filename: 'logo.png', contentType: 'IMAGE/PNG', purpose: 'logo', folder: 'shops', size: 1024 }),
     { filename: 'logo.png', contentType: 'image/png', purpose: 'logo', folder: 'shops', size: 1024 },
   );
+  assert.equal(
+    validateMediaUploadRequest({ filename: 'product.webp', contentType: 'image/webp', purpose: 'product-main-thumbnail', folder: 'shops', size: 512 }).purpose,
+    'product-main-thumbnail',
+  );
   for (const body of [
     { filename: '', contentType: 'image/png' },
     { filename: 'logo.svg', contentType: 'image/svg+xml' },
@@ -117,4 +121,3 @@ test('presigning is refused when the R2 public configuration is incomplete', asy
     }
   }
 });
-

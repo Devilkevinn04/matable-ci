@@ -46,11 +46,12 @@ function parseGallery(value: unknown): unknown[] {
 }
 
 /** Rewrites the main photo and gallery of a product for a public (non-merchant) response. */
-export function withPublicProductImages<T extends { id: number; image_url?: unknown; gallery_images?: unknown; lookbook_image?: unknown }>(product: T): T {
+export function withPublicProductImages<T extends { id: number; image_url?: unknown; thumbnail_url?: unknown; gallery_images?: unknown; lookbook_image?: unknown }>(product: T): T {
   const gallery = parseGallery(product.gallery_images);
   return {
     ...product,
     image_url: toPublicProductImageUrl(product.id, product.image_url, 0),
+    thumbnail_url: toPublicProductImageUrl(product.id, product.thumbnail_url || product.image_url, 998),
     ...(product.lookbook_image
       ? { lookbook_image: toPublicProductImageUrl(product.id, product.lookbook_image, 999) }
       : {}),
@@ -73,13 +74,15 @@ export interface DecodedProductImage {
  */
 export function resolveProductImageRequest(
   file: string,
-  row: { image_url?: unknown; gallery_images?: unknown; lookbook_image?: unknown } | undefined,
+  row: { image_url?: unknown; thumbnail_url?: unknown; gallery_images?: unknown; lookbook_image?: unknown } | undefined,
 ): DecodedProductImage | null {
   const parsed = FILE_PATTERN.exec(file);
   if (!parsed || !row) return null;
   const slot = Number(parsed[1]);
   const value = slot === 0
     ? row.image_url
+    : slot === 998
+      ? row.thumbnail_url || row.image_url
     : slot === 999
       ? row.lookbook_image
       : parseGallery(row.gallery_images)[slot - 1];

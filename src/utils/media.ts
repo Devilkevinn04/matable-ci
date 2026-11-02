@@ -182,6 +182,22 @@ async function prepareImageForUpload(file: File, options: { maxDimension?: numbe
   }
 }
 
+async function prepareImageThumbnail(file: File, maxDimension: number, maxSizeKB: number): Promise<File> {
+  if (file.type === 'image/gif') return file;
+  if (typeof document === 'undefined' || typeof File === 'undefined') {
+    if (file.size <= maxSizeKB * 1024) return file;
+    throw new Error('La miniature ne peut pas être compressée dans cet environnement.');
+  }
+
+  const { compressImageClientSide } = await import('./format');
+  const outputType = file.type === 'image/png' || file.type === 'image/webp' ? 'image/webp' : 'image/jpeg';
+  const { dataUrl } = await compressImageClientSide(file, maxDimension, maxSizeKB, outputType);
+  const thumbnail = await dataUrlToFile(dataUrl, file.name);
+  if (thumbnail.size <= maxSizeKB * 1024) return thumbnail;
+  if (file.size <= maxSizeKB * 1024) return file;
+  throw new Error(`La miniature dépasse ${maxSizeKB} Ko. Choisissez une image plus légère.`);
+}
+
 export async function uploadPublicMediaFile(file: File, shopId: number | string, options: {
   purpose?: string;
   folder?: string;
@@ -200,21 +216,28 @@ export async function uploadPublicMediaFile(file: File, shopId: number | string,
 
   const prepared = await prepareImageForUpload(file, options);
 
+  return uploadPreparedPublicMediaFile(prepared, shopId, options);
+}
+
+async function uploadPreparedPublicMediaFile(file: File, shopId: number | string, options: {
+  purpose?: string;
+  folder?: string;
+} = {}): Promise<string> {
   let uploadDetails: Awaited<ReturnType<typeof requestMediaUploadUrl>>;
   try {
     uploadDetails = await requestMediaUploadUrl({
       shopId,
-      filename: prepared.name,
-      contentType: prepared.type || 'image/jpeg',
+      filename: file.name,
+      contentType: file.type || 'image/jpeg',
       purpose: options.purpose || 'media',
       folder: options.folder || 'shops',
-      size: prepared.size,
+      size: file.size,
     });
   } catch (error) {
     // R2 not configured yet: the compressed base64 fallback keeps the shop usable
     // and stays compatible with the public /media/products resolver.
     if (error instanceof MediaStorageUnavailableError) {
-      return fileToDataUrl(prepared);
+      return fileToDataUrl(file);
     }
     throw error;
   }
@@ -222,10 +245,10 @@ export async function uploadPublicMediaFile(file: File, shopId: number | string,
   const uploadResponse = await fetch(uploadDetails.signedUrl, {
     method: 'PUT',
     headers: {
-      'Content-Type': prepared.type || 'image/jpeg',
+      'Content-Type': file.type || 'image/jpeg',
       'Cache-Control': 'public, max-age=31536000, immutable',
     },
-    body: prepared,
+    body: file,
   });
 
   if (!uploadResponse.ok) {
@@ -233,6 +256,41 @@ export async function uploadPublicMediaFile(file: File, shopId: number | string,
   }
 
   return uploadDetails.publicUrl;
+}
+
+export async function uploadPublicMediaVariants(file: File, shopId: number | string, options: {
+  purpose?: string;
+  folder?: string;
+  maxDimension?: number;
+  maxSizeKB?: number;
+  thumbnailDimension?: number;
+  thumbnailSizeKB?: number;
+} = {}): Promise<{ imageUrl: string; thumbnailUrl: string }> {
+  if (!file || typeof file.name !== 'string') {
+    throw new Error('Aucun fichier valide n’a été fourni.');
+  }
+  if (!isSupportedMediaMimeType(file.type)) {
+    throw new Error('Formats acceptés : JPEG, PNG, WebP ou GIF.');
+  }
+  if (file.size > MAX_PUBLIC_MEDIA_BYTES) {
+    throw new Error('L’image ne doit pas dépasser 8 Mo.');
+  }
+
+  const image = await prepareImageForUpload(file, options);
+  const thumbnail = await prepareImageThumbnail(
+    file,
+    options.thumbnailDimension ?? 480,
+    options.thumbnailSizeKB ?? 35,
+  );
+  const imageUrl = await uploadPreparedPublicMediaFile(image, shopId, options);
+  const thumbnailUrl = thumbnail === image
+    ? imageUrl
+    : await uploadPreparedPublicMediaFile(thumbnail, shopId, {
+      folder: options.folder,
+      purpose: options.purpose ? `${options.purpose}-thumbnail` : 'product-main-thumbnail',
+    });
+
+  return { imageUrl, thumbnailUrl };
 }
 
 export function createMediaStorageAdapter() {

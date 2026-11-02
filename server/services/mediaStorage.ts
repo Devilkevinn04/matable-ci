@@ -13,7 +13,7 @@ import {
   normalizeStoredMediaUrl,
 } from '../../src/utils/media.ts';
 
-const ALLOWED_MEDIA_PURPOSES = new Set(['media', 'logo', 'banner', 'product-main', 'lookbook', 'gallery']);
+const ALLOWED_MEDIA_PURPOSES = new Set(['media', 'logo', 'banner', 'product-main', 'product-main-thumbnail', 'lookbook', 'gallery']);
 const ALLOWED_MEDIA_FOLDERS = new Set(['shops']);
 
 /** Invalid upload request (400), as opposed to an unavailable storage backend (503). */

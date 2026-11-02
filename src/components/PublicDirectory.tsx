@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowRight, ArrowUpRight, BadgePercent, CheckCircle2, Clock3, MapPin, Megaphone, RotateCcw, Search, ShieldCheck, Store, X } from 'lucide-react';
-import { motion, useReducedMotion } from 'motion/react';
 import { MotionReveal } from './MotionSystem';
-import { getCategoryDefaults, getProductImageForDisplay, isShopCategory, normalizeCustomBannerImage, SHOP_CATEGORIES } from '../utils/categoryDefaults';
+import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDisplay, isShopCategory, SHOP_CATEGORIES } from '../utils/categoryDefaults';
 import { shopMatchesDirectorySearch } from '../utils/directorySearch';
 import { getPublicDiscoveryPages, toDiscoveryCitySlug, type DiscoveryPage } from '../utils/discoverySeo';
 import { ProductNewsFeed, type FeedProduct } from './ProductNewsFeed';
@@ -30,7 +29,7 @@ interface DirectoryShop {
   theme_color?: string;
   opening_hours?: { enabled?: boolean; open_time?: string; close_time?: string; days?: number[] };
   theme_config?: { custom_banner_url?: string; primary_color?: string; logo_url?: string; event_mode_enabled?: boolean; event_type?: string; event_banner_text?: string };
-  products_preview?: { id: number; title: string; image_url: string; price: number }[];
+  products_preview?: { id: number; title: string; image_url: string; thumbnail_url?: string; price: number }[];
 }
 
 interface PublicDirectoryProps {
@@ -148,7 +147,7 @@ const openPartnerRequest = (event: React.MouseEvent<HTMLButtonElement>) => {
   requestForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
 };
 
-const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[] }> = ({ shops }) => {
+const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[]; isLoading: boolean }> = ({ shops, isLoading }) => {
   const highlighted = [...shops]
     .filter((shop) => (shop.products_preview?.length || 0) > 0)
     .sort((left, right) => Number(Boolean(right.is_verified)) - Number(Boolean(left.is_verified))
@@ -159,13 +158,15 @@ const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[] }> = ({ shops }) => 
     <aside className="flex min-h-[230px] flex-col overflow-hidden rounded-[26px] border border-[#d6e5dc] bg-[linear-gradient(135deg,#f4faf6,#fffdf8_58%,#e6f2e9)] p-4 shadow-[0_8px_28px_rgba(20,40,30,.08)] sm:min-h-[300px] sm:rounded-[32px] sm:p-6 lg:min-h-[350px]" aria-labelledby="home-trust-title">
       <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#c2410c]">Commencez ici</p>
       <h2 id="home-trust-title" className="mt-1 font-display text-xl font-extrabold leading-tight text-[#065f46] sm:text-2xl">Des boutiques près de chez vous, avec leurs vrais prix.</h2>
-      {highlighted.length > 0 && <ul className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
-        {highlighted.map((shop) => {
+      <ul className="mt-4 grid min-h-[216px] min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2" aria-label="Boutiques recommandées">
+        {isLoading
+          ? [0, 1, 2].map((item) => <li key={item} aria-hidden="true" className="h-16 animate-pulse rounded-2xl bg-white/80" />)
+          : highlighted.map((shop) => {
           const product = shop.products_preview?.[0];
           return <li key={shop.slug}>
             <Link to={`/${encodeURIComponent(shop.slug)}`} className="group flex min-h-[64px] items-center gap-3 rounded-2xl border border-[#e3ece6] bg-white p-2 pr-3 transition hover:border-[#b9d5ca] hover:shadow-[0_8px_18px_rgba(20,40,30,.08)]">
               <span className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-[#e9f5ee]">
-                {product && <img src={getProductImageForDisplay(product.image_url, shop.category)} alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />}
+                {product && <img src={getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category)} alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -180,7 +181,7 @@ const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[] }> = ({ shops }) => 
             </Link>
           </li>;
         })}
-      </ul>}
+      </ul>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         {hasVerifiedShop && <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#315548]"><ShieldCheck className="h-4 w-4 text-[#059669]" aria-hidden="true" /> « Vérifié » : identité du commerçant contrôlée</span>}
         <Link to="/boutiques" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-[#065f46] hover:text-[#047857]">
@@ -201,7 +202,6 @@ const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[] }> = ({ shops }) => 
 
 export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoading, loadError, onRetry, onOpenShop, onOpenDirectory, discoveryPage, isShopDirectoryPage = false, isPromotionsPage = false }) => {
   const location = useLocation();
-  const prefersReducedMotion = useReducedMotion();
   const [query, setQuery] = useState(() => isShopDirectoryPage ? new URLSearchParams(location.search).get('q') || '' : '');
   const [category, setCategory] = useState(discoveryPage?.category || 'all');
   const [directorySort, setDirectorySort] = useState<DirectorySort>('recommended');
@@ -285,7 +285,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       }
       return result;
     };
-    const getPreviewShopImage = (shop: DirectoryShop) => normalizeCustomBannerImage(shop.theme_config?.custom_banner_url, shop.category)
+    const getPreviewShopImage = (shop: DirectoryShop) => (shop.theme_config?.custom_banner_url ? getBannerImageForDisplay(shop.theme_config.custom_banner_url, shop.category) : '')
       || (shop.products_preview?.[0]
         ? getProductImageForDisplay(shop.products_preview[0].image_url, shop.category)
         : getCategoryDefaults(shop.category).bannerPlaceholderImageUrl);
@@ -377,7 +377,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
     return ordered;
   }, [directoryShops, query, category, openOnly, directorySort, discoveryPage?.citySlug, discoveryPage?.category, isShopDirectoryPage]);
   const hasActiveDirectoryFilters = Boolean(query.trim() || category !== 'all' || openOnly);
-  const getShopImage = (shop: DirectoryShop) => normalizeCustomBannerImage(shop.theme_config?.custom_banner_url, shop.category)
+  const getShopImage = (shop: DirectoryShop) => (shop.theme_config?.custom_banner_url ? getBannerImageForDisplay(shop.theme_config.custom_banner_url, shop.category) : '')
     || (shop.products_preview?.[0]
       ? getProductImageForDisplay(shop.products_preview[0].image_url, shop.category)
       : getCategoryDefaults(shop.category).bannerPlaceholderImageUrl);
@@ -527,63 +527,44 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       ) : (
       <section className="mx-auto w-full max-w-[1280px] px-4 pb-4 pt-4 sm:px-8 sm:pb-6 sm:pt-6 lg:px-10">
         <div className="grid overflow-hidden rounded-3xl border border-[#e7dfd3] bg-white shadow-[0_8px_28px_rgba(20,40,30,.07)] lg:min-h-[330px] lg:grid-cols-[.88fr_1.12fr]">
-          <motion.div
-            initial={prefersReducedMotion ? false : 'hidden'}
-            animate="visible"
-            variants={{ hidden: {}, visible: { transition: { delayChildren: 0.08, staggerChildren: 0.12 } } }}
-            className="flex min-w-0 flex-col justify-center bg-gradient-to-br from-[#fffdf8] via-[#f8f5ef] to-[#edf5f0] p-5 sm:p-8 lg:p-9"
-          >
-            <motion.p variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }} className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#c2410c] sm:text-xs">Le commerce local, simplifié</motion.p>
-            <motion.h1
-              variants={{ hidden: {}, visible: { transition: { delayChildren: 0.04, staggerChildren: 0.055 } } }}
-              className="max-w-[600px] font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.055em] text-[#065f46] sm:text-[48px] lg:text-[58px]"
-            >
+          <div className="flex min-w-0 flex-col justify-center bg-gradient-to-br from-[#fffdf8] via-[#f8f5ef] to-[#edf5f0] p-5 sm:p-8 lg:p-9">
+            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#c2410c] sm:text-xs">Le commerce local, simplifié</p>
+            <h1 className="max-w-[600px] font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.055em] text-[#065f46] sm:text-[48px] lg:text-[58px]">
               {homeTitleWords.map((word, index) => (
                 <React.Fragment key={word.text}>
                   {index > 0 && ' '}
-                  <motion.span
-                    variants={{
-                      hidden: { opacity: 0, y: 12, filter: 'blur(5px)' },
-                      visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.42, ease: 'easeOut' } },
-                    }}
-                    className={`inline-block ${word.accent ? 'text-[#c2410c]' : ''}`}
-                  >
+                  <span className={`inline-block ${word.accent ? 'text-[#c2410c]' : ''}`}>
                     {word.text}
-                  </motion.span>
+                  </span>
                 </React.Fragment>
               ))}
-            </motion.h1>
-            <motion.p variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }} className="mt-3 max-w-[480px] text-sm leading-6 text-[#47534b] sm:text-[15px]">
+            </h1>
+            <p className="mt-3 max-w-[480px] text-sm leading-6 text-[#47534b] sm:text-[15px]">
               Parcourez les boutiques, repérez leurs produits et contactez directement les commerçants de Côte d’Ivoire.
-            </motion.p>
-            <motion.div variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }}>
+            </p>
+            <div>
               {searchForm}
-            </motion.div>
-            <motion.div variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }} className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[11px] font-semibold text-[#315548] sm:text-xs">
+            </div>
+            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[11px] font-semibold text-[#315548] sm:text-xs">
               <span className="inline-flex items-center gap-1.5"><Store className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Boutiques locales</span>
               <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Échange direct</span>
               <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Retrait ou livraison à convenir</span>
-            </motion.div>
-            {cityPages.length > 0 && <motion.nav aria-label="Boutiques par quartier" variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }} className="mt-4 flex flex-wrap items-center gap-2">
+            </div>
+            {cityPages.length > 0 && <nav aria-label="Boutiques par quartier" className="mt-4 flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold text-[#47534b]">Près de chez vous :</span>
               {cityPages.slice(0, MAX_HERO_NEIGHBOURHOODS).map((page) => (
                 <Link key={page.path} to={page.path} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#cfe3d8] bg-white px-3 text-xs font-bold text-[#065f46] transition hover:border-[#047857] hover:bg-[#f0f8f3]">
                   <MapPin className="h-3.5 w-3.5" aria-hidden="true" />{page.city}
                 </Link>
               ))}
-            </motion.nav>}
-            <motion.div variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } } }} className="mt-4">
+            </nav>}
+            <div className="mt-4">
               <Link to="/commercants" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-extrabold text-[#c2410c] transition hover:text-[#a53a1d]">
                 Vous vendez ? Ajoutez votre boutique <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
-            </motion.div>
-          </motion.div>
-          <motion.div
-            initial={prefersReducedMotion ? false : { opacity: 0, y: 14, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.55, delay: prefersReducedMotion ? 0 : 0.22, ease: 'easeOut' }}
-            className="flex min-w-0 flex-col justify-center bg-[#fffdf8] p-4 sm:p-6 lg:p-7"
-          >
+            </div>
+          </div>
+          <div className="flex min-w-0 flex-col justify-center bg-[#fffdf8] p-4 sm:p-6 lg:p-7">
             {billboardHasCampaign && <div className="mb-3 flex items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff0df] px-3 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#8f351d] sm:text-[10px]">
                 <BadgePercent className="h-3.5 w-3.5" aria-hidden="true" /> Vitrine premium
@@ -596,9 +577,9 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               placement="billboard"
               previewCampaigns={demoContent?.campaigns}
               onCampaignVisibilityChange={setBillboardHasCampaign}
-              emptyBillboard={<HomeTrustBillboard shops={directoryShops} />}
+              emptyBillboard={<HomeTrustBillboard shops={directoryShops} isLoading={directoryIsLoading} />}
             />
-          </motion.div>
+          </div>
         </div>
       </section>
       )}
@@ -698,7 +679,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                         {shop.products_preview.slice(0, 2).map((product) => (
                           <span key={product.id} className="flex min-w-0 flex-1 items-center gap-1.5">
                             <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#e9f5ee]">
-                              <img src={getProductImageForDisplay(product.image_url, shop.category)} alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />
+                              <img src={getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category)} alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />
                             </span>
                             <span className="min-w-0">
                               <span className="block truncate text-[9px] font-semibold text-[#47534b]">{product.title}</span>

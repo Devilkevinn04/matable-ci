@@ -19,8 +19,9 @@ test('data URL photos become short cacheable URLs; other values are untouched', 
 });
 
 test('gallery photos get their own slot', () => {
-  const product = withPublicProductImages({ id: 7, image_url: pixel, lookbook_image: pixel, gallery_images: JSON.stringify(['https://x.test/b.jpg', pixel]) });
+  const product = withPublicProductImages({ id: 7, image_url: pixel, thumbnail_url: pixel, lookbook_image: pixel, gallery_images: JSON.stringify(['https://x.test/b.jpg', pixel]) });
   assert.match(String(product.image_url), /\/7\/0-[a-f0-9]{20}\.png$/);
+  assert.match(String(product.thumbnail_url), /\/7\/998-[a-f0-9]{20}\.png$/);
   assert.match(String(product.lookbook_image), /\/7\/999-[a-f0-9]{20}\.png$/);
   assert.deepEqual((product.gallery_images as unknown as string[])[0], 'https://x.test/b.jpg');
   assert.match((product.gallery_images as unknown as string[])[1], /\/7\/2-[a-f0-9]{20}\.png$/);
@@ -39,4 +40,6 @@ test('only a URL that was handed out resolves to image bytes', () => {
   assert.equal(resolveProductImageRequest(file, undefined), null);
   const lookbookFile = toPublicProductImageUrl(9, pixel, 999).split('/').pop()!;
   assert.ok(resolveProductImageRequest(lookbookFile, { lookbook_image: pixel }));
+  const thumbnailFile = toPublicProductImageUrl(9, pixel, 998).split('/').pop()!;
+  assert.ok(resolveProductImageRequest(thumbnailFile, { thumbnail_url: pixel }));
 });

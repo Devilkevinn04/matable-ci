@@ -17,7 +17,7 @@ import type { ProductRecord } from '../types.ts';
 
 const PRODUCT_CSV_COLUMNS = [
   'id', 'title', 'description', 'price', 'sale_price', 'sale_starts_at', 'sale_ends_at',
-  'stock', 'image_url', 'is_visible', 'category', 'sizes', 'colors', 'lookbook_image',
+  'stock', 'image_url', 'thumbnail_url', 'is_visible', 'category', 'sizes', 'colors', 'lookbook_image',
   'gallery_images', 'prep_time', 'modifier_groups', 'attributes',
 ] as const;
 
@@ -102,6 +102,7 @@ export function createProductRouter({
         product.sale_ends_at,
         product.stock,
         product.image_url,
+        product.thumbnail_url,
         product.is_visible,
         product.category,
         product.sizes ? JSON.stringify(product.sizes) : '',
@@ -259,10 +260,16 @@ export function createProductRouter({
           Object.assign(product, sale);
 
           const imageUrl = value('image_url');
-          if (imageUrl) product.image_url = normalizeProductImage(imageUrl);
+          const thumbnailUrl = value('thumbnail_url');
+          if (imageUrl) {
+            product.image_url = normalizeProductImage(imageUrl);
+            product.thumbnail_url = thumbnailUrl ? normalizeProductImage(thumbnailUrl) : undefined;
+          } else if (thumbnailUrl) {
+            product.thumbnail_url = normalizeProductImage(thumbnailUrl);
+          }
           const lookbookImage = value('lookbook_image');
           if (lookbookImage) product.lookbook_image = normalizeProductImage(lookbookImage);
-          for (const field of ['image_url', 'lookbook_image'] as const) {
+          for (const field of ['image_url', 'thumbnail_url', 'lookbook_image'] as const) {
             if (hasInvalidMediaValue(product[field])) {
               throw new ProductCsvImportError(`Ligne ${line} : l’image ${field} doit être une URL publique HTTPS.`);
             }
@@ -375,7 +382,7 @@ export function createProductRouter({
           for (const { product, previousStock } of importedProducts) {
             const values = [
               product.title, product.description ?? null, product.price, product.sale_price ?? null,
-              product.sale_starts_at ?? null, product.sale_ends_at ?? null, product.stock, product.image_url,
+              product.sale_starts_at ?? null, product.sale_ends_at ?? null, product.stock, product.image_url, product.thumbnail_url ?? null,
               product.is_available ? 1 : 0, product.is_visible === false ? 0 : 1, product.category ?? null,
               product.sizes ? JSON.stringify(product.sizes) : null, product.colors ? JSON.stringify(product.colors) : null,
               product.lookbook_image ?? null, product.gallery_images?.length ? JSON.stringify(product.gallery_images) : null,
@@ -385,15 +392,15 @@ export function createProductRouter({
             if (previousStock !== null) {
               await transaction.run(`UPDATE products SET
                 title = ?, description = ?, price = ?, sale_price = ?, sale_starts_at = ?, sale_ends_at = ?,
-                stock = ?, image_url = ?, is_available = ?, is_visible = ?, category = ?, sizes = ?, colors = ?,
+                stock = ?, image_url = ?, thumbnail_url = ?, is_available = ?, is_visible = ?, category = ?, sizes = ?, colors = ?,
                 lookbook_image = ?, gallery_images = ?, prep_time = ?, modifier_groups = ?, attributes = ?
                 WHERE id = ? AND shop_id = ?`, [...values, product.id, shopId]);
             } else {
               await transaction.run(`INSERT INTO products
                 (id, shop_id, title, description, price, sale_price, sale_starts_at, sale_ends_at, stock,
-                 image_url, is_available, is_visible, category, sizes, colors, lookbook_image, gallery_images,
+                 image_url, thumbnail_url, is_available, is_visible, category, sizes, colors, lookbook_image, gallery_images,
                  prep_time, modifier_groups, attributes, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
                 product.id, shopId, ...values.slice(0, 10), ...values.slice(10), product.created_at,
               ]);
             }
@@ -438,8 +445,8 @@ export function createProductRouter({
       ? getSubscriptionProductPhotoLimit('standard')
       : getSubscriptionProductPhotoLimit(subscription.plan, subscription.planFeatures);
 
-    const { title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
-    if (hasInvalidMediaValue(image_url) || hasInvalidMediaValue(lookbook_image) || hasInvalidMediaCollection(gallery_images)) {
+    const { title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, thumbnail_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
+    if (hasInvalidMediaValue(image_url) || hasInvalidMediaValue(thumbnail_url) || hasInvalidMediaValue(lookbook_image) || hasInvalidMediaCollection(gallery_images)) {
       return res.status(400).json({ error: 'Image invalide. Utilisez un fichier téléversé ou une URL publique https.' });
     }
     const safeTitle = sanitizeTextField(title, 120);
@@ -463,6 +470,7 @@ export function createProductRouter({
       ...sale,
       stock: numericStock,
       image_url: normalizeProductImage(image_url),
+      thumbnail_url: thumbnail_url ? normalizeProductImage(thumbnail_url) : undefined,
       is_available: (is_available !== undefined ? Boolean(is_available) : true) && numericStock > 0,
       is_visible: is_available !== undefined ? Boolean(is_available) : true,
       category: category ? String(category).trim() : undefined,
@@ -497,16 +505,16 @@ export function createProductRouter({
         );
         if (Number(count?.count || 0) >= productLimit) return 'limit_reached';
         await transaction.run(`
-          INSERT INTO products (id, shop_id, title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, is_available, is_visible, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes, created_at)
+          INSERT INTO products (id, shop_id, title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, thumbnail_url, is_available, is_visible, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes, created_at)
           VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             COALESCE(?, CURRENT_TIMESTAMP)
           )
         `, [
           newProduct.id, newProduct.shop_id, newProduct.title, newProduct.description ?? null, newProduct.price,
           newProduct.sale_price ?? null, newProduct.sale_starts_at ?? null, newProduct.sale_ends_at ?? null, newProduct.stock,
-          newProduct.image_url, newProduct.is_available ? 1 : 0, newProduct.is_visible === false ? 0 : 1, newProduct.category ?? null,
+          newProduct.image_url, newProduct.thumbnail_url ?? null, newProduct.is_available ? 1 : 0, newProduct.is_visible === false ? 0 : 1, newProduct.category ?? null,
           newProduct.sizes ? JSON.stringify(newProduct.sizes) : null, newProduct.colors ? JSON.stringify(newProduct.colors) : null,
           newProduct.lookbook_image ?? null, newProduct.gallery_images?.length ? JSON.stringify(newProduct.gallery_images) : null,
           newProduct.prep_time ?? null, newProduct.modifier_groups ? JSON.stringify(newProduct.modifier_groups) : null,
@@ -536,8 +544,8 @@ export function createProductRouter({
     const cachedProduct = products.find((candidate) => candidate.id === productId && candidate.shop_id === shopId);
     const product = { ...currentProduct };
 
-    const { title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
-    if (hasInvalidMediaValue(image_url) || hasInvalidMediaValue(lookbook_image) || hasInvalidMediaCollection(gallery_images)) {
+    const { title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, thumbnail_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
+    if (hasInvalidMediaValue(image_url) || hasInvalidMediaValue(thumbnail_url) || hasInvalidMediaValue(lookbook_image) || hasInvalidMediaCollection(gallery_images)) {
       return res.status(400).json({ error: 'Image invalide. Utilisez un fichier téléversé ou une URL publique https.' });
     }
     const shop = await getShopFromDatabase(shopId);
@@ -585,7 +593,12 @@ export function createProductRouter({
       if (!Number.isSafeInteger(numericStock) || numericStock < 0) return res.status(400).json({ error: 'Stock de produit invalide.' });
       product.stock = numericStock;
     }
-    if (image_url !== undefined) product.image_url = normalizeProductImage(image_url);
+    if (image_url !== undefined) {
+      product.image_url = normalizeProductImage(image_url);
+      product.thumbnail_url = thumbnail_url === undefined ? undefined : normalizeProductImage(thumbnail_url);
+    } else if (thumbnail_url !== undefined) {
+      product.thumbnail_url = normalizeProductImage(thumbnail_url);
+    }
     if (is_available !== undefined) product.is_visible = Boolean(is_available);
     if (category !== undefined) product.category = category ? String(category).trim() : undefined;
     if (sizes !== undefined) product.sizes = Array.isArray(sizes) ? sizes : undefined;

@@ -11,6 +11,7 @@ export interface ProductDraft {
   sale_ends_at: string;
   stock: number | '';
   image_url: string;
+  thumbnail_url: string;
   lookbook_image: string;
   gallery_images: string[];
   sizes: string;
@@ -46,6 +47,7 @@ export interface ProductSavePayload {
   sale_ends_at?: string | null;
   stock: number;
   image_url: string;
+  thumbnail_url?: string;
   lookbook_image?: string;
   gallery_images?: string[];
   sizes?: string[];
@@ -108,6 +110,7 @@ export function createProductDraft(category: unknown): ProductDraft {
     sale_ends_at: '',
     stock: 10,
     image_url: '',
+    thumbnail_url: '',
     lookbook_image: '',
     gallery_images: [],
     sizes: '',
@@ -147,6 +150,7 @@ export function productToDraft(product: Product): ProductDraft {
     sale_ends_at: toDateTimeLocal(product.sale_ends_at),
     stock: product.stock,
     image_url: isLegacyGenericProductImage(product.image_url) ? '' : product.image_url,
+    thumbnail_url: product.thumbnail_url || '',
     lookbook_image: product.lookbook_image || '',
     gallery_images: product.gallery_images || [],
     sizes: product.sizes ? product.sizes.join(', ') : '',
@@ -213,6 +217,7 @@ export function buildProductSavePayload(draft: ProductDraft, category: ShopCateg
     sale_ends_at: draft.sale_price === '' || !draft.sale_ends_at ? null : new Date(draft.sale_ends_at).toISOString(),
     stock: draft.stock === '' ? 0 : Number(draft.stock),
     image_url: draft.image_url,
+    thumbnail_url: draft.thumbnail_url,
     lookbook_image: draft.lookbook_image.trim() || undefined,
     gallery_images: draft.gallery_images.filter(Boolean).slice(0, 6),
     sizes: parseList(draft.sizes),

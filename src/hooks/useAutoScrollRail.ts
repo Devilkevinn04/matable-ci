@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent, FocusEvent } from 'react';
 import type { RefObject } from 'react';
-import { useReducedMotion } from 'motion/react';
+import { usePrefersReducedMotion } from './usePrefersReducedMotion';
 
 interface AutoScrollRailHandlers {
   onPointerEnter: (event: PointerEvent<HTMLElement>) => void;
@@ -19,7 +19,7 @@ export function useAutoScrollRail<T extends HTMLElement>(
   intervalMs = 4500,
 ): { railRef: RefObject<T | null>; handlers: AutoScrollRailHandlers } {
   const railRef = useRef<T>(null);
-  const prefersReducedMotion = useReducedMotion();
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [pointerInside, setPointerInside] = useState(false);
   const [pointerDown, setPointerDown] = useState(false);
   const [focused, setFocused] = useState(false);

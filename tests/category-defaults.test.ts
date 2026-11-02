@@ -96,7 +96,12 @@ test('renders the category placeholder for an empty or legacy generic product im
 test('does not treat prior category banner defaults as merchant-owned banner photos', () => {
   const oldFashionBanner = 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200';
   assert.equal(normalizeCustomBannerImage(oldFashionBanner, 'health'), '');
-  assert.equal(getBannerImageForDisplay(oldFashionBanner, 'health'), CATEGORY_DEFAULTS.health.bannerPlaceholderImageUrl);
+  const optimizedPlaceholder = new URL(CATEGORY_DEFAULTS.health.bannerPlaceholderImageUrl);
+  optimizedPlaceholder.searchParams.set('auto', 'format');
+  optimizedPlaceholder.searchParams.set('fit', 'crop');
+  optimizedPlaceholder.searchParams.set('w', '1000');
+  optimizedPlaceholder.searchParams.set('q', '75');
+  assert.equal(getBannerImageForDisplay(oldFashionBanner, 'health'), optimizedPlaceholder.toString());
   assert.equal(normalizeCustomBannerImage('https://example.com/store.jpg', 'health'), 'https://example.com/store.jpg');
 });
 
@@ -116,7 +121,12 @@ test('stored media normalizers keep bounded legacy base64 photos on merchant wri
 
   // Display paths stay strict.
   assert.equal(getProductImageForDisplay(legacyProduct, 'food'), CATEGORY_DEFAULTS.food.productPlaceholderImageUrl);
-  assert.equal(getBannerImageForDisplay(legacyBanner, 'food'), CATEGORY_DEFAULTS.food.bannerPlaceholderImageUrl);
+  const optimizedFoodBanner = new URL(CATEGORY_DEFAULTS.food.bannerPlaceholderImageUrl);
+  optimizedFoodBanner.searchParams.set('auto', 'format');
+  optimizedFoodBanner.searchParams.set('fit', 'crop');
+  optimizedFoodBanner.searchParams.set('w', '1000');
+  optimizedFoodBanner.searchParams.set('q', '75');
+  assert.equal(getBannerImageForDisplay(legacyBanner, 'food'), optimizedFoodBanner.toString());
 
   // Write paths preserve the existing photo instead of wiping it.
   assert.equal(normalizeStoredProductImage(legacyProduct), legacyProduct);

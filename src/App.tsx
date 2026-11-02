@@ -11,7 +11,6 @@ import { AccountRecoveryPage } from './components/AccountRecoveryPage';
 import { CustomerPasswordResetPage } from './components/CustomerPasswordResetPage';
 import { MerchantPinResetPage } from './components/MerchantPinResetPage';
 import { ProductModal } from './components/MerchantDashboard/ProductModal';
-import { MotionSystemProvider, PublicRouteEnter } from './components/MotionSystem';
 import type { MerchantState } from './components/MerchantDashboard/useMerchant';
 import type { Shop } from './types';
 import { findPublicDiscoveryPage } from './utils/discoverySeo';
@@ -536,7 +535,6 @@ export default function App() {
   };
 
   return (
-    <MotionSystemProvider>
     <ToastProvider>
       <a href="#main-content" className="skip-link">Aller au contenu</a>
       <div className="min-h-screen flex flex-col bg-transparent font-sans">
@@ -556,8 +554,7 @@ export default function App() {
 
                 {/* min-h keeps the footer below the fold while lazy pages and their data load (it was the main layout shift). */}
                 <div id="main-content" className="flex-1 app-shell min-h-[100svh]" tabIndex={-1}>
-                  <PublicRouteEnter enabled={isAnimatedPublicRoute} routeKey={isAnimatedPublicRoute ? path : 'persistent-app'}>
-                    <React.Suspense fallback={isShopDirectoryRoute || isDiscoveryRoute ? <DirectoryPageLoading /> : <p role="status" className="p-6 text-center text-sm font-semibold text-slate-600">Chargement de la page…</p>}>
+                    <React.Suspense key={isAnimatedPublicRoute ? path : 'persistent-app'} fallback={isShopDirectoryRoute || isDiscoveryRoute ? <DirectoryPageLoading /> : <p role="status" className="p-6 text-center text-sm font-semibold text-slate-600">Chargement de la page…</p>}>
                       <Routes>
                       <Route path="/__preview/article-form" element={isProductModalPreview ? <ProductModalDevPreview /> : <NotFoundPage />} />
                       <Route path="/__preview/delivery-courier" element={isDeliveryCourierPreview ? <DeliveryCourierWorkspace /> : <NotFoundPage />} />
@@ -600,13 +597,11 @@ export default function App() {
                       <Route path="*" element={<NotFoundPage />} />
                       </Routes>
                     </React.Suspense>
-                  </PublicRouteEnter>
                 </div>
                 {!hasStandaloneAccountFlow && currentRole !== 'admin' && <Footer compact={Boolean(legalPage)} />}
               </div>
             </div>
       </div>
     </ToastProvider>
-    </MotionSystemProvider>
   );
 }

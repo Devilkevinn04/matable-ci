@@ -124,6 +124,7 @@ export interface ProductRecord {
   sale_ends_at?: string | null;
   stock: number;
   image_url: string;
+  thumbnail_url?: string;
   is_available: boolean;
   is_visible?: boolean;
   category?: string;

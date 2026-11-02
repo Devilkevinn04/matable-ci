@@ -17,8 +17,8 @@ export default defineConfig(() => {
       rollupOptions: {
         output: {
           manualChunks: {
-            'react-vendor': ['react', 'react-dom'],
-            'ui-motion': ['motion/react', 'lucide-react'],
+            'react-vendor': ['react', 'react-dom', 'react/jsx-runtime'],
+            icons: ['lucide-react'],
           },
         },
       },
