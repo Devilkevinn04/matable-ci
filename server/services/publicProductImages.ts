@@ -92,3 +92,44 @@ export function resolveProductImageRequest(
   const contentType = match[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : match[1].toLowerCase();
   return { contentType, body: Buffer.from(match[2].replace(/\s/g, ''), 'base64'), etag: `"${parsed[2]}"` };
 }
+
+/** Widths the storefront asks for (`?w=`); anything else gets the stored original. */
+export const PRODUCT_IMAGE_WIDTHS = [320, 640, 960] as const;
+const MAX_CACHED_VARIANTS = 300;
+const variantCache = new Map<string, DecodedProductImage>();
+
+export function parseRequestedImageWidth(value: unknown): number | null {
+  const width = Number(value);
+  return (PRODUCT_IMAGE_WIDTHS as readonly number[]).includes(width) ? width : null;
+}
+
+/**
+ * Returns a narrower WebP copy of a stored photo. Cards show photos at 150-400 px wide,
+ * while legacy uploads are up to 1000 px: phones were downloading ~1 MB of pixels per page.
+ * Results are kept in a small in-memory cache; the URL is immutable so CDNs and browsers
+ * cache it for a year as well. Falls back to the original if resizing fails.
+ */
+export async function resizeProductImage(image: DecodedProductImage, width: number): Promise<DecodedProductImage> {
+  const key = `${image.etag}:${width}`;
+  const cached = variantCache.get(key);
+  if (cached) return cached;
+  try {
+    const { default: sharp } = await import('sharp');
+    const body = await sharp(image.body, { failOn: 'none' })
+      .rotate()
+      .resize({ width, withoutEnlargement: true })
+      .webp({ quality: 72 })
+      .toBuffer();
+    const variant: DecodedProductImage = {
+      contentType: 'image/webp',
+      body: body.length < image.body.length ? body : image.body,
+      etag: `"${image.etag.replace(/"/g, '')}-w${width}"`,
+    };
+    if (body.length >= image.body.length) variant.contentType = image.contentType;
+    if (variantCache.size >= MAX_CACHED_VARIANTS) variantCache.delete(variantCache.keys().next().value as string);
+    variantCache.set(key, variant);
+    return variant;
+  } catch {
+    return image;
+  }
+}

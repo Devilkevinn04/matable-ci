@@ -43,3 +43,33 @@ test('only a URL that was handed out resolves to image bytes', () => {
   const thumbnailFile = toPublicProductImageUrl(9, pixel, 998).split('/').pop()!;
   assert.ok(resolveProductImageRequest(thumbnailFile, { thumbnail_url: pixel }));
 });
+
+test('resized variants are WebP, smaller, and only for allowed widths', async () => {
+  const { default: sharp } = await import('sharp');
+  const big = await sharp({ create: { width: 1000, height: 800, channels: 3, background: { r: 200, g: 120, b: 40 } } }).jpeg({ quality: 90 }).toBuffer();
+  const dataUrl = `data:image/jpeg;base64,${big.toString('base64')}`;
+  const file = toPublicProductImageUrl(3, dataUrl).split('/').pop()!;
+  const original = resolveProductImageRequest(file, { image_url: dataUrl })!;
+  const { parseRequestedImageWidth, resizeProductImage } = await import('../server/services/publicProductImages.ts');
+  assert.equal(parseRequestedImageWidth('320'), 320);
+  assert.equal(parseRequestedImageWidth('333'), null);
+  assert.equal(parseRequestedImageWidth(undefined), null);
+  const small = await resizeProductImage(original, 320);
+  const metadata = await sharp(small.body).metadata();
+  assert.equal(small.contentType, 'image/webp');
+  assert.equal(metadata.width, 320);
+  assert.ok(small.body.length < original.body.length);
+  assert.notEqual(small.etag, original.etag);
+});
+
+test('Render host page views redirect to the public domain, API and webhooks do not', async () => {
+  const { getPublicDomainRedirect } = await import('../server/services/hostRedirect.ts');
+  const base = { nodeEnv: 'production', appUrl: 'https://matable-ci.com', host: 'matable-ci.onrender.com', method: 'GET' };
+  assert.equal(getPublicDomainRedirect({ ...base, path: '/cocody', originalUrl: '/cocody?src=tiktok' }), 'https://matable-ci.com/cocody?src=tiktok');
+  assert.equal(getPublicDomainRedirect({ ...base, path: '/api/shops', originalUrl: '/api/shops' }), null);
+  assert.equal(getPublicDomainRedirect({ ...base, path: '/health', originalUrl: '/health' }), null);
+  assert.equal(getPublicDomainRedirect({ ...base, method: 'POST', path: '/webhook', originalUrl: '/webhook' }), null);
+  assert.equal(getPublicDomainRedirect({ ...base, host: 'matable-ci.com', path: '/', originalUrl: '/' }), null);
+  assert.equal(getPublicDomainRedirect({ ...base, nodeEnv: 'development', path: '/', originalUrl: '/' }), null);
+  assert.equal(getPublicDomainRedirect({ ...base, appUrl: '', path: '/', originalUrl: '/' }), null);
+});

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getCategoryDefaults, normalizeProductImage } from '../utils/categoryDefaults';
+import { getResponsiveImageProps } from '../utils/responsiveImages';
 
 interface CategoryProductImageProps {
   imageUrl?: string | null;
@@ -9,6 +10,8 @@ interface CategoryProductImageProps {
   imageFit?: 'cover' | 'contain';
   loading?: 'eager' | 'lazy';
   showFallbackTitle?: boolean;
+  /** How wide the photo is displayed, for responsive image selection. */
+  sizes?: string;
   children?: React.ReactNode;
 }
 
@@ -20,6 +23,7 @@ export const CategoryProductImage: React.FC<CategoryProductImageProps> = ({
   imageFit = 'cover',
   loading = 'lazy',
   showFallbackTitle = true,
+  sizes = '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw',
   children,
 }) => {
   const defaults = getCategoryDefaults(category);
@@ -38,7 +42,7 @@ export const CategoryProductImage: React.FC<CategoryProductImageProps> = ({
         {showFallbackTitle && <span className="line-clamp-2 max-w-full text-sm font-black">{title}</span>}
         {(isPlaceholder || imageFailed) && <span className="text-[10px] font-bold uppercase">{isPlaceholder ? 'Photo à venir' : 'Photo indisponible'} · {defaults.label}</span>}
       </div>
-      {normalizedImage && <img src={normalizedImage} alt={title} loading={loading} referrerPolicy="no-referrer" className={`relative z-10 h-full w-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} onError={(event) => { setImageFailed(true); event.currentTarget.hidden = true; }} />}
+      {normalizedImage && <img {...getResponsiveImageProps(normalizedImage)} sizes={sizes} alt={title} loading={loading} referrerPolicy="no-referrer" className={`relative z-10 h-full w-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} onError={(event) => { setImageFailed(true); event.currentTarget.hidden = true; }} />}
       {children}
     </div>
   );
