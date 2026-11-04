@@ -126,13 +126,13 @@ export const ProductOffersManager: React.FC<ProductOffersManagerProps> = ({ shop
   return (
     <section className="space-y-4 rounded-3xl border border-[#d8e9df] bg-[#f5faf6] p-5 shadow-sm sm:p-7" aria-labelledby="merchant-advertising-title">
       <header className="flex items-start gap-3">
-        <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[#047857]"><Megaphone className="h-5 w-5" aria-hidden="true" /></span>
+        <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[var(--mt-green-hover)]"><Megaphone className="h-5 w-5" aria-hidden="true" /></span>
         <div>
-          <h3 id="merchant-advertising-title" className="text-base font-extrabold text-[#292d2a]">Campagnes sponsorisées · bêta</h3>
+          <h3 id="merchant-advertising-title" className="text-base font-extrabold text-[var(--mt-gray-900)]">Campagnes sponsorisées · bêta</h3>
           <p className="mt-1 text-sm leading-5 text-slate-600">Les campagnes produit et bannière sont gratuites pendant la bêta de 30 jours et restent soumises à validation.</p>
         </div>
       </header>
-      {data && <p className="rounded-xl border border-[#d8e9df] bg-white px-4 py-3 text-sm text-[#047857]">
+      {data && <p className="rounded-xl border border-[#d8e9df] bg-white px-4 py-3 text-sm text-[var(--mt-green-hover)]">
         {data.beta.delivery_enabled ? `Bêta ouverte · ${data.beta.days_remaining} jour(s) restant(s).` : 'La diffusion bêta est actuellement fermée.'}
       </p>}
       {submissionBlockers.length > 0 && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
@@ -146,7 +146,7 @@ export const ProductOffersManager: React.FC<ProductOffersManagerProps> = ({ shop
 
       <form onSubmit={(event) => void submit(event)} className="grid gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:grid-cols-2">
         <label className="text-xs font-bold text-slate-700">Format
-          <select value={kind} onChange={(event) => setKind(event.target.value as 'product' | 'banner')} className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#047857]/15">
+          <select value={kind} onChange={(event) => setKind(event.target.value as 'product' | 'banner')} className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15">
             <option value="product">Produit sponsorisé</option>
             <option value="banner">Bannière de boutique</option>
           </select>
@@ -154,29 +154,29 @@ export const ProductOffersManager: React.FC<ProductOffersManagerProps> = ({ shop
         <p className="self-center text-xs font-semibold text-slate-600">Durée fixe de la bêta : 7 jours</p>
         {kind === 'banner' && !hasCustomBanner && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 sm:col-span-2">Ajoutez d’abord une image de bannière dans Apparence de la vitrine.</p>}
         {kind === 'product' && <label className="text-xs font-bold text-slate-700 sm:col-span-2">Produit à mettre en avant
-          <select value={productId} onChange={(event) => setProductId(event.target.value)} required className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#047857]/15">
+          <select value={productId} onChange={(event) => setProductId(event.target.value)} required className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15">
             <option value="">Choisir un produit disponible</option>
             {availableProducts.map((product) => <option key={product.id} value={product.id}>{product.title} · {product.stock} en stock</option>)}
           </select>
         </label>}
         <label className="text-xs font-bold text-slate-700 sm:col-span-2">Titre
-          <input value={headline} onChange={(event) => setHeadline(event.target.value)} maxLength={90} required className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#047857]/15" />
+          <input value={headline} onChange={(event) => setHeadline(event.target.value)} maxLength={90} required className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15" />
         </label>
         <label className="text-xs font-bold text-slate-700 sm:col-span-2">Description
-          <textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={220} minLength={1} required rows={3} className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#047857]/15" />
+          <textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={220} minLength={1} required rows={3} className="mt-1 min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15" />
         </label>
         <label className="flex items-start gap-2 text-xs leading-5 text-slate-600 sm:col-span-2">
-          <input name="charter_accepted" type="checkbox" required className="mt-1 h-5 w-5 shrink-0 accent-[#047857] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2" />
+          <input name="charter_accepted" type="checkbox" required className="mt-1 h-5 w-5 shrink-0 accent-[var(--mt-green-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)] focus-visible:ring-offset-2" />
           <span>Je confirme l’exactitude des informations et respecte la charte : pas de promesse trompeuse, contenu illicite ou image sans droit d’usage. La campagne est soumise à validation MaTable. *</span>
         </label>
-        <button type="submit" disabled={!canSubmit || busy || (kind === 'product' && availableProducts.length === 0) || (kind === 'banner' && !hasCustomBanner)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#047857] px-5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-2">
+        <button type="submit" disabled={!canSubmit || busy || (kind === 'product' && availableProducts.length === 0) || (kind === 'banner' && !hasCustomBanner)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--mt-green-hover)] px-5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-2">
           {busy ? <RotateCcw className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
           {canSubmit ? 'Soumettre pour validation' : 'Soumission indisponible'}
         </button>
       </form>
 
       <div className="space-y-3">
-        <h4 className="text-sm font-extrabold text-[#292d2a]">Mes campagnes</h4>
+        <h4 className="text-sm font-extrabold text-[var(--mt-gray-900)]">Mes campagnes</h4>
         {!data?.campaigns.length ? <p className="text-sm text-slate-500">Aucune campagne soumise.</p> : data.campaigns.map((campaign) => (
           <article key={campaign.id} className="flex flex-col gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -185,7 +185,7 @@ export const ProductOffersManager: React.FC<ProductOffersManagerProps> = ({ shop
               {campaign.review_note && <p className="mt-1 text-xs text-slate-600">Note : {campaign.review_note}</p>}
               {campaign.starts_at && campaign.ends_at && <p className="mt-1 text-xs text-slate-500">{new Date(campaign.starts_at).toLocaleString('fr-FR')} – {new Date(campaign.ends_at).toLocaleString('fr-FR')}</p>}
               {campaign.metrics && Object.values(campaign.metrics).some((value) => Number(value) > 0) && (
-                <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[#047857]">
+                <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[var(--mt-green-hover)]">
                   <span>{Number(campaign.metrics.impression || 0).toLocaleString('fr-FR')} impressions</span>
                   <span>{Number(campaign.metrics.click || 0).toLocaleString('fr-FR')} clics</span>
                   <span>{Number(campaign.metrics.shop_visit || 0).toLocaleString('fr-FR')} visites boutique</span>

@@ -274,7 +274,7 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
             <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-emerald-800">Votre activité</p>
             <h3 id="merchant-overview-analytics-title" className="mt-1 text-lg font-black text-[#183b31]">Cette semaine</h3>
           </div>
-          <button type="button" onClick={() => setRefreshKey((key) => key + 1)} aria-label="Actualiser les statistiques" className="grid h-9 w-9 place-items-center rounded-full border border-[#dfe8dd] text-[#047857] hover:bg-emerald-50">
+          <button type="button" onClick={() => setRefreshKey((key) => key + 1)} aria-label="Actualiser les statistiques" className="grid h-9 w-9 place-items-center rounded-full border border-[#dfe8dd] text-[var(--mt-green-hover)] hover:bg-emerald-50">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
           </button>
         </div>
@@ -321,7 +321,7 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
                 type="button"
                 aria-pressed={days === period}
                 onClick={() => setDays(period)}
-                className={`min-h-10 rounded-full px-4 text-xs font-extrabold transition ${days === period ? 'bg-[#f0ba80] text-[#292d2a]' : 'border border-white/25 bg-white/5 text-white hover:bg-white/10'}`}
+                className={`min-h-10 rounded-full px-4 text-xs font-extrabold transition ${days === period ? 'bg-[var(--mt-orange-soft)] text-[var(--mt-gray-900)]' : 'border border-white/25 bg-white/5 text-white hover:bg-white/10'}`}
               >
                 {period} jours
               </button>

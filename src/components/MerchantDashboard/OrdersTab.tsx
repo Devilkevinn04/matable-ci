@@ -279,9 +279,9 @@ function MerchantDeliveryRequest({ shopId, orderId, orderStatus }: {
       ) : delivery ? (
         <div className="space-y-2.5 px-3 py-3">
           <div>
-            <p className="font-mono text-sm font-black tracking-wide text-[#103E32]">{delivery.ticket_number || `COURSE-${delivery.id}`}</p>
+            <p className="font-mono text-sm font-black tracking-wide text-[var(--mt-green-deep)]">{delivery.ticket_number || `COURSE-${delivery.id}`}</p>
             <p className="mt-0.5 text-[11px] leading-5 text-[#587067]">
-              {delivery.pickup_zone || 'Retrait'} → {delivery.destination_zone || 'Destination'} · <strong className="tabular-nums text-[#103E32]">{formatFCFA(Number(delivery.quoted_amount) || 0)}</strong>
+              {delivery.pickup_zone || 'Retrait'} → {delivery.destination_zone || 'Destination'} · <strong className="tabular-nums text-[var(--mt-green-deep)]">{formatFCFA(Number(delivery.quoted_amount) || 0)}</strong>
             </p>
           </div>
           {orderStatus === 'pending' && <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-900">La demande attend votre décision. La recherche d’un livreur commencera après acceptation.</p>}
@@ -318,17 +318,17 @@ function MerchantDeliveryRequest({ shopId, orderId, orderStatus }: {
               id={`delivery-destination-${orderId}`}
               value={destinationZoneId}
               onChange={(event) => { setDestinationZoneId(event.target.value); setQuote(null); }}
-              className="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 focus:border-[#087F62] focus:outline-none focus:ring-2 focus:ring-[#087F62]/20"
+              className="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 focus:border-[var(--mt-green-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-primary)]/20"
             >
               <option value="">Zone de destination</option>
               {zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.label}</option>)}
             </select>
             {!quote ? (
-              <button type="button" onClick={() => void loadQuote()} disabled={saving || !destinationZoneId} className="min-h-10 rounded-lg bg-[#087F62] px-3 text-xs font-bold text-white transition-colors hover:bg-[#066B52] disabled:opacity-50">
+              <button type="button" onClick={() => void loadQuote()} disabled={saving || !destinationZoneId} className="min-h-10 rounded-lg bg-[var(--mt-green-primary)] px-3 text-xs font-bold text-white transition-colors hover:bg-[var(--mt-green-hover)] disabled:opacity-50">
                 {saving ? 'Recherche…' : 'Afficher le devis'}
               </button>
             ) : (
-              <button type="button" onClick={() => void requestDelivery()} disabled={saving} className="min-h-10 rounded-lg bg-[#087F62] px-3 text-xs font-bold text-white transition-colors hover:bg-[#066B52] disabled:opacity-50">
+              <button type="button" onClick={() => void requestDelivery()} disabled={saving} className="min-h-10 rounded-lg bg-[var(--mt-green-primary)] px-3 text-xs font-bold text-white transition-colors hover:bg-[var(--mt-green-hover)] disabled:opacity-50">
                 Demander · {formatFCFA(quote.amount)}
               </button>
             )}
@@ -422,7 +422,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
             {/* Orders Statistics Cards */}
             <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:grid-cols-3">
               <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4 min-[380px]:col-span-2 sm:col-span-1">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d1fae5] font-bold text-[#087F62]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d1fae5] font-bold text-[var(--mt-green-primary)]">
                   <DollarSign className="w-5 h-5" />
                 </div>
                 <div>
@@ -436,7 +436,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
               </div>
 
               <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f7f4ee] font-bold text-[#087F62]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f7f4ee] font-bold text-[var(--mt-green-primary)]">
                   <ShoppingBag className="w-5 h-5" />
                 </div>
                 <div>
@@ -450,7 +450,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
               </div>
 
               <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fff6ea] font-bold text-[#C2410C]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fff6ea] font-bold text-[var(--mt-orange-deep)]">
                   <TrendingUp className="w-5 h-5" />
                 </div>
                 <div>
@@ -475,7 +475,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                   placeholder="Rechercher par client, tél ou #..."
                   value={orderSearch}
                   onChange={(e) => setOrderSearch(e.target.value)}
-                  className="min-h-11 w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#087F62]/20"
+                  className="min-h-11 w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-primary)]/20"
                 />
               </div>
                 <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-600 sm:w-56">
@@ -484,7 +484,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                     aria-label="Filtrer les commandes par mode de paiement"
                     value={orderPaymentFilter}
                     onChange={(event) => setOrderPaymentFilter(event.target.value as typeof orderPaymentFilter)}
-                    className="min-h-11 min-w-0 flex-1 border-0 bg-transparent py-2 text-sm font-bold text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#047857]"
+                    className="min-h-11 min-w-0 flex-1 border-0 bg-transparent py-2 text-sm font-bold text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--mt-green-hover)]"
                   >
                     <option value="all">Tous les modes</option>
                     <option value="wave">Wave ({orders.filter(o => o.payment_method_preference === 'wave').length})</option>
@@ -502,7 +502,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                     aria-label="Filtrer les commandes par statut"
                     value={orderStatusFilter}
                     onChange={(event) => setOrderStatusFilter(event.target.value as MerchantOrderFilter)}
-                    className="min-h-11 min-w-0 flex-1 bg-transparent py-2 text-sm text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#047857] sm:w-56 sm:flex-none"
+                    className="min-h-11 min-w-0 flex-1 bg-transparent py-2 text-sm text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--mt-green-hover)] sm:w-56 sm:flex-none"
                   >
                     {orderStatusOptions.map((status) => (
                       <option key={status.id} value={status.id}>{status.label} ({status.count})</option>
@@ -527,7 +527,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                     : 'Modifiez votre recherche ou vos filtres pour afficher les commandes correspondantes.'}
                 </p>
                 {orders.length === 0 && (
-                  <button type="button" onClick={() => copyOwnerLink('public')} className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#065f46] px-4 text-xs font-bold text-white transition hover:bg-[#047857]">
+                  <button type="button" onClick={() => copyOwnerLink('public')} className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--mt-green-deep)] px-4 text-xs font-bold text-white transition hover:bg-[var(--mt-green-hover)]">
                     <ExternalLink className="h-4 w-4" /> Copier le lien de ma vitrine
                   </button>
                 )}

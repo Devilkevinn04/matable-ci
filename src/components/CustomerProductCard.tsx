@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BadgePercent, Bookmark, CheckCircle2, ChevronDown, ChevronUp, Clock, Expand, Heart, Minus, Plus, ShoppingBag, Star, X } from 'lucide-react';
+import { BadgePercent, CheckCircle2, ChevronDown, ChevronUp, Clock, Expand, Heart, Minus, Plus, ShoppingBag, Star, X } from 'lucide-react';
 import type { Product, ShopCategory } from '../types';
 import type { CategoryDefaults } from '../utils/categoryDefaults';
 import { formatFCFA } from '../utils/format';
@@ -167,12 +167,8 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
           {isPromotion && <span className={`absolute left-2.5 z-10 ${product.prep_time ? 'top-10' : 'top-2.5'} inline-flex items-center gap-1 rounded-full bg-[#c2410c] px-2.5 py-1 text-xs font-black text-white shadow`}><BadgePercent className="h-3 w-3" aria-hidden="true" />Promotion</span>}
           {outOfStock && <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-slate-950/70 backdrop-blur-[2px]"><span className="rounded-full bg-rose-600 px-3.5 py-1.5 text-xs font-black text-white shadow-lg">Rupture de stock</span></div>}
           <div className="absolute right-2.5 top-2.5 z-20 flex items-center gap-1.5">
-            <button type="button" onClick={onToggleFavorite} aria-pressed={isFavorite} aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'} title={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'} className={`flex h-9 items-center justify-center gap-1.5 rounded-full border border-white/70 px-2.5 shadow-sm backdrop-blur-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${isFavorite ? 'bg-[#FFFFFF] text-[#065f46]' : 'bg-[#FFFFFF]/90 text-[#47534b] hover:bg-white'}`}>
-              <Bookmark className={`h-4 w-4 ${isFavorite ? 'fill-current' : ''}`} aria-hidden="true" />
-              <span className="sr-only">{isFavorite ? 'Enregistré dans vos favoris' : 'Enregistrer ce produit'}</span>
-            </button>
-            <button type="button" onClick={onToggleLike} disabled={isLikePending} aria-busy={isLikePending} aria-pressed={isLiked} aria-label={`${isLikePending ? 'Mise à jour du J’aime' : isLiked ? 'Retirer votre mention J’aime' : 'Aimer ce produit'}${product.like_count ? `, ${product.like_count} mentions J’aime` : ''}`} title="J’aime" className={`flex h-9 min-w-9 items-center justify-center gap-1 rounded-full border border-white/70 px-2.5 shadow-sm backdrop-blur-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-wait disabled:opacity-70 ${isLiked ? 'bg-[#FFFFFF] text-[#c74445]' : 'bg-[#FFFFFF]/90 text-[#47534b] hover:bg-white'}`}>
-              <Heart className={`h-4 w-4 ${isLiked ? 'fill-current' : ''}`} aria-hidden="true" />
+            <button type="button" onClick={() => { onToggleFavorite(); onToggleLike(); }} disabled={isLikePending} aria-busy={isLikePending} aria-pressed={isFavorite || isLiked} aria-label={`${isLikePending ? 'Mise à jour' : isFavorite || isLiked ? 'Retirer des favoris et des J’aime' : 'Ajouter aux favoris et aimer ce produit'}${product.like_count ? `, ${product.like_count} mentions J’aime` : ''}`} title="Favori et J’aime" className={`flex h-9 min-w-9 items-center justify-center gap-1 rounded-full border border-white/70 px-2.5 shadow-sm backdrop-blur-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-wait disabled:opacity-70 ${isFavorite || isLiked ? 'bg-[#FFFFFF] text-[#c74445]' : 'bg-[#FFFFFF]/90 text-[#47534b] hover:bg-white'}`}>
+              <Heart className={`h-4 w-4 ${isFavorite || isLiked ? 'fill-current' : ''}`} aria-hidden="true" />
               {product.like_count ? <span className="text-xs font-bold tabular-nums">{product.like_count}</span> : null}
             </button>
           </div>

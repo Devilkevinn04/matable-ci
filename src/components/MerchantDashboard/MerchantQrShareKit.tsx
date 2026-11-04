@@ -215,7 +215,7 @@ export const MerchantQrShareKit: React.FC<MerchantQrShareKitProps> = ({ shop, on
           </div>
 
           <div className="space-y-3">
-            <button type="button" disabled={!qrDataUrl || downloadKind !== null} onClick={() => void handleDownload('qr')} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#087F62] px-4 py-3 text-sm font-black text-white hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-50">
+            <button type="button" disabled={!qrDataUrl || downloadKind !== null} onClick={() => void handleDownload('qr')} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--mt-green-primary)] px-4 py-3 text-sm font-black text-white hover:bg-[var(--mt-green-hover)] disabled:cursor-not-allowed disabled:opacity-50">
               {downloadKind === 'qr' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               Télécharger le QR code
             </button>

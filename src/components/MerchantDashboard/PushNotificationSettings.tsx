@@ -124,9 +124,9 @@ export const PushNotificationSettings: React.FC<PushNotificationSettingsProps> =
   return (
     <section className="max-w-3xl rounded-2xl border border-[#e7dfd3] bg-white p-5 sm:p-6">
       <div className="flex items-start gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#d1fae5] text-[#047857]"><Bell className="h-5 w-5" /></span>
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#d1fae5] text-[var(--mt-green-hover)]"><Bell className="h-5 w-5" /></span>
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-extrabold text-[#292d2a]">Notifications sur cet appareil</h3>
+          <h3 className="text-base font-extrabold text-[var(--mt-gray-900)]">Notifications sur cet appareil</h3>
           <p className="mt-1 text-sm leading-6 text-slate-600">Recevez les nouvelles commandes, les alertes de stock, les échéances d’abonnement, les changements de vérification et les annonces de MaTable.</p>
         </div>
       </div>
@@ -152,7 +152,7 @@ export const PushNotificationSettings: React.FC<PushNotificationSettingsProps> =
             Désactiver sur cet appareil
           </button>
         ) : (
-          <button type="button" onClick={enablePush} disabled={busy || loading || !configuration?.configured || !supported} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[#065f46] px-4 text-sm font-bold text-white transition hover:bg-[#047857] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
+          <button type="button" onClick={enablePush} disabled={busy || loading || !configuration?.configured || !supported} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-4 text-sm font-bold text-white transition hover:bg-[var(--mt-green-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto">
             {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
             Activer les notifications
           </button>

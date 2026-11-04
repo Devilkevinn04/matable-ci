@@ -170,13 +170,13 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                     <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500">
                       <span>{products.length} sur {productLimit} articles utilisés</span>
                       {catalogFull && !currentShop.admin_mode && (
-                        <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="font-extrabold text-[#047857] underline underline-offset-2">
+                        <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="font-extrabold text-[var(--mt-green-hover)] underline underline-offset-2">
                           Voir les formules
                         </button>
                       )}
                     </div>
                     <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#e8e5dc]" role="progressbar" aria-label="Utilisation de la capacité du catalogue" aria-valuemin={0} aria-valuemax={productLimit} aria-valuenow={Math.min(products.length, productLimit)}>
-                      <div className={`h-full rounded-full ${catalogFull ? 'bg-[#C2410C]' : 'bg-[#087F62]'}`} style={{ width: `${Math.min(100, (products.length / productLimit) * 100)}%` }} />
+                      <div className={`h-full rounded-full ${catalogFull ? 'bg-[var(--mt-orange-deep)]' : 'bg-[var(--mt-green-primary)]'}`} style={{ width: `${Math.min(100, (products.length / productLimit) * 100)}%` }} />
                     </div>
                   </div>
                 )}
@@ -209,7 +209,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   onClick={handleOpenAddModal}
                   disabled={catalogFull}
                   title={catalogFull ? `La limite de votre formule est de ${productLimit} articles.` : undefined}
-                  className="col-span-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[#087F62] px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-45 sm:col-span-1"
+                  className="col-span-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[var(--mt-green-primary)] px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[var(--mt-green-hover)] disabled:cursor-not-allowed disabled:opacity-45 sm:col-span-1"
                 >
                   <Plus className="w-4 h-4" />
                   <span>{catalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</span>
@@ -231,7 +231,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                       type="button"
                       onClick={() => void applyCatalogImport()}
                       disabled={csvBusy}
-                      className="min-h-10 rounded-lg bg-[#087F62] px-3 text-xs font-bold text-white disabled:opacity-50"
+                      className="min-h-10 rounded-lg bg-[var(--mt-green-primary)] px-3 text-xs font-bold text-white disabled:opacity-50"
                     >
                       {csvBusy ? 'Import en cours…' : 'Confirmer l’import'}
                     </button>
@@ -252,7 +252,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   placeholder="Rechercher un article..."
                   value={catalogSearch}
                   onChange={(e) => setCatalogSearch(e.target.value)}
-                  className="min-h-11 w-full rounded-xl border border-[#d9d5cd] bg-white py-2 pl-9 pr-3 text-sm text-[#292d2a] focus:border-[#047857] focus:outline-none focus:ring-2 focus:ring-[#047857]/15"
+                  className="min-h-11 w-full rounded-xl border border-[#d9d5cd] bg-white py-2 pl-9 pr-3 text-sm text-[var(--mt-gray-900)] focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15"
                 />
               </div>
 
@@ -262,7 +262,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   aria-label="Filtrer les articles du catalogue"
                   value={catalogFilter}
                   onChange={(event) => setCatalogFilter(event.target.value as typeof catalogFilter)}
-                  className="min-h-11 min-w-0 flex-1 bg-transparent py-2 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#047857] sm:w-48 sm:flex-none"
+                  className="min-h-11 min-w-0 flex-1 bg-transparent py-2 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--mt-green-hover)] sm:w-48 sm:flex-none"
                 >
                   {catalogFilterOptions.map(({ id, label, count }) => (
                     <option key={id} value={id}>{label} ({count})</option>
@@ -322,14 +322,14 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                       className="aspect-4/3 bg-[#f3efe8]"
                     >
                       {prod.prep_time && (
-                        <span className="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-[#292d2a]/85 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-xs">
+                        <span className="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-[var(--mt-gray-900)]/85 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-xs">
                           <Clock className="h-3 w-3 shrink-0 text-[#e8a93a]" />
                           <span>{prod.prep_time} min</span>
                         </span>
                       )}
 
                       {prod.is_available === false && (
-                        <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-[#292d2a]/90 px-2 py-0.5 text-[10px] font-bold text-white">
+                        <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-[var(--mt-gray-900)]/90 px-2 py-0.5 text-[10px] font-bold text-white">
                           <EyeOff className="h-3 w-3 shrink-0 text-[#f4e6c8]" />
                           <span>Masqué</span>
                         </span>
@@ -340,11 +340,11 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                           Épuisé
                         </span>
                       ) : prod.stock <= 3 ? (
-                        <span className="absolute top-2 right-2 bg-[#e8a93a] text-[#292d2a] text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs">
+                        <span className="absolute top-2 right-2 bg-[#e8a93a] text-[var(--mt-gray-900)] text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs">
                           Stock bas ({prod.stock})
                         </span>
                       ) : (
-                        <span className="absolute top-2 right-2 rounded-md bg-[#065f46] px-2 py-0.5 text-[10px] font-bold text-white">
+                        <span className="absolute top-2 right-2 rounded-md bg-[var(--mt-green-deep)] px-2 py-0.5 text-[10px] font-bold text-white">
                           Stock: {prod.stock}
                         </span>
                       )}
@@ -357,11 +357,11 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                         </span>
                       )}
                       <div className="flex items-start justify-between gap-2 mb-1">
-                        <h3 className="font-extrabold text-[#292d2a] text-sm line-clamp-1">
+                        <h3 className="font-extrabold text-[var(--mt-gray-900)] text-sm line-clamp-1">
                           {prod.title}
                         </h3>
                         <span className="shrink-0 text-right">
-                          <span className={`block text-sm font-black ${getActiveProductPrice(prod, saleNow) < prod.price ? 'text-[#c2410c]' : 'text-[#065f46]'}`}>
+                          <span className={`block text-sm font-black ${getActiveProductPrice(prod, saleNow) < prod.price ? 'text-[var(--mt-orange-deep)]' : 'text-[var(--mt-green-deep)]'}`}>
                             {formatFCFA(getActiveProductPrice(prod, saleNow))}
                           </span>
                           {getActiveProductPrice(prod, saleNow) < prod.price && <span className="block text-[10px] font-semibold text-slate-400 line-through">{formatFCFA(prod.price)}</span>}
@@ -411,14 +411,14 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                       {((prod.sizes?.length ?? 0) > 0 || (prod.colors?.length ?? 0) > 0) && (
                         <div className="mb-2 flex flex-wrap gap-1">
                           {prod.sizes?.map((size: string) => (
-                            <span key={size} className="rounded border border-[#292d2a]/10 bg-[#f1f3f5] px-1.5 py-0.5 text-[10px] font-bold text-[#292d2a]">
+                            <span key={size} className="rounded border border-[var(--mt-gray-900)]/10 bg-[#f1f3f5] px-1.5 py-0.5 text-[10px] font-bold text-[var(--mt-gray-900)]">
                               Taille {size}
                             </span>
                           ))}
                           {prod.colors?.map((color: string | { name: string }) => {
                             const label = typeof color === 'string' ? color : color.name;
                             return (
-                              <span key={label} className="rounded border border-[#292d2a]/10 bg-[#f1f3f5] px-1.5 py-0.5 text-[10px] font-bold text-[#292d2a]">
+                              <span key={label} className="rounded border border-[var(--mt-gray-900)]/10 bg-[#f1f3f5] px-1.5 py-0.5 text-[10px] font-bold text-[var(--mt-gray-900)]">
                                 Couleur {label}
                               </span>
                             );
@@ -468,19 +468,19 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                             onClick={() => handleQuickStockChange(prod.id, -1)}
                             disabled={prod.stock <= 0}
                             aria-label={`Retirer une unité du stock de ${prod.title}`}
-                            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg bg-white text-[#47534b] transition hover:bg-[#edf5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] disabled:opacity-40"
+                            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg bg-white text-[#47534b] transition hover:bg-[#edf5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)] disabled:opacity-40"
                             title="Décrémenter le stock"
                           >
                             <Minus className="w-3 h-3" />
                           </button>
-                          <span className="font-mono font-bold text-xs px-1.5 min-w-[24px] text-center text-[#292d2a]">
+                          <span className="font-mono font-bold text-xs px-1.5 min-w-[24px] text-center text-[var(--mt-gray-900)]">
                             {prod.stock}
                           </span>
                           <button
                             type="button"
                             onClick={() => handleQuickStockChange(prod.id, 1)}
                             aria-label={`Ajouter une unité au stock de ${prod.title}`}
-                            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg bg-white text-[#47534b] transition hover:bg-[#edf5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]"
+                            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg bg-white text-[#47534b] transition hover:bg-[#edf5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)]"
                             title="Incrémenter le stock"
                           >
                             <Plus className="w-3 h-3" />
@@ -492,7 +492,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                             type="button"
                             onClick={() => handleQuickToggleVisibility(prod.id)}
                             aria-label={prod.is_available === false ? `Rendre ${prod.title} visible` : `Masquer ${prod.title} de la vitrine`}
-                            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-[#d9d5cd] bg-white text-[#47534b] transition hover:bg-[#edf5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]"
+                            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-[#d9d5cd] bg-white text-[#47534b] transition hover:bg-[#edf5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)]"
                             title={prod.is_available === false ? "Rendre visible" : "Masquer de la vitrine"}
                           >
                             {prod.is_available === false ? <EyeOff className="h-4 w-4 shrink-0 text-[#b93712]" /> : <Eye className="h-4 w-4 shrink-0" />}
@@ -501,7 +501,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                             type="button"
                             onClick={() => handleOpenEditModal(prod)}
                             aria-label={`Modifier ${prod.title}`}
-                            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-[#d9d5cd] bg-white text-[#47534b] transition hover:bg-[#edf5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]"
+                            className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-[#d9d5cd] bg-white text-[#47534b] transition hover:bg-[#edf5f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)]"
                             title="Modifier"
                           >
                             <Edit3 className="h-4 w-4 shrink-0" />

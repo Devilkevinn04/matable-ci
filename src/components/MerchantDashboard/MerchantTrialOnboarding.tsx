@@ -131,7 +131,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
           <>
             {onBack && (
               <div className="py-4 sm:py-6">
-                <button type="button" onClick={onBack} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#ded8ce] bg-[#FFFFFF] px-4 text-sm font-bold text-[#47534b] transition hover:bg-[#d1fae5]">
+                <button type="button" onClick={onBack} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#ded8ce] bg-[var(--mt-surface)] px-4 text-sm font-bold text-[#47534b] transition hover:bg-[#d1fae5]">
                   <span aria-hidden="true">←</span> {previewOnly ? 'Retour à l’annuaire' : 'Retour à mon forfait'}
                 </button>
               </div>
@@ -160,7 +160,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     <span className="text-xs font-bold text-white/65">Votre espace commerçant</span>
                     <span className="rounded-full bg-[#d9efdf]/15 px-2.5 py-1 text-[10px] font-extrabold text-[#c8efcf]">MATABLE · ESPACE PRO</span>
                   </div>
-                  <div className="mt-4 flex items-center gap-3 rounded-2xl bg-[#FFFFFF] p-4 text-[#163d32]">
+                  <div className="mt-4 flex items-center gap-3 rounded-2xl bg-[var(--mt-surface)] p-4 text-[#163d32]">
                     <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#e5f0e8]"><Store className="h-6 w-6" aria-hidden="true" /></span>
                     <span><strong className="block text-sm font-black">{shop.name}</strong><span className="mt-0.5 block text-xs text-[#6d786f]">Votre activité, à votre image</span></span>
                     <span className="ml-auto h-2.5 w-2.5 rounded-full bg-[#54a876] ring-4 ring-[#54a876]/15" aria-hidden="true" />
@@ -191,7 +191,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
           </>
         ) : (
           <header className="border-b border-[#dce4dc] pb-6">
-            <p className="text-xs font-extrabold uppercase text-[#047857]">MaTable · Espace commerçant</p>
+            <p className="text-xs font-extrabold uppercase text-[var(--mt-green-hover)]">MaTable · Espace commerçant</p>
             <h1 className="mt-2 text-2xl font-black sm:text-3xl">{mode === 'expired' ? expiredTitle : `Bienvenue, ${shop.name}`}</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? expiredDescription : isTrialActive ? `Votre essai gratuit reste actif jusqu’au ${shop.subscription?.trialEnd ? formatSubscriptionDate(shop.subscription.trialEnd) : 'terme prévu'}. Vous pouvez payer maintenant : après confirmation, votre formule payante sera active et la durée restante de l’essai sera conservée.` : `Vous pouvez choisir une formule payante dès maintenant ou commencer par l’essai gratuit de ${TRIAL_DURATION_MONTHS} mois.`}</p>
             {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-emerald-800 underline underline-offset-2"><MessageCircle className="h-4 w-4" />Contacter l’équipe</a>}
@@ -203,14 +203,14 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             <h2 id="startup-choice-title" className="text-lg font-extrabold text-[#183b31]">Comment souhaitez-vous démarrer ?</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">Vous pourrez toujours passer à une formule payante pendant votre essai.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2" role="group" aria-label="Choisir son démarrage">
-              <button type="button" aria-pressed={!purchaseNow} onClick={() => setPurchaseNow(false)} className={`rounded-2xl border p-4 text-left transition ${!purchaseNow ? 'border-[#047857] bg-white ring-2 ring-[#047857]/15' : 'border-[#d5ddd5] bg-white/70 hover:border-[#047857]'}`}>
+              <button type="button" aria-pressed={!purchaseNow} onClick={() => setPurchaseNow(false)} className={`rounded-2xl border p-4 text-left transition ${!purchaseNow ? 'border-[var(--mt-green-hover)] bg-white ring-2 ring-[var(--mt-green-hover)]/15' : 'border-[#d5ddd5] bg-white/70 hover:border-[var(--mt-green-hover)]'}`}>
                 <span className="flex items-center justify-between gap-3">
                   <span className="text-sm font-extrabold text-[#183b31]">Essayer gratuitement</span>
                   <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-900">{TRIAL_DURATION_MONTHS} mois offerts</span>
                 </span>
                 <span className="mt-2 block text-xs leading-5 text-slate-600">Standard, jusqu’à {TRIAL_CATALOG_LIMIT} produits. Aucun paiement nécessaire pour commencer.</span>
               </button>
-              <button type="button" aria-pressed={purchaseNow} onClick={() => setPurchaseNow(true)} className={`rounded-2xl border p-4 text-left transition ${purchaseNow ? 'border-[#047857] bg-white ring-2 ring-[#047857]/15' : 'border-[#d5ddd5] bg-white/70 hover:border-[#047857]'}`}>
+              <button type="button" aria-pressed={purchaseNow} onClick={() => setPurchaseNow(true)} className={`rounded-2xl border p-4 text-left transition ${purchaseNow ? 'border-[var(--mt-green-hover)] bg-white ring-2 ring-[var(--mt-green-hover)]/15' : 'border-[#d5ddd5] bg-white/70 hover:border-[var(--mt-green-hover)]'}`}>
                 <span className="flex items-center justify-between gap-3">
                   <span className="text-sm font-extrabold text-[#183b31]">Choisir une formule payante</span>
                   <span className="rounded-full bg-[#f9f0e6] px-2.5 py-1 text-[10px] font-black text-[#93602e]">Dès 3 000 FCFA/mois</span>
@@ -267,13 +267,13 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     whileHover={mode === 'plans' && !prefersReducedMotion ? { y: -5 } : undefined}
                     whileTap={mode === 'plans' && !prefersReducedMotion ? { scale: 0.99 } : undefined}
                     transition={{ duration: prefersReducedMotion ? 0 : 0.2 }}
-                    className={`relative flex min-h-[360px] flex-col items-start rounded-[26px] border p-5 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 sm:p-6 ${mode === 'plans' ? `${planColors.card} ${plan.tier === 'premium' ? 'shadow-[0_22px_55px_rgba(7,95,72,.2)] md:scale-[1.035]' : selected ? 'shadow-[0_18px_42px_-24px_rgba(15,77,61,0.35)]' : 'shadow-[0_12px_34px_rgba(38,35,28,.07)]'}` : `min-h-56 rounded-xl ${selected ? 'border-[#047857] bg-white ring-2 ring-[#047857]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[#047857]'}`} hover:-translate-y-0.5`}
+                    className={`relative flex min-h-[360px] flex-col items-start rounded-[26px] border p-5 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 sm:p-6 ${mode === 'plans' ? `${planColors.card} ${plan.tier === 'premium' ? 'shadow-[0_22px_55px_rgba(7,95,72,.2)] md:scale-[1.035]' : selected ? 'shadow-[0_18px_42px_-24px_rgba(15,77,61,0.35)]' : 'shadow-[0_12px_34px_rgba(38,35,28,.07)]'}` : `min-h-56 rounded-xl ${selected ? 'border-[var(--mt-green-hover)] bg-white ring-2 ring-[var(--mt-green-hover)]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[var(--mt-green-hover)]'}`} hover:-translate-y-0.5`}
                   >
-                  {featured && <span className="mb-4 rounded-full bg-[#f0ba80] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[#292d2a] shadow-sm">Recommandée</span>}
+                  {featured && <span className="mb-4 rounded-full bg-[var(--mt-orange-soft)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--mt-gray-900)] shadow-sm">Recommandée</span>}
                     <span className="flex w-full items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-3">
-                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'bg-white/10 text-[#f0ba80]' : 'bg-[#e9f5ee] text-[#087c5b]'}`}><PlanIcon className="h-5 w-5" aria-hidden="true" /></span>
-                        <span className="min-w-0"><span className={`block text-[9px] font-black uppercase tracking-[0.12em] ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-[#f0ba80]' : 'text-[#8b7358]'}`}>{planEyebrow}</span><span className={`mt-0.5 block text-sm font-black uppercase tracking-[0.11em] ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-white' : mode === 'plans' ? 'text-[#075f48]' : ''}`}>{plan.label}</span></span>
+                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'bg-white/10 text-[var(--mt-orange-soft)]' : 'bg-[#e9f5ee] text-[#087c5b]'}`}><PlanIcon className="h-5 w-5" aria-hidden="true" /></span>
+                        <span className="min-w-0"><span className={`block text-[9px] font-black uppercase tracking-[0.12em] ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-[var(--mt-orange-soft)]' : 'text-[#8b7358]'}`}>{planEyebrow}</span><span className={`mt-0.5 block text-sm font-black uppercase tracking-[0.11em] ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-white' : mode === 'plans' ? 'text-[#075f48]' : ''}`}>{plan.label}</span></span>
                       </span>
                       {selected && <Check className={`h-5 w-5 shrink-0 ${mode === 'plans' ? planColors.check : 'text-emerald-700'}`} />}
                     </span>
@@ -284,7 +284,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                       <span className={`ml-1 text-xs font-semibold ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>/{term === 'annual' ? 'an' : 'mois'}</span>
                       <span className={`mt-1.5 block text-xs ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{subscriptionPrices ? term === 'annual' ? `Soit ${new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier])} FCFA/mois · 2 mois offerts` : `${new Intl.NumberFormat('fr-FR').format(Math.ceil(subscriptionPrices[plan.tier] / 30))} FCFA par jour` : 'Tarif indisponible'}</span>
                     </div>
-                    {mode === 'plans' && <span className={`group mt-5 flex min-h-11 w-full items-center justify-between gap-2 rounded-full px-4 text-xs font-extrabold transition ${plan.tier === 'premium' ? 'bg-[#f0ba80] text-[#292d2a]' : 'bg-[#075f48] text-white'}`}>
+                    {mode === 'plans' && <span className={`group mt-5 flex min-h-11 w-full items-center justify-between gap-2 rounded-full px-4 text-xs font-extrabold transition ${plan.tier === 'premium' ? 'bg-[var(--mt-orange-soft)] text-[var(--mt-gray-900)]' : 'bg-[#075f48] text-white'}`}>
                       {selected ? 'Formule sélectionnée' : plan.tier === 'standard' ? 'Commencer' : `Choisir ${plan.label}`} <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
                     </span>}
                     <p className={`mt-7 border-t pt-5 text-xs font-black ${mode === 'plans' && plan.tier === 'premium' ? 'border-white/20 text-white' : 'border-[#e8ebe5] text-[#202d28]'}`}>
@@ -365,7 +365,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
         )}
 
         <aside className={`mt-5 flex items-start gap-3 rounded-2xl border p-4 text-sm ${mode === 'plans' ? 'border-[#dbe8dc] bg-white text-[#345448] sm:mt-7 sm:px-5' : 'border-sky-200 bg-sky-50 text-sky-950'}`}>
-          {mode === 'plans' ? <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-[#047857]" /> : <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-sky-800" />}
+          {mode === 'plans' ? <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-[var(--mt-green-hover)]" /> : <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-sky-800" />}
           <p>{previewOnly ? 'Aperçu de démonstration : comparez les formules librement. Aucun paiement ne sera lancé.' : isManualSubscriptionSuspension ? 'La suspension manuelle est prioritaire. Le paiement sera indisponible jusqu’à sa levée ou son expiration.' : paymentFlowActive ? isTrialActive ? 'Vous pouvez payer dès maintenant. Après confirmation, votre formule payante sera active immédiatement ; la durée restante de l’essai est conservée avant la nouvelle échéance.' : 'Vous gardez la main : le paiement est lancé uniquement après votre validation et votre formule est activée après confirmation sécurisée de GeniusPay. La publication de la boutique et sa vérification restent des étapes distinctes.' : `Votre essai gratuit de ${TRIAL_DURATION_MONTHS} mois commence lorsque vous le démarrez.`}</p>
         </aside>
 
@@ -376,20 +376,20 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             previewOnly ? (
               <button type="button" disabled className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-300 px-5 py-3 text-sm font-bold text-slate-600">Aperçu · paiement désactivé</button>
             ) : (
-              <button type="button" onClick={() => void startSubscriptionPayment()} disabled={isPaymentStarting || !subscriptionPrices || isManualSubscriptionSuspension} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#065f46] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">
+              <button type="button" onClick={() => void startSubscriptionPayment()} disabled={isPaymentStarting || !subscriptionPrices || isManualSubscriptionSuspension} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(15,77,61,0.2)] transition hover:bg-[var(--mt-green-hover)] disabled:cursor-wait disabled:opacity-60">
                 {isPaymentStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
                 {isPaymentStarting ? 'Préparation du paiement…' : paymentPrice === null ? 'Tarifs indisponibles' : `Payer ${new Intl.NumberFormat('fr-FR').format(paymentPrice)} FCFA avec GeniusPay`}
               </button>
             )
           ) : (
-            <button type="button" onClick={() => onStart?.('standard')} disabled={isStarting || !onStart} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#065f46] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">
+            <button type="button" onClick={() => onStart?.('standard')} disabled={isStarting || !onStart} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--mt-green-hover)] disabled:cursor-wait disabled:opacity-60">
               {isStarting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
               {isStarting ? 'Démarrage de l’essai…' : `Commencer mon essai de ${TRIAL_DURATION_MONTHS} mois`}
             </button>
           )}
-          {!paymentFlowActive && <button type="button" onClick={() => setPurchaseNow(true)} className="min-h-11 rounded-lg px-3 text-sm font-bold text-[#047857] underline underline-offset-2">Voir les formules et payer maintenant</button>}
+          {!paymentFlowActive && <button type="button" onClick={() => setPurchaseNow(true)} className="min-h-11 rounded-lg px-3 text-sm font-bold text-[var(--mt-green-hover)] underline underline-offset-2">Voir les formules et payer maintenant</button>}
           {paymentFlowActive && <span className="text-xs text-slate-600">{selectedPlan.label} · {paymentPrice === null ? 'Tarif indisponible' : `${new Intl.NumberFormat('fr-FR').format(paymentPrice)} FCFA/${term === 'annual' ? 'an' : 'mois'}`}</span>}
-          {mode === 'start' && paymentFlowActive && <button type="button" onClick={() => setPurchaseNow(false)} className="min-h-11 rounded-lg px-3 text-sm font-bold text-[#047857] underline underline-offset-2">Commencer plutôt par l’essai gratuit</button>}
+          {mode === 'start' && paymentFlowActive && <button type="button" onClick={() => setPurchaseNow(false)} className="min-h-11 rounded-lg px-3 text-sm font-bold text-[var(--mt-green-hover)] underline underline-offset-2">Commencer plutôt par l’essai gratuit</button>}
         </div>
         {paymentFlowActive && paymentMessage && (
           <div className="mt-3 space-y-2" aria-live="polite">
@@ -414,7 +414,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     type="button"
                     onClick={() => void startSubscriptionPayment()}
                     disabled={isPaymentStarting || !billingEmail.trim() || isManualSubscriptionSuspension}
-                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#065f46] px-4 py-2 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60 sm:w-auto"
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--mt-green-deep)] px-4 py-2 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60 sm:w-auto"
                   >
                     {isPaymentStarting && <LoaderCircle className="h-4 w-4 animate-spin" />}
                     Continuer vers le paiement

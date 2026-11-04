@@ -35,6 +35,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="MaTable" />
     <link rel="manifest" href="/manifest.json" />
+    <style>
+      .initial-shell { min-height: 100vh; padding: 2rem 1.25rem; background: #FAF8F2; color: #292d2a; font-family: "DM Sans", system-ui, sans-serif; }
+      .initial-shell__inner { max-width: 72rem; margin: 0 auto; padding: 2rem; border: 1px solid #e7e9e5; border-radius: 1.5rem; background: #fff; }
+      .initial-shell__eyebrow { color: #c2410c; font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+      .initial-shell h1 { max-width: 42rem; margin: .75rem 0 1rem; color: #065f46; font-family: "Bricolage Grotesque", system-ui, sans-serif; font-size: clamp(2.25rem, 8vw, 4.5rem); line-height: 1.02; }
+      .initial-shell p { max-width: 40rem; margin: 0; color: #647067; font-size: 1rem; line-height: 1.6; }
+    </style>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -66,7 +73,15 @@
     </script>
   </head>
   <body class="antialiased selection:bg-[#F97316]/20 selection:text-[#292d2a]">
-    <div id="root"></div>
+    <div id="root">
+      <main class="initial-shell" aria-label="MaTable">
+        <div class="initial-shell__inner">
+          <div class="initial-shell__eyebrow">Commerce local · Côte d’Ivoire</div>
+          <h1>Le commerce local, tout près de vous.</h1>
+          <p>MaTable est l’annuaire en ligne des boutiques locales. Découvrez leurs produits et contactez directement chaque commerçant.</p>
+        </div>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
