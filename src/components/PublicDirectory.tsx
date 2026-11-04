@@ -863,18 +863,18 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           <div className={`relative z-10 grid items-stretch gap-3 sm:gap-4 lg:gap-5 max-[360px]:grid-cols-1 ${filteredShops.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
             {filteredShops.map((shop, index) => (
               <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045} className={filteredShops.length === 1 ? 'mx-auto w-full max-w-[760px]' : undefined}>
-              <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className="mt-press group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[var(--mt-surface)] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)] focus-visible:ring-offset-2 sm:rounded-[24px]">
+              <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className="mt-press group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[#FFFFFF] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2 sm:rounded-[24px]">
                 <div className="relative aspect-[1.35] shrink-0 overflow-hidden sm:aspect-[1.65]" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
-                  <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]" onError={handlePublicImageError} />
+                  <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" onError={handlePublicImageError} />
                   <span className="absolute inset-0 bg-gradient-to-t from-[#17211f]/75 via-transparent to-[#17211f]/5" />
-                  <span className="absolute bottom-3 left-3 rounded-full bg-[var(--mt-surface)]/90 px-2.5 py-1 text-xs font-bold text-[var(--mt-green-deep)] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
+                  <span className="absolute bottom-3 left-3 rounded-full bg-[#FFFFFF]/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#065f46] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-5 lg:p-6">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-xs font-bold text-[var(--mt-orange-deep)] sm:text-xs sm:tracking-[0.13em]"><span className="sm:hidden">Adresse</span><span className="hidden sm:inline">Une adresse à découvrir</span></span>
+                    <span className="truncate text-[10px] font-bold uppercase tracking-[0.1em] text-[#c2410c] sm:text-xs sm:tracking-[0.13em]"><span className="sm:hidden">Adresse</span><span className="hidden sm:inline">Une adresse à découvrir</span></span>
                     <div className="flex shrink-0 items-center gap-1">
-                    {shop.boost_placements?.some((placement) => placement === (discoveryPage?.citySlug ? 'city' : discoveryPage?.category || category !== 'all' ? 'category' : !isShopDirectoryPage ? 'home' : 'directory') || placement === 'directory') && <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-950 sm:text-xs">Sponsorisé</span>}
-                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-bold sm:px-3 sm:py-1.5 sm:text-xs ${shop.is_open ? 'bg-[#e2eee6] text-[var(--mt-green-deep)]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>
+                    {shop.boost_placements?.some((placement) => placement === (discoveryPage?.citySlug ? 'city' : discoveryPage?.category || category !== 'all' ? 'category' : !isShopDirectoryPage ? 'home' : 'directory') || placement === 'directory') && <span className="rounded-full bg-amber-100 px-2 py-1 text-[9px] font-bold text-amber-950 sm:text-[10px]">Sponsorisé</span>}
+                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold sm:px-3 sm:py-1.5 sm:text-xs ${shop.is_open ? 'bg-[#e2eee6] text-[#065f46]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>
                       {shop.is_open ? <><CheckCircle2 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />Ouverte</> : <><Clock3 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />Fermée</>}
                     </span>
                     </div>
@@ -883,19 +883,19 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                     {shop.theme_config?.logo_url && <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e9e1d7] bg-white sm:h-12 sm:w-12 sm:rounded-2xl">
                       <img src={shop.theme_config.logo_url} alt="" className="h-full w-full object-cover" onError={handlePublicImageError} />
                     </span>}
-                    <h3 className="line-clamp-2 min-w-0 font-display text-base font-extrabold leading-tight tracking-tight text-[var(--mt-gray-900)] sm:text-xl lg:text-2xl">{shop.name}</h3>
+                    <h3 className="line-clamp-2 min-w-0 font-display text-base font-extrabold leading-tight tracking-tight text-[#292d2a] sm:text-xl lg:text-2xl">{shop.name}</h3>
                   </div>
                   {(shop.city || shop.is_verified) && <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs font-semibold text-[#47534b] sm:mt-3 sm:gap-2 sm:text-sm">
                     {shop.city && <><MapPin className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden="true" /><span className="truncate">{shop.city}</span></>}
                     {shop.is_verified && <VerifiedBadge />}
                   </p>}
-                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--mt-gray-600)] sm:mt-3 sm:text-sm sm:leading-6">{shop.welcome_message || 'Une vitrine locale à découvrir et un commerçant à rencontrer.'}</p>
+                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#647067] sm:mt-3 sm:text-sm sm:leading-6">{shop.welcome_message || 'Une vitrine locale à découvrir et un commerçant à rencontrer.'}</p>
                   <div className="mt-auto flex flex-col items-start gap-2 border-t border-[#eee6dd] pt-3 sm:mt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:pt-4">
-                    <span className="text-xs font-semibold leading-4 text-[var(--mt-gray-600)] sm:text-xs">
+                    <span className="text-[10px] font-semibold leading-4 text-[#647067] sm:text-xs">
                       {shop.opening_hours?.enabled && shop.opening_hours.open_time && shop.opening_hours.close_time && `${shop.opening_hours.open_time}–${shop.opening_hours.close_time} · `}
                       {shop.products_count ? `${shop.products_count} article${shop.products_count === 1 ? '' : 's'} en vitrine` : 'Vitrine à découvrir'}
                     </span>
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-[var(--mt-green-deep)] sm:gap-2 sm:text-sm">Découvrir <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1 sm:h-4 sm:w-4" aria-hidden="true" /></span>
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-[#065f46] sm:gap-2 sm:text-sm">Découvrir <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1 sm:h-4 sm:w-4" aria-hidden="true" /></span>
                   </div>
                 </div>
               </Link>
