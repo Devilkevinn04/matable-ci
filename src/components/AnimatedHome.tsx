@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { getProductImageForDisplay } from '../utils/categoryDefaults';
 import { formatFCFA } from '../utils/format';
 import { getResponsiveImageProps } from '../utils/responsiveImages';
+import { isAgeRestrictedProduct } from '../utils/ageRestrictedProducts';
 
 interface AnimatedHomeShop {
   slug: string;
@@ -11,7 +12,7 @@ interface AnimatedHomeShop {
   category?: string;
   city?: string;
   is_verified?: boolean;
-  products_preview?: { title: string; image_url: string; thumbnail_url?: string; price: number }[];
+  products_preview?: { title: string; description?: string | null; image_url: string; thumbnail_url?: string; price: number }[];
 }
 
 interface AnimatedHomeProps {
@@ -38,12 +39,22 @@ const categoryLabels: Record<string, string> = {
 const categoryLabel = (category?: string) => categoryLabels[category || 'other'] || 'Boutiques';
 
 export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, neighbourhoods, onOpenDirectory }) => {
-  const [query, setQuery] = useState('');
-  const products = useMemo(
-    () => shops.flatMap((shop) => (shop.products_preview || []).slice(0, 2).map((product) => ({ shop, product }))).slice(0, 12),
+  const safeShops = useMemo(
+    () => shops
+      .filter((shop) => !/\b(?:puff|vape|tabac)\b/i.test(shop.name))
+      .map((shop) => ({
+        ...shop,
+        products_preview: (shop.products_preview || []).filter((product) => !isAgeRestrictedProduct({ title: product.title, description: product.description || null })),
+      })),
     [shops],
   );
-  const featuredShops = shops.filter((shop) => shop.products_preview?.length).slice(0, 6);
+  const verifiedShopCount = safeShops.filter((shop) => shop.is_verified).length;
+  const [query, setQuery] = useState('');
+  const products = useMemo(
+    () => safeShops.flatMap((shop) => (shop.products_preview || []).slice(0, 2).map((product) => ({ shop, product }))).slice(0, 12),
+    [safeShops],
+  );
+  const featuredShops = safeShops.filter((shop) => shop.products_preview?.length).slice(0, 6);
   const marqueeCities = neighbourhoods.length > 0 ? neighbourhoods : [{ label: 'Abidjan', path: '/boutiques?q=Abidjan' }];
   const marqueeCategories = categories.length > 0 ? categories.map(categoryLabel) : ['Restauration', 'Mode', 'Beauté', 'Maison'];
 
@@ -53,45 +64,45 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
   };
 
   return (
-    <main className="overflow-hidden bg-[#faf9f5] text-[#202522]">
-      <section className="relative overflow-hidden border-y border-[#e7e2d9] bg-[#faf9f5]">
-        <div className="relative mx-auto grid max-w-[1440px] gap-8 px-5 pb-12 pt-12 sm:px-10 sm:pb-20 sm:pt-20 lg:min-h-[680px] lg:grid-cols-[.9fr_1.1fr] lg:items-center lg:gap-4 lg:px-16">
-          <div className="relative z-10 max-w-2xl">
-            <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#d6e2d9] bg-white px-4 py-2 text-sm font-bold text-[#15513e] shadow-sm">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#39d39c]" />
-              {shops.length || 7} boutiques vérifiées à Abidjan
-            </p>
-            <h1 className="font-display text-[clamp(3.2rem,8vw,7.8rem)] font-extrabold leading-[.88] tracking-[-.075em] text-[#103e32]">
+    <main className="overflow-hidden bg-[var(--mt-gray-50)] text-[var(--mt-gray-900)]">
+      <section className="relative overflow-hidden border-y border-[var(--mt-gray-200)] bg-[var(--mt-gray-50)]">
+        <div className="relative mx-auto grid max-w-[1440px] gap-8 px-5 pb-12 pt-12 sm:px-10 sm:pb-20 sm:pt-20 lg:min-h-[680px] lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-4 lg:px-16">
+          <div className="relative z-10 min-w-0 max-w-2xl">
+            {verifiedShopCount > 0 && <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--mt-green-soft)] bg-white px-4 py-2 text-sm font-bold text-[var(--mt-green-deep)] shadow-sm">
+              <span className="h-2.5 w-2.5 rounded-full bg-[var(--mt-green-primary)]" />
+              {verifiedShopCount} boutiques vérifiées à Abidjan
+            </p>}
+            <h1 className="font-display text-[clamp(2.9rem,6.2vw,5.25rem)] font-extrabold leading-[.98] tracking-[-.035em] text-[var(--mt-green-deep)]">
               Le commerce
               <br />
-              local, <span className="text-[#f97316]">tout près</span>
+              local, <span className="text-[var(--mt-orange-deep)]">tout près</span>
               <br />
-              <span className="text-[#f97316]">de chez vous.</span>
+              <span className="text-[var(--mt-orange-deep)]">de chez vous.</span>
             </h1>
-            <p className="mt-7 max-w-xl text-base leading-7 text-[#59615b] sm:text-xl sm:leading-8">
+            <p className="mt-7 max-w-xl text-base leading-7 text-[var(--mt-gray-600)] sm:text-xl sm:leading-8">
               Les vraies photos et les vrais prix des boutiques de votre quartier. Vous choisissez, le commerçant vous répond sur WhatsApp.
             </p>
-            <form onSubmit={submitSearch} role="search" className="mt-7 flex max-w-xl items-center gap-2 rounded-full border-2 border-[#103e32] bg-white p-2 shadow-[0_12px_30px_rgba(16,62,50,.12)]">
-              <Search className="ml-3 h-5 w-5 shrink-0 text-[#5e6861]" aria-hidden="true" />
+            <form onSubmit={submitSearch} role="search" className="mt-7 flex w-full max-w-xl min-w-0 items-center gap-1 overflow-hidden rounded-full border-2 border-[var(--mt-green-deep)] bg-white p-2 shadow-[0_12px_30px_rgba(16,62,50,.12)] sm:gap-2">
+              <Search className="ml-3 h-5 w-5 shrink-0 text-[var(--mt-gray-600)]" aria-hidden="true" />
               <input
                 aria-label="Rechercher une boutique, un produit ou un quartier"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Boutique, produit ou quartier…"
-                className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-[#8b928d] sm:text-base"
+                placeholder="Plat, produit, quartier…"
+                className="min-w-0 flex-1 bg-transparent px-2 py-2 text-base outline-none placeholder:text-[var(--mt-gray-600)]"
               />
-              <button type="submit" className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-[#103e32] px-5 text-sm font-extrabold text-white transition hover:bg-[#087f62]">
-                Chercher <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              <button type="submit" aria-label="Chercher" className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-3 text-sm font-extrabold text-white transition hover:bg-[var(--mt-green-primary)] sm:px-5">
+                <span className="hidden sm:inline">Chercher</span><ArrowRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </form>
             <div className="mt-5 flex flex-wrap gap-2">
-              {neighbourhoods.slice(0, 2).map((place) => <Link key={place.path} to={place.path} className="rounded-full border border-[#d7e3db] bg-white px-3 py-1.5 text-sm font-bold text-[#15513e] hover:border-[#087f62]">{place.label}</Link>)}
-              {['Restauration', 'Beauté', 'Mode'].map((term) => <button key={term} type="button" onClick={() => onOpenDirectory(term)} className="rounded-full border border-[#e7ded2] bg-white px-3 py-1.5 text-sm font-bold text-[#5e665f] hover:border-[#f97316]">{term}</button>)}
+              {neighbourhoods.slice(0, 2).map((place) => <Link key={place.path} to={place.path} className="inline-flex min-h-11 items-center rounded-full border border-[var(--mt-green-soft)] bg-white px-4 text-sm font-bold text-[var(--mt-green-deep)] hover:border-[var(--mt-green-primary)]">{place.label}</Link>)}
+              {['Restauration', 'Beauté', 'Mode'].map((term) => <button key={term} type="button" onClick={() => onOpenDirectory(term)} className="inline-flex min-h-11 items-center rounded-full border border-[var(--mt-gray-200)] bg-white px-4 text-sm font-bold text-[var(--mt-gray-600)] hover:border-[var(--mt-orange-deep)]">{term}</button>)}
             </div>
           </div>
 
           <div className="relative min-h-[420px] sm:min-h-[520px] lg:min-h-[620px]" aria-label="Produits de boutiques locales">
-            <div className="absolute inset-8 rounded-[40%] bg-[#f97316] opacity-90 blur-[1px] sm:inset-16" />
+            <div className="absolute inset-8 rounded-[40%] bg-[var(--mt-orange-bright)] opacity-90 blur-[1px] sm:inset-16" />
             <div className="absolute inset-0 opacity-40 [background-image:radial-gradient(#d7d2c8_1px,transparent_1px)] [background-size:22px_22px]" />
             {products.length > 0 ? products.map(({ shop, product }, index) => (
               <Link
@@ -123,17 +134,17 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
         </div>
       </section>
 
-      <div className="overflow-hidden border-b border-[#e2d9cf] bg-[#f97316] py-3 text-2xl font-extrabold text-[#171b18] sm:text-4xl">
+      <div className="overflow-hidden border-b border-[var(--mt-gray-200)] bg-[var(--mt-orange-bright)] py-3 text-2xl font-extrabold text-[var(--mt-green-deep)] sm:text-4xl">
         <div className="home-marquee flex w-max gap-10 whitespace-nowrap">{[...marqueeCities, ...marqueeCities].map((place, index) => <React.Fragment key={`${place.path}-${index}`}><span>{place.label}</span><span aria-hidden="true">✳</span></React.Fragment>)}</div>
       </div>
-      <div className="overflow-hidden bg-[#103e32] py-3 text-xl font-extrabold text-[#f0ba80] sm:text-3xl">
+      <div className="overflow-hidden bg-[var(--mt-green-deep)] py-3 text-xl font-extrabold text-[var(--mt-orange-soft)] sm:text-3xl">
         <div className="home-marquee-reverse flex w-max gap-8 whitespace-nowrap">{[...marqueeCategories, ...marqueeCategories].map((label, index) => <React.Fragment key={`${label}-${index}`}><span>{label}</span><span aria-hidden="true">·</span></React.Fragment>)}</div>
       </div>
 
       <section className="mx-auto max-w-[1280px] px-5 py-16 sm:px-10 sm:py-24">
         <div className="flex flex-wrap items-end justify-between gap-5">
           <div>
-            <h2 className="font-display text-4xl font-extrabold tracking-[-.06em] sm:text-6xl">Les boutiques <em className="not-italic text-[#f97316]">à la une</em></h2>
+            <h2 className="font-display text-4xl font-extrabold tracking-[-.06em] sm:text-6xl">Les boutiques <em className="not-italic text-[var(--mt-orange-deep)]">à la une</em></h2>
             <p className="mt-4 max-w-xl text-base leading-7 text-[#68716b] sm:text-lg">Chaque vitrine est tenue par le commerçant lui-même, avec ses plats, ses produits et ses prix du jour.</p>
           </div>
           <Link to="/boutiques" className="inline-flex items-center gap-2 text-lg font-extrabold text-[#15513e]">Toutes les boutiques <ArrowRight className="h-5 w-5" /></Link>
@@ -155,11 +166,11 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
         </div>
       </section>
 
-      <section className="bg-[#f97316] px-5 py-16 sm:px-10 sm:py-24">
+      <section className="bg-[var(--mt-green-primary)] px-5 py-16 text-white sm:px-10 sm:py-24">
         <div className="mx-auto max-w-[1080px]">
-          <h2 className="max-w-4xl font-display text-4xl font-extrabold tracking-[-.06em] text-[#171b18] sm:text-6xl">Vous vendez ? <em className="not-italic text-white">Ouvrez votre vitrine.</em></h2>
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-[#4c2615]">Vos produits en photo, vos prix, vos horaires, et les commandes qui arrivent directement sur votre WhatsApp.</p>
-          <Link to="/commercants" className="mt-8 inline-flex min-h-12 items-center gap-2 rounded-full bg-[#103e32] px-6 font-extrabold text-white hover:bg-[#087f62]">Ajouter ma boutique <ArrowRight className="h-4 w-4" /></Link>
+          <h2 className="max-w-4xl font-display text-4xl font-extrabold tracking-[-.06em] text-white sm:text-6xl">Vous vendez ? <em className="not-italic text-[var(--mt-orange-soft)]">Ouvrez votre vitrine.</em></h2>
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-white/85">Vos produits en photo, vos prix, vos horaires, et les commandes qui arrivent directement sur votre WhatsApp.</p>
+          <Link to="/commercants" className="mt-8 inline-flex min-h-12 items-center gap-2 rounded-full bg-white px-6 font-extrabold text-[var(--mt-green-deep)] hover:bg-[var(--mt-gray-50)]">Ajouter ma boutique <ArrowRight className="h-4 w-4" /></Link>
         </div>
       </section>
     </main>
