@@ -98,7 +98,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           aria-expanded={mobileMenuOpen}
           aria-controls="mobile-navigation-menu"
           onClick={() => setMobileMenuOpen((open) => !open)}
-          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-[#d9e7de] bg-[#f0f7f2] px-3 text-sm font-extrabold text-[var(--mt-green-deep)] shadow-sm transition hover:border-[#9bc5b0] hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)] xl:hidden"
+          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full border border-[#d9e7de] bg-[#f0f7f2] px-3 text-sm font-extrabold text-[var(--mt-green-deep)] shadow-sm transition hover:border-[#9bc5b0] hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)] xl:hidden"
         >
           <span className="flex">
               {mobileMenuOpen ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-4 w-4" aria-hidden="true" />}
