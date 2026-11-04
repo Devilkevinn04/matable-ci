@@ -6,7 +6,7 @@ interface FooterProps {
   compact?: boolean;
 }
 
-const linkClassName = 'w-fit text-sm text-white/75 transition-colors hover:text-white focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)]';
+const linkClassName = 'footer-link inline-flex min-h-11 w-fit items-center text-sm text-white/75 transition-colors hover:text-white focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)]';
 
 export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
   <footer className={`${compact ? 'mt-6' : ''} relative isolate overflow-hidden overflow-x-clip border-t border-[#164d3b] bg-[#064e3b] text-white`}>

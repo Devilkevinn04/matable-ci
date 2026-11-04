@@ -38,7 +38,7 @@ export const FaqPage: React.FC = () => (
                     <span>{item.question}</span>
                     <ChevronDown className="h-4 w-4 shrink-0 text-[var(--mt-green-hover)] transition-transform group-open:rotate-180" />
                   </summary>
-                  <p className="max-w-3xl pb-4 pr-8 text-sm leading-6 text-[var(--mt-gray-600)]">{item.answer}</p>
+                  <p className="mt-faq-answer max-w-3xl pb-4 pr-8 text-sm leading-6 text-[var(--mt-gray-600)]">{item.answer}</p>
                 </details>
               ))}
             </div>

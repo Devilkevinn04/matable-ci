@@ -44,7 +44,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`pointer-events-auto flex items-start gap-3 p-4 rounded-2xl shadow-xl border text-xs font-semibold backdrop-blur-md transition-all ${
+            className={`mt-toast pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 text-xs font-semibold shadow-xl backdrop-blur-md ${
               toast.type === 'success'
                 ? 'bg-emerald-950/95 text-white border-emerald-700 shadow-emerald-950/20'
                 : toast.type === 'error'
@@ -82,4 +82,3 @@ export function useToast(): ToastContextValue {
   }
   return ctx;
 }
-

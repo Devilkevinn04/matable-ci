@@ -163,7 +163,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           <nav
             id="mobile-navigation-menu"
             aria-label="Navigation mobile"
-            className="basis-full origin-top overflow-hidden rounded-b-[1.5rem] border-x border-b border-[#e7ddcf] bg-[var(--mt-surface)] px-3 pb-4 pt-3 shadow-[0_22px_45px_-22px_rgba(15,77,61,0.45)] sm:px-5 xl:hidden"
+            className="mt-mobile-panel basis-full origin-top overflow-hidden rounded-b-[1.5rem] border-x border-b border-[#e7ddcf] bg-[var(--mt-surface)] px-3 pb-4 pt-3 shadow-[0_22px_45px_-22px_rgba(15,77,61,0.45)] sm:px-5 xl:hidden"
           >
             <div className="mx-auto grid max-w-[1440px] gap-3">
               {currentRole === 'storefront' && (

@@ -210,7 +210,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
   if (placement === 'billboard' && !campaign && (!eligible || campaignsLoaded)) {
     if (emptyBillboard) return <>{emptyBillboard}</>;
     return (
-      <aside className="flex min-h-[230px] flex-col justify-between overflow-hidden rounded-[26px] border border-[#d6e5dc] bg-[radial-gradient(circle_at_85%_15%,rgba(249,115,22,.15),transparent_35%),linear-gradient(135deg,#f4faf6,#fffdf8_58%,#e6f2e9)] p-5 shadow-[0_8px_28px_rgba(20,40,30,.08)] sm:min-h-[300px] sm:rounded-[32px] sm:p-8 lg:min-h-[350px] lg:p-9" aria-label="Espace partenaires">
+      <aside className="mt-reveal flex min-h-[230px] flex-col justify-between overflow-hidden rounded-[26px] border border-[#d6e5dc] bg-[radial-gradient(circle_at_85%_15%,rgba(249,115,22,.15),transparent_35%),linear-gradient(135deg,#f4faf6,#fffdf8_58%,#e6f2e9)] p-5 shadow-[0_8px_28px_rgba(20,40,30,.08)] sm:min-h-[300px] sm:rounded-[32px] sm:p-8 lg:min-h-[350px] lg:p-9" aria-label="Espace partenaires">
         <div>
           <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-black uppercase tracking-wide text-[#8f351d] shadow-sm">
             <Megaphone className="h-3.5 w-3.5" aria-hidden="true" /> Espace partenaires

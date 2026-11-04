@@ -64,14 +64,14 @@ export function MerchantPlansPage() {
   };
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#fcf9f1] text-[#191817]">
-      <section className="mx-auto grid max-w-[1440px] items-center gap-10 px-5 pb-12 pt-10 sm:px-8 sm:pb-16 sm:pt-16 lg:min-h-[690px] lg:grid-cols-[.9fr_1.1fr] lg:gap-12 lg:px-12">
+    <main className="min-h-screen overflow-hidden bg-[var(--mt-gray-50)] text-[var(--mt-gray-900)]">
+      <section className="mt-reveal mx-auto grid max-w-[1440px] items-center gap-10 px-5 pb-12 pt-10 sm:px-8 sm:pb-16 sm:pt-16 lg:min-h-[690px] lg:grid-cols-[.9fr_1.1fr] lg:gap-12 lg:px-12">
         <div className="relative z-10 max-w-2xl">
           <p className="inline-flex items-center gap-2 rounded-full border border-[#e3ded3] bg-white px-4 py-2 text-xs font-extrabold text-[#145b47] shadow-sm sm:text-sm">
             <span className="h-2.5 w-2.5 rounded-full bg-[#f0ba80]" />
             Votre commerce, visible partout en Côte d’Ivoire
           </p>
-          <h1 className="mt-7 max-w-[720px] font-display text-[clamp(3rem,5vw,5.5rem)] font-black leading-[.96] tracking-[-.065em] text-[#171615]">
+          <h1 className="mt-7 max-w-[720px] font-display text-[clamp(3rem,5vw,5.5rem)] font-black leading-[.96] tracking-[-.065em] text-[var(--mt-gray-900)]">
             Votre boutique mérite sa place <span className="text-[#087c5b]">en ligne.</span>
           </h1>
           <p className="mt-6 max-w-xl text-base leading-7 text-[#625f58] sm:text-lg sm:leading-8">

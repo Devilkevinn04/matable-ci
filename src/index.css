@@ -32,6 +32,8 @@
   --mt-motion-deliberate: 420ms;
   --mt-motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --mt-motion-ease-entrance: cubic-bezier(0.16, 1, 0.3, 1);
+  --mt-motion-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --mt-motion-inout: cubic-bezier(0.77, 0, 0.175, 1);
   --bg: var(--mt-background);
   --bg-soft: #f1f5f2;
   --ink: var(--mt-text);
@@ -83,10 +85,100 @@
   animation: home-float 5s ease-in-out infinite;
 }
 
+@keyframes mt-fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes mt-pop {
+  0% { transform: scale(0.6); }
+  70% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+@keyframes mt-shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+@keyframes mt-bar-up {
+  from { opacity: 0; transform: translateY(140%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.mt-reveal {
+  animation: mt-fade-up 700ms var(--mt-motion-ease-entrance) both;
+}
+
+.mt-press {
+  transition: transform var(--mt-motion-fast) var(--mt-motion-ease);
+}
+
+.mt-press:active {
+  transform: scale(0.97);
+}
+
+.mt-loop {
+  animation-iteration-count: infinite;
+}
+
+.mt-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--mt-gray-200);
+}
+
+.mt-skeleton::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(100deg, transparent 20%, rgb(255 255 255 / 55%) 50%, transparent 80%);
+  animation: mt-shimmer 1.3s linear infinite;
+}
+
+.mt-mobile-panel {
+  animation: mt-fade-up 420ms var(--mt-motion-drawer) both;
+}
+
+.mt-faq-answer {
+  animation: mt-fade-up 240ms var(--mt-motion-ease) both;
+}
+
+.mt-toast {
+  animation: mt-bar-up 300ms var(--mt-motion-drawer) both;
+}
+
+.footer-link {
+  position: relative;
+}
+
+.footer-link::after {
+  position: absolute;
+  right: 0;
+  bottom: 0.35rem;
+  left: 0;
+  height: 2px;
+  content: "";
+  background: var(--mt-orange-soft);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 240ms var(--mt-motion-ease);
+}
+
+.footer-link:hover::after,
+.footer-link:focus-visible::after {
+  transform: scaleX(1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-marquee,
   .home-marquee-reverse,
   .home-product-card {
+    animation: none;
+  }
+
+  .mt-loop,
+  .mt-skeleton::after {
     animation: none;
   }
 }
@@ -287,14 +379,17 @@ body::before {
 }
 
 .cookie-banner {
-  position: relative;
-  width: min(80rem, calc(100% - 2rem));
-  margin: 0.75rem auto 0;
+  position: fixed;
+  left: 0.75rem;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  z-index: 70;
+  width: min(420px, calc(100% - 1.5rem));
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
   gap: 0.75rem;
-  padding: 0.65rem 0.8rem;
+  padding: 0.8rem;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgb(255 255 255 / 98%);
@@ -304,17 +399,17 @@ body::before {
 .cookie-banner-copy { display: flex; align-items: flex-start; gap: 0.65rem; min-width: 0; }
 .cookie-banner-copy p { margin: 0; color: var(--ink-soft); font-size: 0.78rem; line-height: 1.45; }
 .cookie-banner-copy a { color: var(--primary-deep); font-weight: 700; }
-.cookie-banner-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 0.5rem; }
+.cookie-banner-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
 .cookie-button { border: 0; border-radius: 9px; padding: 0.65rem 0.8rem; font-size: 0.75rem; font-weight: 800; cursor: pointer; white-space: nowrap; }
 .cookie-button-primary { color: white; background: var(--primary); }
 .cookie-button-secondary { color: var(--ink); background: var(--surface); }
 .not-found-page { max-width: 32rem; margin: 5rem auto; padding: 2.5rem 1.5rem; text-align: center; }
 
 @media (max-width: 640px) {
-  .cookie-banner { position: fixed; left: 0.75rem; right: 0.75rem; bottom: calc(0.75rem + env(safe-area-inset-bottom)); z-index: 70; width: auto; margin: 0; flex-direction: column; align-items: stretch; gap: 0.55rem; padding: 0.7rem; }
+  .cookie-banner { width: auto; animation: mt-bar-up 500ms var(--mt-motion-drawer) both; }
   .cookie-banner-copy { gap: 0.45rem; }
   .cookie-banner-copy p { font-size: 0.7rem; line-height: 1.3; }
-  .cookie-banner-actions { display: grid; grid-template-columns: 1fr; }
+  .cookie-banner-actions { grid-template-columns: 1fr 1fr; }
   .cookie-button { min-height: 2.75rem; padding: 0.55rem 0.4rem; font-size: 0.7rem; }
 }
 
