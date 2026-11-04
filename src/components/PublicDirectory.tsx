@@ -835,6 +835,27 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           </div>
         )}
 
+        {isShopDirectoryPage && !directoryIsLoading && filteredShops.length > 0 && (
+          <MotionReveal className="relative z-10 mb-5 overflow-hidden rounded-[24px] border border-[#d6e5dc] bg-[#103e32] text-white shadow-[0_16px_38px_rgba(16,62,50,.12)] sm:mb-6 sm:rounded-[30px]">
+            <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full border-[18px] border-[#f5b77d]/20 sm:h-72 sm:w-72" />
+            <div aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 h-20 w-40 rounded-tr-[80px] border-t border-r border-white/15" />
+            <div className="relative flex flex-col gap-5 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-7">
+              <div className="max-w-xl">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-[#f5b77d]">Votre promenade commence ici</p>
+                <h2 className="mt-2 font-display text-2xl font-extrabold leading-tight tracking-[-0.03em] sm:text-4xl">Chaque vitrine raconte un quartier.</h2>
+                <p className="mt-2 max-w-lg text-sm leading-6 text-[#dcebe3] sm:text-base">Faites défiler pour passer d’une adresse à l’autre et laissez les produits vous guider.</p>
+              </div>
+              <div className="flex items-center gap-2 text-xs font-bold text-white/65" aria-hidden="true">
+                <span className="h-2 w-2 rounded-full bg-[#f5b77d]" />
+                <span className="h-px w-12 bg-white/25" />
+                <span className="h-2 w-2 rounded-full border border-white/60" />
+                <span className="h-px w-12 bg-white/25" />
+                <span className="h-2 w-2 rounded-full border border-white/60" />
+              </div>
+            </div>
+          </MotionReveal>
+        )}
+
         {directoryIsLoading ? (
           <div role="status" aria-label="Chargement des boutiques" className="relative z-10 grid grid-cols-2 gap-3 sm:gap-4 max-[360px]:grid-cols-1">
             {[0, 1, 2, 3].map((item) => <div key={item} className="overflow-hidden rounded-[20px] border border-[#e7ddd0] bg-white sm:rounded-[24px]" aria-hidden="true">
@@ -862,10 +883,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         ) : (
           <div className={`relative z-10 grid items-stretch gap-3 sm:gap-4 lg:gap-5 max-[360px]:grid-cols-1 ${filteredShops.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
             {filteredShops.map((shop, index) => (
-              <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045} className={filteredShops.length === 1 ? 'mx-auto w-full max-w-[760px]' : undefined}>
+              <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045} className={`${filteredShops.length === 1 ? 'mx-auto w-full max-w-[760px]' : ''} ${index % 2 === 1 ? 'sm:translate-y-5' : ''}`}>
               <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className="mt-press group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[#FFFFFF] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2 sm:rounded-[24px]">
                 <div className="relative aspect-[1.35] shrink-0 overflow-hidden sm:aspect-[1.65]" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
-                  <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" onError={handlePublicImageError} />
+                  <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="directory-vitrine-image absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" onError={handlePublicImageError} />
                   <span className="absolute inset-0 bg-gradient-to-t from-[#17211f]/75 via-transparent to-[#17211f]/5" />
                   <span className="absolute bottom-3 left-3 rounded-full bg-[#FFFFFF]/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#065f46] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
                 </div>

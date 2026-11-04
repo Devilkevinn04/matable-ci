@@ -154,6 +154,19 @@
 
 .mt-reveal { opacity: 1; }
 
+@keyframes mt-vitrine-drift {
+  from { transform: scale(1.08) translateY(-2%); }
+  to { transform: scale(1.08) translateY(2%); }
+}
+
+@supports (animation-timeline: view()) {
+  .directory-vitrine-image {
+    animation: mt-vitrine-drift linear both;
+    animation-timeline: view();
+    animation-range: entry 0% exit 100%;
+  }
+}
+
 @supports (animation-timeline: view()) {
   .mt-reveal {
     animation: mt-fade-up linear both;
