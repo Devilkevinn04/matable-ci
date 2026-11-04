@@ -77,7 +77,7 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
                 aria-label="Rechercher une boutique, un produit ou un quartier"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Rechercher une boutique, un produit ou un quartier"
+                placeholder="Boutique, produit ou quartier…"
                 className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-[#8b928d] sm:text-base"
               />
               <button type="submit" className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-[#103e32] px-5 text-sm font-extrabold text-white transition hover:bg-[#087f62]">
