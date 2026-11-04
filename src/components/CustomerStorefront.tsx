@@ -924,7 +924,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             <img
               src={bannerUrl}
               alt={`Illustration de la boutique ${shop.name}`}
-              className="relative z-10 h-12 w-full object-cover transition-transform duration-200 group-hover:scale-[1.02] sm:h-60 lg:h-64"
+              className="mt-hero-image relative z-10 h-12 w-full object-cover sm:h-60 lg:h-64"
               onError={(event) => {
                 const element = event.currentTarget;
                 if (element.dataset.placeholderAttempted !== 'true' && element.src !== categoryDefaults.bannerPlaceholderImageUrl) {

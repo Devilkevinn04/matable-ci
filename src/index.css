@@ -106,6 +106,34 @@
   to { transform: translateY(-50%); }
 }
 
+@keyframes mt-hero-zoom {
+  from { transform: scale(1.02) translate(-1%, -1%); }
+  to { transform: scale(1.12) translate(-2%, -2%); }
+}
+
+.mt-hero-image {
+  animation: mt-hero-zoom 18s ease-in-out alternate infinite;
+}
+
+.mt-img-in {
+  animation: mt-blur-in 600ms ease both;
+}
+
+@keyframes mt-blur-in {
+  from { filter: blur(12px); opacity: 0.4; transform: scale(1.05); }
+  to { filter: blur(0); opacity: 1; transform: scale(1); }
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 260ms;
+}
+
+::view-transition-group(*) {
+  animation-duration: 480ms;
+  animation-timing-function: var(--mt-motion-drawer);
+}
+
 .mt-wall-track {
   animation: mt-wall-up linear infinite;
 }
@@ -202,7 +230,8 @@
   .home-marquee-reverse,
   .mt-loop,
   .mt-skeleton::after,
-  .mt-wall-track {
+  .mt-wall-track,
+  .mt-hero-image {
     animation: none;
   }
 }

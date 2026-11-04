@@ -145,7 +145,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   return (
     <article
       id={`product-card-${product.id}`}
-      className={`h-full bg-[#FFFFFF] border border-[#ded8ce] ${cardRadius} ${shadowClass} overflow-hidden flex flex-col transition-[transform,border-color,box-shadow] hover:border-[#047857] hover:-translate-y-0.5 active:scale-[0.97]`}
+      className={`mt-reveal mt-press h-full bg-[#FFFFFF] border border-[#ded8ce] ${cardRadius} ${shadowClass} overflow-hidden flex flex-col transition-[transform,border-color,box-shadow] hover:border-[#047857] hover:-translate-y-0.5 active:scale-[0.97]`}
     >
       <div className="relative flex w-full flex-col">
         <div className={`relative aspect-square w-full overflow-hidden bg-[#f4f1ea] ${layoutStyle === 'grid_portrait' ? 'sm:aspect-[4/5]' : 'sm:aspect-[4/3]'}`}>
