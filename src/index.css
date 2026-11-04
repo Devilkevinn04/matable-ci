@@ -155,8 +155,15 @@
 .mt-reveal { opacity: 1; }
 
 @keyframes mt-vitrine-drift {
-  from { transform: scale(1.08) translateY(-2%); }
-  to { transform: scale(1.08) translateY(2%); }
+  from { transform: scale(1.16) translateY(-7%); }
+  to { transform: scale(1.16) translateY(7%); }
+}
+
+@keyframes mt-vitrine-card {
+  0% { opacity: 0.2; transform: translateY(130px) rotate(-6deg) scale(0.86); }
+  35% { opacity: 1; transform: translateY(8px) rotate(2deg) scale(0.98); }
+  70% { opacity: 1; transform: translateY(-8px) rotate(-1deg) scale(1.02); }
+  100% { opacity: 1; transform: translateY(-35px) rotate(0deg) scale(1.04); }
 }
 
 @supports (animation-timeline: view()) {
@@ -165,6 +172,23 @@
     animation-timeline: view();
     animation-range: entry 0% exit 100%;
   }
+
+  .directory-vitrine-card {
+    animation: mt-vitrine-card linear both;
+    animation-timeline: view();
+    animation-range: entry 0% exit 100%;
+  }
+
+  .directory-vitrine-card-alt {
+    animation-name: mt-vitrine-card-alt;
+  }
+}
+
+@keyframes mt-vitrine-card-alt {
+  0% { opacity: 0.2; transform: translateY(130px) rotate(6deg) scale(0.86); }
+  35% { opacity: 1; transform: translateY(8px) rotate(-2deg) scale(0.98); }
+  70% { opacity: 1; transform: translateY(-8px) rotate(1deg) scale(1.02); }
+  100% { opacity: 1; transform: translateY(-35px) rotate(0deg) scale(1.04); }
 }
 
 @supports (animation-timeline: view()) {
@@ -249,7 +273,9 @@
   .mt-loop,
   .mt-skeleton::after,
   .mt-wall-track,
-  .mt-hero-image {
+  .mt-hero-image,
+  .directory-vitrine-card,
+  .directory-vitrine-image {
     animation: none;
     will-change: auto;
   }
