@@ -202,9 +202,24 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
                 {product && <img {...getResponsiveImageProps(getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category), 720)} alt="" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" onError={handlePublicImageError} />}
                 <span className="absolute left-4 top-4 rounded-full bg-white px-3 py-1 text-xs font-extrabold text-[#c2410c]">{categoryLabel(shop.category)}</span>
               </div>
-              <div className="flex items-center justify-between gap-3 p-5">
-                <span><strong className="block text-lg">{shop.name}</strong><span className="mt-1 flex items-center gap-1 text-sm text-white/70"><MapPin className="h-3.5 w-3.5" />{shop.city || 'Côte d’Ivoire'}</span></span>
-                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+              <div className="p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <span><strong className="block text-lg">{shop.name}</strong><span className="mt-1 flex items-center gap-1 text-sm text-white/70"><MapPin className="h-3.5 w-3.5" />{shop.city || 'Côte d’Ivoire'}</span></span>
+                  <ArrowRight className="h-5 w-5 shrink-0 transition-transform group-hover:translate-x-1" />
+                </div>
+                {(shop.products_preview || []).slice(0, 2).length > 0 && <div className="mt-4 flex min-w-0 gap-2 border-t border-white/15 pt-3">
+                  {(shop.products_preview || []).slice(0, 2).map((previewProduct) => (
+                    <span key={previewProduct.title} className="flex min-w-0 flex-1 items-center gap-2">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/10">
+                        <img {...getResponsiveImageProps(getProductImageForDisplay(previewProduct.thumbnail_url || previewProduct.image_url, shop.category), 320)} sizes="72px" alt="" loading="lazy" className="h-full w-full object-cover" onError={handlePublicImageError} />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-semibold text-white/90">{previewProduct.title}</span>
+                        <span className="block truncate text-xs font-extrabold text-[var(--mt-orange-soft)]">{formatFCFA(previewProduct.price)}</span>
+                      </span>
+                    </span>
+                  ))}
+                </div>}
               </div>
             </Link>;
           })}
