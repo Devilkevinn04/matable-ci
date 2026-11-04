@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "MaTable-ci.com — Vos commerces, ici",
-  "short_name": "MaTable-ci.com",
+  "name": "MaTable — Vos commerces, ici",
+  "short_name": "MaTable",
   "description": "Découvrez les boutiques, produits et talents de Côte d'Ivoire.",
   "start_url": "/",
   "scope": "/",

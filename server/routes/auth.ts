@@ -1017,7 +1017,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     res.setHeader('Content-Disposition', `attachment; filename="matable-donnees-boutique-${shopId}.json"`);
     res.json({
       exported_at: new Date().toISOString(),
-      scope: 'Données MaTable-ci.com enregistrées pour cette boutique. Les fichiers et données conservés directement par les prestataires externes ne sont pas inclus.',
+      scope: 'Données MaTable enregistrées pour cette boutique. Les fichiers et données conservés directement par les prestataires externes ne sont pas inclus.',
       shop,
       products,
       orders: orders.map((order) => ({

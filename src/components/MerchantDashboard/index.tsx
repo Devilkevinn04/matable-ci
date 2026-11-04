@@ -39,6 +39,7 @@ import { getSubscriptionAccessCutoff, getSubscriptionProductLimit, TRIAL_CATALOG
 import { hasShopPublicationSubscriptionAccess, isShopPubliclyVisible } from '../../utils/shopPublication';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 import { Link } from 'react-router-dom';
+import { CategoryIcon } from '../CategoryIcon';
 
 const GuideChecklist = React.lazy(() => import('../UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
 
@@ -678,7 +679,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   }
 
   const identityAlertCopy = identityStatus === 'rejected'
-    ? { title: 'Vérification à reprendre', description: 'Didit n’a pas transmis le motif détaillé à MaTable-ci.com. Consultez les indications affichées par Didit ou contactez l’assistance.' }
+    ? { title: 'Vérification à reprendre', description: 'Didit n’a pas transmis le motif détaillé à MaTable. Consultez les indications affichées par Didit ou contactez l’assistance.' }
     : ['submitted', 'under_review'].includes(identityStatus)
       ? { title: 'Vérification en cours', description: 'La vérification est en cours. Votre boutique sera publiable une fois l’identité confirmée.' }
       : { title: 'Vérifiez votre identité', description: 'Cette étape est nécessaire pour publier votre boutique et recevoir des commandes.' };
@@ -727,14 +728,14 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 className={`${isHeaderCompact ? 'h-8 w-8 rounded-lg text-sm' : 'h-10 w-10 rounded-xl text-lg'} flex shrink-0 items-center justify-center font-black text-white shadow-xs`}
                 style={{ backgroundColor: currentShop.theme_config?.primary_color || currentShop.theme_color || '#0F172A' }}
               >
-                <span aria-hidden="true">{getCategoryDefaults(currentShop.category).icon}</span>
+                <CategoryIcon category={currentShop.category} className={isHeaderCompact ? 'h-4 w-4' : 'h-5 w-5'} />
               </div>
             )}
             <div className="min-w-0">
               <div className={`flex min-w-0 items-center ${isHeaderCompact ? 'gap-1.5' : 'flex-wrap gap-2'}`}>
                 <h1 className={`max-w-full truncate font-black text-slate-900 ${isHeaderCompact ? 'text-sm' : 'text-base sm:text-lg'}`}>{currentShop.name}</h1>
-                <span className="hidden rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700 sm:inline-flex">
-                  {getCategoryDefaults(currentShop.category).icon} {getCategoryDefaults(currentShop.category).label}
+                <span className="hidden items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700 sm:inline-flex">
+                  <CategoryIcon category={currentShop.category} className="h-3 w-3" /> {getCategoryDefaults(currentShop.category).label}
                 </span>
                 <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black ${subscriptionStatus === 'active' || subscriptionStatus === 'trialing' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : subscriptionStatus === 'past_due' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-rose-200 bg-rose-50 text-rose-800'}`}>
                   {subscriptionStatusLabel}
@@ -1039,7 +1040,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         <div className="grid gap-6 lg:grid-cols-1 lg:items-start">
           <nav aria-label="Navigation principale commerçant" className="merchant-sidebar hidden min-w-0 flex-col gap-1 overflow-y-auto p-4 lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-64">
             <div className="mb-5 px-3 pt-3">
-              <p className="text-2xl font-black tracking-tight text-white">MaTable-ci.com</p>
+              <p className="text-2xl font-black tracking-tight text-white">MaTable</p>
               <p className="mt-1 text-sm text-white/70">Espace commerçant</p>
             </div>
             {[
@@ -1094,7 +1095,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {[
                   { label: 'Commandes', value: orders.length, hint: `${actionableOrderCount} à traiter`, tone: 'text-[#C2410C]', icon: ShoppingBag },
-                  { label: 'Montant des commandes', value: formatFCFA(orderValue), hint: 'Paiements non suivis par MaTable-ci.com', tone: 'text-[#087F62]', icon: DollarSign },
+                  { label: 'Montant des commandes', value: formatFCFA(orderValue), hint: 'Paiements non suivis par MaTable', tone: 'text-[#087F62]', icon: DollarSign },
                   { label: 'Clients', value: uniqueCustomerCount, hint: 'Clients ayant commandé', tone: 'text-[#087F62]', icon: UserPlus },
                   { label: 'Articles', value: `${products.length} / ${Number.isFinite(dashboardProductLimit) ? dashboardProductLimit : '∞'}`, hint: 'Dans votre catalogue', tone: 'text-[#087F62]', icon: Package },
                 ].map((metric) => <div key={metric.label} className="flex min-h-[104px] items-start gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4"><span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f7f4ee] ${metric.tone}`}><metric.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="text-xs font-semibold text-slate-500">{metric.label}</p><strong className="mt-1 block truncate text-xl font-black text-[#292d2a]">{metric.value}</strong><p className="mt-1 truncate text-[11px] text-slate-500">{metric.hint}</p></div></div>)}
@@ -1126,7 +1127,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                           : 'Heure indisponible';
                         return (
                           <li key={order.id} className="flex min-w-0 flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
-                            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#f8f1e7] text-[#F97316]"><ShoppingBag className="h-4 w-4" /></span>
+                            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#f8f1e7] text-[#c2410c]"><ShoppingBag className="h-4 w-4" /></span>
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-bold text-[#292d2a]">N° {order.id} · {orderItemName}</p>
                               <p className="mt-0.5 text-xs text-slate-500">{isToday ? 'Aujourd’hui' : orderDateLabel}, {orderTime}</p>
@@ -1144,7 +1145,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                     <div className="h-16 bg-[#e2eee8]" />
                     <div className="-mt-7 px-4 pb-4">
                       <div className="flex h-14 w-14 items-center justify-center rounded-full border-4 border-white bg-[#f9f0e6] text-xl">
-                        {currentShop.theme_config?.logo_url ? <img src={currentShop.theme_config.logo_url} alt="" className="h-full w-full rounded-full object-cover" /> : getCategoryDefaults(currentShop.category).icon}
+                        {currentShop.theme_config?.logo_url ? <img src={currentShop.theme_config.logo_url} alt="" className="h-full w-full rounded-full object-cover" /> : <CategoryIcon category={currentShop.category} className="h-6 w-6 text-[#047857]" />}
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <h3 id="merchant-shop-card-title" className="font-black text-[#047857]">{currentShop.name}</h3>
@@ -1281,7 +1282,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           <button type="button" aria-label="Fermer le menu" onClick={() => setIsSettingsDrawerOpen(false)} className="absolute inset-0 bg-[#292d2a]/55" />
           <aside id="merchant-menu-drawer" aria-labelledby="merchant-menu-title" className="absolute inset-x-0 top-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] flex h-auto w-full flex-col overflow-y-auto bg-[#FFFFFF] p-4 sm:p-5">
             <header className="flex items-start justify-between gap-3 border-b border-[#ded8ce] pb-4">
-              <div><p className="text-[10px] font-black uppercase text-[#F97316]">MaTable-ci.com</p><h2 id="merchant-menu-title" className="mt-1 text-xl font-black text-[#292d2a]">Plus</h2></div>
+              <div><p className="text-[10px] font-black uppercase text-[#c2410c]">MaTable</p><h2 id="merchant-menu-title" className="mt-1 text-xl font-black text-[#292d2a]">Plus</h2></div>
               <button type="button" onClick={() => setIsSettingsDrawerOpen(false)} aria-label="Fermer le menu" className="rounded-lg border border-slate-300 bg-white p-2 text-slate-700"><X className="h-4 w-4" /></button>
             </header>
             <nav className="mt-4 space-y-4" aria-label="Navigation et réglages commerçant">

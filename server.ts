@@ -1320,12 +1320,12 @@ async function startServer() {
   const isFrontendPagePath = (pathname: string) => pathname !== '/' && !pathname.startsWith('/api/') && !pathname.startsWith('/@') && !path.extname(pathname);
   const publicPageSeoMetadata: Record<string, { title: string; description: string }> = {
     '/promotions': {
-      title: 'Promotions en cours | MaTable-ci.com',
+      title: 'Promotions en cours | MaTable',
       description: 'Découvrez les promotions temporaires des boutiques locales en Côte d’Ivoire et profitez de prix réduits pendant leur période de validité.',
     },
     '/guide': {
-      title: 'Guide personnel | MaTable-ci.com',
-      description: 'Votre guide pratique MaTable-ci.com, adapté à votre espace client, marchand ou administration.',
+      title: 'Guide personnel | MaTable',
+      description: 'Votre guide pratique MaTable, adapté à votre espace client, marchand ou administration.',
     },
   };
 
@@ -1535,7 +1535,7 @@ async function startServer() {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          return res.status(404).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Page introuvable | MaTable-ci.com'));
+          return res.status(404).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Page introuvable | MaTable'));
         } catch (error) {
           return next(error);
         }
@@ -1631,7 +1631,7 @@ async function startServer() {
         return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectNoIndexSeo(baseHtml, 'Espace MaTable-ci.com'));
       }
       if (isFrontendPagePath(req.path) && shouldServePublicHtml(req)) {
-        return res.status(404).set({ 'Content-Type': 'text/html' }).send(injectNoIndexSeo(baseHtml, 'Page introuvable | MaTable-ci.com'));
+        return res.status(404).set({ 'Content-Type': 'text/html' }).send(injectNoIndexSeo(baseHtml, 'Page introuvable | MaTable'));
       }
       return res.sendFile(indexHtmlPath);
     });

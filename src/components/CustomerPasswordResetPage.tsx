@@ -44,13 +44,13 @@ export const CustomerPasswordResetPage: React.FC<CustomerPasswordResetPageProps>
       eyebrow="Sécurité du compte"
       title="Choisissez un nouveau mot de passe."
       description="Le lien de réinitialisation est temporaire et ne peut être utilisé qu’une seule fois."
-      imageAlt="Sécurisation d’un compte client MaTable-ci.com"
+      imageAlt="Sécurisation d’un compte client MaTable"
       onBack={onBack}
       topPrompt=""
       topActionLabel=""
     >
       <div>
-        <p className="text-sm font-bold text-[#F97316]">Mot de passe client</p>
+        <p className="text-sm font-bold text-[#c2410c]">Mot de passe client</p>
         <h2 className="mt-1 text-2xl font-extrabold text-[#292d2a]">Réinitialisation sécurisée</h2>
         {!token ? (
           <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">Le lien est invalide ou incomplet. Demandez un nouveau lien depuis la page de récupération.</p>

@@ -47,7 +47,7 @@ export const WhatsAppSubscriptionReminderConsent: React.FC<WhatsAppSubscriptionR
         />
         <span>
           <strong className="block text-sm text-slate-900">Autoriser les rappels WhatsApp avant l’échéance</strong>
-          <span className="mt-1 block text-xs leading-5 text-slate-600">Si WhatsApp Business est configuré sur MaTable-ci.com, des messages peuvent être envoyés à J−14, J−7, J−3 et J−1 avant la fin de l’essai ou de l’abonnement. Vous pouvez retirer votre accord ici à tout moment.</span>
+          <span className="mt-1 block text-xs leading-5 text-slate-600">Si WhatsApp Business est configuré sur MaTable, des messages peuvent être envoyés à J−14, J−7, J−3 et J−1 avant la fin de l’essai ou de l’abonnement. Vous pouvez retirer votre accord ici à tout moment.</span>
           {enabled && shop.whatsapp_subscription_reminders_consent_at && <span className="mt-1 block text-[11px] text-slate-500">Accord donné le {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(shop.whatsapp_subscription_reminders_consent_at))}.</span>}
         </span>
       </label>

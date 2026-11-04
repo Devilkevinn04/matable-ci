@@ -158,7 +158,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                 <div className="relative mx-auto hidden w-full max-w-[390px] rounded-[1.6rem] border border-white/15 bg-white/[0.08] p-4 shadow-2xl backdrop-blur-sm sm:p-5 lg:block">
                   <div className="flex items-center justify-between border-b border-white/10 pb-4">
                     <span className="text-xs font-bold text-white/65">Votre espace commerçant</span>
-                    <span className="rounded-full bg-[#d9efdf]/15 px-2.5 py-1 text-[10px] font-extrabold text-[#c8efcf]">MATABLE-CI.COM · ESPACE PRO</span>
+                    <span className="rounded-full bg-[#d9efdf]/15 px-2.5 py-1 text-[10px] font-extrabold text-[#c8efcf]">MATABLE · ESPACE PRO</span>
                   </div>
                   <div className="mt-4 flex items-center gap-3 rounded-2xl bg-[#FFFFFF] p-4 text-[#163d32]">
                     <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#e5f0e8]"><Store className="h-6 w-6" aria-hidden="true" /></span>
@@ -191,7 +191,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
           </>
         ) : (
           <header className="border-b border-[#dce4dc] pb-6">
-            <p className="text-xs font-extrabold uppercase text-[#047857]">MaTable-ci.com · Espace commerçant</p>
+            <p className="text-xs font-extrabold uppercase text-[#047857]">MaTable · Espace commerçant</p>
             <h1 className="mt-2 text-2xl font-black sm:text-3xl">{mode === 'expired' ? expiredTitle : `Bienvenue, ${shop.name}`}</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? expiredDescription : isTrialActive ? `Votre essai gratuit reste actif jusqu’au ${shop.subscription?.trialEnd ? formatSubscriptionDate(shop.subscription.trialEnd) : 'terme prévu'}. Vous pouvez payer maintenant : après confirmation, votre formule payante sera active et la durée restante de l’essai sera conservée.` : `Vous pouvez choisir une formule payante dès maintenant ou commencer par l’essai gratuit de ${TRIAL_DURATION_MONTHS} mois.`}</p>
             {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-emerald-800 underline underline-offset-2"><MessageCircle className="h-4 w-4" />Contacter l’équipe</a>}
@@ -241,7 +241,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             )}
             {shop.subscription?.cancellationAt && (
               <p className="mb-4 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-950">
-                L’accès à votre boutique prendra fin le {formatSubscriptionDate(shop.subscription.cancellationAt)}. Vous pouvez payer votre renouvellement ici avant cette date : MaTable-ci.com ne prélève jamais automatiquement et la période restante sera conservée.
+                L’accès à votre boutique prendra fin le {formatSubscriptionDate(shop.subscription.cancellationAt)}. Vous pouvez payer votre renouvellement ici avant cette date : MaTable ne prélève jamais automatiquement et la période restante sera conservée.
               </p>
             )}
             <div className={`grid md:grid-cols-3 ${mode === 'plans' ? 'items-stretch gap-4 md:gap-5' : 'mt-4 gap-4'}`} role="radiogroup" aria-label="Formule d’abonnement">
@@ -339,7 +339,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                   <li>• Achat possible pour une boutique vérifiée, ouverte, avec une ville renseignée et au moins {BOOST_MINIMUM_PRODUCT_COUNT} produits.</li>
                   <li>• Un seul emplacement par achat : accueil, haut de catégorie ou boutiques de la ville. Jusqu’à {MAX_SIMULTANEOUS_BOOSTS_PER_PLACEMENT_SCOPE} boosts simultanés par emplacement (accueil), catégorie ou ville.</li>
                   <li>• La durée commence à la date prévue, même si la boutique est temporairement masquée.</li>
-                  <li>• Pas de remboursement après activation. Si MaTable-ci.com ne peut pas activer le boost payé, contactez l’assistance pour demander un remboursement.</li>
+                  <li>• Pas de remboursement après activation. Si MaTable ne peut pas activer le boost payé, contactez l’assistance pour demander un remboursement.</li>
                 </ul>
                 {!previewOnly && <MerchantBoostPurchase shop={shop} productCount={productCount} />}
               </section>
@@ -397,7 +397,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
             {paymentFlowActive && needsBillingEmail && (
               <div className="mt-4 max-w-xl rounded-2xl border border-amber-200 bg-amber-50 p-4">
                 <label htmlFor="merchant-billing-email" className="block text-sm font-bold text-amber-950">E-mail de facturation</label>
-                <p className="mt-1 text-xs leading-5 text-amber-900">GeniusPay utilise cet e-mail pour préparer le paiement. MaTable-ci.com l’utilisera aussi pour vous envoyer le reçu après confirmation.</p>
+                <p className="mt-1 text-xs leading-5 text-amber-900">GeniusPay utilise cet e-mail pour préparer le paiement. MaTable l’utilisera aussi pour vous envoyer le reçu après confirmation.</p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <input
                     id="merchant-billing-email"

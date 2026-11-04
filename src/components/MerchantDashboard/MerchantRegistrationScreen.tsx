@@ -65,7 +65,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
           Espace commerçant
         </div>
         <div>
-          <p className="text-sm font-bold text-[#F97316]">Étape {step} sur 2</p>
+          <p className="text-sm font-bold text-[#c2410c]">Étape {step} sur 2</p>
           <h2 className="mt-1 text-[30px] font-extrabold leading-tight text-[#292d2a]">{step === 1 ? 'Présentez votre boutique' : 'Créez votre accès'}</h2>
         </div>
         <MerchantRegistrationProgress step={step} />

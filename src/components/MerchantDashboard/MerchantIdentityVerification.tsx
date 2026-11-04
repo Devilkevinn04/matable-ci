@@ -141,7 +141,7 @@ export function MerchantIdentityVerification({ shopId, shopName, onStatusChange 
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><ShieldCheck className="h-5 w-5" /></span>
         <div>
           <h3 className="font-extrabold text-slate-900">Vérification d’identité sécurisée</h3>
-          <p className="mt-1 text-sm text-slate-600">La vérification est réalisée par Didit, notre prestataire spécialisé. MaTable-ci.com ne reçoit pas et ne conserve pas vos pièces d’identité ou vos données biométriques.</p>
+          <p className="mt-1 text-sm text-slate-600">La vérification est réalisée par Didit, notre prestataire spécialisé. MaTable ne reçoit pas et ne conserve pas vos pièces d’identité ou vos données biométriques.</p>
         </div>
       </div>
 
@@ -183,7 +183,7 @@ export function MerchantIdentityVerification({ shopId, shopName, onStatusChange 
 
           <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-3 rounded-xl p-2 text-sm text-slate-700 focus-within:ring-2 focus-within:ring-emerald-700">
             <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-1 h-5 w-5 shrink-0 accent-emerald-800" />
-            <span>J’accepte que mes données d’identité et, si le parcours le demande, mes données biométriques soient traitées par Didit afin de vérifier l’identité du responsable de cette boutique. Je comprends que ces données sont transmises directement à Didit et que MaTable-ci.com reçoit le résultat de la vérification.</span>
+            <span>J’accepte que mes données d’identité et, si le parcours le demande, mes données biométriques soient traitées par Didit afin de vérifier l’identité du responsable de cette boutique. Je comprends que ces données sont transmises directement à Didit et que MaTable reçoit le résultat de la vérification.</span>
           </label>
           <p className="mt-3 text-xs text-slate-500">Consultez la <a href="/confidentialite" target="_blank" rel="noreferrer" className="font-semibold underline">politique de confidentialité</a> pour connaître les détails du traitement et vos droits.</p>
           <button type="button" onClick={() => void startVerification()} disabled={!consent || busy || !hasLoadedStatus} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">

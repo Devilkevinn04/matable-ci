@@ -274,7 +274,7 @@ test('GeniusPay creation sends documented idempotency fields and parses the nest
     let checkoutRequest: Record<string, unknown> | null = null;
     const checkout = await createGeniusPayCheckout({
       amount: 5000,
-      description: 'Abonnement MaTable-ci.com',
+      description: 'Abonnement MaTable',
       customer: { name: 'Boutique test', email: 'shop@example.ci', phone: '+2250700000001', country: 'CI' },
       success_url: 'https://matable-ci.com/app?payment_id=intent-contract-test',
       error_url: 'https://matable-ci.com/app?payment_id=intent-contract-test',

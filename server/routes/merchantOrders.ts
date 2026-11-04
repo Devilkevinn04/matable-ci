@@ -568,7 +568,7 @@ export function createMerchantOrdersRouter({
       `🚚 *Valeur des commandes terminées :* ${new Intl.NumberFormat('fr-FR').format(metrics.ca_delivered)} FCFA`,
       `🧺 *Panier moyen livré :* ${new Intl.NumberFormat('fr-FR').format(metrics.panier_moyen_livre)} FCFA`,
       '----------------------------------------',
-      'ℹ️ *MaTable-ci.com ne collecte aucun paiement.* Les paiements sont convenus directement entre le client et le vendeur.',
+      'ℹ️ *MaTable ne collecte aucun paiement.* Les paiements sont convenus directement entre le client et le vendeur.',
     ];
     if (topSellingProducts.length > 0) {
       lines.push('🏆 *ARTICLES LES PLUS VENDUS :*');

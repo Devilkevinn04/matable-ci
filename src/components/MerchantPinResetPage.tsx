@@ -44,13 +44,13 @@ export const MerchantPinResetPage: React.FC<MerchantPinResetPageProps> = ({ toke
       eyebrow="Sécurité du compte"
       title="Choisissez un nouveau PIN."
       description="Le lien confirme l’accès à l’adresse e-mail de la boutique et ne peut être utilisé qu’une seule fois."
-      imageAlt="Sécurisation d’un compte commerçant MaTable-ci.com"
+      imageAlt="Sécurisation d’un compte commerçant MaTable"
       onBack={onBack}
       topPrompt=""
       topActionLabel=""
     >
       <div>
-        <p className="text-sm font-bold text-[#F97316]">PIN commerçant</p>
+        <p className="text-sm font-bold text-[#c2410c]">PIN commerçant</p>
         <h2 className="mt-1 text-2xl font-extrabold text-[#292d2a]">Réinitialisation sécurisée</h2>
         {!token ? (
           <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">Le lien est invalide ou incomplet. Demandez un nouveau lien depuis la page de récupération.</p>

@@ -207,7 +207,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
           </button>
         </div>
       </form>
-      <button type="button" onClick={onLogin} className="mt-2 flex min-h-10 w-full items-center justify-center gap-2 py-2 text-sm font-bold text-[#065f46] hover:text-[#F97316]">
+      <button type="button" onClick={onLogin} className="mt-2 flex min-h-10 w-full items-center justify-center gap-2 py-2 text-sm font-bold text-[#065f46] hover:text-[#c2410c]">
         <Store className="h-4 w-4" aria-hidden="true" /> Déjà commerçant ? Se connecter
       </button>
     </div>

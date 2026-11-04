@@ -576,7 +576,7 @@ export function DeliveryCourierWorkspace() {
           <div className="flex items-start gap-3">
             <img src="/brand-kit/monogram.svg" alt="" width={40} height={40} className="h-10 w-10 shrink-0 rounded-xl" />
             <div>
-              <p className="text-xs font-black uppercase tracking-wide text-[#0F6B54]">Espace livreur MaTable-ci.com</p>
+              <p className="text-xs font-black uppercase tracking-wide text-[#0F6B54]">Espace livreur MaTable</p>
               <p className="mt-1 text-xs leading-5 text-[#103E32]">Recevez les courses de vos zones, révélez les contacts au bon moment et clôturez chaque livraison avec sa preuve photo.</p>
             </div>
           </div>
@@ -593,7 +593,7 @@ export function DeliveryCourierWorkspace() {
         {loading ? <p role="status" className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">Chargement de l’espace livreur…</p> : !serviceAvailable ? (
           <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <h1 className="text-lg font-black text-amber-950">Service de livraison indisponible</h1>
-            <p className="mt-2 text-sm leading-6 text-amber-900">Le service de livraison MaTable-ci.com n’est pas activé sur ce serveur. Contactez l’assistance MaTable-ci.com si vous pensez qu’il s’agit d’une erreur.</p>
+            <p className="mt-2 text-sm leading-6 text-amber-900">Le service de livraison MaTable n’est pas activé sur ce serveur. Contactez l’assistance MaTable si vous pensez qu’il s’agit d’une erreur.</p>
             {isDevEnvironment && (
               <p className="mt-2 text-xs leading-5 text-amber-800">En local, démarrez le serveur avec <code>DELIVERY_TEST_MODE=true</code>. Pour le paiement simulé uniquement, ajoutez <code>DELIVERY_SANDBOX_PAYMENTS=true</code>.</p>
             )}
@@ -633,7 +633,7 @@ export function DeliveryCourierWorkspace() {
               {driver.status === 'suspended' ? (
                 <div className="p-4 sm:p-6">
                   <h2 className="text-lg font-black text-slate-950">Compte suspendu</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">Contactez l’assistance MaTable-ci.com pour obtenir des informations sur votre compte.</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">Contactez l’assistance MaTable pour obtenir des informations sur votre compte.</p>
                   <button type="button" onClick={() => void loadSession()} className="mt-4 min-h-10 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700">Actualiser le statut</button>
                 </div>
               ) : driver.status !== 'active' || driver.identity_status !== 'verified' ? (
@@ -652,7 +652,7 @@ export function DeliveryCourierWorkspace() {
                     <p className="mt-2 text-sm leading-6 text-emerald-950">Votre identité est vérifiée. L’activation de l’accès est en cours; actualisez le statut dans un instant.</p>
                   ) : (
                     <>
-                      <p className="mt-2 text-sm leading-6 text-emerald-950">Didit vérifiera votre identité dans son parcours sécurisé. MaTable-ci.com conserve uniquement le statut, l’identifiant de session et la preuve de votre consentement; les pièces et données biométriques restent chez Didit.</p>
+                      <p className="mt-2 text-sm leading-6 text-emerald-950">Didit vérifiera votre identité dans son parcours sécurisé. MaTable conserve uniquement le statut, l’identifiant de session et la preuve de votre consentement; les pièces et données biométriques restent chez Didit.</p>
                       {driver.identity_status === 'rejected' && <p role="status" className="mt-2 rounded-lg border border-amber-300 bg-white p-2.5 text-xs font-semibold text-amber-950">Didit n’a pas validé cette vérification. Consultez les indications affichées par Didit, puis réessayez.</p>}
                       {!diditAvailable ? (
                         <p role="status" className="mt-3 rounded-lg border border-amber-300 bg-white p-2.5 text-xs font-semibold text-amber-950">La vérification Didit des livreurs n’est pas encore configurée sur ce serveur. Contactez l’assistance.</p>
@@ -660,7 +660,7 @@ export function DeliveryCourierWorkspace() {
                         <>
                           <label className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-200 bg-white p-3 text-xs leading-5 text-slate-800">
                             <input type="checkbox" checked={identityConsent} onChange={(event) => setIdentityConsent(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-800" />
-                            <span>J’accepte que mes données d’identité et, si le parcours le demande, mes données biométriques soient traitées directement par Didit pour vérifier mon identité. MaTable-ci.com recevra le résultat, pas mes pièces.</span>
+                            <span>J’accepte que mes données d’identité et, si le parcours le demande, mes données biométriques soient traitées directement par Didit pour vérifier mon identité. MaTable recevra le résultat, pas mes pièces.</span>
                           </label>
                           <button type="button" onClick={() => void startIdentityVerification()} disabled={saving || !identityConsent} className="mt-3 min-h-11 w-full rounded-lg bg-emerald-900 px-4 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Connexion à Didit…' : 'Continuer avec Didit'}</button>
                         </>
@@ -711,7 +711,7 @@ export function DeliveryCourierWorkspace() {
                         <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs font-semibold text-amber-950">
                           {sandboxPaymentsEnabled
                             ? 'Le paiement réel n’est pas configuré sur ce serveur. Utilisez le mode simulé ci-dessous.'
-                            : 'Le paiement Mobile Money n’est pas encore configuré. Contactez MaTable-ci.com pour activer votre forfait livreur.'}
+                            : 'Le paiement Mobile Money n’est pas encore configuré. Contactez MaTable pour activer votre forfait livreur.'}
                         </p>
                       )}
                       {paymentState?.status === 'pending' && (
@@ -743,7 +743,7 @@ export function DeliveryCourierWorkspace() {
                             <div className="flex items-center gap-2">
                               <img src="/brand-kit/monogram.svg" alt="" width={32} height={32} className="h-8 w-8 shrink-0 rounded-lg" />
                               <div>
-                                <p className="text-xs font-black leading-tight tracking-tight text-[#103E32]">MaTable<span className="text-[#F97316]">-ci.com</span></p>
+                                <p className="text-xs font-black leading-tight tracking-tight text-[#103E32]">MaTable</p>
                                 <p className="mt-0.5 text-[9px] font-bold uppercase leading-none tracking-[0.14em] text-[#8A948E]">Ticket de course</p>
                               </div>
                             </div>

@@ -60,7 +60,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
     const structuredData = {
       '@context': 'https://schema.org',
       '@type': 'FAQPage',
-      name: 'Questions fréquentes | MaTable-ci.com',
+      name: 'Questions fréquentes | MaTable',
       url: canonical,
       inLanguage: 'fr-CI',
       mainEntity: questions.map(({ question, answer }) => ({
@@ -70,21 +70,21 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       })),
     };
     const jsonLd = JSON.stringify(structuredData).replace(/</g, '\\u003c');
-    const description = 'Réponses aux questions fréquentes sur les commandes, les comptes clients et les boutiques MaTable-ci.com.';
+    const description = 'Réponses aux questions fréquentes sur les commandes, les comptes clients et les boutiques MaTable.';
     const tags = [
-      '<title>Questions fréquentes | MaTable-ci.com</title>',
+      '<title>Questions fréquentes | MaTable</title>',
       `<meta name="description" content="${escapeHtml(description)}" />`,
       '<meta name="robots" content="index, follow, max-image-preview:large" />',
       `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
-      '<meta property="og:title" content="Questions fréquentes | MaTable-ci.com" />',
+      '<meta property="og:title" content="Questions fréquentes | MaTable" />',
       `<meta property="og:description" content="${escapeHtml(description)}" />`,
       '<meta property="og:type" content="website" />',
       `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
       `<meta property="og:image" content="${origin}/brand-kit/social-share.png" />`,
-      '<meta property="og:image:alt" content="MaTable-ci.com, boutiques locales en Côte d’Ivoire" />',
+      '<meta property="og:image:alt" content="MaTable, boutiques locales en Côte d’Ivoire" />',
       '<meta property="og:locale" content="fr_CI" />',
       '<meta name="twitter:card" content="summary_large_image" />',
-      '<meta name="twitter:title" content="Questions fréquentes | MaTable-ci.com" />',
+      '<meta name="twitter:title" content="Questions fréquentes | MaTable" />',
       `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
       `<meta name="twitter:image" content="${origin}/brand-kit/social-share.png" />`,
       `<script type="application/ld+json">${jsonLd}</script>`,
@@ -109,7 +109,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
   const injectHowItWorksSeo = (html: string, req: Request) => {
     const origin = getPublicOrigin(req);
     const canonical = `${origin}/comment-ca-marche`;
-    const title = 'Comment ça marche ? | MaTable-ci.com';
+    const title = 'Comment ça marche ? | MaTable';
     const description = 'Le guide pour découvrir une boutique locale, consulter sa vitrine, commander directement auprès du commerçant et convenir du retrait ou de la livraison.';
     const steps = [
       { name: 'Trouvez une boutique ou un produit', text: 'Parcourez les boutiques, explorez les catégories ou recherchez un produit, un quartier ou une ville.' },
@@ -120,7 +120,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
     const structuredData = {
       '@context': 'https://schema.org',
       '@type': 'HowTo',
-      name: 'Comment commander auprès d’une boutique MaTable-ci.com',
+      name: 'Comment commander auprès d’une boutique MaTable',
       description,
       inLanguage: 'fr-CI',
       step: steps.map((step, index) => ({
@@ -149,7 +149,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       `<meta name="twitter:image" content="${escapeHtml(`${origin}/brand-kit/social-share.png`)}" />`,
       `<script type="application/ld+json">${jsonLd}</script>`,
     ].join('\n  ');
-    const crawlableGuide = `<noscript><main><h1>Comment ça marche sur MaTable-ci.com ?</h1><p>${escapeHtml(description)}</p><ol>${steps.map((step) => `<li><h2>${escapeHtml(step.name)}</h2><p>${escapeHtml(step.text)}</p></li>`).join('')}</ol></main></noscript>`;
+    const crawlableGuide = `<noscript><main><h1>Comment ça marche sur MaTable ?</h1><p>${escapeHtml(description)}</p><ol>${steps.map((step) => `<li><h2>${escapeHtml(step.name)}</h2><p>${escapeHtml(step.text)}</p></li>`).join('')}</ol></main></noscript>`;
     return html
       .replace(/<title>.*?<\/title>/, '')
       .replace(/<meta name="description" content=".*?" \/>/, '')
@@ -163,8 +163,8 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
   const injectMerchantPlansSeo = async (html: string, req: Request) => {
     const origin = getPublicOrigin(req);
     const canonical = `${origin}/commercants`;
-    const title = 'Formules commerçants et tarifs | MaTable-ci.com';
-    const description = 'Comparez les formules Standard, Premium et Pro de MaTable-ci.com. Créez votre vitrine avec un essai gratuit de deux mois ou choisissez directement une formule payante.';
+    const title = 'Formules commerçants et tarifs | MaTable';
+    const description = 'Comparez les formules Standard, Premium et Pro de MaTable. Créez votre vitrine avec un essai gratuit de deux mois ou choisissez directement une formule payante.';
     const plans = Object.values(SUBSCRIPTION_PLANS);
     const prices = await getSubscriptionPrices();
     const structuredData = {
@@ -176,7 +176,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       inLanguage: 'fr-CI',
       mainEntity: {
         '@type': 'OfferCatalog',
-        name: 'Formules commerçants MaTable-ci.com',
+        name: 'Formules commerçants MaTable',
         itemListElement: plans.map((plan) => ({
           '@type': 'Offer',
           name: plan.label,
@@ -205,7 +205,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       `<meta name="twitter:image" content="${escapeHtml(`${origin}/brand-kit/social-share.png`)}" />`,
       `<script type="application/ld+json">${jsonLd}</script>`,
     ].join('\n  ');
-    const crawlablePlans = `<noscript><main><h1>Vendre sur MaTable-ci.com</h1><p>${escapeHtml(description)}</p><p>Essai gratuit de ${TRIAL_DURATION_MONTHS} mois, jusqu’à ${TRIAL_CATALOG_LIMIT} produits. Vous pouvez aussi choisir et payer directement une formule.</p><h2>Formules commerçants</h2><ul>${plans.map((plan) => `<li><h3>${escapeHtml(plan.label)} — ${escapeHtml(new Intl.NumberFormat('fr-FR').format(prices[plan.tier]))} FCFA par mois</h3><p>${escapeHtml(plan.description)}</p><ul>${plan.benefits.map((benefit) => `<li>${escapeHtml(benefit)}</li>`).join('')}</ul></li>`).join('')}</ul><p><a href="${escapeHtml(`${origin}/app/creer-boutique`)}">Créer ma boutique</a></p></main></noscript>`;
+    const crawlablePlans = `<noscript><main><h1>Vendre sur MaTable</h1><p>${escapeHtml(description)}</p><p>Essai gratuit de ${TRIAL_DURATION_MONTHS} mois, jusqu’à ${TRIAL_CATALOG_LIMIT} produits. Vous pouvez aussi choisir et payer directement une formule.</p><h2>Formules commerçants</h2><ul>${plans.map((plan) => `<li><h3>${escapeHtml(plan.label)} — ${escapeHtml(new Intl.NumberFormat('fr-FR').format(prices[plan.tier]))} FCFA par mois</h3><p>${escapeHtml(plan.description)}</p><ul>${plan.benefits.map((benefit) => `<li>${escapeHtml(benefit)}</li>`).join('')}</ul></li>`).join('')}</ul><p><a href="${escapeHtml(`${origin}/app/creer-boutique`)}">Créer ma boutique</a></p></main></noscript>`;
     return html
       .replace(/<title>.*?<\/title>/, '')
       .replace(/<meta name="description" content=".*?" \/>/, '')
@@ -219,7 +219,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
   const injectShopOpenGraph = (html: string, targetShop: ShopRecord, req: Request) => {
     const origin = getPublicOrigin(req);
     const shopUrl = `${origin}/${encodeURIComponent(targetShop.slug)}`;
-    const title = `${sanitizeTextField(targetShop.name, 100)} — Boutique locale en Côte d’Ivoire | MaTable-ci.com`;
+    const title = `${sanitizeTextField(targetShop.name, 100)} — Boutique locale en Côte d’Ivoire | MaTable`;
     const description = sanitizeTextField(targetShop.welcome_message || `Découvrez le catalogue de ${targetShop.name} et commandez directement sur WhatsApp.`, 160);
     const defaultImage = `${origin}/brand-kit/social-share.png`;
     const customImage = targetShop.theme_config?.custom_banner_url;
@@ -289,10 +289,10 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
 
   const injectLegalSeo = (html: string, page: string, req: Request) => {
     const metadata: Record<string, { title: string; description: string }> = {
-      'mentions-legales': { title: 'Mentions légales | MaTable-ci.com', description: 'Mentions légales et responsabilités de la plateforme MaTable-ci.com.' },
-      confidentialite: { title: 'Politique de confidentialité | MaTable-ci.com', description: 'Politique de confidentialité et traitement des données sur MaTable-ci.com.' },
-      cgu: { title: 'Conditions générales d’utilisation | MaTable-ci.com', description: 'Conditions générales d’utilisation des vitrines et services MaTable-ci.com.' },
-      cookies: { title: 'Politique relative aux cookies | MaTable-ci.com', description: 'Informations sur les cookies et traceurs utilisés par MaTable-ci.com.' },
+      'mentions-legales': { title: 'Mentions légales | MaTable', description: 'Mentions légales et responsabilités de la plateforme MaTable.' },
+      confidentialite: { title: 'Politique de confidentialité | MaTable', description: 'Politique de confidentialité et traitement des données sur MaTable.' },
+      cgu: { title: 'Conditions générales d’utilisation | MaTable', description: 'Conditions générales d’utilisation des vitrines et services MaTable.' },
+      cookies: { title: 'Politique relative aux cookies | MaTable', description: 'Informations sur les cookies et traceurs utilisés par MaTable.' },
     };
     const content = metadata[page];
     if (!content) return html;
@@ -371,7 +371,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
     const origin = getPublicOrigin(req);
     const canonical = `${origin}/boutiques`;
     const directoryShops = shops.filter((shop) => isShopPubliclyVisible(shop));
-    const title = 'Boutiques locales en Côte d’Ivoire | MaTable-ci.com';
+    const title = 'Boutiques locales en Côte d’Ivoire | MaTable';
     const description = 'Découvrez les boutiques locales en Côte d’Ivoire, explorez les commerces par catégorie ou par ville et contactez directement les commerçants.';
     const structuredData = {
       '@context': 'https://schema.org',

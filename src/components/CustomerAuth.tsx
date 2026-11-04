@@ -147,13 +147,13 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
   return (
     <AuthExperienceLayout
       eyebrow={mode === 'register' && accountType === 'merchant' ? 'Votre commerce, en ligne' : 'Du local, tout simplement'}
-      title={mode === 'register' && accountType === 'merchant' ? 'Faites découvrir votre boutique.' : mode === 'login' ? 'Bienvenue sur MaTable-ci.com' : 'Rejoignez la communauté MaTable-ci.com'}
+      title={mode === 'register' && accountType === 'merchant' ? 'Faites découvrir votre boutique.' : mode === 'login' ? 'Bienvenue sur MaTable' : 'Rejoignez la communauté MaTable'}
       description={mode === 'register' && accountType === 'merchant'
         ? 'Créez votre vitrine locale et recevez les commandes de vos clients directement sur WhatsApp.'
         : mode === 'login'
           ? 'Connectez-vous pour retrouver les boutiques que vous aimez et commander en toute simplicité.'
           : 'Créez votre compte et commencez à découvrir, soutenir et suivre les commerces de votre quartier.'}
-      imageAlt={mode === 'register' && accountType === 'merchant' ? 'Aperçu de la création de votre vitrine locale' : 'Illustration MaTable-ci.com sur le commerce local'}
+      imageAlt={mode === 'register' && accountType === 'merchant' ? 'Aperçu de la création de votre vitrine locale' : 'Illustration MaTable sur le commerce local'}
       onBack={onBack}
       topPrompt={mode === 'register' && accountType === 'merchant' ? 'Déjà commerçant ?' : mode === 'login' ? 'Pas encore de compte ?' : 'Déjà un compte ?'}
       topActionLabel={mode === 'register' && accountType === 'merchant' ? 'Se connecter' : mode === 'login' ? 'Créer un compte' : 'Se connecter'}
@@ -167,9 +167,9 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
             onSelectMerchant={onMerchantLogin}
           />
         )}
-        <p className="text-sm font-bold text-[#F97316]">{pendingOAuthProfile ? 'Presque terminé' : mode === 'login' ? 'Votre espace personnel' : 'Inscription gratuite'}</p>
+        <p className="text-sm font-bold text-[#c2410c]">{pendingOAuthProfile ? 'Presque terminé' : mode === 'login' ? 'Votre espace personnel' : 'Inscription gratuite'}</p>
         <h2 className="mt-1 text-[30px] font-extrabold leading-tight text-[#292d2a]">{pendingOAuthProfile ? 'Finaliser le compte' : mode === 'login' ? 'Connexion' : accountType === 'merchant' ? 'Créer ma boutique' : 'Créer un compte'}</h2>
-        <p className="mt-2 text-sm leading-6 text-[#667168]">{pendingOAuthProfile ? `Compte associé à ${pendingOAuthProfile.email}. Ajoutez votre téléphone pour commander.` : mode === 'login' ? 'Accédez à votre compte MaTable-ci.com.' : accountType === 'merchant' ? 'Renseignez les informations de votre boutique pour démarrer.' : 'Rejoignez MaTable-ci.com en quelques secondes.'}</p>
+        <p className="mt-2 text-sm leading-6 text-[#667168]">{pendingOAuthProfile ? `Compte associé à ${pendingOAuthProfile.email}. Ajoutez votre téléphone pour commander.` : mode === 'login' ? 'Accédez à votre compte MaTable.' : accountType === 'merchant' ? 'Renseignez les informations de votre boutique pour démarrer.' : 'Rejoignez MaTable en quelques secondes.'}</p>
       </div>
 
       {mode === 'register' && !pendingOAuthProfile && (
@@ -386,7 +386,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
   const [accountDeletePassword, setAccountDeletePassword] = useState('');
   const [accountDeleteError, setAccountDeleteError] = useState('');
   const [accountDeleting, setAccountDeleting] = useState(false);
-  const supportUrl = getSupportWhatsAppUrl('Bonjour, j’ai besoin d’aide pour mon compte client MaTable-ci.com.');
+  const supportUrl = getSupportWhatsAppUrl('Bonjour, j’ai besoin d’aide pour mon compte client MaTable.');
 
   useEffect(() => {
     setFirstName(user.first_name);
@@ -636,7 +636,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
         <div className="mx-auto flex max-w-[1184px] flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-8">
           <Link to="/" className="inline-flex items-center gap-3 font-display text-lg font-extrabold tracking-tight text-[#292d2a]">
             <img src="/brand-kit/monogram.svg" alt="" className="h-10 w-10 shrink-0" />
-            <span>MaTable<span className="text-[#047857]">-ci.com</span></span>
+            <span>MaTable</span>
           </Link>
           <div className="flex items-center gap-2">
             <button type="button" onClick={onBack} aria-label="Découvrir les boutiques" className="inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm font-bold text-[#47534b] transition hover:bg-[#d1fae5] sm:px-4"><ShoppingBag className="h-4 w-4" /><span className="sr-only sm:not-sr-only">Découvrir</span></button>
@@ -765,7 +765,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                   </span>
                   <div className="min-w-0">
                     <p className="truncate font-bold text-[#292d2a]">{user.first_name} {user.last_name}</p>
-                    <p className="truncate text-xs text-[#647067]">Compte client MaTable-ci.com</p>
+                    <p className="truncate text-xs text-[#647067]">Compte client MaTable</p>
                   </div>
                 </div>
                 <dl className="mt-5 space-y-3 border-t border-[#e2dbd0] pt-4 text-sm">

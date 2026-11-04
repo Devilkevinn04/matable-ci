@@ -104,7 +104,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
         <div className="flex items-center gap-3">
           <BrandMark className="bg-white/95" />
           <div>
-            <p className="text-[19px] font-extrabold leading-none tracking-tight">MaTable<span className="text-[#f0ba80]">-ci.com</span></p>
+            <p className="text-[19px] font-extrabold leading-none tracking-tight">MaTable</p>
             <p className="mt-1 text-[10px] font-medium text-white/75">Le commerce local, en lien direct</p>
           </div>
         </div>
@@ -150,7 +150,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
           {topPrompt && topActionLabel && onTopAction && (
             <div className="flex items-center gap-2 text-right text-xs sm:text-sm">
               <span className="hidden text-[#47534b] sm:inline">{topPrompt}</span>
-              <button type="button" onClick={onTopAction} className="inline-flex items-center gap-1 font-bold text-[#065f46] hover:text-[#F97316]">
+              <button type="button" onClick={onTopAction} className="inline-flex items-center gap-1 font-bold text-[#065f46] hover:text-[#c2410c]">
                 {topActionLabel}<ArrowRight className="h-3.5 w-3.5" />
               </button>
             </div>

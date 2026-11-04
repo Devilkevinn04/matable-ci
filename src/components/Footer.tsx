@@ -18,8 +18,8 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
     <div className={`relative z-10 mx-auto max-w-[1280px] px-5 sm:px-8 lg:px-10 ${compact ? 'py-7 sm:py-8' : 'py-9 sm:py-12'}`}>
       <div className="grid gap-9 lg:grid-cols-[1.05fr_1.4fr] lg:gap-16">
         <section aria-labelledby="footer-brand-title" className="max-w-md">
-          <Link to="/" aria-label="MaTable-ci.com, accueil" className="inline-flex max-w-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0ba80] focus-visible:ring-offset-4 focus-visible:ring-offset-[#064e3b]">
-            <img id="footer-brand-title" src="/brand-kit/logo-reversed.svg" alt="MaTable-ci.com — Vos commerces, ici" className="h-auto w-[250px] max-w-full" />
+          <Link to="/" aria-label="MaTable, accueil" className="inline-flex max-w-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0ba80] focus-visible:ring-offset-4 focus-visible:ring-offset-[#064e3b]">
+            <img id="footer-brand-title" src="/brand-kit/logo-reversed.svg" alt="MaTable — Vos commerces, ici" className="h-auto w-[250px] max-w-full" />
           </Link>
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/75">
             Les boutiques, les produits et les talents de Côte d’Ivoire, réunis au même endroit.
@@ -70,7 +70,7 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
       </div>
 
       <div className="mt-9 flex flex-col gap-2 border-t border-white/15 pt-5 text-xs text-white/65 sm:mt-10 sm:flex-row sm:items-center sm:justify-between">
-        <p>© {new Date().getFullYear()} MaTable-ci.com · Commerce local en Côte d’Ivoire</p>
+        <p>© {new Date().getFullYear()} MaTable · Commerce local en Côte d’Ivoire</p>
         <p>Fait pour rapprocher les commerces et leurs clients.</p>
       </div>
     </div>

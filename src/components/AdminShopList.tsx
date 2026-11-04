@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
-import { Clock, Download, Eye, Filter, Search, Star, Trash2 } from 'lucide-react';
+import { Clock, Download, Eye, Filter, MapPin, Megaphone, Package, Phone, Search, ShoppingCart, Star, Trash2, Wallet } from 'lucide-react';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
+import { CategoryIcon } from './CategoryIcon';
 import { subscriptionStatusLabels } from './adminDashboardTypes';
 import { ACQUISITION_SOURCES, getAcquisitionSourceLabel } from '../utils/acquisitionSources';
 import type { AdminShopItem } from './adminDashboardTypes';
@@ -145,7 +146,7 @@ export function AdminShopList({
           <div>
             <h2 className="font-black text-slate-900 text-sm">Liste des commerçants</h2>
             <AcquisitionSummary shops={shops} />
-            {canSeeFinancials && <p className="mt-1 text-xs text-slate-500">Les montants correspondent aux commandes enregistrées ; les paiements des ventes ne sont pas suivis par MaTable-ci.com.</p>}
+            {canSeeFinancials && <p className="mt-1 text-xs text-slate-500">Les montants correspondent aux commandes enregistrées ; les paiements des ventes ne sont pas suivis par MaTable.</p>}
           </div>
           <button type="button" onClick={onExport} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><Download className="h-4 w-4" />Exporter CSV</button>
         </div>
@@ -167,10 +168,10 @@ export function AdminShopList({
                     {isFeatured && <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-[10px] font-extrabold text-amber-900"><Star className="h-3 w-3 fill-current" aria-hidden="true" /> À la une</span>}
                     <span className="text-[10px] text-slate-400 font-mono">/{shop.slug}</span>
                     <span
-                      className="text-[10px] font-extrabold px-2 py-0.5 rounded-md"
+                      className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md"
                       style={{ color: getCategoryDefaults(shop.category).primaryColor, backgroundColor: `${getCategoryDefaults(shop.category).primaryColor}1A` }}
                     >
-                      {getCategoryDefaults(shop.category).icon} {getCategoryDefaults(shop.category).label}
+                      <CategoryIcon category={shop.category} className="h-3 w-3" /> {getCategoryDefaults(shop.category).label}
                     </span>
                     {['submitted', 'under_review'].includes(shop.merchant_verification_status || '') && (
                       <button type="button" onClick={() => onFocusVerification(shop.id)} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-extrabold text-amber-900 transition hover:bg-amber-100">
@@ -194,12 +195,12 @@ export function AdminShopList({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                    <span>📞 {shop.whatsapp_number}</span>
-                    <span>📍 {shop.city || 'Ville non renseignée'}</span>
-                    <span>📦 {shop.products_count} articles</span>
-                    <span>🛒 {shop.orders_count} commandes</span>
-                    {(shop.acquisition_source || shop.acquisition_campaign) && <span>📣 {getAcquisitionSourceLabel(shop.acquisition_source)}{shop.acquisition_campaign ? ` · lien « ${shop.acquisition_campaign} »` : ''}</span>}
-                    {canSeeFinancials && <span>💰 Commandes : {new Intl.NumberFormat('fr-FR').format(shop.total_sales)} FCFA</span>}
+                    <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" aria-hidden="true" />{shop.whatsapp_number}</span>
+                    <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" aria-hidden="true" />{shop.city || 'Ville non renseignée'}</span>
+                    <span className="inline-flex items-center gap-1"><Package className="h-3 w-3" aria-hidden="true" />{shop.products_count} articles</span>
+                    <span className="inline-flex items-center gap-1"><ShoppingCart className="h-3 w-3" aria-hidden="true" />{shop.orders_count} commandes</span>
+                    {(shop.acquisition_source || shop.acquisition_campaign) && <span className="inline-flex items-center gap-1"><Megaphone className="h-3 w-3" aria-hidden="true" />{getAcquisitionSourceLabel(shop.acquisition_source)}{shop.acquisition_campaign ? ` · lien « ${shop.acquisition_campaign} »` : ''}</span>}
+                    {canSeeFinancials && <span className="inline-flex items-center gap-1"><Wallet className="h-3 w-3" aria-hidden="true" />Commandes : {new Intl.NumberFormat('fr-FR').format(shop.total_sales)} FCFA</span>}
                   </div>
 
                   <div className="text-xs text-slate-600 flex flex-wrap items-center gap-4 pt-1">

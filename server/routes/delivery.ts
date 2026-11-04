@@ -580,7 +580,7 @@ export function createDeliveryRouter({
     if (!session) return;
     if (session.driver.identity_status !== 'verified' || session.driver.status !== 'active') return res.status(403).json({ error: 'La vérification Didit doit être terminée avant d’activer le forfait.' });
     if (!isDeliveryProviderPaymentConfigured()) {
-      return res.status(503).json({ error: 'Le paiement Mobile Money n’est pas encore configuré. Contactez MaTable-ci.com pour activer votre forfait livreur.' });
+      return res.status(503).json({ error: 'Le paiement Mobile Money n’est pas encore configuré. Contactez MaTable pour activer votre forfait livreur.' });
     }
     if (isAccessActive(session.driver)) return res.status(409).json({ error: 'Le forfait livreur est déjà actif.' });
     const driverId = Number(session.driver.id);
@@ -611,7 +611,7 @@ export function createDeliveryRouter({
     try {
       const checkout = await createGeniusPayCheckout({
         amount: Number(intent.amount),
-        description: 'Forfait livreur MaTable-ci.com (24 h)',
+        description: 'Forfait livreur MaTable (24 h)',
         customer: {
           name: session.driver.name,
           email: driverContact?.email || `livreur-${driverId}@matable-ci.com`,

@@ -16,6 +16,8 @@ import { getAllPresetsForCategory, ThemePreset } from '../utils/themePresets';
 import { normalizeStoredMediaUrl, uploadPublicMediaFile } from '../utils/media';
 import { isSubscriptionFeatureIncluded } from '../utils/subscriptionFeatures';
 import { SHOP_EVENT_TYPES, SHOP_EVENT_VISUALS, normalizeShopEventType } from '../utils/shopEventVisuals';
+import { CategoryIcon } from './CategoryIcon';
+import { ShopEventIcon } from './ShopEventIcon';
 
 interface ThemeCustomizerProps {
   shop: Shop;
@@ -333,7 +335,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              {categoryDefaults.icon} {categoryDefaults.label} · Choisissez un style, regardez l’aperçu, puis enregistrez.
+              <CategoryIcon category={shop.category} className="mr-1 inline h-3.5 w-3.5 align-text-bottom" /> {categoryDefaults.label} · Choisissez un style, regardez l’aperçu, puis enregistrez.
             </p>
             <p className="mt-2 text-[11px] text-slate-500">Personnalisez votre vitrine Premium/Pro. Rien ne change sur votre boutique avant l’enregistrement.</p>
           </div>
@@ -463,13 +465,13 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                 <span className="shrink-0 text-[10px]">Boutique</span>
               </div>
               {themeConfig.custom_banner_url && <div className="h-16 bg-cover bg-center" role="img" aria-label="Aperçu de la bannière" style={{ backgroundImage: `url("${themeConfig.custom_banner_url}")` }} />}
-              {themeConfig.event_mode_enabled && <div className={`flex items-center gap-2 border-y px-3 py-2 text-[9px] font-bold ${eventVisual.bannerClass}`}><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/80 text-sm" aria-hidden="true">{eventVisual.icon}</span><span className="shrink-0 rounded-full bg-white/80 px-2 py-1 uppercase tracking-wide">{eventVisual.label}</span><span className="line-clamp-2">{themeConfig.event_banner_text || 'Votre annonce apparaîtra ici'}</span></div>}
+              {themeConfig.event_mode_enabled && <div className={`flex items-center gap-2 border-y px-3 py-2 text-[9px] font-bold ${eventVisual.bannerClass}`}><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/80"><ShopEventIcon type={normalizeShopEventType(themeConfig.event_type)} className="h-3.5 w-3.5" /></span><span className="shrink-0 rounded-full bg-white/80 px-2 py-1 uppercase tracking-wide">{eventVisual.label}</span><span className="line-clamp-2">{themeConfig.event_banner_text || 'Votre annonce apparaîtra ici'}</span></div>}
               <div className="p-3" style={{ backgroundColor: themeConfig.secondary_color, color: currentSecondaryTextColor }}>
                 <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{categoryDefaults.label}{shop.city ? ` · ${shop.city}` : ''}</p>
                 <h6 className="mt-1 text-sm font-bold">Bienvenue chez {shop.name}</h6>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   {[0, 1].map((item) => <div key={item} className="overflow-hidden border border-black/5 bg-white" style={{ borderRadius: previewRadius, boxShadow: previewShadow }}>
-                    <div className="flex h-14 items-center justify-center text-xl" style={{ backgroundColor: `${themeConfig.primary_color}12` }}>{categoryDefaults.icon}</div>
+                    <div className="flex h-14 items-center justify-center text-xl" style={{ backgroundColor: `${themeConfig.primary_color}12` }}><CategoryIcon category={shop.category} className="h-6 w-6" /></div>
                     <div className="p-2"><span className="block truncate text-[10px] font-semibold text-slate-800">Exemple d’article</span><span className="mt-1 block text-[10px] font-bold" style={{ color: themeConfig.primary_color }}>5 000 FCFA</span></div>
                   </div>)}
                 </div>
@@ -701,11 +703,11 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                     onChange={(event) => setThemeConfig((current) => ({ ...current, event_type: normalizeShopEventType(event.target.value) }))}
                     className="mt-1 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500"
                   >
-                    {SHOP_EVENT_TYPES.map((type) => <option key={type} value={type}>{SHOP_EVENT_VISUALS[type].icon} {SHOP_EVENT_VISUALS[type].label}</option>)}
+                    {SHOP_EVENT_TYPES.map((type) => <option key={type} value={type}>{SHOP_EVENT_VISUALS[type].label}</option>)}
                   </select>
                 </label>
                 <div className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${eventVisual.bannerClass}`}>
-                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-lg ${eventVisual.badgeClass}`} aria-hidden="true">{eventVisual.icon}</span>
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${eventVisual.badgeClass}`}><ShopEventIcon type={normalizeShopEventType(themeConfig.event_type)} className="h-4 w-4" /></span>
                   <div className="min-w-0"><span className="block text-[10px] font-black uppercase tracking-wide">{eventVisual.label}</span><span className="block truncate text-[10px] font-medium">{eventVisual.suggestion}</span></div>
                 </div>
                 <label htmlFor="theme-event-banner-text" className="sr-only">Texte du bandeau promotionnel</label>

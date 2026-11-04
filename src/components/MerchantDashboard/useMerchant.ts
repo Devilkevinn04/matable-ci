@@ -402,12 +402,12 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       trackSignup('merchant', 'registration');
       const publicUrl = `${window.location.origin}/${data.shop.slug}`;
       const privateUrl = `${window.location.origin}/app?access=${encodeURIComponent(data.owner_access_token)}`;
-      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable-ci.com. Votre essai Standard gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé et votre espace marchand est accessible immédiatement. Vous pouvez choisir une formule payante et la régler dès maintenant ou quand vous le souhaitez. Vérifiez votre identité pour publier la boutique et recevoir des commandes. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
+      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable. Votre essai Standard gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé et votre espace marchand est accessible immédiatement. Vous pouvez choisir une formule payante et la régler dès maintenant ou quand vous le souhaitez. Vérifiez votre identité pour publier la boutique et recevoir des commandes. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
       setRegistrationLinks({
         publicUrl,
         privateUrl,
         whatsappUrl: `https://wa.me/${data.shop.whatsapp_number.replace(/\D/g, '')}?text=${encodeURIComponent(accessMessage)}`,
-        emailUrl: `mailto:${regEmail.trim()}?subject=${encodeURIComponent(`Accès MaTable-ci.com - ${data.shop.name}`)}&body=${encodeURIComponent(accessMessage)}`,
+        emailUrl: `mailto:${regEmail.trim()}?subject=${encodeURIComponent(`Accès MaTable - ${data.shop.name}`)}&body=${encodeURIComponent(accessMessage)}`,
       });
       loadShopData(data.shop.id);
     } catch (err: unknown) {

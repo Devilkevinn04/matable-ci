@@ -103,7 +103,7 @@ function PreviewPageHeader({ title, subtitle }: { title: string; subtitle: strin
       <div className="flex min-w-0 items-center gap-3">
         <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#047857] text-base font-black text-white">M</span>
         <div className="min-w-0">
-          <p className="truncate text-[10px] font-black uppercase tracking-[0.14em] text-[#047857]">MaTable-ci.com · {title}</p>
+          <p className="truncate text-[10px] font-black uppercase tracking-[0.14em] text-[#047857]">MaTable · {title}</p>
           <p className="truncate text-xs text-slate-500">{subtitle}</p>
         </div>
       </div>

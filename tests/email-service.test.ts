@@ -33,7 +33,7 @@ test('transactional email posts the payload to the Resend API', async () => {
 
     const result = await sendTransactionalEmail({
       to: 'merchant@example.com',
-      subject: 'Bienvenue chez MaTable-ci.com',
+      subject: 'Bienvenue chez MaTable',
       html: '<p>Bonjour</p>',
       text: 'Bonjour',
       replyTo: 'support@matable-ci.com',
@@ -99,7 +99,7 @@ test('subscription receipt email contains confirmed payment details and escapes 
   }
 });
 
-test('transactional emails share the MaTable-ci.com branded layout', async () => {
+test('transactional emails share the MaTable branded layout', async () => {
   const previousApiKey = process.env.RESEND_API_KEY;
   const previousFrom = process.env.RESEND_FROM_EMAIL;
   process.env.RESEND_API_KEY = 'resend-key';

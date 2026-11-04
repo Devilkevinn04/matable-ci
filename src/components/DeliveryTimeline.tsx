@@ -14,7 +14,7 @@ export interface DeliveryTimelineEvent {
 const ACTOR_LABELS: Record<string, string> = {
   merchant: 'Boutique',
   driver: 'Livreur',
-  admin: 'MaTable-ci.com',
+  admin: 'MaTable',
 };
 
 function formatEventDate(value: string) {

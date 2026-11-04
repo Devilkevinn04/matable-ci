@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getCategoryDefaults, normalizeProductImage } from '../utils/categoryDefaults';
 import { getResponsiveImageProps } from '../utils/responsiveImages';
+import { CategoryIcon } from './CategoryIcon';
 
 interface CategoryProductImageProps {
   imageUrl?: string | null;
@@ -38,7 +39,7 @@ export const CategoryProductImage: React.FC<CategoryProductImageProps> = ({
   return (
     <div className={`relative overflow-hidden bg-slate-100 ${className}`}>
       <div aria-hidden="true" className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center" style={{ backgroundColor: defaults.secondaryColor, color: defaults.primaryColor }}>
-        <span className="grid h-16 w-16 place-items-center rounded-2xl border border-current/15 bg-white/75 text-4xl">{defaults.icon}</span>
+        <span className="grid h-16 w-16 place-items-center rounded-2xl border border-current/15 bg-white/75"><CategoryIcon category={typeof category === 'string' ? category : undefined} className="h-9 w-9" /></span>
         {showFallbackTitle && <span className="line-clamp-2 max-w-full text-sm font-black">{title}</span>}
         {(isPlaceholder || imageFailed) && <span className="text-[10px] font-bold uppercase">{isPlaceholder ? 'Photo à venir' : 'Photo indisponible'} · {defaults.label}</span>}
       </div>

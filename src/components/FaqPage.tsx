@@ -6,7 +6,7 @@ import { FAQ_SECTIONS } from '../utils/faqContent';
 export const FaqPage: React.FC = () => (
   <main className="min-h-[70vh] bg-[#f8f6f0] px-4 py-8 text-[#292d2a] sm:px-6 sm:py-12">
     <div className="mx-auto max-w-[1184px]">
-      <Link to="/" className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[#047857] transition hover:text-[#F97316]">
+      <Link to="/" className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[#047857] transition hover:text-[#c2410c]">
         <ArrowLeft className="h-4 w-4" /> Retour aux boutiques
       </Link>
 
@@ -16,7 +16,7 @@ export const FaqPage: React.FC = () => (
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-[#f0ba80]">
             <CircleHelp className="h-5 w-5" />
           </div>
-          <p className="mt-5 text-xs font-bold uppercase tracking-[0.14em] text-[#f0ba80]">MaTable-ci.com · Aide</p>
+          <p className="mt-5 text-xs font-bold uppercase tracking-[0.14em] text-[#f0ba80]">MaTable · Aide</p>
           <h1 className="mt-2 font-display text-3xl font-extrabold tracking-[-.035em] sm:text-4xl">Questions fréquentes</h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-white/80 sm:text-base">
             Les réponses utiles pour découvrir une boutique, commander et gérer votre compte.

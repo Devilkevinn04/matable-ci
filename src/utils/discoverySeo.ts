@@ -52,7 +52,7 @@ function makeCategoryPage(category: ShopCategory, shopCount: number): DiscoveryP
   const heading = `Boutiques ${phrase} en Côte d’Ivoire`;
   return {
     path: `/boutiques/categorie/${category}`,
-    title: `${heading} | MaTable-ci.com`,
+    title: `${heading} | MaTable`,
     description: `Parcourez les vitrines ${phrase} en Côte d’Ivoire, découvrez leurs catalogues et contactez directement les commerçants sur WhatsApp.`,
     heading,
     category,
@@ -64,7 +64,7 @@ function makeCityPage(city: string, citySlug: string, shopCount: number): Discov
   const heading = `Boutiques locales à ${city}`;
   return {
     path: `/boutiques/ville/${citySlug}`,
-    title: `${heading} | MaTable-ci.com`,
+    title: `${heading} | MaTable`,
     description: `Découvrez les boutiques et commerces locaux à ${city}, consultez leurs vitrines et contactez directement les commerçants sur WhatsApp.`,
     heading,
     city,

@@ -2260,18 +2260,18 @@ export function createAdminRouter(options: AdminRouterOptions) {
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const template = String(req.body?.template || '').trim();
     const templates: Record<string, string> = {
-      welcome: `Bonjour ${shop.name}, votre espace MaTable-ci.com est prêt. Pensez à compléter votre catalogue et à partager votre vitrine avec vos clients.`,
-      catalog: `Bonjour ${shop.name}, pensez à vérifier vos articles, vos prix et vos disponibilités afin que votre vitrine MaTable-ci.com reste à jour.`,
-      orders: `Bonjour ${shop.name}, pensez à consulter vos nouvelles commandes et à confirmer rapidement les demandes reçues via MaTable-ci.com.`,
-      support: `Bonjour ${shop.name}, nous vous contactons au sujet de votre boutique MaTable-ci.com. Répondez à ce message si vous avez besoin d’aide.`,
-      trial_expiring: `Bonjour ${shop.name}, votre essai MaTable-ci.com arrive à échéance. Connectez-vous à votre espace commerçant pour choisir une formule et garder votre vitrine visible. L’équipe MaTable-ci.com reste disponible si besoin.`,
+      welcome: `Bonjour ${shop.name}, votre espace MaTable est prêt. Pensez à compléter votre catalogue et à partager votre vitrine avec vos clients.`,
+      catalog: `Bonjour ${shop.name}, pensez à vérifier vos articles, vos prix et vos disponibilités afin que votre vitrine MaTable reste à jour.`,
+      orders: `Bonjour ${shop.name}, pensez à consulter vos nouvelles commandes et à confirmer rapidement les demandes reçues via MaTable.`,
+      support: `Bonjour ${shop.name}, nous vous contactons au sujet de votre boutique MaTable. Répondez à ce message si vous avez besoin d’aide.`,
+      trial_expiring: `Bonjour ${shop.name}, votre essai MaTable arrive à échéance. Connectez-vous à votre espace commerçant pour choisir une formule et garder votre vitrine visible. L’équipe MaTable reste disponible si besoin.`,
     };
     if (template === 'identity_verification') {
       const messageTemplate = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
       if (req.body?.message !== undefined && (!messageTemplate || messageTemplate.length > 2000)) {
         return res.status(400).json({ error: 'Le message doit contenir entre 1 et 2 000 caractères.' });
       }
-      templates.identity_verification = messageTemplate || `Bonjour {boutique}, votre boutique MaTable-ci.com est actuellement en veille et n’apparaît pas sur le site, car votre identité n’a pas encore été vérifiée. Pour la faire réapparaître, connectez-vous à votre tableau de bord marchand : {dashboard}, puis ouvrez « Vérification d’identité » et suivez les étapes de Didit. Après la vérification, la remise en ligne pourra être finalisée si les autres critères de publication sont remplis. Répondez à ce message si vous avez besoin d’aide.`;
+      templates.identity_verification = messageTemplate || `Bonjour {boutique}, votre boutique MaTable est actuellement en veille et n’apparaît pas sur le site, car votre identité n’a pas encore été vérifiée. Pour la faire réapparaître, connectez-vous à votre tableau de bord marchand : {dashboard}, puis ouvrez « Vérification d’identité » et suivez les étapes de Didit. Après la vérification, la remise en ligne pourra être finalisée si les autres critères de publication sont remplis. Répondez à ce message si vous avez besoin d’aide.`;
       if (shop.merchant_verification_status === 'verified'
         || shop.merchant_verification_status === 'not_required'
         || shop.publication_status === 'active') {

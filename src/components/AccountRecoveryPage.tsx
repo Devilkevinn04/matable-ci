@@ -51,13 +51,13 @@ export const AccountRecoveryPage: React.FC<AccountRecoveryPageProps> = ({ initia
       description={accountType === 'customer'
         ? 'Recevez un lien sécurisé pour choisir un nouveau mot de passe client.'
         : 'Recevez un lien sécurisé à l’adresse enregistrée pour vérifier votre boîte mail et choisir un nouveau PIN.'}
-      imageAlt="Assistance MaTable-ci.com pour les comptes clients et commerçants"
+      imageAlt="Assistance MaTable pour les comptes clients et commerçants"
       onBack={onBack}
       topPrompt=""
       topActionLabel=""
     >
       <div>
-        <p className="text-sm font-bold text-[#F97316]">Récupération d’accès</p>
+        <p className="text-sm font-bold text-[#c2410c]">Récupération d’accès</p>
         <h2 className="mt-1 text-2xl font-extrabold text-[#292d2a]">Quel compte souhaitez-vous récupérer ?</h2>
         <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-[#f0eee7] p-1" role="group" aria-label="Type de compte à récupérer">
           <button type="button" aria-pressed={accountType === 'customer'} onClick={() => { setAccountType('customer'); setContact(''); setRequestSent(false); setError(''); }} className={`min-h-11 rounded-lg px-3 text-sm font-bold ${accountType === 'customer' ? 'bg-white text-[#065f46] shadow-sm' : 'text-[#59655c]'}`}><UserRound className="mr-1.5 inline h-4 w-4" />Client</button>
@@ -80,7 +80,7 @@ export const AccountRecoveryPage: React.FC<AccountRecoveryPageProps> = ({ initia
           </form>
         )}
         {accountType === 'merchant' && whatsappUrl && <a href={whatsappUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-full border border-[#deded5] px-5 py-3 text-sm font-bold text-[#065f46] hover:bg-[#f7f1e6]"><MessageCircle className="h-4 w-4" />Contacter l’assistance</a>}
-        <a href={accountType === 'merchant' ? '/app' : '/connexion'} className="mt-4 block py-2 text-center text-sm font-bold text-[#065f46] hover:text-[#F97316]">Retour à la connexion</a>
+        <a href={accountType === 'merchant' ? '/app' : '/connexion'} className="mt-4 block py-2 text-center text-sm font-bold text-[#065f46] hover:text-[#c2410c]">Retour à la connexion</a>
       </div>
     </AuthExperienceLayout>
   );

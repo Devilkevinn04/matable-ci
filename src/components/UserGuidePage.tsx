@@ -31,7 +31,7 @@ const roleGuides: Record<GuideRole, RoleGuide> = {
       { id: 'find-shop', title: 'Trouver une boutique ou un produit', description: 'Parcourez l’annuaire ou recherchez par nom, catégorie et ville.', href: '/boutiques', linkLabel: 'Explorer les boutiques' },
       { id: 'check-store', title: 'Vérifier les informations de la vitrine', description: 'Consultez le catalogue, les prix, les horaires et les options de retrait ou livraison indiquées par le commerçant.' },
       { id: 'prepare-order', title: 'Préparer votre demande', description: 'Choisissez les articles et quantités, puis précisez vos coordonnées et le lieu souhaité avant de continuer.' },
-      { id: 'contact-merchant', title: 'Confirmer avec le commerçant', description: 'La demande se poursuit sur WhatsApp. Confirmez directement la disponibilité, le prix final et les modalités; le paiement de la commande n’est pas encaissé par MaTable-ci.com.' },
+      { id: 'contact-merchant', title: 'Confirmer avec le commerçant', description: 'La demande se poursuit sur WhatsApp. Confirmez directement la disponibilité, le prix final et les modalités; le paiement de la commande n’est pas encaissé par MaTable.' },
       { id: 'manage-account', title: 'Retrouver votre espace client', description: 'La création d’un compte client est facultative. Si vous en avez un, utilisez votre espace pour retrouver vos informations et commandes disponibles.', href: '/connexion', linkLabel: 'Ouvrir mon compte' },
     ],
     note: 'Ne communiquez jamais votre mot de passe, PIN ou code de vérification dans une conversation.',
@@ -47,7 +47,7 @@ const roleGuides: Record<GuideRole, RoleGuide> = {
       { id: 'merchant-plan', title: 'Consulter la formule et les limites', description: 'Vérifiez les limites de votre formule. Une modification planifiée prend effet à la prochaine échéance selon les conditions affichées.', href: '/commercants', linkLabel: 'Voir les formules' },
       { id: 'merchant-orders', title: 'Traiter les demandes clients', description: 'Consultez les commandes reçues, confirmez les détails et convenez du paiement, du retrait ou de la livraison avec le client.' },
     ],
-    note: 'Gardez votre PIN privé. L’équipe MaTable-ci.com ne vous demandera jamais de mot de passe ni de code à usage unique.',
+    note: 'Gardez votre PIN privé. L’équipe MaTable ne vous demandera jamais de mot de passe ni de code à usage unique.',
   },
   'super-admin': {
     label: 'Super-admin',
@@ -223,13 +223,13 @@ export function UserGuidePage() {
   return (
     <main className="min-h-[70vh] bg-[#f8f6f0] px-4 py-8 text-[#292d2a] sm:px-6 sm:py-12">
       <div className="mx-auto max-w-[1184px]">
-        <Link to={returnPath} className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[#047857] hover:text-[#F97316]">
+        <Link to={returnPath} className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[#047857] hover:text-[#c2410c]">
           {returnLabel}
         </Link>
         <header className="mt-6 rounded-3xl bg-[#065f46] p-5 text-white sm:mt-8 sm:p-8">
           <div className="flex items-center gap-2 text-[#f0ba80]">
             <BookOpen className="h-5 w-5" aria-hidden="true" />
-            <p className="text-xs font-bold uppercase tracking-[0.14em]">Guide personnel MaTable-ci.com</p>
+            <p className="text-xs font-bold uppercase tracking-[0.14em]">Guide personnel MaTable</p>
           </div>
           <h1 className="mt-3 text-3xl font-black sm:text-4xl">Votre parcours · {roleGuides[role].label}</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-white/80 sm:text-base">

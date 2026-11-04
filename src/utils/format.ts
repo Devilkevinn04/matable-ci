@@ -74,7 +74,7 @@ export function generateWhatsAppOrderReceipt(
   const blocks: string[] = [];
 
   blocks.push([
-    `🧾 *COMMANDE MATABLE-CI.COM #${order.id}*`,
+    `🧾 *COMMANDE MATABLE #${order.id}*`,
     `${sanitizeWhatsAppText(shop.name)} · ${getCategoryDefaults(shop.category).label}`,
   ].join('\n'));
   blocks.push('⏳ *DEMANDE EN ATTENTE* · La boutique doit accepter ou refuser sous 2 heures ; les articles sont réservés pendant ce délai.');

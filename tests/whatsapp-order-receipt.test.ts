@@ -43,7 +43,7 @@ test('WhatsApp receipt includes every server-confirmed item and its exact option
 
   const { text, url } = generateWhatsAppOrderReceipt(shop, order);
 
-  assert.match(text, /COMMANDE MATABLE-CI\.COM #42/);
+  assert.match(text, /COMMANDE MATABLE #42/);
   assert.match(text, /Attiéké poisson/);
   assert.match(text, /Alloco, Piment à part/);
   assert.match(text, /^Cocody$/m);
@@ -83,7 +83,7 @@ test('WhatsApp receipt separates MaTable delivery fees from the articles total',
 
   const { text } = generateWhatsAppOrderReceipt(shop, order);
 
-  assert.match(text, /COMMANDE MATABLE-CI\.COM #43/);
+  assert.match(text, /COMMANDE MATABLE #43/);
   assert.match(text, /Frais de livraison MaTable : 2\s?000 FCFA/);
   assert.match(text, /TOTAL À RÉGLER : 8\s?500 FCFA/);
   assert.match(text, /règlement des articles et des frais de livraison/);
@@ -119,7 +119,7 @@ test('WhatsApp receipt handles minimal data and keeps the contact link valid', (
 
   const { text, url } = generateWhatsAppOrderReceipt(shop, order);
 
-  assert.match(text, /COMMANDE MATABLE-CI\.COM #44/);
+  assert.match(text, /COMMANDE MATABLE #44/);
   assert.match(text, /Thé & citron/);
   assert.match(text, /À convenir avec le vendeur/);
   assert.match(text, /TOTAL INDICATIF : 1\s?500 FCFA/);

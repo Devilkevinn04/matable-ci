@@ -73,7 +73,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
           />
 
           <div className="mb-6">
-            <p className="text-sm font-bold text-[#F97316]">Espace propriétaire</p>
+            <p className="text-sm font-bold text-[#c2410c]">Espace propriétaire</p>
             <h2 className="mt-1 text-[30px] font-extrabold leading-tight text-[#292d2a]">Connexion</h2>
             <p className="mt-2 text-sm leading-6 text-[#68756c]">
               Connectez-vous avec le numéro WhatsApp et le code PIN choisis lors de la création de votre boutique.
@@ -165,7 +165,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
           </div>
 
           <p className="text-center text-[11px] text-slate-400 mt-4">
-            MaTable-ci.com • Espace boutique professionnel
+            MaTable • Espace boutique professionnel
           </p>
         </div>
 

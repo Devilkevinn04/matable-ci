@@ -191,7 +191,7 @@ export function MerchantPlansPage() {
           <p className="mt-4 max-w-xl text-sm leading-6 text-[#625f58] sm:text-base sm:leading-7">MaTable présente votre vitrine et facilite la prise de contact. Le client et le commerçant conviennent directement du paiement, du retrait ou de la livraison.</p>
           <div className="mt-6 space-y-3">
             {[
-              'Aucun paiement de commande encaissé par MaTable-ci.com.',
+              'Aucun paiement de commande encaissé par MaTable.',
               'Les modalités sont convenues directement avec votre client.',
               'Votre catalogue reste consultable depuis un lien partageable.',
             ].map((line) => <p key={line} className="flex items-start gap-2.5 text-sm font-semibold text-[#3e4a42]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#087c5b]" aria-hidden="true" />{line}</p>)}

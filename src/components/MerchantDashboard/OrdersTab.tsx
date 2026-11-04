@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShoppingBag, Check, ExternalLink, Search, TrendingUp, DollarSign, MapPin, Download, Gift } from 'lucide-react';
+import { ShoppingBag, Check, ExternalLink, Search, TrendingUp, DollarSign, MapPin, Download, Gift, CheckCircle2, Clock3, CookingPot, Package, Sparkles, X } from 'lucide-react';
 import type { MerchantOrderFilter, MerchantState } from './useMerchant';
 import { formatFCFA } from '../../utils/format';
 import { OrderContactReveal } from '../OrderContactReveal';
@@ -513,7 +513,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
             </div>
 
             <p className="-mt-2 rounded-xl border border-slate-200 bg-[#fffdf8] px-3 py-2 text-[11px] leading-5 text-slate-600">
-              Les montants ci-dessus sont calculés à partir des commandes hors annulation et expiration, y compris les commandes livrées. Ils regroupent les articles et excluent les frais de livraison MaTable, qui ne sont pas du chiffre d’affaires boutique. MaTable-ci.com ne suit pas les encaissements : vérifiez directement le règlement auprès de vos clients. Le mode choisi ou un clic WhatsApp ne confirme pas le paiement.
+              Les montants ci-dessus sont calculés à partir des commandes hors annulation et expiration, y compris les commandes livrées. Ils regroupent les articles et excluent les frais de livraison MaTable, qui ne sont pas du chiffre d’affaires boutique. MaTable ne suit pas les encaissements : vérifiez directement le règlement auprès de vos clients. Le mode choisi ou un clic WhatsApp ne confirme pas le paiement.
             </p>
 
             {/* Orders List */}
@@ -559,44 +559,44 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                           <span className="text-xs font-mono text-slate-500">
                             {order.customer_phone}
                           </span>
-                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
                             {{ wave: 'WAVE', mobile_money: 'MOBILE MONEY', cash: 'ESPÈCES', to_confirm: 'À CONVENIR' }[order.payment_method_preference] || 'À CONVENIR'}
                           </span>
 
                           {/* Status Badge */}
                           {order.status === 'confirmed' && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                              ✓ Acceptée · stock réservé
+                            <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
+                              <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Acceptée · stock réservé
                             </span>
                           )}
                           {order.status === 'delivered' && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              ✨ Livrée
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                              <Sparkles className="h-3 w-3" aria-hidden="true" /> Livrée
                             </span>
                           )}
                           {order.status === 'preparing' && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                              🍳 En préparation
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">
+                              <CookingPot className="h-3 w-3" aria-hidden="true" /> En préparation
                             </span>
                           )}
                           {order.status === 'ready' && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
-                              📦 Prête
+                            <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-bold text-orange-700">
+                              <Package className="h-3 w-3" aria-hidden="true" /> Prête
                             </span>
                           )}
                           {order.status === 'cancelled' && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-                              ✕ Demande annulée
+                            <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-700">
+                              <X className="h-3 w-3" aria-hidden="true" /> Demande annulée
                             </span>
                           )}
                           {order.status === 'rejected' && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-                              ✕ Demande refusée · stock libéré
+                            <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-700">
+                              <X className="h-3 w-3" aria-hidden="true" /> Demande refusée · stock libéré
                             </span>
                           )}
                           {(!order.status || order.status === 'pending') && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                                ⏳ À traiter avant {pendingDeadlineLabel || 'expiration sous 2 h'} · stock réservé
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">
+                                <Clock3 className="h-3 w-3" aria-hidden="true" /> À traiter avant {pendingDeadlineLabel || 'expiration sous 2 h'} · stock réservé
                             </span>
                           )}
                           {order.whatsapp_tracking_available && (
