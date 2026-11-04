@@ -134,7 +134,7 @@ const DEMO_PRODUCTS: FeedProduct[] = DEMO_SHOPS.flatMap((shop, shopIndex) =>
 
 const VerifiedBadge: React.FC = () => (
   <span
-    className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[#e3f4ea] px-1.5 py-0.5 text-xs font-extrabold text-[#065f46] sm:text-xs"
+    className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[#e3f4ea] px-1.5 py-0.5 text-xs font-extrabold text-[var(--mt-green-deep)] sm:text-xs"
     title="Le commerçant a fait vérifier son identité"
   >
     <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Vérifié
@@ -158,8 +158,8 @@ const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[]; isLoading?: boolean
   const hasVerifiedShop = shops.some((shop) => shop.is_verified);
   return (
     <aside className="flex min-h-[230px] flex-col overflow-hidden rounded-[26px] border border-[#d6e5dc] bg-[linear-gradient(135deg,#f4faf6,#fffdf8_58%,#e6f2e9)] p-4 shadow-[0_8px_28px_rgba(20,40,30,.08)] sm:min-h-[300px] sm:rounded-[32px] sm:p-6 lg:min-h-[350px]" aria-labelledby="home-trust-title">
-      <p className="text-xs font-black uppercase tracking-[0.14em] text-[#c2410c]">Commencez ici</p>
-      <h2 id="home-trust-title" className="mt-1 font-display text-xl font-extrabold leading-tight text-[#065f46] sm:text-2xl">Des boutiques près de chez vous, avec leurs vrais prix.</h2>
+      <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-orange-deep)]">Commencez ici</p>
+      <h2 id="home-trust-title" className="mt-1 font-display text-xl font-extrabold leading-tight text-[var(--mt-green-deep)] sm:text-2xl">Des boutiques près de chez vous, avec leurs vrais prix.</h2>
       <ul className="mt-4 grid min-h-[216px] min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-2" aria-label="Boutiques recommandées">
         {isLoading
           ? [0, 1, 2].map((item) => <li key={item} aria-hidden="true" className="h-16 animate-pulse rounded-2xl bg-white/80" />)
@@ -172,21 +172,21 @@ const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[]; isLoading?: boolean
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate text-sm font-extrabold text-[#292d2a]">{shop.name}</span>
+                  <span className="truncate text-sm font-extrabold text-[var(--mt-gray-900)]">{shop.name}</span>
                   {shop.is_verified && <VerifiedBadge />}
                 </span>
-                <span className="mt-0.5 block truncate text-xs text-[#647067]">
+                <span className="mt-0.5 block truncate text-xs text-[var(--mt-gray-600)]">
                   {shop.city || 'Côte d’Ivoire'}{product ? ` · ${product.title} ${formatFCFA(product.price)}` : ''}
                 </span>
               </span>
-              <ArrowRight className="h-4 w-4 shrink-0 text-[#059669] transition-transform group-hover:translate-x-1" aria-hidden="true" />
+              <ArrowRight className="h-4 w-4 shrink-0 text-[var(--mt-green-primary)] transition-transform group-hover:translate-x-1" aria-hidden="true" />
             </Link>
           </li>;
         })}
       </ul>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        {(hasVerifiedShop || isLoading) && <span className={`inline-flex items-center gap-1.5 text-sm font-semibold text-[#315548] ${isLoading ? 'invisible' : ''}`}><ShieldCheck className="h-4 w-4 text-[#059669]" aria-hidden="true" /> « Vérifié » : identité du commerçant contrôlée</span>}
-        <Link to="/boutiques" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-[#065f46] hover:text-[#047857]">
+        {(hasVerifiedShop || isLoading) && <span className={`inline-flex items-center gap-1.5 text-sm font-semibold text-[#315548] ${isLoading ? 'invisible' : ''}`}><ShieldCheck className="h-4 w-4 text-[var(--mt-green-primary)]" aria-hidden="true" /> « Vérifié » : identité du commerçant contrôlée</span>}
+        <Link to="/boutiques" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-[var(--mt-green-deep)] hover:text-[var(--mt-green-hover)]">
           Toutes les boutiques <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       </div>
@@ -194,7 +194,7 @@ const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[]; isLoading?: boolean
         <span className="inline-flex min-w-0 items-center gap-2 text-xs font-bold text-[#8f351d] sm:text-sm">
           <Megaphone className="h-4 w-4 shrink-0" aria-hidden="true" /> Votre marque ici ? Cet espace est réservé aux partenaires.
         </span>
-        <button type="button" onClick={openPartnerRequest} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full bg-[#c2410c] px-4 text-xs font-extrabold text-white transition hover:bg-[#a53a1d]">
+        <button type="button" onClick={openPartnerRequest} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full bg-[var(--mt-orange-deep)] px-4 text-xs font-extrabold text-white transition hover:bg-[#a53a1d]">
           Proposer un partenariat <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       </div>
@@ -414,7 +414,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       if (isShopDirectoryPage) onOpenDirectory(query.trim() || undefined);
       else onOpenDirectory(query);
     }}
-    className={`mt-4 flex w-full max-w-[610px] items-center gap-1.5 rounded-[16px] border p-1.5 shadow-[0_10px_28px_rgba(0,0,0,.12)] focus-within:ring-2 focus-within:ring-[#f0ba80]/50 sm:mt-6 sm:gap-2 sm:rounded-[18px] sm:p-2 ${isShopDirectoryPage ? 'border-white/20 bg-white text-[#292d2a]' : 'border-[#d9cdbd] bg-white focus-within:border-[#047857] focus-within:ring-[#047857]/15'}`}
+    className={`mt-4 flex w-full max-w-[610px] items-center gap-1.5 rounded-[16px] border p-1.5 shadow-[0_10px_28px_rgba(0,0,0,.12)] focus-within:ring-2 focus-within:ring-[var(--mt-orange-soft)]/50 sm:mt-6 sm:gap-2 sm:rounded-[18px] sm:p-2 ${isShopDirectoryPage ? 'border-white/20 bg-white text-[var(--mt-gray-900)]' : 'border-[#d9cdbd] bg-white focus-within:border-[var(--mt-green-hover)] focus-within:ring-[var(--mt-green-hover)]/15'}`}
   >
     <Search className="ml-2 h-5 w-5 shrink-0 text-[#82796e]" aria-hidden="true" />
     <input
@@ -425,7 +425,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       className="min-h-10 min-w-0 flex-1 border-0 bg-transparent px-1.5 text-sm outline-none placeholder:text-[#898178] sm:min-h-11 sm:px-2 sm:text-base"
     />
     {query && <button type="button" onClick={() => setQuery('')} aria-label="Effacer la recherche" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X className="h-4 w-4" /></button>}
-    <button type="submit" className={`inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl px-2.5 text-xs font-bold text-white transition sm:min-h-11 sm:px-5 sm:text-sm ${isShopDirectoryPage ? 'bg-[#c2410c] hover:bg-[#a53a1d]' : 'bg-[#065f46] hover:bg-[#047857]'}`}>
+    <button type="submit" className={`inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl px-2.5 text-xs font-bold text-white transition sm:min-h-11 sm:px-5 sm:text-sm ${isShopDirectoryPage ? 'bg-[var(--mt-orange-deep)] hover:bg-[#a53a1d]' : 'bg-[var(--mt-green-deep)] hover:bg-[var(--mt-green-hover)]'}`}>
       <span className="sm:hidden">Chercher</span>
       <span className="hidden sm:inline">{isShopDirectoryPage ? 'Rechercher' : 'Voir les boutiques'}</span>
     </button>
@@ -433,8 +433,8 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
 
   if (isPromotionsPage) {
     return (
-      <main className="min-h-screen bg-[#FAF8F2] text-[#292d2a]">
-        <section className="relative isolate overflow-hidden bg-[#065f46] text-white">
+      <main className="min-h-screen bg-[var(--mt-gray-50)] text-[var(--mt-gray-900)]">
+        <section className="relative isolate overflow-hidden bg-[var(--mt-green-deep)] text-white">
           <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-32 -z-10 h-80 w-80 rounded-full border border-white/10 sm:right-[12%] sm:h-[34rem] sm:w-[34rem]" />
           <div className="mx-auto grid max-w-[1184px] gap-8 px-5 py-9 sm:px-8 sm:py-12 lg:grid-cols-[1fr_350px] lg:items-end">
             <MotionReveal>
@@ -443,20 +443,20 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <span aria-hidden="true" className="px-2">/</span>
                 <span>Promotions</span>
               </nav>
-              <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#f0ba80]"><BadgePercent className="h-4 w-4" aria-hidden="true" /> Bons plans des boutiques</p>
-              <h1 className="mt-3 max-w-3xl font-display text-4xl font-extrabold leading-[1.04] tracking-[-.045em] sm:text-6xl">Les bons plans du quartier. <span className="text-[#f0ba80]">Vraiment.</span></h1>
+              <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-orange-soft)]"><BadgePercent className="h-4 w-4" aria-hidden="true" /> Bons plans des boutiques</p>
+              <h1 className="mt-3 max-w-3xl font-display text-4xl font-extrabold leading-[1.04] tracking-[-.045em] sm:text-6xl">Les bons plans du quartier. <span className="text-[var(--mt-orange-soft)]">Vraiment.</span></h1>
               <p className="mt-4 max-w-2xl text-sm leading-6 text-white/80 sm:text-lg sm:leading-7">Des prix réduits publiés par les boutiques locales, visibles pendant leurs dates réelles. Repérez une offre, découvrez le vendeur et échangez directement avec lui.</p>
-              <a href="#offres-actives" className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f0ba80] px-5 text-sm font-extrabold text-[#292d2a] transition hover:bg-[#ffd09a]">Voir les offres actives <ArrowRight className="h-4 w-4" aria-hidden="true" /></a>
+              <a href="#offres-actives" className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--mt-orange-soft)] px-5 text-sm font-extrabold text-[var(--mt-gray-900)] transition hover:bg-[#ffd09a]">Voir les offres actives <ArrowRight className="h-4 w-4" aria-hidden="true" /></a>
             </MotionReveal>
             <MotionReveal delay={0.1}>
             <aside className="rounded-[24px] border border-white/15 bg-white/[0.08] p-5 backdrop-blur-sm sm:p-6" aria-label="Comment reconnaître une offre active">
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-[#f0ba80]">Une offre claire, pas de surprise</p>
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-orange-soft)]">Une offre claire, pas de surprise</p>
               <ul className="mt-4 space-y-3 text-sm leading-5 text-white/90">
-                <li className="flex gap-2.5"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#f0ba80]" aria-hidden="true" /><span>Le prix réduit et le prix habituel sont affichés ensemble.</span></li>
-                <li className="flex gap-2.5"><Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[#f0ba80]" aria-hidden="true" /><span>La période de validité est indiquée sur chaque offre.</span></li>
-                <li className="flex gap-2.5"><Store className="mt-0.5 h-4 w-4 shrink-0 text-[#f0ba80]" aria-hidden="true" /><span>Disponibilité, retrait et livraison se confirment avec la boutique.</span></li>
+                <li className="flex gap-2.5"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-orange-soft)]" aria-hidden="true" /><span>Le prix réduit et le prix habituel sont affichés ensemble.</span></li>
+                <li className="flex gap-2.5"><Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-orange-soft)]" aria-hidden="true" /><span>La période de validité est indiquée sur chaque offre.</span></li>
+                <li className="flex gap-2.5"><Store className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-orange-soft)]" aria-hidden="true" /><span>Disponibilité, retrait et livraison se confirment avec la boutique.</span></li>
               </ul>
-              <Link to="/comment-ca-marche#promotions" className="mt-5 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-[#f0ba80] hover:text-white">Comprendre les promotions <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+              <Link to="/comment-ca-marche#promotions" className="mt-5 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-[var(--mt-orange-soft)] hover:text-white">Comprendre les promotions <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
             </aside>
             </MotionReveal>
           </div>
@@ -469,22 +469,22 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
   }
 
   return (
-    <main className="public-directory min-h-screen bg-[#FAF8F2] text-[#292d2a]">
+    <main className="public-directory min-h-screen bg-[var(--mt-gray-50)] text-[var(--mt-gray-900)]">
       {discoveryPage ? (
         <section className="mx-auto w-full max-w-[1184px] px-5 pb-7 pt-10 sm:px-8 sm:pb-10 sm:pt-14">
-          <nav aria-label="Fil d’Ariane" className="mb-5 text-sm text-[#647067]">
-            <Link to="/" className="font-semibold text-[#065f46] hover:underline">Accueil</Link>
+          <nav aria-label="Fil d’Ariane" className="mb-5 text-sm text-[var(--mt-gray-600)]">
+            <Link to="/" className="font-semibold text-[var(--mt-green-deep)] hover:underline">Accueil</Link>
             <span aria-hidden="true" className="px-2">/</span>
             <span>{discoveryPage.city || (discoveryPage.category ? categoryLabel(discoveryPage.category) : 'Boutiques')}</span>
           </nav>
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-[#c2410c] sm:text-sm">Commerce local · Côte d’Ivoire</p>
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--mt-orange-deep)] sm:text-sm">Commerce local · Côte d’Ivoire</p>
           <h1 className="max-w-3xl font-display text-3xl font-extrabold leading-tight tracking-[-0.04em] sm:text-5xl">{discoveryPage.heading}</h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-[#5f5a55] sm:text-lg">{discoveryPage.description.replace(' | MaTable', '')}</p>
           {relatedDiscoveryPages.length > 0 && (
             <nav aria-label={discoveryPage.city ? 'Découvrir par catégorie' : 'Découvrir par ville'} className="mt-6 flex flex-wrap gap-2">
               <span className="self-center pr-1 text-sm font-bold text-[#47534b]">{discoveryPage.city ? 'Explorer les catégories :' : 'Explorer par ville :'}</span>
               {relatedDiscoveryPages.map((page) => (
-                <Link key={page.path} to={page.path} className="rounded-full border border-[#e0d5c6] bg-white px-3 py-1.5 text-sm font-semibold text-[#065f46] transition hover:border-[#047857]">
+                <Link key={page.path} to={page.path} className="rounded-full border border-[#e0d5c6] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--mt-green-deep)] transition hover:border-[var(--mt-green-hover)]">
                   {page.city || (page.category ? categoryLabel(page.category) : '')}
                 </Link>
               ))}
@@ -492,9 +492,9 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           )}
         </section>
       ) : isShopDirectoryPage ? (
-        <section className="relative isolate overflow-hidden bg-[#065f46] text-white">
+        <section className="relative isolate overflow-hidden bg-[var(--mt-green-deep)] text-white">
           <div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-36 -z-10 h-[470px] w-[470px] rounded-full border border-white/10 sm:right-[8%] sm:top-[-250px] sm:h-[700px] sm:w-[700px]" />
-          <div aria-hidden="true" className="pointer-events-none absolute -right-5 top-20 -z-10 h-64 w-64 rounded-full border border-[#f0ba80]/20 sm:right-[15%] sm:top-8 sm:h-96 sm:w-96" />
+          <div aria-hidden="true" className="pointer-events-none absolute -right-5 top-20 -z-10 h-64 w-64 rounded-full border border-[var(--mt-orange-soft)]/20 sm:right-[15%] sm:top-8 sm:h-96 sm:w-96" />
           <div className="mx-auto grid w-full max-w-[1280px] gap-9 px-5 pb-10 pt-8 sm:px-8 sm:pb-14 sm:pt-10 lg:grid-cols-[1fr_340px] lg:items-end lg:gap-16 lg:px-12 lg:pb-16 lg:pt-12">
             <MotionReveal className="min-w-0">
               <nav aria-label="Fil d’Ariane" className="mb-8 text-sm text-white/65">
@@ -502,11 +502,11 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <span aria-hidden="true" className="px-2">/</span>
                 <span>Boutiques</span>
               </nav>
-              <p className="mb-4 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#f0ba80] sm:text-sm">
-                <span className="h-px w-7 bg-[#f0ba80]" aria-hidden="true" /> Le carnet des bonnes adresses
+              <p className="mb-4 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[var(--mt-orange-soft)] sm:text-sm">
+                <span className="h-px w-7 bg-[var(--mt-orange-soft)]" aria-hidden="true" /> Le carnet des bonnes adresses
               </p>
               <h1 className="max-w-3xl font-display text-4xl font-extrabold leading-[1.04] tracking-[-0.045em] sm:text-6xl lg:text-[68px]">
-                Les boutiques qui font <span className="text-[#f0ba80]">vivre</span> nos quartiers.
+                Les boutiques qui font <span className="text-[var(--mt-orange-soft)]">vivre</span> nos quartiers.
               </h1>
               <p className="mt-5 max-w-xl text-base leading-7 text-[#e0ebe5] sm:text-lg">
                     Des créateurs aux bonnes tables, trouvez une adresse et découvrez l’histoire derrière chaque vitrine.
@@ -514,31 +514,31 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               {searchForm}
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-white/70 sm:text-sm" aria-label="Suggestions de recherche">
                 <span className="mr-1 font-semibold text-white/90">Explorer :</span>
-                {popularSearches.map((term) => <button key={term} type="button" onClick={() => setQuery(term)} className="rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-white transition hover:border-[#f0ba80] hover:bg-white/10">{term}</button>)}
+                {popularSearches.map((term) => <button key={term} type="button" onClick={() => setQuery(term)} className="rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-white transition hover:border-[var(--mt-orange-soft)] hover:bg-white/10">{term}</button>)}
               </div>
             </MotionReveal>
             <MotionReveal delay={0.1}>
-            <aside className="relative hidden overflow-hidden rounded-[26px] border border-white/15 bg-[#FFFFFF] p-5 text-[#292d2a] shadow-[0_24px_70px_rgba(0,0,0,.2)] sm:block sm:p-6" aria-label="Repères de l’annuaire">
+            <aside className="relative hidden overflow-hidden rounded-[26px] border border-white/15 bg-[var(--mt-surface)] p-5 text-[var(--mt-gray-900)] shadow-[0_24px_70px_rgba(0,0,0,.2)] sm:block sm:p-6" aria-label="Repères de l’annuaire">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#c2410c]">Le commerce à portée de main</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--mt-orange-deep)]">Le commerce à portée de main</p>
                   <h2 className="mt-2 font-display text-2xl font-extrabold leading-tight">Une adresse, une histoire.</h2>
                 </div>
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#d1fae5] text-[#065f46]"><Sparkles className="h-5 w-5" aria-hidden="true" /></span>
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#d1fae5] text-[var(--mt-green-deep)]"><Sparkles className="h-5 w-5" aria-hidden="true" /></span>
               </div>
-              <p className="mt-2 text-sm leading-6 text-[#647067]">Trouvez votre prochain coup de cœur et prenez contact en direct.</p>
-              {(directoryIsLoading || directoryShops.length >= MIN_DIRECTORY_COUNT_SHOWN) && <div className="mt-5 grid grid-cols-2 divide-x divide-[#e7ddd0] rounded-2xl bg-[#FAF8F2] py-3">
+              <p className="mt-2 text-sm leading-6 text-[var(--mt-gray-600)]">Trouvez votre prochain coup de cœur et prenez contact en direct.</p>
+              {(directoryIsLoading || directoryShops.length >= MIN_DIRECTORY_COUNT_SHOWN) && <div className="mt-5 grid grid-cols-2 divide-x divide-[#e7ddd0] rounded-2xl bg-[var(--mt-gray-50)] py-3">
                 <div className="px-4">
-                  <span className="block font-display text-2xl font-extrabold text-[#065f46]">{directoryIsLoading ? '…' : directoryShops.length}</span>
-                  <span className="text-xs font-semibold text-[#647067]">adresses locales</span>
+                  <span className="block font-display text-2xl font-extrabold text-[var(--mt-green-deep)]">{directoryIsLoading ? '…' : directoryShops.length}</span>
+                  <span className="text-xs font-semibold text-[var(--mt-gray-600)]">adresses locales</span>
                 </div>
                 <div className="px-4">
-                  <span className="block font-display text-2xl font-extrabold text-[#065f46]">{directoryIsLoading ? '…' : categories.length}</span>
-                  <span className="text-xs font-semibold text-[#647067]">univers à explorer</span>
+                  <span className="block font-display text-2xl font-extrabold text-[var(--mt-green-deep)]">{directoryIsLoading ? '…' : categories.length}</span>
+                  <span className="text-xs font-semibold text-[var(--mt-gray-600)]">univers à explorer</span>
                 </div>
               </div>}
               {cityPages.length > 0 && <div className="mt-4 flex flex-wrap gap-2">
-                {cityPages.slice(0, 3).map((page) => <Link key={page.path} to={page.path} className="inline-flex items-center gap-1 rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[#065f46] transition hover:bg-[#d2e8dd]"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{page.city}</Link>)}
+                {cityPages.slice(0, 3).map((page) => <Link key={page.path} to={page.path} className="inline-flex items-center gap-1 rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[var(--mt-green-deep)] transition hover:bg-[#d2e8dd]"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{page.city}</Link>)}
               </div>}
             </aside>
             </MotionReveal>
@@ -548,12 +548,12 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       <section className="mx-auto w-full max-w-[1280px] px-4 pb-4 pt-4 sm:px-8 sm:pb-6 sm:pt-6 lg:px-10">
         <div className="grid overflow-hidden rounded-3xl border border-[#e7dfd3] bg-white shadow-[0_8px_28px_rgba(20,40,30,.07)] lg:min-h-[330px] lg:grid-cols-[.88fr_1.12fr]">
           <div className="flex min-w-0 flex-col justify-center bg-gradient-to-br from-[#fffdf8] via-[#f8f5ef] to-[#edf5f0] p-5 sm:p-8 lg:p-9">
-            <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-[#c2410c] sm:text-xs">Le commerce local, simplifié</p>
-            <h1 className="max-w-[600px] font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.055em] text-[#065f46] sm:text-[48px] lg:text-[58px]">
+            <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--mt-orange-deep)] sm:text-xs">Le commerce local, simplifié</p>
+            <h1 className="max-w-[600px] font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.055em] text-[var(--mt-green-deep)] sm:text-[48px] lg:text-[58px]">
               {homeTitleWords.map((word, index) => (
                 <React.Fragment key={word.text}>
                   {index > 0 && ' '}
-                  <span className={`inline-block ${word.accent ? 'text-[#c2410c]' : ''}`}>
+                  <span className={`inline-block ${word.accent ? 'text-[var(--mt-orange-deep)]' : ''}`}>
                     {word.text}
                   </span>
                 </React.Fragment>
@@ -566,20 +566,20 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               {searchForm}
             </div>
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-[#315548]">
-              <span className="inline-flex items-center gap-1.5"><Store className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Boutiques locales</span>
-              <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Échange direct</span>
-              <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[#059669]" aria-hidden="true" /> Retrait ou livraison à convenir</span>
+              <span className="inline-flex items-center gap-1.5"><Store className="h-4 w-4 text-[var(--mt-green-primary)]" aria-hidden="true" /> Boutiques locales</span>
+              <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-[var(--mt-green-primary)]" aria-hidden="true" /> Échange direct</span>
+              <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[var(--mt-green-primary)]" aria-hidden="true" /> Retrait ou livraison à convenir</span>
             </div>
             {heroNeighbourhoods.length > 0 && <nav aria-label="Boutiques par quartier" className="mt-4 flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold text-[#47534b]">Près de chez vous :</span>
               {heroNeighbourhoods.map((neighbourhood) => (
-                <Link key={neighbourhood.path} to={neighbourhood.path} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#cfe3d8] bg-white px-3 text-xs font-bold text-[#065f46] transition hover:border-[#047857] hover:bg-[#f0f8f3]">
+                <Link key={neighbourhood.path} to={neighbourhood.path} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#cfe3d8] bg-white px-3 text-xs font-bold text-[var(--mt-green-deep)] transition hover:border-[var(--mt-green-hover)] hover:bg-[#f0f8f3]">
                   <MapPin className="h-3.5 w-3.5" aria-hidden="true" />{neighbourhood.label}
                 </Link>
               ))}
             </nav>}
             <div className="mt-4">
-              <Link to="/commercants" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-extrabold text-[#c2410c] transition hover:text-[#a53a1d]">
+              <Link to="/commercants" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-extrabold text-[var(--mt-orange-deep)] transition hover:text-[#a53a1d]">
                 Vous vendez ? Ajoutez votre boutique <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
             </div>
@@ -589,7 +589,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff0df] px-3 py-1.5 text-xs font-black uppercase tracking-wide text-[#8f351d] sm:text-xs">
                 <BadgePercent className="h-3.5 w-3.5" aria-hidden="true" /> Vitrine premium
               </span>
-              <span className="text-xs font-bold uppercase tracking-wide text-[#647067] sm:text-xs">Sponsors & partenaires</span>
+              <span className="text-xs font-bold uppercase tracking-wide text-[var(--mt-gray-600)] sm:text-xs">Sponsors & partenaires</span>
             </div>}
             <PublicCampaignCarousel
               onOpenShop={handleOpenShop}
@@ -612,10 +612,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       {!discoveryPage && !isShopDirectoryPage && (directoryIsLoading || categories.length > 0) && <section className="mx-auto w-full max-w-[1280px] px-5 pb-4 sm:px-8 sm:pb-6 lg:px-10" aria-labelledby="home-categories-title">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <MotionReveal>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#c2410c]">Explorez par univers</p>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--mt-orange-deep)]">Explorez par univers</p>
             <h2 id="home-categories-title" className="mt-1 font-display text-xl font-extrabold tracking-tight sm:text-2xl">Les catégories du moment</h2>
           </MotionReveal>
-          <button type="button" onClick={() => handleOpenDirectory()} className="inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-[#065f46] hover:text-[#047857]">
+          <button type="button" onClick={() => handleOpenDirectory()} className="inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-[var(--mt-green-deep)] hover:text-[var(--mt-green-hover)]">
             Toutes les boutiques <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
@@ -634,14 +634,14 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             const count = categoryCounts.get(item) || 0;
             const showCount = count >= MIN_CATEGORY_COUNT_SHOWN;
             return <MotionReveal key={item} delay={index * 0.05} className="w-[46%] shrink-0 snap-start sm:w-[calc(33.333%-8px)] lg:w-[calc(20%-10px)]">
-            <button type="button" aria-pressed={category === item} onClick={() => isLocalAdvertisingDemo ? setCategory(category === item ? 'all' : item) : onOpenDirectory(categoryLabel(item))} className={`motion-interactive group flex min-h-[112px] w-full flex-col items-start justify-between rounded-2xl border border-black/[.04] px-3 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(20,40,30,.08)] sm:px-4 ${category === item && isLocalAdvertisingDemo ? 'ring-2 ring-[#065f46] ring-offset-2' : ''}`} style={{ backgroundColor: categoryTileColors[item] || '#f1f5f2' }}>
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/80 text-[#065f46]"><CategoryIcon category={item} className="h-4 w-4" /></span>
+            <button type="button" aria-pressed={category === item} onClick={() => isLocalAdvertisingDemo ? setCategory(category === item ? 'all' : item) : onOpenDirectory(categoryLabel(item))} className={`motion-interactive group flex min-h-[112px] w-full flex-col items-start justify-between rounded-2xl border border-black/[.04] px-3 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(20,40,30,.08)] sm:px-4 ${category === item && isLocalAdvertisingDemo ? 'ring-2 ring-[var(--mt-green-deep)] ring-offset-2' : ''}`} style={{ backgroundColor: categoryTileColors[item] || '#f1f5f2' }}>
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/80 text-[var(--mt-green-deep)]"><CategoryIcon category={item} className="h-4 w-4" /></span>
               <span className="mt-2 flex w-full items-end justify-between gap-1">
                 <span className="min-w-0">
-                  <span className="block truncate font-display text-xs font-extrabold text-[#292d2a] sm:text-sm">{categoryLabel(item)}</span>
+                  <span className="block truncate font-display text-xs font-extrabold text-[var(--mt-gray-900)] sm:text-sm">{categoryLabel(item)}</span>
                   {showCount && <span className="mt-0.5 block text-xs text-[#47534b]">{count} boutiques</span>}
                 </span>
-                <ArrowRight className="mb-0.5 h-3.5 w-3.5 shrink-0 text-[#047857] transition-transform group-hover:translate-x-1" aria-hidden="true" />
+                <ArrowRight className="mb-0.5 h-3.5 w-3.5 shrink-0 text-[var(--mt-green-hover)] transition-transform group-hover:translate-x-1" aria-hidden="true" />
               </span>
             </button>
             </MotionReveal>;
@@ -653,14 +653,14 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         <div className="overflow-hidden rounded-[26px] border border-[#e7dfd3] bg-gradient-to-br from-[#f6faf6] via-white to-[#fff8ef] p-4 shadow-[0_8px_28px_rgba(20,40,30,.06)] sm:rounded-[32px] sm:p-6">
           <div className="mb-4 flex items-end justify-between gap-3">
             <MotionReveal>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#c2410c]">Les commerces de proximité</p>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--mt-orange-deep)]">Les commerces de proximité</p>
               <h2 id="home-shops-title" className="mt-1 font-display text-xl font-extrabold tracking-tight text-[#183f32] sm:text-2xl">Boutiques à la une</h2>
             </MotionReveal>
             <div className="flex items-center gap-3">
               <Link to="/promotions" className="hidden min-h-10 items-center gap-1.5 rounded-full bg-[#fff0df] px-4 text-xs font-extrabold text-[#a53a1d] transition hover:bg-[#fbe3d6] sm:inline-flex">
                 <BadgePercent className="h-4 w-4" aria-hidden="true" /> Offres du moment
               </Link>
-              <button type="button" onClick={() => handleOpenDirectory()} className="inline-flex min-h-10 shrink-0 items-center gap-1 text-sm font-bold text-[#065f46] hover:text-[#047857]">
+              <button type="button" onClick={() => handleOpenDirectory()} className="inline-flex min-h-10 shrink-0 items-center gap-1 text-sm font-bold text-[var(--mt-green-deep)] hover:text-[var(--mt-green-hover)]">
                 Toutes <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
@@ -670,7 +670,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               {[0, 1, 2, 3].map((item) => <div key={item} className="h-[220px] animate-pulse rounded-2xl bg-[#e9e4da]" />)}
             </div>
           ) : homeShops.length === 0 ? (
-            <div className="flex min-h-28 items-center justify-center rounded-2xl border border-dashed border-[#d8d0c3] bg-white px-5 text-center text-sm text-[#647067]">Les boutiques locales seront bientôt à découvrir ici.</div>
+            <div className="flex min-h-28 items-center justify-center rounded-2xl border border-dashed border-[#d8d0c3] bg-white px-5 text-center text-sm text-[var(--mt-gray-600)]">Les boutiques locales seront bientôt à découvrir ici.</div>
           ) : (
             <div
               ref={shopRail.railRef}
@@ -687,12 +687,12 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                     <span className="relative block aspect-[1.45] overflow-hidden bg-[#e9f5ee]">
                       <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" onError={(event) => { event.currentTarget.hidden = true; }} />
                       <span className="absolute left-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-[#8f351d] sm:text-xs">{categoryLabel(shop.category)}</span>
-                      {(shop.is_sponsored || shop.is_featured) && <span className="absolute right-2 top-2 rounded-full bg-[#065f46]/95 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-white">À la une</span>}
+                      {(shop.is_sponsored || shop.is_featured) && <span className="absolute right-2 top-2 rounded-full bg-[var(--mt-green-deep)]/95 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-white">À la une</span>}
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col p-3 sm:p-3.5">
-                      <span className="block truncate font-display text-sm font-extrabold text-[#292d2a] sm:text-base">{shop.name}</span>
+                      <span className="block truncate font-display text-sm font-extrabold text-[var(--mt-gray-900)] sm:text-base">{shop.name}</span>
                       <span className="mt-1 flex min-w-0 items-center gap-2">
-                        {shop.city && <span className="flex min-w-0 items-center gap-1 truncate text-xs text-[#647067] sm:text-xs"><MapPin className="h-3 w-3 shrink-0 text-[#059669]" aria-hidden="true" />{shop.city}</span>}
+                        {shop.city && <span className="flex min-w-0 items-center gap-1 truncate text-xs text-[var(--mt-gray-600)] sm:text-xs"><MapPin className="h-3 w-3 shrink-0 text-[var(--mt-green-primary)]" aria-hidden="true" />{shop.city}</span>}
                         {shop.is_verified && <VerifiedBadge />}
                       </span>
                       {shop.products_preview && shop.products_preview.length > 0 && <span className="mt-3 flex min-w-0 items-center gap-2 border-t border-[#eee8de] pt-2.5">
@@ -703,14 +703,14 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                             </span>
                             <span className="min-w-0">
                               <span className="block truncate text-xs font-semibold text-[#47534b]">{product.title}</span>
-                              <span className="block truncate text-xs font-extrabold text-[#065f46]">{formatFCFA(product.price)}</span>
+                              <span className="block truncate text-xs font-extrabold text-[var(--mt-green-deep)]">{formatFCFA(product.price)}</span>
                             </span>
                           </span>
                         ))}
                       </span>}
-                      <span className="mt-auto flex items-center justify-between gap-2 pt-3 text-xs font-semibold text-[#647067] sm:text-xs">
+                      <span className="mt-auto flex items-center justify-between gap-2 pt-3 text-xs font-semibold text-[var(--mt-gray-600)] sm:text-xs">
                         <span className="truncate">Retrait ou livraison à convenir</span>
-                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[#059669] transition-transform group-hover:translate-x-1" aria-hidden="true" />
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--mt-green-primary)] transition-transform group-hover:translate-x-1" aria-hidden="true" />
                       </span>
                     </span>
                   </Link>
@@ -723,10 +723,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         <Link to="/promotions" className="motion-interactive group relative flex min-h-[92px] items-center justify-between gap-4 overflow-hidden rounded-2xl bg-[#fff0df] px-4 py-4 text-left transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(150,70,30,.12)] sm:px-6">
           <span aria-hidden="true" className="absolute -right-7 -top-8 h-36 w-36 rounded-full border-[18px] border-[#f5d3b5]" />
           <span className="relative flex min-w-0 items-center gap-3 sm:gap-4">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#c2410c] text-white"><BadgePercent className="h-5 w-5" aria-hidden="true" /></span>
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--mt-orange-deep)] text-white"><BadgePercent className="h-5 w-5" aria-hidden="true" /></span>
             <span className="min-w-0">
             <span className="block text-xs font-black uppercase tracking-[0.12em] text-[#a53a1d]">Promotions des boutiques</span>
-            <span className="mt-1 block font-display text-base font-extrabold leading-tight text-[#292d2a] sm:text-lg">Les offres actives, réunies au même endroit.</span>
+            <span className="mt-1 block font-display text-base font-extrabold leading-tight text-[var(--mt-gray-900)] sm:text-lg">Les offres actives, réunies au même endroit.</span>
             </span>
           </span>
           <span className="relative inline-flex shrink-0 items-center gap-1 text-xs font-bold text-[#a53a1d] sm:text-sm">Voir les offres <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden="true" /></span>
@@ -751,7 +751,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 -left-24 z-0 h-80 w-80 rounded-full bg-[#f3d9bb]/35 blur-3xl" />
         <div className="relative z-10 mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[#a53a1d] sm:text-xs"><span className="h-px w-6 bg-[#c2410c]" aria-hidden="true" />{isShopDirectoryPage ? 'Le carnet des adresses' : 'Découverte'}</p>
+            <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[#a53a1d] sm:text-xs"><span className="h-px w-6 bg-[var(--mt-orange-deep)]" aria-hidden="true" />{isShopDirectoryPage ? 'Le carnet des adresses' : 'Découverte'}</p>
             <h2 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-[#183f32] sm:text-3xl">
               {discoveryPage ? 'Les boutiques à découvrir' : hasActiveDirectoryFilters ? 'Adresses correspondantes' : 'Le répertoire des boutiques'}
             </h2>
@@ -771,14 +771,14 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                   <p className="text-xs font-black uppercase tracking-[0.14em] text-[#a53a1d]">À chacun son univers</p>
                   <p className="mt-1 font-display text-lg font-extrabold text-[#183f32] sm:text-xl">Qu’avez-vous envie de découvrir ?</p>
                 </div>
-                <span className="hidden pb-1 text-xs font-medium text-[#647067] sm:block">Choisissez une catégorie</span>
+                <span className="hidden pb-1 text-xs font-medium text-[var(--mt-gray-600)] sm:block">Choisissez une catégorie</span>
               </div>
               <div className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 pb-2 sm:flex-wrap sm:overflow-visible sm:pb-0" aria-label="Filtrer par catégorie">
                 <button
                   type="button"
                   aria-pressed={category === 'all'}
                   onClick={() => setCategory('all')}
-                  className={`motion-interactive flex min-h-[70px] min-w-[104px] shrink-0 flex-col items-start justify-between rounded-2xl border px-3 py-2.5 text-left transition sm:min-w-[126px] sm:px-4 ${category === 'all' ? 'border-[#065f46] bg-[#065f46] text-white shadow-[0_8px_18px_rgba(6,95,70,.2)]' : 'border-[#e9e1d7] bg-[#fffdf8] text-[#183f32] hover:border-[#9cbdab] hover:bg-[#f4faf6]'}`}
+                  className={`motion-interactive flex min-h-[70px] min-w-[104px] shrink-0 flex-col items-start justify-between rounded-2xl border px-3 py-2.5 text-left transition sm:min-w-[126px] sm:px-4 ${category === 'all' ? 'border-[var(--mt-green-deep)] bg-[var(--mt-green-deep)] text-white shadow-[0_8px_18px_rgba(6,95,70,.2)]' : 'border-[#e9e1d7] bg-[#fffdf8] text-[#183f32] hover:border-[#9cbdab] hover:bg-[#f4faf6]'}`}
                 >
                   <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${category === 'all' ? 'bg-white/15' : 'bg-[#e2eee6]'}`}><LayoutGrid className="h-4 w-4" aria-hidden="true" /></span>
                   <span className="flex w-full items-center justify-between gap-2 text-xs font-bold sm:text-sm">
@@ -794,7 +794,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                       type="button"
                       aria-pressed={selected}
                       onClick={() => setCategory(selected ? 'all' : item)}
-                      className={`motion-interactive flex min-h-[70px] min-w-[104px] shrink-0 flex-col items-start justify-between rounded-2xl border px-3 py-2.5 text-left transition sm:min-w-[126px] sm:px-4 ${selected ? 'border-[#065f46] bg-[#065f46] text-white shadow-[0_8px_18px_rgba(6,95,70,.2)]' : 'border-[#e9e1d7] bg-[#fffdf8] text-[#183f32] hover:border-[#9cbdab] hover:bg-[#f4faf6]'}`}
+                      className={`motion-interactive flex min-h-[70px] min-w-[104px] shrink-0 flex-col items-start justify-between rounded-2xl border px-3 py-2.5 text-left transition sm:min-w-[126px] sm:px-4 ${selected ? 'border-[var(--mt-green-deep)] bg-[var(--mt-green-deep)] text-white shadow-[0_8px_18px_rgba(6,95,70,.2)]' : 'border-[#e9e1d7] bg-[#fffdf8] text-[#183f32] hover:border-[#9cbdab] hover:bg-[#f4faf6]'}`}
                     >
                       <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${selected ? 'bg-white/15' : ''}`} style={!selected ? { backgroundColor: categoryTileColors[item] || '#e9e4da' } : undefined}><CategoryIcon category={item} className="h-4 w-4" /></span>
                       <span className="flex w-full items-center justify-between gap-2 text-xs font-bold sm:text-sm">
@@ -807,12 +807,12 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               </div>
             </div>
             <div className="relative mt-3 flex flex-wrap items-center gap-2 border-t border-[#e9e1d7] pt-3 sm:mt-4 sm:pt-4">
-              <label htmlFor="directory-sort" className="mr-1 text-xs font-black uppercase tracking-wide text-[#647067] sm:text-xs">Affiner</label>
+              <label htmlFor="directory-sort" className="mr-1 text-xs font-black uppercase tracking-wide text-[var(--mt-gray-600)] sm:text-xs">Affiner</label>
               <select
                 id="directory-sort"
                 value={directorySort}
                 onChange={(event) => setDirectorySort(event.target.value as DirectorySort)}
-                className="min-h-10 min-w-[185px] flex-1 rounded-xl border border-[#e0d5c6] bg-[#fffdf8] px-3 text-sm font-semibold text-[#292d2a] outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/15 sm:flex-none"
+                className="min-h-10 min-w-[185px] flex-1 rounded-xl border border-[#e0d5c6] bg-[#fffdf8] px-3 text-sm font-semibold text-[var(--mt-gray-900)] outline-none transition focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/15 sm:flex-none"
               >
                 <option value="recommended">Ordre recommandé</option>
                 <option value="open">Ouvertes en premier</option>
@@ -822,17 +822,17 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 type="button"
                 aria-pressed={openOnly}
                 onClick={() => setOpenOnly((current) => !current)}
-                className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition sm:text-sm ${openOnly ? 'border-[#065f46] bg-[#e2eee6] text-[#065f46]' : 'border-[#e0d5c6] bg-white text-[#47534b] hover:border-[#047857]'}`}
+                className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition sm:text-sm ${openOnly ? 'border-[var(--mt-green-deep)] bg-[#e2eee6] text-[var(--mt-green-deep)]' : 'border-[#e0d5c6] bg-white text-[#47534b] hover:border-[var(--mt-green-hover)]'}`}
               >
                 <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                 Ouvertes uniquement
               </button>
-              {hasActiveDirectoryFilters && <button type="button" onClick={() => { setQuery(''); setCategory('all'); setOpenOnly(false); handleOpenDirectory(); }} className="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-xs font-bold text-[#065f46] transition hover:bg-[#e9f5ee] sm:text-sm">Effacer les filtres <X className="h-4 w-4" aria-hidden="true" /></button>}
+              {hasActiveDirectoryFilters && <button type="button" onClick={() => { setQuery(''); setCategory('all'); setOpenOnly(false); handleOpenDirectory(); }} className="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-xs font-bold text-[var(--mt-green-deep)] transition hover:bg-[#e9f5ee] sm:text-sm">Effacer les filtres <X className="h-4 w-4" aria-hidden="true" /></button>}
             </div>
             {cityPages.length > 0 && (
               <nav className="relative mt-3 flex flex-wrap items-center gap-2 border-t border-[#e9e1d7] pt-3 sm:mt-4 sm:pt-4" aria-label="Découvrir les boutiques par ville">
-                <span className="mr-1 text-xs font-black uppercase tracking-wide text-[#647067]">Explorer une ville</span>
-                {cityPages.map((page) => <Link key={page.path} to={page.path} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-white/80 bg-white/70 px-3 text-xs font-bold text-[#315548] shadow-sm transition hover:border-[#9cbdab] hover:bg-white"><MapPin className="h-3.5 w-3.5 text-[#c2410c]" aria-hidden="true" />{page.city}</Link>)}
+                <span className="mr-1 text-xs font-black uppercase tracking-wide text-[var(--mt-gray-600)]">Explorer une ville</span>
+                {cityPages.map((page) => <Link key={page.path} to={page.path} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-white/80 bg-white/70 px-3 text-xs font-bold text-[#315548] shadow-sm transition hover:border-[#9cbdab] hover:bg-white"><MapPin className="h-3.5 w-3.5 text-[var(--mt-orange-deep)]" aria-hidden="true" />{page.city}</Link>)}
               </nav>
             )}
           </div>
@@ -851,33 +851,33 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           </div>
         ) : loadError ? (
           <div role="alert" className="relative z-10 rounded-2xl border border-[#e8b8a4] bg-[#fff8f4] p-8 text-center">
-            <h3 className="font-display text-lg font-bold text-[#292d2a]">Impossible de charger les boutiques</h3>
-            <p className="mt-2 text-sm text-[#647067]">Vérifiez votre connexion, puis réessayez.</p>
-            <button type="button" onClick={onRetry} className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full bg-[#065f46] px-4 text-sm font-bold text-white hover:bg-[#047857]"><RotateCcw className="h-4 w-4" aria-hidden="true" /> Réessayer</button>
+            <h3 className="font-display text-lg font-bold text-[var(--mt-gray-900)]">Impossible de charger les boutiques</h3>
+            <p className="mt-2 text-sm text-[var(--mt-gray-600)]">Vérifiez votre connexion, puis réessayez.</p>
+            <button type="button" onClick={onRetry} className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-4 text-sm font-bold text-white hover:bg-[var(--mt-green-hover)]"><RotateCcw className="h-4 w-4" aria-hidden="true" /> Réessayer</button>
           </div>
         ) : filteredShops.length === 0 ? (
-          <div className="relative z-10 rounded-2xl border border-dashed border-[#cfc8bc] bg-[#FFFFFF] p-8 text-center">
-            <Store className="mx-auto h-10 w-10 text-[#047857]" aria-hidden="true" />
+          <div className="relative z-10 rounded-2xl border border-dashed border-[#cfc8bc] bg-[var(--mt-surface)] p-8 text-center">
+            <Store className="mx-auto h-10 w-10 text-[var(--mt-green-hover)]" aria-hidden="true" />
             <h3 className="mt-3 font-display text-lg font-bold">{openOnly && !query.trim() && category === 'all' ? 'Aucune boutique ouverte en ce moment' : hasActiveDirectoryFilters ? 'Aucune boutique trouvée' : 'Aucune boutique disponible pour le moment'}</h3>
-            <p className="mt-2 text-sm text-[#647067]">{openOnly && !query.trim() && category === 'all' ? 'Consultez les horaires affichés sur les boutiques ou retirez ce filtre.' : hasActiveDirectoryFilters ? 'Essayez un autre mot-clé ou effacez vos filtres.' : 'La vitrine s’actualisera dès qu’une boutique sera publiée.'}</p>
-            {hasActiveDirectoryFilters && <button type="button" onClick={() => { setQuery(''); setCategory('all'); setOpenOnly(false); }} className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#065f46] px-4 py-2 text-sm font-bold text-white">Effacer les filtres <X className="h-4 w-4" /></button>}
+            <p className="mt-2 text-sm text-[var(--mt-gray-600)]">{openOnly && !query.trim() && category === 'all' ? 'Consultez les horaires affichés sur les boutiques ou retirez ce filtre.' : hasActiveDirectoryFilters ? 'Essayez un autre mot-clé ou effacez vos filtres.' : 'La vitrine s’actualisera dès qu’une boutique sera publiée.'}</p>
+            {hasActiveDirectoryFilters && <button type="button" onClick={() => { setQuery(''); setCategory('all'); setOpenOnly(false); }} className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-4 py-2 text-sm font-bold text-white">Effacer les filtres <X className="h-4 w-4" /></button>}
           </div>
         ) : (
           <div className={`relative z-10 grid items-stretch gap-3 sm:gap-4 lg:gap-5 max-[360px]:grid-cols-1 ${filteredShops.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
             {filteredShops.map((shop, index) => (
               <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045} className={filteredShops.length === 1 ? 'mx-auto w-full max-w-[760px]' : undefined}>
-              <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className="motion-interactive group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[#FFFFFF] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2 sm:rounded-[24px]">
+              <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className="motion-interactive group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[var(--mt-surface)] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)] focus-visible:ring-offset-2 sm:rounded-[24px]">
                 <div className="relative aspect-[1.35] shrink-0 overflow-hidden sm:aspect-[1.65]" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
                   <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
                   <span className="absolute inset-0 bg-gradient-to-t from-[#17211f]/75 via-transparent to-[#17211f]/5" />
-                  <span className="absolute bottom-3 left-3 rounded-full bg-[#FFFFFF]/90 px-2.5 py-1 text-xs font-bold uppercase tracking-[0.08em] text-[#065f46] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
+                  <span className="absolute bottom-3 left-3 rounded-full bg-[var(--mt-surface)]/90 px-2.5 py-1 text-xs font-bold uppercase tracking-[0.08em] text-[var(--mt-green-deep)] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-5 lg:p-6">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-xs font-bold uppercase tracking-[0.1em] text-[#c2410c] sm:text-xs sm:tracking-[0.13em]"><span className="sm:hidden">Adresse</span><span className="hidden sm:inline">Une adresse à découvrir</span></span>
+                    <span className="truncate text-xs font-bold uppercase tracking-[0.1em] text-[var(--mt-orange-deep)] sm:text-xs sm:tracking-[0.13em]"><span className="sm:hidden">Adresse</span><span className="hidden sm:inline">Une adresse à découvrir</span></span>
                     <div className="flex shrink-0 items-center gap-1">
                     {shop.boost_placements?.some((placement) => placement === (discoveryPage?.citySlug ? 'city' : discoveryPage?.category || category !== 'all' ? 'category' : !isShopDirectoryPage ? 'home' : 'directory') || placement === 'directory') && <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-950 sm:text-xs">Sponsorisé</span>}
-                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-bold sm:px-3 sm:py-1.5 sm:text-xs ${shop.is_open ? 'bg-[#e2eee6] text-[#065f46]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>
+                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-bold sm:px-3 sm:py-1.5 sm:text-xs ${shop.is_open ? 'bg-[#e2eee6] text-[var(--mt-green-deep)]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>
                       {shop.is_open ? <><CheckCircle2 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />Ouverte</> : <><Clock3 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />Fermée</>}
                     </span>
                     </div>
@@ -886,19 +886,19 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                     {shop.theme_config?.logo_url && <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e9e1d7] bg-white sm:h-12 sm:w-12 sm:rounded-2xl">
                       <img src={shop.theme_config.logo_url} alt="" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />
                     </span>}
-                    <h3 className="line-clamp-2 min-w-0 font-display text-base font-extrabold leading-tight tracking-tight text-[#292d2a] sm:text-xl lg:text-2xl">{shop.name}</h3>
+                    <h3 className="line-clamp-2 min-w-0 font-display text-base font-extrabold leading-tight tracking-tight text-[var(--mt-gray-900)] sm:text-xl lg:text-2xl">{shop.name}</h3>
                   </div>
                   {(shop.city || shop.is_verified) && <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs font-semibold text-[#47534b] sm:mt-3 sm:gap-2 sm:text-sm">
                     {shop.city && <><MapPin className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden="true" /><span className="truncate">{shop.city}</span></>}
                     {shop.is_verified && <VerifiedBadge />}
                   </p>}
-                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#647067] sm:mt-3 sm:text-sm sm:leading-6">{shop.welcome_message || 'Une vitrine locale à découvrir et un commerçant à rencontrer.'}</p>
+                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--mt-gray-600)] sm:mt-3 sm:text-sm sm:leading-6">{shop.welcome_message || 'Une vitrine locale à découvrir et un commerçant à rencontrer.'}</p>
                   <div className="mt-auto flex flex-col items-start gap-2 border-t border-[#eee6dd] pt-3 sm:mt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:pt-4">
-                    <span className="text-xs font-semibold leading-4 text-[#647067] sm:text-xs">
+                    <span className="text-xs font-semibold leading-4 text-[var(--mt-gray-600)] sm:text-xs">
                       {shop.opening_hours?.enabled && shop.opening_hours.open_time && shop.opening_hours.close_time && `${shop.opening_hours.open_time}–${shop.opening_hours.close_time} · `}
                       {shop.products_count ? `${shop.products_count} article${shop.products_count === 1 ? '' : 's'} en vitrine` : 'Vitrine à découvrir'}
                     </span>
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-[#065f46] sm:gap-2 sm:text-sm">Découvrir <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1 sm:h-4 sm:w-4" aria-hidden="true" /></span>
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-[var(--mt-green-deep)] sm:gap-2 sm:text-sm">Découvrir <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1 sm:h-4 sm:w-4" aria-hidden="true" /></span>
                   </div>
                 </div>
               </Link>
@@ -909,13 +909,13 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       </section>}
 
       {!discoveryPage && !isShopDirectoryPage && <section className="mx-auto w-full max-w-[1184px] px-5 py-10 sm:px-8 sm:py-14">
-        <div className="flex flex-col items-start justify-between gap-6 overflow-hidden rounded-[24px] bg-[#065f46] px-6 py-8 text-white sm:flex-row sm:items-center sm:px-10 sm:py-10">
+        <div className="flex flex-col items-start justify-between gap-6 overflow-hidden rounded-[24px] bg-[var(--mt-green-deep)] px-6 py-8 text-white sm:flex-row sm:items-center sm:px-10 sm:py-10">
           <div className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#f0ba80]">Vous vendez en Côte d’Ivoire ?</p>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--mt-orange-soft)]">Vous vendez en Côte d’Ivoire ?</p>
             <h2 className="mt-2 font-display text-2xl font-extrabold leading-tight sm:text-3xl">Présentez votre commerce sur MaTable.</h2>
             <p className="mt-2 text-sm leading-6 text-[#e0eae3]">Découvrez les outils, les étapes de création et les formules pour commerçants.</p>
           </div>
-          <Link to="/commercants" className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-full bg-[#FFFFFF] px-6 text-sm font-bold text-[#065f46] transition hover:bg-[#f6eadc]">Espace commerçant <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+          <Link to="/commercants" className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-full bg-[var(--mt-surface)] px-6 text-sm font-bold text-[var(--mt-green-deep)] transition hover:bg-[#f6eadc]">Espace commerçant <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
         </div>
       </section>}
 
@@ -924,7 +924,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           role="dialog"
           aria-modal="true"
           aria-labelledby="demo-store-title"
-          className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-[#FAF8F2] shadow-2xl sm:rounded-3xl"
+          className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-[var(--mt-gray-50)] shadow-2xl sm:rounded-3xl"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="relative h-40 overflow-hidden bg-[#d1fae5] sm:h-56">
@@ -941,10 +941,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           <div className="p-5 sm:p-7">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-wide text-[#c2410c]">Vitrine de démonstration</p>
-                <p className="mt-1 text-sm text-[#647067]">Ajoutez des articles pour essayer le panier local.</p>
+                <p className="text-xs font-black uppercase tracking-wide text-[var(--mt-orange-deep)]">Vitrine de démonstration</p>
+                <p className="mt-1 text-sm text-[var(--mt-gray-600)]">Ajoutez des articles pour essayer le panier local.</p>
               </div>
-              <span className="rounded-full bg-[#e2eee6] px-3 py-1.5 text-xs font-bold text-[#065f46]">{activeDemoShop.is_open ? 'Ouverte' : 'Fermée'}</span>
+              <span className="rounded-full bg-[#e2eee6] px-3 py-1.5 text-xs font-bold text-[var(--mt-green-deep)]">{activeDemoShop.is_open ? 'Ouverte' : 'Fermée'}</span>
             </div>
             <ul className="space-y-3">
               {(activeDemoShop.products_preview || []).map((product) => {
@@ -952,10 +952,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 return <li key={product.id} className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-3">
                   <img src={product.image_url} alt="" className="h-16 w-16 shrink-0 rounded-xl bg-[#e9f5ee] object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />
                   <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-sm font-bold text-[#292d2a]">{product.title}</h3>
-                    <p className="mt-1 text-sm font-extrabold text-[#065f46]">{formatFCFA(product.price)}</p>
+                    <h3 className="truncate text-sm font-bold text-[var(--mt-gray-900)]">{product.title}</h3>
+                    <p className="mt-1 text-sm font-extrabold text-[var(--mt-green-deep)]">{formatFCFA(product.price)}</p>
                   </div>
-                  <button type="button" onClick={() => setDemoBasket((current) => ({ ...current, [product.id]: (current[product.id] || 0) + 1 }))} className="min-h-10 shrink-0 rounded-full bg-[#065f46] px-3 text-xs font-bold text-white transition hover:bg-[#047857]">
+                  <button type="button" onClick={() => setDemoBasket((current) => ({ ...current, [product.id]: (current[product.id] || 0) + 1 }))} className="min-h-10 shrink-0 rounded-full bg-[var(--mt-green-deep)] px-3 text-xs font-bold text-white transition hover:bg-[var(--mt-green-hover)]">
                     {quantity ? `Ajouté (${quantity})` : 'Ajouter'}
                   </button>
                 </li>;
@@ -964,9 +964,9 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#e9f5ee] p-4">
               <div>
                 <p className="text-xs font-bold text-[#315548]">Panier de démo · {Object.values(demoBasket).reduce((sum, quantity) => sum + quantity, 0)} article(s)</p>
-                <p className="mt-1 text-lg font-black text-[#065f46]">{formatFCFA((activeDemoShop.products_preview || []).reduce((sum, product) => sum + product.price * (demoBasket[product.id] || 0), 0))}</p>
+                <p className="mt-1 text-lg font-black text-[var(--mt-green-deep)]">{formatFCFA((activeDemoShop.products_preview || []).reduce((sum, product) => sum + product.price * (demoBasket[product.id] || 0), 0))}</p>
               </div>
-              <span className="text-right text-xs leading-4 text-[#647067]">Aucune commande ni paiement<br />ne sera envoyé.</span>
+              <span className="text-right text-xs leading-4 text-[var(--mt-gray-600)]">Aucune commande ni paiement<br />ne sera envoyé.</span>
             </div>
           </div>
         </section>

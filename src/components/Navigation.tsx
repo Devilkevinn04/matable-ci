@@ -60,31 +60,31 @@ export const Navigation: React.FC<NavigationProps> = ({
         event.preventDefault();
         onOpenDirectory(searchQuery.trim() || undefined);
       }}
-      className={`flex min-w-0 items-center gap-2 rounded-full border border-[#e5e7eb] bg-[#fafafa] p-1 pl-3 transition focus-within:border-[#059669] focus-within:ring-2 focus-within:ring-[#059669]/15 ${className}`}
+      className={`flex min-w-0 items-center gap-2 rounded-full border border-[#e5e7eb] bg-[#fafafa] p-1 pl-3 transition focus-within:border-[var(--mt-green-primary)] focus-within:ring-2 focus-within:ring-[var(--mt-green-primary)]/15 ${className}`}
     >
-      <Search className="h-4 w-4 shrink-0 text-[#647067]" aria-hidden="true" />
+      <Search className="h-4 w-4 shrink-0 text-[var(--mt-gray-600)]" aria-hidden="true" />
       <input
         type="search"
         aria-label="Rechercher un produit, une boutique ou une catégorie"
         value={searchQuery}
         onChange={(event) => setSearchQuery(event.target.value)}
         placeholder="Boutique, produit, quartier…"
-        className="min-h-9 min-w-0 flex-1 border-0 bg-transparent text-xs text-[#292d2a] outline-none placeholder:text-[#7b817d] sm:text-sm"
+        className="min-h-9 min-w-0 flex-1 border-0 bg-transparent text-xs text-[var(--mt-gray-900)] outline-none placeholder:text-[#7b817d] sm:text-sm"
       />
-      <button type="submit" aria-label="Rechercher" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#059669] text-white transition hover:bg-[#047857]">
+      <button type="submit" aria-label="Rechercher" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--mt-green-primary)] text-white transition hover:bg-[var(--mt-green-hover)]">
         <Search className="h-4 w-4" aria-hidden="true" />
       </button>
     </form>
   );
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[#e5d9ca] bg-[#FFFFFF]/95 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-[#e5d9ca] bg-[var(--mt-surface)]/95 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-2 px-4 py-2.5 sm:gap-3 sm:px-8 sm:py-4">
         <div className="flex min-w-0 items-center gap-3">
           <Link to="/" aria-label="MaTable, accueil" className="flex items-center gap-2.5 text-left">
             <img src="/brand-kit/monogram.svg" alt="" className="h-10 w-10 shrink-0" />
             <span className="min-w-0">
-              <span className="block whitespace-nowrap text-xl font-black leading-5 tracking-tight text-[#103E32]">MaTable</span>
+              <span className="block whitespace-nowrap text-xl font-black leading-5 tracking-tight text-[var(--mt-green-deep)]">MaTable</span>
               <span className="mt-1 block whitespace-nowrap text-xs font-extrabold tracking-[0.09em] text-[#587067]">VOS COMMERCES, ICI.</span>
             </span>
           </Link>
@@ -98,7 +98,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           aria-expanded={mobileMenuOpen}
           aria-controls="mobile-navigation-menu"
           onClick={() => setMobileMenuOpen((open) => !open)}
-          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-[#d9e7de] bg-[#f0f7f2] px-3 text-sm font-extrabold text-[#065f46] shadow-sm transition hover:border-[#9bc5b0] hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] xl:hidden"
+          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-[#d9e7de] bg-[#f0f7f2] px-3 text-sm font-extrabold text-[var(--mt-green-deep)] shadow-sm transition hover:border-[#9bc5b0] hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)] xl:hidden"
         >
           <span className="flex">
               {mobileMenuOpen ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-4 w-4" aria-hidden="true" />}
@@ -114,7 +114,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                   key={label}
                   to={to}
                   aria-current={active ? 'page' : undefined}
-                  className={`inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-bold transition hover:bg-[#f0f7f2] hover:text-[#065f46] ${active ? 'bg-[#e9f5ee] text-[#065f46]' : 'text-[#47534b]'}`}
+                  className={`inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-bold transition hover:bg-[#f0f7f2] hover:text-[var(--mt-green-deep)] ${active ? 'bg-[#e9f5ee] text-[var(--mt-green-deep)]' : 'text-[#47534b]'}`}
                 >
                   <Icon className="h-4 w-4" aria-hidden="true" />{label}
                 </Link>
@@ -122,37 +122,37 @@ export const Navigation: React.FC<NavigationProps> = ({
             </div>
           )}
           {currentRole !== 'storefront' && currentRole !== 'admin' && (
-            <Link to="/guide" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-bold text-[#47534b] transition hover:bg-[#f0f7f2] hover:text-[#065f46] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2">
+            <Link to="/guide" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-bold text-[#47534b] transition hover:bg-[#f0f7f2] hover:text-[var(--mt-green-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)] focus-visible:ring-offset-2">
               <BookOpen className="h-4 w-4" aria-hidden="true" />Guides
             </Link>
           )}
           {currentRole === 'merchant' && (
-            <button onClick={() => onOpenDirectory()} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[#e4d9ca] bg-white px-3.5 py-2 text-sm font-semibold text-[#332d2a] transition hover:border-[#047857] hover:text-[#065f46]">
+            <button onClick={() => onOpenDirectory()} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[#e4d9ca] bg-white px-3.5 py-2 text-sm font-semibold text-[#332d2a] transition hover:border-[var(--mt-green-hover)] hover:text-[var(--mt-green-deep)]">
               <ShoppingBag className="h-3.5 w-3.5" /> Boutiques
             </button>
           )}
           {currentRole === 'admin' && (
-            <span className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[#d5e5df] bg-[#edf8f4] px-3.5 py-2 text-sm font-semibold text-[#065f46]">
+            <span className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[#d5e5df] bg-[#edf8f4] px-3.5 py-2 text-sm font-semibold text-[var(--mt-green-deep)]">
               <ShieldCheck className="h-3.5 w-3.5" /> Super-admin
             </span>
           )}
           {currentRole !== 'admin' && isMerchantPlansPage && (
-            <Link to="/app/creer-boutique" className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#075f48] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#047857]">
+            <Link to="/app/creer-boutique" className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#075f48] px-4 py-2 text-sm font-bold text-white transition hover:bg-[var(--mt-green-hover)]">
               <Store className="h-4 w-4" aria-hidden="true" /> Créer ma boutique
             </Link>
           )}
           {currentRole !== 'admin' && customerUser && (
             <>
-              <button onClick={onOpenCustomerAccount} className="inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-[#065f46] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#047857]">
+              <button onClick={onOpenCustomerAccount} className="inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-[var(--mt-green-deep)] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[var(--mt-green-hover)]">
                 <ShoppingBag className="h-3.5 w-3.5" aria-hidden="true" /> Mon compte
               </button>
-              <button onClick={onLogoutCustomer} className="inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-[#e4d9ca] bg-white px-3.5 py-2 text-sm font-semibold text-[#332d2a] transition hover:border-[#047857] hover:text-[#065f46]">
+              <button onClick={onLogoutCustomer} className="inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-[#e4d9ca] bg-white px-3.5 py-2 text-sm font-semibold text-[#332d2a] transition hover:border-[var(--mt-green-hover)] hover:text-[var(--mt-green-deep)]">
                 Déconnexion
               </button>
             </>
           )}
           {currentRole === 'storefront' && !customerUser && (
-            <Link to="/connexion" className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-full border border-[#e4d9ca] bg-white px-4 py-2 text-sm font-semibold text-[#332d2a] transition hover:border-[#047857] hover:text-[#065f46]">
+            <Link to="/connexion" className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-full border border-[#e4d9ca] bg-white px-4 py-2 text-sm font-semibold text-[#332d2a] transition hover:border-[var(--mt-green-hover)] hover:text-[var(--mt-green-deep)]">
               Connexion
             </Link>
           )}
@@ -163,11 +163,11 @@ export const Navigation: React.FC<NavigationProps> = ({
           <nav
             id="mobile-navigation-menu"
             aria-label="Navigation mobile"
-            className="basis-full origin-top overflow-hidden rounded-b-[1.5rem] border-x border-b border-[#e7ddcf] bg-[#FFFFFF] px-3 pb-4 pt-3 shadow-[0_22px_45px_-22px_rgba(15,77,61,0.45)] sm:px-5 xl:hidden"
+            className="basis-full origin-top overflow-hidden rounded-b-[1.5rem] border-x border-b border-[#e7ddcf] bg-[var(--mt-surface)] px-3 pb-4 pt-3 shadow-[0_22px_45px_-22px_rgba(15,77,61,0.45)] sm:px-5 xl:hidden"
           >
             <div className="mx-auto grid max-w-[1440px] gap-3">
               {currentRole === 'storefront' && (
-                <div className="relative isolate overflow-hidden rounded-[1.15rem] bg-gradient-to-br from-[#065f46] via-[#047857] to-[#36806a] p-4 text-white">
+                <div className="relative isolate overflow-hidden rounded-[1.15rem] bg-gradient-to-br from-[var(--mt-green-deep)] via-[var(--mt-green-hover)] to-[#36806a] p-4 text-white">
                   <span aria-hidden="true" className="absolute -right-6 -top-10 -z-10 h-32 w-32 rounded-full border-[18px] border-white/10" />
                   <span aria-hidden="true" className="absolute right-9 top-7 -z-10 h-12 w-12 rounded-full bg-[#efc781]/25 blur-xl" />
                   <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.18em] text-[#f3dcae]">
@@ -177,14 +177,14 @@ export const Navigation: React.FC<NavigationProps> = ({
                 </div>
               )}
               {currentRole === 'storefront' && (
-                <div className="grid gap-1 rounded-2xl bg-[#FAF8F2] p-1">
+                <div className="grid gap-1 rounded-2xl bg-[var(--mt-gray-50)] p-1">
                   {publicNavigationLinks.map(({ to, label, icon: Icon, active }) => (
                     <Link
                       key={label}
                       to={to}
                       aria-current={active ? 'page' : undefined}
                       onClick={() => setMobileMenuOpen(false)}
-                      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition hover:bg-white ${active ? 'bg-white text-[#065f46]' : 'text-[#47534b]'}`}
+                      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition hover:bg-white ${active ? 'bg-white text-[var(--mt-green-deep)]' : 'text-[#47534b]'}`}
                     >
                       <Icon className="h-4 w-4" aria-hidden="true" />{label}
                     </Link>
@@ -205,13 +205,13 @@ export const Navigation: React.FC<NavigationProps> = ({
                 </button>
               )}
               {currentRole === 'admin' && (
-                <span className="flex min-h-11 items-center gap-3 rounded-xl border border-[#d5e5df] bg-[#edf8f4] px-3 text-sm font-semibold text-[#065f46]">
+                <span className="flex min-h-11 items-center gap-3 rounded-xl border border-[#d5e5df] bg-[#edf8f4] px-3 text-sm font-semibold text-[var(--mt-green-deep)]">
                   <ShieldCheck className="h-4 w-4" /> Super-admin
                 </span>
               )}
               {customerUser && currentRole !== 'admin' && (
                 <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => { setMobileMenuOpen(false); onOpenCustomerAccount(); }} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#065f46] px-3 text-sm font-semibold text-white">
+                  <button onClick={() => { setMobileMenuOpen(false); onOpenCustomerAccount(); }} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--mt-green-deep)] px-3 text-sm font-semibold text-white">
                     <ShoppingBag className="h-4 w-4" /> Mon compte
                   </button>
                   <button onClick={() => { setMobileMenuOpen(false); onLogoutCustomer(); }} className="flex min-h-11 items-center justify-center rounded-xl border border-[#e4d9ca] bg-white px-3 text-sm font-semibold text-[#332d2a]">
@@ -220,7 +220,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 </div>
               )}
               {!customerUser && currentRole === 'storefront' && (
-                <Link to="/connexion" onClick={() => setMobileMenuOpen(false)} className="flex min-h-11 items-center justify-center rounded-xl border border-[#e4d9ca] bg-white px-3 text-sm font-semibold text-[#332d2a] transition hover:border-[#047857]">
+                <Link to="/connexion" onClick={() => setMobileMenuOpen(false)} className="flex min-h-11 items-center justify-center rounded-xl border border-[#e4d9ca] bg-white px-3 text-sm font-semibold text-[#332d2a] transition hover:border-[var(--mt-green-hover)]">
                   Connexion client
                 </Link>
               )}
@@ -241,11 +241,11 @@ export const Navigation: React.FC<NavigationProps> = ({
       {location.pathname === '/' && currentRole === 'storefront' && (
         <nav aria-label="Catégories de produits" className="hidden border-t border-[#f0ebe2] bg-white/80 xl:block">
           <div className="mx-auto flex max-w-[1440px] items-center gap-1 overflow-x-auto px-8 py-1.5">
-            <button type="button" onClick={() => onOpenDirectory()} className="mr-2 inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg bg-[#059669] px-4 text-xs font-bold text-white transition hover:bg-[#047857]">
+            <button type="button" onClick={() => onOpenDirectory()} className="mr-2 inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg bg-[var(--mt-green-primary)] px-4 text-xs font-bold text-white transition hover:bg-[var(--mt-green-hover)]">
               <Store className="h-3.5 w-3.5" aria-hidden="true" /> Toutes les catégories
             </button>
             {SHOP_CATEGORIES.filter((category) => category !== 'other').map((category) => (
-              <button key={category} type="button" onClick={() => onOpenDirectory(getCategoryDefaults(category).label)} className="min-h-9 shrink-0 rounded-lg px-3 text-xs font-semibold text-[#47534b] transition hover:bg-[#f0f7f2] hover:text-[#065f46]">
+              <button key={category} type="button" onClick={() => onOpenDirectory(getCategoryDefaults(category).label)} className="min-h-9 shrink-0 rounded-lg px-3 text-xs font-semibold text-[#47534b] transition hover:bg-[#f0f7f2] hover:text-[var(--mt-green-deep)]">
                 {getCategoryDefaults(category).label}
               </button>
             ))}

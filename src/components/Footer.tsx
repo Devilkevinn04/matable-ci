@@ -6,25 +6,25 @@ interface FooterProps {
   compact?: boolean;
 }
 
-const linkClassName = 'w-fit text-sm text-white/75 transition-colors hover:text-white focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0ba80]';
+const linkClassName = 'w-fit text-sm text-white/75 transition-colors hover:text-white focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)]';
 
 export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
   <footer className={`${compact ? 'mt-6' : ''} relative isolate overflow-hidden overflow-x-clip border-t border-[#164d3b] bg-[#064e3b] text-white`}>
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
       <div className="absolute -right-28 -top-40 h-96 w-96 rounded-full border border-white/[.08] sm:right-[8%]" />
-      <div className="absolute -bottom-48 -left-28 h-96 w-96 rounded-full border border-[#f0ba80]/10" />
+      <div className="absolute -bottom-48 -left-28 h-96 w-96 rounded-full border border-[var(--mt-orange-soft)]/10" />
     </div>
 
     <div className={`relative z-10 mx-auto max-w-[1280px] px-5 sm:px-8 lg:px-10 ${compact ? 'py-7 sm:py-8' : 'py-9 sm:py-12'}`}>
       <div className="grid gap-9 lg:grid-cols-[1.05fr_1.4fr] lg:gap-16">
         <section aria-labelledby="footer-brand-title" className="max-w-md">
-          <Link to="/" aria-label="MaTable, accueil" className="inline-flex max-w-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0ba80] focus-visible:ring-offset-4 focus-visible:ring-offset-[#064e3b]">
+          <Link to="/" aria-label="MaTable, accueil" className="inline-flex max-w-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] focus-visible:ring-offset-4 focus-visible:ring-offset-[#064e3b]">
             <img id="footer-brand-title" src="/brand-kit/logo-reversed.svg" alt="MaTable — Vos commerces, ici" className="h-auto w-[250px] max-w-full" />
           </Link>
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/75">
             Les boutiques, les produits et les talents de Côte d’Ivoire, réunis au même endroit.
           </p>
-          <p className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-[#f0ba80]">
+          <p className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-[var(--mt-orange-soft)]">
             <MapPin className="h-4 w-4" aria-hidden="true" />
             Le commerce local, partout en Côte d’Ivoire
           </p>
@@ -33,7 +33,7 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
         <div className="space-y-5">
         <nav className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3 sm:gap-x-8" aria-label="Navigation et informations">
           <section aria-labelledby="footer-discover-title">
-            <h2 id="footer-discover-title" className="text-xs font-black uppercase tracking-[0.14em] text-[#f0ba80]">Découvrir</h2>
+            <h2 id="footer-discover-title" className="text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-orange-soft)]">Découvrir</h2>
             <ul className="mt-4 flex list-none flex-col gap-3 p-0">
               <li><Link to="/boutiques" className={linkClassName}>Boutiques</Link></li>
               <li><Link to="/promotions" className={linkClassName}>Promotions</Link></li>
@@ -44,7 +44,7 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
           </section>
 
           <section aria-labelledby="footer-merchants-title">
-            <h2 id="footer-merchants-title" className="text-xs font-black uppercase tracking-[0.14em] text-[#f0ba80]">Pour les commerçants</h2>
+            <h2 id="footer-merchants-title" className="text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-orange-soft)]">Pour les commerçants</h2>
             <ul className="mt-4 flex list-none flex-col gap-3 p-0">
               <li><Link to="/commercants" className={linkClassName}>Espace commerçant</Link></li>
               <li><Link to="/guide" className={linkClassName}>Guide personnalisé</Link></li>
@@ -52,7 +52,7 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
           </section>
 
           <section aria-labelledby="footer-legal-title" className="col-span-2 sm:col-span-1">
-            <h2 id="footer-legal-title" className="text-xs font-black uppercase tracking-[0.14em] text-[#f0ba80]">Informations</h2>
+            <h2 id="footer-legal-title" className="text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-orange-soft)]">Informations</h2>
             <ul className="mt-4 flex list-none flex-col gap-3 p-0">
               <li><Link to="/mentions-legales" className={linkClassName}>Mentions légales</Link></li>
               <li><Link to="/confidentialite" className={linkClassName}>Confidentialité</Link></li>
@@ -61,7 +61,7 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
             </ul>
           </section>
         </nav>
-          <Link to="/commercants" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full bg-white px-4 text-xs font-extrabold text-[#065f46] transition hover:bg-[#fff0df] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0ba80] focus-visible:ring-offset-2 focus-visible:ring-offset-[#064e3b]">
+          <Link to="/commercants" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full bg-white px-4 text-xs font-extrabold text-[var(--mt-green-deep)] transition hover:bg-[#fff0df] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#064e3b]">
             <Store className="h-4 w-4 shrink-0" aria-hidden="true" />
             Présenter ma boutique
             <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
