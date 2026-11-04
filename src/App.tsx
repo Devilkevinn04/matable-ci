@@ -279,6 +279,8 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const navigationType = useNavigationType();
+  const previousRouteRef = useRef(`${location.pathname}${location.search}`);
+  const [routeProgressVisible, setRouteProgressVisible] = useState(false);
   const path = location.pathname;
   const normalizedPath = path.replace(/^\//, '').replace(/\/$/, '');
   const isShopDirectoryRoute = path.replace(/\/+$/, '') === '/boutiques';
@@ -335,6 +337,15 @@ export default function App() {
   const scrollPositionsRef = useRef<Map<string, number>>(new Map());
   const isRestoringScrollRef = useRef(false);
   const hasLoadedShopCatalogRef = useRef(false);
+
+  useEffect(() => {
+    const routeKey = `${location.pathname}${location.search}`;
+    if (previousRouteRef.current === routeKey) return;
+    previousRouteRef.current = routeKey;
+    setRouteProgressVisible(true);
+    const timer = window.setTimeout(() => setRouteProgressVisible(false), 650);
+    return () => window.clearTimeout(timer);
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     const routeKey = `${location.pathname}${location.search}`;
@@ -557,6 +568,11 @@ export default function App() {
   return (
     <ToastProvider>
       <a href="#main-content" className="skip-link">Aller au contenu</a>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-1 origin-left bg-[var(--mt-orange-deep)] shadow-[0_1px_8px_rgba(190,83,43,.35)] transition-[transform,opacity] duration-500"
+        style={{ transform: routeProgressVisible ? 'scaleX(1)' : 'scaleX(0)', opacity: routeProgressVisible ? 1 : 0 }}
+      />
       <div className="min-h-screen flex flex-col bg-transparent font-sans">
             <div className="w-full">
               <div className="min-h-screen">
