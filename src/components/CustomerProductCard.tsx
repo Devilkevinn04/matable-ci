@@ -188,7 +188,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
         <h3 className="mb-1 line-clamp-2 text-base font-extrabold leading-snug text-slate-900">{productTitle}</h3>
         {description ? (
           <div className="mb-2 sm:mb-3">
-            <p className={`text-base leading-relaxed text-slate-600 ${shouldTruncate && !isDescriptionExpanded ? 'line-clamp-3' : ''}`}>
+            <p className={`text-sm leading-6 text-slate-600 sm:text-base sm:leading-relaxed ${shouldTruncate && !isDescriptionExpanded ? 'line-clamp-2 sm:line-clamp-3' : ''}`}>
               {shouldTruncate && !isDescriptionExpanded ? `${description.slice(0, 130)}...` : description}
             </p>
             {shouldTruncate && (

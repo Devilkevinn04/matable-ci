@@ -924,7 +924,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             <img
               src={bannerUrl}
               alt={`Illustration de la boutique ${shop.name}`}
-              className="mt-hero-image relative z-10 h-12 w-full object-cover sm:h-60 lg:h-64"
+              className="mt-hero-image relative z-10 h-16 w-full object-cover sm:h-60 lg:h-64"
               onError={(event) => {
                 const element = event.currentTarget;
                 if (element.dataset.placeholderAttempted !== 'true' && element.src !== categoryDefaults.bannerPlaceholderImageUrl) {
@@ -942,7 +942,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
                   {categoryDefaults.label} <span className="text-white/45">/</span> {shop.city || 'Côte d’Ivoire'}
                 </p>
-                <p className="line-clamp-1 max-w-xl text-sm font-medium leading-5 text-white sm:mt-2 sm:line-clamp-2 sm:text-base sm:leading-6">{getWelcomeMessageForDisplay(shop.welcome_message, shop.category)}</p>
+                <p className="line-clamp-2 max-w-xl text-sm font-medium leading-5 text-white sm:mt-2 sm:line-clamp-2 sm:text-base sm:leading-6">{getWelcomeMessageForDisplay(shop.welcome_message, shop.category)}</p>
               </div>
               <a href="#store-catalogue" className="hidden min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/70 bg-[var(--mt-surface)] px-3 py-1.5 text-xs font-extrabold text-[var(--mt-green-deep)] transition hover:-translate-y-0.5 hover:bg-white sm:inline-flex sm:min-h-11 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm">Découvrir la sélection<ArrowRight className="h-4 w-4" /></a>
             </div>
