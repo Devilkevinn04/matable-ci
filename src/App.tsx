@@ -11,6 +11,7 @@ import type { Shop } from './types';
 import { findPublicDiscoveryPage } from './utils/discoverySeo';
 import { getCanonicalOrigin } from './utils/seoCanonical';
 import { trackPageView, trackLogout } from './utils/analyticsTracker';
+import { navigateWithTransition } from './utils/navigateWithTransition';
 import { DirectorySkeleton, HomeSkeleton, PageSkeleton, StorefrontSkeleton } from './components/Skeletons';
 
 // Pages most visitors never open stay out of the first JavaScript download.
@@ -584,9 +585,9 @@ export default function App() {
                       } />
                       <Route path="/__preview/mobile" element={isMobileDashboardPreview ? <MobileDashboardPreview /> : <NotFoundPage />} />
                       <Route path="/__preview/advertising" element={isAdvertisingPreview ? <React.Suspense fallback={<p role="status" className="p-6 text-center text-sm font-semibold text-slate-600">Chargement de l’aperçu…</p>}><AdvertisingPreviewPage /></React.Suspense> : <NotFoundPage />} />
-                      <Route path="/" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} />} />
-                      <Route path="/boutiques" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} isShopDirectoryPage />} />
-                      <Route path="/promotions" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} isPromotionsPage />} />
+                      <Route path="/" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigateWithTransition(navigate, `/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} />} />
+                      <Route path="/boutiques" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigateWithTransition(navigate, `/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} isShopDirectoryPage />} />
+                      <Route path="/promotions" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigateWithTransition(navigate, `/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} isPromotionsPage />} />
                       <Route path="/comment-ca-marche" element={<HowItWorksPage />} />
                       <Route path="/guide" element={<UserGuidePage />} />
                       <Route path="/commercants" element={<MerchantPlansPage />} />
@@ -599,7 +600,7 @@ export default function App() {
                       <Route path="/cgu" element={<LegalPages page="cgu" />} />
                       <Route path="/cookies" element={<LegalPages page="cookies" />} />
                       <Route path="/boutiques/*" element={discoveryPage
-                        ? <PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigate(`/${slug}`)} onOpenDirectory={() => navigate('/boutiques')} discoveryPage={discoveryPage} />
+                        ? <PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigateWithTransition(navigate, `/${slug}`)} onOpenDirectory={() => navigate('/boutiques')} discoveryPage={discoveryPage} />
                         : isLoadingShops
                           ? <DirectoryPageLoading />
                           : <NotFoundPage />

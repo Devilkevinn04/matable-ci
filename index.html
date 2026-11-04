@@ -36,11 +36,16 @@
     <meta name="apple-mobile-web-app-title" content="MaTable" />
     <link rel="manifest" href="/manifest.json" />
     <style>
-      .initial-shell { min-height: 100vh; padding: 2rem 1.25rem; background: #FAF8F2; color: #292d2a; font-family: "DM Sans", system-ui, sans-serif; }
-      .initial-shell__inner { max-width: 72rem; margin: 0 auto; padding: 2rem; border: 1px solid #e7e9e5; border-radius: 1.5rem; background: #fff; }
-      .initial-shell__eyebrow { color: #c2410c; font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
-      .initial-shell h1 { max-width: 42rem; margin: .75rem 0 1rem; color: #065f46; font-family: "Bricolage Grotesque", system-ui, sans-serif; font-size: clamp(2.25rem, 8vw, 4.5rem); line-height: 1.02; }
-      .initial-shell p { max-width: 40rem; margin: 0; color: #647067; font-size: 1rem; line-height: 1.6; }
+      .initial-shell { display: grid; min-height: 100vh; place-items: center; background: #103E32; color: white; font-family: "DM Sans", system-ui, sans-serif; }
+      .initial-shell__inner { display: grid; justify-items: center; gap: .75rem; }
+      .initial-shell__mark { position: relative; display: grid; width: 96px; height: 96px; place-items: center; border-radius: 28px; background: #087F62; font: 800 4rem/1 "Bricolage Grotesque", sans-serif; animation: initial-mark 700ms cubic-bezier(.22,1,.36,1) both; }
+      .initial-shell__mark::after { position: absolute; top: 8px; right: 8px; width: 16px; height: 16px; border-radius: 999px; background: #F97316; content: ""; animation: initial-dot 350ms 550ms cubic-bezier(.22,1,.36,1) both; }
+      .initial-shell__name { font-size: 1.5rem; font-weight: 800; animation: initial-rise 350ms 350ms ease both; }
+      .initial-shell__tagline { color: rgb(255 255 255 / 70%); font-size: .9rem; }
+      @keyframes initial-mark { from { opacity: 0; transform: scale(.5) rotate(-12deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
+      @keyframes initial-dot { from { opacity: 0; transform: scale(.3); } 70% { transform: scale(1.2); } to { opacity: 1; transform: scale(1); } }
+      @keyframes initial-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+      @media (prefers-reduced-motion: reduce) { .initial-shell__mark, .initial-shell__mark::after, .initial-shell__name { animation: none; } }
     </style>
     <script type="application/ld+json">
       {
@@ -75,10 +80,10 @@
   <body class="antialiased selection:bg-[#F97316]/20 selection:text-[#292d2a]">
     <div id="root">
       <main class="initial-shell" aria-label="MaTable">
-        <div class="initial-shell__inner">
-          <div class="initial-shell__eyebrow">Commerce local · Côte d’Ivoire</div>
-          <h1>Le commerce local, tout près de vous.</h1>
-          <p>MaTable est l’annuaire en ligne des boutiques locales. Découvrez leurs produits et contactez directement chaque commerçant.</p>
+        <div class="initial-shell__inner" role="status" aria-label="Chargement de MaTable">
+          <div class="initial-shell__mark" aria-hidden="true">M</div>
+          <div class="initial-shell__name">MaTable</div>
+          <div class="initial-shell__tagline">Vos commerces, ici.</div>
         </div>
       </main>
     </div>

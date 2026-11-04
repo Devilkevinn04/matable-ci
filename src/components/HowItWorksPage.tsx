@@ -25,13 +25,6 @@ const tourSteps = [
     icon: MessageCircle,
     accent: 'bg-[#e3f2e7] text-[var(--mt-green-hover)]',
   },
-  {
-    label: 'Convenir',
-    title: 'Vous vous mettez d’accord ensemble',
-    description: 'Le paiement, le retrait ou la livraison se décident directement avec le vendeur. MaTable facilite la rencontre, le commerçant garde la main.',
-    icon: Truck,
-    accent: 'bg-[#f3e6c9] text-[#805516]',
-  },
 ];
 
 const shopSteps = [
@@ -60,7 +53,7 @@ const HowItWorksPage: React.FC = () => {
     const timer = window.setInterval(() => {
       setStepDirection(1);
       setActiveStep((step) => (step + 1) % tourSteps.length);
-    }, 5200);
+    }, 4200);
     return () => window.clearInterval(timer);
   }, [activeStep, reduceMotion]);
 
