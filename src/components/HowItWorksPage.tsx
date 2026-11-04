@@ -118,7 +118,7 @@ const HowItWorksPage: React.FC = () => {
         </div>
       </section>
 
-      <section id="visite-guidee" className="mt-reveal mx-auto max-w-[1184px] px-5 py-14 sm:px-8 sm:py-20">
+      <section id="visite-guidee" className="mx-auto max-w-[1184px] px-5 py-14 sm:px-8 sm:py-20">
         <header className="mb-8 max-w-2xl sm:mb-10">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--mt-orange-deep)]">{reduceMotion ? 'Visite guidée' : 'Visite guidée animée'}</p>
           <h2 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-4xl">Découvrez MaTable en quelques étapes.</h2>

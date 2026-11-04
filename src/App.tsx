@@ -11,6 +11,7 @@ import type { Shop } from './types';
 import { findPublicDiscoveryPage } from './utils/discoverySeo';
 import { getCanonicalOrigin } from './utils/seoCanonical';
 import { trackPageView, trackLogout } from './utils/analyticsTracker';
+import { DirectorySkeleton, HomeSkeleton, PageSkeleton, StorefrontSkeleton } from './components/Skeletons';
 
 // Pages most visitors never open stay out of the first JavaScript download.
 const LegalPages = React.lazy(() => import('./components/LegalPages').then((module) => ({ default: module.LegalPages })));
@@ -572,13 +573,13 @@ export default function App() {
 
                 {/* min-h keeps the footer below the fold while lazy pages and their data load (it was the main layout shift). */}
                 <div id="main-content" className="flex-1 app-shell min-h-[100svh]" tabIndex={-1}>
-                    <React.Suspense key={isAnimatedPublicRoute ? path : 'persistent-app'} fallback={isShopDirectoryRoute || isDiscoveryRoute ? <DirectoryPageLoading /> : <p role="status" className="p-6 text-center text-sm font-semibold text-slate-600">Chargement de la page…</p>}>
+                    <React.Suspense key={isAnimatedPublicRoute ? path : 'persistent-app'} fallback={isShopDirectoryRoute || isDiscoveryRoute ? <DirectorySkeleton /> : path === '/' ? <HomeSkeleton /> : path.startsWith('/boutiques/') ? <StorefrontSkeleton /> : <PageSkeleton />}>
                       <Routes>
                       <Route path="/__preview/article-form" element={isProductModalPreview ? <ProductModalDevPreview /> : <NotFoundPage />} />
                       <Route path="/__preview/delivery-courier" element={isDeliveryCourierPreview ? <DeliveryCourierWorkspace /> : <NotFoundPage />} />
                       <Route path="/livreur" element={<DeliveryCourierWorkspace />} />
                       <Route path="/__preview/merchant-plans" element={isMerchantPlansPreview
-                        ? <React.Suspense fallback={<p role="status" className="p-6 text-center text-sm font-semibold text-slate-600">Chargement de la page…</p>}><MerchantTrialOnboarding shop={merchantPlanPreviewShop} isStarting={false} mode="plans" previewOnly onBack={() => navigate('/boutiques')} /></React.Suspense>
+                        ? <React.Suspense fallback={<PageSkeleton />}><MerchantTrialOnboarding shop={merchantPlanPreviewShop} isStarting={false} mode="plans" previewOnly onBack={() => navigate('/boutiques')} /></React.Suspense>
                         : <NotFoundPage />
                       } />
                       <Route path="/__preview/mobile" element={isMobileDashboardPreview ? <MobileDashboardPreview /> : <NotFoundPage />} />

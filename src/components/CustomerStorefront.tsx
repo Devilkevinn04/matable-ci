@@ -886,7 +886,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               <span className="hidden sm:inline">{totalCartCount > 0 ? 'Mon panier' : 'Catalogue'}</span>
               {totalCartCount > 0 && (
                 <span 
-                  className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white px-1 text-xs font-black"
+                  key={totalCartCount}
+                  className="mt-pop absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white px-1 text-xs font-black"
                   style={{ backgroundColor: primaryColor, color: primaryTextColor }}
                 >
                   {totalCartCount}
