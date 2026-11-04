@@ -890,6 +890,19 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                     {shop.is_verified && <VerifiedBadge />}
                   </p>}
                   <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#647067] sm:mt-3 sm:text-sm sm:leading-6">{shop.welcome_message || 'Une vitrine locale à découvrir et un commerçant à rencontrer.'}</p>
+                  {shop.products_preview && shop.products_preview.length > 0 && <span className="mt-3 flex min-w-0 items-center gap-2 border-t border-[#eee6dd] pt-2.5">
+                    {shop.products_preview.slice(0, 2).map((product) => (
+                      <span key={product.id} className="flex min-w-0 flex-1 items-center gap-1.5">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#e9f5ee]">
+                          <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), shop.category), 320)} sizes="64px" alt="" loading="lazy" className="h-full w-full object-cover" onError={handlePublicImageError} />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-semibold text-[#47534b]">{product.title}</span>
+                          <span className="block truncate text-xs font-extrabold text-[#065f46]">{formatFCFA(product.price)}</span>
+                        </span>
+                      </span>
+                    ))}
+                  </span>}
                   <div className="mt-auto flex flex-col items-start gap-2 border-t border-[#eee6dd] pt-3 sm:mt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:pt-4">
                     <span className="text-[10px] font-semibold leading-4 text-[#647067] sm:text-xs">
                       {shop.opening_hours?.enabled && shop.opening_hours.open_time && shop.opening_hours.close_time && `${shop.opening_hours.open_time}–${shop.opening_hours.close_time} · `}
