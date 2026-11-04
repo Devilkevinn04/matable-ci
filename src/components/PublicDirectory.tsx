@@ -355,7 +355,6 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
     ...categories.slice(0, 4).map(categoryLabel),
     ...cityPages.slice(0, 1).map((page) => page.city || ''),
   ].filter(Boolean).slice(0, 5);
-  const isHomepage = !discoveryPage && !isShopDirectoryPage;
   const filteredShops = useMemo(() => {
     const filtered = directoryShops.filter((shop) =>
     shopMatchesDirectorySearch(shop, query, categoryLabel(shop.category))
@@ -399,7 +398,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       if (isShopDirectoryPage) onOpenDirectory(query.trim() || undefined);
       else onOpenDirectory(query);
     }}
-    className={`mt-4 flex w-full max-w-[610px] items-center gap-1.5 rounded-[16px] border p-1.5 shadow-[0_10px_28px_rgba(0,0,0,.12)] focus-within:ring-2 focus-within:ring-[var(--mt-orange-soft)]/50 sm:mt-6 sm:gap-2 sm:rounded-[18px] sm:p-2 ${isShopDirectoryPage || isHomepage ? 'border-white/20 bg-white text-[var(--mt-gray-900)]' : 'border-[#d9cdbd] bg-white focus-within:border-[var(--mt-green-hover)] focus-within:ring-[var(--mt-green-hover)]/15'}`}
+    className={`mt-4 flex w-full max-w-[610px] items-center gap-1.5 rounded-[16px] border p-1.5 shadow-[0_10px_28px_rgba(0,0,0,.12)] focus-within:ring-2 focus-within:ring-[var(--mt-orange-soft)]/50 sm:mt-6 sm:gap-2 sm:rounded-[18px] sm:p-2 ${isShopDirectoryPage ? 'border-white/20 bg-white text-[var(--mt-gray-900)]' : 'border-[#d9cdbd] bg-white focus-within:border-[var(--mt-green-hover)] focus-within:ring-[var(--mt-green-hover)]/15'}`}
   >
     <Search className="ml-2 h-5 w-5 shrink-0 text-[#82796e]" aria-hidden="true" />
     <input
@@ -410,7 +409,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       className="min-h-10 min-w-0 flex-1 border-0 bg-transparent px-1.5 text-sm outline-none placeholder:text-[#898178] sm:min-h-11 sm:px-2 sm:text-base"
     />
     {query && <button type="button" onClick={() => setQuery('')} aria-label="Effacer la recherche" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X className="h-4 w-4" /></button>}
-    <button type="submit" className={`inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl px-2.5 text-xs font-bold text-white transition sm:min-h-11 sm:px-5 sm:text-sm ${isShopDirectoryPage || isHomepage ? 'bg-[var(--mt-orange-deep)] hover:bg-[#a53a1d]' : 'bg-[var(--mt-green-deep)] hover:bg-[var(--mt-green-hover)]'}`}>
+    <button type="submit" className={`inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl px-2.5 text-xs font-bold text-white transition sm:min-h-11 sm:px-5 sm:text-sm ${isShopDirectoryPage ? 'bg-[var(--mt-orange-deep)] hover:bg-[#a53a1d]' : 'bg-[var(--mt-green-deep)] hover:bg-[var(--mt-green-hover)]'}`}>
       <span className="sm:hidden">Chercher</span>
       <span className="hidden sm:inline">{isShopDirectoryPage ? 'Rechercher' : 'Voir les boutiques'}</span>
     </button>
@@ -532,11 +531,9 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       ) : (
       <section className="mx-auto w-full max-w-[1280px] px-4 pb-4 pt-4 sm:px-8 sm:pb-6 sm:pt-6 lg:px-10">
         <div className="grid overflow-hidden rounded-3xl border border-[#e7dfd3] bg-white shadow-[0_8px_28px_rgba(20,40,30,.07)] lg:min-h-[330px] lg:grid-cols-[.88fr_1.12fr]">
-          <div className="order-2 relative flex min-w-0 flex-col justify-center overflow-hidden bg-[var(--mt-green-deep)] p-5 text-white sm:p-8 lg:order-1 lg:p-9">
-            <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-30 [background-image:radial-gradient(rgba(255,255,255,.16)_1px,transparent_1px)] [background-size:28px_28px]" />
-            <div className="relative">
-            <p className="mb-2 text-xs font-black text-[var(--mt-orange-soft)] sm:text-xs">Le commerce local, simplifié</p>
-            <h1 className="max-w-[600px] font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.055em] text-white sm:text-[48px] lg:text-[58px]">
+          <div className="order-2 flex min-w-0 flex-col justify-center bg-gradient-to-br from-[#fffdf8] via-[#f8f5ef] to-[#edf5f0] p-5 sm:p-8 lg:order-1 lg:p-9">
+            <p className="mb-2 text-xs font-black text-[var(--mt-orange-deep)] sm:text-xs">Le commerce local, simplifié</p>
+            <h1 className="max-w-[600px] font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.055em] text-[var(--mt-green-deep)] sm:text-[48px] lg:text-[58px]">
               {homeTitleWords.map((word, index) => (
                 <React.Fragment key={word.text}>
                   {index > 0 && ' '}
@@ -546,30 +543,29 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 </React.Fragment>
               ))}
             </h1>
-            <p className="mt-3 max-w-[480px] text-sm leading-6 text-[#e0ebe5] sm:text-[15px]">
+            <p className="mt-3 max-w-[480px] text-sm leading-6 text-[#47534b] sm:text-[15px]">
               MaTable est l’annuaire en ligne des boutiques locales en Côte d’Ivoire. Explorez leurs produits et contactez directement chaque commerçant.
             </p>
             <div>
               {searchForm}
             </div>
-            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-white/85">
-              <span className="inline-flex items-center gap-1.5"><Store className="h-4 w-4 text-[var(--mt-orange-soft)]" aria-hidden="true" /> Boutiques locales</span>
-              <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-[var(--mt-orange-soft)]" aria-hidden="true" /> Échange direct</span>
-              <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[var(--mt-orange-soft)]" aria-hidden="true" /> Retrait ou livraison à convenir</span>
+            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-[#315548]">
+              <span className="inline-flex items-center gap-1.5"><Store className="h-4 w-4 text-[var(--mt-green-primary)]" aria-hidden="true" /> Boutiques locales</span>
+              <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-[var(--mt-green-primary)]" aria-hidden="true" /> Échange direct</span>
+              <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[var(--mt-green-primary)]" aria-hidden="true" /> Retrait ou livraison à convenir</span>
             </div>
             {heroNeighbourhoods.length > 0 && <nav aria-label="Boutiques par quartier" className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-bold text-white/80">Près de chez vous :</span>
+              <span className="text-xs font-bold text-[#47534b]">Près de chez vous :</span>
               {heroNeighbourhoods.map((neighbourhood) => (
-                <Link key={neighbourhood.path} to={neighbourhood.path} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-white/20 bg-white/10 px-3 text-xs font-bold text-white transition hover:border-[var(--mt-orange-soft)] hover:bg-white/15">
+                <Link key={neighbourhood.path} to={neighbourhood.path} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#cfe3d8] bg-white px-3 text-xs font-bold text-[var(--mt-green-deep)] transition hover:border-[var(--mt-green-hover)] hover:bg-[#f0f8f3]">
                   <MapPin className="h-3.5 w-3.5" aria-hidden="true" />{neighbourhood.label}
                 </Link>
               ))}
             </nav>}
             <div className="mt-4">
-              <Link to="/commercants" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-extrabold text-[var(--mt-orange-soft)] transition hover:text-white">
+              <Link to="/commercants" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-extrabold text-[var(--mt-orange-deep)] transition hover:text-[#a53a1d]">
                 Vous vendez ? Ajoutez votre boutique <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
-            </div>
             </div>
           </div>
           <div className="order-1 flex min-w-0 flex-col justify-center bg-[#fffdf8] p-4 sm:p-6 lg:order-2 lg:p-7">
