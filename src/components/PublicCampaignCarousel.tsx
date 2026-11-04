@@ -305,7 +305,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
         onClick={() => { void sendEvent('click', item); onOpenShop(item.shop.slug); }}
         className={`group relative flex min-w-0 items-end overflow-hidden rounded-2xl bg-[#17332c] text-left shadow-[0_8px_24px_rgba(20,40,30,.12)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(20,40,30,.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2 ${featured ? 'min-h-[255px] p-5 sm:min-h-[300px] sm:rounded-[26px] sm:p-7 lg:min-h-[350px] lg:rounded-[30px] lg:p-8' : 'min-h-[150px] p-4 sm:min-h-[170px] sm:p-5 lg:min-h-0'}`}
       >
-        <img src={item.shop.image_url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" onError={(event) => { event.currentTarget.hidden = true; }} />
+        <img src={item.shop.image_url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]" onError={(event) => { event.currentTarget.hidden = true; }} />
         <span aria-hidden="true" className={`absolute inset-0 ${featured ? 'bg-gradient-to-r from-[#102d25]/90 via-[#102d25]/55 to-[#102d25]/10' : 'bg-gradient-to-t from-[#102d25]/90 via-[#102d25]/35 to-transparent'}`} />
         <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-black uppercase tracking-wide text-[#8f351d] sm:left-4 sm:top-4">
           <Megaphone className="h-3 w-3" aria-hidden="true" /> Sponsorisé
@@ -372,7 +372,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
     >
       <button type="button" onClick={() => { void sendEvent('click'); onOpenShop(campaign.shop.slug); }} className="group flex h-full w-full flex-col text-left">
         <span className="relative aspect-[4/3] w-full overflow-hidden bg-[#d1fae5]">
-          <img src={product.thumbnail_url || product.image_url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
+          <img src={product.thumbnail_url || product.image_url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
           <span className="absolute left-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-black uppercase text-[#8f351d]">Sponsorisé</span>
           <span className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-bold text-[#065f46]">{formatFCFA(product.price)}</span>
         </span>

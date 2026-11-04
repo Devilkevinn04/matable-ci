@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowRight, ArrowUpRight, BadgePercent, CheckCircle2, Clock3, LayoutGrid, MapPin, Megaphone, RotateCcw, Search, ShieldCheck, Sparkles, Store, X } from 'lucide-react';
+import { ArrowRight, BadgePercent, CheckCircle2, Clock3, LayoutGrid, MapPin, RotateCcw, Search, ShieldCheck, Sparkles, Store, X } from 'lucide-react';
 import { MotionReveal } from './MotionSystem';
 import { CategoryIcon } from './CategoryIcon';
 import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDisplay, isShopCategory, SHOP_CATEGORIES } from '../utils/categoryDefaults';
@@ -141,14 +141,6 @@ const VerifiedBadge: React.FC = () => (
   </span>
 );
 
-const openPartnerRequest = (event: React.MouseEvent<HTMLButtonElement>) => {
-  const requestForm = document.getElementById('public-partner-request');
-  if (!(requestForm instanceof HTMLDetailsElement)) return;
-  event.preventDefault();
-  requestForm.open = true;
-  requestForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
-};
-
 const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[]; isLoading?: boolean }> = ({ shops, isLoading = false }) => {
   const highlighted = [...shops]
     .filter((shop) => (shop.products_preview?.length || 0) > 0)
@@ -189,14 +181,6 @@ const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[]; isLoading?: boolean
         <Link to="/boutiques" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-[var(--mt-green-deep)] hover:text-[var(--mt-green-hover)]">
           Toutes les boutiques <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Link>
-      </div>
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#f5d3b5] bg-[#fff6ec] px-3 py-2.5 sm:px-4" aria-label="Espace partenaires">
-        <span className="inline-flex min-w-0 items-center gap-2 text-xs font-bold text-[#8f351d] sm:text-sm">
-          <Megaphone className="h-4 w-4 shrink-0" aria-hidden="true" /> Votre marque ici ? Cet espace est réservé aux partenaires.
-        </span>
-        <button type="button" onClick={openPartnerRequest} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full bg-[var(--mt-orange-deep)] px-4 text-xs font-extrabold text-white transition hover:bg-[#a53a1d]">
-          Proposer un partenariat <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
       </div>
     </aside>
   );
@@ -443,14 +427,14 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <span aria-hidden="true" className="px-2">/</span>
                 <span>Promotions</span>
               </nav>
-              <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-orange-soft)]"><BadgePercent className="h-4 w-4" aria-hidden="true" /> Bons plans des boutiques</p>
+              <p className="inline-flex items-center gap-2 text-xs font-black text-[var(--mt-orange-soft)]"><BadgePercent className="h-4 w-4" aria-hidden="true" /> Bons plans des boutiques</p>
               <h1 className="mt-3 max-w-3xl font-display text-4xl font-extrabold leading-[1.04] tracking-[-.045em] sm:text-6xl">Les bons plans du quartier. <span className="text-[var(--mt-orange-soft)]">Vraiment.</span></h1>
               <p className="mt-4 max-w-2xl text-sm leading-6 text-white/80 sm:text-lg sm:leading-7">Des prix réduits publiés par les boutiques locales, visibles pendant leurs dates réelles. Repérez une offre, découvrez le vendeur et échangez directement avec lui.</p>
               <a href="#offres-actives" className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--mt-orange-soft)] px-5 text-sm font-extrabold text-[var(--mt-gray-900)] transition hover:bg-[#ffd09a]">Voir les offres actives <ArrowRight className="h-4 w-4" aria-hidden="true" /></a>
             </MotionReveal>
             <MotionReveal delay={0.1}>
             <aside className="rounded-[24px] border border-white/15 bg-white/[0.08] p-5 backdrop-blur-sm sm:p-6" aria-label="Comment reconnaître une offre active">
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-orange-soft)]">Une offre claire, pas de surprise</p>
+              <p className="text-xs font-black text-[var(--mt-orange-soft)]">Une offre claire, pas de surprise</p>
               <ul className="mt-4 space-y-3 text-sm leading-5 text-white/90">
                 <li className="flex gap-2.5"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-orange-soft)]" aria-hidden="true" /><span>Le prix réduit et le prix habituel sont affichés ensemble.</span></li>
                 <li className="flex gap-2.5"><Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-orange-soft)]" aria-hidden="true" /><span>La période de validité est indiquée sur chaque offre.</span></li>
@@ -502,7 +486,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <span aria-hidden="true" className="px-2">/</span>
                 <span>Boutiques</span>
               </nav>
-              <p className="mb-4 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[var(--mt-orange-soft)] sm:text-sm">
+              <p className="mb-4 inline-flex items-center gap-2 text-xs font-bold text-[var(--mt-orange-soft)] sm:text-sm">
                 <span className="h-px w-7 bg-[var(--mt-orange-soft)]" aria-hidden="true" /> Le carnet des bonnes adresses
               </p>
               <h1 className="max-w-3xl font-display text-4xl font-extrabold leading-[1.04] tracking-[-0.045em] sm:text-6xl lg:text-[68px]">
@@ -521,7 +505,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             <aside className="relative hidden overflow-hidden rounded-[26px] border border-white/15 bg-[var(--mt-surface)] p-5 text-[var(--mt-gray-900)] shadow-[0_24px_70px_rgba(0,0,0,.2)] sm:block sm:p-6" aria-label="Repères de l’annuaire">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--mt-orange-deep)]">Le commerce à portée de main</p>
+                  <p className="text-xs font-bold text-[var(--mt-orange-deep)]">Le commerce à portée de main</p>
                   <h2 className="mt-2 font-display text-2xl font-extrabold leading-tight">Une adresse, une histoire.</h2>
                 </div>
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#d1fae5] text-[var(--mt-green-deep)]"><Sparkles className="h-5 w-5" aria-hidden="true" /></span>
@@ -547,8 +531,8 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       ) : (
       <section className="mx-auto w-full max-w-[1280px] px-4 pb-4 pt-4 sm:px-8 sm:pb-6 sm:pt-6 lg:px-10">
         <div className="grid overflow-hidden rounded-3xl border border-[#e7dfd3] bg-white shadow-[0_8px_28px_rgba(20,40,30,.07)] lg:min-h-[330px] lg:grid-cols-[.88fr_1.12fr]">
-          <div className="flex min-w-0 flex-col justify-center bg-gradient-to-br from-[#fffdf8] via-[#f8f5ef] to-[#edf5f0] p-5 sm:p-8 lg:p-9">
-            <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--mt-orange-deep)] sm:text-xs">Le commerce local, simplifié</p>
+          <div className="order-2 flex min-w-0 flex-col justify-center bg-gradient-to-br from-[#fffdf8] via-[#f8f5ef] to-[#edf5f0] p-5 sm:p-8 lg:order-1 lg:p-9">
+            <p className="mb-2 text-xs font-black text-[var(--mt-orange-deep)] sm:text-xs">Le commerce local, simplifié</p>
             <h1 className="max-w-[600px] font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.055em] text-[var(--mt-green-deep)] sm:text-[48px] lg:text-[58px]">
               {homeTitleWords.map((word, index) => (
                 <React.Fragment key={word.text}>
@@ -584,12 +568,12 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               </Link>
             </div>
           </div>
-          <div className="flex min-w-0 flex-col justify-center bg-[#fffdf8] p-4 sm:p-6 lg:p-7">
+          <div className="order-1 flex min-w-0 flex-col justify-center bg-[#fffdf8] p-4 sm:p-6 lg:order-2 lg:p-7">
             {billboardHasCampaign && <div className="mb-3 flex items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff0df] px-3 py-1.5 text-xs font-black uppercase tracking-wide text-[#8f351d] sm:text-xs">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff0df] px-3 py-1.5 text-xs font-black text-[#8f351d] sm:text-xs">
                 <BadgePercent className="h-3.5 w-3.5" aria-hidden="true" /> Vitrine premium
               </span>
-              <span className="text-xs font-bold uppercase tracking-wide text-[var(--mt-gray-600)] sm:text-xs">Sponsors & partenaires</span>
+              <span className="text-xs font-bold text-[var(--mt-gray-600)] sm:text-xs">Sponsors & partenaires</span>
             </div>}
             <PublicCampaignCarousel
               onOpenShop={handleOpenShop}
@@ -685,9 +669,9 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <MotionReveal key={shop.slug} delay={index * 0.04} className="h-[336px] min-w-[78%] snap-start sm:min-w-[44%] lg:min-w-[calc(25%-12px)]">
                   <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className="motion-interactive group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white shadow-[0_2px_12px_rgba(20,40,30,.05)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.1)]">
                     <span className="relative block aspect-[1.45] overflow-hidden bg-[#e9f5ee]">
-                      <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" onError={(event) => { event.currentTarget.hidden = true; }} />
-                      <span className="absolute left-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-[#8f351d] sm:text-xs">{categoryLabel(shop.category)}</span>
-                      {(shop.is_sponsored || shop.is_featured) && <span className="absolute right-2 top-2 rounded-full bg-[var(--mt-green-deep)]/95 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-white">À la une</span>}
+                      <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" onError={(event) => { event.currentTarget.hidden = true; }} />
+                      <span className="absolute left-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-black text-[#8f351d] sm:text-xs">{categoryLabel(shop.category)}</span>
+                      {(shop.is_sponsored || shop.is_featured) && <span className="absolute right-2 top-2 rounded-full bg-[var(--mt-green-deep)]/95 px-2.5 py-1 text-xs font-black text-white">À la une</span>}
                     </span>
                     <span className="flex min-w-0 flex-1 flex-col p-3 sm:p-3.5">
                       <span className="block truncate font-display text-sm font-extrabold text-[var(--mt-gray-900)] sm:text-base">{shop.name}</span>
@@ -725,7 +709,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           <span className="relative flex min-w-0 items-center gap-3 sm:gap-4">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--mt-orange-deep)] text-white"><BadgePercent className="h-5 w-5" aria-hidden="true" /></span>
             <span className="min-w-0">
-            <span className="block text-xs font-black uppercase tracking-[0.12em] text-[#a53a1d]">Promotions des boutiques</span>
+            <span className="block text-xs font-black text-[#a53a1d]">Promotions des boutiques</span>
             <span className="mt-1 block font-display text-base font-extrabold leading-tight text-[var(--mt-gray-900)] sm:text-lg">Les offres actives, réunies au même endroit.</span>
             </span>
           </span>
@@ -751,7 +735,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 -left-24 z-0 h-80 w-80 rounded-full bg-[#f3d9bb]/35 blur-3xl" />
         <div className="relative z-10 mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-[#a53a1d] sm:text-xs"><span className="h-px w-6 bg-[var(--mt-orange-deep)]" aria-hidden="true" />{isShopDirectoryPage ? 'Le carnet des adresses' : 'Découverte'}</p>
+            <p className="inline-flex items-center gap-2 text-xs font-black text-[#a53a1d] sm:text-xs"><span className="h-px w-6 bg-[var(--mt-orange-deep)]" aria-hidden="true" />{isShopDirectoryPage ? 'Le carnet des adresses' : 'Découverte'}</p>
             <h2 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-[#183f32] sm:text-3xl">
               {discoveryPage ? 'Les boutiques à découvrir' : hasActiveDirectoryFilters ? 'Adresses correspondantes' : 'Le répertoire des boutiques'}
             </h2>
@@ -768,7 +752,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             <div className="relative">
               <div className="mb-3 flex items-end justify-between gap-3">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.14em] text-[#a53a1d]">À chacun son univers</p>
+                  <p className="text-xs font-black text-[#a53a1d]">À chacun son univers</p>
                   <p className="mt-1 font-display text-lg font-extrabold text-[#183f32] sm:text-xl">Qu’avez-vous envie de découvrir ?</p>
                 </div>
                 <span className="hidden pb-1 text-xs font-medium text-[var(--mt-gray-600)] sm:block">Choisissez une catégorie</span>
@@ -807,7 +791,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               </div>
             </div>
             <div className="relative mt-3 flex flex-wrap items-center gap-2 border-t border-[#e9e1d7] pt-3 sm:mt-4 sm:pt-4">
-              <label htmlFor="directory-sort" className="mr-1 text-xs font-black uppercase tracking-wide text-[var(--mt-gray-600)] sm:text-xs">Affiner</label>
+              <label htmlFor="directory-sort" className="mr-1 text-xs font-black text-[var(--mt-gray-600)] sm:text-xs">Affiner</label>
               <select
                 id="directory-sort"
                 value={directorySort}
@@ -831,7 +815,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             </div>
             {cityPages.length > 0 && (
               <nav className="relative mt-3 flex flex-wrap items-center gap-2 border-t border-[#e9e1d7] pt-3 sm:mt-4 sm:pt-4" aria-label="Découvrir les boutiques par ville">
-                <span className="mr-1 text-xs font-black uppercase tracking-wide text-[var(--mt-gray-600)]">Explorer une ville</span>
+                <span className="mr-1 text-xs font-black text-[var(--mt-gray-600)]">Explorer une ville</span>
                 {cityPages.map((page) => <Link key={page.path} to={page.path} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-white/80 bg-white/70 px-3 text-xs font-bold text-[#315548] shadow-sm transition hover:border-[#9cbdab] hover:bg-white"><MapPin className="h-3.5 w-3.5 text-[var(--mt-orange-deep)]" aria-hidden="true" />{page.city}</Link>)}
               </nav>
             )}
@@ -868,13 +852,13 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045} className={filteredShops.length === 1 ? 'mx-auto w-full max-w-[760px]' : undefined}>
               <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className="motion-interactive group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[var(--mt-surface)] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)] focus-visible:ring-offset-2 sm:rounded-[24px]">
                 <div className="relative aspect-[1.35] shrink-0 overflow-hidden sm:aspect-[1.65]" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
-                  <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
+                  <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
                   <span className="absolute inset-0 bg-gradient-to-t from-[#17211f]/75 via-transparent to-[#17211f]/5" />
-                  <span className="absolute bottom-3 left-3 rounded-full bg-[var(--mt-surface)]/90 px-2.5 py-1 text-xs font-bold uppercase tracking-[0.08em] text-[var(--mt-green-deep)] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
+                  <span className="absolute bottom-3 left-3 rounded-full bg-[var(--mt-surface)]/90 px-2.5 py-1 text-xs font-bold text-[var(--mt-green-deep)] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-5 lg:p-6">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-xs font-bold uppercase tracking-[0.1em] text-[var(--mt-orange-deep)] sm:text-xs sm:tracking-[0.13em]"><span className="sm:hidden">Adresse</span><span className="hidden sm:inline">Une adresse à découvrir</span></span>
+                    <span className="truncate text-xs font-bold text-[var(--mt-orange-deep)] sm:text-xs sm:tracking-[0.13em]"><span className="sm:hidden">Adresse</span><span className="hidden sm:inline">Une adresse à découvrir</span></span>
                     <div className="flex shrink-0 items-center gap-1">
                     {shop.boost_placements?.some((placement) => placement === (discoveryPage?.citySlug ? 'city' : discoveryPage?.category || category !== 'all' ? 'category' : !isShopDirectoryPage ? 'home' : 'directory') || placement === 'directory') && <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-950 sm:text-xs">Sponsorisé</span>}
                     <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-bold sm:px-3 sm:py-1.5 sm:text-xs ${shop.is_open ? 'bg-[#e2eee6] text-[var(--mt-green-deep)]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>
@@ -911,7 +895,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       {!discoveryPage && !isShopDirectoryPage && <section className="mx-auto w-full max-w-[1184px] px-5 py-10 sm:px-8 sm:py-14">
         <div className="flex flex-col items-start justify-between gap-6 overflow-hidden rounded-[24px] bg-[var(--mt-green-deep)] px-6 py-8 text-white sm:flex-row sm:items-center sm:px-10 sm:py-10">
           <div className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--mt-orange-soft)]">Vous vendez en Côte d’Ivoire ?</p>
+            <p className="text-xs font-bold text-[var(--mt-orange-soft)]">Vous vendez en Côte d’Ivoire ?</p>
             <h2 className="mt-2 font-display text-2xl font-extrabold leading-tight sm:text-3xl">Présentez votre commerce sur MaTable.</h2>
             <p className="mt-2 text-sm leading-6 text-[#e0eae3]">Découvrez les outils, les étapes de création et les formules pour commerçants.</p>
           </div>
@@ -934,14 +918,14 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
             <div className="absolute bottom-4 left-5 right-5 text-white sm:bottom-6 sm:left-7">
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-white/80">{categoryLabel(activeDemoShop.category)} · {activeDemoShop.city}</p>
+              <p className="text-xs font-bold text-white/80">{categoryLabel(activeDemoShop.category)} · {activeDemoShop.city}</p>
               <h2 id="demo-store-title" className="mt-1 font-display text-2xl font-black sm:text-3xl">{activeDemoShop.name}</h2>
             </div>
           </div>
           <div className="p-5 sm:p-7">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-wide text-[var(--mt-orange-deep)]">Vitrine de démonstration</p>
+                <p className="text-xs font-black text-[var(--mt-orange-deep)]">Vitrine de démonstration</p>
                 <p className="mt-1 text-sm text-[var(--mt-gray-600)]">Ajoutez des articles pour essayer le panier local.</p>
               </div>
               <span className="rounded-full bg-[#e2eee6] px-3 py-1.5 text-xs font-bold text-[var(--mt-green-deep)]">{activeDemoShop.is_open ? 'Ouverte' : 'Fermée'}</span>
