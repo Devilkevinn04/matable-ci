@@ -61,6 +61,36 @@
   --radius-sm: 0.7rem;
 }
 
+@keyframes home-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes home-float {
+  0%, 100% { margin-top: 0; }
+  50% { margin-top: -8px; }
+}
+
+.home-marquee {
+  animation: home-marquee 28s linear infinite;
+}
+
+.home-marquee-reverse {
+  animation: home-marquee 34s linear infinite reverse;
+}
+
+.home-product-card {
+  animation: home-float 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-marquee,
+  .home-marquee-reverse,
+  .home-product-card {
+    animation: none;
+  }
+}
+
 html {
   scroll-behavior: smooth;
 }

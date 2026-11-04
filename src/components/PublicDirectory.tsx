@@ -12,6 +12,7 @@ import { PublicPartnerCarousel, type PublicPermanentPartner } from './PublicPart
 import { formatFCFA } from '../utils/format';
 import { getResponsiveImageProps } from '../utils/responsiveImages';
 import { useAutoScrollRail } from '../hooks/useAutoScrollRail';
+import { AnimatedHome } from './AnimatedHome';
 
 interface DirectoryShop {
   id?: number;
@@ -414,6 +415,17 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       <span className="hidden sm:inline">{isShopDirectoryPage ? 'Rechercher' : 'Voir les boutiques'}</span>
     </button>
   </form>;
+
+  if (!discoveryPage && !isShopDirectoryPage && !isPromotionsPage) {
+    return (
+      <AnimatedHome
+        shops={directoryShops}
+        categories={categories}
+        neighbourhoods={heroNeighbourhoods}
+        onOpenDirectory={onOpenDirectory}
+      />
+    );
+  }
 
   if (isPromotionsPage) {
     return (
