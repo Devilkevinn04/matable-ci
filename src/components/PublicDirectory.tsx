@@ -11,6 +11,7 @@ import { PublicCampaignCarousel, type PublicCampaign } from './PublicCampaignCar
 import { PublicPartnerCarousel, type PublicPermanentPartner } from './PublicPartnerCarousel';
 import { formatFCFA } from '../utils/format';
 import { getResponsiveImageProps } from '../utils/responsiveImages';
+import { handlePublicImageError } from '../utils/imageFallback';
 import { useAutoScrollRail } from '../hooks/useAutoScrollRail';
 import { AnimatedHome } from './AnimatedHome';
 
@@ -161,7 +162,7 @@ const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[]; isLoading?: boolean
           return <li key={shop.slug}>
             <Link to={`/${encodeURIComponent(shop.slug)}`} className="group flex min-h-[64px] items-center gap-3 rounded-2xl border border-[#e3ece6] bg-white p-2 pr-3 transition hover:border-[#b9d5ca] hover:shadow-[0_8px_18px_rgba(20,40,30,.08)]">
               <span className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-[#e9f5ee]">
-                {product && <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), shop.category), 320)} sizes="64px" alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />}
+                {product && <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), shop.category), 320)} sizes="64px" alt="" loading="lazy" className="h-full w-full object-cover" onError={handlePublicImageError} />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -681,7 +682,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <MotionReveal key={shop.slug} delay={index * 0.04} className="h-[336px] min-w-[78%] snap-start sm:min-w-[44%] lg:min-w-[calc(25%-12px)]">
                   <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className="motion-interactive group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white shadow-[0_2px_12px_rgba(20,40,30,.05)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.1)]">
                     <span className="relative block aspect-[1.45] overflow-hidden bg-[#e9f5ee]">
-                      <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" onError={(event) => { event.currentTarget.hidden = true; }} />
+                      <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" onError={handlePublicImageError} />
                       <span className="absolute left-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-black text-[#8f351d] sm:text-xs">{categoryLabel(shop.category)}</span>
                       {(shop.is_sponsored || shop.is_featured) && <span className="absolute right-2 top-2 rounded-full bg-[var(--mt-green-deep)]/95 px-2.5 py-1 text-xs font-black text-white">À la une</span>}
                     </span>
@@ -695,7 +696,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                         {shop.products_preview.slice(0, 2).map((product) => (
                           <span key={product.id} className="flex min-w-0 flex-1 items-center gap-1.5">
                             <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#e9f5ee]">
-                              <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), shop.category), 320)} sizes="64px" alt="" loading="lazy" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />
+                              <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), shop.category), 320)} sizes="64px" alt="" loading="lazy" className="h-full w-full object-cover" onError={handlePublicImageError} />
                             </span>
                             <span className="min-w-0">
                               <span className="block truncate text-xs font-semibold text-[#47534b]">{product.title}</span>
@@ -864,7 +865,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045} className={filteredShops.length === 1 ? 'mx-auto w-full max-w-[760px]' : undefined}>
               <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className="mt-press group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[var(--mt-surface)] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)] focus-visible:ring-offset-2 sm:rounded-[24px]">
                 <div className="relative aspect-[1.35] shrink-0 overflow-hidden sm:aspect-[1.65]" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
-                  <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
+                  <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]" onError={handlePublicImageError} />
                   <span className="absolute inset-0 bg-gradient-to-t from-[#17211f]/75 via-transparent to-[#17211f]/5" />
                   <span className="absolute bottom-3 left-3 rounded-full bg-[var(--mt-surface)]/90 px-2.5 py-1 text-xs font-bold text-[var(--mt-green-deep)] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
                 </div>
@@ -880,7 +881,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                   </div>
                   <div className="mt-2 flex min-w-0 items-center gap-2 sm:mt-4 sm:gap-3">
                     {shop.theme_config?.logo_url && <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e9e1d7] bg-white sm:h-12 sm:w-12 sm:rounded-2xl">
-                      <img src={shop.theme_config.logo_url} alt="" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />
+                      <img src={shop.theme_config.logo_url} alt="" className="h-full w-full object-cover" onError={handlePublicImageError} />
                     </span>}
                     <h3 className="line-clamp-2 min-w-0 font-display text-base font-extrabold leading-tight tracking-tight text-[var(--mt-gray-900)] sm:text-xl lg:text-2xl">{shop.name}</h3>
                   </div>
@@ -924,7 +925,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           onClick={(event) => event.stopPropagation()}
         >
           <div className="relative h-40 overflow-hidden bg-[#d1fae5] sm:h-56">
-            <img src={getShopImage(activeDemoShop)} alt="" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />
+            <img src={getShopImage(activeDemoShop)} alt="" className="h-full w-full object-cover" onError={handlePublicImageError} />
             <div className="absolute inset-0 bg-gradient-to-t from-[#10231d]/75 to-transparent" />
             <button type="button" aria-label="Fermer l’aperçu de la boutique" onClick={() => setActiveDemoShop(null)} className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#183f32] shadow-lg transition hover:bg-[#fff0df]">
               <X className="h-5 w-5" aria-hidden="true" />
@@ -946,7 +947,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               {(activeDemoShop.products_preview || []).map((product) => {
                 const quantity = demoBasket[product.id] || 0;
                 return <li key={product.id} className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-3">
-                  <img src={product.image_url} alt="" className="h-16 w-16 shrink-0 rounded-xl bg-[#e9f5ee] object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />
+                  <img src={product.image_url} alt="" className="h-16 w-16 shrink-0 rounded-xl bg-[#e9f5ee] object-cover" onError={handlePublicImageError} />
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-sm font-bold text-[var(--mt-gray-900)]">{product.title}</h3>
                     <p className="mt-1 text-sm font-extrabold text-[var(--mt-green-deep)]">{formatFCFA(product.price)}</p>

@@ -136,6 +136,7 @@
 
 .mt-wall-track {
   animation: mt-wall-up linear infinite;
+  will-change: transform;
 }
 
 .mt-wall-track-reverse {
@@ -171,6 +172,10 @@
 
 .mt-pop {
   animation: mt-pop 450ms var(--mt-motion-ease) both;
+}
+
+.mt-wall {
+  contain: paint;
 }
 
 .mt-loop {
@@ -233,6 +238,7 @@
   .mt-wall-track,
   .mt-hero-image {
     animation: none;
+    will-change: auto;
   }
 }
 

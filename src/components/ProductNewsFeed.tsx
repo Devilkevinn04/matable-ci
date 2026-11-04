@@ -13,6 +13,7 @@ import { PublicPartnerRequestForm } from './PublicPartnerRequestForm';
 import { useAutoScrollRail } from '../hooks/useAutoScrollRail';
 import { cachedFetchJson } from '../utils/requestCache';
 import { getResponsiveImageProps } from '../utils/responsiveImages';
+import { handlePublicImageError } from '../utils/imageFallback';
 
 interface FeedShop {
   id: number;
@@ -197,7 +198,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
       className="mt-press mt-reveal group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl  border border-[#e7e9e5] bg-white text-left shadow-[0_2px_12px_rgba(20,40,30,.06)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2"
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-[#d1fae5]">
-        <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), product.shop.category))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]" onError={(event) => { event.currentTarget.hidden = true; }} />
+        <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), product.shop.category))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]" onError={handlePublicImageError} />
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           {isPromotion
             ? <span aria-label={discountPercent > 0 ? `Réduction de ${discountPercent} %` : 'Prix réduit'} className="inline-flex items-center gap-1 rounded-full bg-[#c2410c] px-2.5 py-1 text-[10px] font-bold text-white"><BadgePercent className="h-3 w-3" aria-hidden="true" />{discountPercent > 0 ? `−${discountPercent}%` : 'Prix réduit'}</span>

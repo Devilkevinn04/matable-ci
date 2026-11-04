@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { getProductImageForDisplay } from '../utils/categoryDefaults';
 import { formatFCFA } from '../utils/format';
 import { getResponsiveImageProps } from '../utils/responsiveImages';
+import { handlePublicImageError } from '../utils/imageFallback';
 import { isAgeRestrictedProduct } from '../utils/ageRestrictedProducts';
 
 interface AnimatedHomeShop {
@@ -59,7 +60,7 @@ const ProductWall: React.FC<ProductWallProps> = ({ products }) => {
               {[...column, ...column].map(({ shop, product }, index) => (
                 <div key={`${shop.slug}-${product.title}-${index}`} className="shrink-0 rounded-[22px] border border-[var(--mt-gray-200)] bg-white p-2 shadow-[0_18px_38px_rgb(33_38_34_/_18%)] sm:rounded-[22px]">
                   <span className="block aspect-[4/5] overflow-hidden rounded-2xl bg-[var(--mt-gray-50)]">
-                    <img {...getResponsiveImageProps(getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category), 420)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    <img {...getResponsiveImageProps(getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category), 420)} alt="" className="h-full w-full object-cover" loading="lazy" onError={handlePublicImageError} />
                   </span>
                   <span className="block truncate px-1 pt-2 text-[15px] font-bold text-[var(--mt-gray-900)]">{product.title}</span>
                   <span className="block truncate px-1 text-xs text-[var(--mt-gray-600)]">{shop.name}</span>
@@ -198,7 +199,7 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
             const product = shop.products_preview?.[0];
             return <Link key={shop.slug} to={`/${encodeURIComponent(shop.slug)}`} className="group overflow-hidden rounded-[28px] bg-[#103e32] text-white shadow-[0_18px_40px_rgba(16,62,50,.14)]">
               <div className="relative aspect-[1.2] overflow-hidden">
-                {product && <img {...getResponsiveImageProps(getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category), 720)} alt="" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" />}
+                {product && <img {...getResponsiveImageProps(getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category), 720)} alt="" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" onError={handlePublicImageError} />}
                 <span className="absolute left-4 top-4 rounded-full bg-white px-3 py-1 text-xs font-extrabold text-[#c2410c]">{categoryLabel(shop.category)}</span>
               </div>
               <div className="flex items-center justify-between gap-3 p-5">

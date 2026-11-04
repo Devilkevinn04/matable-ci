@@ -36,6 +36,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   ];
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const mobileMenuRef = React.useRef<HTMLElement | null>(null);
   const [searchQuery, setSearchQuery] = useState(() => new URLSearchParams(location.search).get('q') || '');
   React.useEffect(() => {
     setMobileMenuOpen(false);
@@ -45,13 +46,33 @@ export const Navigation: React.FC<NavigationProps> = ({
   }, [location.search]);
   React.useEffect(() => {
     if (!mobileMenuOpen) return;
+    const focusableSelector = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusFirstItem = () => mobileMenuRef.current?.querySelector<HTMLElement>(focusableSelector)?.focus();
+    const focusTimer = window.setTimeout(focusFirstItem, 0);
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setMobileMenuOpen(false);
-      mobileMenuButtonRef.current?.focus();
+      if (event.key === 'Escape') {
+        setMobileMenuOpen(false);
+        mobileMenuButtonRef.current?.focus();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusableElements = mobileMenuRef.current?.querySelectorAll<HTMLElement>(focusableSelector);
+      if (!focusableElements?.length) return;
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
     };
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [mobileMenuOpen]);
   const headerSearch = (className: string) => (
     <form
@@ -162,6 +183,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         {mobileMenuOpen && (
           <nav
             id="mobile-navigation-menu"
+            ref={mobileMenuRef}
             aria-label="Navigation mobile"
             className="mt-mobile-panel basis-full origin-top overflow-hidden rounded-b-[1.5rem] border-x border-b border-[#e7ddcf] bg-[var(--mt-surface)] px-3 pb-4 pt-3 shadow-[0_22px_45px_-22px_rgba(15,77,61,0.45)] sm:px-5 xl:hidden"
           >
