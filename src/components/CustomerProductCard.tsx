@@ -5,6 +5,7 @@ import type { Product, ShopCategory } from '../types';
 import type { CategoryDefaults } from '../utils/categoryDefaults';
 import { formatFCFA } from '../utils/format';
 import { CategoryProductImage } from './CategoryProductImage';
+import { ProductOptionsSheet } from './ProductOptionsSheet';
 import { getActiveProductPrice } from '../utils/productPricing';
 import { useProductSaleClock } from '../utils/useProductSaleClock';
 
@@ -14,6 +15,7 @@ interface CustomerProductCardProps {
   categoryDefaults: CategoryDefaults;
   isShopOpen: boolean;
   layoutStyle: 'grid_portrait' | 'card_landscape';
+  compact?: boolean;
   cardRadius: string;
   shadowClass: string;
   primaryColor: string;
@@ -45,6 +47,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   categoryDefaults,
   isShopOpen,
   layoutStyle,
+  compact = false,
   cardRadius,
   shadowClass,
   primaryColor,
@@ -84,6 +87,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   ];
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
   const imageViewerCloseRef = useRef<HTMLButtonElement>(null);
   const imageViewerTriggerRef = useRef<HTMLButtonElement>(null);
   const imageViewerDialogRef = useRef<HTMLElement>(null);
@@ -141,6 +145,88 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   const showNextImage = () => {
     setSelectedImageIndex((index) => (index + 1) % productImages.length);
   };
+
+  if (compact) {
+    const hasChoices = hasProductOptions;
+    const shortDescription = description.replace(/\s+/g, ' ').trim();
+    const addLabel = hasChoices ? `Choisir les options de ${productTitle}` : `Ajouter ${productTitle} au panier`;
+    return (
+      <>
+        <article
+          id={`product-card-${product.id}`}
+          className="mt-reveal flex min-h-[7.5rem] gap-3 rounded-2xl border border-[#ded8ce] bg-white p-2.5 shadow-sm"
+        >
+          <button type="button" onClick={() => setIsSheetOpen(true)} aria-label={`Voir les détails de ${productTitle}`} className="relative h-[6.25rem] w-[6.25rem] shrink-0 overflow-hidden rounded-xl bg-[#f4f1ea]">
+            <CategoryProductImage imageUrl={product.thumbnail_url || product.image_url} category={category} title={productTitle} showFallbackTitle={false} sizes="100px" className="h-full w-full" />
+            {product.prep_time && <span className="absolute left-1 top-1 flex items-center gap-0.5 rounded-md bg-slate-900/80 px-1.5 py-0.5 text-[11px] font-black text-white"><Clock className="h-2.5 w-2.5 text-amber-400" aria-hidden="true" />{product.prep_time} min</span>}
+            {outOfStock && <span className="absolute inset-0 flex items-center justify-center bg-slate-950/65 text-[11px] font-black text-white">Épuisé</span>}
+          </button>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex items-start justify-between gap-1">
+              <button type="button" onClick={() => setIsSheetOpen(true)} className="min-w-0 text-left">
+                <h3 className="line-clamp-2 text-[15px] font-extrabold leading-snug text-slate-900">{productTitle}</h3>
+              </button>
+              <button type="button" onClick={() => { onToggleFavorite(); onToggleLike(); }} disabled={isLikePending} aria-pressed={isFavorite || isLiked} aria-label={isFavorite || isLiked ? 'Retirer des favoris' : 'Ajouter aux favoris'} className={`-mr-1 -mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${isFavorite || isLiked ? 'text-rose-600' : 'text-slate-400'}`}>
+                <Heart className={`h-[18px] w-[18px] ${isFavorite || isLiked ? 'fill-current' : ''}`} aria-hidden="true" />
+              </button>
+            </div>
+            {shortDescription && <p className="line-clamp-1 text-xs font-medium text-slate-500">{shortDescription}</p>}
+            <div className="mt-auto flex items-end justify-between gap-2 pt-1.5">
+              <div className="min-w-0">
+                <span className="block whitespace-nowrap text-[15px] font-black leading-tight" style={{ color: isPromotion ? '#c2410c' : primaryColor }}>{hasChoices && !isPromotion && selectedModifierTotal === 0 && category === 'food' && product.modifier_groups?.some((group) => group.options.some((option) => typeof option !== 'string' && option.price_delta > 0)) ? 'Dès ' : ''}{formatFCFA(selectedUnitPrice)}</span>
+                {isPromotion && <span className="block whitespace-nowrap text-[11px] font-semibold text-slate-400 line-through">{formatFCFA(product.price + selectedModifierTotal)}</span>}
+                {!outOfStock && product.stock <= 3 && <span className="block text-[11px] font-bold text-amber-700">{product.stock} restant{product.stock > 1 ? 's' : ''}</span>}
+              </div>
+              {outOfStock ? (
+                <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-bold text-slate-400">Indisponible</span>
+              ) : quantityInCart > 0 && !hasChoices ? (
+                <div className="flex shrink-0 items-center gap-1 rounded-full bg-[#f1ebdf] p-1">
+                  <button id={`qty-minus-${product.id}`} type="button" onClick={onDecreaseQuantity} aria-label="Diminuer" className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm"><Minus className="h-4 w-4" /></button>
+                  <span role="status" aria-label={`${quantityInCart} au panier`} className="min-w-5 text-center text-sm font-black">{quantityInCart}</span>
+                  <button id={`qty-plus-${product.id}`} type="button" onClick={onAddToCart} disabled={quantityInCart >= product.stock} aria-label="Augmenter" className="flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm disabled:opacity-40" style={{ backgroundColor: primaryColor }}><Plus className="h-4 w-4" /></button>
+                </div>
+              ) : (
+                <button
+                  id={`add-btn-${product.id}`}
+                  type="button"
+                  disabled={!isShopOpen}
+                  aria-label={addLabel}
+                  onClick={hasChoices || quantityInCart > 0 ? () => setIsSheetOpen(true) : onAddToCart}
+                  className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white shadow-md transition active:scale-[0.92] disabled:opacity-50"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  <Plus className="h-5 w-5" strokeWidth={3} aria-hidden="true" />
+                  {quantityInCart > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-[11px] font-black text-slate-900 shadow ring-1 ring-slate-200">{quantityInCart}</span>}
+                </button>
+              )}
+            </div>
+          </div>
+        </article>
+        {isSheetOpen && (
+          <ProductOptionsSheet
+            product={product}
+            category={category}
+            categoryDefaults={categoryDefaults}
+            imageSrc={product.image_url}
+            isShopOpen={isShopOpen}
+            outOfStock={outOfStock}
+            primaryColor={primaryColor}
+            activeSize={activeSize}
+            activeColor={activeColor}
+            activeModifiers={activeModifiers}
+            unitPrice={selectedUnitPrice}
+            quantityInCart={quantityInCart}
+            onSelectSize={onSelectSize}
+            onSelectColor={onSelectColor}
+            onToggleModifier={onToggleModifier}
+            onAddToCart={onAddToCart}
+            onDecreaseQuantity={onDecreaseQuantity}
+            onClose={() => setIsSheetOpen(false)}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <article
