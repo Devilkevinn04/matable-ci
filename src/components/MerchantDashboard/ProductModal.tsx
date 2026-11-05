@@ -343,7 +343,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                               <legend className="mb-1.5 text-[11px] font-bold text-slate-600">Maximum pour ce groupe</legend>
                               <div className="grid grid-cols-5 gap-1" role="radiogroup" aria-label={`Maximum de choix pour ${group.name || `Groupe ${groupIndex + 1}`}`}>
                                 {[1, 2, 3, 4, 5].map((selectionCount) => (
-                                  <label key={selectionCount} className={`flex min-h-9 cursor-pointer items-center justify-center rounded-lg border px-2 text-xs font-bold transition ${Number(group.max_selections) === selectionCount ? 'border-emerald-800 bg-emerald-800 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-700 hover:bg-emerald-50'}`}>
+                                  <label key={selectionCount} className={`flex min-h-11 cursor-pointer items-center justify-center rounded-lg border px-2 text-xs font-bold transition ${Number(group.max_selections) === selectionCount ? 'border-emerald-800 bg-emerald-800 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-700 hover:bg-emerald-50'}`}>
                                     <input
                                       type="radio"
                                       name={`modifier-group-${groupIndex}-max-selections`}

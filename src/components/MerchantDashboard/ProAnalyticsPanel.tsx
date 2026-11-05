@@ -203,7 +203,7 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
             <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-emerald-800">Votre activité</p>
             <h3 id="merchant-overview-analytics-title" className="mt-1 text-lg font-black text-[#183b31]">Cette semaine</h3>
           </div>
-          <button type="button" onClick={() => setRefreshKey((key) => key + 1)} aria-label="Actualiser les statistiques" className="grid h-9 w-9 place-items-center rounded-full border border-[#dfe8dd] text-[var(--mt-green-hover)] hover:bg-emerald-50">
+          <button type="button" onClick={() => setRefreshKey((key) => key + 1)} aria-label="Actualiser les statistiques" className="grid h-11 w-11 place-items-center rounded-full border border-[#dfe8dd] text-[var(--mt-green-hover)] hover:bg-emerald-50">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
           </button>
         </div>
@@ -259,7 +259,7 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
         </div>
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/15 pt-4 text-[11px] text-emerald-50/80">
           <p>Formule {shop.subscription?.plan || 'Standard'} · données sur {analytics?.days || days} jours · visites comptées après consentement</p>
-          <button type="button" onClick={() => setRefreshKey((key) => key + 1)} disabled={loading} className="inline-flex min-h-9 items-center gap-2 rounded-full border border-white/25 px-3 font-bold text-white transition hover:bg-white/10 disabled:opacity-60">
+          <button type="button" onClick={() => setRefreshKey((key) => key + 1)} disabled={loading} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/25 px-3 font-bold text-white transition hover:bg-white/10 disabled:opacity-60">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
             Actualiser
           </button>

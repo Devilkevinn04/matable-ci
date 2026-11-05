@@ -161,7 +161,7 @@ export function GuideChecklist({ role, accountId, collapsible = false }: GuideCh
                       aria-label={`${isComplete ? 'Marquer comme non terminée' : 'Marquer comme terminée'} : ${step.title}`}
                       aria-pressed={isComplete}
                       onClick={() => toggleStep(step.id)}
-                      className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full border transition ${
+                      className={`-my-1 -ml-1.5 grid h-11 w-11 shrink-0 place-items-center rounded-full border transition ${
                         isComplete ? 'border-[var(--mt-green-hover)] bg-[var(--mt-green-hover)] text-white' : 'border-[#bdb5aa] bg-white text-transparent hover:border-[var(--mt-green-hover)]'
                       }`}
                     >
@@ -172,7 +172,7 @@ export function GuideChecklist({ role, accountId, collapsible = false }: GuideCh
                       <h3 className={`mt-1 text-sm font-extrabold sm:text-base ${isComplete ? 'text-[var(--mt-green-hover)]' : 'text-[var(--mt-gray-900)]'}`}>{step.title}</h3>
                       <p className="mt-1 text-sm leading-6 text-[var(--mt-gray-600)]">{step.description}</p>
                       {step.href && step.linkLabel && (
-                        <Link to={step.href} className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg border border-[#c8dbd0] bg-white px-3 text-xs font-bold text-[var(--mt-green-deep)] hover:bg-[#d1fae5]">
+                        <Link to={step.href} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#c8dbd0] bg-white px-3 text-xs font-bold text-[var(--mt-green-deep)] hover:bg-[#d1fae5]">
                           {step.linkLabel}
                         </Link>
                       )}

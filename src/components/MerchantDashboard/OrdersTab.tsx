@@ -288,12 +288,12 @@ function MerchantDeliveryRequest({ shopId, orderId, orderStatus }: {
           <DeliveryProgress status={delivery.status} />
           <div className="flex flex-wrap gap-2">
             {delivery.proof_available && !proofUrl && (
-              <button type="button" onClick={() => void loadProof()} disabled={proofLoading} className="min-h-9 rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#0F6B54] transition-colors hover:bg-[#F0FAF5] disabled:opacity-50">
+              <button type="button" onClick={() => void loadProof()} disabled={proofLoading} className="min-h-11 rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#0F6B54] transition-colors hover:bg-[#F0FAF5] disabled:opacity-50">
                 {proofLoading ? 'Chargement…' : 'Voir la preuve'}
               </button>
             )}
             {isActiveOrder && ['requested', 'accepted', 'to_pickup'].includes(delivery.status) && (
-              <button type="button" onClick={() => void cancelDelivery()} disabled={saving} className="min-h-9 rounded-lg border border-rose-300 bg-white px-3 text-xs font-bold text-rose-800 disabled:opacity-50">Annuler la demande</button>
+              <button type="button" onClick={() => void cancelDelivery()} disabled={saving} className="min-h-11 rounded-lg border border-rose-300 bg-white px-3 text-xs font-bold text-rose-800 disabled:opacity-50">Annuler la demande</button>
             )}
           </div>
           {proofUrl && (

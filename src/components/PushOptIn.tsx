@@ -164,18 +164,18 @@ export function PushOptIn({
       {error && <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-2.5 text-xs font-semibold text-rose-800">{error}</p>}
 
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className={`flex min-h-9 items-center gap-2 text-[11px] font-semibold ${accent.done}`} aria-live="polite">
+        <div className={`flex min-h-11 items-center gap-2 text-[11px] font-semibold ${accent.done}`} aria-live="polite">
           {subscribed ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Smartphone className="h-3.5 w-3.5 text-slate-400" />}
           {loading ? 'Vérification de cet appareil…' : subscribed ? 'Notifications activées sur cet appareil' : 'Notifications désactivées sur cet appareil'}
           {configuration?.configured && <span className="text-slate-500">· {configuration.subscribed_devices} appareil(s)</span>}
         </div>
         {subscribed ? (
-          <button type="button" onClick={disablePush} disabled={busy || loading} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 disabled:opacity-50">
+          <button type="button" onClick={disablePush} disabled={busy || loading} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 disabled:opacity-50">
             {busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <BellOff className="h-3.5 w-3.5" />}
             Désactiver
           </button>
         ) : (
-          <button type="button" onClick={enablePush} disabled={busy || loading || !configuration?.configured || !supported} className={`inline-flex min-h-9 items-center justify-center gap-2 rounded-full px-3 text-xs font-bold text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${accent.button}`}>
+          <button type="button" onClick={enablePush} disabled={busy || loading || !configuration?.configured || !supported} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-xs font-bold text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${accent.button}`}>
             {busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Bell className="h-3.5 w-3.5" />}
             Activer les alertes
           </button>

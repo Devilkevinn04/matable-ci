@@ -328,7 +328,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     >
       <span>{paymentReturnNotice.message}</span>
       {paymentReturnNotice.status === 'pending' && (
-        <button type="button" onClick={() => setPaymentReturnNonce((nonce) => nonce + 1)} className="min-h-9 rounded-md border border-current px-3 text-xs font-bold">
+        <button type="button" onClick={() => setPaymentReturnNonce((nonce) => nonce + 1)} className="min-h-11 rounded-md border border-current px-3 text-xs font-bold">
           Vérifier à nouveau
         </button>
       )}
@@ -872,7 +872,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           {currentShop.theme_config?.event_mode_enabled && (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950">
               <p className="text-sm font-bold">Événement actif sur votre vitrine</p>
-              <button type="button" onClick={() => { setSettingsSubTab('themes'); setActiveTab('settings'); }} className="inline-flex min-h-9 items-center rounded-xl border border-amber-300 bg-white px-3 text-xs font-bold hover:bg-amber-100">Gérer l’événement</button>
+              <button type="button" onClick={() => { setSettingsSubTab('themes'); setActiveTab('settings'); }} className="inline-flex min-h-11 items-center rounded-xl border border-amber-300 bg-white px-3 text-xs font-bold hover:bg-amber-100">Gérer l’événement</button>
             </div>
           )}
         </section>
@@ -921,7 +921,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <h2 id="setup-checklist-title" className="mt-1 text-xl font-black text-[var(--mt-gray-900)] sm:text-2xl">{isShopPublished ? 'Votre vitrine est prête' : 'Votre vitrine est presque prête'}</h2>
             </div>
             <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-              <Link to="/guide?role=merchant" state={{ guideAccountId: currentShop.id }} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[var(--mt-green-hover)] hover:bg-[#f3faf6]">
+              <Link to="/guide?role=merchant" state={{ guideAccountId: currentShop.id }} className="inline-flex min-h-11 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[var(--mt-green-hover)] hover:bg-[#f3faf6]">
                 <BookOpen className="h-4 w-4" aria-hidden="true" /> Tutoriel
               </Link>
               <div className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 shadow-sm ring-1 ring-[#e8e0d6]">
@@ -935,7 +935,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 aria-expanded={isSetupChecklistExpanded}
                 aria-controls="merchant-setup-steps"
                 onClick={() => setIsSetupChecklistExpanded((expanded) => !expanded)}
-                className="inline-flex min-h-9 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[var(--mt-green-hover)] lg:hidden"
+                className="inline-flex min-h-11 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[var(--mt-green-hover)] lg:hidden"
               >
                 {isSetupChecklistExpanded ? 'Masquer les étapes' : 'Voir les étapes'}
                 <ChevronDown className={`h-4 w-4 transition-transform ${isSetupChecklistExpanded ? 'rotate-180' : ''}`} />
@@ -1107,7 +1107,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 <section aria-labelledby="merchant-recent-orders-title" className="min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
                   <div className="mb-3 flex items-center justify-between gap-3 border-b border-[#eee8dc] pb-3">
                     <h3 id="merchant-recent-orders-title" className="text-lg font-black text-[var(--mt-green-hover)]">Commandes récentes</h3>
-                    <button type="button" onClick={() => setActiveTab('orders')} className="text-xs font-bold text-[var(--mt-green-hover)] underline underline-offset-2">Voir tout</button>
+                    <button type="button" onClick={() => setActiveTab('orders')} className="inline-flex min-h-11 items-center px-2 text-xs font-bold text-[var(--mt-green-hover)] underline underline-offset-2">Voir tout</button>
                   </div>
                   {recentOrders.length === 0 ? (
                     <p className="py-5 text-sm text-slate-500">Vos nouvelles commandes apparaîtront ici.</p>
@@ -1286,7 +1286,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           <aside id="merchant-menu-drawer" aria-labelledby="merchant-menu-title" className="absolute inset-x-0 top-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] flex h-auto w-full flex-col overflow-y-auto bg-[var(--mt-surface)] p-4 sm:p-5">
             <header className="flex items-start justify-between gap-3 border-b border-[#ded8ce] pb-4">
               <div><p className="text-[10px] font-black uppercase text-[var(--mt-orange-deep)]">MaTable</p><h2 id="merchant-menu-title" className="mt-1 text-xl font-black text-[var(--mt-gray-900)]">Plus</h2></div>
-              <button type="button" onClick={() => setIsSettingsDrawerOpen(false)} aria-label="Fermer le menu" className="rounded-lg border border-slate-300 bg-white p-2 text-slate-700"><X className="h-4 w-4" /></button>
+              <button type="button" onClick={() => setIsSettingsDrawerOpen(false)} aria-label="Fermer le menu" className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-300 bg-white text-slate-700"><X className="h-5 w-5" /></button>
             </header>
             <nav className="mt-4 space-y-4" aria-label="Navigation et réglages commerçant">
               <section>
