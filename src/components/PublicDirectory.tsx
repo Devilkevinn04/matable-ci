@@ -513,8 +513,8 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <span className="mr-1 font-semibold text-white/90">Explorer :</span>
                 {popularSearches.map((term) => <button key={term} type="button" onClick={() => setQuery(term)} className="rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-white transition hover:border-[var(--mt-orange-soft)] hover:bg-white/10">{term}</button>)}
               </div>
-              <a href="#directory-stories" className="mt-7 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-white/70 transition hover:text-white">
-                Faire défiler pour explorer <ArrowDown className="h-4 w-4 animate-bounce" aria-hidden="true" />
+              <a href="#directory-stories" onClick={(event) => { event.preventDefault(); history.replaceState(null, '', '#directory-stories'); document.getElementById('directory-stories')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} className="mt-7 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-white/70 transition hover:text-white">
+                Faire défiler pour explorer <ArrowDown className="h-4 w-4" aria-hidden="true" />
               </a>
             </MotionReveal>
             <MotionReveal delay={0.1}>
