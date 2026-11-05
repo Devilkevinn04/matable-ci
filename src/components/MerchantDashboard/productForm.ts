@@ -65,6 +65,45 @@ export interface ProductModifierGroupDraft {
   options: string[];
 }
 
+const MODIFIER_SURCHARGE_PATTERN = /\s*\(\+\s*([\d\s.,]+)\s*(?:F(?:CFA)?)?\)$/i;
+
+/** Sépare « Alloco (+500 F) » en nom et supplément, sans que le commerçant ait à connaître la syntaxe. */
+export function splitModifierOption(label: string): { name: string; extra: number } {
+  const match = label.match(MODIFIER_SURCHARGE_PATTERN);
+  if (!match) return { name: label, extra: 0 };
+  const extra = Number(match[1].replace(/\D/g, ''));
+  return { name: label.slice(0, match.index).trim(), extra: Number.isSafeInteger(extra) ? extra : 0 };
+}
+
+export function joinModifierOption(name: string, extra: number): string {
+  const cleanName = name.replace(MODIFIER_SURCHARGE_PATTERN, '');
+  const amount = Math.max(0, Math.floor(Number(extra) || 0));
+  return amount > 0 ? `${cleanName} (+${amount} F)` : cleanName;
+}
+
+export const MODIFIER_GROUP_PRESETS: ProductModifierGroupDraft[] = [
+  { name: 'Sauce', required: false, max_selections: 2, options: ['Douce', 'Pimentée'] },
+  { name: 'Accompagnement', required: true, max_selections: 1, options: ['Alloco', 'Attiéké', 'Riz'] },
+  { name: 'Boisson', required: false, max_selections: 1, options: ['Eau', 'Jus de bissap (+300 F)'] },
+  { name: 'Portion', required: true, max_selections: 1, options: ['Normale', 'Grande (+500 F)'] },
+];
+
+/** Groupes déjà créés sur les autres articles, dédoublonnés, pour les réutiliser en un geste. */
+export function collectReusableModifierGroups(products: Product[], excludeProductId?: number): ProductModifierGroupDraft[] {
+  const seen = new Set<string>();
+  const result: ProductModifierGroupDraft[] = [];
+  for (const product of products) {
+    if (product.id === excludeProductId) continue;
+    for (const group of productToDraft(product).modifier_groups) {
+      const key = `${group.name.toLowerCase()}|${group.options.join('|').toLowerCase()}`;
+      if (!group.name.trim() || group.options.length === 0 || seen.has(key)) continue;
+      seen.add(key);
+      result.push(group);
+    }
+  }
+  return result;
+}
+
 export function parseProductChoices(value: string): string[] {
   return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))];
 }
@@ -187,7 +226,7 @@ export function buildProductSavePayload(draft: ProductDraft, category: ShopCateg
   );
   const modifierGroups: ProductModifierDraftGroup[] | undefined = defaults.productFormType === 'food' && draft.modifier_groups.length > 0
     ? draft.modifier_groups.map((group, groupIndex) => {
-      const labels = group.options.map((label) => label.trim()).filter(Boolean);
+      const labels = group.options.map((label) => label.trim()).filter((label) => splitModifierOption(label).name);
       return {
         id: `mod-${groupIndex}`,
         name: group.name.trim() || `Options ${groupIndex + 1}`,

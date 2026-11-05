@@ -8,6 +8,7 @@ import { trackLogin, trackLogout, trackSignup } from '../../utils/analyticsTrack
 import { normalizeAcquisitionSource } from '../../utils/acquisitionSources';
 import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from '../../utils/analyticsAttribution';
 import { hasAnalyticsConsent } from '../../utils/cookieConsent';
+import { buildBulkProductPatch, type BulkProductAction } from './bulkActions';
 
 export type MerchantOrderFilter = 'all' | 'actionable' | OrderStatus;
 
@@ -644,10 +645,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       setProducts(prev => prev.map(p => {
         if (p.id === productId) {
           const newStock = Math.max(0, p.stock + delta);
-          return {
-    addDeliveryZone,
-    updateDeliveryZone,
-    removeDeliveryZone, ...p, stock: newStock };
+          return { ...p, stock: newStock };
         }
         return p;
       }));
@@ -687,6 +685,48 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     } catch {
       toast.error('Impossible de contacter le serveur.');
     }
+  };
+
+  // Modification partielle d'un article (le PUT n'écrase que les champs envoyés)
+  const patchProduct = async (productId: number, body: Record<string, unknown>): Promise<boolean> => {
+    if (!currentShop) return false;
+    try {
+      const res = await fetch(`/api/shops/${currentShop.id}/products/${productId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.product) {
+        toast.error(data.error || 'Impossible de modifier l’article.');
+        return false;
+      }
+      setProducts(prev => prev.map(p => (p.id === productId ? { ...p, ...data.product } : p)));
+      return true;
+    } catch {
+      toast.error('Impossible de contacter le serveur.');
+      return false;
+    }
+  };
+
+  const handleQuickPriceChange = async (productId: number, price: number) => {
+    if (!Number.isSafeInteger(price) || price < 0) {
+      toast.error('Entrez un prix valide.');
+      return false;
+    }
+    return patchProduct(productId, { price });
+  };
+
+  const handleBulkProductAction = async (productIds: number[], action: BulkProductAction): Promise<number> => {
+    let done = 0;
+    for (const id of productIds) {
+      const product = products.find((candidate) => candidate.id === id);
+      if (!product) continue;
+      const body = buildBulkProductPatch(product, action);
+      if (!body) continue;
+      if (await patchProduct(id, body)) done += 1;
+    }
+    return done;
   };
 
   // Internal function — executes the actual status PATCH (called directly or via confirm modal)
@@ -944,6 +984,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     handleTriggerCronBilan,
     handleQuickStockChange,
     handleQuickToggleVisibility,
+    handleQuickPriceChange,
+    handleBulkProductAction,
     handleUpdateOrderStatus,
     handleSaveGeneralSettings,
     toast,

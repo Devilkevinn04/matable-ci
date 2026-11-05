@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Package, Plus, Edit3, Trash2, Clock, Search, Eye, EyeOff, Minus, Download, Upload } from 'lucide-react';
+import { Package, Plus, Edit3, Trash2, Clock, Search, Eye, EyeOff, Minus, Download, Upload, Check, CheckSquare, X, Ban, Tag, Tags as TagsIcon } from 'lucide-react';
+import { useToast } from '../Toast';
 import { MerchantState } from './useMerchant';
+import { CatalogCompactList } from './CatalogCompactList';
+import type { BulkProductAction } from './bulkActions';
 import { formatFCFA } from '../../utils/format';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
 import { CategoryProductImage } from '../CategoryProductImage';
@@ -25,10 +28,42 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
     setCatalogFilter,
     handleQuickStockChange,
     handleQuickToggleVisibility,
+    handleQuickPriceChange,
+    handleBulkProductAction,
     handleOpenAddModal,
     handleOpenEditModal,
     handleDeleteProduct,
   } = state;
+  const toast = useToast();
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [pendingAction, setPendingAction] = useState<{ label: string; action: BulkProductAction } | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const toggleSelected = (productId: number) => setSelectedIds((current) => (
+    current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId]
+  ));
+  const leaveSelection = () => { setSelectionMode(false); setSelectedIds([]); setPendingAction(null); };
+  const bulkChoices: { label: string; icon: React.ReactNode; action: BulkProductAction }[] = [
+    { label: 'Masquer', icon: <EyeOff className="h-4 w-4" />, action: { type: 'hide' } },
+    { label: 'Afficher', icon: <Eye className="h-4 w-4" />, action: { type: 'show' } },
+    { label: 'Épuiser', icon: <Ban className="h-4 w-4" />, action: { type: 'soldout' } },
+    { label: 'Promo -10 %', icon: <Tag className="h-4 w-4" />, action: { type: 'promo', percent: 10, days: 7 } },
+    { label: 'Promo -20 %', icon: <Tag className="h-4 w-4" />, action: { type: 'promo', percent: 20, days: 7 } },
+    { label: 'Fin promo', icon: <TagsIcon className="h-4 w-4" />, action: { type: 'clear-promo' } },
+  ];
+  const runBulkAction = async () => {
+    if (!pendingAction) return;
+    setBulkBusy(true);
+    const done = await handleBulkProductAction(selectedIds, pendingAction.action);
+    setBulkBusy(false);
+    setPendingAction(null);
+    if (done > 0) {
+      toast.success(`${done} article${done > 1 ? 's' : ''} mis à jour.`);
+      leaveSelection();
+    } else {
+      toast.info('Rien à changer : ces articles sont déjà dans cet état.');
+    }
+  };
   const [saleNow, setSaleNow] = useState(Date.now());
   const [csvText, setCsvText] = useState('');
   const [csvPreview, setCsvPreview] = useState<{ created_count: number; updated_count: number } | null>(null);
@@ -269,6 +304,16 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   ))}
                 </select>
               </label>
+
+              <button
+                type="button"
+                onClick={() => (selectionMode ? leaveSelection() : setSelectionMode(true))}
+                aria-pressed={selectionMode}
+                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold sm:w-auto ${selectionMode ? 'border-[var(--mt-green-deep)] bg-[var(--mt-green-deep)] text-white' : 'border-[#d9d5cd] bg-white text-[#47534b]'}`}
+              >
+                <CheckSquare className="h-4 w-4" />
+                {selectionMode ? 'Terminer' : 'Choisir plusieurs'}
+              </button>
             </div>
 
             {/* Product Cards Grid */}
@@ -309,12 +354,26 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="hidden grid-cols-1 gap-4 sm:grid sm:grid-cols-2 md:grid-cols-3">
                 {filteredProducts.map(prod => (
                   <div
                     key={prod.id}
-                    className={`flex flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${prod.is_available === false ? 'border-dashed border-[#d9d5cd] opacity-75' : 'border-[#e7dfd3]'}`}
+                    className={`relative flex flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${selectedIds.includes(prod.id) ? 'border-[var(--mt-green-hover)] ring-2 ring-[var(--mt-green-hover)]/30' : prod.is_available === false ? 'border-dashed border-[#d9d5cd] opacity-75' : 'border-[#e7dfd3]'}`}
                   >
+                    {selectionMode && (
+                      <button
+                        type="button"
+                        role="checkbox"
+                        aria-checked={selectedIds.includes(prod.id)}
+                        aria-label={`Sélectionner ${prod.title}`}
+                        onClick={() => toggleSelected(prod.id)}
+                        className={`absolute inset-0 z-10 flex items-start justify-start p-3 ${selectedIds.includes(prod.id) ? 'bg-[var(--mt-green-deep)]/10' : 'bg-transparent'}`}
+                      >
+                        <span className={`flex h-8 w-8 items-center justify-center rounded-full border-2 ${selectedIds.includes(prod.id) ? 'border-[var(--mt-green-deep)] bg-[var(--mt-green-deep)] text-white' : 'border-slate-300 bg-white'}`}>
+                          {selectedIds.includes(prod.id) && <Check className="h-4 w-4" />}
+                        </span>
+                      </button>
+                    )}
                     <CategoryProductImage
                       imageUrl={prod.image_url}
                       category={currentShop.category}
@@ -520,6 +579,64 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {!dataLoading && filteredProducts.length > 0 && (
+              <CatalogCompactList
+                products={filteredProducts}
+                category={currentShop.category}
+                saleNow={saleNow}
+                selectionMode={selectionMode}
+                selectedIds={selectedIds}
+                onToggleSelected={toggleSelected}
+                onStockChange={handleQuickStockChange}
+                onToggleVisibility={handleQuickToggleVisibility}
+                onPriceChange={handleQuickPriceChange}
+                onEdit={handleOpenEditModal}
+              />
+            )}
+
+            {selectionMode && <div className="h-40" aria-hidden="true" />}
+            {selectionMode && (
+              <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 border-t border-[#e7dfd3] bg-white px-3 pb-3 pt-3 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] lg:bottom-0">
+                <div className="mx-auto max-w-3xl">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-sm font-black text-[var(--mt-gray-900)]" aria-live="polite">
+                      {selectedIds.length === 0 ? 'Touchez les articles à modifier' : `${selectedIds.length} article${selectedIds.length > 1 ? 's' : ''} choisi${selectedIds.length > 1 ? 's' : ''}`}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => setSelectedIds(selectedIds.length === filteredProducts.length ? [] : filteredProducts.map((prod) => prod.id))} className="min-h-10 rounded-lg px-2 text-xs font-bold text-[var(--mt-green-deep)]">
+                        {selectedIds.length === filteredProducts.length ? 'Tout décocher' : 'Tout choisir'}
+                      </button>
+                      <button type="button" onClick={leaveSelection} className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600" aria-label="Quitter la sélection"><X className="h-4 w-4" /></button>
+                    </div>
+                  </div>
+                  {pendingAction ? (
+                    <div className="flex flex-col gap-2 rounded-xl bg-[#faf8f3] p-2.5 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm font-bold text-[var(--mt-gray-900)]">{pendingAction.label}{pendingAction.action.type === 'promo' ? ` pendant ${pendingAction.action.days} jours` : ''} pour {selectedIds.length} article{selectedIds.length > 1 ? 's' : ''} ?</p>
+                      <div className="flex gap-2">
+                        <button type="button" disabled={bulkBusy} onClick={() => void runBulkAction()} className="min-h-12 flex-1 rounded-xl bg-[var(--mt-green-deep)] px-5 text-sm font-black text-white disabled:opacity-60">{bulkBusy ? 'En cours…' : 'Oui, confirmer'}</button>
+                        <button type="button" disabled={bulkBusy} onClick={() => setPendingAction(null)} className="min-h-12 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700">Annuler</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1">
+                      {bulkChoices.map((choice) => (
+                        <button
+                          key={choice.label}
+                          type="button"
+                          disabled={selectedIds.length === 0}
+                          onClick={() => setPendingAction(choice)}
+                          className="flex min-h-14 min-w-[5.5rem] shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border border-[#e7dfd3] bg-white px-2 text-[11px] font-bold text-[var(--mt-gray-900)] transition active:bg-[#edf5f0] disabled:opacity-40"
+                        >
+                          {choice.icon}
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

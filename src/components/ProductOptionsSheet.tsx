@@ -4,6 +4,7 @@ import { Check, Clock, Minus, Plus, X } from 'lucide-react';
 import type { Product, ShopCategory } from '../types';
 import type { CategoryDefaults } from '../utils/categoryDefaults';
 import { formatFCFA } from '../utils/format';
+import { splitModifierOption } from './MerchantDashboard/productForm';
 import { CategoryProductImage } from './CategoryProductImage';
 
 interface ProductOptionsSheetProps {
@@ -165,7 +166,7 @@ export const ProductOptionsSheet: React.FC<ProductOptionsSheetProps> = ({
                         className={`flex min-h-12 w-full items-center gap-3 rounded-xl border px-3.5 text-left transition active:scale-[0.99] disabled:opacity-40 ${selected ? 'border-[var(--mt-green-deep)] bg-[#e9f6f0] shadow-sm' : 'border-[#ded8ce] bg-white'}`}
                       >
                         <span className={`flex h-5 w-5 shrink-0 items-center justify-center border-2 ${max === 1 ? 'rounded-full' : 'rounded-md'} ${selected ? 'border-[var(--mt-green-deep)] bg-[var(--mt-green-deep)] text-white' : 'border-slate-300 bg-white'}`}>{selected && <Check className="h-3 w-3" strokeWidth={4} aria-hidden="true" />}</span>
-                        <span className="min-w-0 flex-1 text-sm font-bold text-slate-900">{label}</span>
+                        <span className="min-w-0 flex-1 text-sm font-bold text-slate-900">{splitModifierOption(label).name}</span>
                         <span className={`shrink-0 text-xs font-black ${delta > 0 ? 'text-[#a53a1d]' : 'text-slate-400'}`}>{delta > 0 ? `+ ${formatFCFA(delta)}` : 'Inclus'}</span>
                       </button>
                     );

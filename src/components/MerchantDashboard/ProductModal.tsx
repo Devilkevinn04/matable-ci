@@ -2,7 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Trash2, X, Upload, Boxes } from 'lucide-react';
 import { MerchantState } from './useMerchant';
-import { parseProductChoices, serializeProductChoices } from './productForm';
+import { parseProductChoices, serializeProductChoices, splitModifierOption, joinModifierOption, collectReusableModifierGroups, MODIFIER_GROUP_PRESETS } from './productForm';
 import type { ProductModifierGroupDraft } from './productForm';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
 import { CategoryProductImage } from '../CategoryProductImage';
@@ -21,7 +21,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
     imageCompressing, compressedSizeKB, originalImageSizeKB, handleImageUpload, handleLookbookImageUpload,
     prodGalleryImages, handleGalleryImageUpload, handleRemoveGalleryImage, handleSaveProduct
   } = state;
-  const [modifierOptionDrafts, setModifierOptionDrafts] = React.useState<Record<number, string>>({});
+  const { products } = state;
   const [customSize, setCustomSize] = React.useState('');
   const [customColor, setCustomColor] = React.useState('');
 
@@ -59,14 +59,17 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
   const updateModifierGroups = (update: (groups: ProductModifierGroupDraft[]) => ProductModifierGroupDraft[]) => {
     setProdModifierGroups((groups) => update(groups));
   };
-  const addModifierOption = (groupIndex: number) => {
-    const option = modifierOptionDrafts[groupIndex]?.trim();
-    if (!option) return;
-    updateModifierGroups((groups) => groups.map((group, index) => (
-      index === groupIndex ? { ...group, options: [...group.options, option] } : group
-    )));
-    setModifierOptionDrafts((drafts) => ({ ...drafts, [groupIndex]: '' }));
-  };
+  const reusableGroups = (() => {
+    const own = new Set(prodModifierGroups.map((group) => group.name.trim().toLowerCase()));
+    const known = [...collectReusableModifierGroups(products, editingProduct?.id), ...MODIFIER_GROUP_PRESETS];
+    const seen = new Set<string>();
+    return known.filter((group) => {
+      const key = group.name.trim().toLowerCase();
+      if (own.has(key) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
   return createPortal(
     <>
 {/* PRODUCT ADD/EDIT MODAL */}
@@ -294,7 +297,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                     <div className="space-y-3">
                       <div>
                         <h5 className="text-xs font-bold text-slate-700">Groupes d’options</h5>
-                        <p className="mt-1 text-[11px] text-slate-500">Ajoutez les choix proposés avec le plat. Indiquez un supplément dans son nom, par exemple « Alloco (+500 F) ».</p>
+                        <p className="mt-1 text-[11px] text-slate-500">Ajoutez les choix proposés avec le plat. Touchez « +500 » ou « Autre » pour un supplément.</p>
                       </div>
                       {modifierGroups.map((group, groupIndex) => (
                         <div key={groupIndex} className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -314,7 +317,6 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                               type="button"
                               onClick={() => {
                                 updateModifierGroups((groups) => groups.filter((_, index) => index !== groupIndex));
-                                setModifierOptionDrafts({});
                               }}
                               aria-label={`Supprimer le groupe ${group.name || groupIndex + 1}`}
                               title="Supprimer ce groupe"
@@ -357,48 +359,94 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                             </fieldset>
                           </div>
                           {group.options.length > 0 && (
-                            <div className="flex flex-wrap gap-2" aria-label={`Choix du groupe ${group.name}`}>
-                              {group.options.map((option, optionIndex) => (
-                                <span key={`${option}-${optionIndex}`} className="inline-flex min-h-8 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 py-1 pl-3 pr-1 text-xs font-semibold text-emerald-900">
-                                  {option}
-                                  <button
-                                    type="button"
-                                    onClick={() => updateModifierGroups((groups) => groups.map((item, index) => (
-                                      index === groupIndex ? { ...item, options: item.options.filter((_, itemIndex) => itemIndex !== optionIndex) } : item
-                                    )))}
-                                    aria-label={`Retirer ${option}`}
-                                    className="flex h-6 w-6 items-center justify-center rounded-full text-emerald-800 transition hover:bg-emerald-100"
-                                  >
-                                    <X className="h-3.5 w-3.5" />
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
+                            <ul className="space-y-2" aria-label={`Choix du groupe ${group.name}`}>
+                              {group.options.map((option, optionIndex) => {
+                                const { name: optionName, extra } = splitModifierOption(option);
+                                const setOption = (name: string, nextExtra: number) => updateModifierGroups((groups) => groups.map((item, index) => (
+                                  index === groupIndex
+                                    ? { ...item, options: item.options.map((current, itemIndex) => itemIndex === optionIndex ? joinModifierOption(name, nextExtra) : current) }
+                                    : item
+                                )));
+                                return (
+                                  <li key={optionIndex} className="rounded-xl border border-emerald-200 bg-white p-2.5">
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        value={optionName}
+                                        onChange={(event) => setOption(event.target.value, extra)}
+                                        aria-label={`Nom du choix ${optionIndex + 1}`}
+                                        placeholder="Nom du choix"
+                                        className="min-h-11 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/15"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => updateModifierGroups((groups) => groups.map((item, index) => (
+                                          index === groupIndex ? { ...item, options: item.options.filter((_, itemIndex) => itemIndex !== optionIndex) } : item
+                                        )))}
+                                        aria-label={`Retirer ${optionName || 'ce choix'}`}
+                                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label="Supplément de prix">
+                                      {[{ label: 'Gratuit', value: 0 }, { label: '+500', value: 500 }, { label: '+1 000', value: 1000 }].map((choice) => (
+                                        <button
+                                          key={choice.value}
+                                          type="button"
+                                          aria-pressed={extra === choice.value}
+                                          onClick={() => setOption(optionName, choice.value)}
+                                          className={`min-h-10 rounded-full border px-3.5 text-xs font-bold transition ${extra === choice.value ? 'border-emerald-800 bg-emerald-800 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-700'}`}
+                                        >
+                                          {choice.label}
+                                        </button>
+                                      ))}
+                                      <label className="flex min-h-10 items-center gap-1 rounded-full border border-slate-300 bg-white pl-3 pr-2 text-xs font-bold text-slate-600">
+                                        <span>Autre</span>
+                                        <input
+                                          type="number"
+                                          inputMode="numeric"
+                                          min={0}
+                                          value={extra > 0 && ![500, 1000].includes(extra) ? extra : ''}
+                                          onChange={(event) => setOption(optionName, Number(event.target.value))}
+                                          aria-label="Autre supplément en francs"
+                                          placeholder="0"
+                                          className="w-16 bg-transparent text-right text-sm outline-none"
+                                        />
+                                        <span>F</span>
+                                      </label>
+                                    </div>
+                                  </li>
+                                );
+                              })}
+                            </ul>
                           )}
-                          <div className="flex flex-col gap-2 sm:flex-row">
-                            <input
-                              value={modifierOptionDrafts[groupIndex] || ''}
-                              onChange={(event) => setModifierOptionDrafts((drafts) => ({ ...drafts, [groupIndex]: event.target.value }))}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  event.preventDefault();
-                                  addModifierOption(groupIndex);
-                                }
-                              }}
-                              placeholder="Ex. : Attiéké ou Alloco (+500 F)"
-                              className="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/15"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => addModifierOption(groupIndex)}
-                              disabled={!modifierOptionDrafts[groupIndex]?.trim()}
-                              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:border-emerald-700 hover:bg-emerald-50 hover:text-emerald-900 disabled:cursor-not-allowed disabled:opacity-45"
-                            >
-                              <Plus className="h-3.5 w-3.5" /> Ajouter
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => updateModifierGroups((groups) => groups.map((item, index) => (
+                              index === groupIndex ? { ...item, options: [...item.options, ''] } : item
+                            )))}
+                            className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold text-slate-700 transition hover:border-emerald-700 hover:bg-emerald-50 hover:text-emerald-900"
+                          >
+                            <Plus className="h-4 w-4" /> Ajouter un choix
+                          </button>
                         </div>
                       ))}
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+                        <p className="text-xs font-bold text-emerald-900">Ajouter en un geste</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {reusableGroups.map((group) => (
+                            <button
+                              key={group.name}
+                              type="button"
+                              onClick={() => updateModifierGroups((groups) => [...groups, { ...group, options: [...group.options] }])}
+                              className="min-h-10 rounded-full border border-emerald-300 bg-white px-3.5 text-xs font-bold text-emerald-900 transition hover:bg-emerald-100"
+                            >
+                              + {group.name}
+                              <span className="ml-1 font-medium text-slate-500">({group.options.length})</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <button
                         type="button"
                         onClick={() => updateModifierGroups((groups) => [...groups, { name: `Groupe ${groups.length + 1}`, required: false, max_selections: 2, options: [] }])}
