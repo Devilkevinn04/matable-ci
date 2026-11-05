@@ -5,6 +5,7 @@ import { formatFCFA } from '../../utils/format';
 import { getActiveProductPrice } from '../../utils/productPricing';
 import { CategoryProductImage } from '../CategoryProductImage';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
+import { getMerchantVocabulary } from '../../utils/merchantVocabulary';
 
 interface CatalogCompactListProps {
   products: Product[];
@@ -97,7 +98,8 @@ export const CatalogCompactList: React.FC<CatalogCompactListProps> = ({
   products, category, saleNow, selectionMode, selectedIds, onToggleSelected, onStockChange, onToggleVisibility, onPriceChange, onEdit,
 }) => {
   const formType = getCategoryDefaults(category).productFormType;
-  const stockUnit = formType === 'food' ? 'disponible' : 'en stock';
+  const vocabulary = getMerchantVocabulary(category);
+  const stockUnit = vocabulary.stockUnit;
   return (
   <ul className="space-y-2 sm:hidden">
     {products.map((product) => {
@@ -158,7 +160,7 @@ export const CatalogCompactList: React.FC<CatalogCompactListProps> = ({
                   <Minus className="h-4 w-4" />
                 </button>
                 <span className={`min-w-14 px-1 text-center text-xs font-black ${product.stock <= 0 ? 'text-[#b93712]' : product.stock <= 3 ? 'text-[#a66a00]' : 'text-[var(--mt-gray-900)]'}`}>
-                  {product.stock <= 0 ? 'Épuisé' : `${product.stock} ${stockUnit}`}
+                  {product.stock <= 0 ? vocabulary.soldOutBadge : `${product.stock} ${stockUnit}`}
                 </span>
                 <button
                   type="button"

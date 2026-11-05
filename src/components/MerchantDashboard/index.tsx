@@ -35,6 +35,7 @@ import {
 import { OrderStatus } from '../../types';
 import { formatFCFA } from '../../utils/format';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
+import { getMerchantVocabulary } from '../../utils/merchantVocabulary';
 import { getSubscriptionAccessCutoff, getSubscriptionProductLimit, TRIAL_CATALOG_LIMIT } from '../../utils/subscriptionFeatures';
 import { hasShopPublicationSubscriptionAccess, isShopPubliclyVisible } from '../../utils/shopPublication';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
@@ -866,7 +867,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <h2 className="mt-1 text-2xl font-black tracking-tight text-[var(--mt-green-hover)]">Bonjour, {currentShop.name}</h2>
               <p className="mt-1 text-sm text-slate-600">Voici l’activité de votre boutique aujourd’hui.</p>
             </div>
-            <button type="button" onClick={() => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); }} disabled={dashboardCatalogFull} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--mt-green-primary)] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--mt-green-hover)] disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />{dashboardCatalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</button>
+            <button type="button" onClick={() => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); }} disabled={dashboardCatalogFull} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--mt-green-primary)] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--mt-green-hover)] disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />{dashboardCatalogFull ? 'Limite du forfait atteinte' : getMerchantVocabulary(currentShop.category).addItem}</button>
           </div>
           {currentShop.theme_config?.event_mode_enabled && (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950">
@@ -904,8 +905,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           {(actionableOrderCount > 0 || outOfStockCount > 0 || lowStockCount > 0) && (
             <div className="flex flex-wrap gap-2">
               {actionableOrderCount > 0 && <button type="button" onClick={() => { setOrderSearch(''); setOrderPaymentFilter('all'); setOrderStatusFilter('actionable'); setActiveTab('orders'); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 text-xs font-bold text-orange-900 hover:bg-orange-50"><ShoppingBag className="h-4 w-4" />{actionableOrderCount} commande{actionableOrderCount > 1 ? 's' : ''} à traiter</button>}
-              {outOfStockCount > 0 && <button type="button" onClick={() => { setCatalogSearch(''); setCatalogFilter('out_of_stock'); setActiveTab('catalog'); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-xs font-bold text-rose-900 hover:bg-rose-50"><Package className="h-4 w-4" />{outOfStockCount} produit{outOfStockCount > 1 ? 's' : ''} épuisé{outOfStockCount > 1 ? 's' : ''}</button>}
-              {lowStockCount > 0 && <button type="button" onClick={() => { setCatalogSearch(''); setCatalogFilter('low_stock'); setActiveTab('catalog'); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-xs font-bold text-amber-900 hover:bg-amber-50"><AlertTriangle className="h-4 w-4" />{lowStockCount} stock{lowStockCount > 1 ? 's' : ''} bas</button>}
+              {outOfStockCount > 0 && <button type="button" onClick={() => { setCatalogSearch(''); setCatalogFilter('out_of_stock'); setActiveTab('catalog'); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-xs font-bold text-rose-900 hover:bg-rose-50"><Package className="h-4 w-4" />{getMerchantVocabulary(currentShop.category).soldOutChip(outOfStockCount)}</button>}
+              {lowStockCount > 0 && <button type="button" onClick={() => { setCatalogSearch(''); setCatalogFilter('low_stock'); setActiveTab('catalog'); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-xs font-bold text-amber-900 hover:bg-amber-50"><AlertTriangle className="h-4 w-4" />{getMerchantVocabulary(currentShop.category).lowStockChip(lowStockCount)}</button>}
             </div>
           )}
         </section>

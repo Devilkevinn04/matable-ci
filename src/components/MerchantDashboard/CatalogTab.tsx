@@ -6,6 +6,7 @@ import { CatalogCompactList } from './CatalogCompactList';
 import type { BulkProductAction } from './bulkActions';
 import { formatFCFA } from '../../utils/format';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
+import { getMerchantVocabulary } from '../../utils/merchantVocabulary';
 import { CategoryProductImage } from '../CategoryProductImage';
 import { getSubscriptionProductLimit, TRIAL_CATALOG_LIMIT } from '../../utils/subscriptionFeatures';
 import { getActiveProductPrice, getProductSaleStatus } from '../../utils/productPricing';
@@ -43,10 +44,11 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
     current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId]
   ));
   const leaveSelection = () => { setSelectionMode(false); setSelectedIds([]); setPendingAction(null); };
+  const vocabulary = getMerchantVocabulary(currentShop.category);
   const bulkChoices: { label: string; icon: React.ReactNode; action: BulkProductAction }[] = [
     { label: 'Masquer', icon: <EyeOff className="h-4 w-4" />, action: { type: 'hide' } },
     { label: 'Afficher', icon: <Eye className="h-4 w-4" />, action: { type: 'show' } },
-    { label: 'Épuiser', icon: <Ban className="h-4 w-4" />, action: { type: 'soldout' } },
+    { label: vocabulary.soldOutAction, icon: <Ban className="h-4 w-4" />, action: { type: 'soldout' } },
     { label: 'Promo -10 %', icon: <Tag className="h-4 w-4" />, action: { type: 'promo', percent: 10, days: 7 } },
     { label: 'Promo -20 %', icon: <Tag className="h-4 w-4" />, action: { type: 'promo', percent: 20, days: 7 } },
     { label: 'Fin promo', icon: <TagsIcon className="h-4 w-4" />, action: { type: 'clear-promo' } },
@@ -90,8 +92,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
   const catalogFilterOptions = [
     { id: 'all' as const, label: 'Tous les articles', count: products.length },
     { id: 'in_stock' as const, label: 'En stock', count: products.filter(product => product.stock > 0 && product.is_available !== false).length },
-    { id: 'low_stock' as const, label: 'Stock bas', count: lowStockCount },
-    { id: 'out_of_stock' as const, label: 'Épuisés', count: outOfStockCount },
+    { id: 'low_stock' as const, label: vocabulary.lowStockFilter, count: lowStockCount },
+    { id: 'out_of_stock' as const, label: vocabulary.soldOutFilter, count: outOfStockCount },
     { id: 'hidden' as const, label: 'Masqués', count: products.filter(product => product.is_available === false).length },
     { id: 'promotions' as const, label: 'Avec promotion', count: promotionCount },
   ];
@@ -194,7 +196,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
             {/* Header with Search and Add Button */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-black text-slate-900">Articles du catalogue</h2>
+                <h2 className="text-lg font-black text-slate-900">{vocabulary.catalogTitle}</h2>
                 <p className="text-xs text-slate-500">
                   {trialCatalogLimited
                     ? `Essai gratuit · ${products.length}/${productLimitLabel} articles · ${currentShop.subscription?.trialDaysRemaining} jours restants`
@@ -247,7 +249,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   className="col-span-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[var(--mt-green-primary)] px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[var(--mt-green-hover)] disabled:cursor-not-allowed disabled:opacity-45 sm:col-span-1"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>{catalogFull ? 'Limite du forfait atteinte' : 'Ajouter un article'}</span>
+                  <span>{catalogFull ? 'Limite du forfait atteinte' : vocabulary.addItem}</span>
                 </button>
               </div>
             </div>
@@ -284,7 +286,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                 <input
                   type="text"
                   aria-label="Rechercher un produit dans le catalogue"
-                  placeholder="Rechercher un article..."
+                  placeholder={vocabulary.searchPlaceholder}
                   value={catalogSearch}
                   onChange={(e) => setCatalogSearch(e.target.value)}
                   className="min-h-11 w-full rounded-xl border border-[#d9d5cd] bg-white py-2 pl-9 pr-3 text-sm text-[var(--mt-gray-900)] focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15"
@@ -350,7 +352,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   className="py-2.5 px-4 rounded-xl bg-slate-900 text-white font-bold text-xs inline-flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>{catalogFull ? 'Limite du forfait atteinte' : products.length === 0 && !catalogSearch && catalogFilter === 'all' ? 'Ajouter mon premier produit' : 'Ajouter un article'}</span>
+                  <span>{catalogFull ? 'Limite du forfait atteinte' : products.length === 0 && !catalogSearch && catalogFilter === 'all' ? vocabulary.addFirstItem : vocabulary.addItem}</span>
                 </button>
               </div>
             ) : (
@@ -396,11 +398,11 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
 
                       {prod.stock <= 0 ? (
                         <span className="absolute top-2 right-2 bg-[#b93712] text-white text-[10px] font-black px-2 py-0.5 rounded-md shadow-xs">
-                          Épuisé
+                          {vocabulary.soldOutBadge}
                         </span>
                       ) : prod.stock <= 3 ? (
                         <span className="absolute top-2 right-2 bg-[#e8a93a] text-[var(--mt-gray-900)] text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs">
-                          Stock bas ({prod.stock})
+                          {vocabulary.lowStockBadge} ({prod.stock})
                         </span>
                       ) : (
                         <span className="absolute top-2 right-2 rounded-md bg-[var(--mt-green-deep)] px-2 py-0.5 text-[10px] font-bold text-white">

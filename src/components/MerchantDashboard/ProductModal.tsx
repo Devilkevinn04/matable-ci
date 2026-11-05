@@ -5,6 +5,7 @@ import { MerchantState } from './useMerchant';
 import { parseProductChoices, serializeProductChoices, splitModifierOption, joinModifierOption, collectReusableModifierGroups, MODIFIER_GROUP_PRESETS } from './productForm';
 import type { ProductModifierGroupDraft } from './productForm';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
+import { getMerchantVocabulary } from '../../utils/merchantVocabulary';
 import { CategoryProductImage } from '../CategoryProductImage';
 import { getSubscriptionProductPhotoLimit } from '../../utils/subscriptionFeatures';
 
@@ -27,6 +28,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
 
   if (!isProductModalOpen) return null;
   const categoryDefaults = getCategoryDefaults(currentShop.category);
+  const vocabulary = getMerchantVocabulary(currentShop.category);
   const productPhotoLimit = currentShop.admin_mode ? 6
     : currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0
       ? getSubscriptionProductPhotoLimit('standard')
@@ -83,7 +85,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                 </div>
                 <div className="min-w-0">
                   <h3 id="product-dialog-title" className="truncate text-base font-extrabold text-slate-900 sm:text-lg lg:text-xl">
-                    {editingProduct ? 'Modifier l\'article' : 'Ajouter un article au catalogue'}
+                    {editingProduct ? vocabulary.editItem : vocabulary.addItem}
                   </h3>
                   <p className="mt-0.5 text-[10px] text-slate-500 sm:text-[11px] lg:text-xs">Commencez par le nom, le prix et une courte présentation. Vous pourrez compléter le reste ensuite.</p>
                 </div>
