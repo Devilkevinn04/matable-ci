@@ -36,6 +36,7 @@ import {
   parseSubscriptionProFeatures,
 } from './src/utils/subscriptionFeatures.ts';
 import { retryPendingMerchantPushes, sendMerchantPush } from './server/services/pushNotifications.ts';
+import { runAutomatedMerchantAnnouncements } from './server/services/automatedAnnouncements.ts';
 import { seedDemoDatabaseIfEmpty } from './server/services/demoSeed.ts';
 import { applySecurityHeaders } from './server/middleware/securityHeaders.ts';
 import { createMaintenanceModeMiddleware } from './server/middleware/maintenanceMode.ts';
@@ -135,6 +136,11 @@ async function processSubscriptionAutomation() {
     await retryPendingMerchantPushes();
   } catch (error) {
     console.error('Automatic Push retry cycle failed.', error);
+  }
+  try {
+    await runAutomatedMerchantAnnouncements(now);
+  } catch (error) {
+    console.error('Automated merchant announcement cycle failed.', error);
   }
   const reminderConfig = getWhatsAppSubscriptionReminderConfig();
   const emailReminderConfigured = Boolean(getResendEmailConfig());

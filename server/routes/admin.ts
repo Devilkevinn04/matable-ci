@@ -17,10 +17,8 @@ import { mapShopRow } from '../repositories/shops.ts';
 import {
   getPushSubscriptionCount,
   getVapidConfiguration,
-  normalizePushText,
-  normalizePushUrl,
-  sendPlatformAnnouncementPush,
 } from '../services/pushNotifications.ts';
+import { getAutomatedAnnouncementStats } from '../services/automatedAnnouncements.ts';
 
 interface AdminRouterOptions {
   shops: ShopRecord[];
@@ -88,7 +86,6 @@ export function createAdminRouter(options: AdminRouterOptions) {
       || (req.method === 'DELETE' && /^\/shops\/\d+$/.test(path))
       || (req.method === 'POST' && /^\/shops\/\d+\/access-link$/.test(path))
       || (req.method === 'PATCH' && path === '/maintenance')
-      || (req.method === 'POST' && path === '/push/announcements')
       || (req.method === 'GET' && path === '/push/status')) {
       return requireSuperAdmin(req, res, next);
     }
@@ -299,50 +296,15 @@ export function createAdminRouter(options: AdminRouterOptions) {
   });
 
   router.get('/push/status', async (_req, res) => {
-    const [announcements, subscriptionCount] = await Promise.all([
-      dbAll<Record<string, unknown>>(
-        'SELECT id, title, body, url, created_at, recipient_count, sent_count, failed_count FROM platform_announcements ORDER BY created_at DESC LIMIT 20',
-      ),
+    const [rules, subscriptionCount] = await Promise.all([
+      getAutomatedAnnouncementStats(),
       getPushSubscriptionCount(),
     ]);
     return res.json({
       configured: Boolean(getVapidConfiguration()),
       subscribed_devices: subscriptionCount,
-      announcements,
+      rules,
     });
-  });
-
-  router.post('/push/announcements', requireSuperAdmin, async (req, res) => {
-    if (!getVapidConfiguration()) {
-      return res.status(503).json({ error: 'Configurez VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY et VAPID_SUBJECT avant de publier une annonce Push.' });
-    }
-    if (await getPushSubscriptionCount() === 0) {
-      return res.status(409).json({ error: 'Aucun appareil marchand n’est abonné aux notifications Push.' });
-    }
-    const title = normalizePushText(req.body?.title, 100);
-    const body = normalizePushText(req.body?.body, 240);
-    const url = normalizePushUrl(req.body?.url || '/app');
-    if (title.length < 3 || body.length < 3 || !url) {
-      return res.status(400).json({ error: 'Titre (3–100 caractères), message (3–240 caractères) et lien interne valide requis.' });
-    }
-    const createdAt = new Date().toISOString();
-    const inserted = await dbGet<{ id: number }>(
-      `INSERT INTO platform_announcements (title, body, url, created_at)
-       VALUES (?, ?, ?, ?) RETURNING id`,
-      [title, body, url, createdAt],
-    );
-    if (!inserted) throw new Error('Impossible d’enregistrer l’annonce de la plateforme.');
-    const delivery = await sendPlatformAnnouncementPush({ id: Number(inserted.id), title, body, url });
-    await dbRun(`UPDATE platform_announcements SET recipient_count = ?, sent_count = ?, failed_count = ? WHERE id = ?`,
-      [delivery.recipientShops, delivery.sent, delivery.failed, inserted.id]);
-    await logAdminAction('platform_push_announcement_sent', null, {
-      announcement_id: inserted.id,
-      recipients: delivery.recipientShops,
-      attempted: delivery.attempted,
-      sent: delivery.sent,
-      failed: delivery.failed,
-    });
-    return res.status(201).json({ success: true, id: inserted.id, delivery });
   });
 
   router.get('/content-moderation', requireVerification, async (_req, res) => {

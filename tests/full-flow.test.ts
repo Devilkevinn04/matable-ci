@@ -997,12 +997,12 @@ test('verification admin is limited to identity follow-up and content moderation
     assert.equal(forbidden.response.status, 403, `${method} ${path}: ${JSON.stringify(forbidden.payload)}`);
   }
 
-  const protectedPush = await apiFetch('/api/admin/push/announcements', {
+  const removedManualPush = await apiFetch('/api/admin/push/announcements', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Forbidden', body: 'This should be blocked for verification admin', url: '/app' }),
+    body: JSON.stringify({ title: 'Manual', body: 'Manual announcements are removed', url: '/app' }),
   });
-  assert.equal(protectedPush.response.status, 403, JSON.stringify(protectedPush.payload));
+  assert.ok([403, 404].includes(removedManualPush.response.status), JSON.stringify(removedManualPush.payload));
 
   const logout = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
   assert.equal(logout.response.status, 200, JSON.stringify(logout.payload));
@@ -1593,13 +1593,10 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
     body: JSON.stringify({ key: 'super-admin-demo-key' }),
   });
   assert.equal(adminLogin.response.status, 200, JSON.stringify(adminLogin.payload));
-  const pushWithoutRecipients = await apiFetch('/api/admin/push/announcements', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Annonce de test', body: 'Aucun destinataire', url: '/app' }),
-  });
-  assert.equal(pushWithoutRecipients.response.status, 409, JSON.stringify(pushWithoutRecipients.payload));
-  assert.match(pushWithoutRecipients.payload.error, /Aucun appareil marchand/);
+  const pushStatus = await apiFetch('/api/admin/push/status');
+  assert.equal(pushStatus.response.status, 200, JSON.stringify(pushStatus.payload));
+  assert.equal(pushStatus.payload.rules.length, 6);
+  assert.ok(pushStatus.payload.rules.every((rule: any) => rule.shops_reached_30d === 0));
   const verificationQueue = await apiFetch('/api/admin/identity-verifications');
   assert.equal(verificationQueue.response.status, 200, JSON.stringify(verificationQueue.payload));
   const verificationRecord = verificationQueue.payload.verifications.find((record: any) => record.shop_id === shopId);

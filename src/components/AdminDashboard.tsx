@@ -1529,7 +1529,7 @@ export const AdminDashboard: React.FC = () => {
         items: [
           { id: 'advertising', label: 'Publicité et partenaires', icon: Megaphone },
           { id: 'promotions', label: 'Promotions', icon: Tag },
-          { id: 'push', label: 'Annonces Push', icon: Send },
+          { id: 'push', label: 'Annonces automatiques', icon: Send },
         ],
       },
       {

@@ -284,37 +284,6 @@ export function dispatchStockTransitionPush(
   }).catch((error: unknown) => console.error(`Unable to queue stock notification for shop ${shopId}.`, error));
 }
 
-export async function sendPlatformAnnouncementPush(announcement: {
-  id: number;
-  title: string;
-  body: string;
-  url: string;
-}) {
-  const shopRows = await dbAll<{ shop_id: number }>('SELECT DISTINCT shop_id FROM merchant_push_subscriptions ORDER BY shop_id');
-  let sent = 0;
-  let failed = 0;
-  let attempted = 0;
-  await forEachLimited(shopRows, 8, async ({ shop_id }) => {
-    try {
-      const result = await sendMerchantPush(Number(shop_id), {
-        eventKey: `announcement-${announcement.id}`,
-        category: 'announcement',
-        title: announcement.title,
-        body: announcement.body,
-        url: announcement.url,
-        tag: `announcement-${announcement.id}`,
-      });
-      attempted += result.attempted;
-      sent += result.sent;
-      failed += result.failed;
-    } catch (error) {
-      failed += 1;
-      console.error(`Unable to send platform announcement ${announcement.id} to shop ${shop_id}.`, error);
-    }
-  });
-  return { recipientShops: shopRows.length, attempted, sent, failed };
-}
-
 export async function getPushSubscriptionCount() {
   const result = await dbGet<{ count: number | string }>('SELECT COUNT(*) AS count FROM merchant_push_subscriptions');
   return Number(result?.count || 0);
