@@ -191,6 +191,22 @@
   100% { opacity: 1; transform: translateY(-35px) rotate(0deg) scale(1.04); }
 }
 
+@keyframes mt-directory-orbit {
+  from { transform: rotate(0deg) scale(1); }
+  to { transform: rotate(16deg) scale(1.04); }
+}
+
+.directory-orbit-slow,
+.directory-orbit-fast {
+  animation: mt-directory-orbit 18s ease-in-out infinite alternate;
+  transform-origin: center;
+}
+
+.directory-orbit-fast {
+  animation-duration: 11s;
+  animation-direction: alternate-reverse;
+}
+
 @supports (animation-timeline: view()) {
   .mt-reveal {
     animation: mt-fade-up linear both;
@@ -275,7 +291,9 @@
   .mt-wall-track,
   .mt-hero-image,
   .directory-vitrine-card,
-  .directory-vitrine-image {
+  .directory-vitrine-image,
+  .directory-orbit-slow,
+  .directory-orbit-fast {
     animation: none;
     will-change: auto;
   }

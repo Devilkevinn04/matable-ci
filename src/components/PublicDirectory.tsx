@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowRight, BadgePercent, CheckCircle2, Clock3, LayoutGrid, MapPin, RotateCcw, Search, ShieldCheck, Sparkles, Store, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, BadgePercent, CheckCircle2, Clock3, LayoutGrid, MapPin, RotateCcw, Search, ShieldCheck, Sparkles, Store, X } from 'lucide-react';
 import { MotionReveal } from './MotionSystem';
 import { CategoryIcon } from './CategoryIcon';
 import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDisplay, isShopCategory, SHOP_CATEGORIES } from '../utils/categoryDefaults';
@@ -490,8 +490,8 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         </section>
       ) : isShopDirectoryPage ? (
         <section className="relative isolate overflow-hidden bg-[var(--mt-green-deep)] text-white">
-          <div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-36 -z-10 h-[470px] w-[470px] rounded-full border border-white/10 sm:right-[8%] sm:top-[-250px] sm:h-[700px] sm:w-[700px]" />
-          <div aria-hidden="true" className="pointer-events-none absolute -right-5 top-20 -z-10 h-64 w-64 rounded-full border border-[var(--mt-orange-soft)]/20 sm:right-[15%] sm:top-8 sm:h-96 sm:w-96" />
+          <div aria-hidden="true" className="directory-orbit-slow pointer-events-none absolute -right-20 -top-36 -z-10 h-[470px] w-[470px] rounded-full border border-white/10 sm:right-[8%] sm:top-[-250px] sm:h-[700px] sm:w-[700px]" />
+          <div aria-hidden="true" className="directory-orbit-fast pointer-events-none absolute -right-5 top-20 -z-10 h-64 w-64 rounded-full border border-[var(--mt-orange-soft)]/20 sm:right-[15%] sm:top-8 sm:h-96 sm:w-96" />
           <div className="mx-auto grid w-full max-w-[1280px] gap-9 px-5 pb-10 pt-8 sm:px-8 sm:pb-14 sm:pt-10 lg:grid-cols-[1fr_340px] lg:items-end lg:gap-16 lg:px-12 lg:pb-16 lg:pt-12">
             <MotionReveal className="min-w-0">
               <nav aria-label="Fil d’Ariane" className="mb-8 text-sm text-white/65">
@@ -513,6 +513,9 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <span className="mr-1 font-semibold text-white/90">Explorer :</span>
                 {popularSearches.map((term) => <button key={term} type="button" onClick={() => setQuery(term)} className="rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-white transition hover:border-[var(--mt-orange-soft)] hover:bg-white/10">{term}</button>)}
               </div>
+              <a href="#directory-stories" className="mt-7 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-white/70 transition hover:text-white">
+                Faire défiler pour explorer <ArrowDown className="h-4 w-4 animate-bounce" aria-hidden="true" />
+              </a>
             </MotionReveal>
             <MotionReveal delay={0.1}>
             <aside className="relative hidden overflow-hidden rounded-[26px] border border-white/15 bg-[var(--mt-surface)] p-5 text-[var(--mt-gray-900)] shadow-[0_24px_70px_rgba(0,0,0,.2)] sm:block sm:p-6" aria-label="Repères de l’annuaire">
@@ -760,7 +763,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         </div>
 
         {isShopDirectoryPage && (
-          <div className="relative z-10 mb-5 overflow-hidden rounded-[24px] border border-white/90 bg-white/75 p-3 shadow-[0_8px_28px_rgba(40,52,43,.07)] backdrop-blur-sm sm:rounded-[28px] sm:p-5">
+          <MotionReveal className="relative z-10 mb-5 overflow-hidden rounded-[24px] border border-white/90 bg-white/75 p-3 shadow-[0_8px_28px_rgba(40,52,43,.07)] backdrop-blur-sm sm:rounded-[28px] sm:p-5">
             <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full bg-[#f3d9bb]/35 blur-2xl" />
             <div className="relative">
               <div className="mb-3 flex items-end justify-between gap-3">
@@ -832,14 +835,14 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 {cityPages.map((page) => <Link key={page.path} to={page.path} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-white/80 bg-white/70 px-3 text-xs font-bold text-[#315548] shadow-sm transition hover:border-[#9cbdab] hover:bg-white"><MapPin className="h-3.5 w-3.5 text-[var(--mt-orange-deep)]" aria-hidden="true" />{page.city}</Link>)}
               </nav>
             )}
-          </div>
+          </MotionReveal>
         )}
 
         {isShopDirectoryPage && !directoryIsLoading && filteredShops.length > 0 && (
-          <MotionReveal className="relative z-10 mb-5 overflow-hidden rounded-[24px] border border-[#d6e5dc] bg-[#103e32] text-white shadow-[0_16px_38px_rgba(16,62,50,.12)] sm:mb-6 sm:rounded-[30px]">
+          <MotionReveal className="relative z-10 mb-5 overflow-hidden rounded-[24px] border border-[#d6e5dc] bg-[#103e32] text-white shadow-[0_16px_38px_rgba(16,62,50,.12)] sm:mb-6 sm:rounded-[30px]" >
             <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full border-[18px] border-[#f5b77d]/20 sm:h-72 sm:w-72" />
             <div aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 h-20 w-40 rounded-tr-[80px] border-t border-r border-white/15" />
-            <div className="relative flex flex-col gap-5 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-7">
+            <div id="directory-stories" className="relative flex flex-col gap-5 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-7">
               <div className="max-w-xl">
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-[#f5b77d]">Votre promenade commence ici</p>
                 <h2 className="mt-2 font-display text-2xl font-extrabold leading-tight tracking-[-0.03em] sm:text-4xl">Chaque vitrine raconte un quartier.</h2>
