@@ -2,6 +2,8 @@
 
 État constaté le 31/10/2026 sur `https://matable-ci.onrender.com`.
 
+> Le parcours de vérification des livreurs est actuellement en veille. Le callback et les étapes techniques ci-dessous sont conservés comme références historiques ; ne les utilisez pas pour réactiver les opérations de livraison.
+
 ## Ce qui est déjà en place
 
 | Élément | Statut | Preuve |
@@ -24,7 +26,7 @@ L’adresse principale est **`https://matable-ci.com`**. Le domaine racine et `w
 |---|---|
 | `APP_URL` en production | `https://matable-ci.com` |
 | Callback Didit marchand | `https://matable-ci.com/app?verification=complete` — construit avec `new URL('/app?verification=complete', APP_URL)` |
-| Callback Didit livreur | `https://matable-ci.com/livreur?verification=complete` — construit avec `new URL('/livreur?verification=complete', APP_URL)` |
+| Callback Didit livreur (référence conservée, parcours en veille) | `https://matable-ci.com/livreur?verification=complete` — construit avec `new URL('/livreur?verification=complete', APP_URL)` |
 | Destination webhook Didit | `https://matable-ci.onrender.com/api/webhooks/didit` (v3, `status.updated`, toujours active sur l’alias Render) |
 | Domaines de retour Didit | `allowed_return_hosts: []` → les deux callbacks ci-dessus sont acceptés |
 
@@ -119,7 +121,7 @@ curl -s -o /dev/null -w '%{http_code}\n' \
    - `SELECT actor, action, details FROM admin_audit_logs WHERE actor = 'didit_webhook' ORDER BY created_at DESC LIMIT 1;`
 7. Résultat attendu : statut `verified` après webhook `Approved`, boutique republiable.
 
-## Test de bout en bout — Didit livreur
+## Référence historique — Didit livreur (ne pas exécuter pendant la veille)
 
 1. Ouvrir `/livreur`, créer un compte de test, donner le consentement.
 2. Vérifier `didit_available: true` dans la réponse de session (clé API + workflow résolus).

@@ -218,7 +218,7 @@ export const CATEGORY_DEFAULTS: Record<ShopCategory, CategoryDefaults> = {
     defaultProductModifiers: '',
     productPlaceholderImageUrl: image('photo-1576091160399-112ba8d25d1d', 600),
     bannerPlaceholderImageUrl: image('photo-1576091160399-112ba8d25d1d', 900),
-    primaryColor: '#047857',
+    primaryColor: '#087F62',
     secondaryColor: '#ECFDF5',
     layoutStyle: 'grid_portrait',
     productFormType: 'standard',

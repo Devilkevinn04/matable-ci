@@ -251,10 +251,10 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                 const planIcon = plan.tier === 'standard' ? Store : plan.tier === 'premium' ? Sparkles : BarChart3;
                 const planEyebrow = plan.tier === 'standard' ? 'Pour démarrer' : plan.tier === 'premium' ? 'Le meilleur équilibre' : 'Pour accélérer';
                 const planColors = plan.tier === 'premium'
-                  ? { card: 'border-[#075f48] bg-[#075f48] text-white', subdued: 'text-white/80', check: 'text-[#f0ba80]' }
+                  ? { card: 'border-[var(--mt-green-hover)] bg-[var(--mt-green-hover)] text-white', subdued: 'text-white/80', check: 'text-[#f0ba80]' }
                   : plan.tier === 'pro'
-                  ? { card: selected ? 'border-[#075f48] bg-[#075f48] text-white ring-4 ring-[#075f48]/15' : 'border-[#cad9d0] bg-[#f1f6f1] text-[#183b31] hover:border-[#075f48]', subdued: selected ? 'text-white/80' : 'text-slate-600', check: selected ? 'text-[#f0ba80]' : 'text-[#075f48]' }
-                  : { card: selected ? 'border-[#047857] bg-white ring-4 ring-[#047857]/10 shadow-[0_18px_42px_-24px_rgba(15,77,61,0.45)]' : 'border-[#e0e4db] bg-white hover:border-[#9fb7a8]', subdued: 'text-slate-600', check: 'text-[#047857]' };
+                  ? { card: selected ? 'border-[var(--mt-green-hover)] bg-[var(--mt-green-hover)] text-white ring-4 ring-[var(--mt-green-hover)]/15' : 'border-[#cad9d0] bg-[#f1f6f1] text-[#183b31] hover:border-[var(--mt-green-hover)]', subdued: selected ? 'text-white/80' : 'text-slate-600', check: selected ? 'text-[#f0ba80]' : 'text-[var(--mt-green-hover)]' }
+                  : { card: selected ? 'border-[var(--mt-green-primary)] bg-white ring-4 ring-[var(--mt-green-primary)]/10 shadow-[0_18px_42px_-24px_rgba(15,77,61,0.45)]' : 'border-[#e0e4db] bg-white hover:border-[#9fb7a8]', subdued: 'text-slate-600', check: 'text-[var(--mt-green-primary)]' };
                 const PlanIcon = planIcon;
                 return (
                   <motion.button
@@ -273,7 +273,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     <span className="flex w-full items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-3">
                         <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'bg-white/10 text-[var(--mt-orange-soft)]' : 'bg-[#e9f5ee] text-[#087c5b]'}`}><PlanIcon className="h-5 w-5" aria-hidden="true" /></span>
-                        <span className="min-w-0"><span className={`block text-[9px] font-black uppercase tracking-[0.12em] ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-[var(--mt-orange-soft)]' : 'text-[#8b7358]'}`}>{planEyebrow}</span><span className={`mt-0.5 block text-sm font-black uppercase tracking-[0.11em] ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-white' : mode === 'plans' ? 'text-[#075f48]' : ''}`}>{plan.label}</span></span>
+                        <span className="min-w-0"><span className={`block text-[9px] font-black uppercase tracking-[0.12em] ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-[var(--mt-orange-soft)]' : 'text-[#8b7358]'}`}>{planEyebrow}</span><span className={`mt-0.5 block text-sm font-black uppercase tracking-[0.11em] ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-white' : mode === 'plans' ? 'text-[var(--mt-green-hover)]' : ''}`}>{plan.label}</span></span>
                       </span>
                       {selected && <Check className={`h-5 w-5 shrink-0 ${mode === 'plans' ? planColors.check : 'text-emerald-700'}`} />}
                     </span>
@@ -284,7 +284,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                       <span className={`ml-1 text-xs font-semibold ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>/{term === 'annual' ? 'an' : 'mois'}</span>
                       <span className={`mt-1.5 block text-xs ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{subscriptionPrices ? term === 'annual' ? `Soit ${new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier])} FCFA/mois · 2 mois offerts` : `${new Intl.NumberFormat('fr-FR').format(Math.ceil(subscriptionPrices[plan.tier] / 30))} FCFA par jour` : 'Tarif indisponible'}</span>
                     </div>
-                    {mode === 'plans' && <span className={`group mt-5 flex min-h-11 w-full items-center justify-between gap-2 rounded-full px-4 text-xs font-extrabold transition ${plan.tier === 'premium' ? 'bg-[var(--mt-orange-soft)] text-[var(--mt-gray-900)]' : 'bg-[#075f48] text-white'}`}>
+                    {mode === 'plans' && <span className={`group mt-5 flex min-h-11 w-full items-center justify-between gap-2 rounded-full px-4 text-xs font-extrabold transition ${plan.tier === 'premium' ? 'bg-[var(--mt-orange-soft)] text-[var(--mt-gray-900)]' : 'bg-[var(--mt-green-hover)] text-white'}`}>
                       {selected ? 'Formule sélectionnée' : plan.tier === 'standard' ? 'Commencer' : `Choisir ${plan.label}`} <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
                     </span>}
                     <p className={`mt-7 border-t pt-5 text-xs font-black ${mode === 'plans' && plan.tier === 'premium' ? 'border-white/20 text-white' : 'border-[#e8ebe5] text-[#202d28]'}`}>

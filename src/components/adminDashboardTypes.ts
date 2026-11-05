@@ -182,10 +182,19 @@ export interface AdminCustomerDetail {
 
 export interface AdminHealth {
   status: string;
+  operational_status: 'ok' | 'warning' | 'critical';
   checked_at: string;
   database: string;
   database_path: string | null;
   counts: { shops: number; products: number; orders: number };
+  operations: {
+    pending_order_reminders: number;
+    overdue_pending_orders: number;
+    failed_push_deliveries_24h: number;
+    push_subscriptions: number;
+    push_configured: boolean;
+  };
+  alerts: { code: string; severity: 'warning' | 'critical'; count: number; message: string }[];
   latest_analytics_event_at: string | null;
   integrations: { whatsapp_click_to_chat: string };
 }

@@ -71,15 +71,15 @@ export const PublicPartnerCarousel: React.FC<PublicPartnerCarouselProps> = ({ pr
           <h2 className="mt-1 font-display text-lg font-extrabold tracking-tight text-[#183f32] sm:text-xl">Ils accompagnent le commerce local</h2>
         </div>
         <div className="carousel-controls flex items-center gap-2">
-          {isPreview && <span className="hidden rounded-full bg-[#e3f1e8] px-2.5 py-1 text-xs font-black uppercase tracking-wide text-[#065f46] sm:inline-flex">Exemple fictif · aperçu</span>}
+          {isPreview && <span className="hidden rounded-full bg-[#e3f1e8] px-2.5 py-1 text-xs font-black uppercase tracking-wide text-[var(--mt-green-deep)] sm:inline-flex">Exemple fictif · aperçu</span>}
           {partners.length > 1 && <>
-            <button type="button" onClick={() => scroll(-1)} aria-label="Partenaires précédents" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
+            <button type="button" onClick={() => scroll(-1)} aria-label="Partenaires précédents" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </button>
-            <button type="button" onClick={() => setPaused((current) => !current)} aria-label={paused ? 'Reprendre le défilement des partenaires' : 'Mettre en pause le défilement des partenaires'} className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
+            <button type="button" onClick={() => setPaused((current) => !current)} aria-label={paused ? 'Reprendre le défilement des partenaires' : 'Mettre en pause le défilement des partenaires'} className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]">
               {paused ? <Play className="h-3.5 w-3.5" aria-hidden="true" /> : <Pause className="h-3.5 w-3.5" aria-hidden="true" />}
             </button>
-            <button type="button" onClick={() => scroll(1)} aria-label="Partenaires suivants" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
+            <button type="button" onClick={() => scroll(1)} aria-label="Partenaires suivants" className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e0d5c6] bg-white text-[#315548] shadow-sm transition hover:bg-[#e3f1e8] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]">
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </>}
@@ -88,14 +88,14 @@ export const PublicPartnerCarousel: React.FC<PublicPartnerCarouselProps> = ({ pr
       <div ref={scrollContainer} className="carousel-rail -mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2">
         {partners.map((partner) => (
           <article key={partner.id} className="flex min-h-[106px] min-w-[78%] snap-start items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-3 shadow-[0_3px_14px_rgba(20,40,30,.05)] sm:min-w-[44%] sm:p-4 lg:min-w-[calc(25%-9px)]">
-            <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#eee8de] bg-[#fffdf8] text-lg font-black text-[#065f46]">
+            <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#eee8de] bg-[#fffdf8] text-lg font-black text-[var(--mt-green-deep)]">
               {partner.name.trim().slice(0, 1).toUpperCase()}
               {partner.logo_url && <img src={partner.logo_url} alt="" loading="lazy" className="absolute inset-0 h-full w-full bg-white object-contain p-1" onError={(event) => { event.currentTarget.hidden = true; }} />}
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-black uppercase tracking-wide text-[#647067]">{partner.name} · {partner.descriptor}</p>
               <h3 className="mt-1 line-clamp-2 font-display text-sm font-extrabold leading-tight text-[#292d2a] sm:text-base">{partner.headline}</h3>
-              <span className="mt-2 inline-flex rounded-full bg-[#e3f1e8] px-2.5 py-1 text-xs font-black uppercase tracking-wide text-[#065f46]">Partenaire MaTable</span>
+              <span className="mt-2 inline-flex rounded-full bg-[#e3f1e8] px-2.5 py-1 text-xs font-black uppercase tracking-wide text-[var(--mt-green-deep)]">Partenaire MaTable</span>
             </div>
             {partner.destination_url && (
               <a
@@ -103,7 +103,7 @@ export const PublicPartnerCarousel: React.FC<PublicPartnerCarouselProps> = ({ pr
                 target={partner.destination_url.startsWith('https://') ? '_blank' : undefined}
                 rel={partner.destination_url.startsWith('https://') ? 'sponsored noopener noreferrer' : 'sponsored'}
                 aria-label={`Découvrir ${partner.name}`}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f2f7f3] text-[#065f46] transition hover:bg-[#e3f1e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f2f7f3] text-[var(--mt-green-deep)] transition hover:bg-[#e3f1e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]"
               >
                 <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
               </a>

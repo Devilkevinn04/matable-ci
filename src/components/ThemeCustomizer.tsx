@@ -355,7 +355,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-              <Palette className="w-4 h-4 text-[#047857]" />
+              <Palette className="w-4 h-4 text-[var(--mt-green-primary)]" />
               <span>Choisir un style ({categoryDefaults.label})</span>
             </h4>
             <span className="text-[11px] text-slate-500">
@@ -373,10 +373,10 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                   key={p.id}
                   onClick={() => handleSelectPreset(p)}
                   aria-pressed={isSelected}
-                  className={`relative w-full p-3.5 rounded-xl border text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] ${
+                  className={`relative w-full p-3.5 rounded-xl border text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] ${
                     isSelected
-                      ? 'border-[#047857] ring-2 ring-[#047857]/15 bg-[#f4f8f5]'
-                      : 'border-slate-200 hover:border-[#047857] bg-white'
+                      ? 'border-[var(--mt-green-primary)] ring-2 ring-[var(--mt-green-primary)]/15 bg-[#f4f8f5]'
+                      : 'border-slate-200 hover:border-[var(--mt-green-primary)] bg-white'
                   }`}
                 >
                   <div
@@ -388,7 +388,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                         Style proposé
                       </span>
                       {isSelected && (
-                        <span className="w-5 h-5 rounded-full bg-white text-[#065f46] flex items-center justify-center shadow-xs" aria-label="Style sélectionné">
+                        <span className="w-5 h-5 rounded-full bg-white text-[var(--mt-green-deep)] flex items-center justify-center shadow-xs" aria-label="Style sélectionné">
                           <Check className="w-3.5 h-3.5" />
                         </span>
                       )}
@@ -400,7 +400,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                   <p className="text-xs text-slate-500 line-clamp-2 mt-1 leading-relaxed">
                     {p.description}
                   </p>
-                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#065f46]">{isSelected ? 'Sélectionné' : 'Utiliser ce style'} <Check className={`h-3.5 w-3.5 ${isSelected ? '' : 'invisible'}`} /></span>
+                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--mt-green-deep)]">{isSelected ? 'Sélectionné' : 'Utiliser ce style'} <Check className={`h-3.5 w-3.5 ${isSelected ? '' : 'invisible'}`} /></span>
                 </button>
               );
             })}
@@ -430,8 +430,8 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                   aria-pressed={isActive}
                   className={`text-left rounded-xl border p-3.5 transition-all ${
                     isActive
-                      ? 'border-[#065f46] bg-[#065f46] text-white shadow-sm'
-                      : 'border-slate-200 bg-slate-50 hover:border-[#047857] text-slate-700'
+                      ? 'border-[var(--mt-green-deep)] bg-[var(--mt-green-deep)] text-white shadow-sm'
+                      : 'border-slate-200 bg-slate-50 hover:border-[var(--mt-green-primary)] text-slate-700'
                   }`}
                 >
                   <div className="text-[10px] font-black uppercase tracking-[0.16em] opacity-80">
@@ -550,7 +550,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                 />
               </div>
               <details className="mt-2 text-xs text-slate-600">
-                <summary className="w-fit cursor-pointer font-medium text-[#065f46]">Saisir un code couleur précis</summary>
+                <summary className="w-fit cursor-pointer font-medium text-[var(--mt-green-deep)]">Saisir un code couleur précis</summary>
                 <label htmlFor="theme-primary-hex" className="mt-2 block text-[11px]">Code de la couleur principale</label>
                 <input id="theme-primary-hex" type="text" inputMode="text" autoComplete="off" spellCheck={false} value={primaryColorDraft} onChange={(event) => updateHexDraft(event.target.value, 'primary')} onBlur={() => commitHexDraft('primary')} aria-invalid={Boolean(colorInputError)} aria-describedby={colorInputError ? 'theme-color-error' : undefined} placeholder="#176B55" className="mt-1 min-h-11 w-full max-w-48 rounded-md border border-slate-300 px-3 py-2 font-mono text-sm" />
               </details>
@@ -575,7 +575,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                 <div className="h-10 w-10 shrink-0 rounded-md border border-slate-200" aria-label={`Aperçu couleur ${themeConfig.secondary_color}`} style={{ backgroundColor: themeConfig.secondary_color }} />
               </div>
               <details className="mt-2 text-xs text-slate-600">
-                <summary className="w-fit cursor-pointer font-medium text-[#065f46]">Saisir un code couleur précis</summary>
+                <summary className="w-fit cursor-pointer font-medium text-[var(--mt-green-deep)]">Saisir un code couleur précis</summary>
                 <label htmlFor="theme-secondary-hex" className="mt-2 block text-[11px]">Code de la couleur de fond</label>
                 <input id="theme-secondary-hex" type="text" inputMode="text" autoComplete="off" spellCheck={false} value={secondaryColorDraft} onChange={(event) => updateHexDraft(event.target.value, 'secondary')} onBlur={() => commitHexDraft('secondary')} aria-invalid={Boolean(colorInputError)} aria-describedby={colorInputError ? 'theme-color-error' : undefined} placeholder="#F8FAFC" className="mt-1 min-h-11 w-full max-w-48 rounded-md border border-slate-300 px-3 py-2 font-mono text-sm" />
               </details>

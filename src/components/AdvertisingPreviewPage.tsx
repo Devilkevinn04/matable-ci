@@ -37,7 +37,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
       <div className="mx-auto max-w-6xl">
         <header className="rounded-3xl border border-[#cce3d7] bg-white p-5 shadow-sm sm:p-8">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full bg-[#e3f1e8] px-3 py-1.5 text-xs font-black uppercase tracking-wide text-[#065f46]">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[#e3f1e8] px-3 py-1.5 text-xs font-black uppercase tracking-wide text-[var(--mt-green-deep)]">
               <Megaphone className="h-4 w-4" aria-hidden="true" /> Aperçu publicitaire
             </span>
             <span className="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-900">Données fictives · local uniquement</span>
@@ -53,7 +53,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
                 type="button"
                 aria-pressed={view === tab.id}
                 onClick={() => setView(tab.id)}
-                className={`min-h-10 rounded-full px-4 text-sm font-bold transition ${view === tab.id ? 'bg-[#065f46] text-white' : 'border border-[#d9e4dc] bg-white text-[#315548] hover:bg-[#f2f8f4]'}`}
+                className={`min-h-10 rounded-full px-4 text-sm font-bold transition ${view === tab.id ? 'bg-[var(--mt-green-deep)] text-white' : 'border border-[#d9e4dc] bg-white text-[#315548] hover:bg-[#f2f8f4]'}`}
               >
                 {tab.label}
               </button>
@@ -70,7 +70,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
               </div>
               <div className="flex gap-2" aria-label="Format de campagne à prévisualiser">
                 {(['product', 'banner'] as const).map((kind) => (
-                  <button key={kind} type="button" aria-pressed={format === kind} onClick={() => setFormat(kind)} className={`min-h-10 rounded-full px-4 text-xs font-bold ${format === kind ? 'bg-[#d1fae5] text-[#065f46] ring-1 ring-[#83b49d]' : 'border border-[#d9e4dc] bg-white text-[#47534b]'}`}>
+                  <button key={kind} type="button" aria-pressed={format === kind} onClick={() => setFormat(kind)} className={`min-h-10 rounded-full px-4 text-xs font-bold ${format === kind ? 'bg-[#d1fae5] text-[var(--mt-green-deep)] ring-1 ring-[#83b49d]' : 'border border-[#d9e4dc] bg-white text-[#47534b]'}`}>
                     {kind === 'product' ? 'Produit sponsorisé' : 'Bannière boutique'}
                   </button>
                 ))}
@@ -86,7 +86,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
                 <span className="rounded-full bg-[#f2f6f2] px-3 py-1.5 text-[10px] font-bold text-[#47534b]">Format intégré · clairement identifié</span>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <article className="relative isolate flex min-h-48 flex-col justify-end overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_75%_22%,#f4cd9c_0,transparent_28%),linear-gradient(135deg,#075f48,#31816a_58%,#b6d7c4)] p-4 text-white sm:row-span-2 sm:min-h-full sm:p-6">
+                <article className="relative isolate flex min-h-48 flex-col justify-end overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_75%_22%,#f4cd9c_0,transparent_28%),linear-gradient(135deg,var(--mt-green-hover),#31816a_58%,#b6d7c4)] p-4 text-white sm:row-span-2 sm:min-h-full sm:p-6">
                   <span aria-hidden="true" className="absolute -right-8 top-8 -z-10 flex h-48 w-48 items-center justify-center rounded-full border-[18px] border-white/20 text-7xl sm:h-60 sm:w-60 sm:text-8xl">👜</span>
                   <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#8f351d]">
                     <Megaphone className="h-3 w-3" aria-hidden="true" /> Sponsorisé · Exemple
@@ -94,7 +94,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
                   <p className="mt-8 text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">{previewCampaign.shop} · {previewCampaign.city}</p>
                   <h4 className="mt-1 max-w-sm font-display text-xl font-black leading-tight sm:text-3xl">{previewCampaign.headline}</h4>
                   <p className="mt-2 max-w-sm text-xs leading-5 text-white/85 sm:text-sm">{previewCampaign.product} · {previewCampaign.price}</p>
-                  <span className="mt-4 inline-flex w-fit min-h-9 items-center gap-2 rounded-full bg-white px-4 text-xs font-extrabold text-[#065f46]">
+                  <span className="mt-4 inline-flex w-fit min-h-9 items-center gap-2 rounded-full bg-white px-4 text-xs font-extrabold text-[var(--mt-green-deep)]">
                     Découvrir la boutique <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
                   </span>
                 </article>
@@ -109,7 +109,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
                       <span className="mt-1 block truncate font-display text-sm font-extrabold text-[#292d2a] sm:text-base">{shop.shop}</span>
                       <span className="mt-0.5 block text-xs text-[#647067]">{shop.city} · Boutique</span>
                     </span>
-                    <ArrowUpRight className="ml-auto h-4 w-4 shrink-0 text-[#065f46]" aria-hidden="true" />
+                    <ArrowUpRight className="ml-auto h-4 w-4 shrink-0 text-[var(--mt-green-deep)]" aria-hidden="true" />
                   </article>
                 ))}
               </div>
@@ -142,13 +142,13 @@ export const AdvertisingPreviewPage: React.FC = () => {
                   <p className="mt-2 text-[10px] leading-5 text-[#647067]">Les promotions ponctuelles gardent un autre emplacement et leur mention « Sponsorisé ».</p>
                 </div>
 
-                <div className="relative isolate flex min-h-48 flex-col justify-end overflow-hidden bg-[radial-gradient(circle_at_78%_20%,#f4cd9c_0,transparent_27%),linear-gradient(135deg,#075f48,#31816a_58%,#b6d7c4)] p-5 text-white sm:min-h-56 sm:p-7 lg:min-h-full">
+                <div className="relative isolate flex min-h-48 flex-col justify-end overflow-hidden bg-[radial-gradient(circle_at_78%_20%,#f4cd9c_0,transparent_27%),linear-gradient(135deg,var(--mt-green-hover),#31816a_58%,#b6d7c4)] p-5 text-white sm:min-h-56 sm:p-7 lg:min-h-full">
                   <span aria-hidden="true" className="pointer-events-none absolute -right-8 top-4 -z-10 flex h-48 w-48 items-center justify-center rounded-full border-[18px] border-white/20 text-7xl sm:h-60 sm:w-60 sm:text-8xl">👜</span>
                   <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#8f351d]"><Megaphone className="h-3 w-3" aria-hidden="true" /> Campagne produit · exemple</span>
                   <p className="mt-8 text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">{previewCampaign.shop} · {previewCampaign.city}</p>
                   <h4 className="mt-1 max-w-sm font-display text-xl font-black leading-tight sm:text-3xl">{previewCampaign.headline}</h4>
                   <p className="mt-2 max-w-sm text-xs leading-5 text-white/85 sm:text-sm">{previewCampaign.product} · {previewCampaign.price}</p>
-                  <span className="mt-4 inline-flex w-fit min-h-9 items-center gap-2 rounded-full bg-white px-4 text-xs font-extrabold text-[#065f46]">Découvrir la boutique <ArrowUpRight className="h-4 w-4" aria-hidden="true" /></span>
+                  <span className="mt-4 inline-flex w-fit min-h-9 items-center gap-2 rounded-full bg-white px-4 text-xs font-extrabold text-[var(--mt-green-deep)]">Découvrir la boutique <ArrowUpRight className="h-4 w-4" aria-hidden="true" /></span>
                   <span className="absolute bottom-3 right-4 text-[9px] font-bold uppercase tracking-wide text-white/80">Exemple · local uniquement</span>
                 </div>
               </div>
@@ -201,7 +201,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
                     <div className="p-3">
                       <p className="truncate text-[10px] font-semibold text-[#647067]">{product.shop}</p>
                       <h4 className="mt-1 line-clamp-2 min-h-10 text-sm font-bold">{product.title}</h4>
-                      <p className="mt-2 font-display text-sm font-black text-[#065f46]">{product.price}</p>
+                      <p className="mt-2 font-display text-sm font-black text-[var(--mt-green-deep)]">{product.price}</p>
                     </div>
                   </article>
                 ))}
@@ -214,7 +214,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
         {view === 'merchant' && (
           <section className="mt-6 rounded-3xl border border-[#d8e9df] bg-[#f5faf6] p-5 sm:p-8" aria-labelledby="preview-merchant-title">
             <header className="flex items-start gap-3">
-              <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[#047857]"><Store className="h-5 w-5" aria-hidden="true" /></span>
+              <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[var(--mt-green-primary)]"><Store className="h-5 w-5" aria-hidden="true" /></span>
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.14em] text-[#c2410c]">Espace commerçant · aperçu rempli</p>
                 <h2 id="preview-merchant-title" className="mt-1 text-2xl font-black">Préparer une mise en avant</h2>
@@ -238,10 +238,10 @@ export const AdvertisingPreviewPage: React.FC = () => {
                 <textarea readOnly value={previewCampaign.body} rows={3} className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm" />
               </label>
               <label className="flex items-start gap-2 text-xs leading-5 text-slate-600 sm:col-span-2">
-                <input type="checkbox" defaultChecked className="mt-1 accent-[#047857]" />
+                <input type="checkbox" defaultChecked className="mt-1 accent-[var(--mt-green-primary)]" />
                 <span>Je confirme l’exactitude des informations et respecte la charte de contenu. *</span>
               </label>
-              <button type="button" disabled title="Aperçu uniquement, aucune campagne ne sera envoyée." className="min-h-11 rounded-full bg-[#047857] px-5 text-sm font-bold text-white sm:col-span-2 sm:justify-self-start disabled:cursor-not-allowed disabled:opacity-70">Soumettre pour validation · aperçu</button>
+              <button type="button" disabled title="Aperçu uniquement, aucune campagne ne sera envoyée." className="min-h-11 rounded-full bg-[var(--mt-green-primary)] px-5 text-sm font-bold text-white sm:col-span-2 sm:justify-self-start disabled:cursor-not-allowed disabled:opacity-70">Soumettre pour validation · aperçu</button>
             </div>
             <div className="mt-5 rounded-2xl border border-[#d9e4dc] bg-white p-4">
               <h3 className="text-sm font-black">Mes campagnes</h3>
@@ -257,7 +257,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
           <section className="mt-6 space-y-5" aria-labelledby="preview-admin-title">
             <header className="rounded-3xl border border-[#d8e9df] bg-[#f5faf6] p-5 sm:p-8">
               <div className="flex items-start gap-3">
-                <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[#047857]"><ShieldCheck className="h-5 w-5" aria-hidden="true" /></span>
+                <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[var(--mt-green-primary)]"><ShieldCheck className="h-5 w-5" aria-hidden="true" /></span>
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.14em] text-[#c2410c]">Administration · aperçu rempli</p>
                   <h2 id="preview-admin-title" className="mt-1 text-2xl font-black">Publicité et visibilité</h2>
@@ -279,7 +279,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
                   <p className="mt-3 max-w-2xl text-sm leading-6 text-[#47534b]">{previewCampaign.body}</p>
                   <p className="mt-3 text-xs text-[#647067]">Charte confirmée · 25 octobre 2026 · Mesures consenties : 0 impression · 0 clic</p>
                 </div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#e3f1e8] px-3 py-1.5 text-xs font-bold text-[#065f46]"><BadgeCheck className="h-4 w-4" aria-hidden="true" /> Boutique vérifiée</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#e3f1e8] px-3 py-1.5 text-xs font-bold text-[var(--mt-green-deep)]"><BadgeCheck className="h-4 w-4" aria-hidden="true" /> Boutique vérifiée</span>
               </div>
               <label className="mt-5 block text-xs font-bold text-slate-700">Note de modération
                 <input readOnly value="Exemple : visuel et description conformes à la charte." className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm" />

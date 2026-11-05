@@ -9,7 +9,7 @@ interface FooterProps {
 const linkClassName = 'footer-link inline-flex min-h-11 w-fit items-center text-sm text-white/75 transition-colors hover:text-white focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)]';
 
 export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
-  <footer className={`${compact ? 'mt-6' : ''} relative isolate overflow-hidden overflow-x-clip border-t border-[#164d3b] bg-[#064e3b] text-white`}>
+  <footer className={`${compact ? 'mt-6' : ''} relative isolate overflow-hidden overflow-x-clip border-t border-[#164d3b] bg-[var(--mt-green-deep)] text-white`}>
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
       <div className="absolute -right-28 -top-40 h-96 w-96 rounded-full border border-white/[.08] sm:right-[8%]" />
       <div className="absolute -bottom-48 -left-28 h-96 w-96 rounded-full border border-[var(--mt-orange-soft)]/10" />
@@ -18,7 +18,7 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
     <div className={`relative z-10 mx-auto max-w-[1280px] px-5 sm:px-8 lg:px-10 ${compact ? 'py-7 sm:py-8' : 'py-9 sm:py-12'}`}>
       <div className="grid gap-9 lg:grid-cols-[1.05fr_1.4fr] lg:gap-16">
         <section aria-labelledby="footer-brand-title" className="max-w-md">
-          <Link to="/" aria-label="MaTable, accueil" className="inline-flex max-w-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] focus-visible:ring-offset-4 focus-visible:ring-offset-[#064e3b]">
+          <Link to="/" aria-label="MaTable, accueil" className="inline-flex max-w-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--mt-green-deep)]">
             <img id="footer-brand-title" src="/brand-kit/logo-reversed.svg" alt="MaTable — Vos commerces, ici" className="h-auto w-[250px] max-w-full" />
           </Link>
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/75">
@@ -39,7 +39,6 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
               <li><Link to="/promotions" className={linkClassName}>Promotions</Link></li>
               <li><Link to="/comment-ca-marche" className={linkClassName}>Comment ça marche</Link></li>
               <li><Link to="/faq" className={linkClassName}>Questions fréquentes</Link></li>
-              <li><Link to="/livreur" className={linkClassName}>Espace livreur</Link></li>
             </ul>
           </section>
 
@@ -61,7 +60,7 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
             </ul>
           </section>
         </nav>
-          <Link to="/commercants" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full bg-white px-4 text-xs font-extrabold text-[var(--mt-green-deep)] transition hover:bg-[#fff0df] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#064e3b]">
+          <Link to="/commercants" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full bg-white px-4 text-xs font-extrabold text-[var(--mt-green-deep)] transition hover:bg-[#fff0df] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--mt-green-deep)]">
             <Store className="h-4 w-4 shrink-0" aria-hidden="true" />
             Présenter ma boutique
             <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />

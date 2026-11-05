@@ -115,6 +115,9 @@ before(async () => {
       PORT: String(port),
       MATABLE_DB_PATH: TEST_DB_PATH,
       APP_URL: baseUrl,
+      VAPID_PUBLIC_KEY: '',
+      VAPID_PRIVATE_KEY: '',
+      VAPID_SUBJECT: '',
     },
     stdio: 'ignore',
   });

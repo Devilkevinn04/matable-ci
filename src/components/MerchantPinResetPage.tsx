@@ -57,21 +57,21 @@ export const MerchantPinResetPage: React.FC<MerchantPinResetPageProps> = ({ toke
         ) : completed ? (
           <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
             <p role="status">Votre PIN a été modifié. Toutes les sessions commerçant existantes ont été déconnectées.</p>
-            <button type="button" onClick={onBack} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#065f46] px-5 py-3 text-sm font-bold text-white hover:bg-[#047857]">Se connecter<ArrowRight className="h-4 w-4" /></button>
+            <button type="button" onClick={onBack} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white hover:bg-[var(--mt-green-primary)]">Se connecter<ArrowRight className="h-4 w-4" /></button>
           </div>
         ) : (
           <form onSubmit={resetPin} className="mt-5 space-y-4">
             <label className="block text-sm font-semibold text-[#47534b]">
               Nouveau PIN à 6 chiffres
-              <input required type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 6))} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" />
+              <input required type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 6))} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" />
             </label>
             <label className="block text-sm font-semibold text-[#47534b]">
               Confirmer le nouveau PIN
-              <input required type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value.replace(/\D/g, '').slice(0, 6))} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" />
+              <input required type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value.replace(/\D/g, '').slice(0, 6))} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" />
             </label>
             <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><span>Évitez les suites ou répétitions faciles à deviner. Le lien expire après 30 minutes.</span></p>
             {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-            <button type="submit" disabled={submitting} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#065f46] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">
+            <button type="submit" disabled={submitting} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--mt-green-primary)] disabled:cursor-wait disabled:opacity-60">
               <span>{submitting ? 'Modification…' : 'Enregistrer le nouveau PIN'}</span><ArrowRight className="h-4 w-4" />
             </button>
           </form>

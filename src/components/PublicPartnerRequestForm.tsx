@@ -40,7 +40,7 @@ export const PublicPartnerRequestForm: React.FC = () => {
 
   return (
     <details id="public-partner-request" className="mx-auto mt-5 max-w-5xl rounded-2xl border border-[#e0d5c6] bg-[#FFFFFF] p-4 sm:p-5">
-      <summary className="cursor-pointer text-sm font-extrabold text-[#065f46]">Vous représentez une marque ou une structure ? Proposer un partenariat</summary>
+      <summary className="cursor-pointer text-sm font-extrabold text-[var(--mt-green-deep)]">Vous représentez une marque ou une structure ? Proposer un partenariat</summary>
       <div className="mt-3">
         <p className="text-sm leading-5 text-[#647067]">Les propositions externes sont étudiées au cas par cas. Cette demande ne crée ni campagne ni paiement automatique.</p>
         {error && <p role="alert" className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900">{error}</p>}
@@ -73,10 +73,10 @@ export const PublicPartnerRequestForm: React.FC = () => {
             <textarea name="message" required minLength={10} maxLength={1000} rows={4} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
           </label>
           <label className="flex items-start gap-2 text-xs leading-5 text-slate-600 sm:col-span-2">
-            <input name="privacy_consent" type="checkbox" required className="mt-1 accent-[#047857]" />
+            <input name="privacy_consent" type="checkbox" required className="mt-1 accent-[var(--mt-green-primary)]" />
             <span>J’accepte l’utilisation de ces coordonnées pour étudier et traiter cette demande. *</span>
           </label>
-          <button type="submit" disabled={busy} className="min-h-11 rounded-full bg-[#047857] px-5 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2 sm:justify-self-start">{busy ? 'Transmission…' : 'Envoyer une demande'}</button>
+          <button type="submit" disabled={busy} className="min-h-11 rounded-full bg-[var(--mt-green-primary)] px-5 text-sm font-bold text-white disabled:opacity-50 sm:col-span-2 sm:justify-self-start">{busy ? 'Transmission…' : 'Envoyer une demande'}</button>
         </form>
       </div>
     </details>

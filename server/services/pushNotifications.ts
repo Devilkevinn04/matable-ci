@@ -249,6 +249,7 @@ export async function retryPendingMerchantPushes() {
   const deliveries = await dbAll<{ shop_id: number; event_key: string; payload_json: string }>(
     `SELECT shop_id, event_key, payload_json FROM merchant_push_deliveries
      WHERE sent_at IS NULL AND attempted_at <= ? AND attempts < 5
+       AND event_key NOT LIKE 'pending-order-reminder:%'
      ORDER BY attempted_at ASC LIMIT 100`,
     [retryBefore],
   );

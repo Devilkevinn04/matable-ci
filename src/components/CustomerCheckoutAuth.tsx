@@ -61,7 +61,7 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
   return (
     <section className="rounded-2xl border border-[#e9dfd0] bg-[#FFFFFF] p-4 shadow-sm">
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#047857] text-white">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--mt-green-primary)] text-white">
           <ShieldCheck className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
@@ -94,8 +94,8 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-[#dfd7ce] bg-white p-3 text-[11px] font-semibold text-[#47534b]">
-        <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-[#047857]" /> Sécurisé</span>
-        <span className="inline-flex items-center gap-1 text-[#047857]"><Sparkles className="h-3.5 w-3.5" /> Paiement sur WhatsApp</span>
+        <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-[var(--mt-green-primary)]" /> Sécurisé</span>
+        <span className="inline-flex items-center gap-1 text-[var(--mt-green-primary)]"><Sparkles className="h-3.5 w-3.5" /> Paiement sur WhatsApp</span>
       </div>
 
       <div className="mt-4"><CustomerOAuthButtons returnTo={`${window.location.pathname}${window.location.search}`} /></div>
@@ -110,7 +110,7 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
                 onChange={(event) => setFirstName(event.target.value)}
                 required
                 autoComplete="given-name"
-                className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-normal outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#dff3ec]"
+                className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-normal outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[#dff3ec]"
                 placeholder="Votre prénom"
               />
             </label>
@@ -121,7 +121,7 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
                 onChange={(event) => setLastName(event.target.value)}
                 required
                 autoComplete="family-name"
-                className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-normal outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#dff3ec]"
+                className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-normal outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[#dff3ec]"
                 placeholder="Votre nom"
               />
             </label>
@@ -137,7 +137,7 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
               required
               inputMode="tel"
               autoComplete="tel"
-              className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-normal outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#dff3ec]"
+              className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-normal outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[#dff3ec]"
               placeholder="07 00 00 00 00"
             />
           </label>
@@ -153,7 +153,7 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
               onChange={(event) => setEmail(event.target.value)}
               required
               autoComplete="email"
-              className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white py-2.5 pl-9 pr-3 text-sm font-normal outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#dff3ec]"
+              className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white py-2.5 pl-9 pr-3 text-sm font-normal outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[#dff3ec]"
               placeholder="vous@exemple.ci"
             />
           </div>
@@ -169,7 +169,7 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
               required
               minLength={8}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 pr-10 text-sm font-normal outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#dff3ec]"
+              className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 pr-10 text-sm font-normal outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[#dff3ec]"
               placeholder="8 caractères minimum"
             />
             <button
@@ -196,14 +196,14 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
         <button
           type="submit"
           disabled={isSubmitting}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#047857] px-3 py-3 text-sm font-bold text-white transition hover:bg-[#145645] disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--mt-green-primary)] px-3 py-3 text-sm font-bold text-white transition hover:bg-[#145645] disabled:opacity-60"
         >
           {isSubmitting ? 'Vérification...' : mode === 'register' ? 'Créer mon compte' : 'Se connecter'}
           <ArrowRight className="h-4 w-4" />
         </button>
 
         {mode === 'login' && (
-          <Link to="/recuperation-acces?type=customer" className="block py-1 text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[#065f46]">
+          <Link to="/recuperation-acces?type=customer" className="block py-1 text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[var(--mt-green-deep)]">
             Mot de passe oublié ?
           </Link>
         )}

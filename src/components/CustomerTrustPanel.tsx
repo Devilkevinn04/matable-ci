@@ -202,13 +202,13 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
               {eligibleOrders.map((order) => <option key={order.id} value={order.id}>Commande #{order.id}</option>)}
             </select>
             {ordersError && <p role="alert" className="text-xs text-rose-800">{ordersError}</p>}
-            {!ordersLoading && !ordersError && !ordersAuthenticated && <p className="text-xs text-slate-600">Connectez-vous à votre compte client pour déposer un avis vérifié. <a href={customerLoginUrl} onClick={onClose} className="font-bold text-[#065f46] underline underline-offset-2">Se connecter</a></p>}
+            {!ordersLoading && !ordersError && !ordersAuthenticated && <p className="text-xs text-slate-600">Connectez-vous à votre compte client pour déposer un avis vérifié. <a href={customerLoginUrl} onClick={onClose} className="font-bold text-[var(--mt-green-deep)] underline underline-offset-2">Se connecter</a></p>}
             {!ordersLoading && !ordersError && ordersAuthenticated && eligibleOrders.length === 0 && <p className="text-xs text-slate-600">{orders.length === 0 ? 'Aucune commande n’est associée à votre compte pour le moment.' : hasReviewedTargetOrder ? 'Vous avez déjà donné votre avis sur cet élément pour toutes vos commandes livrées.' : 'Une commande livrée de cette boutique ou contenant ce produit est nécessaire pour laisser un avis.'}</p>}
             <div className="flex gap-1" aria-label="Note sur cinq">
               {[1, 2, 3, 4, 5].map((value) => <button key={value} type="button" onClick={() => setRating(value)} aria-label={`${value} étoile${value > 1 ? 's' : ''}`} aria-pressed={rating === value} className={`rounded p-1 text-2xl ${rating >= value ? 'text-amber-500' : 'text-slate-300'}`}>★</button>)}
             </div>
             <textarea value={comment} onChange={(event) => setComment(event.target.value)} maxLength={1000} rows={3} placeholder="Votre expérience (facultatif)" className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm" />
-            <button type="submit" disabled={saving || ordersLoading || eligibleOrders.length === 0} className="min-h-10 rounded-full bg-[#065f46] px-4 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Envoi…' : 'Envoyer mon avis'}</button>
+            <button type="submit" disabled={saving || ordersLoading || eligibleOrders.length === 0} className="min-h-10 rounded-full bg-[var(--mt-green-deep)] px-4 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Envoi…' : 'Envoyer mon avis'}</button>
           </form>
 
           <form onSubmit={submitReport} className="space-y-3">
@@ -217,7 +217,7 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
             <select value={reportReason} onChange={(event) => setReportReason(event.target.value)} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">{reportReasons.map((reason) => <option key={reason.value} value={reason.value}>{reason.label}</option>)}</select>
             <textarea value={reportDetails} onChange={(event) => setReportDetails(event.target.value)} maxLength={1000} rows={3} placeholder="Expliquez brièvement (facultatif)" className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm" />
             <button type="submit" disabled={saving || !ordersAuthenticated} className="min-h-10 rounded-full border border-rose-300 px-4 text-xs font-bold text-rose-800 disabled:opacity-50">{saving ? 'Envoi…' : 'Envoyer le signalement'}</button>
-            {!ordersAuthenticated && <p className="text-xs text-slate-500">Connectez-vous à votre compte client pour envoyer un signalement. <a href={customerLoginUrl} onClick={onClose} className="font-bold text-[#065f46] underline underline-offset-2">Se connecter</a></p>}
+            {!ordersAuthenticated && <p className="text-xs text-slate-500">Connectez-vous à votre compte client pour envoyer un signalement. <a href={customerLoginUrl} onClick={onClose} className="font-bold text-[var(--mt-green-deep)] underline underline-offset-2">Se connecter</a></p>}
           </form>
         </div>
       </section>

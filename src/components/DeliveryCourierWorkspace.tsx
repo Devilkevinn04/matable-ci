@@ -553,7 +553,7 @@ export function DeliveryCourierWorkspace() {
         : null;
 
   return (
-    <main className="min-h-screen bg-[#f5f7f5] px-3 pb-10 pt-4 text-slate-900 sm:px-6 sm:pt-8">
+    <main className="min-h-screen bg-[var(--mt-gray-50)] px-3 pb-10 pt-4 text-slate-900 sm:px-6 sm:pt-8">
       <style>{`@page { size: A5 portrait; margin: 10mm; }
 @media print {
   body * { visibility: hidden !important; }
@@ -581,14 +581,14 @@ export function DeliveryCourierWorkspace() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Link to="/" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#103E32] transition-colors hover:bg-[#F4F8F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">
+            <Link to="/" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#103E32] transition-colors hover:bg-[#F4F8F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]">
               <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />Retour au site
             </Link>
             {driver && <button type="button" onClick={() => void logout()} className="min-h-9 rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#103E32] transition-colors hover:bg-[#F4F8F5]">Déconnexion</button>}
           </div>
         </header>
 
-        {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-900">{error}</p>}
+        {error && serviceAvailable && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-900">{error}</p>}
         {notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-950">{notice}</p>}
         {loading ? <p role="status" className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">Chargement de l’espace livreur…</p> : !serviceAvailable ? (
           <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">

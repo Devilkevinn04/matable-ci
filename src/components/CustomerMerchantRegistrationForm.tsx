@@ -81,7 +81,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
     }
   };
 
-  const fieldClass = 'mt-1.5 min-h-11 w-full rounded-[12px] border border-[#deded5] bg-white px-3 py-2 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10';
+  const fieldClass = 'mt-1.5 min-h-11 w-full rounded-[12px] border border-[#deded5] bg-white px-3 py-2 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10';
 
   const benefits = [
     { label: 'Vitrine locale', icon: Store },
@@ -91,7 +91,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
 
   return (
     <div className="space-y-4">
-      <div className="inline-flex items-center gap-2 rounded-full border border-[#dfe8dd] bg-[#edf3ec] px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#065f46]">
+      <div className="inline-flex items-center gap-2 rounded-full border border-[#dfe8dd] bg-[#edf3ec] px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--mt-green-deep)]">
         <Sparkles className="h-3.5 w-3.5" />
         Espace commerçant
       </div>
@@ -106,22 +106,22 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
       <div className="grid gap-2 sm:grid-cols-3">
         {benefits.map(({ label, icon: Icon }) => (
           <div key={label} className="flex items-center gap-2 rounded-2xl border border-[#e7e0d6] bg-[#FAF8F2] px-2.5 py-2.5 text-[11px] font-semibold text-[#47534b]">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e9f3ec] text-[#065f46]">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e9f3ec] text-[var(--mt-green-deep)]">
               <Icon className="h-3.5 w-3.5" />
             </span>
             {label}
           </div>
         ))}
       </div>
-      <div className="flex items-center gap-3 rounded-[18px] border border-[#d8e4d9] bg-gradient-to-br from-[#0c604a] to-[#073f32] p-3.5 text-white shadow-[0_10px_28px_rgba(7,63,50,.12)] sm:p-4">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f0ba80] text-[#073f32]"><Store className="h-5 w-5" aria-hidden="true" /></span>
+      <div className="flex items-center gap-3 rounded-[18px] border border-[#d8e4d9] bg-gradient-to-br from-[#0c604a] to-[var(--mt-green-deep)] p-3.5 text-white shadow-[0_10px_28px_rgba(7,63,50,.12)] sm:p-4">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f0ba80] text-[var(--mt-green-deep)]"><Store className="h-5 w-5" aria-hidden="true" /></span>
         <MerchantShopPreview name={name} category={getCategoryDefaults(category).label} city={city === 'Autre ville / commune' ? otherCity : city} />
       </div>
       <form ref={formRef} onSubmit={submit} className="space-y-3">
         {step === 1 && <>
         <div className="rounded-[18px] border border-[#eef0ea] bg-[#f7f5f2] p-3">
           <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#47534b]">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#dfeee6] text-[#065f46]">1</span>
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#dfeee6] text-[var(--mt-green-deep)]">1</span>
             Informations boutique
           </div>
           <div className="space-y-3">
@@ -166,7 +166,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
         {step === 2 && <>
         <div className="rounded-[18px] border border-[#eef0ea] bg-[#f7f5f2] p-3">
           <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#47534b]">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#dfeee6] text-[#065f46]">2</span>
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#dfeee6] text-[var(--mt-green-deep)]">2</span>
             Accès et sécurité
           </div>
           <div className="space-y-3">
@@ -180,7 +180,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
                 Code PIN (6 chiffres)
                 <span className="relative mt-1.5 block">
                   <input type={showPin ? 'text' : 'password'} inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 6))} required autoComplete="new-password" placeholder="Choisissez un PIN" aria-label="Code PIN (6 chiffres)" className={`${fieldClass} mt-0 pr-12`} />
-                  <button type="button" onClick={() => setShowPin((visible) => !visible)} aria-label={showPin ? 'Masquer le PIN' : 'Afficher le PIN'} aria-pressed={showPin} className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-[#647067] transition hover:bg-[#f3f1eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">{showPin ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}</button>
+                  <button type="button" onClick={() => setShowPin((visible) => !visible)} aria-label={showPin ? 'Masquer le PIN' : 'Afficher le PIN'} aria-pressed={showPin} className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-[#647067] transition hover:bg-[#f3f1eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]">{showPin ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}</button>
                 </span>
               </label>
               <label className="block text-sm font-semibold text-[#47534b]">
@@ -193,7 +193,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
 
         <div className="rounded-[18px] border border-[#dfe8dd] bg-[#edf3ec] px-3 py-3 text-sm leading-6 text-[#426458]">
           <div className="flex items-start gap-2">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#065f46]" />
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-green-deep)]" />
             <span>Votre vitrine publique sera activée après la vérification de votre identité.</span>
           </div>
         </div>
@@ -202,12 +202,12 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
         {error && <p role="alert" className="rounded-xl border border-[#F97316]/30 bg-[#fff0e8] px-3 py-2.5 text-sm font-semibold text-[#a33e24]">{error}</p>}
         <div className="flex gap-2">
           {step === 2 && <button type="button" onClick={() => setStep(1)} className="min-h-12 flex-1 rounded-full border border-[#d5ddd5] bg-white px-4 py-3 text-sm font-bold text-[#47534b] transition hover:bg-[#f7f5f2]">Retour</button>}
-          <button type="submit" disabled={isSubmitting} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#065f46] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_25px_rgba(15,77,61,0.24)] transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">
+          <button type="submit" disabled={isSubmitting} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_25px_rgba(15,77,61,0.24)] transition hover:bg-[var(--mt-green-primary)] disabled:cursor-wait disabled:opacity-60">
             {isSubmitting ? 'Création en cours…' : step === 1 ? 'Continuer' : 'Créer ma boutique'} <ArrowRight className="h-4 w-4" />
           </button>
         </div>
       </form>
-      <button type="button" onClick={onLogin} className="mt-2 flex min-h-10 w-full items-center justify-center gap-2 py-2 text-sm font-bold text-[#065f46] hover:text-[#c2410c]">
+      <button type="button" onClick={onLogin} className="mt-2 flex min-h-10 w-full items-center justify-center gap-2 py-2 text-sm font-bold text-[var(--mt-green-deep)] hover:text-[#c2410c]">
         <Store className="h-4 w-4" aria-hidden="true" /> Déjà commerçant ? Se connecter
       </button>
     </div>

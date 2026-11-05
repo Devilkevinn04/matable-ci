@@ -387,7 +387,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
     || (shop.products_preview?.[0]
       ? getProductImageForDisplay(shop.products_preview[0].image_url, shop.category)
       : getCategoryDefaults(shop.category).bannerPlaceholderImageUrl);
-  const getShopColor = (shop: DirectoryShop) => shop.theme_color || shop.theme_config?.primary_color || '#047857';
+  const getShopColor = (shop: DirectoryShop) => shop.theme_color || shop.theme_config?.primary_color || '#087F62';
   const searchForm = <form
     role="search"
     aria-label={isShopDirectoryPage ? 'Rechercher une boutique' : 'Rechercher une boutique ou un produit'}
@@ -885,18 +885,18 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           <div className={`relative z-10 grid items-stretch gap-3 sm:gap-4 lg:grid-cols-3 lg:gap-5 max-[360px]:grid-cols-1 ${filteredShops.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
             {filteredShops.map((shop, index) => (
               <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045} className={`${filteredShops.length === 1 ? 'mx-auto w-full max-w-[760px]' : ''}`}>
-              <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className={`directory-vitrine-card mt-press group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[#FFFFFF] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2 sm:rounded-[24px] ${index % 2 === 1 ? 'directory-vitrine-card-alt' : ''}`}>
+              <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className={`directory-vitrine-card mt-press group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[#FFFFFF] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] focus-visible:ring-offset-2 sm:rounded-[24px] ${index % 2 === 1 ? 'directory-vitrine-card-alt' : ''}`}>
                 <div className="relative aspect-[1.45] shrink-0 overflow-hidden sm:aspect-[1.8]" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
                   <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="directory-vitrine-image absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" onError={handlePublicImageError} />
                   <span className="absolute inset-0 bg-gradient-to-t from-[#17211f]/75 via-transparent to-[#17211f]/5" />
-                  <span className="absolute bottom-3 left-3 rounded-full bg-[#FFFFFF]/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#065f46] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
+                  <span className="absolute bottom-3 left-3 rounded-full bg-[#FFFFFF]/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--mt-green-deep)] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-5 lg:p-6">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-[10px] font-bold uppercase tracking-[0.1em] text-[#c2410c] sm:text-xs sm:tracking-[0.13em]"><span className="sm:hidden">Adresse</span><span className="hidden sm:inline">Une adresse à découvrir</span></span>
                     <div className="flex shrink-0 items-center gap-1">
                     {shop.boost_placements?.some((placement) => placement === (discoveryPage?.citySlug ? 'city' : discoveryPage?.category || category !== 'all' ? 'category' : !isShopDirectoryPage ? 'home' : 'directory') || placement === 'directory') && <span className="rounded-full bg-amber-100 px-2 py-1 text-[9px] font-bold text-amber-950 sm:text-[10px]">Sponsorisé</span>}
-                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold sm:px-3 sm:py-1.5 sm:text-xs ${shop.is_open ? 'bg-[#e2eee6] text-[#065f46]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>
+                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold sm:px-3 sm:py-1.5 sm:text-xs ${shop.is_open ? 'bg-[#e2eee6] text-[var(--mt-green-deep)]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>
                       {shop.is_open ? <><CheckCircle2 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />Ouverte</> : <><Clock3 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />Fermée</>}
                     </span>
                     </div>
@@ -920,7 +920,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-xs font-semibold text-[#47534b]">{product.title}</span>
-                          <span className="block truncate text-xs font-extrabold text-[#065f46]">{formatFCFA(product.price)}</span>
+                          <span className="block truncate text-xs font-extrabold text-[var(--mt-green-deep)]">{formatFCFA(product.price)}</span>
                         </span>
                       </span>
                     ))}
@@ -930,7 +930,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                       {shop.opening_hours?.enabled && shop.opening_hours.open_time && shop.opening_hours.close_time && `${shop.opening_hours.open_time}–${shop.opening_hours.close_time} · `}
                       {shop.products_count ? `${shop.products_count} article${shop.products_count === 1 ? '' : 's'} en vitrine` : 'Vitrine à découvrir'}
                     </span>
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-[#065f46] sm:gap-2 sm:text-sm">Découvrir <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1 sm:h-4 sm:w-4" aria-hidden="true" /></span>
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-[var(--mt-green-deep)] sm:gap-2 sm:text-sm">Découvrir <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1 sm:h-4 sm:w-4" aria-hidden="true" /></span>
                   </div>
                 </div>
               </Link>

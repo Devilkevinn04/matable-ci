@@ -145,7 +145,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   return (
     <article
       id={`product-card-${product.id}`}
-      className={`mt-reveal mt-press h-full bg-[#FFFFFF] border border-[#ded8ce] ${cardRadius} ${shadowClass} overflow-hidden flex flex-col transition-[transform,border-color,box-shadow] hover:border-[#047857] hover:-translate-y-0.5 active:scale-[0.97]`}
+      className={`mt-reveal mt-press h-full bg-[#FFFFFF] border border-[#ded8ce] ${cardRadius} ${shadowClass} overflow-hidden flex flex-col transition-[transform,border-color,box-shadow] hover:border-[var(--mt-green-primary)] hover:-translate-y-0.5 active:scale-[0.97]`}
     >
       <div className="relative flex w-full flex-col">
         <div className={`relative aspect-square w-full overflow-hidden bg-[#f4f1ea] ${layoutStyle === 'grid_portrait' ? 'sm:aspect-[4/5]' : 'sm:aspect-[4/3]'}`}>
@@ -203,7 +203,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
         )}
         {hasProductOptions && (
           <details className="group mb-2 sm:mb-3">
-            <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-1 text-sm font-bold text-[#047857] sm:hidden [&::-webkit-details-marker]:hidden">
+            <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-1 text-sm font-bold text-[var(--mt-green-primary)] sm:hidden [&::-webkit-details-marker]:hidden">
               <span>{category === 'food' && product.modifier_groups?.length ? 'Options du plat' : 'Options et détails'}</span>
               <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
             </summary>
@@ -218,7 +218,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
             </div>
           </details>
         )}
-        <button type="button" onClick={onOpenTrust} aria-label="Lire et rédiger un avis ou signaler un problème" className="inline-flex min-h-9 items-center gap-1 text-xs font-bold text-[#047857] hover:underline sm:gap-1.5"><Star className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden="true" />Lire / donner un avis</button>
+        <button type="button" onClick={onOpenTrust} aria-label="Lire et rédiger un avis ou signaler un problème" className="inline-flex min-h-9 items-center gap-1 text-xs font-bold text-[var(--mt-green-primary)] hover:underline sm:gap-1.5"><Star className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden="true" />Lire / donner un avis</button>
 
         <div className="mb-2 mt-auto flex flex-col items-start gap-1 border-t border-slate-100 pt-2 sm:mb-3 sm:flex-row sm:items-baseline sm:justify-between">
           <div className="min-w-0"><span className="hidden text-xs font-bold text-slate-400 sm:block">Prix unitaire</span><span className="whitespace-nowrap text-base font-black tracking-tight sm:text-lg" style={{ color: isPromotion ? '#c2410c' : primaryColor }}>{formatFCFA(selectedUnitPrice)}</span>{isPromotion && <><span className="ml-1.5 whitespace-nowrap text-xs font-semibold text-slate-400 line-through">{formatFCFA(product.price + selectedModifierTotal)}</span>{product.sale_ends_at && <span className="mt-0.5 block text-xs font-semibold text-[#a53a1d]">Jusqu’au {new Date(product.sale_ends_at).toLocaleDateString('fr-FR')}</span>}</>}{selectedModifierTotal > 0 && <span className="mt-0.5 block text-xs font-medium text-slate-500">{formatFCFA(activeBasePrice)} + {formatFCFA(selectedModifierTotal)} de supplément</span>}</div>

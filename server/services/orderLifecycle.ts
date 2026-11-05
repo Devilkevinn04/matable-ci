@@ -1,8 +1,15 @@
 import { databaseMode, dbAll, dbTransaction, type DatabaseTransaction } from '../../db.ts';
 import type { OrderRecord } from '../types.ts';
 import { dispatchDeliveryCancelledPush } from './deliveryNotifications.ts';
+import { getVapidConfiguration, sendMerchantPush } from './pushNotifications.ts';
 
 export const PENDING_ORDER_TTL_MS = 2 * 60 * 60 * 1000;
+export const PENDING_ORDER_REMINDER_DELAY_MS = 30 * 60 * 1000;
+const PENDING_ORDER_REMINDER_EVENT_PREFIX = 'pending-order-reminder:';
+
+function pendingOrderReminderEventKey(orderId: number, pendingSince: string) {
+  return `${PENDING_ORDER_REMINDER_EVENT_PREFIX}${orderId}:${pendingSince}`;
+}
 
 export interface OrderStockUpdate {
   productId: number;
@@ -90,6 +97,9 @@ async function expirePendingOrder(
     [orderId],
   );
   if (updated.changes !== 1) return null;
+  await transaction.run(`UPDATE merchant_push_deliveries SET sent_at = ?, last_error = 'order_expired'
+    WHERE shop_id = ? AND event_key = ? AND sent_at IS NULL`,
+  [now, shopId, pendingOrderReminderEventKey(orderId, row.pending_since || row.created_at)]);
   const stockUpdates = await restoreReservedOrderStock(transaction, { items }, shopId);
 
   let cancelledDelivery: ExpiredPendingOrder['cancelledDelivery'];
@@ -141,6 +151,65 @@ export async function expireStalePendingOrders(nowMs = Date.now(), limit = 200):
     }
   }
   return expired;
+}
+
+export async function remindPendingOrdersWithoutResponse(nowMs = Date.now(), limit = 100): Promise<number> {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) {
+    throw new Error('Pending order reminder limit must be between 1 and 1000.');
+  }
+  if (!getVapidConfiguration()) return 0;
+
+  const reminderCutoff = new Date(nowMs - PENDING_ORDER_REMINDER_DELAY_MS).toISOString();
+  const expiryCutoff = new Date(nowMs - PENDING_ORDER_TTL_MS).toISOString();
+  const candidates = await dbAll<{
+    id: number | string;
+    shop_id: number | string;
+    created_at: string;
+    pending_since: string | null;
+  }>(`
+    SELECT orders.id, orders.shop_id, orders.created_at, orders.pending_since
+    FROM orders
+    WHERE orders.status = 'pending'
+      AND COALESCE(orders.pending_since, orders.created_at) <= ?
+      AND COALESCE(orders.pending_since, orders.created_at) > ?
+      AND EXISTS (
+        SELECT 1 FROM merchant_push_subscriptions subscriptions
+        WHERE subscriptions.shop_id = orders.shop_id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM merchant_push_deliveries deliveries
+        WHERE deliveries.shop_id = orders.shop_id
+          AND deliveries.event_key = '${PENDING_ORDER_REMINDER_EVENT_PREFIX}' || orders.id || ':' || COALESCE(orders.pending_since, orders.created_at)
+      )
+    ORDER BY COALESCE(orders.pending_since, orders.created_at) ASC, orders.id ASC
+    LIMIT ?
+  `, [reminderCutoff, expiryCutoff, limit]);
+
+  let nextIndex = 0;
+  let remindedOrders = 0;
+  await Promise.all(Array.from({ length: Math.min(8, candidates.length) }, async () => {
+    while (nextIndex < candidates.length) {
+      const candidate = candidates[nextIndex++];
+      if (!candidate) continue;
+      const orderId = Number(candidate.id);
+      const shopId = Number(candidate.shop_id);
+      const pendingSince = candidate.pending_since || candidate.created_at;
+      try {
+        const result = await sendMerchantPush(shopId, {
+          eventKey: pendingOrderReminderEventKey(orderId, pendingSince),
+          category: 'orders',
+          title: 'Commande en attente',
+          body: 'Une commande attend votre réponse depuis 30 minutes.',
+          url: '/app',
+          tag: `order-pending-${orderId}`,
+        });
+        if (result.sent > 0) remindedOrders += 1;
+      } catch (error) {
+        console.error(`Unable to send pending order reminder for order ${orderId}.`, error);
+      }
+    }
+  }));
+  return remindedOrders;
 }
 
 export function expirePendingOrderInTransaction(

@@ -31,7 +31,6 @@ import {
   X,
   Megaphone,
   Tag,
-  MapPin,
 } from 'lucide-react';
 import { AdminIdentityVerificationPanel, statusLabels as verificationStatusLabels } from './AdminIdentityVerificationPanel';
 import { AdminShopList } from './AdminShopList';
@@ -41,9 +40,10 @@ import { AdminSubscriptionPlanPricing } from './AdminSubscriptionPlanPricing';
 import { AdminSubscriptionPlanFeatures } from './AdminSubscriptionPlanFeatures';
 import { AdminHomepageMarketing } from './AdminHomepageMarketing';
 import { AdminProductPromotions } from './AdminProductPromotions';
-import { AdminDeliveryPricing } from './AdminDeliveryPricing';
+import { AnalyticsDailyBars } from './AnalyticsDailyBars';
 import { Link } from 'react-router-dom';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
+import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 const GuideChecklist = React.lazy(() => import('./UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
 import {
   audienceSourceLabels,
@@ -80,7 +80,7 @@ const adminOrderTransitions: Record<AdminOrder['status'], AdminOrder['status'][]
 };
 
 type AdminRole = 'super_admin' | 'verification_admin';
-type AdminView = 'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'verification-shops' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'push' | 'moderation' | 'audit' | 'advertising' | 'promotions' | 'delivery';
+type AdminView = 'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'verification-shops' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'push' | 'moderation' | 'audit' | 'advertising' | 'promotions';
 
 interface VerificationShopSummary {
   id: number;
@@ -135,7 +135,27 @@ const adminAuditActionLabels: Record<string, string> = {
   advertising_partner_request_updated: 'Demande partenaire traitée',
 };
 
+const adminOrderStatusLabels: Record<AdminOrder['status'], string> = {
+  pending: 'En attente',
+  confirmed: 'Acceptée',
+  preparing: 'En préparation',
+  ready: 'Prête',
+  delivered: 'Livrée',
+  cancelled: 'Annulée',
+  rejected: 'Refusée',
+  expired: 'Expirée',
+};
+const formatAuditDetailValue = (value: unknown) => {
+  if (typeof value === 'boolean') return value ? 'Oui' : 'Non';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(T[\d:.]+Z)?$/.test(value)) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeZone: 'UTC' }).format(date);
+  }
+  return String(value);
+};
 const adminAuditDetailLabels: Record<string, string> = {
+  user_id: 'Compte client',
+  is_active: 'Compte actif',
   announcement_id: 'Annonce',
   attempted: 'Tentatives',
   days: 'Jours ajoutés',
@@ -274,6 +294,10 @@ export const AdminDashboard: React.FC = () => {
     reason: string;
   }>>({});
   const [adminOrders, setAdminOrders] = useState<AdminOrder[]>([]);
+  const [overviewPendingOrders, setOverviewPendingOrders] = useState<AdminOrder[]>([]);
+  const [overviewPendingOrderCount, setOverviewPendingOrderCount] = useState<number | null>(null);
+  const [overviewPendingOrdersLoading, setOverviewPendingOrdersLoading] = useState(false);
+  const [overviewPendingOrdersError, setOverviewPendingOrdersError] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [orderTotal, setOrderTotal] = useState(0);
   const [orderPage, setOrderPage] = useState(0);
@@ -290,6 +314,7 @@ export const AdminDashboard: React.FC = () => {
   const [customerDetailLoading, setCustomerDetailLoading] = useState(false);
   const [customerDetailError, setCustomerDetailError] = useState('');
   const [adminHealth, setAdminHealth] = useState<AdminHealth | null>(null);
+  const [healthPollingError, setHealthPollingError] = useState('');
   const [maintenanceMode, setMaintenanceMode] = useState<AdminMaintenance | null>(null);
   const [maintenanceEnabledDraft, setMaintenanceEnabledDraft] = useState(false);
   const [maintenanceMessageDraft, setMaintenanceMessageDraft] = useState('Le service revient bientôt. Merci de votre patience.');
@@ -310,6 +335,8 @@ export const AdminDashboard: React.FC = () => {
   const [featuredActionShopId, setFeaturedActionShopId] = useState<number | null>(null);
   const [contentModeration, setContentModeration] = useState<AdminContentModeration>({ reviews: [], reports: [] });
   const [contentModerationError, setContentModerationError] = useState('');
+  const [contentModerationLoading, setContentModerationLoading] = useState(false);
+  const [contentModerationLoaded, setContentModerationLoaded] = useState(false);
   const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
   const [auditLogTotal, setAuditLogTotal] = useState(0);
   const [auditLogPage, setAuditLogPage] = useState(0);
@@ -347,7 +374,6 @@ export const AdminDashboard: React.FC = () => {
         if (!verificationShopsRes.ok) throw new Error('Impossible de charger la liste des boutiques en lecture seule.');
         setVerificationShops(await verificationShopsRes.json());
         setIsAuthenticated(true);
-        await fetchContentModeration();
         return;
       }
       setAdminView('overview');
@@ -376,14 +402,33 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const refreshOverviewQueues = async () => {
+    await Promise.all([fetchOverviewPendingOrders(), fetchContentModeration()]);
+  };
+
+  const loadAdminHealth = async () => {
+    const healthRes = await fetch('/api/admin/health', { cache: 'no-store' });
+    if (!healthRes.ok) throw new Error('Impossible de charger l’état du service.');
+    const health = await healthRes.json() as AdminHealth;
+    setAdminHealth(health);
+  };
+
+  const pollAdminHealth = async () => {
+    try {
+      await loadAdminHealth();
+      setHealthPollingError('');
+      setOperationsError((current) => current === 'Impossible de charger l’état du service.' ? '' : current);
+    } catch (error) {
+      setHealthPollingError(error instanceof Error ? error.message : 'L’état du service est momentanément indisponible.');
+    }
+  };
+
   const fetchOperations = async (role = adminRole) => {
     try {
       setOperationsLoading(true);
       setOperationsError('');
-      const healthRes = await fetch('/api/admin/health');
-      if (!healthRes.ok) throw new Error('Impossible de charger l’état du service.');
-      const health = await healthRes.json();
-      setAdminHealth(health);
+      setHealthPollingError('');
+      await loadAdminHealth();
       if (role === 'super_admin') {
         const maintenanceRes = await fetch('/api/admin/maintenance');
         if (!maintenanceRes.ok) throw new Error('Impossible de charger le mode maintenance.');
@@ -404,14 +449,22 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const fetchContentModeration = async () => {
+    setContentModerationLoading(true);
     try {
       const response = await fetch('/api/admin/content-moderation');
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de charger la modération.');
-      setContentModeration({ reviews: data.reviews || [], reports: data.reports || [] });
+      if (!Array.isArray(data.reviews) || !Array.isArray(data.reports)) {
+        throw new Error('Les données de modération reçues sont invalides.');
+      }
+      setContentModeration({ reviews: data.reviews, reports: data.reports });
       setContentModerationError('');
+      setContentModerationLoaded(true);
     } catch (error) {
+      setContentModerationLoaded(false);
       setContentModerationError(error instanceof Error ? error.message : 'Impossible de charger la modération.');
+    } finally {
+      setContentModerationLoading(false);
     }
   };
 
@@ -513,12 +566,31 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const fetchOverviewPendingOrders = async () => {
+    setOverviewPendingOrdersLoading(true);
+    setOverviewPendingOrdersError('');
+    try {
+      const response = await fetch('/api/admin/orders?limit=5&offset=0&status=pending');
+      const data = await response.json() as { orders?: AdminOrder[]; total?: number; error?: string };
+      if (!response.ok) throw new Error(data.error || 'Impossible de charger les commandes en attente.');
+      if (!Array.isArray(data.orders) || typeof data.total !== 'number' || !Number.isSafeInteger(data.total) || data.total < 0) {
+        throw new Error('Les données des commandes en attente sont invalides.');
+      }
+      setOverviewPendingOrders(data.orders);
+      setOverviewPendingOrderCount(data.total);
+    } catch (error) {
+      setOverviewPendingOrdersError(error instanceof Error ? error.message : 'Impossible de charger les commandes en attente.');
+    } finally {
+      setOverviewPendingOrdersLoading(false);
+    }
+  };
+
   const updateOrderStatus = async (order: AdminOrder, status: AdminOrder['status']) => {
     if (!adminOrderTransitions[order.status].includes(status)) {
-      showNotice(`Transition non autorisée : ${order.status} → ${status}.`);
+      showNotice(`Transition non autorisée : ${adminOrderStatusLabels[order.status]} → ${adminOrderStatusLabels[status]}.`);
       return;
     }
-    const reason = window.prompt(`Motif obligatoire pour la commande #${order.id} (${order.status} → ${status}) :`);
+    const reason = window.prompt(`Motif obligatoire pour la commande #${order.id} (${adminOrderStatusLabels[order.status]} → ${adminOrderStatusLabels[status]}) :`);
     if (reason === null) return;
     if (reason.trim().length < 3) {
       showNotice('Saisissez un motif d’au moins 3 caractères.');
@@ -535,8 +607,7 @@ export const AdminDashboard: React.FC = () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de modifier cette commande.');
       showNotice(`Commande #${order.id} mise à jour.`);
-      await fetchOperations();
-      await fetchAdminOrders();
+      await Promise.all([fetchOperations(), fetchAdminOrders(), fetchOverviewPendingOrders()]);
     } catch (error) {
       showNotice(error instanceof Error ? error.message : 'Impossible de modifier cette commande.');
     } finally {
@@ -643,6 +714,21 @@ export const AdminDashboard: React.FC = () => {
   }, [isAuthenticated, adminView]);
 
   useEffect(() => {
+    if (!isAuthenticated || adminRole !== 'super_admin' || adminView !== 'overview') return;
+    void refreshOverviewQueues();
+  }, [isAuthenticated, adminRole, adminView]);
+  useVisibilityPolling(
+    refreshOverviewQueues,
+    30_000,
+    isAuthenticated && adminRole === 'super_admin' && adminView === 'overview',
+  );
+  useVisibilityPolling(
+    pollAdminHealth,
+    30_000,
+    isAuthenticated && adminRole === 'super_admin' && ['overview', 'operations'].includes(adminView),
+  );
+
+  useEffect(() => {
     if (!isAuthenticated || adminRole !== 'super_admin' || adminView !== 'finance') return;
     const timer = window.setTimeout(() => {
       void fetchFinance(financeDays, financePaymentsPage, paymentSearch, paymentStatusFilter, paymentTypeFilter);
@@ -716,8 +802,13 @@ export const AdminDashboard: React.FC = () => {
     setAdminKey('');
     setAdminHealth(null);
     setAdminOrders([]);
+    setOverviewPendingOrders([]);
+    setOverviewPendingOrderCount(null);
+    setOverviewPendingOrdersError('');
     setAnalytics(null);
     setFinance(null);
+    setContentModeration({ reviews: [], reports: [] });
+    setContentModerationLoaded(false);
   };
 
   const handleExtendTrial = async (shop: AdminSubscriptionShop) => {
@@ -1023,14 +1114,14 @@ export const AdminDashboard: React.FC = () => {
           <div className="mb-5 flex items-center gap-3">
             <div className="brand-mark">M</div>
             <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">MaTable</div>
-              <h1 className="text-xl font-black text-slate-900">
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--mt-gray-600)]">MaTable</div>
+              <h1 className="text-xl font-black text-[var(--mt-green-deep)]">
                 {loginRole === 'verification_admin' ? 'Accès vérification' : 'Accès super-admin'}
               </h1>
             </div>
           </div>
           <div className="mb-4 rounded-2xl bg-gradient-to-r from-[#eef5ff] to-[#f7e7c7] p-4 border-[2px] border-[var(--mt-gray-900)]">
-            <div className="flex items-center gap-2 text-[#1b3a63] font-bold text-xs">
+            <div className="flex items-center gap-2 text-[var(--mt-green-deep)] font-bold text-xs">
               <ShieldCheck className="w-4 h-4" />
               {loginRole === 'verification_admin' ? 'Espace de vérification' : 'Espace de contrôle central'}
             </div>
@@ -1049,7 +1140,7 @@ export const AdminDashboard: React.FC = () => {
               setAdminKey('');
               setAuthError(null);
             }}
-            className="mb-4 w-full rounded-2xl border-[2px] border-[var(--mt-gray-900)] bg-[var(--mt-surface)] px-3 py-3 text-sm font-medium text-[var(--mt-gray-900)] outline-none focus:border-[#1b3a63] focus:bg-white"
+            className="mb-4 w-full rounded-2xl border border-[var(--mt-gray-200)] bg-white px-3 py-3 text-sm font-medium text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-primary)] focus:bg-white"
           >
             <option value="super_admin">Super-admin</option>
             <option value="verification_admin">Admin de vérification</option>
@@ -1065,14 +1156,14 @@ export const AdminDashboard: React.FC = () => {
               aria-invalid={Boolean(authError)}
               aria-describedby={authError ? 'admin-key-error' : 'admin-login-instructions'}
               required
-              className="w-full rounded-2xl border-[2px] border-[var(--mt-gray-900)] bg-[var(--mt-surface)] px-3 py-3 pr-12 text-sm font-medium text-[var(--mt-gray-900)] outline-none transition focus:border-[#1b3a63] focus:bg-white"
+              className="w-full rounded-2xl border-[2px] border-[var(--mt-gray-900)] bg-[var(--mt-surface)] px-3 py-3 pr-12 text-sm font-medium text-[var(--mt-gray-900)] outline-none transition focus:border-[var(--mt-green-primary)] focus:bg-white"
             />
             <button type="button" onClick={() => setShowAdminKey((visible) => !visible)} aria-label={showAdminKey ? 'Masquer la clé' : 'Afficher la clé'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
               {showAdminKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
           {authError && <p id="admin-key-error" role="alert" className="mt-3 text-sm text-[#b93712]">{authError}</p>}
-          <button type="submit" className="mt-5 w-full rounded-2xl bg-[#1b3a63] px-4 py-3 text-sm font-black text-white shadow-[4px_4px_0_rgba(33,23,18,0.95)] border-2 border-[var(--mt-gray-900)] transition hover:translate-y-[-1px]">
+          <button type="submit" className="mt-5 w-full rounded-2xl bg-[var(--mt-green-primary)] px-4 py-3 text-sm font-black text-white shadow-[4px_4px_0_rgba(33,23,18,0.95)] border-2 border-[var(--mt-gray-900)] transition hover:translate-y-[-1px]">
             Se connecter
           </button>
         </motion.form>
@@ -1225,16 +1316,6 @@ export const AdminDashboard: React.FC = () => {
 
   const activeShopsCount = shops.filter(s => s.is_active).length;
   const overviewDaily = analytics?.daily || [];
-  const overviewChartMaxSales = Math.max(1, ...overviewDaily.map((day) => day.sales));
-  const overviewChartX = (index: number) => 24 + index * (672 / Math.max(overviewDaily.length - 1, 1));
-  const overviewSalesY = (sales: number) => 182 - (sales / overviewChartMaxSales) * 150;
-  const overviewSalesPoints = overviewDaily
-    .map((day, index) => `${overviewChartX(index)},${overviewSalesY(day.sales)}`)
-    .join(' ');
-  const overviewSalesArea = overviewDaily.length
-    ? `M ${overviewChartX(0)},182 L ${overviewDaily.map((day, index) => `${overviewChartX(index)},${overviewSalesY(day.sales)}`).join(' L ')} L ${overviewChartX(overviewDaily.length - 1)},182 Z`
-    : '';
-  const overviewTickDays = overviewDaily.filter((_, index) => index % Math.max(1, Math.ceil(overviewDaily.length / 6)) === 0 || index === overviewDaily.length - 1);
   const overviewTopShops = [...(analytics?.by_shop || [])].sort((left, right) => right.sales - left.sales).slice(0, 5);
   const filteredAudienceShops = (analytics?.by_shop || [])
     .filter((shop) => shop.shop_name.toLocaleLowerCase('fr').includes(audienceShopSearch.trim().toLocaleLowerCase('fr')))
@@ -1377,39 +1458,95 @@ export const AdminDashboard: React.FC = () => {
   const pendingVerificationCount = adminRole === 'verification_admin'
     ? verificationShops.filter((shop) => ['pending', 'submitted', 'under_review'].includes(shop.merchant_verification_status)).length
     : pendingVerificationShops.length;
+  const overviewModerationCount = contentModeration.reports.length + contentModeration.reviews.length;
+  const overviewActionCount = overviewPendingOrderCount === null || !contentModerationLoaded || Boolean(overviewPendingOrdersError || contentModerationError)
+    ? null
+    : overviewPendingOrderCount + pendingVerificationShops.length + overviewModerationCount;
+  const overviewActionItems = [
+    {
+      id: 'reports',
+      title: 'Signalements à examiner',
+      detail: 'Vérifier le contenu signalé et décider de la suite.',
+      count: contentModeration.reports.length,
+      priority: 'Important',
+      icon: Flag,
+      view: 'moderation' as AdminView,
+      tone: 'bg-rose-50 text-rose-800',
+      priorityTone: 'bg-rose-100 text-rose-900',
+    },
+    {
+      id: 'identity',
+      title: 'Dossiers d’identité à suivre',
+      detail: 'Examiner les statuts transmis par Didit.',
+      count: pendingVerificationShops.length,
+      priority: 'Important',
+      icon: ShieldCheck,
+      view: 'identity' as AdminView,
+      tone: 'bg-amber-50 text-amber-800',
+      priorityTone: 'bg-amber-100 text-amber-900',
+    },
+    {
+      id: 'orders',
+      title: 'Commandes en attente de réponse',
+      detail: 'Suivre les demandes en attente côté commerçant.',
+      count: overviewPendingOrderCount || 0,
+      priority: 'À suivre',
+      icon: ShoppingBag,
+      view: 'orders' as AdminView,
+      tone: 'bg-sky-50 text-sky-800',
+      priorityTone: 'bg-sky-100 text-sky-900',
+    },
+    {
+      id: 'reviews',
+      title: 'Avis à modérer',
+      detail: 'Décider si les avis peuvent être publiés.',
+      count: contentModeration.reviews.length,
+      priority: 'Normal',
+      icon: CheckCircle2,
+      view: 'moderation' as AdminView,
+      tone: 'bg-violet-50 text-violet-800',
+      priorityTone: 'bg-violet-100 text-violet-900',
+    },
+  ].filter((item) => item.count > 0);
   const adminNavigationGroups: { label: string; items: { id: AdminView; label: string; icon: React.ComponentType<{ className?: string }> }[] }[] = adminRole === 'super_admin'
     ? [
       {
-        label: 'Pilotage',
+        label: 'Vue générale',
         items: [
           { id: 'overview', label: 'Accueil', icon: Activity },
+        ],
+      },
+      {
+        label: 'Activité commerciale',
+        items: [
           { id: 'shops', label: `Boutiques (${shops.length})`, icon: Store },
           { id: 'orders', label: 'Commandes', icon: ShoppingBag },
           { id: 'customers', label: `Clients (${customerTotal})`, icon: UserRound },
         ],
       },
       {
-        label: 'Confiance',
+        label: 'Marketing et partenariats',
         items: [
-          { id: 'moderation', label: 'Avis & signalements', icon: Flag },
-          { id: 'identity', label: `Identité (${pendingVerificationCount})`, icon: ShieldCheck },
+          { id: 'advertising', label: 'Publicité et partenaires', icon: Megaphone },
+          { id: 'promotions', label: 'Promotions', icon: Tag },
+          { id: 'push', label: 'Annonces Push', icon: Send },
         ],
       },
       {
-        label: 'Mesure',
-        items: [{ id: 'audience', label: 'Audience', icon: BarChart3 }],
+        label: 'Confiance et sécurité',
+        items: [
+          { id: 'moderation', label: 'Avis & signalements', icon: Flag },
+          { id: 'identity', label: `Identité (${pendingVerificationCount})`, icon: ShieldCheck },
+          { id: 'audit', label: 'Journal d’audit', icon: ClipboardList },
+        ],
       },
       {
-        label: 'Plateforme',
+        label: 'Configuration et système',
         items: [
           { id: 'finance', label: 'Finances', icon: CreditCard },
           { id: 'subscriptions', label: 'Abonnements', icon: RefreshCw },
           { id: 'operations', label: 'Opérations', icon: Activity },
-          { id: 'push', label: 'Annonces Push', icon: Send },
-          { id: 'promotions', label: 'Promotions', icon: Tag },
-          { id: 'delivery', label: 'Livraison', icon: MapPin },
-          { id: 'advertising', label: 'Publicité', icon: Megaphone },
-          { id: 'audit', label: 'Journal d’audit', icon: ClipboardList },
+          { id: 'audience', label: 'Rapports', icon: BarChart3 },
         ],
       },
     ]
@@ -1569,156 +1706,266 @@ export const AdminDashboard: React.FC = () => {
         <div className="min-w-0 space-y-6">
         {adminView === 'overview' && (
           <section aria-labelledby="admin-overview-title" className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div><p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--mt-green-hover)]">Centre de pilotage</p><h2 id="admin-overview-title" className="mt-1 text-2xl font-black text-[var(--mt-gray-900)]">Vue d’ensemble</h2><p className="mt-1 text-xs text-slate-500">{analytics ? `Données du ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${analytics.daily[0]?.date || new Date().toISOString().slice(0, 10)}T12:00:00`))} au ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${analytics.daily.at(-1)?.date || new Date().toISOString().slice(0, 10)}T12:00:00`))} · actualisation automatique toutes les 30 secondes` : 'Chargement des données de la période…'}</p></div>
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="sr-only" htmlFor="admin-overview-days">Période des indicateurs</label>
-                <select id="admin-overview-days" value={analyticsDays} onChange={(event) => { const days = Number(event.target.value); setAnalyticsDays(days); void fetchAnalytics(days); }} className="min-h-10 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 sm:flex-none">
-                  <option value={7}>7 derniers jours</option>
-                  <option value={30}>30 derniers jours</option>
-                  <option value={90}>90 derniers jours</option>
-                </select>
-                <button type="button" onClick={() => void fetchAnalytics(analyticsDays)} className="min-h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Actualiser les chiffres</button>
-              </div>
-            </div>
-            {adminRole === 'super_admin' && (
-              <div className="grid grid-cols-2 gap-2.5 sm:hidden">
-                {[
-                  { label: 'Comptes boutiques actifs', value: `${activeShopsCount} / ${shops.length}` },
-                  { label: 'Commandes', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.orders) : '—' },
-                  { label: 'Montant commandé', value: analytics ? `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F` : '—' },
-                  { label: 'Commandes / sessions', value: analytics ? `${analytics.totals.conversion_rate.toLocaleString('fr-FR')}%` : '—' },
-                ].map((item) => (
-                  <article key={item.label} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3">
-                    <span className="block min-h-8 text-[10px] font-bold uppercase leading-4 tracking-[0.06em] text-slate-500">{item.label}</span>
-                    <strong className="mt-1 block break-words text-lg font-black text-slate-900">{item.value}</strong>
-                  </article>
-                ))}
-              </div>
-            )}
-            <div className={`hidden grid-cols-2 gap-3 sm:grid ${adminRole === 'super_admin' ? 'sm:grid-cols-3 xl:grid-cols-5' : 'sm:grid-cols-3 xl:grid-cols-4'}`}>
-              {[
-                { label: 'Comptes boutiques actifs', value: `${activeShopsCount}/${shops.length}`, comparison: `${shops.length ? Math.round((activeShopsCount / shops.length) * 100) : 0}% du réseau`, tone: 'border-emerald-100 bg-emerald-50' },
-                ...(adminRole === 'super_admin' ? [{ label: 'Montant des commandes', value: analytics ? `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F` : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.sales, analytics.previous.sales)} vs période précédente` : 'Chargement…', tone: 'border-sky-100 bg-sky-50' }] : []),
-                { label: 'Commandes', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.orders) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.orders, analytics.previous.orders)} vs période précédente` : 'Chargement…', tone: 'border-slate-200 bg-slate-50' },
-                { label: 'Visites consenties', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.page_views) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.page_views, analytics.previous.page_views)} vs période précédente` : 'Chargement…', tone: 'border-violet-100 bg-violet-50' },
-                { label: 'Sessions uniques', value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.unique_visitors) : '—', comparison: analytics ? `${formatAudienceChange(analytics.totals.unique_visitors, analytics.previous.unique_visitors)} vs période précédente` : 'Chargement…', tone: 'border-indigo-100 bg-indigo-50' },
-              ].map((item, index) => (
-                <motion.div
-                  key={item.label}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.04, duration: 0.3 }}
-                  className={`min-w-0 rounded-2xl border p-3 shadow-sm ${item.tone}`}
-                >
-                  <span className="block min-h-8 text-[10px] font-bold uppercase leading-4 tracking-[0.08em] text-slate-600">{item.label}</span>
-                  <span className="mt-2 block break-words text-lg font-black text-slate-900 sm:text-xl">{item.value}</span>
-                  <span className="mt-1 block text-[10px] leading-4 text-slate-500">{item.comparison}</span>
-                </motion.div>
-              ))}
-            </div>
-            {adminRole === 'super_admin' && (
-              <section aria-labelledby="admin-mobile-follow-up-title" className="space-y-3 sm:hidden">
-                <h3 id="admin-mobile-follow-up-title" className="text-sm font-black text-slate-900">À traiter</h3>
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                  <button type="button" onClick={() => setAdminView('identity')} className="flex min-h-14 w-full items-center gap-3 border-b border-slate-200 px-3 py-2.5 text-left">
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-800"><ShieldCheck className="h-4 w-4" /></span>
-                    <span className="min-w-0 flex-1 text-xs font-bold text-slate-800">{pendingVerificationCount} identité{pendingVerificationCount === 1 ? '' : 's'} en attente</span>
-                    <span aria-hidden="true" className="text-lg text-slate-400">›</span>
-                  </button>
-                  <button type="button" onClick={() => setAdminView('moderation')} className="flex min-h-14 w-full items-center gap-3 border-b border-slate-200 px-3 py-2.5 text-left">
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-50 text-violet-800"><Flag className="h-4 w-4" /></span>
-                    <span className="min-w-0 flex-1 text-xs font-bold text-slate-800">{contentModeration.reviews.length + contentModeration.reports.length} avis et signalements à modérer</span>
-                    <span aria-hidden="true" className="text-lg text-slate-400">›</span>
-                  </button>
-                  <button type="button" onClick={() => setAdminView('finance')} className="flex min-h-14 w-full items-center gap-3 px-3 py-2.5 text-left">
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-800"><CreditCard className="h-4 w-4" /></span>
-                    <span className="min-w-0 flex-1 text-xs font-bold text-slate-800">{finance ? `${finance.summary.failed_count} paiement${finance.summary.failed_count === 1 ? '' : 's'} échoué${finance.summary.failed_count === 1 ? '' : 's'} · ${finance.days} j` : 'Ouvrir le suivi des paiements'}</span>
-                    <span aria-hidden="true" className="text-lg text-slate-400">›</span>
-                  </button>
+            <header className="overflow-hidden rounded-[1.5rem] bg-[#123e32] p-5 text-white shadow-[0_12px_30px_rgba(18,62,50,.12)] sm:p-7">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-100"><BarChart3 className="h-3.5 w-3.5" aria-hidden="true" /> Aperçu de la plateforme</p>
+                  <h2 id="admin-overview-title" className="mt-3 text-2xl font-black tracking-tight sm:text-3xl">Activité de MaTable</h2>
+                  <p className="mt-2 max-w-xl text-xs leading-5 text-emerald-50/80 sm:text-sm">Les indicateurs ci-dessous résument les boutiques, les visiteurs et les commandes sur la période choisie.</p>
                 </div>
-                {finance && (
-                  <button type="button" onClick={() => setAdminView('finance')} className="flex min-h-24 w-full flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left">
-                    <span>
-                      <span className="block text-xs font-semibold text-slate-500">Encaissements confirmés · {finance.days} jours</span>
-                      <strong className="mt-1 block text-2xl font-black text-[var(--mt-green-deep)]">{new Intl.NumberFormat('fr-FR').format(finance.summary.collected_amount)} FCFA</strong>
-                      <span className="mt-1 block text-[11px] text-slate-500">{finance.summary.confirmed_count} paiement{finance.summary.confirmed_count === 1 ? '' : 's'} confirmé{finance.summary.confirmed_count === 1 ? '' : 's'}</span>
-                    </span>
-                    <span className="text-xs font-bold text-emerald-800 underline underline-offset-2">Journal</span>
-                  </button>
+                <div className="flex flex-wrap gap-2">
+                  <label className="sr-only" htmlFor="admin-overview-days">Période des statistiques</label>
+                  <select id="admin-overview-days" value={analyticsDays} onChange={(event) => { const days = Number(event.target.value); setAnalyticsDays(days); void fetchAnalytics(days); }} className="min-h-10 rounded-full border border-white/25 bg-white/10 px-4 text-xs font-extrabold text-white focus:bg-[#123e32]">
+                    <option value={7}>7 derniers jours</option>
+                    <option value={30}>30 derniers jours</option>
+                    <option value={90}>90 derniers jours</option>
+                  </select>
+                  <button type="button" onClick={() => void fetchAnalytics(analyticsDays)} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-white/25 px-4 text-xs font-bold text-white transition hover:bg-white/10"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Actualiser</button>
+                </div>
+              </div>
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-white/15 pt-4 text-[11px] text-emerald-50/80">
+                <p>{analytics ? `Données du ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${analytics.daily[0]?.date || new Date().toISOString().slice(0, 10)}T12:00:00`))} au ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${analytics.daily.at(-1)?.date || new Date().toISOString().slice(0, 10)}T12:00:00`))}` : 'Chargement des données de la période…'}</p>
+                <p>Actualisation automatique toutes les 30 secondes</p>
+              </div>
+            </header>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                {
+                  label: 'Visiteurs distincts',
+                  value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.unique_visitors) : '—',
+                  detail: 'Personnes ayant accepté les statistiques.',
+                  current: analytics?.totals.unique_visitors,
+                  previous: analytics?.previous.unique_visitors,
+                  icon: Eye,
+                  tone: 'green',
+                },
+                {
+                  label: 'Commandes reçues',
+                  value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.orders) : '—',
+                  detail: 'Hors commandes annulées ou expirées.',
+                  current: analytics?.totals.orders,
+                  previous: analytics?.previous.orders,
+                  icon: ShoppingBag,
+                  tone: 'orange',
+                },
+                {
+                  label: 'Ratio commandes / visiteurs',
+                  value: analytics ? `${analytics.totals.conversion_rate.toLocaleString('fr-FR')} %` : '—',
+                  detail: 'Ratio brut ; peut dépasser 100 % si des visiteurs commandent plusieurs fois.',
+                  current: analytics?.totals.conversion_rate,
+                  previous: analytics?.previous.conversion_rate,
+                  percentagePoints: true,
+                  icon: TrendingUp,
+                  tone: 'blue',
+                },
+                {
+                  label: 'Montant demandé',
+                  value: analytics ? `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} FCFA` : '—',
+                  detail: 'Valeur des commandes, non encaissée par MaTable.',
+                  current: analytics?.totals.sales,
+                  previous: analytics?.previous.sales,
+                  icon: DollarSign,
+                  tone: 'gold',
+                },
+              ].map((metric) => {
+                const tones = {
+                  green: 'bg-emerald-50 text-emerald-800 ring-emerald-100',
+                  blue: 'bg-sky-50 text-sky-800 ring-sky-100',
+                  orange: 'bg-orange-50 text-orange-800 ring-orange-100',
+                  gold: 'bg-amber-50 text-amber-800 ring-amber-100',
+                };
+                const change = metric.current === undefined || metric.previous === undefined
+                  ? null
+                  : formatAudienceChange(metric.current, metric.previous, metric.percentagePoints);
+                const isStable = metric.current === metric.previous;
+                const isPositive = metric.current !== undefined && metric.previous !== undefined && metric.current > metric.previous;
+                const comparison = change === null
+                  ? 'Comparaison en cours'
+                  : isStable
+                    ? 'Stable par rapport à la période précédente'
+                    : metric.previous === 0
+                      ? 'Nouvelle activité · aucune sur la période précédente'
+                      : `${change} par rapport à la période précédente`;
+                return (
+                  <article key={metric.label} className="flex min-w-0 flex-col rounded-2xl border border-[#e7dfd3] bg-white p-4 shadow-[0_3px_12px_rgba(41,45,42,.03)] sm:p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="min-h-10 text-xs font-bold leading-5 text-slate-600">{metric.label}</p>
+                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 ${tones[metric.tone]}`}><metric.icon className="h-4 w-4" aria-hidden="true" /></span>
+                    </div>
+                    <p className="mt-2 break-words text-2xl font-black tracking-tight text-[#183b31] sm:text-3xl">{metric.value}</p>
+                    <p className="mt-1 min-h-8 text-[11px] leading-4 text-slate-500">{metric.detail}</p>
+                    <p className={`mt-3 border-t border-slate-100 pt-2 text-[10px] font-bold ${change === null ? 'text-slate-400' : isStable ? 'text-slate-500' : isPositive ? 'text-emerald-700' : 'text-orange-800'}`}>
+                      {comparison}
+                    </p>
+                  </article>
+                );
+              })}
+            </div>
+            <section aria-label="État du réseau de boutiques" className="flex flex-col gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Store className="h-4 w-4" aria-hidden="true" /></span>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-700">Réseau de boutiques</p>
+                  <p className="mt-1 text-[11px] text-slate-500">Comptes actifs : {new Intl.NumberFormat('fr-FR').format(activeShopsCount)} sur {new Intl.NumberFormat('fr-FR').format(shops.length)} · le statut actif ne signifie pas que la vitrine est publiée.</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setAdminView('shops')} className="min-h-10 shrink-0 rounded-xl border border-[#dfe8dd] px-4 text-xs font-bold text-[#315548] transition hover:bg-emerald-50">Voir les boutiques</button>
+            </section>
+            {adminRole === 'super_admin' && (
+              <section aria-labelledby="admin-action-center-title" className="chart-panel p-4 md:p-5">
+                <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--mt-green-hover)]">Intervention humaine</p>
+                    <h3 id="admin-action-center-title" className="mt-1 text-base font-black text-slate-900">File d’intervention</h3>
+                    <p className="mt-1 text-xs text-slate-500">Les règles simples sont suivies par le système ; ces éléments nécessitent une vérification ou un jugement. Actualisation automatique toutes les 30 secondes, lorsque cet onglet est visible.</p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                    {overviewActionCount !== null
+                      ? `${overviewActionCount} à traiter`
+                      : overviewPendingOrdersLoading || contentModerationLoading
+                        ? 'Actualisation…'
+                        : 'Données indisponibles'}
+                  </span>
+                </header>
+                {overviewPendingOrdersError && <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900">{overviewPendingOrdersError}</p>}
+                {contentModerationError && <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900">Modération indisponible : {contentModerationError}</p>}
+                {overviewPendingOrdersLoading || contentModerationLoading ? (
+                  <p role="status" className="mt-3 text-xs text-slate-500">Actualisation des files de commandes et de modération…</p>
+                ) : null}
+                {overviewActionCount !== null && !overviewPendingOrdersLoading && !contentModerationLoading && overviewActionItems.length === 0 && (
+                  <p className="py-5 text-sm font-semibold text-emerald-800">Aucune intervention requise dans les files chargées.</p>
+                )}
+                {overviewActionItems.length > 0 && (
+                  <div className="mt-2 divide-y divide-slate-200">
+                    {overviewActionItems.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <article key={item.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center">
+                          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${item.tone}`}><Icon className="h-5 w-5" /></span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="text-sm font-bold text-slate-900">{item.title}</h4>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${item.priorityTone}`}>{item.priority}</span>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-600">{item.detail}</p>
+                          </div>
+                          <strong className="shrink-0 text-lg font-black tabular-nums text-slate-900">{new Intl.NumberFormat('fr-FR').format(item.count)}</strong>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (item.view === 'orders') {
+                                setOrderStatusFilter('pending');
+                                setOrderSearch('');
+                                setOrderPage(0);
+                              }
+                              setAdminView(item.view);
+                            }}
+                            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                          >
+                            Ouvrir <ChevronRight className="h-4 w-4" />
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+                {overviewPendingOrderCount !== null && overviewPendingOrderCount > 0 && overviewPendingOrders.length > 0 && (
+                  <div className="mt-3 rounded-xl bg-slate-50 px-3">
+                    <p className="py-2 text-[10px] font-black uppercase tracking-wide text-slate-500">Demandes récentes en attente</p>
+                    {overviewPendingOrders.slice(0, 3).map((order) => (
+                      <button
+                        key={order.id}
+                        type="button"
+                        onClick={() => {
+                          setOrderStatusFilter('pending');
+                          setOrderSearch(String(order.id));
+                          setOrderPage(0);
+                          setAdminView('orders');
+                        }}
+                        className="flex min-h-10 w-full items-center justify-between gap-3 border-t border-slate-200 py-2 text-left"
+                      >
+                        <span className="min-w-0 truncate text-xs font-semibold text-slate-800">#{order.id} · {order.shop_name}</span>
+                        <span className="shrink-0 text-[10px] text-slate-500">{new Date(order.created_at).toLocaleDateString('fr-FR')}</span>
+                      </button>
+                    ))}
+                  </div>
                 )}
               </section>
             )}
-            {adminRole === 'super_admin' && (
-              <section aria-label="Taux de conversion des visites en commandes" className="chart-panel px-4 py-3">
-                <p className="text-xs font-semibold text-slate-500">Visites vers commandes</p>
-                <strong className="mt-1 block text-2xl font-black text-[var(--mt-green-deep)]">{analytics ? `${analytics.totals.conversion_rate.toLocaleString('fr-FR')}%` : '—'}</strong>
-                <p className="mt-1 text-xs text-slate-500">{analytics ? `${formatAudienceChange(analytics.totals.conversion_rate, analytics.previous.conversion_rate, true)} par rapport à la période précédente` : 'Chargement des données…'}</p>
-              </section>
-            )}
-            {adminRole === 'super_admin' && <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-600">« Compte boutique actif » ne signifie pas que sa vitrine est publiquement visible. Les montants agrègent les commandes hors annulation et expiration : les paiements des ventes ne sont pas suivis par MaTable. Les visites ne comptent que les sessions ayant accepté les statistiques.</p>}
             {analytics && adminRole === 'super_admin' && (
-              <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.8fr)]">
-                <section aria-labelledby="admin-sales-chart-title" className="min-w-0 chart-panel p-4 md:p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div><h3 id="admin-sales-chart-title" className="text-sm font-black text-slate-900">Valeur des commandes par jour</h3><p className="mt-1 text-xs text-slate-500">{analytics.days} jours · commandes non annulées ni expirées</p></div>
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-600"><span className="h-2.5 w-2.5 rounded-full bg-emerald-700" />Montant des commandes · FCFA</span>
+              <div className="space-y-4">
+                <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+                  <AnalyticsDailyBars
+                    title="Visites des vitrines"
+                    description="Consultations de boutiques par jour, uniquement après consentement à la mesure."
+                    rows={overviewDaily}
+                    valueFor={(day) => day.page_views}
+                    color="#087c5b"
+                    formatValue={(value) => new Intl.NumberFormat('fr-FR').format(value)}
+                    emptyMessage="Les visites mesurées apparaîtront ici dès qu’une vitrine recevra de l’activité."
+                  />
+                  <AnalyticsDailyBars
+                    title="Commandes reçues"
+                    description="Commandes enregistrées par jour, hors annulation et expiration."
+                    rows={overviewDaily}
+                    valueFor={(day) => day.orders}
+                    color="#e77a3d"
+                    formatValue={(value) => new Intl.NumberFormat('fr-FR').format(value)}
+                    emptyMessage="Les commandes apparaîtront ici dès qu’une boutique en recevra."
+                  />
+                </div>
+                <section aria-labelledby="admin-overview-clarifications" className="rounded-2xl border border-[#e7dfd3] bg-white p-4">
+                  <h3 id="admin-overview-clarifications" className="text-sm font-extrabold text-[#183b31]">Comment lire ces chiffres ?</h3>
+                  <div className="mt-2 grid gap-2 text-xs leading-5 text-slate-600 sm:grid-cols-3">
+                    <p><strong className="text-slate-800">Boutiques actives :</strong> les comptes peuvent utiliser MaTable ; cela ne confirme pas que leur vitrine est publiée.</p>
+                    <p><strong className="text-slate-800">Valeur des commandes :</strong> sommes demandées dans les commandes ; les paiements client-commerçant ne sont pas encaissés ni suivis par MaTable.</p>
+                    <p><strong className="text-slate-800">Visiteurs distincts :</strong> sessions anonymisées comptées uniquement après consentement aux statistiques.</p>
                   </div>
-                  {overviewDaily.length === 0 ? <p className="py-10 text-center text-sm text-slate-500">Aucune journée dans cette période.</p> : (
-                    <>
-                      <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-2">
-                        <div className="flex h-48 flex-col justify-between pt-6 pb-9 text-right text-[9px] tabular-nums text-slate-400">
-                          {[1, 0.75, 0.5, 0.25, 0].map((ratio) => <span key={ratio} title={`${new Intl.NumberFormat('fr-FR').format(overviewChartMaxSales * ratio)} F`}>{new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(overviewChartMaxSales * ratio)} F</span>)}
-                        </div>
-                        <div className="relative h-48 min-w-0 rounded-xl border border-slate-200 bg-white px-1 py-1">
-                          <svg role="img" aria-label={`Valeur des commandes en FCFA par jour sur ${analytics.days} jours`} viewBox="0 0 720 210" preserveAspectRatio="none" className="h-full w-full overflow-visible">
-                            {[32, 69.5, 107, 144.5, 182].map((y) => <line key={y} x1="24" x2="696" y1={y} y2={y} stroke="#e2e8f0" strokeWidth="1" />)}
-                            {overviewSalesArea && <path d={overviewSalesArea} fill="url(#admin-sales-fill)" />}
-                            <defs><linearGradient id="admin-sales-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#047857" stopOpacity="0.22" /><stop offset="100%" stopColor="#047857" stopOpacity="0.015" /></linearGradient></defs>
-                            <polyline points={overviewSalesPoints} fill="none" stroke="#047857" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                            {overviewDaily.map((day, index) => <circle key={`sales-${day.date}`} cx={overviewChartX(index)} cy={overviewSalesY(day.sales)} r="2.2" fill="#047857"><title>{new Date(`${day.date}T12:00:00`).toLocaleDateString('fr-FR')} · {new Intl.NumberFormat('fr-FR').format(day.sales)} FCFA · {day.orders} commande{day.orders === 1 ? '' : 's'}</title></circle>)}
-                          </svg>
-                          <div className="absolute inset-x-2 bottom-1 flex justify-between text-[9px] tabular-nums text-slate-400">{overviewTickDays.map((day) => <span key={day.date}>{new Date(`${day.date}T12:00:00`).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</span>)}</div>
-                        </div>
-                      </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                        <div className="rounded-lg bg-slate-50 px-3 py-2"><span className="block text-[10px] text-slate-500">Montant total</span><strong className="mt-1 block text-sm tabular-nums text-slate-900">{new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} F</strong></div>
-                        <div className="rounded-lg bg-slate-50 px-3 py-2"><span className="block text-[10px] text-slate-500">Commandes comptées</span><strong className="mt-1 block text-sm tabular-nums text-slate-900">{new Intl.NumberFormat('fr-FR').format(analytics.totals.orders)}</strong></div>
-                        <div className="col-span-2 rounded-lg bg-slate-50 px-3 py-2 sm:col-span-1"><span className="block text-[10px] text-slate-500">Moyenne par commande</span><strong className="mt-1 block text-sm tabular-nums text-slate-900">{new Intl.NumberFormat('fr-FR').format(analytics.totals.orders ? Math.round(analytics.totals.sales / analytics.totals.orders) : 0)} F</strong></div>
-                      </div>
-                      <details className="mt-3 rounded-xl border border-slate-200 bg-white">
-                        <summary className="cursor-pointer px-3 py-2.5 text-xs font-bold text-slate-700">Voir les valeurs exactes par jour ({overviewDaily.length} jours)</summary>
-                        <div className="max-h-64 overflow-auto border-t border-slate-200">
-                          <table className="w-full min-w-[520px] text-left text-xs">
-                            <thead className="sticky top-0 bg-slate-50 text-[10px] uppercase text-slate-500"><tr><th className="px-3 py-2">Date</th><th className="px-3 py-2 text-right">Commandes</th><th className="px-3 py-2 text-right">Valeur (FCFA)</th></tr></thead>
-                            <tbody>{overviewDaily.map((day) => <tr key={day.date} className="border-t border-slate-100"><th scope="row" className="px-3 py-2 font-medium text-slate-700">{new Date(`${day.date}T12:00:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' })}</th><td className="px-3 py-2 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.orders)}</td><td className="px-3 py-2 text-right tabular-nums text-slate-700">{new Intl.NumberFormat('fr-FR').format(day.sales)}</td></tr>)}</tbody>
-                          </table>
-                        </div>
-                      </details>
-                    </>
-                  )}
                 </section>
-                <section aria-labelledby="admin-top-shops-title" className="min-w-0 chart-panel p-4 md:p-5">
+                <section aria-labelledby="admin-top-shops-title" className="min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3"><div><h3 id="admin-top-shops-title" className="text-sm font-black text-slate-900">Boutiques par montant commandé</h3><p className="mt-1 text-xs text-slate-500">Classement sur la même période</p></div><button type="button" onClick={() => setAdminView('shops')} className="shrink-0 text-xs font-bold text-sky-800 underline underline-offset-2">Toutes</button></div>
                   {overviewTopShops.length === 0 || overviewTopShops.every((shop) => shop.sales === 0) ? <p className="py-6 text-sm text-slate-500">Aucun montant de commande sur cette période.</p> : <div className="mt-2 divide-y divide-slate-100">{overviewTopShops.filter((shop) => shop.sales > 0).map((shop, index) => <div key={shop.shop_id} className="py-3"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-2"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-50 text-[10px] font-black text-emerald-800">{index + 1}</span><div className="min-w-0"><p className="truncate text-xs font-bold text-slate-800">{shop.shop_name}</p><p className="mt-1 text-[10px] text-slate-500">{shop.orders} commande{shop.orders === 1 ? '' : 's'} · {shop.unique_visitors} session{shop.unique_visitors === 1 ? '' : 's'} unique{shop.unique_visitors === 1 ? '' : 's'}</p></div></div><strong className="shrink-0 text-xs tabular-nums text-slate-900">{new Intl.NumberFormat('fr-FR').format(shop.sales)} F</strong></div><div className="ml-8 mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-700" style={{ width: `${Math.min(100, shop.sales / Math.max(1, overviewTopShops[0]?.sales || 1) * 100)}%` }} /></div></div>)}</div>}
                 </section>
               </div>
             )}
-            <div className="grid gap-4 lg:grid-cols-2">
-              <section aria-labelledby="admin-follow-up-title" className="min-w-0 chart-panel p-4 md:p-5">
-                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3"><div className="min-w-0"><h3 id="admin-follow-up-title" className="text-sm font-black text-slate-900">Dossiers à suivre</h3><p className="mt-1 text-xs text-slate-500">Vérifications nécessitant une revue.</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">{pendingVerificationShops.length}</span></div>
-                {pendingVerificationShops.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucun dossier en attente.</p> : <div className="divide-y divide-slate-200">{pendingVerificationShops.slice(0, 5).map((shop) => <div key={shop.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-900">{shop.name}</p><p className="mt-1 text-xs text-slate-500">{shop.merchant_verification_status === 'under_review' ? 'Revue en cours' : 'À examiner'} · {shop.whatsapp_number}</p></div><button type="button" onClick={() => focusVerificationShop(shop.id)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700">Ouvrir</button></div>)}</div>}
-                {pendingVerificationShops.length > 5 && <button type="button" onClick={() => setAdminView('identity')} className="mt-2 text-xs font-bold text-sky-800 underline underline-offset-2">Voir les {pendingVerificationShops.length} dossiers</button>}
-              </section>
+            <div className="grid gap-4">
               <section aria-labelledby="admin-recent-orders-title" className="min-w-0 chart-panel p-4 md:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3"><div className="min-w-0"><h3 id="admin-recent-orders-title" className="text-sm font-black text-slate-900">Commandes récentes</h3><p className="mt-1 text-xs text-slate-500">Dernières demandes enregistrées.</p></div><button type="button" onClick={() => setAdminView('orders')} className="shrink-0 text-xs font-bold text-sky-800 underline underline-offset-2">Toutes les commandes</button></div>
-                {adminOrders.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucune commande enregistrée.</p> : <div className="divide-y divide-slate-200">{adminOrders.slice(0, 5).map((order) => <div key={order.id} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-900">#{order.id} · {order.shop_name}</p><p className="mt-1 truncate text-xs text-slate-500">{order.customer_name} · {new Date(order.created_at).toLocaleDateString('fr-FR')}</p></div><div className="shrink-0 text-right">{adminRole === 'super_admin' && <strong className="block text-sm text-slate-900">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} F</strong>}<span className="text-[10px] font-semibold text-slate-500">{order.status}</span></div></div>)}</div>}
+                {adminOrders.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucune commande enregistrée.</p> : <div className="divide-y divide-slate-200">{adminOrders.slice(0, 5).map((order) => <div key={order.id} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-900">#{order.id} · {order.shop_name}</p><p className="mt-1 truncate text-xs text-slate-500">{order.customer_name} · {new Date(order.created_at).toLocaleDateString('fr-FR')}</p></div><div className="shrink-0 text-right">{adminRole === 'super_admin' && <strong className="block text-sm text-slate-900">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} F</strong>}<span className="text-[10px] font-semibold text-slate-500">{adminOrderStatusLabels[order.status]}</span></div></div>)}</div>}
               </section>
             </div>
-            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-center gap-3"><Activity className="h-5 w-5 shrink-0 text-emerald-700" /><div><p className="text-sm font-bold text-slate-900">État du service</p><p className="text-xs text-slate-500">{adminHealth ? `${adminHealth.database === 'postgresql' ? 'PostgreSQL (Neon)' : 'SQLite'} · ${adminHealth.status === 'ok' ? 'Opérationnel' : adminHealth.status}` : 'Vérification en cours'}</p></div></div>
-              <button type="button" onClick={() => setAdminView('operations')} className="min-h-10 shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">Détails opérations</button>
-            </div>
+            <section aria-label="État du service et alertes" className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3"><Activity className={`h-5 w-5 shrink-0 ${adminHealth?.operational_status === 'critical' ? 'text-rose-700' : adminHealth?.operational_status === 'warning' ? 'text-amber-700' : 'text-emerald-700'}`} /><div><p className="text-sm font-bold text-slate-900">État du service</p><p className="text-xs text-slate-500">{adminHealth ? `${adminHealth.database === 'postgresql' ? 'PostgreSQL (Neon)' : 'SQLite'} · ${adminHealth.operational_status === 'critical' ? 'Action requise' : adminHealth.operational_status === 'warning' ? 'À surveiller' : 'Opérationnel'}` : operationsError || healthPollingError || 'Vérification en cours'}</p></div></div>
+                <button type="button" onClick={() => setAdminView('operations')} className="min-h-10 shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">Détails opérations</button>
+              </div>
+              {(operationsError || healthPollingError) && <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900">État technique indisponible : {operationsError || healthPollingError}</p>}
+              {!!adminHealth?.alerts.length && (
+                <div className={`mt-3 rounded-lg border px-3 py-2 ${adminHealth.operational_status === 'critical' ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'}`} role={adminHealth.operational_status === 'critical' ? 'alert' : 'status'}>
+                  <p className="text-xs font-bold text-slate-900">{adminHealth.operational_status === 'critical' ? 'Action technique requise' : 'Points à surveiller'}</p>
+                  <ul className="mt-1 space-y-1">
+                    {adminHealth.alerts.map((alert) => (
+                      <li key={alert.code} className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-700">
+                        <span>{alert.message}</span>
+                        <button type="button" onClick={() => {
+                          if (alert.code.includes('pending_order')) {
+                            setOrderStatusFilter('pending');
+                            setOrderPage(0);
+                            setAdminView('orders');
+                          } else setAdminView('operations');
+                        }} className="shrink-0 font-bold text-sky-800 underline underline-offset-2">Examiner</button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {maintenanceMode?.enabled && (
+                <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-xs font-bold text-amber-950">Le mode maintenance est activé : le site marchand est actuellement indisponible.</p>
+                  <button type="button" onClick={() => setAdminView('operations')} className="min-h-9 rounded-lg border border-amber-300 bg-white px-3 text-xs font-bold text-amber-950">Examiner</button>
+                </div>
+              )}
+            </section>
           </section>
         )}
 
@@ -1732,21 +1979,21 @@ export const AdminDashboard: React.FC = () => {
               <label className="relative block"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input type="search" value={orderSearch} onChange={(event) => { setOrderSearch(event.target.value); setOrderPage(0); }} placeholder="Rechercher boutique, client, téléphone ou numéro" className="min-h-10 w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-sky-700" /></label>
               <select value={orderStatusFilter} onChange={(event) => { setOrderStatusFilter(event.target.value); setOrderPage(0); }} aria-label="Filtrer les commandes par statut" className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
                 <option value="all">Tous les statuts</option>
-                {['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled', 'rejected', 'expired'].map((status) => <option key={status} value={status}>{status}</option>)}
+                {(Object.keys(adminOrderStatusLabels) as AdminOrder['status'][]).map((status) => <option key={status} value={status}>{adminOrderStatusLabels[status]}</option>)}
               </select>
             </div>
             <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
               {filteredAdminOrders.length === 0 ? <p className="py-5 text-sm text-slate-500">Aucune commande correspondante.</p> : filteredAdminOrders.map((order) => (
                 <article key={order.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0"><h3 className="truncate text-sm font-bold text-slate-900">#{order.id} · {order.shop_name}</h3><p className="mt-1 truncate text-xs text-slate-600">{order.customer_name} · {order.items_count} article(s)</p><p className="mt-1 text-xs text-slate-500">{order.customer_phone} · {new Date(order.created_at).toLocaleString('fr-FR')}</p></div>
-                  <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 sm:justify-end"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{order.status}</span>{adminRole === 'super_admin' && <strong className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} FCFA</strong>}
+                  <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 sm:justify-end"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{adminOrderStatusLabels[order.status]}</span>{adminRole === 'super_admin' && <strong className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(order.total_amount)} FCFA</strong>}
                     {adminOrderTransitions[order.status].length > 0 && (
                       <label className="sr-only" htmlFor={`order-status-${order.id}`}>Modifier le statut de la commande {order.id}</label>
                     )}
                     {adminOrderTransitions[order.status].length > 0 && (
                       <select id={`order-status-${order.id}`} defaultValue="" disabled={orderActionLoadingId === order.id} onChange={(event) => { const status = event.target.value as AdminOrder['status']; if (status) void updateOrderStatus(order, status); event.currentTarget.value = ''; }} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-bold text-slate-700 disabled:opacity-50">
                         <option value="" disabled>Changer le statut…</option>
-                        {adminOrderTransitions[order.status].map((status) => <option key={status} value={status}>{status}</option>)}
+                        {adminOrderTransitions[order.status].map((status) => <option key={status} value={status}>{adminOrderStatusLabels[status]}</option>)}
                       </select>
                     )}
                   </div>
@@ -1796,7 +2043,7 @@ export const AdminDashboard: React.FC = () => {
                                       {customerDetail.orders.map((order) => (
                                         <li key={order.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
                                           <span className="font-semibold text-slate-700">#{order.id} · {order.shop_name} · {new Date(order.created_at).toLocaleDateString('fr-FR')}</span>
-                                          <span className="text-slate-600">{order.items_count} article(s) · {order.status} · {new Intl.NumberFormat('fr-FR').format(order.total_amount)} FCFA (montant demandé, non encaissé)</span>
+                                          <span className="text-slate-600">{order.items_count} article(s) · {adminOrderStatusLabels[order.status as AdminOrder['status']] || order.status} · {new Intl.NumberFormat('fr-FR').format(order.total_amount)} FCFA (montant demandé, non encaissé)</span>
                                         </li>
                                       ))}
                                     </ul>
@@ -1885,7 +2132,7 @@ export const AdminDashboard: React.FC = () => {
                     <div className="chart-grid relative h-44 min-w-0 rounded-2xl border border-slate-200 bg-white p-3">
                       <svg role="img" aria-label={`Pages vues consenties par jour, échelle de 0 à ${maxDailyViews}`} viewBox="0 0 420 160" className="h-full w-full">
                         <path d="M18 35H402 M18 82H402 M18 140H402" stroke="#e2e8e5" strokeWidth="1" />
-                        <polyline fill="none" stroke="#047857" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={chartPoints} />
+                        <polyline fill="none" stroke="var(--mt-green-primary)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={chartPoints} />
                         {analytics.daily.map((day, index) => {
                           const x = 18 + (index * (384 / Math.max(analytics.daily.length - 1, 1)));
                           const y = 140 - (day.page_views / maxDailyViews) * 96;
@@ -2394,12 +2641,12 @@ export const AdminDashboard: React.FC = () => {
             </button>
           </div>
 
-          {operationsError && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900">{operationsError}</p>}
+          {(operationsError || healthPollingError) && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900">{operationsError || healthPollingError}</p>}
           {adminHealth ? (
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-              <div className={`rounded-2xl border p-3 ${adminHealth.status === 'ok' ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50'}`}>
-                <span className={`text-[10px] font-bold ${adminHealth.status === 'ok' ? 'text-emerald-700' : 'text-rose-800'}`}>Service</span>
-                <strong className={`mt-1 block text-sm ${adminHealth.status === 'ok' ? 'text-emerald-900' : 'text-rose-900'}`}>{adminHealth.status === 'ok' ? 'Opérationnel' : `À vérifier · ${adminHealth.status}`}</strong>
+              <div className={`rounded-2xl border p-3 ${adminHealth.operational_status === 'ok' ? 'border-emerald-200 bg-emerald-50' : adminHealth.operational_status === 'critical' ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'}`}>
+                <span className={`text-[10px] font-bold ${adminHealth.operational_status === 'ok' ? 'text-emerald-700' : adminHealth.operational_status === 'critical' ? 'text-rose-800' : 'text-amber-800'}`}>Service</span>
+                <strong className={`mt-1 block text-sm ${adminHealth.operational_status === 'ok' ? 'text-emerald-900' : adminHealth.operational_status === 'critical' ? 'text-rose-900' : 'text-amber-900'}`}>{adminHealth.operational_status === 'ok' ? 'Opérationnel' : adminHealth.operational_status === 'critical' ? 'Action requise' : 'À surveiller'}</strong>
               </div>
               <div className={`rounded-2xl border p-3 ${adminHealth.database === 'postgresql' ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
                 <span className={`text-[10px] font-bold ${adminHealth.database === 'postgresql' ? 'text-emerald-700' : 'text-amber-800'}`}>Base de données</span>
@@ -2413,6 +2660,38 @@ export const AdminDashboard: React.FC = () => {
             <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600" role="status">
               {operationsLoading ? 'Chargement de l’état du service…' : 'État du service indisponible. Utilisez « Actualiser » pour réessayer.'}
             </p>
+          )}
+          {adminHealth && (
+            <section aria-label="Alertes opérationnelles" className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-xs font-black text-slate-900">Suivi des automatisations</h3>
+                <p className="text-[10px] text-slate-500">Vérifié à {new Intl.DateTimeFormat('fr-FR', { timeStyle: 'short' }).format(new Date(adminHealth.checked_at))} · actualisation automatique toutes les 30 s</p>
+              </div>
+              <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-slate-700">Rappels de commande dus : <strong>{adminHealth.operations.pending_order_reminders}</strong></p>
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-slate-700">Commandes dépassant 2 h : <strong>{adminHealth.operations.overdue_pending_orders}</strong></p>
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-slate-700">Échecs Push (24 h) : <strong>{adminHealth.operations.failed_push_deliveries_24h}</strong></p>
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-slate-700">Push : <strong>{adminHealth.operations.push_configured ? 'configuré' : 'non configuré'}</strong> · {adminHealth.operations.push_subscriptions} appareil(s)</p>
+              </div>
+              {adminHealth.alerts.length > 0 ? (
+                <ul className="mt-3 space-y-2" role={adminHealth.operational_status === 'critical' ? 'alert' : 'status'}>
+                  {adminHealth.alerts.map((alert) => (
+                    <li key={alert.code} className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs ${alert.severity === 'critical' ? 'border-rose-200 bg-rose-50 text-rose-950' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
+                      <span className="font-semibold">{alert.message}</span>
+                      <button type="button" onClick={() => {
+                        if (alert.code.includes('pending_order')) {
+                          setOrderStatusFilter('pending');
+                          setOrderPage(0);
+                          setAdminView('orders');
+                        } else setAdminView('operations');
+                      }} className="font-bold underline underline-offset-2">Examiner</button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900" role="status">Aucune alerte opérationnelle détectée.</p>
+              )}
+            </section>
           )}
 
           {adminRole === 'super_admin' && <div className="mt-5 border-t border-slate-200 pt-5">
@@ -2621,7 +2900,6 @@ export const AdminDashboard: React.FC = () => {
         )}
 
         {adminView === 'push' && adminRole === 'super_admin' && <AdminPushAnnouncements />}
-        {adminView === 'delivery' && adminRole === 'super_admin' && <AdminDeliveryPricing />}
         {adminView === 'promotions' && adminRole === 'super_admin' && <AdminProductPromotions />}
         {adminView === 'advertising' && adminRole === 'super_admin' && <AdminHomepageMarketing />}
 
@@ -2672,7 +2950,7 @@ export const AdminDashboard: React.FC = () => {
                           {Object.entries(entry.details).map(([key, value]) => (
                             <div key={key} className="max-w-full rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px]">
                               <dt className="inline font-semibold text-slate-500">{adminAuditDetailLabels[key] || key}: </dt>
-                              <dd className="inline break-words text-slate-800">{typeof value === 'boolean' ? value ? 'Oui' : 'Non' : String(value)}</dd>
+                              <dd className="inline break-words text-slate-800">{formatAuditDetailValue(value)}</dd>
                             </div>
                           ))}
                         </dl>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Store, ShieldCheck, ShoppingBag, Compass, CircleHelp, BookOpen, Menu, X, Sparkles, Search, Home, ArrowUpRight, BadgePercent, Bike } from 'lucide-react';
+import { Store, ShieldCheck, ShoppingBag, Compass, CircleHelp, BookOpen, Menu, X, Sparkles, Search, Home, ArrowUpRight, BadgePercent } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import type { CustomerUser } from './CustomerAuth';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../utils/categoryDefaults';
@@ -32,7 +32,6 @@ export const Navigation: React.FC<NavigationProps> = ({
     { to: '/promotions', label: 'Promotions', icon: BadgePercent, active: isPromotionsPage },
     { to: '/comment-ca-marche', label: 'Comment ça marche', icon: CircleHelp, active: location.pathname === '/comment-ca-marche' },
     { to: '/commercants', label: 'Commerçants', icon: Store, active: isMerchantPlansPage },
-    { to: '/livreur', label: 'Livreurs', icon: Bike, active: location.pathname === '/livreur' },
   ];
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuButtonRef = React.useRef<HTMLButtonElement | null>(null);
@@ -101,7 +100,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   return (
     <header className="sticky top-0 z-50 border-b border-[#e5d9ca] bg-[var(--mt-surface)]/95 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-2 px-4 py-2.5 sm:gap-3 sm:px-8 sm:py-4">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           <Link to="/" aria-label="MaTable, accueil" className="flex items-center gap-2.5 text-left">
             <img src="/brand-kit/monogram.svg" alt="" className="h-10 w-10 shrink-0" />
             <span className="min-w-0">
@@ -119,7 +118,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           aria-expanded={mobileMenuOpen}
           aria-controls="mobile-navigation-menu"
           onClick={() => setMobileMenuOpen((open) => !open)}
-          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full border border-[#d9e7de] bg-[#f0f7f2] px-3 text-sm font-extrabold text-[var(--mt-green-deep)] shadow-sm transition hover:border-[#9bc5b0] hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)] xl:hidden"
+          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full border border-[#d9e7de] bg-[#f0f7f2] px-3 text-sm font-extrabold text-[var(--mt-green-deep)] shadow-sm transition hover:border-[#9bc5b0] hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)] min-[1400px]:hidden"
         >
           <span className="flex">
               {mobileMenuOpen ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-4 w-4" aria-hidden="true" />}
@@ -127,7 +126,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           <span>{mobileMenuOpen ? 'Fermer' : 'Menu'}</span>
         </button>
 
-        <nav className="hidden min-w-0 flex-1 items-center justify-end gap-3 xl:flex" aria-label="Navigation principale">
+        <nav className="hidden min-w-0 flex-1 items-center justify-end gap-3 min-[1400px]:flex" aria-label="Navigation principale">
           {currentRole === 'storefront' && (
             <div className="mr-auto flex shrink-0 items-center gap-1">
               {publicNavigationLinks.map(({ to, label, icon: Icon, active }) => (
@@ -158,7 +157,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             </span>
           )}
           {currentRole !== 'admin' && isMerchantPlansPage && (
-            <Link to="/app/creer-boutique" className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#075f48] px-4 py-2 text-sm font-bold text-white transition hover:bg-[var(--mt-green-hover)]">
+            <Link to="/app/creer-boutique" className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[var(--mt-green-hover)] px-4 py-2 text-sm font-bold text-white transition hover:bg-[var(--mt-green-hover)]">
               <Store className="h-4 w-4" aria-hidden="true" /> Créer ma boutique
             </Link>
           )}
@@ -185,7 +184,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             id="mobile-navigation-menu"
             ref={mobileMenuRef}
             aria-label="Navigation mobile"
-            className="mt-mobile-panel basis-full origin-top overflow-hidden rounded-b-[1.5rem] border-x border-b border-[#e7ddcf] bg-[var(--mt-surface)] px-3 pb-4 pt-3 shadow-[0_22px_45px_-22px_rgba(15,77,61,0.45)] sm:px-5 xl:hidden"
+            className="mt-mobile-panel basis-full origin-top overflow-hidden rounded-b-[1.5rem] border-x border-b border-[#e7ddcf] bg-[var(--mt-surface)] px-3 pb-4 pt-3 shadow-[0_22px_45px_-22px_rgba(15,77,61,0.45)] sm:px-5 min-[1400px]:hidden"
           >
             <div className="mx-auto grid max-w-[1440px] gap-3">
               {currentRole === 'storefront' && (

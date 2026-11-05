@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookOpen, Check, CircleHelp, RotateCcw } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, CircleHelp, RotateCcw } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import {
   getGuideProgressKey,
@@ -224,7 +224,7 @@ export function UserGuidePage() {
     <main className="min-h-[70vh] bg-[var(--mt-gray-50)] px-4 py-8 text-[var(--mt-gray-900)] sm:px-6 sm:py-12">
       <div className="mx-auto max-w-[1184px]">
         <Link to={returnPath} className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-[var(--mt-green-hover)] hover:text-[var(--mt-orange-deep)]">
-          {returnLabel}
+          <ArrowLeft className="h-4 w-4" /> {returnLabel}
         </Link>
         <header className="mt-6 rounded-3xl bg-[var(--mt-green-deep)] p-5 text-white sm:mt-8 sm:p-8">
           <div className="flex items-center gap-2 text-[var(--mt-orange-soft)]">

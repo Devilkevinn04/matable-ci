@@ -195,16 +195,16 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
         event.preventDefault();
         onOpenShop(product.shop.slug);
       }}
-      className="mt-press mt-reveal group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl  border border-[#e7e9e5] bg-white text-left shadow-[0_2px_12px_rgba(20,40,30,.06)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2"
+      className="mt-press mt-reveal group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl  border border-[#e7e9e5] bg-white text-left shadow-[0_2px_12px_rgba(20,40,30,.06)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] focus-visible:ring-offset-2"
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-[#d1fae5]">
         <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), product.shop.category))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]" onError={handlePublicImageError} />
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           {isPromotion
             ? <span aria-label={discountPercent > 0 ? `Réduction de ${discountPercent} %` : 'Prix réduit'} className="inline-flex items-center gap-1 rounded-full bg-[#c2410c] px-2.5 py-1 text-[10px] font-bold text-white"><BadgePercent className="h-3 w-3" aria-hidden="true" />{discountPercent > 0 ? `−${discountPercent}%` : 'Prix réduit'}</span>
-            : label && <span className="rounded-full bg-[#FFFFFF]/95 px-2.5 py-1 text-[10px] font-bold text-[#065f46]">{label}</span>}
+            : label && <span className="rounded-full bg-[#FFFFFF]/95 px-2.5 py-1 text-[10px] font-bold text-[var(--mt-green-deep)]">{label}</span>}
         </div>
-        {product.stock > 0 && <span className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold text-[#065f46]">
+        {product.stock > 0 && <span className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold text-[var(--mt-green-deep)]">
           <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> {product.stock <= 3 ? `Plus que ${product.stock} disponible${product.stock > 1 ? 's' : ''}` : `${product.stock} en stock`}
         </span>}
       </div>
@@ -216,13 +216,13 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
         </p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <p className={`text-base font-extrabold ${isPromotion ? 'text-[#c2410c]' : 'text-[#065f46]'}`}>{formatFCFA(activePrice)}</p>
+            <p className={`text-base font-extrabold ${isPromotion ? 'text-[#c2410c]' : 'text-[var(--mt-green-deep)]'}`}>{formatFCFA(activePrice)}</p>
             {isPromotion && <p className="text-xs font-semibold text-[#81786d]"><del>{formatFCFA(product.price)}</del></p>}
             {isPromotion && product.sale_ends_at && <p className="basis-full text-[10px] font-semibold text-[#a53a1d]">Jusqu’au {new Date(product.sale_ends_at).toLocaleDateString('fr-FR')}</p>}
           </div>
-          {product.shop.city && <p className="flex items-center gap-1 text-[11px] text-[#647067]"><MapPin className="h-3 w-3 text-[#047857]" aria-hidden="true" />{getDiscoveryCityLabel(product.shop.city)}</p>}
+          {product.shop.city && <p className="flex items-center gap-1 text-[11px] text-[#647067]"><MapPin className="h-3 w-3 text-[var(--mt-green-primary)]" aria-hidden="true" />{getDiscoveryCityLabel(product.shop.city)}</p>}
         </div>
-        <span className="mt-3 flex items-center justify-between border-t border-[#eee8de] pt-2.5 text-[11px] font-bold text-[#065f46]">
+        <span className="mt-3 flex items-center justify-between border-t border-[#eee8de] pt-2.5 text-[11px] font-bold text-[var(--mt-green-deep)]">
           <span>Découvrir la boutique</span>
           <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden="true" />
         </span>
@@ -249,8 +249,8 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
             </p>
           </MotionReveal>
           {!promotionsOnly && <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end" aria-label="Trier les produits">
-            <button type="button" aria-pressed={sort === 'popular'} onClick={() => changeFilter(() => setSort('popular'))} className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-bold transition ${sort === 'popular' ? 'bg-[#065f46] text-white' : 'border border-[#e0d5c6] bg-white text-[#47534b] hover:border-[#047857]'}`}><Flame className="h-4 w-4" aria-hidden="true" />Tendances</button>
-            <button type="button" aria-pressed={sort === 'new'} onClick={() => changeFilter(() => setSort('new'))} className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-bold transition ${sort === 'new' ? 'bg-[#065f46] text-white' : 'border border-[#e0d5c6] bg-white text-[#47534b] hover:border-[#047857]'}`}><Sparkles className="h-4 w-4" aria-hidden="true" />Nouveautés</button>
+            <button type="button" aria-pressed={sort === 'popular'} onClick={() => changeFilter(() => setSort('popular'))} className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-bold transition ${sort === 'popular' ? 'bg-[var(--mt-green-deep)] text-white' : 'border border-[#e0d5c6] bg-white text-[#47534b] hover:border-[var(--mt-green-primary)]'}`}><Flame className="h-4 w-4" aria-hidden="true" />Tendances</button>
+            <button type="button" aria-pressed={sort === 'new'} onClick={() => changeFilter(() => setSort('new'))} className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-bold transition ${sort === 'new' ? 'bg-[var(--mt-green-deep)] text-white' : 'border border-[#e0d5c6] bg-white text-[#47534b] hover:border-[var(--mt-green-primary)]'}`}><Sparkles className="h-4 w-4" aria-hidden="true" />Nouveautés</button>
           </div>}
         </div>
 
@@ -269,7 +269,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
       ) : error && products.length === 0 ? (
         <div role="alert" className="mt-6 rounded-2xl border border-[#e8b8a4] bg-[#fff8f4] p-8 text-center">
           <p className="font-bold text-[#292d2a]">Impossible de charger les produits pour le moment.</p>
-          <button type="button" onClick={() => setRetryKey((key) => key + 1)} className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-[#065f46] px-4 text-sm font-bold text-white"><RotateCcw className="h-4 w-4" aria-hidden="true" />Réessayer</button>
+          <button type="button" onClick={() => setRetryKey((key) => key + 1)} className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-4 text-sm font-bold text-white"><RotateCcw className="h-4 w-4" aria-hidden="true" />Réessayer</button>
         </div>
       ) : products.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-[#cfc8bc] bg-[#FFFFFF] p-8 text-center text-sm text-[#647067]">{promotionsOnly ? 'Aucune promotion active pour cette catégorie. Revenez bientôt pour découvrir les prochaines offres.' : 'Aucun produit disponible avec ces filtres pour l’instant.'}</div>
@@ -293,7 +293,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
             ))}
           </ul>
           {error && <p role="alert" className="mt-4 text-center text-sm text-[#9a3412]">La suite du fil n’a pas pu être chargée.</p>}
-          {hasMore && <div className="mt-7 text-center"><button type="button" disabled={isLoading} onClick={() => setOffset((current) => current + PAGE_SIZE)} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[#065f46] bg-white px-5 text-sm font-bold text-[#065f46] hover:bg-[#d1fae5] disabled:opacity-50">{isLoading ? 'Chargement…' : 'Voir plus de produits'} <ArrowRight className="h-4 w-4" aria-hidden="true" /></button></div>}
+          {hasMore && <div className="mt-7 text-center"><button type="button" disabled={isLoading} onClick={() => setOffset((current) => current + PAGE_SIZE)} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--mt-green-deep)] bg-white px-5 text-sm font-bold text-[var(--mt-green-deep)] hover:bg-[#d1fae5] disabled:opacity-50">{isLoading ? 'Chargement…' : 'Voir plus de produits'} <ArrowRight className="h-4 w-4" aria-hidden="true" /></button></div>}
         </>
       )}
       {!promotionsOnly && <PublicPartnerRequestForm />}

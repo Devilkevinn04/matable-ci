@@ -174,10 +174,10 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
 
       {mode === 'register' && !pendingOAuthProfile && (
         <div className="mb-5 grid grid-cols-2 rounded-full bg-[#f0eee7] p-1" role="group" aria-label="Type de compte">
-          <button type="button" onClick={() => { setAccountType('customer'); setAcceptedTermsPrivacy(false); }} aria-pressed={accountType === 'customer'} className={`flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition ${accountType === 'customer' ? 'bg-[#065f46] text-white shadow-sm' : 'text-[#59655c] hover:bg-white/70'}`}>
+          <button type="button" onClick={() => { setAccountType('customer'); setAcceptedTermsPrivacy(false); }} aria-pressed={accountType === 'customer'} className={`flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition ${accountType === 'customer' ? 'bg-[var(--mt-green-deep)] text-white shadow-sm' : 'text-[#59655c] hover:bg-white/70'}`}>
             <UserRound className="h-4 w-4" /> Client
           </button>
-          <button type="button" onClick={() => { setAccountType('merchant'); setAcceptedTermsPrivacy(false); }} aria-pressed={accountType === 'merchant'} className={`flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition ${accountType === 'merchant' ? 'bg-[#065f46] text-white shadow-sm' : 'text-[#59655c] hover:bg-white/70'}`}>
+          <button type="button" onClick={() => { setAccountType('merchant'); setAcceptedTermsPrivacy(false); }} aria-pressed={accountType === 'merchant'} className={`flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition ${accountType === 'merchant' ? 'bg-[var(--mt-green-deep)] text-white shadow-sm' : 'text-[#59655c] hover:bg-white/70'}`}>
             <Store className="h-4 w-4" /> Commerçant
           </button>
         </div>
@@ -188,17 +188,17 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
       ) : (
         <form onSubmit={submit} className="space-y-4">
           {!pendingOAuthProfile && <CustomerOAuthButtons returnTo={customerReturnTo} />}
-          {mode === 'register' && <div className="grid gap-3 min-[390px]:grid-cols-2 sm:gap-4"><label className="block text-sm font-semibold text-[#47534b]">Prénom<input value={firstName} onChange={(event) => setFirstName(event.target.value)} required autoComplete="given-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" placeholder="Votre prénom" /></label><label className="block text-sm font-semibold text-[#47534b]">Nom<input value={lastName} onChange={(event) => setLastName(event.target.value)} required autoComplete="family-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" placeholder="Votre nom" /></label></div>}
-          {mode === 'register' && <label className="block text-sm font-semibold text-[#47534b]">Numéro de téléphone<input type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="tel" aria-invalid={Boolean(phoneFieldError)} aria-describedby={phoneFieldError ? 'customer-phone-error' : undefined} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" placeholder="+225 07 00 00 00 00" />{phoneFieldError && <span id="customer-phone-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{phoneFieldError}</span>}</label>}
-          {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#47534b]">Adresse e-mail<div className="relative mt-1.5"><Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#869188]" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" aria-invalid={Boolean(emailFieldError)} aria-describedby={emailFieldError ? 'customer-email-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-11 pr-4 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" placeholder="vous@exemple.ci" /></div>{emailFieldError && <span id="customer-email-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{emailFieldError}</span>}</label>}
-          {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#47534b]">Mot de passe<div className="relative mt-1.5"><input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} aria-invalid={Boolean(passwordFieldError)} aria-describedby={passwordFieldError ? 'customer-password-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 pr-12 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/10" placeholder="8 caractères minimum" /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} aria-pressed={showPassword} className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-[#647067] transition hover:bg-[#f3f1eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857]">{showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}</button></div>{passwordFieldError && <span id="customer-password-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{passwordFieldError}</span>}</label>}
+          {mode === 'register' && <div className="grid gap-3 min-[390px]:grid-cols-2 sm:gap-4"><label className="block text-sm font-semibold text-[#47534b]">Prénom<input value={firstName} onChange={(event) => setFirstName(event.target.value)} required autoComplete="given-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="Votre prénom" /></label><label className="block text-sm font-semibold text-[#47534b]">Nom<input value={lastName} onChange={(event) => setLastName(event.target.value)} required autoComplete="family-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="Votre nom" /></label></div>}
+          {mode === 'register' && <label className="block text-sm font-semibold text-[#47534b]">Numéro de téléphone<input type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="tel" aria-invalid={Boolean(phoneFieldError)} aria-describedby={phoneFieldError ? 'customer-phone-error' : undefined} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="+225 07 00 00 00 00" />{phoneFieldError && <span id="customer-phone-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{phoneFieldError}</span>}</label>}
+          {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#47534b]">Adresse e-mail<div className="relative mt-1.5"><Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#869188]" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" aria-invalid={Boolean(emailFieldError)} aria-describedby={emailFieldError ? 'customer-email-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-11 pr-4 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="vous@exemple.ci" /></div>{emailFieldError && <span id="customer-email-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{emailFieldError}</span>}</label>}
+          {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#47534b]">Mot de passe<div className="relative mt-1.5"><input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} aria-invalid={Boolean(passwordFieldError)} aria-describedby={passwordFieldError ? 'customer-password-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 pr-12 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="8 caractères minimum" /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} aria-pressed={showPassword} className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-[#647067] transition hover:bg-[#f3f1eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]">{showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}</button></div>{passwordFieldError && <span id="customer-password-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{passwordFieldError}</span>}</label>}
           {(pendingOAuthProfile || mode === 'register') && (
             <TermsPrivacyConsent id="customer-account-terms-privacy" checked={acceptedTermsPrivacy} onChange={setAcceptedTermsPrivacy} />
           )}
           {error && <p role="alert" className="rounded-xl border border-[#F97316]/30 bg-[#fff0e8] px-3 py-2.5 text-sm font-semibold text-[#a33e24]">{error}</p>}
-          <button type="submit" disabled={isSubmitting} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#065f46] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">{isSubmitting ? 'Vérification...' : pendingOAuthProfile ? 'Terminer mon inscription' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'} <ArrowRight className="h-4 w-4" /></button>
-          {mode === 'login' && <Link to="/recuperation-acces?type=customer" className="block text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[#065f46]">Mot de passe oublié ?</Link>}
-          <p className="flex items-center justify-center gap-2 pt-1 text-center text-xs text-[#778179]"><ShieldCheck className="h-4 w-4 text-[#047857]" /> Vos identifiants restent privés.</p>
+          <button type="submit" disabled={isSubmitting} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--mt-green-primary)] disabled:cursor-wait disabled:opacity-60">{isSubmitting ? 'Vérification...' : pendingOAuthProfile ? 'Terminer mon inscription' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'} <ArrowRight className="h-4 w-4" /></button>
+          {mode === 'login' && <Link to="/recuperation-acces?type=customer" className="block text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[var(--mt-green-deep)]">Mot de passe oublié ?</Link>}
+          <p className="flex items-center justify-center gap-2 pt-1 text-center text-xs text-[#778179]"><ShieldCheck className="h-4 w-4 text-[var(--mt-green-primary)]" /> Vos identifiants restent privés.</p>
         </form>
       )}
     </AuthExperienceLayout>
@@ -645,7 +645,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
         </div>
       </header>
 
-      <section className="relative isolate overflow-hidden bg-[#065f46] text-white">
+      <section className="relative isolate overflow-hidden bg-[var(--mt-green-deep)] text-white">
         <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-36 -z-10 h-96 w-96 rounded-full border border-white/10 sm:right-8 sm:top-[-17rem] sm:h-[34rem] sm:w-[34rem]" />
         <div className="mx-auto flex max-w-[1184px] items-center gap-3 px-5 py-5 sm:gap-4 sm:px-8 sm:py-8">
           <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 font-display text-lg font-extrabold text-[#f0ba80] sm:h-16 sm:w-16 sm:text-2xl">
@@ -664,8 +664,8 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
 
         <nav aria-label="Menu du compte client" className="hidden gap-2 pb-1 lg:flex lg:flex-col">
           {accountSections.map(({ id, label, description, icon: Icon }) => (
-            <button key={id} type="button" aria-current={activeSection === id ? 'page' : undefined} onClick={() => setActiveSection(id)} className={`flex min-h-14 min-w-0 items-center gap-2 rounded-2xl border px-3 py-3 text-left transition sm:gap-3 sm:px-4 lg:min-w-0 ${activeSection === id ? 'border-[#c8dbd0] bg-[#d1fae5] text-[#065f46]' : 'border-transparent bg-[#FFFFFF] text-[#647067] hover:border-[#e3d9cc]'}`}>
-              <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${activeSection === id ? 'bg-white text-[#065f46]' : 'bg-[#f1eee7] text-[#647067]'}`}><Icon className="h-4 w-4" /></span>
+            <button key={id} type="button" aria-current={activeSection === id ? 'page' : undefined} onClick={() => setActiveSection(id)} className={`flex min-h-14 min-w-0 items-center gap-2 rounded-2xl border px-3 py-3 text-left transition sm:gap-3 sm:px-4 lg:min-w-0 ${activeSection === id ? 'border-[#c8dbd0] bg-[#d1fae5] text-[var(--mt-green-deep)]' : 'border-transparent bg-[#FFFFFF] text-[#647067] hover:border-[#e3d9cc]'}`}>
+              <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${activeSection === id ? 'bg-white text-[var(--mt-green-deep)]' : 'bg-[#f1eee7] text-[#647067]'}`}><Icon className="h-4 w-4" /></span>
               <span><strong className="block text-sm">{label}</strong><span className="hidden text-xs opacity-75 lg:block">{description}</span></span>
               <ChevronRight className="ml-auto hidden h-4 w-4 lg:block" />
             </button>
@@ -674,9 +674,9 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
             <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#c2410c]">Une question ?</p>
             <p className="mt-2 text-sm leading-5 text-[#647067]">Notre équipe peut vous aider pour l’accès ou l’utilisation de votre compte.</p>
             {supportUrl
-              ? <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-[#065f46]"><MessageCircle className="h-4 w-4" />Contacter l’assistance</a>
+              ? <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-[var(--mt-green-deep)]"><MessageCircle className="h-4 w-4" />Contacter l’assistance</a>
               : <p className="mt-3 text-xs text-[#81796f]">Assistance WhatsApp momentanément indisponible.</p>}
-            <button type="button" onClick={onBack} className="mt-2 flex min-h-10 items-center gap-2 text-sm font-bold text-[#065f46]">Explorer les boutiques <ChevronRight className="h-4 w-4" /></button>
+            <button type="button" onClick={onBack} className="mt-2 flex min-h-10 items-center gap-2 text-sm font-bold text-[var(--mt-green-deep)]">Explorer les boutiques <ChevronRight className="h-4 w-4" /></button>
           </div>
         </nav>
 
@@ -688,7 +688,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                 <h2 className="mt-1 font-display text-xl font-extrabold sm:text-3xl">Votre activité</h2>
                 <p className="mt-1 text-xs leading-5 text-[#647067] sm:mt-2 sm:text-sm sm:leading-6">Suivez vos commandes et retrouvez vos sélections.</p>
               </div>
-              <button type="button" onClick={onBack} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[#065f46] px-4 text-xs font-bold text-white transition hover:bg-[#047857] sm:min-h-11 sm:px-5 sm:text-sm">
+              <button type="button" onClick={onBack} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-4 text-xs font-bold text-white transition hover:bg-[var(--mt-green-primary)] sm:min-h-11 sm:px-5 sm:text-sm">
                 Découvrir <ArrowRight className="h-4 w-4" />
               </button>
             </div>
@@ -700,23 +700,23 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2 sm:mt-6 sm:grid-cols-4 sm:gap-3">
-              <button type="button" onClick={() => setActiveSection('orders')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#c8dbd0] hover:bg-[#f8fcf9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] sm:p-4">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#d1fae5] text-[#065f46] sm:h-10 sm:w-10"><ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5" /></span>
+              <button type="button" onClick={() => setActiveSection('orders')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#c8dbd0] hover:bg-[#f8fcf9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] sm:p-4">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#d1fae5] text-[var(--mt-green-deep)] sm:h-10 sm:w-10"><ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5" /></span>
                 <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{ordersLoading ? '…' : orders.length}</span>
                 <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#647067] sm:text-sm">Commandes</span>
               </button>
-              <button type="button" onClick={() => setActiveSection('orders')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#e8c69a] hover:bg-[#fffaf2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] sm:p-4">
+              <button type="button" onClick={() => setActiveSection('orders')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#e8c69a] hover:bg-[#fffaf2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] sm:p-4">
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#fff2df] text-[#9b5a13] sm:h-10 sm:w-10"><Clock3 className="h-4 w-4 sm:h-5 sm:w-5" /></span>
                 <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{ordersLoading ? '…' : activeOrdersCount}</span>
                 <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#647067] sm:text-sm">En cours</span>
               </button>
-              <button type="button" onClick={() => setActiveSection('favorites')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#e8c69a] hover:bg-[#fffaf2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] sm:p-4">
+              <button type="button" onClick={() => setActiveSection('favorites')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#e8c69a] hover:bg-[#fffaf2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] sm:p-4">
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#fff2df] text-[#c2410c] sm:h-10 sm:w-10"><Heart className="h-4 w-4 sm:h-5 sm:w-5" /></span>
                 <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{savedLoading ? '…' : savedState.shops.length + savedState.products.length}</span>
                 <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#647067] sm:text-sm">Favoris</span>
               </button>
-              <button type="button" onClick={() => setActiveSection('loyalty')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#c8dbd0] hover:bg-[#f8fcf9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] sm:p-4">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#d1fae5] text-[#065f46] sm:h-10 sm:w-10"><Gift className="h-4 w-4 sm:h-5 sm:w-5" /></span>
+              <button type="button" onClick={() => setActiveSection('loyalty')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#c8dbd0] hover:bg-[#f8fcf9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] sm:p-4">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#d1fae5] text-[var(--mt-green-deep)] sm:h-10 sm:w-10"><Gift className="h-4 w-4 sm:h-5 sm:w-5" /></span>
                 <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{ordersLoading ? '…' : availableRewardsCount}</span>
                 <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#647067] sm:text-sm">Récompenses</span>
               </button>
@@ -729,17 +729,17 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#81796f]">À retrouver</p>
                     <h3 className="mt-1 font-display text-xl font-extrabold">Activité récente</h3>
                   </div>
-                  <button type="button" onClick={() => setActiveSection('orders')} className="inline-flex min-h-10 items-center gap-1 rounded-full px-3 text-sm font-bold text-[#065f46] hover:bg-[#d1fae5]">
+                  <button type="button" onClick={() => setActiveSection('orders')} className="inline-flex min-h-10 items-center gap-1 rounded-full px-3 text-sm font-bold text-[var(--mt-green-deep)] hover:bg-[#d1fae5]">
                     Tout voir <ChevronRight className="h-4 w-4" />
                   </button>
                 </div>
                 {ordersLoading && <div role="status" className="mt-4 space-y-3"><span className="sr-only">Chargement de votre activité…</span>{[0, 1].map((item) => <div key={item} className="h-20 animate-pulse rounded-2xl bg-[#f1eee7]" />)}</div>}
                 {ordersError && <div role="alert" className="mt-4 rounded-2xl border border-[#e8c69a] bg-[#fff8ec] p-4 text-sm text-[#704d16]"><p>{ordersError}</p><button type="button" onClick={() => setOrdersRefresh((value) => value + 1)} className="mt-2 font-bold underline underline-offset-2">Réessayer</button></div>}
                 {!ordersLoading && !ordersError && orders.length === 0 && <div className="mt-4 rounded-2xl border border-dashed border-[#d9cfc2] bg-[#f9f6f0] p-5 sm:p-6">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#d1fae5] text-[#065f46]"><Package className="h-5 w-5" /></span>
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#d1fae5] text-[var(--mt-green-deep)]"><Package className="h-5 w-5" /></span>
                   <h4 className="mt-3 font-display text-lg font-bold">Votre prochaine découverte commence ici.</h4>
                   <p className="mt-1 max-w-lg text-sm leading-6 text-[#647067]">Quand vous commanderez en étant connecté, votre historique apparaîtra dans cet espace.</p>
-                  <button type="button" onClick={onBack} className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[#065f46] transition hover:bg-[#d1fae5]">
+                  <button type="button" onClick={onBack} className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[var(--mt-green-deep)] transition hover:bg-[#d1fae5]">
                     Parcourir les adresses locales <ArrowRight className="h-4 w-4" />
                   </button>
                 </div>}
@@ -751,7 +751,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="rounded-full bg-[#f1eee7] px-3 py-1.5 text-xs font-bold text-[#47534b]">{customerOrderStatusLabel(order.status)}</span>
-                      <strong className="whitespace-nowrap text-sm font-extrabold text-[#065f46]">{(order.total_amount + Number(order.delivery_fee || 0)).toLocaleString('fr-FR')} F</strong>
+                      <strong className="whitespace-nowrap text-sm font-extrabold text-[var(--mt-green-deep)]">{(order.total_amount + Number(order.delivery_fee || 0)).toLocaleString('fr-FR')} F</strong>
                     </div>
                   </article>)}
                 </div>}
@@ -760,7 +760,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
               <aside className="min-w-0 rounded-2xl bg-[#f5f2eb] p-5">
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#81796f]">Vos informations</p>
                 <div className="mt-4 flex items-center gap-3">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#065f46] font-display font-extrabold text-[#f0ba80]">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--mt-green-deep)] font-display font-extrabold text-[#f0ba80]">
                     {(user.first_name || user.name).trim().charAt(0).toLocaleUpperCase()}
                   </span>
                   <div className="min-w-0">
@@ -770,22 +770,22 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                 </div>
                 <dl className="mt-5 space-y-3 border-t border-[#e2dbd0] pt-4 text-sm">
                   <div className="flex min-w-0 items-start gap-2.5">
-                    <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[#047857]" />
+                    <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-green-primary)]" />
                     <div className="min-w-0"><dt className="text-xs text-[#81796f]">E-mail</dt><dd className="truncate font-semibold text-[#3d3933]">{user.email}</dd></div>
                   </div>
                   <div className="flex min-w-0 items-start gap-2.5">
-                    <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-[#047857]" />
+                    <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-green-primary)]" />
                     <div className="min-w-0"><dt className="text-xs text-[#81796f]">Téléphone</dt><dd className="font-semibold text-[#3d3933]">{user.phone || 'Non renseigné'}</dd></div>
                   </div>
                 </dl>
-                <button type="button" onClick={() => setActiveSection('profile')} className="mt-5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[#065f46] transition hover:bg-[#d1fae5]">
+                <button type="button" onClick={() => setActiveSection('profile')} className="mt-5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[var(--mt-green-deep)] transition hover:bg-[#d1fae5]">
                   Gérer mes informations <ArrowRight className="h-4 w-4" />
                 </button>
                 <div className="mt-3 flex items-start gap-2 rounded-xl bg-white/70 p-3 text-xs leading-5 text-[#647067]">
-                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#047857]" />
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-green-primary)]" />
                   Vos coordonnées servent à faciliter le suivi de vos commandes.
                 </div>
-                {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[#065f46] transition hover:bg-[#d1fae5]"><MessageCircle className="h-4 w-4" />Besoin d’aide ? Écrire au service client</a>}
+                {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[var(--mt-green-deep)] transition hover:bg-[#d1fae5]"><MessageCircle className="h-4 w-4" />Besoin d’aide ? Écrire au service client</a>}
               </aside>
             </div>
           </>}
@@ -805,7 +805,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
               <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#fff2df] text-[#c2410c]"><Heart className="h-6 w-6" /></span>
               <h3 className="mt-3 font-display text-lg font-bold">Votre sélection personnelle vous attend.</h3>
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#647067]">Enregistrez une boutique ou un produit avec l’icône marque-page pour les retrouver ici.</p>
-              <button type="button" onClick={onBack} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#065f46] px-5 text-sm font-bold text-white">Explorer les boutiques <ArrowRight className="h-4 w-4" /></button>
+              <button type="button" onClick={onBack} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 text-sm font-bold text-white">Explorer les boutiques <ArrowRight className="h-4 w-4" /></button>
             </div>}
             {!savedLoading && !savedError && (savedState.shops.length > 0 || savedState.products.length > 0) && <div className="mt-6 space-y-7">
               {savedState.shops.length > 0 && <div>
@@ -827,7 +827,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                     <a href={`/${encodeURIComponent(product.slug)}`} className="flex min-w-0 flex-1 items-center gap-3">
                       {product.image_url
                         ? <img src={product.image_url} alt="" loading="lazy" className="h-14 w-14 shrink-0 rounded-xl bg-[#f1eee7] object-cover" />
-                        : <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#d1fae5] text-[#065f46]"><Store className="h-5 w-5" /></span>}
+                        : <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#d1fae5] text-[var(--mt-green-deep)]"><Store className="h-5 w-5" /></span>}
                       <span className="min-w-0"><span className="block truncate font-bold text-[#292d2a]">{product.title}</span><span className="mt-1 block truncate text-xs text-[#647067]">{product.shop_name} · {product.price.toLocaleString('fr-FR')} FCFA</span></span>
                     </a>
                     <button type="button" onClick={() => void removeFavorite('product', product.id)} aria-label={`Retirer ${product.title} des favoris`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#c2410c] hover:bg-[#fff2df]"><Heart className="h-5 w-5 fill-current" /></button>
@@ -844,7 +844,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                 <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Mes commandes</h2>
                 <p className="mt-2 text-sm leading-6 text-[#647067]">Les demandes envoyées depuis ce compte. Les commandes invitées n’apparaissent pas ici.</p>
               </div>
-              {!ordersLoading && <span className="rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[#065f46]">{orders.length} au total</span>}
+              {!ordersLoading && <span className="rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[var(--mt-green-deep)]">{orders.length} au total</span>}
             </div>
             <PushOptIn
               configUrl="/api/auth/customer-push/config"
@@ -857,10 +857,10 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
             {ordersLoading && <div role="status" className="mt-6 space-y-3"><span className="sr-only">Chargement de vos commandes…</span>{[0, 1].map((item) => <div key={item} className="h-28 animate-pulse rounded-2xl bg-[#f1eee7]" />)}</div>}
             {ordersError && <div role="alert" className="mt-6 rounded-2xl border border-[#e8c69a] bg-[#fff8ec] p-4 text-sm text-[#704d16]"><p>{ordersError}</p><button type="button" onClick={() => setOrdersRefresh((value) => value + 1)} className="mt-2 font-bold underline underline-offset-2">Réessayer</button></div>}
             {!ordersLoading && !ordersError && orders.length === 0 && <div className="mt-6 rounded-2xl border border-dashed border-[#d9cfc2] bg-[#f9f6f0] p-7 text-center">
-              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#d1fae5] text-[#065f46]"><Package className="h-6 w-6" /></span>
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#d1fae5] text-[var(--mt-green-deep)]"><Package className="h-6 w-6" /></span>
               <h3 className="mt-3 font-display text-lg font-bold">Votre carnet de commandes est vide</h3>
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#647067]">Connectez-vous au moment d’envoyer une commande pour la retrouver facilement ici.</p>
-              <button type="button" onClick={onBack} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#065f46] px-5 text-sm font-bold text-white">Découvrir les boutiques <ChevronRight className="h-4 w-4" /></button>
+              <button type="button" onClick={onBack} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 text-sm font-bold text-white">Découvrir les boutiques <ChevronRight className="h-4 w-4" /></button>
             </div>}
             {!ordersLoading && !ordersError && orders.length > 0 && <div className="mt-6 space-y-3">
               {orders.map((order) => <article key={order.id} className="rounded-2xl border border-[#e8e0d6] bg-white p-4 sm:p-5">
@@ -872,7 +872,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                   </div>
                   <div className="flex flex-col items-start gap-2 sm:items-end">
                     <span className="rounded-full bg-[#f1eee7] px-3 py-1.5 text-xs font-bold text-[#47534b]">{customerOrderStatusLabel(order.status)}</span>
-                    <strong className="text-sm font-extrabold text-[#065f46]">{(order.total_amount + Number(order.delivery_fee || 0)).toLocaleString('fr-FR')} FCFA</strong>
+                    <strong className="text-sm font-extrabold text-[var(--mt-green-deep)]">{(order.total_amount + Number(order.delivery_fee || 0)).toLocaleString('fr-FR')} FCFA</strong>
                     {Number(order.delivery_fee || 0) > 0 && (
                       <span className="text-[10px] font-semibold text-[#647067] sm:text-right">
                         {order.total_amount.toLocaleString('fr-FR')} FCFA d’articles<br />+ {Number(order.delivery_fee).toLocaleString('fr-FR')} FCFA de livraison
@@ -886,7 +886,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                     <span className="font-semibold text-[#647067]">{(item.unit_price * item.quantity).toLocaleString('fr-FR')} FCFA</span>
                   </li>)}
                 </ul> : null}
-                {order.delivery_location && <p className="mt-3 flex items-center gap-2 border-t border-[#eee6dd] pt-3 text-xs text-[#647067]"><MapPin className="h-3.5 w-3.5 shrink-0 text-[#047857]" />{order.delivery_location}</p>}
+                {order.delivery_location && <p className="mt-3 flex items-center gap-2 border-t border-[#eee6dd] pt-3 text-xs text-[#647067]"><MapPin className="h-3.5 w-3.5 shrink-0 text-[var(--mt-green-primary)]" />{order.delivery_location}</p>}
                 {order.status === 'pending' && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-[#eee6dd] pt-3">
                   <p className="text-xs leading-5 text-[#647067]">En attente de la boutique. Sans réponse sous 2 heures, la demande expire et le stock est libéré.</p>
                   <button type="button" onClick={() => void cancelPendingOrder(order.id)} disabled={cancellingOrderId === order.id} className="min-h-10 rounded-full border border-rose-200 bg-rose-50 px-4 text-xs font-bold text-rose-800 transition hover:bg-rose-100 disabled:opacity-50">
@@ -912,10 +912,10 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                 <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Ma fidélité</h2>
                 <p className="mt-2 text-sm leading-6 text-[#647067]">Chaque boutique suit séparément vos commandes livrées. Une récompense est disponible tous les cinq achats livrés.</p>
               </div>
-              <span className="rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[#065f46]">{availableRewardsCount} récompense{availableRewardsCount === 1 ? '' : 's'} disponible{availableRewardsCount === 1 ? '' : 's'}</span>
+              <span className="rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[var(--mt-green-deep)]">{availableRewardsCount} récompense{availableRewardsCount === 1 ? '' : 's'} disponible{availableRewardsCount === 1 ? '' : 's'}</span>
             </div>
             {loyaltyCards.length === 0 && <div className="mt-6 rounded-2xl border border-dashed border-[#d9cfc2] bg-[#f9f6f0] p-7 text-center">
-              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#d1fae5] text-[#065f46]"><Gift className="h-6 w-6" /></span>
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#d1fae5] text-[var(--mt-green-deep)]"><Gift className="h-6 w-6" /></span>
               <h3 className="mt-3 font-display text-lg font-bold">Votre fidélité commence ici</h3>
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#647067]">Connectez-vous avant de commander. Vos achats livrés auprès de chaque boutique alimenteront leur propre carte de fidélité.</p>
             </div>}
@@ -928,17 +928,17 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                       <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#c2410c]">Carte de fidélité</p>
                       <h3 className="mt-1 truncate font-display text-lg font-extrabold">{card.shop_name}</h3>
                     </div>
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#d1fae5] text-[#065f46]"><Gift className="h-5 w-5" /></span>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#d1fae5] text-[var(--mt-green-deep)]"><Gift className="h-5 w-5" /></span>
                   </div>
                   <div className="mt-4 flex items-baseline justify-between gap-2">
                     <span className="text-sm font-bold text-[#292d2a]">{card.delivered_orders} commande{card.delivered_orders === 1 ? '' : 's'} livrée{card.delivered_orders === 1 ? '' : 's'}</span>
                     <span className="text-xs font-semibold text-[#647067]">{card.available_rewards > 0 ? `${card.available_rewards} récompense${card.available_rewards === 1 ? '' : 's'} à réclamer` : `${card.orders_to_next_reward} avant la prochaine`}</span>
                   </div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#f1eee7]" role="progressbar" aria-label={`Progression fidélité chez ${card.shop_name}`} aria-valuemin={0} aria-valuemax={5} aria-valuenow={card.available_rewards > 0 ? 5 : card.orders_toward_next_reward}>
-                    <div className="h-full rounded-full bg-[#047857] transition-all" style={{ width: `${progress}%` }} />
+                    <div className="h-full rounded-full bg-[var(--mt-green-primary)] transition-all" style={{ width: `${progress}%` }} />
                   </div>
                   <p className="mt-3 text-xs leading-5 text-[#647067]">{card.available_rewards > 0 ? 'Présentez-vous à la boutique pour recevoir votre récompense. Elle est remise par le commerçant et ne modifie pas automatiquement le prix des commandes.' : 'Une récompense est acquise après cinq commandes livrées auprès de cette boutique.'}</p>
-                  <a href={`/${encodeURIComponent(card.shop_slug)}`} className="mt-3 inline-flex min-h-10 items-center gap-1 text-sm font-bold text-[#065f46]">Voir la boutique <ChevronRight className="h-4 w-4" /></a>
+                  <a href={`/${encodeURIComponent(card.shop_slug)}`} className="mt-3 inline-flex min-h-10 items-center gap-1 text-sm font-bold text-[var(--mt-green-deep)]">Voir la boutique <ChevronRight className="h-4 w-4" /></a>
                 </article>;
               })}
             </div>}
@@ -951,22 +951,22 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
             <form onSubmit={saveProfile} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-sm font-bold text-[#47534b]">Prénom
-                  <input required maxLength={60} value={firstName} onChange={(event) => setFirstName(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#047857]" />
+                  <input required maxLength={60} value={firstName} onChange={(event) => setFirstName(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]" />
                 </label>
                 <label className="block text-sm font-bold text-[#47534b]">Nom
-                  <input required maxLength={60} value={lastName} onChange={(event) => setLastName(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#047857]" />
+                  <input required maxLength={60} value={lastName} onChange={(event) => setLastName(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]" />
                 </label>
               </div>
               <label className="block text-sm font-bold text-[#47534b]">Téléphone
-                <input required type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#047857]" />
+                <input required type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]" />
               </label>
               <label className="block text-sm font-bold text-[#47534b]">Adresse e-mail
                 <input type="email" value={user.email} readOnly className="mt-1.5 min-h-12 w-full rounded-xl border border-[#e8e0d6] bg-[#FAF8F2] px-3 text-sm font-medium text-[#647067]" />
                 <span className="mt-1 block text-xs font-normal text-[#81796f]">La modification de l’e-mail sera disponible avec la vérification de la nouvelle adresse.</span>
               </label>
               {profileError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">{profileError}</p>}
-              {profileMessage && <p role="status" className="flex items-center gap-2 rounded-xl border border-[#c8dbd0] bg-[#d1fae5] px-3 py-2.5 text-sm font-semibold text-[#065f46]"><Check className="h-4 w-4" />{profileMessage}</p>}
-              <button type="submit" disabled={profileSaving} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[#065f46] px-5 text-sm font-bold text-white transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">{profileSaving ? 'Enregistrement…' : <><PencilLine className="h-4 w-4" />Enregistrer les modifications</>}</button>
+              {profileMessage && <p role="status" className="flex items-center gap-2 rounded-xl border border-[#c8dbd0] bg-[#d1fae5] px-3 py-2.5 text-sm font-semibold text-[var(--mt-green-deep)]"><Check className="h-4 w-4" />{profileMessage}</p>}
+              <button type="submit" disabled={profileSaving} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 text-sm font-bold text-white transition hover:bg-[var(--mt-green-primary)] disabled:cursor-wait disabled:opacity-60">{profileSaving ? 'Enregistrement…' : <><PencilLine className="h-4 w-4" />Enregistrer les modifications</>}</button>
             </form>
           </div>}
 
@@ -976,24 +976,24 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
             <p className="mt-2 text-sm leading-6 text-[#647067]">Choisissez un mot de passe unique d’au moins 8 caractères. Les autres sessions seront déconnectées après la modification.</p>
             <form onSubmit={changePassword} className="mt-6 space-y-4">
               <label className="block text-sm font-bold text-[#47534b]">Mot de passe actuel
-                <input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#047857]" />
+                <input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]" />
                 <span className="mt-1 block text-xs font-normal text-[#81796f]">Laissez ce champ vide si vous vous connectez avec Google ou Apple et que vous définissez un mot de passe pour la première fois.</span>
               </label>
               <label className="block text-sm font-bold text-[#47534b]">Nouveau mot de passe
-                <input required minLength={8} maxLength={128} type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#047857]" />
+                <input required minLength={8} maxLength={128} type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]" />
               </label>
               <label className="block text-sm font-bold text-[#47534b]">Confirmer le nouveau mot de passe
-                <input required minLength={8} maxLength={128} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#047857]" />
+                <input required minLength={8} maxLength={128} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]" />
               </label>
               {passwordError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">{passwordError}</p>}
-              {passwordMessage && <p role="status" className="flex items-center gap-2 rounded-xl border border-[#c8dbd0] bg-[#d1fae5] px-3 py-2.5 text-sm font-semibold text-[#065f46]"><Check className="h-4 w-4" />{passwordMessage}</p>}
-              <button type="submit" disabled={passwordSaving} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[#065f46] px-5 text-sm font-bold text-white transition hover:bg-[#047857] disabled:cursor-wait disabled:opacity-60">{passwordSaving ? 'Mise à jour…' : <><KeyRound className="h-4 w-4" />Mettre à jour le mot de passe</>}</button>
+              {passwordMessage && <p role="status" className="flex items-center gap-2 rounded-xl border border-[#c8dbd0] bg-[#d1fae5] px-3 py-2.5 text-sm font-semibold text-[var(--mt-green-deep)]"><Check className="h-4 w-4" />{passwordMessage}</p>}
+              <button type="submit" disabled={passwordSaving} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 text-sm font-bold text-white transition hover:bg-[var(--mt-green-primary)] disabled:cursor-wait disabled:opacity-60">{passwordSaving ? 'Mise à jour…' : <><KeyRound className="h-4 w-4" />Mettre à jour le mot de passe</>}</button>
             </form>
             <div className="mt-10 border-t border-[#e3d9cc] pt-6">
               <h3 className="text-lg font-extrabold">Sessions actives</h3>
               <p className="mt-1 text-sm leading-6 text-[#647067]">Les détails techniques des appareils ne sont pas enregistrés. Fermez les autres sessions si vous ne reconnaissez pas une connexion.</p>
               {sessionsError && <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">{sessionsError}</p>}
-              {sessionsMessage && <p role="status" className="mt-3 rounded-xl border border-[#c8dbd0] bg-[#d1fae5] px-3 py-2.5 text-sm font-semibold text-[#065f46]">{sessionsMessage}</p>}
+              {sessionsMessage && <p role="status" className="mt-3 rounded-xl border border-[#c8dbd0] bg-[#d1fae5] px-3 py-2.5 text-sm font-semibold text-[var(--mt-green-deep)]">{sessionsMessage}</p>}
               <ul className="mt-3 space-y-2">
                 {customerSessions.map((session, index) => (
                   <li key={`${session.created_at}-${index}`} className="flex items-center justify-between rounded-xl border border-[#e3d9cc] bg-white px-3 py-2.5 text-sm">
@@ -1035,7 +1035,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
               type="button"
               aria-current={activeSection === id ? 'page' : undefined}
               onClick={() => setActiveSection(id)}
-              className={`flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#047857] ${activeSection === id ? 'text-[#065f46]' : 'text-[#81796f] hover:text-[#47534b]'}`}
+              className={`flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--mt-green-primary)] ${activeSection === id ? 'text-[var(--mt-green-deep)]' : 'text-[#81796f] hover:text-[#47534b]'}`}
             >
               <span className={`flex h-7 w-9 items-center justify-center rounded-full ${activeSection === id ? 'bg-[#d1fae5]' : ''}`}><Icon className="h-[18px] w-[18px]" aria-hidden="true" /></span>
               <span className="w-full truncate text-[10px] font-bold leading-tight sm:text-xs">{mobileLabel}</span>

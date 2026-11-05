@@ -175,13 +175,13 @@ export const AdminHomepageMarketing: React.FC = () => {
     <section className="space-y-5" aria-labelledby="admin-advertising-title">
       <header className="flex flex-col gap-3 rounded-2xl border border-[#d8e9df] bg-[#f5faf6] p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
-          <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[#047857]"><Megaphone className="h-5 w-5" aria-hidden="true" /></span>
+          <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[var(--mt-green-primary)]"><Megaphone className="h-5 w-5" aria-hidden="true" /></span>
           <div>
             <h2 id="admin-advertising-title" className="text-xl font-black text-slate-900">Publicité et visibilité</h2>
             <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-600">La diffusion et la rotation des campagnes éligibles sont automatiques. La validation des contenus et le contrôle de diffusion restent réservés à l’administration.</p>
           </div>
         </div>
-        <button type="button" disabled={busy || loading || !data || (betaAction === 'resume' && data.beta.days_remaining === 0)} onClick={() => void runAction('/api/admin/advertising/beta', 'POST', { action: betaAction }, 'Configuration de la bêta mise à jour.')} className="min-h-11 shrink-0 rounded-full bg-[#047857] px-5 text-sm font-bold text-white disabled:opacity-50">
+        <button type="button" disabled={busy || loading || !data || (betaAction === 'resume' && data.beta.days_remaining === 0)} onClick={() => void runAction('/api/admin/advertising/beta', 'POST', { action: betaAction }, 'Configuration de la bêta mise à jour.')} className="min-h-11 shrink-0 rounded-full bg-[var(--mt-green-primary)] px-5 text-sm font-bold text-white disabled:opacity-50">
           {betaActionLabel}
         </button>
       </header>

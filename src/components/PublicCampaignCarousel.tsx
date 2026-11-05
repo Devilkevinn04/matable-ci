@@ -216,7 +216,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
           <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-black uppercase tracking-wide text-[#8f351d] shadow-sm">
             <Megaphone className="h-3.5 w-3.5" aria-hidden="true" /> Espace partenaires
           </span>
-          <h2 className="mt-5 max-w-xl font-display text-2xl font-black leading-tight text-[#065f46] sm:mt-7 sm:text-3xl lg:text-4xl">
+          <h2 className="mt-5 max-w-xl font-display text-2xl font-black leading-tight text-[var(--mt-green-deep)] sm:mt-7 sm:text-3xl lg:text-4xl">
             Votre marque au cœur du commerce local.
           </h2>
           <p className="mt-3 max-w-lg text-sm leading-6 text-[#47534b]">
@@ -240,7 +240,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
       <aside className="h-full overflow-hidden rounded-3xl border border-dashed border-[#b8d3c8] bg-gradient-to-r from-[#f5faf6] to-white shadow-sm" aria-label="Espace publicitaire">
         <div className="flex h-full flex-col gap-3 p-3 sm:gap-4 sm:p-4">
           <div className="min-w-0">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e3f1e8] px-3 py-1 text-xs font-black uppercase tracking-wide text-[#065f46]">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e3f1e8] px-3 py-1 text-xs font-black uppercase tracking-wide text-[var(--mt-green-deep)]">
               <Megaphone className="h-3.5 w-3.5" aria-hidden="true" /> Espace publicitaire
             </span>
             <h3 className="mt-2 text-base font-black leading-snug text-[#292d2a] sm:text-lg">Aucune campagne sponsorisée en cours</h3>
@@ -249,10 +249,10 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
             </p>
           </div>
           <div className="mt-auto flex flex-col gap-2">
-            <Link to="/commercants" className="inline-flex min-h-9 items-center justify-center rounded-full bg-[#065f46] px-3 text-center text-sm font-bold text-white transition hover:bg-[#047857]">
+            <Link to="/commercants" className="inline-flex min-h-9 items-center justify-center rounded-full bg-[var(--mt-green-deep)] px-3 text-center text-sm font-bold text-white transition hover:bg-[var(--mt-green-primary)]">
               Espace commerçant
             </Link>
-            <button type="button" onClick={openPartnerRequest} className="inline-flex min-h-9 items-center justify-center rounded-full border border-[#b8d3c8] bg-white px-3 text-center text-sm font-bold text-[#065f46] transition hover:bg-[#f5faf6]">
+            <button type="button" onClick={openPartnerRequest} className="inline-flex min-h-9 items-center justify-center rounded-full border border-[#b8d3c8] bg-white px-3 text-center text-sm font-bold text-[var(--mt-green-deep)] transition hover:bg-[#f5faf6]">
               Proposer un partenariat
             </button>
           </div>
@@ -289,7 +289,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
         </div>
         {bannerCampaigns.length === 0 && (
           <label className="mt-3 flex items-start gap-2 text-sm leading-4 text-[#647067]">
-            <input type="checkbox" checked={measurementConsent} onChange={(event) => acceptMeasurement(event.target.checked)} className="mt-0.5 accent-[#047857]" />
+            <input type="checkbox" checked={measurementConsent} onChange={(event) => acceptMeasurement(event.target.checked)} className="mt-0.5 accent-[var(--mt-green-primary)]" />
             <span>J’accepte la mesure anonymisée des impressions et clics publicitaires.</span>
           </label>
         )}
@@ -304,7 +304,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
         data-ad-campaign-id={item.id}
         type="button"
         onClick={() => { void sendEvent('click', item); onOpenShop(item.shop.slug); }}
-        className={`group relative flex min-w-0 items-end overflow-hidden rounded-2xl bg-[#17332c] text-left shadow-[0_8px_24px_rgba(20,40,30,.12)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(20,40,30,.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2 ${featured ? 'min-h-[255px] p-5 sm:min-h-[300px] sm:rounded-[26px] sm:p-7 lg:min-h-[350px] lg:rounded-[30px] lg:p-8' : 'min-h-[150px] p-4 sm:min-h-[170px] sm:p-5 lg:min-h-0'}`}
+        className={`group relative flex min-w-0 items-end overflow-hidden rounded-2xl bg-[#17332c] text-left shadow-[0_8px_24px_rgba(20,40,30,.12)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(20,40,30,.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] focus-visible:ring-offset-2 ${featured ? 'min-h-[255px] p-5 sm:min-h-[300px] sm:rounded-[26px] sm:p-7 lg:min-h-[350px] lg:rounded-[30px] lg:p-8' : 'min-h-[150px] p-4 sm:min-h-[170px] sm:p-5 lg:min-h-0'}`}
       >
         <img src={item.shop.image_url} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]" onError={handlePublicImageError} />
         <span aria-hidden="true" className={`absolute inset-0 ${featured ? 'bg-gradient-to-r from-[#102d25]/90 via-[#102d25]/55 to-[#102d25]/10' : 'bg-gradient-to-t from-[#102d25]/90 via-[#102d25]/35 to-transparent'}`} />
@@ -315,7 +315,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
           <span className="block truncate text-xs font-bold uppercase tracking-[0.12em] text-white/80 sm:text-xs">{item.shop.name}{item.shop.city ? ` · ${item.shop.city}` : ''}</span>
           <span className={`mt-1 block font-display font-black leading-tight ${featured ? 'line-clamp-2 text-xl sm:text-2xl lg:text-3xl' : 'line-clamp-2 text-base sm:text-lg'}`}>{item.headline}</span>
           {featured && item.body && <span className="mt-2 line-clamp-2 block max-w-lg text-xs leading-5 text-white/90 sm:text-sm">{item.body}</span>}
-          <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-[#065f46] sm:text-xs">Découvrir <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
+          <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--mt-green-deep)] sm:text-xs">Découvrir <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" /></span>
         </span>
       </button>
     );
@@ -353,7 +353,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
           </div>
         )}
         <label className="mt-2 flex items-start gap-2 text-xs leading-4 text-[#647067]">
-          <input type="checkbox" checked={measurementConsent} onChange={(event) => acceptMeasurement(event.target.checked)} className="mt-0.5 accent-[#047857]" />
+          <input type="checkbox" checked={measurementConsent} onChange={(event) => acceptMeasurement(event.target.checked)} className="mt-0.5 accent-[var(--mt-green-primary)]" />
           <span>J’accepte la mesure anonymisée des impressions et clics publicitaires. Elle reste désactivée sans votre accord.</span>
         </label>
       </section>
@@ -375,7 +375,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
         <span className="relative aspect-[4/3] w-full overflow-hidden bg-[#d1fae5]">
           <img src={product.thumbnail_url || product.image_url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]" onError={handlePublicImageError} />
           <span className="absolute left-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-black uppercase text-[#8f351d]">Sponsorisé</span>
-          <span className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-bold text-[#065f46]">{formatFCFA(product.price)}</span>
+          <span className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-bold text-[var(--mt-green-deep)]">{formatFCFA(product.price)}</span>
         </span>
         <span className="flex flex-1 flex-col p-3.5 sm:p-4">
           <span className="line-clamp-1 text-xs font-semibold text-[#647067]">{campaign.shop.name}</span>
@@ -386,7 +386,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
       </button>
       {bannerCampaigns.length === 0 && tileCampaigns.length === 0 && (
         <label className="flex items-start gap-2 border-t border-[#eee8df] px-3.5 py-2.5 text-xs leading-4 text-[#647067] sm:px-4">
-          <input type="checkbox" checked={measurementConsent} onChange={(event) => acceptMeasurement(event.target.checked)} className="mt-0.5 accent-[#047857]" />
+          <input type="checkbox" checked={measurementConsent} onChange={(event) => acceptMeasurement(event.target.checked)} className="mt-0.5 accent-[var(--mt-green-primary)]" />
           <span>Mesure publicitaire facultative</span>
         </label>
       )}

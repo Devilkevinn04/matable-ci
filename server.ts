@@ -22,7 +22,7 @@ import { createGeniusPayRouter } from './server/routes/geniusPay.ts';
 import { createDeliveryAdminRouter } from './server/routes/deliveryAdmin.ts';
 import { createDeliveryRouter } from './server/routes/delivery.ts';
 import { expireStaleRequestedCourses, parseOfferTtlMinutes } from './server/services/deliveryLifecycle.ts';
-import { expireStalePendingOrders } from './server/services/orderLifecycle.ts';
+import { expireStalePendingOrders, remindPendingOrdersWithoutResponse } from './server/services/orderLifecycle.ts';
 import { createAdvertisingRouters } from './server/routes/advertising.ts';
 import { createPublicRateLimitMiddleware } from './server/services/rateLimits.ts';
 import { buildSessionFingerprint, createAuthSessionHelpers, isRequestFingerprintMatch } from './server/services/authSessions.ts';
@@ -1242,7 +1242,7 @@ async function startServer() {
 
   const runPendingOrderExpiry = () => {
     void expireStalePendingOrders()
-      .then((expiredOrders) => {
+      .then(async (expiredOrders) => {
         for (const expired of expiredOrders) {
           const cachedOrder = orders.find((order) => order.id === expired.orderId);
           if (cachedOrder) {
@@ -1258,6 +1258,12 @@ async function startServer() {
           }
         }
         if (expiredOrders.length > 0) console.info(`Expired ${expiredOrders.length} pending order(s) after the response window.`);
+        try {
+          const remindedOrders = await remindPendingOrdersWithoutResponse();
+          if (remindedOrders > 0) console.info(`Sent pending order reminders for ${remindedOrders} order(s).`);
+        } catch (error) {
+          console.error('Scheduled pending order reminder cycle failed.', error);
+        }
       })
       .catch((error: unknown) => {
         console.error('Scheduled pending order expiry failed.', error);

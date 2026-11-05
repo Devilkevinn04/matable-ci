@@ -113,7 +113,7 @@ const merchantPlanPreviewShop: Shop = {
   slug: 'atelier-awa',
   whatsapp_number: '+2250700000000',
   pin_code_hash: '',
-  theme_color: '#176b55',
+  theme_color: '#066B52',
   welcome_message: null,
   is_open: true,
   is_active: true,
@@ -134,7 +134,7 @@ const merchantPlanPreviewShop: Shop = {
     isActive: true,
   },
   theme_config: {
-    primary_color: '#176b55',
+    primary_color: '#066B52',
     secondary_color: '#c98b4a',
     font_family: 'Plus Jakarta Sans',
     layout_style: 'grid_portrait',
@@ -152,10 +152,10 @@ function StorefrontRoute({ customerUser, onCustomerAuthenticated }: {
 function NotFoundPage() {
   return (
     <div className="not-found-page" role="main">
-      <p className="text-sm font-black uppercase tracking-[0.18em] text-[#176b55]">Erreur 404</p>
+      <p className="text-sm font-black uppercase tracking-[0.18em] text-[var(--mt-green-hover)]">Erreur 404</p>
       <h1 className="text-2xl font-black text-slate-900">Cette page n’existe pas</h1>
       <p className="mt-2 mb-6 text-sm text-slate-600">Vérifiez l’adresse ou revenez à l’annuaire.</p>
-      <Link to="/" className="inline-flex items-center justify-center rounded-xl bg-[#176b55] px-5 py-3 font-bold text-white">Retour aux boutiques</Link>
+      <Link to="/" className="inline-flex items-center justify-center rounded-xl bg-[var(--mt-green-hover)] px-5 py-3 font-bold text-white">Retour aux boutiques</Link>
     </div>
   );
 }
@@ -315,8 +315,9 @@ export default function App() {
   const isMobileDashboardPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/mobile';
   const isAdvertisingPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/advertising';
   const isDeliveryCourierPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/delivery-courier';
-  const isDeliveryCourierWorkspace = isDeliveryCourierPreview || path === '/livreur';
-  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isRecoveryPage || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierWorkspace;
+  const isDeliveryPausedRoute = path === '/livreur';
+  const isDeliveryCourierWorkspace = isDeliveryCourierPreview;
+  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isRecoveryPage || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierWorkspace || isDeliveryPausedRoute;
   const isAnimatedPublicRoute = currentRole === 'storefront'
     && customerView === 'none'
     && !isRecoveryPage
@@ -324,8 +325,9 @@ export default function App() {
     && !isMerchantPlansPreview
     && !isMobileDashboardPreview
     && !isAdvertisingPreview
-    && !isDeliveryCourierWorkspace;
-  const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !isShopDirectoryRoute && !isPromotionsPage && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && !isDeliveryCourierWorkspace && customerView === 'none';
+    && !isDeliveryCourierWorkspace
+    && !isDeliveryPausedRoute;
+  const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !isShopDirectoryRoute && !isPromotionsPage && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && !isDeliveryCourierWorkspace && !isDeliveryPausedRoute && customerView === 'none';
   const isUnknownStorefront = isCustomerStorefront && !isLoadingShops && !availableShops.some((shop) => shop.slug === normalizedPath);
   const isSingleSegmentStorefrontRoute = isCustomerStorefront
     && path.split('/').filter(Boolean).length === 1
@@ -478,8 +480,8 @@ export default function App() {
        ? { title: 'Aperçu publicité | MaTable', description: 'Aperçu local des campagnes publicitaires, des formulaires commerçants et de la modération MaTable.' }
       : isDeliveryCourierPreview
        ? { title: 'Aperçu espace livreur | MaTable', description: 'Prévisualisation locale du parcours livreur MaTable, avec forfait sandbox et courses de test.' }
-      : isDeliveryCourierWorkspace
-       ? { title: 'Espace livreur | MaTable', description: 'Connectez-vous à votre espace livreur MaTable, consultez les courses de vos zones et clôturez vos livraisons.' }
+      : isDeliveryPausedRoute
+       ? { title: 'Livraison MaTable en veille', description: 'Les opérations de livraison MaTable sont actuellement en veille.' }
       : isMerchantPlansPreview
        ? { title: 'Aperçu des formules commerçants | MaTable', description: 'Comparaison des formules Standard, Premium et Pro pour les commerçants MaTable.' }
       : legalPage
@@ -594,7 +596,16 @@ export default function App() {
                       <Routes>
                       <Route path="/__preview/article-form" element={isProductModalPreview ? <ProductModalDevPreview /> : <NotFoundPage />} />
                       <Route path="/__preview/delivery-courier" element={isDeliveryCourierPreview ? <DeliveryCourierWorkspace /> : <NotFoundPage />} />
-                      <Route path="/livreur" element={<DeliveryCourierWorkspace />} />
+                      <Route path="/livreur" element={
+                        <main className="mx-auto w-full max-w-3xl px-4 py-12 sm:py-20">
+                          <section role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-950 sm:p-8">
+                            <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-800">Service en veille</p>
+                            <h1 className="mt-2 text-2xl font-black">Livraison MaTable</h1>
+                            <p className="mt-3 text-sm leading-6">Les opérations livreur et le suivi des courses MaTable sont temporairement suspendus. Les données historiques sont conservées. Pour le retrait ou une livraison organisée directement par une boutique, contactez son équipe.</p>
+                            <a href="/" className="mt-5 inline-flex min-h-10 items-center rounded-xl bg-amber-900 px-4 py-2 text-sm font-bold text-white hover:bg-amber-800">Retour à l’accueil</a>
+                          </section>
+                        </main>
+                      } />
                       <Route path="/__preview/merchant-plans" element={isMerchantPlansPreview
                         ? <React.Suspense fallback={<PageSkeleton />}><MerchantTrialOnboarding shop={merchantPlanPreviewShop} isStarting={false} mode="plans" previewOnly onBack={() => navigate('/boutiques')} /></React.Suspense>
                         : <NotFoundPage />

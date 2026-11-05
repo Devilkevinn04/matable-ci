@@ -99,6 +99,7 @@ import { ProductModal } from './ProductModal';
 import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
 import { ProAnalyticsPanel } from './ProAnalyticsPanel';
 import { MerchantQrShareKit } from './MerchantQrShareKit';
+import { MerchantPushPrompt } from './MerchantPushPrompt';
 
 export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStorefront, onBackToDirectory, onCustomerLogin, openRegistration = false }) => {
 
@@ -713,6 +714,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           <button type="button" onClick={() => window.location.assign('/admin')} className="rounded-md bg-white/15 px-3 py-1.5 hover:bg-white/25">Retour à l’administration</button>
         </div>
       )}
+      <MerchantPushPrompt shop={currentShop} />
       {/* Top Shop Control Bar */}
       <div className={`sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur-sm transition-[box-shadow] ${isHeaderCompact ? 'shadow-md' : ''}`}>
         <div className={`mx-auto flex max-w-7xl transition-[padding,gap] lg:ml-64 lg:max-w-none ${isHeaderCompact ? 'items-center gap-2 px-3 py-2' : 'flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between'}`}>

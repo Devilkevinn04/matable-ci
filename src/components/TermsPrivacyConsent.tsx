@@ -14,13 +14,13 @@ export const TermsPrivacyConsent: React.FC<TermsPrivacyConsentProps> = ({ id, ch
       required
       checked={checked}
       onChange={(event) => onChange(event.target.checked)}
-      className="mt-1 h-4 w-4 shrink-0 accent-[#047857]"
+      className="mt-1 h-4 w-4 shrink-0 accent-[var(--mt-green-primary)]"
     />
     <span>
       J’accepte les{' '}
-      <a href="/cgu" target="_blank" rel="noreferrer" className="font-bold text-[#047857] underline underline-offset-2">Conditions générales d’utilisation</a>
+      <a href="/cgu" target="_blank" rel="noreferrer" className="font-bold text-[var(--mt-green-primary)] underline underline-offset-2">Conditions générales d’utilisation</a>
       {' '}et la{' '}
-      <a href="/confidentialite" target="_blank" rel="noreferrer" className="font-bold text-[#047857] underline underline-offset-2">Politique de confidentialité</a>.
+      <a href="/confidentialite" target="_blank" rel="noreferrer" className="font-bold text-[var(--mt-green-primary)] underline underline-offset-2">Politique de confidentialité</a>.
     </span>
   </label>
 );

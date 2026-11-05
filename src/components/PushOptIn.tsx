@@ -143,8 +143,8 @@ export function PushOptIn({
     }
     : {
       panel: 'border-[#e7dfd3] bg-white',
-      icon: 'bg-[#d1fae5] text-[#047857]',
-      button: 'bg-[#065f46] hover:bg-[#047857] focus-visible:ring-emerald-700',
+      icon: 'bg-[#d1fae5] text-[var(--mt-green-primary)]',
+      button: 'bg-[var(--mt-green-deep)] hover:bg-[var(--mt-green-primary)] focus-visible:ring-emerald-700',
       done: 'text-emerald-800',
     };
 

@@ -518,11 +518,11 @@ h1, h2, h3, h4, .display-font {
   width: 2.2rem;
   height: 2.2rem;
   border-radius: 0.9rem;
-  background: linear-gradient(135deg, var(--ink) 0%, #2e2218 100%);
-  color: #fff7ee;
+  background: linear-gradient(135deg, var(--mt-green-primary) 0%, var(--mt-green-deep) 100%);
+  color: #fff;
   font-weight: 900;
   border: 2px solid rgba(255,255,255,0.4);
-  box-shadow: 0 12px 22px rgba(249, 115, 22, 0.28);
+  box-shadow: 0 12px 22px rgba(8, 127, 98, 0.28);
 }
 
 .brand-mark-hero {
@@ -1308,8 +1308,10 @@ button:hover {
 
 .admin-dashboard .chart-panel,
 .admin-dashboard .metric-card {
-  border-color: var(--line);
-  box-shadow: var(--shadow);
+  background: #fff;
+  border-color: #e7dfd3;
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgba(24, 59, 49, 0.05);
 }
 
 .site-footer {
@@ -1510,7 +1512,7 @@ button:hover {
 
 .merchant-sidebar,
 .admin-sidebar {
-  background: #0d4c3d;
+  background: var(--mt-green-deep);
   color: #fff;
 }
 
@@ -1539,14 +1541,14 @@ button:hover {
 .merchant-sidebar button[aria-current="page"],
 .admin-sidebar button[aria-current="page"] {
   border-color: transparent;
-  background: #047857;
+  background: var(--mt-green-primary);
   color: #fff;
 }
 
 .merchant-sidebar button:hover,
 .merchant-sidebar a:hover,
 .admin-sidebar button:not([aria-current="page"]):hover {
-  background: #047857;
+  background: var(--mt-green-primary);
   color: #fff;
 }
 

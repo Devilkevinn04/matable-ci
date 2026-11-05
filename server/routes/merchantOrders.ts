@@ -504,7 +504,7 @@ export function createMerchantOrdersRouter({
             ? 'Demande refusée et stock libéré.'
             : status === 'cancelled'
               ? 'Demande annulée.'
-            : `Statut mis à jour (${status}).`,
+            : `Statut mis à jour : ${({ preparing: 'en préparation', ready: 'prête', delivered: 'livrée', confirmed: 'acceptée' } as Record<string, string>)[status] || 'enregistré'}.`,
       });
     } catch (error: unknown) {
       if (!error || typeof error !== 'object' || !('statusCode' in error)) throw error;

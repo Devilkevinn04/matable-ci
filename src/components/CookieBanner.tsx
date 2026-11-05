@@ -35,7 +35,7 @@ export const CookieBanner: React.FC = () => {
   return (
     <section className="cookie-banner" aria-label="Préférences de cookies">
       <div className="cookie-banner-copy">
-        <ShieldCheck className="h-5 w-5 shrink-0 text-[#047857]" aria-hidden="true" />
+        <ShieldCheck className="h-5 w-5 shrink-0 text-[var(--mt-green-primary)]" aria-hidden="true" />
         <p>
           Cookies essentiels actifs. Autorisez-vous l’analyse d’audience facultative ?
           <Link to="/cookies"> Personnaliser</Link>

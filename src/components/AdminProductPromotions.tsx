@@ -93,7 +93,7 @@ export const AdminProductPromotions: React.FC = () => {
     <section className="space-y-5" aria-labelledby="admin-product-promotions-title">
       <header className="flex flex-col gap-3 rounded-2xl border border-[#d8e9df] bg-[#f5faf6] p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
-          <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[#047857]"><Tag className="h-5 w-5" aria-hidden="true" /></span>
+          <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[var(--mt-green-primary)]"><Tag className="h-5 w-5" aria-hidden="true" /></span>
           <div>
             <h2 id="admin-product-promotions-title" className="text-xl font-black text-slate-900">Promotions du catalogue</h2>
             <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-600">Suivi des prix réduits publiés par les boutiques. Le prix normal est conservé; le prix promotionnel s’applique uniquement pendant la période déclarée. Cette vue ne modifie pas les tarifs marchands.</p>

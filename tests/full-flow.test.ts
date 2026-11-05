@@ -3112,7 +3112,13 @@ test('super-admin full watchdog workflow: wrong key rejection, access link gener
   const adminHealth = await apiFetch('/api/admin/health');
   assert.equal(adminHealth.response.status, 200, JSON.stringify(adminHealth.payload));
   assert.equal(adminHealth.payload.status, 'ok');
+  assert.ok(['ok', 'warning', 'critical'].includes(adminHealth.payload.operational_status));
   assert.equal(typeof adminHealth.payload.counts.shops, 'number');
+  assert.equal(typeof adminHealth.payload.operations.overdue_pending_orders, 'number');
+  assert.equal(typeof adminHealth.payload.operations.pending_order_reminders, 'number');
+  assert.equal(typeof adminHealth.payload.operations.failed_push_deliveries_24h, 'number');
+  assert.equal(typeof adminHealth.payload.operations.push_configured, 'boolean');
+  assert.ok(Array.isArray(adminHealth.payload.alerts));
 
   const adminShops = await apiFetch('/api/admin/shops');
   assert.equal(adminShops.response.status, 200, JSON.stringify(adminShops.payload));

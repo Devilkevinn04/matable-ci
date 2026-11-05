@@ -3,6 +3,7 @@ import { BarChart3, Eye, Megaphone, MousePointer2, Package, QrCode, RefreshCw, R
 import type { LucideIcon } from 'lucide-react';
 import type { Shop } from '../../types';
 import { getSubscriptionAnalyticsDayLimit } from '../../utils/subscriptionFeatures';
+import { AnalyticsDailyBars } from '../AnalyticsDailyBars';
 
 type DailyAnalytics = {
   date: string;
@@ -129,78 +130,6 @@ function MetricCard({
       <p className="mt-3 break-words text-2xl font-black tracking-tight text-[#183b31] sm:text-3xl">{value}</p>
       <p className="mt-1 text-[11px] leading-4 text-slate-500">{detail}</p>
     </div>
-  );
-}
-
-function DailyBars({
-  title,
-  description,
-  rows,
-  valueFor,
-  color,
-  formatValue,
-}: {
-  title: string;
-  description: string;
-  rows: DailyAnalytics[];
-  valueFor: (row: DailyAnalytics) => number;
-  color: string;
-  formatValue: (value: number) => string;
-}) {
-  const maxValue = Math.max(1, ...rows.map(valueFor));
-  const tickIndexes = Array.from(new Set([0, Math.floor((rows.length - 1) / 2), rows.length - 1]));
-
-  return (
-    <section className="min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5" aria-label={title}>
-      <div>
-        <h3 className="font-extrabold text-[#183b31]">{title}</h3>
-        <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
-      </div>
-      {rows.length ? (
-        <>
-          <div className="mt-5 grid h-36 grid-cols-[36px_minmax(0,1fr)] gap-2 sm:h-44 sm:grid-cols-[48px_minmax(0,1fr)]">
-            <div className="flex flex-col justify-between pb-1 text-right text-[10px] tabular-nums text-slate-400" aria-hidden="true">
-              <span>{formatValue(maxValue)}</span>
-              <span>{formatValue(Math.round(maxValue / 2))}</span>
-              <span>0</span>
-            </div>
-            <div
-              className="relative flex min-w-0 items-end gap-[3px] border-b border-l border-slate-200 px-1 pb-1"
-              role="img"
-              aria-label={`${title}: ${rows.map((row) => `${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${row.date}T12:00:00`))}, ${formatValue(valueFor(row))}`).join('; ')}`}
-            >
-              <div className="pointer-events-none absolute inset-x-0 top-0 flex h-full flex-col justify-between pb-1" aria-hidden="true">
-                <span className="border-t border-dashed border-slate-100" />
-                <span className="border-t border-dashed border-slate-100" />
-                <span className="border-t border-slate-200" />
-              </div>
-              {rows.map((row) => {
-                const value = valueFor(row);
-                const height = value ? Math.max(4, (value / maxValue) * 100) : 0;
-                return (
-                  <div key={row.date} className="relative z-[1] flex h-full min-w-0 flex-1 items-end justify-center">
-                    <div
-                      className="w-full max-w-3 rounded-t-[3px] transition-[height] duration-300 sm:max-w-4"
-                      style={{ height: `${height}%`, backgroundColor: color, opacity: value ? 0.85 : 0.12 }}
-                      title={`${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${row.date}T12:00:00`))} : ${formatValue(value)}`}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <div className="ml-10 mt-2 flex justify-between text-[10px] font-medium text-slate-400 sm:ml-14">
-            {tickIndexes.map((index) => (
-              <span key={rows[index].date}>{shortDateFormat.format(new Date(`${rows[index].date}T12:00:00`))}</span>
-            ))}
-          </div>
-        </>
-      ) : (
-        <div className="mt-4 grid h-36 place-items-center rounded-xl bg-[#faf9f5] px-4 text-center text-sm text-slate-500">
-          Les données apparaîtront ici dès que votre boutique aura reçu de l’activité.
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -350,21 +279,23 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <DailyBars
+        <AnalyticsDailyBars
           title="Visites de la vitrine"
           description="Nombre de consultations mesurées chaque jour."
           rows={dailyRows}
           valueFor={(day) => day.page_views}
           color="#087c5b"
           formatValue={(value) => numberFormat.format(value)}
+          emptyMessage="Les données apparaîtront ici dès que votre boutique aura reçu de l’activité."
         />
-        <DailyBars
+        <AnalyticsDailyBars
           title="Commandes reçues"
           description="Commandes enregistrées et non annulées, par jour."
           rows={dailyRows}
           valueFor={(day) => day.orders}
           color="#e77a3d"
           formatValue={(value) => numberFormat.format(value)}
+          emptyMessage="Les données apparaîtront ici dès que votre boutique aura reçu de l’activité."
         />
       </div>
 

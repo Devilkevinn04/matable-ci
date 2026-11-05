@@ -36,9 +36,9 @@ const onboardingSteps = [
 ];
 
 const planPresentation = {
-  standard: { shell: 'bg-[#fffdf7]', price: 'text-[#292d2a]', action: 'bg-[#075f48] text-white hover:bg-[#047857]', subtle: 'text-[#625f58]', check: 'text-[#075f48]' },
-  premium: { shell: 'bg-[#075f48] text-white', price: 'text-white', action: 'bg-[#f0ba80] text-[#292d2a] hover:bg-[#ffd09a]', subtle: 'text-white/80', check: 'text-[#f0ba80]' },
-  pro: { shell: 'bg-[#fffdf7]', price: 'text-[#292d2a]', action: 'bg-[#075f48] text-white hover:bg-[#047857]', subtle: 'text-[#625f58]', check: 'text-[#075f48]' },
+  standard: { shell: 'bg-[#fffdf7]', price: 'text-[#292d2a]', action: 'bg-[var(--mt-green-hover)] text-white hover:bg-[var(--mt-green-primary)]', subtle: 'text-[#625f58]', check: 'text-[var(--mt-green-hover)]' },
+  premium: { shell: 'bg-[var(--mt-green-hover)] text-white', price: 'text-white', action: 'bg-[#f0ba80] text-[#292d2a] hover:bg-[#ffd09a]', subtle: 'text-white/80', check: 'text-[#f0ba80]' },
+  pro: { shell: 'bg-[#fffdf7]', price: 'text-[#292d2a]', action: 'bg-[var(--mt-green-hover)] text-white hover:bg-[var(--mt-green-primary)]', subtle: 'text-[#625f58]', check: 'text-[var(--mt-green-hover)]' },
 } as const;
 
 const planPositioning = {
@@ -78,7 +78,7 @@ export function MerchantPlansPage() {
             Créez une vitrine claire, montrez vos produits et échangez directement avec les clients. Vous gardez la main sur vos ventes et vos livraisons.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <Link to="/app/creer-boutique" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[#075f48] px-6 text-sm font-extrabold text-white shadow-[0_8px_20px_rgba(7,95,72,.18)] transition hover:-translate-y-0.5 hover:bg-[#047857]">
+            <Link to="/app/creer-boutique" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[var(--mt-green-hover)] px-6 text-sm font-extrabold text-white shadow-[0_8px_20px_rgba(7,95,72,.18)] transition hover:-translate-y-0.5 hover:bg-[var(--mt-green-primary)]">
               Créer ma boutique <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
             <Link to="/app/connexion" className="inline-flex min-h-12 items-center justify-center rounded-full border border-[#d9d2c6] bg-white px-5 text-sm font-bold text-[#292d2a] transition hover:border-[#087c5b]">
@@ -99,13 +99,13 @@ export function MerchantPlansPage() {
                 <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#e9f5ee] text-[#087c5b]"><Store className="h-5 w-5" aria-hidden="true" /></span>
                 <span><strong className="block text-sm">Atelier Awa</strong><span className="text-[10px] text-[#77736a]">Aperçu de vitrine</span></span>
               </div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#eaf5ec] px-2.5 py-1 text-[10px] font-bold text-[#176b55]"><BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" /> Exemple</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#eaf5ec] px-2.5 py-1 text-[10px] font-bold text-[var(--mt-green-hover)]"><BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" /> Exemple</span>
             </div>
             <div className="grid gap-4 p-4 sm:grid-cols-[150px_1fr] sm:gap-5 sm:p-6">
               <aside className="hidden rounded-2xl bg-[#f4f2ec] p-3 sm:block">
                 <p className="mb-3 px-2 text-[9px] font-black uppercase tracking-[.14em] text-[#8c877d]">Ma boutique</p>
                 {['Vue générale', 'Produits', 'Commandes', 'Statistiques'].map((item, index) => (
-                  <p key={item} className={`mb-1 rounded-lg px-2 py-2 text-[10px] font-bold ${index === 0 ? 'bg-white text-[#075f48] shadow-sm' : 'text-[#706b63]'}`}>{item}</p>
+                  <p key={item} className={`mb-1 rounded-lg px-2 py-2 text-[10px] font-bold ${index === 0 ? 'bg-white text-[var(--mt-green-hover)] shadow-sm' : 'text-[#706b63]'}`}>{item}</p>
                 ))}
               </aside>
               <div className="min-w-0">
@@ -115,7 +115,7 @@ export function MerchantPlansPage() {
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {[['Visites', '1 284'], ['Produits', '24'], ['Messages', '18']].map(([label, value]) => (
-                    <div key={label} className="rounded-xl border border-[#eeeae1] p-3"><p className="text-[9px] font-semibold text-[#77736a]">{label}</p><p className="mt-1 text-lg font-black text-[#075f48]">{value}</p></div>
+                    <div key={label} className="rounded-xl border border-[#eeeae1] p-3"><p className="text-[9px] font-semibold text-[#77736a]">{label}</p><p className="mt-1 text-lg font-black text-[var(--mt-green-hover)]">{value}</p></div>
                   ))}
                 </div>
                 <div className="mt-3 rounded-xl border border-[#eeeae1] p-3">
@@ -129,7 +129,7 @@ export function MerchantPlansPage() {
                       <div key={product.name} className="min-w-0 overflow-hidden rounded-lg bg-[#f5f3ed]">
                         <div className="flex aspect-[1.3] items-center justify-center bg-[#eaf2e9] text-3xl" aria-hidden="true">{product.icon}</div>
                         <p className="truncate px-2 pt-2 text-[9px] font-bold">{product.name}</p>
-                        <p className="px-2 pb-2 pt-1 text-[9px] font-black text-[#075f48]">{product.price}</p>
+                        <p className="px-2 pb-2 pt-1 text-[9px] font-black text-[var(--mt-green-hover)]">{product.price}</p>
                       </div>
                     ))}
                   </div>
@@ -201,7 +201,7 @@ export function MerchantPlansPage() {
           <div className="rounded-[22px] bg-white p-5 shadow-sm sm:p-7">
             <div className="flex items-center justify-between border-b border-[#eeeae1] pb-4">
               <div><p className="text-[10px] font-bold uppercase tracking-wide text-[#9a6a3a]">Une demande reçue</p><p className="mt-1 text-lg font-black">Chemise en lin naturel</p></div>
-              <span className="rounded-full bg-[#e8f4e9] px-3 py-1 text-[10px] font-black text-[#176b55]">À confirmer</span>
+              <span className="rounded-full bg-[#e8f4e9] px-3 py-1 text-[10px] font-black text-[var(--mt-green-hover)]">À confirmer</span>
             </div>
             <div className="mt-5 flex items-center gap-3">
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#f4e8d2] text-sm font-black text-[#765323]">AK</span>
@@ -210,7 +210,7 @@ export function MerchantPlansPage() {
             <div className="mt-5 rounded-xl bg-[#f7f5ef] p-4 text-sm leading-6 text-[#59564f]">« Bonjour, est-ce que la chemise est disponible ? Je suis à Cocody. »</div>
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <p className="flex items-center gap-1.5 text-xs font-semibold text-[#706b63]"><Truck className="h-4 w-4 text-[#087c5b]" aria-hidden="true" /> Retrait ou livraison à convenir</p>
-              <span className="inline-flex min-h-9 items-center gap-2 rounded-full bg-[#075f48] px-4 text-xs font-bold text-white"><MessageCircle className="h-3.5 w-3.5" aria-hidden="true" /> Répondre sur WhatsApp</span>
+              <span className="inline-flex min-h-9 items-center gap-2 rounded-full bg-[var(--mt-green-hover)] px-4 text-xs font-bold text-white"><MessageCircle className="h-3.5 w-3.5" aria-hidden="true" /> Répondre sur WhatsApp</span>
             </div>
             <p className="mt-4 text-center text-[10px] text-[#888278]">Exemple d’interface · demande fictive</p>
           </div>
@@ -226,10 +226,10 @@ export function MerchantPlansPage() {
               <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-[#625f58] sm:text-base">Les mêmes bases pour vendre. Plus d’outils et de visibilité à mesure que votre activité avance.</p>
             </div>
             <div className="inline-flex w-fit items-center gap-1 rounded-full border border-[#d7d0c4] bg-white p-1.5 shadow-[0_8px_24px_rgba(38,35,28,.08)]" role="group" aria-label="Durée de l’abonnement">
-              <button type="button" aria-pressed={term === 'monthly'} onClick={() => setTerm('monthly')} className={`min-h-10 rounded-full px-4 text-xs font-bold transition ${term === 'monthly' ? 'bg-[#075f48] text-white' : 'text-[#5c5a53] hover:bg-[#f6f4ef]'}`}>
+              <button type="button" aria-pressed={term === 'monthly'} onClick={() => setTerm('monthly')} className={`min-h-10 rounded-full px-4 text-xs font-bold transition ${term === 'monthly' ? 'bg-[var(--mt-green-hover)] text-white' : 'text-[#5c5a53] hover:bg-[#f6f4ef]'}`}>
                 Mensuel
               </button>
-              <button type="button" aria-pressed={term === 'annual'} onClick={() => setTerm('annual')} className={`min-h-10 rounded-full px-4 text-xs font-bold transition ${term === 'annual' ? 'bg-[#075f48] text-white' : 'text-[#5c5a53] hover:bg-[#f6f4ef]'}`}>
+              <button type="button" aria-pressed={term === 'annual'} onClick={() => setTerm('annual')} className={`min-h-10 rounded-full px-4 text-xs font-bold transition ${term === 'annual' ? 'bg-[var(--mt-green-hover)] text-white' : 'text-[#5c5a53] hover:bg-[#f6f4ef]'}`}>
               Annuel <span className={`ml-1 rounded-full px-2 py-1 text-[10px] font-black ${term === 'annual' ? 'bg-[#f0ba80] text-[#292d2a]' : 'bg-[#fff1df] text-[#8b4c1e]'}`}>2 mois offerts</span>
               </button>
             </div>
@@ -257,12 +257,12 @@ export function MerchantPlansPage() {
                     viewport={{ once: true, amount: 0.18 }}
                     transition={{ duration: prefersReducedMotion ? 0 : 0.45, delay: prefersReducedMotion ? 0 : index * 0.1, ease: [0.22, 1, 0.36, 1] }}
                     whileHover={prefersReducedMotion ? undefined : { y: -6, transition: { duration: 0.2 } }}
-                    className={`relative flex flex-col overflow-hidden rounded-[28px] ${featured ? 'z-10 bg-[#075f48] text-white shadow-[0_28px_70px_rgba(7,95,72,.27)] md:-my-3 md:scale-[1.035]' : 'border border-[#e4ddd1] bg-white text-[#292d2a] shadow-[0_14px_38px_rgba(38,35,28,.07)]'}`}
+                    className={`relative flex flex-col overflow-hidden rounded-[28px] ${featured ? 'z-10 bg-[var(--mt-green-hover)] text-white shadow-[0_28px_70px_rgba(7,95,72,.27)] md:-my-3 md:scale-[1.035]' : 'border border-[#e4ddd1] bg-white text-[#292d2a] shadow-[0_14px_38px_rgba(38,35,28,.07)]'}`}
                   >
                     {featured && <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full border-[28px] border-white/[0.07]" />}
                     <div className={`relative flex items-center justify-between gap-3 px-5 py-4 sm:px-7 ${featured ? 'border-b border-white/15 bg-[#064f3d]' : 'border-b border-[#f0ece5] bg-[#faf8f2]'}`}>
                       <div className="flex min-w-0 items-center gap-3">
-                        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${featured ? 'bg-[#f0ba80] text-[#292d2a]' : 'bg-[#e8f3ed] text-[#075f48]'}`}><PlanIcon className="h-5 w-5" aria-hidden="true" /></span>
+                        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${featured ? 'bg-[#f0ba80] text-[#292d2a]' : 'bg-[#e8f3ed] text-[var(--mt-green-hover)]'}`}><PlanIcon className="h-5 w-5" aria-hidden="true" /></span>
                         <div className="min-w-0">
                           <p className={`text-[9px] font-black uppercase tracking-[.15em] ${featured ? 'text-[#f0ba80]' : 'text-[#a2642e]'}`}>{planPositioning[plan.tier]}</p>
                           <h3 className="mt-0.5 text-xl font-black sm:text-2xl">{plan.label}</h3>
@@ -328,7 +328,7 @@ export function MerchantPlansPage() {
           <h2 className="mt-2 max-w-2xl font-display text-3xl font-black leading-tight tracking-[-.035em] sm:text-4xl">Faites découvrir votre commerce.</h2>
           <p className="mt-3 text-sm text-[#625f58]">Créez votre vitrine aujourd’hui, puis partagez-la à vos clients.</p>
         </div>
-        <Link to="/app/creer-boutique" className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-full bg-[#075f48] px-6 text-sm font-extrabold text-white transition hover:bg-[#047857]">
+        <Link to="/app/creer-boutique" className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-full bg-[var(--mt-green-hover)] px-6 text-sm font-extrabold text-white transition hover:bg-[var(--mt-green-primary)]">
           Ouvrir ma boutique <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       </section>

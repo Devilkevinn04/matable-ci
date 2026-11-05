@@ -8,8 +8,8 @@ export const MerchantRegistrationProgress: React.FC<{ step: 1 | 2 }> = ({ step }
       const isComplete = step > number;
       const isCurrent = step === number;
       return (
-        <li key={label} aria-current={isCurrent ? 'step' : undefined} className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 text-xs font-bold transition-colors ${isCurrent ? 'border-[#047857] bg-[#edf6ef] text-[#065f46]' : isComplete ? 'border-[#d4e8d9] bg-[#f5faf5] text-[#426458]' : 'border-[#e8e2d8] bg-[#faf9f6] text-[#8a9089]'}`}>
-          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${isCurrent ? 'bg-[#047857] text-white' : isComplete ? 'bg-[#dcefe2] text-[#047857]' : 'bg-[#eeece6] text-[#7b8279]'}`}>
+        <li key={label} aria-current={isCurrent ? 'step' : undefined} className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 text-xs font-bold transition-colors ${isCurrent ? 'border-[var(--mt-green-primary)] bg-[#edf6ef] text-[var(--mt-green-deep)]' : isComplete ? 'border-[#d4e8d9] bg-[#f5faf5] text-[#426458]' : 'border-[#e8e2d8] bg-[#faf9f6] text-[#8a9089]'}`}>
+          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${isCurrent ? 'bg-[var(--mt-green-primary)] text-white' : isComplete ? 'bg-[#dcefe2] text-[var(--mt-green-primary)]' : 'bg-[#eeece6] text-[#7b8279]'}`}>
             {isComplete ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : number}
           </span>
           {label}
@@ -29,7 +29,7 @@ export const AuthAudienceSwitcher: React.FC<{
       type="button"
       onClick={onSelectCustomer}
       aria-current={activeAudience === 'customer' ? 'page' : undefined}
-      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'customer' ? 'bg-white text-[#065f46] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
+      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'customer' ? 'bg-white text-[var(--mt-green-deep)] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
     >
       <UserRound className="h-4 w-4" aria-hidden="true" />
       Connexion client
@@ -38,7 +38,7 @@ export const AuthAudienceSwitcher: React.FC<{
       type="button"
       onClick={onSelectMerchant}
       aria-current={activeAudience === 'merchant' ? 'page' : undefined}
-      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'merchant' ? 'bg-white text-[#065f46] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
+      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'merchant' ? 'bg-white text-[var(--mt-green-deep)] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
     >
       <Store className="h-4 w-4" aria-hidden="true" />
       Connexion marchand
@@ -60,10 +60,7 @@ interface AuthExperienceLayoutProps {
 }
 
 export const BrandMark: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <span className={`relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] bg-[#e8f1e9] ${className}`} aria-hidden="true">
-    <MapPin className="h-7 w-7 fill-[#065f46] text-[#065f46]" strokeWidth={2.4} />
-    <span className="absolute left-1/2 top-[35%] h-2 w-2 -translate-x-1/2 rounded-full bg-[#F97316]" />
-  </span>
+  <img src="/brand-kit/monogram.svg" alt="" aria-hidden="true" className={`h-11 w-11 shrink-0 rounded-[15px] ${className}`} />
 );
 
 export const MerchantShopPreview: React.FC<{ name: string; category: string; city: string }> = ({ name, category, city }) => (
@@ -98,7 +95,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
 }) => (
   <main className="min-h-[100svh] bg-[#f1eee6] px-3 py-3 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
     <div className="mx-auto grid w-full max-w-[1240px] gap-3 lg:min-h-[min(820px,calc(100svh-4rem))] lg:grid-cols-[.94fr_1.06fr] lg:gap-5">
-      <section className="relative isolate flex min-h-[250px] flex-col overflow-hidden rounded-[24px] bg-[#073f32] p-5 text-white sm:min-h-[300px] sm:rounded-[30px] sm:p-8 lg:min-h-[700px] lg:p-10">
+      <section className="relative isolate flex min-h-[250px] flex-col overflow-hidden rounded-[24px] bg-[var(--mt-green-deep)] p-5 text-white sm:min-h-[300px] sm:rounded-[30px] sm:p-8 lg:min-h-[700px] lg:p-10">
         <div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-28 -z-10 h-80 w-80 rounded-full border border-white/10 sm:h-[28rem] sm:w-[28rem]" />
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-36 -left-20 -z-10 h-80 w-80 rounded-full bg-[#f0ba80]/10 blur-3xl" />
         <div className="flex items-center gap-3">
@@ -122,9 +119,9 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
         >
           {storyCard ?? (
             <>
-              <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#f0ba80] text-[#073f32] sm:h-[76px] sm:w-[76px]">
+              <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#f0ba80] text-[var(--mt-green-deep)] sm:h-[76px] sm:w-[76px]">
                 <Store className="h-6 w-6 sm:h-8 sm:w-8" strokeWidth={1.8} aria-hidden="true" />
-                <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#16483a] bg-white text-[#047857] sm:h-7 sm:w-7"><BadgeCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden="true" /></span>
+                <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#16483a] bg-white text-[var(--mt-green-primary)] sm:h-7 sm:w-7"><BadgeCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden="true" /></span>
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[9px] font-black uppercase tracking-[0.13em] text-[#f0ba80] sm:text-[10px]">Une vitrine à votre image</p>
@@ -150,7 +147,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
           {topPrompt && topActionLabel && onTopAction && (
             <div className="flex items-center gap-2 text-right text-xs sm:text-sm">
               <span className="hidden text-[#47534b] sm:inline">{topPrompt}</span>
-              <button type="button" onClick={onTopAction} className="inline-flex items-center gap-1 font-bold text-[#065f46] hover:text-[#c2410c]">
+              <button type="button" onClick={onTopAction} className="inline-flex items-center gap-1 font-bold text-[var(--mt-green-deep)] hover:text-[#c2410c]">
                 {topActionLabel}<ArrowRight className="h-3.5 w-3.5" />
               </button>
             </div>
