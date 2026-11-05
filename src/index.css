@@ -254,6 +254,18 @@
 html {
   scroll-behavior: smooth;
   overflow-x: clip;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+button, a, summary, [role="tab"] {
+  touch-action: manipulation;
+}
+
+@media (pointer: coarse) {
+  button:active:not(:disabled), a:active, summary:active {
+    opacity: 0.88;
+  }
 }
 
 *, *::before, *::after {

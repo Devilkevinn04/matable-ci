@@ -148,7 +148,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
       className={`mt-reveal mt-press h-full bg-[#FFFFFF] border border-[#ded8ce] ${cardRadius} ${shadowClass} overflow-hidden flex flex-col transition-[transform,border-color,box-shadow] hover:border-[var(--mt-green-primary)] hover:-translate-y-0.5 active:scale-[0.97]`}
     >
       <div className="relative flex w-full flex-col">
-        <div className={`relative aspect-square w-full overflow-hidden bg-[#f4f1ea] ${layoutStyle === 'grid_portrait' ? 'sm:aspect-[4/5]' : 'sm:aspect-[4/3]'}`}>
+        <div className={`relative w-full overflow-hidden bg-[#f4f1ea] ${layoutStyle === 'grid_portrait' ? 'aspect-square sm:aspect-[4/5]' : 'aspect-[5/4] sm:aspect-[4/3]'}`}>
           {selectedImage && (
             <button
               ref={imageViewerTriggerRef}
@@ -158,7 +158,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
               className="group absolute inset-0 z-0 rounded-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
             >
               <CategoryProductImage imageUrl={selectedImage.thumbnailSrc} category={category} title={selectedImage.alt} showFallbackTitle={false} imageFit={selectedImage.fit} className={`h-full w-full transition-transform duration-200 group-hover:scale-105 ${selectedImage.fit === 'contain' ? 'p-1' : ''}`} />
-              <span className="pointer-events-none absolute bottom-2 right-2 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-slate-950/65 text-white shadow-sm backdrop-blur-sm">
+              <span className="pointer-events-none absolute bottom-2 right-2 z-20 hidden h-9 w-9 sm:flex items-center justify-center rounded-full border border-white/80 bg-slate-950/65 text-white shadow-sm backdrop-blur-sm">
                 <Expand className="h-4 w-4" aria-hidden="true" />
               </span>
             </button>
@@ -192,7 +192,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
               {shouldTruncate && !isDescriptionExpanded ? `${description.slice(0, 130)}...` : description}
             </p>
             {shouldTruncate && (
-              <button type="button" onClick={onToggleDescription} className="mt-1 flex min-h-8 items-center gap-0.5 text-xs font-bold text-slate-800 hover:text-slate-950">
+              <button type="button" onClick={onToggleDescription} className={`mt-1 min-h-8 items-center gap-0.5 text-xs font-bold text-slate-800 hover:text-slate-950 ${isDescriptionExpanded ? 'flex' : 'hidden sm:flex'}`}>
                 <span>{isDescriptionExpanded ? 'Réduire' : 'Lire la suite'}</span>
                 {isDescriptionExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
               </button>
@@ -203,7 +203,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
         )}
         {hasProductOptions && (
           <details className="group mb-2 sm:mb-3">
-            <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-1 text-sm font-bold text-[var(--mt-green-primary)] sm:hidden [&::-webkit-details-marker]:hidden">
+            <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-1 text-xs font-bold text-[var(--mt-green-primary)] sm:hidden [&::-webkit-details-marker]:hidden">
               <span>{category === 'food' && product.modifier_groups?.length ? 'Options du plat' : 'Options et détails'}</span>
               <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
             </summary>
@@ -218,14 +218,14 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
             </div>
           </details>
         )}
-        <button type="button" onClick={onOpenTrust} aria-label="Lire et rédiger un avis ou signaler un problème" className="inline-flex min-h-9 items-center gap-1 text-xs font-bold text-[var(--mt-green-primary)] hover:underline sm:gap-1.5"><Star className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden="true" />Lire / donner un avis</button>
+        <button type="button" onClick={onOpenTrust} aria-label="Lire et rédiger un avis ou signaler un problème" className="hidden min-h-9 items-center gap-1 text-xs font-bold text-[var(--mt-green-primary)] hover:underline sm:inline-flex sm:gap-1.5"><Star className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden="true" /><span className="sm:hidden">Avis</span><span className="hidden sm:inline">Lire / donner un avis</span></button>
 
         <div className="mb-2 mt-auto flex flex-col items-start gap-1 border-t border-slate-100 pt-2 sm:mb-3 sm:flex-row sm:items-baseline sm:justify-between">
           <div className="min-w-0"><span className="hidden text-xs font-bold text-slate-400 sm:block">Prix unitaire</span><span className="whitespace-nowrap text-base font-black tracking-tight sm:text-lg" style={{ color: isPromotion ? '#c2410c' : primaryColor }}>{formatFCFA(selectedUnitPrice)}</span>{isPromotion && <><span className="ml-1.5 whitespace-nowrap text-xs font-semibold text-slate-400 line-through">{formatFCFA(product.price + selectedModifierTotal)}</span>{product.sale_ends_at && <span className="mt-0.5 block text-xs font-semibold text-[#a53a1d]">Jusqu’au {new Date(product.sale_ends_at).toLocaleDateString('fr-FR')}</span>}</>}{selectedModifierTotal > 0 && <span className="mt-0.5 block text-xs font-medium text-slate-500">{formatFCFA(activeBasePrice)} + {formatFCFA(selectedModifierTotal)} de supplément</span>}</div>
           <div className="shrink-0 text-right">{outOfStock ? <span className="inline-block rounded-full bg-rose-50 px-1.5 py-0.5 text-xs font-bold text-rose-600 sm:px-2">Épuisé</span> : product.stock <= 3 ? <span className="inline-block rounded-full bg-amber-50 px-1.5 py-0.5 text-xs font-bold text-amber-700 sm:px-2"><span className="sm:hidden">{product.stock} restant{product.stock > 1 ? 's' : ''}</span><span className="hidden sm:inline">Plus que {product.stock} dispo</span></span> : <span className="hidden items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-xs font-semibold text-emerald-700 sm:inline-flex sm:px-2"><CheckCircle2 className="h-3 w-3" aria-hidden="true" />En stock ({product.stock})</span>}</div>
         </div>
 
-        {outOfStock ? <button disabled className="min-h-11 w-full rounded-xl bg-slate-100 px-2 py-2 text-sm font-bold text-slate-400 sm:px-4 sm:py-2.5">Indisponible</button> : quantityInCart > 0 ? <div className="flex min-h-11 items-center justify-between rounded-xl border border-slate-200 bg-slate-100 p-1"><button id={`qty-minus-${product.id}`} onClick={onDecreaseQuantity} className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-slate-700 shadow-2xs transition-colors hover:bg-slate-50" aria-label="Diminuer"><Minus className="h-4 w-4" /></button><span role="status" aria-label={`${quantityInCart} au panier`} className="min-w-0 truncate px-1 text-sm font-extrabold text-slate-900 sm:px-2"><span className="sm:hidden">{quantityInCart}</span><span className="hidden sm:inline">{quantityInCart} au panier</span></span><button id={`qty-plus-${product.id}`} onClick={onAddToCart} disabled={quantityInCart >= product.stock} className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 disabled:opacity-40" aria-label="Augmenter"><Plus className="h-4 w-4" /></button></div> : <button id={`add-btn-${product.id}`} onClick={onAddToCart} disabled={!isShopOpen} className="flex min-h-11 w-full items-center justify-center gap-1 rounded-xl border border-white/30 px-1.5 py-2 text-sm font-bold text-white shadow-sm transition-[filter,transform,opacity] hover:brightness-105 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 sm:gap-2 sm:px-4 sm:py-2.5" style={{ backgroundColor: primaryColor, boxShadow: `0 6px 16px ${primaryColor}35`, ...glowStyle }}><ShoppingBag className="h-4 w-4" /><span className="sm:hidden">Ajouter</span><span className="hidden sm:inline">Ajouter au panier</span></button>}
+        {outOfStock ? <button disabled className="min-h-11 w-full rounded-xl bg-slate-100 px-2 py-2 text-sm font-bold text-slate-400 sm:px-4 sm:py-2.5">Indisponible</button> : quantityInCart > 0 ? <div className="flex min-h-11 items-center justify-between rounded-xl border border-slate-200 bg-slate-100 p-1"><button id={`qty-minus-${product.id}`} onClick={onDecreaseQuantity} className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-slate-700 shadow-2xs transition-colors hover:bg-slate-50" aria-label="Diminuer"><Minus className="h-4 w-4" /></button><span role="status" aria-label={`${quantityInCart} au panier`} className="min-w-0 truncate px-1 text-sm font-extrabold text-slate-900 sm:px-2"><span className="sm:hidden">{quantityInCart}</span><span className="hidden sm:inline">{quantityInCart} au panier</span></span><button id={`qty-plus-${product.id}`} onClick={onAddToCart} disabled={quantityInCart >= product.stock} className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 disabled:opacity-40" aria-label="Augmenter"><Plus className="h-4 w-4" /></button></div> : <button id={`add-btn-${product.id}`} onClick={onAddToCart} disabled={!isShopOpen} className="flex min-h-11 w-full items-center justify-center gap-1 rounded-xl border border-white/30 px-1.5 py-2 text-sm font-bold text-white shadow-sm transition-[filter,transform,opacity] hover:brightness-105 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 sm:gap-2 sm:px-4 sm:py-2.5" style={{ backgroundColor: primaryColor, boxShadow: `0 6px 16px ${primaryColor}35`, ...glowStyle }}><Plus className="h-4 w-4 sm:hidden" aria-hidden="true" /><ShoppingBag className="hidden h-4 w-4 sm:block" aria-hidden="true" /><span className="sm:hidden">Ajouter</span><span className="hidden sm:inline">Ajouter au panier</span></button>}
       </div>
 
       {isImageViewerOpen && selectedImage && typeof document !== 'undefined' && createPortal(

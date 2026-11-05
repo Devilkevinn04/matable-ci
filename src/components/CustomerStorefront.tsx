@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { StorefrontLoadingSkeleton } from './Skeletons';
+import { InstallAppPrompt } from './InstallAppPrompt';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { 
@@ -23,6 +26,7 @@ import {
   Smartphone,
   Banknote,
   MessageCircle,
+  ChevronDown,
 } from 'lucide-react';
 import type { Order, Shop, Product } from '../types';
 import { formatFCFA, generateWhatsAppOrderReceipt, getProductUnitPrice } from '../utils/format';
@@ -105,6 +109,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const pendingLikeRequests = useRef(new Set<number>());
   const [isFavoriteShop, setIsFavoriteShop] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -236,13 +241,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const deliveryFee = selectedDeliveryOption ? Number(selectedDeliveryOption.amount) : 0;
   const orderTotalDue = totalCartAmount + deliveryFee;
 
-  const fetchShopData = async (signal: AbortSignal, ageConfirmed = false): Promise<boolean> => {
+  const fetchShopData = async (signal: AbortSignal, ageConfirmed = false, silent = false): Promise<boolean> => {
     try {
-      if (!ageConfirmed) {
+      if (!ageConfirmed && !silent) {
         setLoading(true);
         setError(null);
-      }
-      if (!ageConfirmed) {
         setShop(null);
         setProducts([]);
       }
@@ -256,6 +259,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       setShop(data.shop);
       setProducts(data.products || []);
       setHasAgeRestrictedProducts(Boolean(data.has_age_restricted_products));
+      if (silent) return true;
 
       // Initialize default selections for products
       const initSizes: Record<number, string> = {};
@@ -280,11 +284,12 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       return true;
     } catch (err: any) {
       if (signal.aborted) return false;
+      if (silent) return false;
       if (ageConfirmed) setAgeVerificationError('Impossible de charger les produits. Réessayez.');
       else setError(err.message || 'Erreur lors du chargement');
       return false;
     } finally {
-      if (!signal.aborted && !ageConfirmed) setLoading(false);
+      if (!signal.aborted && !ageConfirmed && !silent) setLoading(false);
     }
   };
 
@@ -348,7 +353,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     void fetchShopData(controller.signal);
     setOrderSuccess(null);
     return () => controller.abort();
+  }, [shopSlug, reloadKey]);
+
+  const refreshCatalogue = useCallback(async () => {
+    const controller = new AbortController();
+    return fetchShopData(controller.signal, false, true);
   }, [shopSlug]);
+  const pullToRefresh = usePullToRefresh(refreshCatalogue, !loading && !!shop);
 
   useEffect(() => {
     if (!customerUser) return;
@@ -711,29 +722,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   };
 
   if (loading) {
-    return (
-      <div className="page-loading-wrap" role="main">
-        <div className="page-loading-shell">
-          <div className="page-loading-orb page-loading-orb-1" />
-          <div className="page-loading-orb page-loading-orb-2" />
-          <div className="brand-mark brand-mark-hero">M</div>
-          <div className="page-loading-copy">
-            <span className="eyebrow">MaTable</span>
-            <h2>Chargement de la vitrine…</h2>
-            <div className="loading-progress">
-              <div className="loading-progress-bar" />
-            </div>
-            <p className="mt-1.5 text-sm leading-5 text-slate-500">Indiquez où vous souhaitez récupérer votre commande ou être contacté pour en convenir avec la boutique.</p>
-            <div className="loading-dots">
-              <span />
-              <span />
-              <span />
-            </div>
-            <p>Conçu pour des connexions rapides et stables sur mobile.</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <StorefrontLoadingSkeleton onRetry={() => setReloadKey((key) => key + 1)} />;
   }
 
   if (error || !shop) {
@@ -822,7 +811,16 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       }}
     >
       {/* 1. Header & Shop Identity */}
-      <header ref={headerRef} className="bg-[var(--mt-surface)]/95 backdrop-blur-md border-b border-[#ded8ce] sticky top-0 z-40 shadow-sm">
+      <div
+        aria-live="polite"
+        className="pointer-events-none fixed inset-x-0 z-50 flex justify-center transition-opacity sm:hidden"
+        style={{ top: 'calc(env(safe-area-inset-top) + 4.5rem)', opacity: pullToRefresh.distance > 8 || pullToRefresh.refreshing || pullToRefresh.failed ? 1 : 0 }}
+      >
+        <span className="rounded-full bg-[var(--mt-green-deep)] px-4 py-2 text-xs font-black text-white shadow-lg">
+          {pullToRefresh.failed ? 'Actualisation impossible. Réessayez.' : pullToRefresh.refreshing ? 'Actualisation du catalogue…' : pullToRefresh.ready ? 'Relâchez pour actualiser' : 'Tirez pour actualiser'}
+        </span>
+      </div>
+      <header ref={headerRef} className="bg-[var(--mt-surface)]/95 backdrop-blur-md border-b border-[#ded8ce] sticky top-0 z-40 pt-[env(safe-area-inset-top)] shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-2 sm:py-3 flex items-center justify-between gap-2 sm:gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <Link to="/" aria-label="Retour à l’annuaire" title="Retour à l’annuaire" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"><ArrowLeft className="h-4 w-4" /></Link>
@@ -830,11 +828,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               <img
                 src={logoUrl}
                 alt={shop.name}
-                className="h-11 w-11 rounded-xl object-cover shrink-0 border border-slate-200 bg-white"
+                className="hidden h-11 w-11 rounded-xl object-cover shrink-0 border border-slate-200 bg-white sm:block"
               />
             ) : (
               <div 
-                className="h-11 w-11 rounded-xl flex items-center justify-center font-black text-lg shrink-0"
+                className="hidden h-11 w-11 rounded-xl items-center justify-center font-black text-lg shrink-0 sm:flex"
                 style={{ backgroundColor: primaryColor, color: primaryTextColor }}
               >
                 <CategoryIcon category={shop.category} className="h-5 w-5" />
@@ -842,13 +840,14 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             )}
             <div className="min-w-0">
               <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-2">
-                <h1 className="line-clamp-2 max-w-full text-base font-black leading-tight text-[var(--mt-gray-900)] sm:line-clamp-1 sm:text-lg">{shop.name}</h1>
-                <span className="flex shrink-0 items-center gap-2">
-                  <span className={`text-xs font-semibold ${shop.is_open ? 'text-[var(--mt-green-hover)]' : 'text-[#8a5a12]'}`}>
-                    {shop.is_open ? 'Ouverte' : 'Fermée'}
+                <h1 className="line-clamp-1 max-w-full text-base font-black leading-tight text-[var(--mt-gray-900)] sm:text-lg">{shop.name}</h1>
+                <span className="flex min-w-0 max-w-full items-center gap-2">
+                  <span className={`inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap text-xs font-bold ${shop.is_open ? 'text-[var(--mt-green-hover)]' : 'text-[#8a5a12]'}`}>
+                    <span aria-hidden="true" className={`h-2 w-2 rounded-full ${shop.is_open ? 'bg-[var(--mt-green-hover)]' : 'bg-[#8a5a12]'}`} />
+                    {shop.is_open ? 'Ouverte' : 'Fermée'}{shop.city ? <span className="truncate sm:hidden">· {shop.city}</span> : null}
                   </span>
                   {shop.merchant_verification_status === 'verified' && (
-                    <span className="inline-flex items-center gap-0.5 rounded-full bg-[#e3f4ea] px-1.5 py-0.5 text-xs font-extrabold text-[var(--mt-green-deep)]" title="Le commerçant a fait vérifier son identité">
+                    <span className="hidden items-center gap-0.5 rounded-full bg-[#e3f4ea] px-1.5 py-0.5 text-xs font-extrabold text-[var(--mt-green-deep)] sm:inline-flex" title="Le commerçant a fait vérifier son identité">
                       <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Vérifié
                     </span>
                   )}
@@ -871,7 +870,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               onClick={() => toggleCustomerFavorite('shop', shop.id)}
               aria-pressed={isFavoriteShop}
               aria-label={isFavoriteShop ? 'Retirer cette boutique de vos favoris' : 'Ajouter cette boutique à vos favoris'}
-              className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold transition sm:w-auto sm:gap-1.5 sm:px-3 ${isFavoriteShop ? 'border-[#c8dbd0] bg-[#d1fae5] text-[var(--mt-green-deep)]' : 'border-[#ded8ce] bg-white text-[#47534b] hover:border-[var(--mt-green-hover)]'}`}
+              className={`hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold transition sm:inline-flex sm:w-auto sm:gap-1.5 sm:px-3 ${isFavoriteShop ? 'border-[#c8dbd0] bg-[#d1fae5] text-[var(--mt-green-deep)]' : 'border-[#ded8ce] bg-white text-[#47534b] hover:border-[var(--mt-green-hover)]'}`}
             >
               <Bookmark className={`h-4 w-4 ${isFavoriteShop ? 'fill-current' : ''}`} />
               <span className="hidden sm:inline">{isFavoriteShop ? 'Enregistrée' : 'Enregistrer'}</span>
@@ -924,7 +923,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             <img
               src={bannerUrl}
               alt={`Illustration de la boutique ${shop.name}`}
-              className="mt-hero-image relative z-10 h-16 w-full object-cover sm:h-60 lg:h-64"
+              className="mt-hero-image relative z-10 h-60 w-full object-cover lg:h-64"
               onError={(event) => {
                 const element = event.currentTarget;
                 if (element.dataset.placeholderAttempted !== 'true' && element.src !== categoryDefaults.bannerPlaceholderImageUrl) {
@@ -935,14 +934,15 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 }
               }}
             />
-            <div className="absolute inset-0 z-20 bg-gradient-to-r from-slate-950/65 via-slate-950/20 to-transparent sm:bg-gradient-to-t sm:from-slate-950/75 sm:via-slate-950/10" />
+            <div className="absolute inset-0 z-20 bg-gradient-to-t from-slate-950/80 via-slate-950/25 to-transparent" />
             <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col items-start gap-2 p-3 sm:flex-row sm:items-end sm:justify-between sm:gap-3 sm:p-6">
               <div className="max-w-2xl text-white drop-shadow-sm">
-                <p className="hidden items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-white/90 backdrop-blur-sm sm:inline-flex">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                  {categoryDefaults.label} <span className="text-white/45">/</span> {shop.city || 'Côte d’Ivoire'}
+                <p className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-bold text-white/90 backdrop-blur-sm">
+                  {shop.merchant_verification_status === 'verified' && <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />}
+                  {shop.merchant_verification_status === 'verified' ? 'Vérifié · ' : ''}{categoryDefaults.label}
                 </p>
-                <p className="line-clamp-2 max-w-xl text-sm font-medium leading-5 text-white sm:mt-2 sm:line-clamp-2 sm:text-base sm:leading-6">{getWelcomeMessageForDisplay(shop.welcome_message, shop.category)}</p>
+                <h2 className="mt-2 line-clamp-3 font-display text-3xl font-extrabold leading-tight sm:text-4xl">{shop.name}</h2>
+                <p className="mt-1.5 line-clamp-2 max-w-xl text-sm font-medium leading-5 text-white/90 sm:text-base sm:leading-6">{getWelcomeMessageForDisplay(shop.welcome_message, shop.category)}</p>
               </div>
               <a href="#store-catalogue" className="hidden min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/70 bg-[var(--mt-surface)] px-3 py-1.5 text-xs font-extrabold text-[var(--mt-green-deep)] transition hover:-translate-y-0.5 hover:bg-white sm:inline-flex sm:min-h-11 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm">Découvrir la sélection<ArrowRight className="h-4 w-4" /></a>
             </div>
@@ -981,8 +981,38 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
         <div className="min-w-0">
+        <details className="mb-3 rounded-2xl border border-[#ded8ce] bg-white px-4 py-3.5 shadow-sm sm:mb-5 sm:p-5">
+          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+            <span className="flex items-center justify-between gap-2">
+              <span className="whitespace-nowrap text-[15px] font-black text-[var(--mt-gray-900)] sm:text-lg">Comment commander ?</span>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#d1fae5] px-2.5 py-1 text-xs font-bold text-[var(--mt-green-deep)]">3 étapes<ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /></span>
+            </span>
+          </summary>
+          <div className="mt-3 border-t border-[#eee8dc] pt-3">
+          <div className="grid auto-rows-fr gap-2 sm:grid-cols-3 sm:gap-3">
+            {[
+              { number: '01', title: 'Choisissez vos articles', description: 'Ajoutez vos envies au panier.' },
+              { number: '02', title: 'Écrivez à la boutique', description: 'Envoyez votre récapitulatif sur WhatsApp.' },
+              { number: '03', title: 'Convenez avec le commerçant', description: 'Retrait ou livraison : les modalités et frais sont confirmés avec lui.' },
+            ].map((step) => (
+              <div key={step.number} className="flex min-h-24 items-center gap-3 rounded-xl bg-[#f8f3ec] p-3 sm:min-h-28 sm:items-start sm:p-4">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#d1fae5] text-xs font-black text-[var(--mt-green-deep)]">{step.number}</span>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-black text-[var(--mt-gray-900)]">{step.title}</h3>
+                  <p className="mt-1 line-clamp-2 text-sm leading-5 text-[var(--mt-gray-600)]">{step.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 flex items-start gap-2 text-sm leading-5 text-[var(--mt-gray-600)]">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-green-hover)]" />
+            MaTable met en relation le client et la boutique et peut organiser la livraison dans les zones couvertes, avec des frais affichés au moment de la commande.
+          </p>
+          </div>
+        </details>
+        <span id="store-catalogue" className="block scroll-mt-24" aria-hidden="true" />
         {/* Catalog Section Header */}
-        <div id="store-catalogue" className="scroll-mt-24 mb-3 flex flex-col items-start justify-between gap-2 border-b border-[#ded8ce] pb-3 sm:flex-row sm:items-end sm:mb-4 sm:pb-4">
+        <div className="mb-3 hidden flex-col items-start justify-between gap-2 border-b border-[#ded8ce] pb-3 sm:flex sm:flex-row sm:items-end sm:mb-4 sm:pb-4">
           <div className="relative min-w-0 pl-4">
             <span aria-hidden="true" className="absolute bottom-1 left-0 top-1 w-[3px] rounded-full bg-[var(--mt-orange-deep)]" />
             <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-[#8c5a36]">{categoryDefaults.label} <span className="px-1 text-[#c5b6a3]">/</span> La sélection</p>
@@ -998,7 +1028,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
         {/* Search Bar & Category Filter */}
         {(products.length > 4 || categories.length > 1) && (
-        <div className="sticky top-[var(--storefront-header-h,4rem)] z-30 -mx-4 mb-3 flex flex-row items-center justify-between gap-2 border-y border-[#ded8ce] bg-[#faf8f3]/95 px-4 py-2 shadow-sm backdrop-blur-md sm:mb-5">
+        <div className="sticky top-[var(--storefront-header-h,4rem)] z-30 -mx-4 mb-3 flex flex-col gap-2 border-y border-[#ded8ce] bg-[#faf8f3]/95 px-4 py-2 shadow-sm backdrop-blur-md sm:mb-5 sm:flex-row sm:items-center sm:justify-between">
           {products.length > 4 && <div className="relative min-w-0 flex-1 sm:max-w-sm">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
             <input
@@ -1021,21 +1051,23 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           </div>}
 
           {categories.length > 1 && (
-            <label className="flex min-h-11 w-[7rem] shrink-0 items-center gap-2 rounded-xl border border-[#ded8ce] bg-[var(--mt-surface)] px-2 text-xs font-bold text-[var(--mt-gray-600)] shadow-[0_4px_14px_rgba(33,23,18,0.04)] sm:w-auto sm:gap-3 sm:px-3 sm:text-sm">
-              <span className="hidden shrink-0 sm:inline">Catégorie</span>
-              <select
-                aria-label="Filtrer les produits par catégorie"
-                value={selectedCategory}
-                onChange={(event) => setSelectedCategory(event.target.value)}
-                className="min-w-0 flex-1 bg-transparent py-2 text-xs text-[var(--mt-gray-900)] outline-none sm:w-56 sm:flex-none sm:text-sm"
-              >
-                <option value="all">Toutes les catégories ({products.length})</option>
-                {categories.map((category) => {
-                  const count = products.filter(product => product.category === category).length;
-                  return <option key={category} value={category}>{category} ({count})</option>;
-                })}
-              </select>
-            </label>
+            <div role="tablist" aria-label="Filtrer les produits par catégorie" className="flex w-full min-w-0 gap-1 overflow-x-auto rounded-full bg-[#e8e2d6] p-1 [scrollbar-width:none] sm:w-auto [&::-webkit-scrollbar]:hidden">
+              {['all', ...categories].map((category) => {
+                const active = selectedCategory === category;
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setSelectedCategory(category)}
+                    className={`min-h-10 flex-1 whitespace-nowrap rounded-full px-4 text-sm font-extrabold transition ${active ? 'bg-white text-[var(--mt-green-deep)] shadow-sm' : 'text-[var(--mt-gray-600)] hover:text-[var(--mt-gray-900)]'}`}
+                  >
+                    {category === 'all' ? 'Tout' : category}
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
         )}
@@ -1277,35 +1309,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           </div>
         )}
 
-        <details className="mt-4 rounded-2xl border border-[#ded8ce] bg-[var(--mt-surface)] px-4 py-3 shadow-[0_8px_24px_rgba(33,23,31,0.05)] sm:mt-8 sm:p-5">
-          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-            <span className="flex items-center justify-between gap-3">
-              <span className="text-sm font-black text-[var(--mt-gray-900)] sm:text-lg">Comment commander ?</span>
-              <span className="shrink-0 rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[var(--mt-green-deep)]">3 étapes</span>
-            </span>
-          </summary>
-          <div className="mt-3 border-t border-[#eee8dc] pt-3">
-          <div className="grid auto-rows-fr gap-2 sm:grid-cols-3 sm:gap-3">
-            {[
-              { number: '01', title: 'Choisissez vos articles', description: 'Ajoutez vos envies au panier.' },
-              { number: '02', title: 'Écrivez à la boutique', description: 'Envoyez votre récapitulatif sur WhatsApp.' },
-              { number: '03', title: 'Convenez avec le commerçant', description: 'Retrait ou livraison : les modalités et frais sont confirmés avec lui.' },
-            ].map((step) => (
-              <div key={step.number} className="flex min-h-24 items-center gap-3 rounded-xl bg-[#f8f3ec] p-3 sm:min-h-28 sm:items-start sm:p-4">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#d1fae5] text-xs font-black text-[var(--mt-green-deep)]">{step.number}</span>
-                <div className="min-w-0">
-                  <h3 className="text-sm font-black text-[var(--mt-gray-900)]">{step.title}</h3>
-                  <p className="mt-1 line-clamp-2 text-sm leading-5 text-[var(--mt-gray-600)]">{step.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-3 flex items-start gap-2 text-sm leading-5 text-[var(--mt-gray-600)]">
-            <Info className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-green-hover)]" />
-            MaTable met en relation le client et la boutique et peut organiser la livraison dans les zones couvertes, avec des frais affichés au moment de la commande.
-          </p>
-          </div>
-        </details>
 
         <details className="mt-8 rounded-xl border border-[#ded8ce] bg-[var(--mt-surface)] px-4 py-3 shadow-sm">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
@@ -1411,6 +1414,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         </div>
 
       </main>
+
+      {totalCartCount === 0 && !isCartOpen && <InstallAppPrompt shopName={shop.name} />}
 
       {/* 4. FLOATING BOTTOM BAR (Cart Summary) */}
       {totalCartCount > 0 && !isCartOpen && (
