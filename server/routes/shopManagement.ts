@@ -209,11 +209,35 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       'SELECT COUNT(*) AS count FROM merchant_push_subscriptions WHERE shop_id = ?',
       [shopId],
     );
+    const preferences = await dbGet<{ weekly_summary: number | string; reminders: number | string }>(
+      'SELECT weekly_summary, reminders FROM merchant_push_preferences WHERE shop_id = ?',
+      [shopId],
+    );
     return res.json({
       configured: Boolean(vapid),
       public_key: vapid?.publicKey || null,
       subscribed_devices: Number(subscriptions[0]?.count || 0),
+      preferences: {
+        weekly_summary: preferences ? Number(preferences.weekly_summary) === 1 : true,
+        reminders: preferences ? Number(preferences.reminders) === 1 : true,
+      },
     });
+  });
+
+  router.put('/:id/push/preferences', requireMerchantOwnShop, async (req, res) => {
+    const shopId = Number(req.params.id);
+    const { weekly_summary: weeklySummary, reminders } = req.body ?? {};
+    if (typeof weeklySummary !== 'boolean' || typeof reminders !== 'boolean') {
+      return res.status(400).json({ error: 'Préférences de notification invalides.' });
+    }
+    await dbRun(
+      `INSERT INTO merchant_push_preferences (shop_id, weekly_summary, reminders, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT (shop_id) DO UPDATE SET weekly_summary = excluded.weekly_summary,
+         reminders = excluded.reminders, updated_at = excluded.updated_at`,
+      [shopId, weeklySummary ? 1 : 0, reminders ? 1 : 0, new Date().toISOString()],
+    );
+    return res.json({ success: true, preferences: { weekly_summary: weeklySummary, reminders } });
   });
 
   router.put('/:id/push/subscription', requireMerchantOwnShop, async (req, res) => {

@@ -19,6 +19,17 @@ interface EligibleShop {
   created_at: string;
   publication_status: string | null;
   merchant_verification_status: string | null;
+  weekly_summary: number | string;
+  reminders: number | string;
+}
+
+// Les annonces automatiques ne partent qu'entre 08:00 et 20:00, heure d'Abidjan (UTC, sans heure d'été).
+export const QUIET_HOURS_START_UTC = 20;
+export const QUIET_HOURS_END_UTC = 8;
+
+export function isWithinQuietHours(now: Date) {
+  const hour = now.getUTCHours();
+  return hour >= QUIET_HOURS_START_UTC || hour < QUIET_HOURS_END_UTC;
 }
 
 export interface AutomatedAnnouncementResult {
@@ -55,11 +66,13 @@ async function getActivity(shopId: number, fromIso: string, toIso: string) {
 // Envoie les annonces déclenchées par l'état des boutiques. Chaque clé d'événement est
 // unique par boutique, donc un cycle répété ne renvoie jamais deux fois la même annonce.
 export async function runAutomatedMerchantAnnouncements(now = new Date()): Promise<AutomatedAnnouncementResult> {
-  if (!getVapidConfiguration()) return { checked: 0, queued: 0 };
+  if (!getVapidConfiguration() || isWithinQuietHours(now)) return { checked: 0, queued: 0 };
 
   const shops = await dbAll<EligibleShop>(
-    `SELECT s.id, s.name, s.created_at, s.publication_status, s.merchant_verification_status
+    `SELECT s.id, s.name, s.created_at, s.publication_status, s.merchant_verification_status,
+            COALESCE(pref.weekly_summary, 1) AS weekly_summary, COALESCE(pref.reminders, 1) AS reminders
      FROM shops s
+     LEFT JOIN merchant_push_preferences pref ON pref.shop_id = s.id
      WHERE s.is_active = 1
        AND EXISTS (SELECT 1 FROM merchant_push_subscriptions p WHERE p.shop_id = s.id)
      ORDER BY s.id ASC`,
@@ -88,7 +101,7 @@ export async function runAutomatedMerchantAnnouncements(now = new Date()): Promi
       await send(shop, 'auto-welcome', 'Alertes activées ✅', `Vous recevrez ici les commandes de ${shop.name}, les alertes de stock et les nouveautés MaTable.`, '/app');
 
       const verification = shop.merchant_verification_status || 'not_required';
-      if (ageMs >= DAY_MS && (verification === 'pending' || verification === 'rejected')) {
+      if (Number(shop.reminders) === 1 && ageMs >= DAY_MS && (verification === 'pending' || verification === 'rejected')) {
         await send(
           shop,
           `auto-identity-${verification}`,
@@ -101,11 +114,11 @@ export async function runAutomatedMerchantAnnouncements(now = new Date()): Promi
         );
       }
 
-      if (ageMs >= 2 * DAY_MS && await countRows('SELECT COUNT(*) AS count FROM products WHERE shop_id = ?', [shop.id]) === 0) {
+      if (Number(shop.reminders) === 1 && ageMs >= 2 * DAY_MS && await countRows('SELECT COUNT(*) AS count FROM products WHERE shop_id = ?', [shop.id]) === 0) {
         await send(shop, 'auto-no-products', 'Ajoutez votre premier produit', 'Votre boutique est vide. Ajoutez un produit pour recevoir vos premières commandes.', '/app');
       }
 
-      if (weeklyDue && new Date(shop.created_at).getTime() < weekStart.getTime()) {
+      if (Number(shop.weekly_summary) === 1 && weeklyDue && new Date(shop.created_at).getTime() < weekStart.getTime()) {
         const activity = await getActivity(shop.id, previousWeekIso, weekStart.toISOString());
         if (activity.visitors + activity.orders > 0) {
           await send(
@@ -118,7 +131,7 @@ export async function runAutomatedMerchantAnnouncements(now = new Date()): Promi
         }
       }
 
-      if (shop.publication_status === 'active' && ageMs >= 14 * DAY_MS) {
+      if (Number(shop.reminders) === 1 && shop.publication_status === 'active' && ageMs >= 14 * DAY_MS) {
         const activity = await getActivity(shop.id, inactivityFromIso, nowIso);
         if (activity.visitors + activity.orders === 0) {
           await send(shop, `auto-inactive-${monthKey}`, 'Votre boutique est calme', 'Aucune visite ni commande depuis 14 jours. Partagez votre lien ou votre QR code pour relancer l’activité.', '/app');

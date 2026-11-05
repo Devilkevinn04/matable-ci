@@ -77,6 +77,23 @@ test('automated announcements fire once per shop from shop state', async () => {
     assert.equal(stats.find((rule) => rule.id === 'welcome')?.shops_reached_30d, 3);
     assert.equal(stats.length, 6);
 
+    // Heures calmes : rien ne part la nuit, même un lundi.
+    const night = new Date('2026-11-16T22:30:00.000Z');
+    assert.deepEqual(await runAutomatedMerchantAnnouncements(night), { checked: 0, queued: 0 });
+    assert.equal(titles.length, sentCount);
+
+    // Un commerçant qui désactive les catégories ne reçoit que le message de bienvenue.
+    await insertShop(5, 30, 'active', 'pending');
+    await subscribe(5);
+    await database.dbRun('INSERT INTO merchant_push_preferences (shop_id, weekly_summary, reminders, updated_at) VALUES (5, 0, 0, ?)', [daysAgo(0)]);
+    await database.dbRun(
+      `INSERT INTO analytics_events (shop_id, event_type, session_id, created_at) VALUES (5, 'page_view', 'visitor-5', ?)`,
+      [new Date('2026-11-12T10:00:00.000Z').toISOString()],
+    );
+    await runAutomatedMerchantAnnouncements(new Date('2026-11-16T12:00:00.000Z'));
+    const optedOutKeys = await database.dbAll<{ event_key: string }>('SELECT event_key FROM merchant_push_deliveries WHERE shop_id = 5');
+    assert.deepEqual(optedOutKeys.map(({ event_key }) => event_key), ['auto-welcome']);
+
     delete process.env.VAPID_PUBLIC_KEY;
     delete process.env.VAPID_PRIVATE_KEY;
     delete process.env.VAPID_SUBJECT;

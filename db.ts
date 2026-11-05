@@ -510,6 +510,12 @@ function migrateSqlite(connection: Database.Database) {
     updated_at TEXT NOT NULL
   )`);
   connection.exec('CREATE INDEX IF NOT EXISTS idx_merchant_push_subscriptions_shop ON merchant_push_subscriptions(shop_id)');
+  connection.exec(`CREATE TABLE IF NOT EXISTS merchant_push_preferences (
+    shop_id INTEGER PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
+    weekly_summary INTEGER NOT NULL DEFAULT 1,
+    reminders INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL
+  )`);
   connection.exec(`CREATE TABLE IF NOT EXISTS merchant_push_deliveries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
@@ -820,6 +826,12 @@ export const postgresMigrations = [
     updated_at TEXT NOT NULL
   )`,
   'CREATE INDEX IF NOT EXISTS idx_merchant_push_subscriptions_shop ON merchant_push_subscriptions(shop_id)',
+  `CREATE TABLE IF NOT EXISTS merchant_push_preferences (
+    shop_id BIGINT PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
+    weekly_summary INTEGER NOT NULL DEFAULT 1,
+    reminders INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS merchant_push_deliveries (
     id BIGSERIAL PRIMARY KEY,
     shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,

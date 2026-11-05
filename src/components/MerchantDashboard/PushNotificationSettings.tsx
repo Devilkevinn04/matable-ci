@@ -6,6 +6,7 @@ interface PushConfiguration {
   configured: boolean;
   public_key: string | null;
   subscribed_devices: number;
+  preferences?: { weekly_summary: boolean; reminders: boolean };
 }
 
 function decodeApplicationServerKey(value: string) {
@@ -92,6 +93,25 @@ export const PushNotificationSettings: React.FC<PushNotificationSettingsProps> =
     }
   };
 
+  const updatePreference = async (key: 'weekly_summary' | 'reminders', value: boolean) => {
+    const current = configuration?.preferences ?? { weekly_summary: true, reminders: true };
+    const next = { ...current, [key]: value };
+    setError(null);
+    setConfiguration((previous) => previous ? { ...previous, preferences: next } : previous);
+    try {
+      const response = await fetch(`/api/shops/${shop.id}/push/preferences`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
+      });
+      if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Impossible d’enregistrer ce choix.');
+    } catch (preferenceError) {
+      setConfiguration((previous) => previous ? { ...previous, preferences: current } : previous);
+      setError(preferenceError instanceof Error ? preferenceError.message : 'Impossible d’enregistrer ce choix.');
+    }
+  };
+
   const disablePush = async () => {
     setBusy(true);
     setError(null);
@@ -140,6 +160,27 @@ export const PushNotificationSettings: React.FC<PushNotificationSettingsProps> =
       {supported && configuration && !configuration.configured && <p role="status" className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Le service Push n’est pas encore configuré sur le serveur.</p>}
       {permission === 'denied' && <p role="status" className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Les notifications sont bloquées par le navigateur. Réactivez-les dans les réglages du site pour pouvoir vous abonner.</p>}
       {error && <p role="alert" className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
+
+      {configuration?.configured && (
+        <fieldset className="mt-4 space-y-2 rounded-xl border border-[#e7dfd3] p-3">
+          <legend className="px-1 text-xs font-extrabold text-slate-700">Messages automatiques de MaTable</legend>
+          {([
+            ['weekly_summary', 'Résumé du lundi', 'Visiteurs et commandes de la semaine écoulée.'],
+            ['reminders', 'Conseils et relances', 'Premier produit, vérification d’identité, boutique calme.'],
+          ] as const).map(([key, label, hint]) => (
+            <label key={key} className="flex min-h-11 cursor-pointer items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-emerald-700"
+                checked={configuration.preferences?.[key] ?? true}
+                onChange={(event) => void updatePreference(key, event.target.checked)}
+              />
+              <span><span className="block font-bold text-slate-800">{label}</span><span className="block text-xs text-slate-500">{hint}</span></span>
+            </label>
+          ))}
+          <p className="text-xs text-slate-500">Les commandes, le stock et les échéances d’abonnement restent toujours actifs. Aucun message automatique n’est envoyé entre 20 h et 8 h.</p>
+        </fieldset>
+      )}
 
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-h-11 items-center gap-2 text-xs font-semibold text-slate-600" aria-live="polite">
