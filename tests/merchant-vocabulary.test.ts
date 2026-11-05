@@ -19,6 +19,11 @@ test('restauration et services parlent leur langue', () => {
   assert.equal(getMerchantVocabulary('services').soldOutBadge, 'Complet');
 });
 
+test('accord au féminin', () => {
+  assert.equal(getMerchantVocabulary('crafts').soldOutChip(1), '1 création épuisée');
+  assert.equal(getMerchantVocabulary('crafts').soldOutChip(2), '2 créations épuisées');
+});
+
 test('catégorie inconnue : vocabulaire générique', () => {
   const v = getMerchantVocabulary('zzz');
   assert.equal(v.addItem, 'Ajouter un article');

@@ -74,7 +74,7 @@ export function getMerchantVocabulary(category: unknown): MerchantVocabulary {
     soldOutFilter: noun.soldOut?.filter ?? 'Épuisés',
     lowStockBadge: noun.lowStock?.badge ?? 'Stock bas',
     lowStockFilter: noun.lowStock?.filter ?? 'Stock bas',
-    soldOutChip: (count) => `${count} ${pluralize(noun.singular, count)} ${noun.soldOut ? noun.soldOut.after(count) : `épuisé${count > 1 ? 's' : ''}`}`,
+    soldOutChip: (count) => `${count} ${pluralize(noun.singular, count)} ${noun.soldOut ? noun.soldOut.after(count) : `épuisé${noun.feminine ? 'e' : ''}${count > 1 ? 's' : ''}`}`,
     lowStockChip: (count) => (noun.lowStock
       ? `${count} ${pluralize(noun.singular, count)} ${noun.lowStock.after(count)}`
       : `${count} stock${count > 1 ? 's' : ''} bas`),
