@@ -522,7 +522,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                         </div>
                       )}
 
-                      <div className="mt-auto flex items-center justify-between border-t border-[#ece7de] pt-3">
+                      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-[#ece7de] pt-3">
                         <div className="flex items-center gap-1 rounded-xl border border-[#e7dfd3] bg-[#f8f5ef] p-1">
                           <button
                             type="button"
