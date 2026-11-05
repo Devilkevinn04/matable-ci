@@ -490,9 +490,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         </section>
       ) : isShopDirectoryPage ? (
         <section className="relative isolate overflow-hidden bg-[var(--mt-green-deep)] text-white">
-          <div aria-hidden="true" className="directory-orbit-slow pointer-events-none absolute -right-20 -top-36 -z-10 h-[470px] w-[470px] rounded-full border border-white/10 sm:right-[8%] sm:top-[-250px] sm:h-[700px] sm:w-[700px]" />
-          <div aria-hidden="true" className="directory-orbit-fast pointer-events-none absolute -right-5 top-20 -z-10 h-64 w-64 rounded-full border border-[var(--mt-orange-soft)]/20 sm:right-[15%] sm:top-8 sm:h-96 sm:w-96" />
-          <div className="mx-auto grid w-full max-w-[1280px] gap-9 px-5 pb-10 pt-8 sm:px-8 sm:pb-14 sm:pt-10 lg:grid-cols-[1fr_340px] lg:items-end lg:gap-16 lg:px-12 lg:pb-16 lg:pt-12">
+          <div className="mx-auto grid w-full max-w-[1280px] gap-7 px-5 pb-8 pt-7 sm:px-8 sm:pb-10 sm:pt-9 lg:grid-cols-[1fr_340px] lg:items-end lg:gap-10 lg:px-12 lg:pb-12 lg:pt-10">
             <MotionReveal className="min-w-0">
               <nav aria-label="Fil d’Ariane" className="mb-8 text-sm text-white/65">
                 <Link to="/" className="font-semibold text-white hover:underline">Accueil</Link>
@@ -502,7 +500,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <p className="mb-4 inline-flex items-center gap-2 text-xs font-bold text-[var(--mt-orange-soft)] sm:text-sm">
                 <span className="h-px w-7 bg-[var(--mt-orange-soft)]" aria-hidden="true" /> Le carnet des bonnes adresses
               </p>
-              <h1 className="max-w-3xl font-display text-4xl font-extrabold leading-[1.04] tracking-[-0.045em] sm:text-6xl lg:text-[68px]">
+              <h1 className="max-w-3xl font-display text-4xl font-extrabold leading-[1.04] tracking-[-0.045em] sm:text-6xl lg:text-[60px]">
                 Les boutiques qui font <span className="text-[var(--mt-orange-soft)]">vivre</span> nos quartiers.
               </h1>
               <p className="mt-5 max-w-xl text-base leading-7 text-[#e0ebe5] sm:text-lg">
@@ -763,7 +761,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         </div>
 
         {isShopDirectoryPage && (
-          <MotionReveal className="relative z-10 mb-5 overflow-hidden rounded-[24px] border border-white/90 bg-white/75 p-3 shadow-[0_8px_28px_rgba(40,52,43,.07)] backdrop-blur-sm sm:rounded-[28px] sm:p-5">
+          <MotionReveal className="relative z-10 mb-4 overflow-hidden rounded-[20px] border border-white/90 bg-white/75 p-3 shadow-[0_8px_28px_rgba(40,52,43,.07)] backdrop-blur-sm sm:rounded-[24px] sm:p-4">
             <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full bg-[#f3d9bb]/35 blur-2xl" />
             <div className="relative">
               <div className="mb-3 flex items-end justify-between gap-3">
@@ -839,10 +837,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         )}
 
         {isShopDirectoryPage && !directoryIsLoading && filteredShops.length > 0 && (
-          <MotionReveal className="relative z-10 mb-5 overflow-hidden rounded-[24px] border border-[#d6e5dc] bg-[#103e32] text-white shadow-[0_16px_38px_rgba(16,62,50,.12)] sm:mb-6 sm:rounded-[30px]" >
+          <MotionReveal className="relative z-10 mb-4 overflow-hidden rounded-[20px] border border-[#d6e5dc] bg-[#103e32] text-white shadow-[0_16px_38px_rgba(16,62,50,.12)] sm:rounded-[24px]" >
             <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full border-[18px] border-[#f5b77d]/20 sm:h-72 sm:w-72" />
             <div aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 h-20 w-40 rounded-tr-[80px] border-t border-r border-white/15" />
-            <div id="directory-stories" className="relative flex flex-col gap-5 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-7">
+            <div id="directory-stories" className="relative flex flex-col gap-4 p-4 sm:flex-row sm:items-end sm:justify-between sm:p-5">
               <div className="max-w-xl">
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-[#f5b77d]">Votre promenade commence ici</p>
                 <h2 className="mt-2 font-display text-2xl font-extrabold leading-tight tracking-[-0.03em] sm:text-4xl">Chaque vitrine raconte un quartier.</h2>
@@ -884,11 +882,11 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             {hasActiveDirectoryFilters && <button type="button" onClick={() => { setQuery(''); setCategory('all'); setOpenOnly(false); }} className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-4 py-2 text-sm font-bold text-white">Effacer les filtres <X className="h-4 w-4" /></button>}
           </div>
         ) : (
-          <div className={`relative z-10 grid items-stretch gap-3 sm:gap-4 lg:gap-5 max-[360px]:grid-cols-1 ${filteredShops.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+          <div className={`relative z-10 grid items-stretch gap-3 sm:gap-4 lg:grid-cols-3 lg:gap-5 max-[360px]:grid-cols-1 ${filteredShops.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
             {filteredShops.map((shop, index) => (
-              <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045} className={`${filteredShops.length === 1 ? 'mx-auto w-full max-w-[760px]' : ''} ${index % 2 === 1 ? 'sm:translate-y-5' : ''}`}>
+              <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045} className={`${filteredShops.length === 1 ? 'mx-auto w-full max-w-[760px]' : ''}`}>
               <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className={`directory-vitrine-card mt-press group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[#FFFFFF] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#047857] focus-visible:ring-offset-2 sm:rounded-[24px] ${index % 2 === 1 ? 'directory-vitrine-card-alt' : ''}`}>
-                <div className="relative aspect-[1.35] shrink-0 overflow-hidden sm:aspect-[1.65]" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
+                <div className="relative aspect-[1.45] shrink-0 overflow-hidden sm:aspect-[1.8]" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
                   <img {...getResponsiveImageProps(getShopImage(shop))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt="" loading="lazy" className="directory-vitrine-image absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]" onError={handlePublicImageError} />
                   <span className="absolute inset-0 bg-gradient-to-t from-[#17211f]/75 via-transparent to-[#17211f]/5" />
                   <span className="absolute bottom-3 left-3 rounded-full bg-[#FFFFFF]/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#065f46] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
