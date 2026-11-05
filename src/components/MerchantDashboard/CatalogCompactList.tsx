@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Check, Edit3, Eye, EyeOff, Minus, Plus } from 'lucide-react';
+import { Check, Clock, Edit3, Eye, EyeOff, Minus, Plus } from 'lucide-react';
 import type { Product, ShopCategory } from '../../types';
 import { formatFCFA } from '../../utils/format';
 import { getActiveProductPrice } from '../../utils/productPricing';
 import { CategoryProductImage } from '../CategoryProductImage';
+import { getCategoryDefaults } from '../../utils/categoryDefaults';
 
 interface CatalogCompactListProps {
   products: Product[];
@@ -74,9 +75,30 @@ const PriceButton: React.FC<{ product: Product; saleNow: number; onPriceChange: 
   );
 };
 
+/** Ligne d'information propre à la catégorie : tailles et couleurs pour la mode, durée et choix pour les plats. */
+function getRowDetails(product: Product, formType: 'fashion' | 'food' | 'standard'): { icon?: React.ReactNode; text: string } | null {
+  if (formType === 'fashion') {
+    const sizes = product.sizes?.length ? `Tailles ${product.sizes.join(' ')}` : '';
+    const colorCount = product.colors?.length ?? 0;
+    const colors = colorCount > 0 ? `${colorCount} couleur${colorCount > 1 ? 's' : ''}` : '';
+    const text = [sizes, colors].filter(Boolean).join(' · ');
+    return text ? { text } : null;
+  }
+  if (formType === 'food') {
+    const groups = product.modifier_groups?.length ?? 0;
+    const parts = [groups > 0 ? `${groups} choix` : ''].filter(Boolean);
+    if (!product.prep_time && parts.length === 0) return null;
+    return { icon: product.prep_time ? <Clock className="h-3 w-3" /> : undefined, text: [product.prep_time ? `${product.prep_time} min` : '', ...parts].filter(Boolean).join(' · ') };
+  }
+  return null;
+}
+
 export const CatalogCompactList: React.FC<CatalogCompactListProps> = ({
   products, category, saleNow, selectionMode, selectedIds, onToggleSelected, onStockChange, onToggleVisibility, onPriceChange, onEdit,
-}) => (
+}) => {
+  const formType = getCategoryDefaults(category).productFormType;
+  const stockUnit = formType === 'food' ? 'disponible' : 'en stock';
+  return (
   <ul className="space-y-2 sm:hidden">
     {products.map((product) => {
       const hidden = product.is_available === false;
@@ -113,6 +135,10 @@ export const CatalogCompactList: React.FC<CatalogCompactListProps> = ({
               />
               <span className="min-w-0">
                 <span className="line-clamp-2 text-sm font-extrabold leading-tight text-[var(--mt-gray-900)]">{product.title}</span>
+                {(() => {
+                  const details = getRowDetails(product, formType);
+                  return details ? <span className="mt-0.5 flex items-start gap-1 text-[11px] font-semibold text-slate-500">{details.icon}<span className="line-clamp-2">{details.text}</span></span> : null;
+                })()}
                 {hidden && <span className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold text-slate-500"><EyeOff className="h-3 w-3" />Masqué</span>}
               </span>
             </button>
@@ -132,7 +158,7 @@ export const CatalogCompactList: React.FC<CatalogCompactListProps> = ({
                   <Minus className="h-4 w-4" />
                 </button>
                 <span className={`min-w-14 px-1 text-center text-xs font-black ${product.stock <= 0 ? 'text-[#b93712]' : product.stock <= 3 ? 'text-[#a66a00]' : 'text-[var(--mt-gray-900)]'}`}>
-                  {product.stock <= 0 ? 'Épuisé' : `${product.stock} en stock`}
+                  {product.stock <= 0 ? 'Épuisé' : `${product.stock} ${stockUnit}`}
                 </span>
                 <button
                   type="button"
@@ -158,4 +184,5 @@ export const CatalogCompactList: React.FC<CatalogCompactListProps> = ({
       );
     })}
   </ul>
-);
+  );
+};
