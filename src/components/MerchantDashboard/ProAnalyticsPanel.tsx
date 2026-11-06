@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Eye, Megaphone, MousePointer2, Package, QrCode, RefreshCw, Route, ShoppingBag, Users, Wallet } from 'lucide-react';
+import { BarChart3, Eye, LockKeyhole, Megaphone, MousePointer2, Package, QrCode, RefreshCw, Route, ShoppingBag, Users, Wallet } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Shop } from '../../types';
-import { getSubscriptionAnalyticsDayLimit } from '../../utils/subscriptionFeatures';
+import { getSubscriptionAnalyticsDayLimit, isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
 import { AnalyticsDailyBars } from '../AnalyticsDailyBars';
 
 type DailyAnalytics = {
@@ -50,6 +50,7 @@ type CampaignAnalytics = {
 
 type ProAnalytics = {
   days: number;
+  advanced_analytics?: boolean;
   summary: {
     page_views: number;
     unique_visitors: number;
@@ -141,6 +142,8 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
   const [error, setError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const canUseAnalytics = shop.admin_mode || shop.subscription?.isActive === true;
+  const canUseAdvancedAnalytics = shop.admin_mode === true
+    || (shop.subscription?.isActive === true && isSubscriptionFeatureIncluded(shop.subscription?.plan, 'advanced_analytics'));
 
   useEffect(() => {
     setDays(compact ? Math.min(7, maxDays) : maxDays);
@@ -341,6 +344,22 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
         )}
       </section>
 
+      {!canUseAdvancedAnalytics && (
+        <section className="rounded-2xl border border-[#e7dfd3] bg-white p-5 sm:p-6">
+          <p className="inline-flex items-center gap-2 rounded-full bg-[#f4f7f3] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-800">
+            <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" /> Fonctionnalité Pro
+          </p>
+          <h3 className="mt-3 text-lg font-extrabold text-[#183b31]">Parcours, campagnes et audiences</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            La formule Pro débloque le parcours jusqu’à la commande, les pages les plus vues, les appareils, les audiences et les résultats détaillés de vos campagnes de partage.
+          </p>
+          <a href="/commercants" className="mt-4 inline-flex min-h-11 items-center justify-center rounded-full bg-[var(--mt-green-deep)] px-5 text-xs font-bold text-white transition hover:bg-[var(--mt-green-hover)]">
+            Découvrir la formule Pro
+          </a>
+        </section>
+      )}
+
+      {canUseAdvancedAnalytics && (<>
       <section aria-labelledby="merchant-funnel-title" className="overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white">
         <div className="border-b border-[#eee8dc] px-4 py-4 sm:px-5">
           <div className="flex items-center gap-2"><Route className="h-4 w-4 text-emerald-800" aria-hidden="true" /><h3 id="merchant-funnel-title" className="font-extrabold text-[#183b31]">Parcours jusqu’à la commande</h3></div>
@@ -438,6 +457,7 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
           <p className="px-4 py-8 text-center text-sm text-slate-500">Aucune campagne mesurée sur cette période. Partagez un lien avec <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">?src=</code> ou utilisez votre QR code pour suivre les retombées.</p>
         )}
       </section>
+      </>)}
 
       <div className="flex items-start gap-3 rounded-2xl border border-[#eadfce] bg-[#fffaf2] p-4 text-xs leading-5 text-[#6b6255]">
         <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-[#93602e]" aria-hidden="true" />

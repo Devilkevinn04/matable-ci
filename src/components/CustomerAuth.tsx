@@ -33,6 +33,11 @@ interface PendingOAuthProfile {
   last_name: string;
 }
 
+interface PendingOAuthLink {
+  email: string;
+  provider: 'google' | 'apple';
+}
+
 interface CustomerAuthProps {
   initialMode?: 'login' | 'register';
   onModeChange: (mode: 'login' | 'register') => void;
@@ -54,6 +59,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingOAuthProfile, setPendingOAuthProfile] = useState<PendingOAuthProfile | null>(null);
+  const [pendingOAuthLink, setPendingOAuthLink] = useState<PendingOAuthLink | null>(null);
   const [acceptedTermsPrivacy, setAcceptedTermsPrivacy] = useState(false);
   const requestedReturnTo = new URLSearchParams(window.location.search).get('return_to');
   const customerReturnTo = requestedReturnTo?.startsWith('/')
@@ -62,6 +68,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
     ? requestedReturnTo
     : '/compte';
   const normalizedError = error.toLocaleLowerCase();
+  const oauthLinkProviderLabel = pendingOAuthLink?.provider === 'apple' ? 'Apple' : 'Google';
   const duplicateAccountError = normalizedError.includes('compte existe déjà');
   const invalidCredentialsError = normalizedError.includes('identifiants invalides');
   const phoneFieldError = error && (normalizedError.includes('téléphone') || duplicateAccountError || (mode === 'login' && normalizedError.includes('requis')))
@@ -79,14 +86,28 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('oauth') === 'error') setError('La connexion Google/Apple n’a pas abouti. Réessayez ou utilisez votre adresse e-mail.');
-    if (params.get('oauth') !== 'complete') return;
+    const oauthState = params.get('oauth');
+    if (oauthState !== 'complete' && oauthState !== 'link') return;
 
     let active = true;
-    fetch('/api/auth/customer-oauth/pending', { credentials: 'include', cache: 'no-store' })
+    const endpoint = oauthState === 'link'
+      ? '/api/auth/customer-oauth/link-pending'
+      : '/api/auth/customer-oauth/pending';
+    fetch(endpoint, { credentials: 'include', cache: 'no-store' })
       .then(async (response) => {
         const data = await response.json();
-        if (!response.ok || !data.pending) throw new Error('Cette étape a expiré. Relancez la connexion sociale.');
+        if (!response.ok || !data.pending) {
+          throw new Error(oauthState === 'link'
+            ? 'Cette association a expiré. Relancez la connexion sociale.'
+            : 'Cette étape a expiré. Relancez la connexion sociale.');
+        }
         if (!active) return;
+        if (oauthState === 'link') {
+          setPendingOAuthLink({ email: data.email, provider: data.provider === 'apple' ? 'apple' : 'google' });
+          setMode('login');
+          setAccountType('customer');
+          return;
+        }
         setPendingOAuthProfile({ email: data.email, first_name: data.first_name || '', last_name: data.last_name || '' });
         setFirstName(data.first_name || '');
         setLastName(data.last_name || '');
@@ -104,6 +125,20 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
     setError('');
     setIsSubmitting(true);
     try {
+      if (pendingOAuthLink) {
+        const response = await fetch('/api/auth/customer-oauth/link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ password }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Impossible d’associer ce compte.');
+        trackLogin('customer', pendingOAuthLink.provider);
+        const returnTo = typeof data.return_to === 'string' && data.return_to.startsWith('/') && !data.return_to.startsWith('//') ? data.return_to : '/compte';
+        window.location.assign(returnTo);
+        return;
+      }
       if (pendingOAuthProfile) {
         const response = await fetch('/api/auth/customer-oauth/complete', {
           method: 'POST',
@@ -160,16 +195,16 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
       onTopAction={mode === 'register' && accountType === 'merchant' ? onMerchantLogin : () => switchMode(mode === 'login' ? 'register' : 'login')}
     >
       <div className="mb-6">
-        {mode === 'login' && !pendingOAuthProfile && (
+        {mode === 'login' && !pendingOAuthProfile && !pendingOAuthLink && (
           <AuthAudienceSwitcher
             activeAudience="customer"
             onSelectCustomer={() => undefined}
             onSelectMerchant={onMerchantLogin}
           />
         )}
-        <p className="text-sm font-bold text-[#c2410c]">{pendingOAuthProfile ? 'Presque terminé' : mode === 'login' ? 'Votre espace personnel' : 'Inscription gratuite'}</p>
-        <h2 className="mt-1 text-[30px] font-extrabold leading-tight text-[#292d2a]">{pendingOAuthProfile ? 'Finaliser le compte' : mode === 'login' ? 'Connexion' : accountType === 'merchant' ? 'Créer ma boutique' : 'Créer un compte'}</h2>
-        <p className="mt-2 text-sm leading-6 text-[#667168]">{pendingOAuthProfile ? `Compte associé à ${pendingOAuthProfile.email}. Ajoutez votre téléphone pour commander.` : mode === 'login' ? 'Accédez à votre compte MaTable.' : accountType === 'merchant' ? 'Renseignez les informations de votre boutique pour démarrer.' : 'Rejoignez MaTable en quelques secondes.'}</p>
+        <p className="text-sm font-bold text-[#c2410c]">{pendingOAuthProfile ? 'Presque terminé' : pendingOAuthLink ? 'Connexion sécurisée' : mode === 'login' ? 'Votre espace personnel' : 'Inscription gratuite'}</p>
+        <h2 className="mt-1 text-[30px] font-extrabold leading-tight text-[#292d2a]">{pendingOAuthProfile ? 'Finaliser le compte' : pendingOAuthLink ? 'Associer ce compte' : mode === 'login' ? 'Connexion' : accountType === 'merchant' ? 'Créer ma boutique' : 'Créer un compte'}</h2>
+        <p className="mt-2 text-sm leading-6 text-[#667168]">{pendingOAuthProfile ? `Compte associé à ${pendingOAuthProfile.email}. Ajoutez votre téléphone pour commander.` : pendingOAuthLink ? `Un compte MaTable existe déjà avec ${pendingOAuthLink.email}. Saisissez votre mot de passe pour y associer ${oauthLinkProviderLabel}.` : mode === 'login' ? 'Accédez à votre compte MaTable.' : accountType === 'merchant' ? 'Renseignez les informations de votre boutique pour démarrer.' : 'Rejoignez MaTable en quelques secondes.'}</p>
       </div>
 
       {mode === 'register' && !pendingOAuthProfile && (
@@ -187,16 +222,17 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
         <CustomerMerchantRegistrationForm onCreated={onMerchantRegister} onLogin={onMerchantLogin} />
       ) : (
         <form onSubmit={submit} className="space-y-4">
-          {!pendingOAuthProfile && <CustomerOAuthButtons returnTo={customerReturnTo} />}
+          {!pendingOAuthProfile && !pendingOAuthLink && <CustomerOAuthButtons returnTo={customerReturnTo} />}
           {mode === 'register' && <div className="grid gap-3 min-[390px]:grid-cols-2 sm:gap-4"><label className="block text-sm font-semibold text-[#47534b]">Prénom<input value={firstName} onChange={(event) => setFirstName(event.target.value)} required autoComplete="given-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="Votre prénom" /></label><label className="block text-sm font-semibold text-[#47534b]">Nom<input value={lastName} onChange={(event) => setLastName(event.target.value)} required autoComplete="family-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="Votre nom" /></label></div>}
           {mode === 'register' && <label className="block text-sm font-semibold text-[#47534b]">Numéro de téléphone<input type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="tel" aria-invalid={Boolean(phoneFieldError)} aria-describedby={phoneFieldError ? 'customer-phone-error' : undefined} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="+225 07 00 00 00 00" />{phoneFieldError && <span id="customer-phone-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{phoneFieldError}</span>}</label>}
-          {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#47534b]">Adresse e-mail<div className="relative mt-1.5"><Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#869188]" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" aria-invalid={Boolean(emailFieldError)} aria-describedby={emailFieldError ? 'customer-email-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-11 pr-4 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="vous@exemple.ci" /></div>{emailFieldError && <span id="customer-email-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{emailFieldError}</span>}</label>}
+          {pendingOAuthLink && <label className="block text-sm font-semibold text-[#47534b]">Adresse e-mail<input type="email" value={pendingOAuthLink.email} readOnly autoComplete="email" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-[#f7f6f1] px-4 py-3 text-sm font-normal text-[#292d2a] outline-none" /></label>}
+          {!pendingOAuthProfile && !pendingOAuthLink && <label className="block text-sm font-semibold text-[#47534b]">Adresse e-mail<div className="relative mt-1.5"><Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#869188]" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" aria-invalid={Boolean(emailFieldError)} aria-describedby={emailFieldError ? 'customer-email-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-11 pr-4 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="vous@exemple.ci" /></div>{emailFieldError && <span id="customer-email-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{emailFieldError}</span>}</label>}
           {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#47534b]">Mot de passe<div className="relative mt-1.5"><input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} aria-invalid={Boolean(passwordFieldError)} aria-describedby={passwordFieldError ? 'customer-password-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 pr-12 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="8 caractères minimum" /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} aria-pressed={showPassword} className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-[#647067] transition hover:bg-[#f3f1eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]">{showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}</button></div>{passwordFieldError && <span id="customer-password-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{passwordFieldError}</span>}</label>}
           {(pendingOAuthProfile || mode === 'register') && (
             <TermsPrivacyConsent id="customer-account-terms-privacy" checked={acceptedTermsPrivacy} onChange={setAcceptedTermsPrivacy} />
           )}
           {error && <p role="alert" className="rounded-xl border border-[#F97316]/30 bg-[#fff0e8] px-3 py-2.5 text-sm font-semibold text-[#a33e24]">{error}</p>}
-          <button type="submit" disabled={isSubmitting} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--mt-green-primary)] disabled:cursor-wait disabled:opacity-60">{isSubmitting ? 'Vérification...' : pendingOAuthProfile ? 'Terminer mon inscription' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'} <ArrowRight className="h-4 w-4" /></button>
+          <button type="submit" disabled={isSubmitting} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--mt-green-primary)] disabled:cursor-wait disabled:opacity-60">{isSubmitting ? 'Vérification...' : pendingOAuthLink ? 'Associer mon compte' : pendingOAuthProfile ? 'Terminer mon inscription' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'} <ArrowRight className="h-4 w-4" /></button>
           {mode === 'login' && <Link to="/recuperation-acces?type=customer" className="block text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[var(--mt-green-deep)]">Mot de passe oublié ?</Link>}
           <p className="flex items-center justify-center gap-2 pt-1 text-center text-xs text-[#778179]"><ShieldCheck className="h-4 w-4 text-[var(--mt-green-primary)]" /> Vos identifiants restent privés.</p>
         </form>

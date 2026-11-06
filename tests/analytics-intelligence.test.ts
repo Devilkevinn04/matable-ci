@@ -238,9 +238,39 @@ test('merchant analytics scope new sections to the shop', async () => {
   });
   assert.equal(batch.status, 204);
 
+  const standardResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/analytics?days=7`, { headers: { Cookie: cookie } });
+  assert.equal(standardResponse.status, 200);
+  const standardAnalytics = await standardResponse.json() as {
+    advanced_analytics: boolean;
+    audiences: unknown[];
+    top_pages: unknown[];
+    devices: unknown[];
+    funnel: unknown[];
+    co_viewed_products: unknown[];
+    campaigns: unknown[];
+  };
+  assert.equal(standardAnalytics.advanced_analytics, false);
+  assert.deepEqual(standardAnalytics.audiences, []);
+  assert.deepEqual(standardAnalytics.top_pages, []);
+  assert.deepEqual(standardAnalytics.devices, []);
+  assert.deepEqual(standardAnalytics.funnel, []);
+  assert.deepEqual(standardAnalytics.co_viewed_products, []);
+  assert.deepEqual(standardAnalytics.campaigns, []);
+
+  const database = new Database(TEST_DB_PATH);
+  try {
+    database.prepare(`
+      UPDATE shops SET subscription_status = 'active', selected_subscription_tier = 'pro', subscription_expires_at = ?
+      WHERE id = ?
+    `).run(new Date(Date.now() + 30 * 86400000).toISOString(), shopId);
+  } finally {
+    database.close();
+  }
+
   const response = await fetch(`${BASE_URL}/api/shops/${shopId}/analytics?days=7`, { headers: { Cookie: cookie } });
   assert.equal(response.status, 200);
   const analytics = await response.json() as {
+    advanced_analytics: boolean;
     summary: { qr_scans: number; qr_visitors: number };
     audiences: Array<{ audience: string }>;
     top_pages: Array<{ path: string }>;
@@ -253,6 +283,7 @@ test('merchant analytics scope new sections to the shop', async () => {
       whatsapp_clicks: number; conversion_rate: number;
     }>;
   };
+  assert.equal(analytics.advanced_analytics, true);
   assert.equal(analytics.summary.qr_scans, 1);
   assert.equal(analytics.summary.qr_visitors, 1);
   assert.ok(analytics.audiences.some((row) => row.audience === 'customer'));

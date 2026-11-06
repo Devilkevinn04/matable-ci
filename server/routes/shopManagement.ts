@@ -313,7 +313,26 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       ORDER BY views DESC, clicks DESC, p.id ASC
       LIMIT 10
     `, [shop.id, since]);
-    const [audienceRows, topPageRows, funnelRow, qrRow, deviceRows, coViewRows, campaignEventRows, campaignOrderRows, campaignWhatsappRows] = await Promise.all([
+    const canUseAdvancedAnalytics = req.adminShopAccess === true
+      || canUseSubscriptionFeature(shop, 'advanced_analytics');
+    const qrRow = await dbGet<{ scans: number; visitors: number }>(`
+      SELECT COUNT(*) AS scans, COUNT(DISTINCT session_id) AS visitors
+      FROM analytics_events
+      WHERE shop_id = ? AND event_type = 'page_view' AND campaign = 'qr' AND created_at >= ?
+    `, [shop.id, since]);
+    let audienceRows: Array<{ audience: string; events: number; sessions: number }> = [];
+    let topPageRows: Array<{ path: string; views: number; visitors: number }> = [];
+    let funnelRow: { visits: number; product_views: number; cart_adds: number; checkouts: number; orders: number } | undefined;
+    let deviceRows: Array<{ device: string; sessions: number; events: number }> = [];
+    let coViewRows: Array<{ product_a: number; product_b: number; title_a: string | null; title_b: string | null; sessions: number }> = [];
+    let campaignEventRows: Array<{
+      campaign: string; visits: number; visitors: number; product_views: number;
+      product_clicks: number; cart_adds: number; checkouts: number; order_events: number;
+    }> = [];
+    let campaignOrderRows: Array<{ campaign: string; orders: number; sales: number }> = [];
+    let campaignWhatsappRows: Array<{ campaign: string; whatsapp_clicks: number }> = [];
+    if (canUseAdvancedAnalytics) {
+      [audienceRows, topPageRows, funnelRow, deviceRows, coViewRows, campaignEventRows, campaignOrderRows, campaignWhatsappRows] = await Promise.all([
       dbAll<{ audience: string; events: number; sessions: number }>(`
         SELECT COALESCE(audience, 'unknown') AS audience, COUNT(*) AS events,
           COUNT(DISTINCT session_id) AS sessions
@@ -334,11 +353,6 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
           COUNT(DISTINCT CASE WHEN event_type = 'checkout_start' THEN session_id END) AS checkouts,
           COUNT(DISTINCT CASE WHEN event_type = 'order_created' THEN session_id END) AS orders
         FROM analytics_events WHERE shop_id = ? AND created_at >= ?
-      `, [shop.id, since]),
-      dbGet<{ scans: number; visitors: number }>(`
-        SELECT COUNT(*) AS scans, COUNT(DISTINCT session_id) AS visitors
-        FROM analytics_events
-        WHERE shop_id = ? AND event_type = 'page_view' AND campaign = 'qr' AND created_at >= ?
       `, [shop.id, since]),
       dbAll<{ device: string; sessions: number; events: number }>(`
         SELECT COALESCE(device, 'unknown') AS device, COUNT(DISTINCT session_id) AS sessions,
@@ -393,6 +407,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
         GROUP BY orders.attribution_campaign
       `, [shop.id, since]),
     ]);
+    }
     const campaignTotals = new Map<string, {
       campaign: string; visits: number; visitors: number; product_views: number;
       product_clicks: number; cart_adds: number; checkouts: number; order_events: number;
@@ -478,6 +493,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     res.json({
       days,
       since,
+      advanced_analytics: canUseAdvancedAnalytics,
       traffic_basis: 'consented_page_views',
       summary: {
         page_views: Number(totals[0]?.page_views || 0),
@@ -512,7 +528,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
         sessions: Number(row.sessions || 0),
         events: Number(row.events || 0),
       })),
-      funnel: funnelSteps.map((step, index) => ({
+      funnel: canUseAdvancedAnalytics ? funnelSteps.map((step, index) => ({
         ...step,
         conversion_from_previous: index === 0
           ? 100
@@ -522,7 +538,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
         conversion_from_visit: funnelSteps[0].count
           ? Number(((step.count / funnelSteps[0].count) * 100).toFixed(1))
           : 0,
-      })),
+      })) : [],
       co_viewed_products: coViewRows.map((row) => ({
         product_a: Number(row.product_a),
         product_b: Number(row.product_b),

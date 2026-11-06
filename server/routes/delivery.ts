@@ -43,6 +43,7 @@ const ACTIVE_DELIVERY_STATES = new Set(['accepted', 'to_pickup', 'picked_up']);
 interface DeliveryRouterOptions {
   hashAccessToken: (token: string) => string;
   hashPin: (pin: string) => string;
+  isWeakPin: (pin: unknown) => boolean;
   verifyPin: (pin: string, storedHash: string) => boolean;
   getCookie: (req: Request, name: string) => string | null;
   buildSessionFingerprint: (req: Request) => string;
@@ -210,6 +211,7 @@ function clearDriverCookie(res: Response) {
 export function createDeliveryRouter({
   hashAccessToken,
   hashPin,
+  isWeakPin,
   verifyPin,
   getCookie,
   buildSessionFingerprint,
@@ -316,6 +318,9 @@ export function createDeliveryRouter({
     const pin = typeof req.body?.pin === 'string' ? req.body.pin.trim() : '';
     if (name.length < 2 || !phone || !/^\d{6}$/.test(pin)) {
       return res.status(400).json({ error: 'Nom, numéro ivoirien valide et code PIN de 6 chiffres requis.' });
+    }
+    if (isWeakPin(pin)) {
+      return res.status(400).json({ error: 'Choisissez un code PIN plus difficile à deviner.' });
     }
     const existing = await dbGet<{ id: number }>('SELECT id FROM delivery_drivers WHERE phone = ?', [phone]);
     if (existing) return res.status(409).json({ error: 'Un compte livreur existe déjà pour ce numéro.' });

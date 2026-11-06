@@ -59,3 +59,20 @@ test('merchant analytics stays locked when the subscription is inactive', () => 
   assert.match(html, /Les statistiques sont accessibles pendant un essai ou un abonnement actif/);
   assert.doesNotMatch(html, /Articles qui attirent le plus/);
 });
+
+test('advanced analytics sections are reserved for the Pro plan', () => {
+  const standardShop = makeShop(true);
+  const standardHtml = renderToStaticMarkup(React.createElement(ProAnalyticsPanel, { shop: standardShop }));
+  assert.match(standardHtml, /Fonctionnalité Pro/);
+  assert.doesNotMatch(standardHtml, /Campagnes et partages/);
+  assert.doesNotMatch(standardHtml, /Parcours jusqu’à la commande/);
+
+  const proShop = {
+    ...standardShop,
+    subscription: { ...standardShop.subscription!, plan: 'pro' as const },
+  };
+  const proHtml = renderToStaticMarkup(React.createElement(ProAnalyticsPanel, { shop: proShop }));
+  assert.doesNotMatch(proHtml, /Fonctionnalité Pro/);
+  assert.match(proHtml, /Campagnes et partages/);
+  assert.match(proHtml, /Parcours jusqu’à la commande/);
+});

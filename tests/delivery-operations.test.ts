@@ -127,6 +127,13 @@ test('delivery operations can be enabled without exposing sandbox payments', asy
   assert.equal(zones.response.status, 200);
   assert.deepEqual(zones.payload.zones, []);
 
+  const weakPinRegistration = await api('/api/delivery/drivers/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Livreur PIN faible', phone: '+2250700000043', pin: '123456' }),
+  });
+  assert.equal(weakPinRegistration.response.status, 400);
+
   const registration = await api<{ driver: { id: number; status: string; identity_status: string } }>('/api/delivery/drivers/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

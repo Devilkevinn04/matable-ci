@@ -42,6 +42,16 @@ interface PendingCustomerOAuthProfile {
   expiresAt: number;
 }
 
+interface PendingCustomerOAuthLink {
+  provider: CustomerOAuthProvider;
+  providerUserId: string;
+  email: string;
+  userId: number;
+  returnTo: string;
+  expiresAt: number;
+  attempts: number;
+}
+
 const GOOGLE_OIDC_KEYS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 const APPLE_OIDC_KEYS = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
 const TERMS_DOCUMENT = '/cgu';
@@ -148,7 +158,9 @@ export function createAuthRouter(options: AuthRouterOptions) {
 
   const oauthTransactions = new Map<string, CustomerOAuthTransaction>();
   const pendingOAuthProfiles = new Map<string, PendingCustomerOAuthProfile>();
+  const pendingOAuthLinks = new Map<string, PendingCustomerOAuthLink>();
   const pendingOAuthCookie = 'matable_oauth_pending';
+  const pendingOAuthLinkCookie = 'matable_oauth_link';
 
   const oauthProviderEnabled = (provider: CustomerOAuthProvider) => provider === 'google'
     ? Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET)
@@ -354,7 +366,11 @@ export function createAuthRouter(options: AuthRouterOptions) {
     for (const [key, profile] of pendingOAuthProfiles) {
       if (profile.expiresAt <= Date.now()) pendingOAuthProfiles.delete(key);
     }
+    for (const [key, link] of pendingOAuthLinks) {
+      if (link.expiresAt <= Date.now()) pendingOAuthLinks.delete(key);
+    }
     if (oauthTransactions.size >= 1000) oauthTransactions.delete(oauthTransactions.keys().next().value || '');
+    if (pendingOAuthLinks.size >= 1000) pendingOAuthLinks.delete(pendingOAuthLinks.keys().next().value || '');
 
     const state = randomUUID();
     const nonce = randomUUID();
@@ -459,10 +475,36 @@ export function createAuthRouter(options: AuthRouterOptions) {
           [email],
         );
         if (existingUser) {
-          if (!existingUser.is_active || !(await linkCustomerOAuthIdentity(provider, providerUserId, existingUser.id, email))) {
-            return res.redirect(303, oauthError.toString());
+          if (!existingUser.is_active) return res.redirect(303, oauthError.toString());
+          const linkedIdentityCount = await dbGet<{ count: number | string }>(
+            'SELECT COUNT(*) AS count FROM customer_oauth_identities WHERE user_id = ?',
+            [existingUser.id],
+          );
+          if (Number(linkedIdentityCount?.count || 0) > 0) {
+            if (!(await linkCustomerOAuthIdentity(provider, providerUserId, existingUser.id, email))) {
+              return res.redirect(303, oauthError.toString());
+            }
+            user = existingUser;
+          } else {
+            // An email/password account exists: never link a social identity
+            // without proof that the visitor controls that account.
+            const linkId = randomUUID();
+            pendingOAuthLinks.set(linkId, {
+              provider,
+              providerUserId,
+              email,
+              userId: existingUser.id,
+              returnTo: transaction.returnTo,
+              expiresAt: Date.now() + 10 * 60 * 1000,
+              attempts: 0,
+            });
+            const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+            res.setHeader('Set-Cookie', `${pendingOAuthLinkCookie}=${encodeURIComponent(linkId)}; Path=/api/auth/customer-oauth; HttpOnly; SameSite=Lax; Max-Age=600${secure}`);
+            const linkUrl = new URL('/connexion', getOAuthOrigin(req));
+            linkUrl.searchParams.set('oauth', 'link');
+            linkUrl.searchParams.set('return_to', transaction.returnTo);
+            return res.redirect(303, linkUrl.toString());
           }
-          user = existingUser;
         } else {
           let providerName: { firstName?: string; lastName?: string } = {};
           if (provider === 'apple' && typeof req.body?.user === 'string') {
@@ -503,6 +545,58 @@ export function createAuthRouter(options: AuthRouterOptions) {
 
   router.get('/customer-oauth/:provider/callback', rateLimitPublicRequest(30), customerOAuthCallback);
   router.post('/customer-oauth/:provider/callback', rateLimitPublicRequest(30), customerOAuthCallback);
+
+  const clearPendingOAuthLinkCookie = (res: Response) => {
+    const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+    res.append('Set-Cookie', `${pendingOAuthLinkCookie}=; Path=/api/auth/customer-oauth; HttpOnly; SameSite=Lax; Max-Age=0${secure}`);
+  };
+
+  router.get('/customer-oauth/link-pending', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const linkId = getCookie(req, pendingOAuthLinkCookie) || '';
+    const pending = pendingOAuthLinks.get(linkId);
+    if (!pending || pending.expiresAt <= Date.now()) {
+      if (pending) pendingOAuthLinks.delete(linkId);
+      return res.json({ pending: false });
+    }
+    return res.json({ pending: true, email: pending.email, provider: pending.provider });
+  });
+
+  router.post('/customer-oauth/link', rateLimitPublicRequest(10), async (req, res) => {
+    const linkId = getCookie(req, pendingOAuthLinkCookie) || '';
+    const pending = pendingOAuthLinks.get(linkId);
+    if (!pending || pending.expiresAt <= Date.now()) {
+      if (pending) pendingOAuthLinks.delete(linkId);
+      clearPendingOAuthLinkCookie(res);
+      return res.status(401).json({ error: 'Cette association a expiré. Recommencez la connexion sociale.' });
+    }
+
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    if (!password) return res.status(400).json({ error: 'Mot de passe requis pour associer ce compte.' });
+
+    const user = await dbGet<CustomerProfileRow & { is_active: number; password_hash: string }>(
+      'SELECT id, name, first_name, last_name, phone, email, created_at, is_active, password_hash FROM users WHERE id = ?',
+      [pending.userId],
+    );
+    const passwordMatches = Boolean(user?.is_active)
+      && bcrypt.compareSync(password, user?.password_hash || dummyCustomerPasswordHash);
+    if (!user || !passwordMatches) {
+      pending.attempts += 1;
+      if (pending.attempts >= 5) pendingOAuthLinks.delete(linkId);
+      return res.status(401).json({ error: 'Mot de passe incorrect.' });
+    }
+
+    if (!(await linkCustomerOAuthIdentity(pending.provider, pending.providerUserId, user.id, pending.email))) {
+      pendingOAuthLinks.delete(linkId);
+      clearPendingOAuthLinkCookie(res);
+      return res.status(409).json({ error: 'Cette identité sociale est déjà liée à un autre compte.' });
+    }
+
+    pendingOAuthLinks.delete(linkId);
+    clearPendingOAuthLinkCookie(res);
+    const profile = await createCustomerSession(req, res, user);
+    return res.json({ success: true, user: profile, return_to: safeOAuthReturnTo(pending.returnTo) });
+  });
 
   router.post('/customer-oauth/complete', rateLimitPublicRequest(20), async (req, res) => {
     const pendingId = getCookie(req, pendingOAuthCookie) || '';

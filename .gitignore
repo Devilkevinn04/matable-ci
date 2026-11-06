@@ -4,6 +4,7 @@ dist/
 coverage/
 .DS_Store
 .idea/
+.vscode/
 __MACOSX/
 *.zip
 *.log

@@ -73,3 +73,19 @@ test('Render host page views redirect to the public domain, API and webhooks do 
   assert.equal(getPublicDomainRedirect({ ...base, nodeEnv: 'development', path: '/', originalUrl: '/' }), null);
   assert.equal(getPublicDomainRedirect({ ...base, appUrl: '', path: '/', originalUrl: '/' }), null);
 });
+
+test('HTTP redirects prefer the configured public origin over a forged Host header', async () => {
+  const { getSecureRedirectUrl } = await import('../server/services/hostRedirect.ts');
+  assert.equal(
+    getSecureRedirectUrl({ appUrl: 'https://matable-ci.com', host: 'evil.example', originalUrl: '/compte?x=1' }),
+    'https://matable-ci.com/compte?x=1',
+  );
+  assert.equal(
+    getSecureRedirectUrl({ appUrl: 'http://localhost:3000', host: '127.0.0.1:3000', originalUrl: '/faq' }),
+    'https://127.0.0.1:3000/faq',
+  );
+  assert.equal(
+    getSecureRedirectUrl({ appUrl: '', host: 'matable-ci.com', originalUrl: '/' }),
+    'https://matable-ci.com/',
+  );
+});

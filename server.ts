@@ -79,7 +79,7 @@ import { normalizeCustomerPhone } from './src/utils/normalizeCustomerPhone.ts';
 import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from './src/utils/subscriptionFeatures.ts';
 import type { ShopCategory } from './src/utils/categoryDefaults.ts';
 import { findPublicDiscoveryPage } from './src/utils/discoverySeo.ts';
-import { getPublicDomainRedirect } from './server/services/hostRedirect.ts';
+import { getPublicDomainRedirect, getSecureRedirectUrl } from './server/services/hostRedirect.ts';
 import { PUBLIC_PRODUCT_IMAGE_PATH, parseRequestedImageWidth, resizeProductImage, resolveProductImageRequest } from './server/services/publicProductImages.ts';
 
 export { buildSessionFingerprint, isRequestFingerprintMatch };
@@ -920,7 +920,11 @@ async function startServer() {
     const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
     const isSecureRequest = req.secure || forwardedProto === 'https';
     if (process.env.NODE_ENV === 'production' && !isSecureRequest) {
-      return res.redirect(308, `https://${req.get('host')}${req.originalUrl}`);
+      return res.redirect(308, getSecureRedirectUrl({
+        appUrl: process.env.APP_URL,
+        host: req.get('host'),
+        originalUrl: req.originalUrl,
+      }));
     }
     const host = String(req.headers.host || '').toLowerCase().split(':')[0];
     const acceptsHtml = String(req.headers.accept || '').includes('text/html');
@@ -929,8 +933,11 @@ async function startServer() {
       && (req.method === 'GET' || req.method === 'HEAD')
       && acceptsHtml
     ) {
-      const canonicalOrigin = new URL(String(process.env.APP_URL)).origin;
-      return res.redirect(308, `${canonicalOrigin}${req.originalUrl}`);
+      return res.redirect(308, getSecureRedirectUrl({
+        appUrl: process.env.APP_URL,
+        host: req.get('host'),
+        originalUrl: req.originalUrl,
+      }));
     }
     next();
   });
@@ -1214,6 +1221,7 @@ async function startServer() {
     app.use('/api', createDeliveryRouter({
       hashAccessToken,
       hashPin,
+      isWeakPin: isWeakShopPin,
       verifyPin,
       getCookie,
       buildSessionFingerprint,

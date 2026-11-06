@@ -1,4 +1,23 @@
 /**
+ * Builds the HTTPS URL used when a request arrives over HTTP. The configured
+ * public origin wins so a forged Host header cannot redirect visitors elsewhere.
+ */
+export function getSecureRedirectUrl(input: {
+  appUrl: string | undefined;
+  host: string | undefined;
+  originalUrl: string;
+}): string {
+  const configured = String(input.appUrl || '').trim().replace(/\/$/, '');
+  try {
+    const parsed = new URL(configured);
+    if (parsed.protocol === 'https:') return `${parsed.origin}${input.originalUrl}`;
+  } catch {
+    // Fall back to the request host below.
+  }
+  return `https://${String(input.host || '').trim()}${input.originalUrl}`;
+}
+
+/**
  * Visitors who reach the Render host (old links, TikTok bio) move to the public domain.
  * Only page views are redirected: API calls, webhooks, media and the health check keep
  * working on the Render host so providers configured with it are not broken.
