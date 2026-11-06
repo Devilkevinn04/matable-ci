@@ -221,8 +221,8 @@ export function AdminShopList({
                     }}
                     className="max-w-48 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
                   >
-                    <option value="" disabled>☆ Mettre à la une…</option>
-                    {isFeatured && <option value="featured">★ À la une</option>}
+                    <option value="" disabled>Choisir une mise en avant…</option>
+                    {isFeatured && <option value="featured">À la une</option>}
                     {isFeatured && <option value="0">Retirer de la une</option>}
                     <option value="7">7 jours</option>
                     <option value="14">14 jours</option>

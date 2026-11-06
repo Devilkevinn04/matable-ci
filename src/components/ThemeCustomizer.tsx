@@ -40,7 +40,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
     logo_url: shop.theme_config?.logo_url || '',
     event_mode_enabled: shop.theme_config?.event_mode_enabled || false,
     event_type: normalizeShopEventType(shop.theme_config?.event_type),
-    event_banner_text: shop.theme_config?.event_banner_text || '🎉 VENTES FLASH DU MOMENT — LIVRAISON EXPRESS À ABIDJAN',
+    event_banner_text: shop.theme_config?.event_banner_text || 'VENTES FLASH DU MOMENT — LIVRAISON EXPRESS À ABIDJAN',
     advanced_css: {
       borderRadius: shop.theme_config?.advanced_css?.borderRadius || 'rounded-xl',
       shadowIntensity: shop.theme_config?.advanced_css?.shadowIntensity || 'subtle',
@@ -58,7 +58,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
     logo_url: shop.theme_config?.logo_url || '',
     event_mode_enabled: shop.theme_config?.event_mode_enabled || false,
     event_type: normalizeShopEventType(shop.theme_config?.event_type),
-    event_banner_text: shop.theme_config?.event_banner_text || '🎉 VENTES FLASH DU MOMENT — LIVRAISON EXPRESS À ABIDJAN',
+    event_banner_text: shop.theme_config?.event_banner_text || 'VENTES FLASH DU MOMENT — LIVRAISON EXPRESS À ABIDJAN',
     advanced_css: {
       borderRadius: shop.theme_config?.advanced_css?.borderRadius || 'rounded-xl',
       shadowIntensity: shop.theme_config?.advanced_css?.shadowIntensity || 'subtle',
@@ -624,7 +624,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                   }`}
                 >
-                  <span>👗 Portrait 3:4 (Fashion)</span>
+                  <span>Portrait 3:4 (Fashion)</span>
                   <p className="text-[10px] font-normal opacity-80 mt-0.5">Idéal vêtements & mannequins</p>
                 </button>
 
@@ -638,7 +638,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                   }`}
                 >
-                  <span>🍲 Paysage 16:9 / Carré (Food)</span>
+                  <span>Paysage 16:9 / Carré (Food)</span>
                   <p className="text-[10px] font-normal opacity-80 mt-0.5">Idéal plats & grillades</p>
                 </button>
               </div>

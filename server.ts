@@ -1363,7 +1363,7 @@ async function startServer() {
             'Content-Type': 'text/html',
             'Cache-Control': 'no-store',
             'Referrer-Policy': 'no-referrer',
-          }).end(injectNoIndexSeo(transformed, 'Espace commerçant | MaTable-ci.com'));
+          }).end(injectNoIndexSeo(transformed, 'Espace commerçant | MaTable'));
         } catch (error) {
           return next(error);
         }
@@ -1374,7 +1374,7 @@ async function startServer() {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Aperçu des formules commerçants | MaTable-ci.com'));
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Aperçu des formules commerçants | MaTable'));
         } catch (error) {
           return next(error);
         }
@@ -1385,7 +1385,7 @@ async function startServer() {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Aperçus mobiles | MaTable-ci.com'));
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Aperçus mobiles | MaTable'));
         } catch (error) {
           return next(error);
         }
@@ -1398,7 +1398,7 @@ async function startServer() {
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
           return res.status(200)
             .set({ 'Content-Type': 'text/html', 'Cache-Control': 'no-store' })
-            .end(injectNoIndexSeo(transformed, 'Aperçu test livreur | MaTable-ci.com'));
+            .end(injectNoIndexSeo(transformed, 'Aperçu test livreur | MaTable'));
         } catch (error) {
           return next(error);
         }
@@ -1411,7 +1411,7 @@ async function startServer() {
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
           return res.status(200)
             .set({ 'Content-Type': 'text/html', 'Cache-Control': 'no-store' })
-            .end(injectNoIndexSeo(transformed, 'Aperçu local | MaTable-ci.com'));
+            .end(injectNoIndexSeo(transformed, 'Aperçu local | MaTable'));
         } catch (error) {
           return next(error);
         }
@@ -1537,7 +1537,7 @@ async function startServer() {
           const indexHtmlPath = path.join(process.cwd(), 'index.html');
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Espace MaTable-ci.com'));
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Espace MaTable'));
         } catch (error) {
           return next(error);
         }
@@ -1574,7 +1574,7 @@ async function startServer() {
             'Content-Type': 'text/html',
             'Cache-Control': 'no-store',
             'Referrer-Policy': 'no-referrer',
-          }).send(injectNoIndexSeo(baseHtml, 'Espace commerçant | MaTable-ci.com'));
+          }).send(injectNoIndexSeo(baseHtml, 'Espace commerçant | MaTable'));
       }
 
       const seoShops = await loadShopsFromDatabase();
@@ -1640,7 +1640,7 @@ async function startServer() {
       }
 
       if (isPrivateSeoPath(req.path) && baseHtml && shouldServePublicHtml(req)) {
-        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectNoIndexSeo(baseHtml, 'Espace MaTable-ci.com'));
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectNoIndexSeo(baseHtml, 'Espace MaTable'));
       }
       if (isFrontendPagePath(req.path) && shouldServePublicHtml(req)) {
         return res.status(404).set({ 'Content-Type': 'text/html' }).send(injectNoIndexSeo(baseHtml, 'Page introuvable | MaTable'));
@@ -1650,7 +1650,7 @@ async function startServer() {
   }
 
   app.listen(PORT, process.env.HOST || '0.0.0.0', () => {
-    console.log(`Server MaTable-ci.com running on port ${PORT}`);
+    console.log(`Server MaTable running on port ${PORT}`);
     void processSubscriptionAutomation();
   });
 }

@@ -1,6 +1,7 @@
 import { ArrowRight, BadgeCheck, BarChart3, Check, Clock3, MapPin, MessageCircle, Package, Sparkles, Store, Truck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { CategoryIcon } from './CategoryIcon';
 import {
   DEFAULT_SUBSCRIPTION_PRO_FEATURES,
   getSubscriptionPlanBenefits,
@@ -122,12 +123,12 @@ export function MerchantPlansPage() {
                   <div className="flex items-center justify-between"><p className="text-[10px] font-black">Produits en vitrine</p><span className="text-[9px] font-bold text-[#087c5b]">Voir la boutique ↗</span></div>
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     {[
-                      { icon: '👜', name: 'Sac artisanal', price: '12 500 F' },
-                      { icon: '👔', name: 'Chemise lin', price: '16 000 F' },
-                      { icon: '🧴', name: 'Soin karité', price: '4 500 F' },
+                      { category: 'fashion', name: 'Sac artisanal', price: '12 500 F' },
+                      { category: 'fashion', name: 'Chemise lin', price: '16 000 F' },
+                      { category: 'beauty', name: 'Soin karité', price: '4 500 F' },
                     ].map((product) => (
                       <div key={product.name} className="min-w-0 overflow-hidden rounded-lg bg-[#f5f3ed]">
-                        <div className="flex aspect-[1.3] items-center justify-center bg-[#eaf2e9] text-3xl" aria-hidden="true">{product.icon}</div>
+                        <div className="flex aspect-[1.3] items-center justify-center bg-[#eaf2e9] text-[#047857]"><CategoryIcon category={product.category} className="h-6 w-6" /></div>
                         <p className="truncate px-2 pt-2 text-[9px] font-bold">{product.name}</p>
                         <p className="px-2 pb-2 pt-1 text-[9px] font-black text-[var(--mt-green-hover)]">{product.price}</p>
                       </div>

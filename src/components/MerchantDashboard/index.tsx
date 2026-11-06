@@ -31,6 +31,7 @@ import {
   MoreHorizontal,
   Bell,
   BookOpen,
+  Star,
 } from 'lucide-react';
 import { OrderStatus } from '../../types';
 import { formatFCFA } from '../../utils/format';
@@ -1199,7 +1200,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#e2eee8] text-xs font-black text-[var(--mt-green-hover)]">{review.author_name.slice(0, 2).toLocaleUpperCase()}</span>
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-[var(--mt-gray-900)]">{review.author_name} <span className="font-normal text-slate-500">· {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(review.created_at))}</span></p>
-                        <p className="mt-1 text-xs font-bold text-[#93602e]" aria-label={`${review.rating} sur 5 étoiles`}>{'★'.repeat(Math.max(0, Math.min(5, Math.round(review.rating))))}</p>
+                        <p className="mt-1 inline-flex text-[#93602e]" aria-label={`${review.rating} sur 5 étoiles`}>{Array.from({ length: 5 }, (_, index) => <Star key={index} className={`h-3 w-3 ${index < Math.round(review.rating) ? 'fill-current' : 'text-slate-300'}`} aria-hidden="true" />)}</p>
                         <p className="mt-1 break-words text-xs leading-5 text-slate-600">{review.comment}</p>
                       </div>
                     </article>

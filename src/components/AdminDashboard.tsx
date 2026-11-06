@@ -31,6 +31,7 @@ import {
   X,
   Megaphone,
   Tag,
+  Star,
 } from 'lucide-react';
 import { AdminIdentityVerificationPanel, statusLabels as verificationStatusLabels } from './AdminIdentityVerificationPanel';
 import { AdminShopList } from './AdminShopList';
@@ -2838,7 +2839,7 @@ export const AdminDashboard: React.FC = () => {
                 {contentModeration.reviews.length === 0 ? <p className="py-4 text-sm text-slate-500">Aucun avis en attente.</p> : contentModeration.reviews.map((review) => (
                   <article key={review.id} className="py-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div><p className="text-sm font-bold text-slate-900">{review.target_type === 'shop' ? review.shop_name : review.product_title || review.shop_name} · {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</p><p className="mt-1 text-xs text-slate-500">{review.customer_name || 'Client'} · {new Date(review.created_at).toLocaleString('fr-FR')}</p></div>
+                      <div><p className="text-sm font-bold text-slate-900">{review.target_type === 'shop' ? review.shop_name : review.product_title || review.shop_name} · <span className="inline-flex text-amber-500" aria-label={`${review.rating} sur 5`}>{Array.from({ length: 5 }, (_, index) => <Star key={index} className={`h-3.5 w-3.5 ${index < review.rating ? 'fill-current' : 'text-slate-300'}`} aria-hidden="true" />)}</span></p><p className="mt-1 text-xs text-slate-500">{review.customer_name || 'Client'} · {new Date(review.created_at).toLocaleString('fr-FR')}</p></div>
                       <div className="flex gap-2"><button type="button" onClick={() => void moderateContent('reviews', review.id, 'approved')} className="min-h-9 rounded-lg bg-emerald-700 px-3 text-xs font-bold text-white">Publier</button><button type="button" onClick={() => void moderateContent('reviews', review.id, 'hidden')} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700">Masquer</button></div>
                     </div>
                     {review.comment && <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{review.comment}</p>}

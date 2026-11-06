@@ -27,7 +27,7 @@ function record(ok, label, detail = '') {
 const forwardedProto = String(process.env.SMOKE_FORWARDED_PROTO || '').trim();
 
 async function request(path) {
-  const headers = { 'User-Agent': 'MaTable-ci.com-production-smoke/1.0' };
+  const headers = { 'User-Agent': 'MaTable-production-smoke/1.0' };
   if (forwardedProto) headers['X-Forwarded-Proto'] = forwardedProto;
   const response = await fetch(`${baseUrl}${path}`, {
     redirect: 'follow',

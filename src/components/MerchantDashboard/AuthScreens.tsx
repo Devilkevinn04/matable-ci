@@ -235,7 +235,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                         className="min-h-11 w-full rounded-xl border border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-bold text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10"
                       >
                         {shopCategoryOptions.map((option) => (
-                          <option key={option.value} value={option.value}>{option.icon} {option.label}</option>
+                          <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
                       </select>
                     </div>

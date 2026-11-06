@@ -572,7 +572,7 @@ export default function App() {
       <a href="#main-content" className="skip-link">Aller au contenu</a>
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-1 origin-left bg-[var(--mt-orange-deep)] shadow-[0_1px_8px_rgba(190,83,43,.35)] transition-[transform,opacity] duration-500"
+        className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-1 origin-left bg-[var(--mt-orange-deep)] shadow-[0_1px_8px_rgba(190,83,43,.35)] transition-[transform,opacity] duration-300"
         style={{ transform: routeProgressVisible ? 'scaleX(1)' : 'scaleX(0)', opacity: routeProgressVisible ? 1 : 0 }}
       />
       <div className="min-h-screen flex flex-col bg-transparent font-sans">

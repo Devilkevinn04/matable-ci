@@ -9,7 +9,7 @@
     <path d="M17 64V27h10l17 20 17-20h10v37H60V44L44 62 28 44v20H17Z" fill="#FFFDF8"/>
     <circle cx="66" cy="19" r="8" fill="#F97316"/>
     <path d="M66 14v10M61 19h10" stroke="#FFFDF8" stroke-linecap="round" stroke-width="2.5"/>
-    <text x="108" y="48" fill="#103E32" font-family="Arial, sans-serif" font-size="36" font-weight="800">MaTable<tspan fill="#F97316">-ci.com</tspan></text>
+    <text x="108" y="48" fill="#103E32" font-family="Arial, sans-serif" font-size="36" font-weight="800">Ma<tspan fill="#F97316">Table</tspan></text>
     <text x="110" y="72" fill="#587067" font-family="Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="2">VOS COMMERCES, ICI.</text>
   </g>
   <text x="82" y="296" fill="#103E32" font-family="Arial, sans-serif" font-size="67" font-weight="800" letter-spacing="-2">Le commerce local,</text>

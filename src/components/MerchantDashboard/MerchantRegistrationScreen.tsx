@@ -102,7 +102,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
               <label className="block text-sm font-semibold text-[#47534b]">
                 Activité
                 <select value={regCategory} onChange={(event) => setRegCategory(event.target.value as ShopCategory)} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10">
-                  {SHOP_CATEGORIES.map((category) => <option key={category} value={category}>{getCategoryDefaults(category).icon} {getCategoryDefaults(category).label}</option>)}
+                  {SHOP_CATEGORIES.map((category) => <option key={category} value={category}>{getCategoryDefaults(category).label}</option>)}
                 </select>
               </label>
               <label className="block text-sm font-semibold text-[#47534b]">

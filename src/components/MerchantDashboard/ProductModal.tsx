@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, X, Upload, Boxes } from 'lucide-react';
+import { CheckCircle2, Plus, Trash2, X, Upload, Boxes } from 'lucide-react';
 import { MerchantState } from './useMerchant';
 import { parseProductChoices, serializeProductChoices, splitModifierOption, joinModifierOption, collectReusableModifierGroups, MODIFIER_GROUP_PRESETS } from './productForm';
 import type { ProductModifierGroupDraft } from './productForm';
@@ -503,8 +503,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                       <p className="mt-2 text-[11px] text-slate-500">Choisissez une photo dans votre téléphone ou votre ordinateur. Elle sera préparée automatiquement.</p>
                       {imageCompressing && <span className="mt-2 block text-[11px] font-bold text-amber-700">Optimisation de la photo en cours...</span>}
                       {compressedSizeKB && (
-                        <span className="mt-2 block text-[11px] font-bold text-emerald-600">
-                          ✓ Photo prête : {originalImageSizeKB || '?'} KB → {compressedSizeKB} KB
+                        <span className="mt-2 flex items-center gap-1 text-[11px] font-bold text-emerald-600">
+                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Photo prête : {originalImageSizeKB || '?'} KB → {compressedSizeKB} KB
                         </span>
                       )}
                     </div>

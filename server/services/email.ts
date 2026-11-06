@@ -82,7 +82,7 @@ function renderBrandedEmail(params: {
                   <img src="${escapeHtml(logoUrl)}" width="34" height="34" alt="MaTable" style="display:block;width:34px;height:34px;border:0;border-radius:9px;" />
                 </td>
                 <td style="vertical-align:middle;padding-left:12px;font-family:${EMAIL_FONT};">
-                  <div style="font-size:17px;font-weight:800;line-height:1.1;letter-spacing:-0.2px;color:#FFFFFF;">MaTable<span style="color:${BRAND.accent};">-ci.com</span></div>
+                  <div style="font-size:17px;font-weight:800;line-height:1.1;letter-spacing:-0.2px;color:#FFFFFF;">Ma<span style="color:${BRAND.accent};">Table</span></div>
                   <div style="margin-top:3px;font-size:9px;font-weight:700;line-height:1.2;letter-spacing:1.6px;text-transform:uppercase;color:#B9DCCF;">Vos commerces, ici.</div>
                 </td>
               </tr>

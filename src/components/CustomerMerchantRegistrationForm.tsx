@@ -134,7 +134,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
               <label className="block text-sm font-semibold text-[#47534b]">
                 Activité
                 <select value={category} onChange={(event) => setCategory(event.target.value as ShopCategory)} className={fieldClass}>
-                  {SHOP_CATEGORIES.map((item) => <option key={item} value={item}>{getCategoryDefaults(item).icon} {getCategoryDefaults(item).label}</option>)}
+                  {SHOP_CATEGORIES.map((item) => <option key={item} value={item}>{getCategoryDefaults(item).label}</option>)}
                 </select>
               </label>
               <label className="block text-sm font-semibold text-[#47534b]">
