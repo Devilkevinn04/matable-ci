@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { hashAmbassadorToken } from './ambassadors.ts';
+import { normalizeAmbassadorCode } from '../../src/utils/ambassadors.ts';
 import { Router, type RequestHandler } from 'express';
 import { databaseMode, dbTransaction } from '../../db.ts';
 import { addCalendarMonths } from '../../src/utils/subscriptionFeatures.ts';
@@ -195,7 +197,18 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
           await transaction.get('SELECT pg_advisory_xact_lock(?)', [slugLockKey]);
         }
       }
+      const referralToken = typeof req.body?.ambassador_token === 'string' ? req.body.ambassador_token : '';
+      const click = /^[a-f0-9]{64}$/.test(referralToken)
+        ? await transaction.get<{ ambassador_id: string }>(
+          `SELECT c.ambassador_id FROM ambassador_clicks c JOIN ambassadors a ON a.id = c.ambassador_id
+           WHERE c.token_hash = ? AND c.expires_at > ? AND a.active = 1`,
+          [hashAmbassadorToken(referralToken), now.toISOString()],
+        ) : undefined;
+      const manualCode = normalizeAmbassadorCode(req.body?.ambassador_code);
+      const ambassador = click || (manualCode ? await transaction.get<{ ambassador_id: string }>('SELECT id AS ambassador_id FROM ambassadors WHERE code = ? AND active = 1', [manualCode]) : undefined);
+      if (!click && typeof req.body?.ambassador_code === 'string' && req.body.ambassador_code.trim() && !ambassador) return 'invalid_ambassador_code';
       await persistShopInTransaction(newShop, transaction);
+      if (ambassador) await transaction.run('INSERT INTO ambassador_referrals (shop_id, ambassador_id, created_at) VALUES (?, ?, ?)', [newShop.id, ambassador.ambassador_id, now.toISOString()]);
       await transaction.run(
         'INSERT INTO merchant_account_consents (shop_id, terms_document, privacy_document, accepted_at) VALUES (?, ?, ?, ?)',
         [newShop.id, '/cgu', '/confidentialite', now.toISOString()],
@@ -213,6 +226,9 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     }
     if (registrationResult === 'duplicate_email') {
       return res.status(409).json({ error: 'Cette adresse e-mail est déjà associée à un compte marchand.' });
+    }
+    if (registrationResult === 'invalid_ambassador_code') {
+      return res.status(400).json({ error: 'Ce code ambassadeur est invalide ou désactivé.' });
     }
 
     try {

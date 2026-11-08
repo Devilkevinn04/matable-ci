@@ -37,13 +37,13 @@ export const CookieBanner: React.FC = () => {
       <div className="cookie-banner-copy">
         <ShieldCheck className="h-5 w-5 shrink-0 text-[var(--mt-green-primary)]" aria-hidden="true" />
         <p>
-          Cookies essentiels actifs. Autorisez-vous l’analyse d’audience facultative ?
+          Les liens ambassadeurs peuvent mémoriser un identifiant pendant 90 jours pour attribuer une inscription au bon partenaire, indépendamment de votre choix sur les statistiques d’audience.
           <Link to="/cookies"> Personnaliser</Link>
         </p>
       </div>
       <div className="cookie-banner-actions">
-        <button type="button" onClick={() => choose(false)} className="cookie-button cookie-button-secondary">Refuser tout</button>
-        <button type="button" onClick={() => choose(true)} className="cookie-button cookie-button-primary">Accepter tout</button>
+        <button type="button" onClick={() => choose(false)} className="cookie-button cookie-button-secondary">Refuser les statistiques</button>
+        <button type="button" onClick={() => choose(true)} className="cookie-button cookie-button-primary">Autoriser les statistiques</button>
       </div>
     </section>
   );

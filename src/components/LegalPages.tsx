@@ -23,7 +23,7 @@ const CookiePreferenceControls: React.FC = () => {
   return (
     <section className="mt-6 rounded-xl border border-[#dce4dc] bg-white p-4" aria-labelledby="cookie-preferences-title">
       <h2 id="cookie-preferences-title">Vos préférences</h2>
-      <p>Les traceurs essentiels restent actifs. Vous pouvez autoriser ou refuser les statistiques de fréquentation, puis modifier ce choix ici à tout moment.</p>
+      <p>Les statistiques de fréquentation sont facultatives et désactivées par défaut. L’attribution des inscriptions provenant d’un lien ambassadeur est distincte des statistiques : un identifiant est conservé jusqu’à 90 jours pour attribuer l’inscription au bon partenaire.</p>
       <label className="mt-4 flex min-h-11 items-center gap-3 text-sm font-semibold text-slate-800">
         <input type="checkbox" checked={analyticsEnabled} onChange={(event) => { setAnalyticsEnabled(event.target.checked); setMessage(''); }} />
         Autoriser les statistiques de fréquentation
@@ -73,7 +73,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
           <p className="legal-kicker">MaTable · Côte d’Ivoire</p>
           <h1>{content.title}</h1>
           <p>{content.intro}</p>
-          <small>Dernière mise à jour : 10 octobre 2026</small>
+          <small>Dernière mise à jour : 8 novembre 2026</small>
         </header>
 
         {page === 'mentions-legales' && (
@@ -112,6 +112,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
               <h2>Données traitées</h2>
               <p>Pour créer un compte client, nous traitons le prénom, le nom, le téléphone, l’adresse e-mail et le mot de passe sous forme hachée. Si vous choisissez Google ou Apple, nous recevons l’identifiant propre à ce fournisseur et les informations de profil qu’il transmet, notamment l’e-mail vérifié et, lorsqu’il est disponible, le nom. Le mot de passe de votre compte Google ou Apple ne nous est jamais transmis. Les informations du compte client sont distinctes de l’abonnement d’une boutique. Lorsque vous êtes connecté, vos favoris de boutiques et de produits ainsi que vos mentions « J’aime » sur les produits sont associés à votre compte. Les favoris restent privés; seul le nombre total de mentions « J’aime » par produit est affiché publiquement.</p>
               <p>Pour une commande, nous traitons le nom, le téléphone, le lieu et les indications de livraison, le créneau éventuel, les articles, quantités, options, montant recalculé, statut, date et l’identifiant du compte client associé. Le moyen de paiement enregistré est une préférence (espèces, mobile money, Wave ou à convenir), et non une donnée de carte ou une preuve de paiement. Un client connecté peut recevoir le récapitulatif à l’adresse de son compte; un client invité peut saisir une adresse facultative au checkout. Cette adresse invitée est transmise à Resend pour l’envoi du récapitulatif et n’est pas enregistrée dans la commande.</p>
+              <p>Pour gérer le programme ambassadeur, MaTable traite le nom, l’adresse e-mail, le code partenaire, le mot de passe sous forme hachée et les sessions de connexion. L’espace personnel affiche les boutiques attribuées, l’état de publication, les paiements d’abonnement et les commissions associées, sans afficher les coordonnées de contact des commerçants. Lors d’une demande de retrait, le portefeuille mobile money choisi et le numéro de réception sont communiqués au Super-admin pour effectuer manuellement le transfert. Les demandes, références et dates de versement sont conservées pour l’historique et le contrôle.</p>
               <p>Lorsqu’un commerçant active le rappel WhatsApp, nous enregistrons son choix et sa date de consentement. Si l’intégration WhatsApp Business est configurée, le numéro WhatsApp de la boutique, son nom et la date d’échéance de l’abonnement sont transmis à Meta pour envoyer le modèle de rappel approuvé. Pour un renouvellement lancé par le commerçant, GeniusPay reçoit les données nécessaires au paiement et achemine la transaction vers ses passerelles; MaTable conserve l’intention, le montant, la formule, le statut, la référence fournisseur et les dates de traitement. MaTable ne stocke pas de numéro de carte bancaire.</p>
             </section>
             <section>
@@ -125,7 +126,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             </section>
             <section>
               <h2>Finalités et bases d’utilisation</h2>
-              <p>Les données servent à créer et gérer les comptes, mémoriser les boutiques et produits favoris, afficher les mentions « J’aime » agrégées, traiter les commandes et leur suivi, envoyer le récapitulatif de commande demandé, assurer la vérification des commerçants, effectuer les renouvellements demandés, fournir l’assistance, protéger les comptes et prévenir les abus. Les statistiques de fréquentation ne sont enregistrées que si vous les autorisez dans la bannière ou sur la page Cookies. Les rappels automatiques d’échéance par WhatsApp ne sont envoyés qu’aux commerçants ayant activé cette option; le consentement peut être retiré dans les réglages de l’abonnement. Les données nécessaires à une fonctionnalité sont utilisées pour la fournir; les statistiques et les rappels reposent sur vos choix.</p>
+              <p>Les données servent à créer et gérer les comptes, mémoriser les boutiques et produits favoris, afficher les mentions « J’aime » agrégées, traiter les commandes et leur suivi, attribuer les inscriptions marchandes issues des liens ambassadeurs et calculer les commissions correspondantes, envoyer le récapitulatif de commande demandé, assurer la vérification des commerçants, effectuer les renouvellements demandés, fournir l’assistance, protéger les comptes et prévenir les abus. Les statistiques de fréquentation ne sont enregistrées que si vous les autorisez dans la bannière ou sur la page Cookies. Les rappels automatiques d’échéance par WhatsApp ne sont envoyés qu’aux commerçants ayant activé cette option; le consentement peut être retiré dans les réglages de l’abonnement. Les données nécessaires à une fonctionnalité sont utilisées pour la fournir; les statistiques et les rappels reposent sur vos choix.</p>
             </section>
             <section>
               <h2>Comptes clients, commandes et services tiers</h2>
@@ -188,15 +189,16 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
           <div className="legal-content">
             <section>
               <h2>Stockage nécessaire au service</h2>
-              <p>Les cookies d’authentification HttpOnly et SameSite=Lax maintiennent les sessions client, commerçant et administrateur et sont supprimés à la déconnexion ou à leur expiration. Le choix de consentement est enregistré dans le stockage local du navigateur. Le panier de commande et certains identifiants temporaires sont conservés dans le stockage de session du navigateur; ils ne sont pas des cookies.</p>
+              <p>Les cookies d’authentification HttpOnly et SameSite=Lax maintiennent les sessions client, commerçant, ambassadeur et administrateur et sont supprimés à la déconnexion ou à leur expiration. Le choix de consentement est enregistré dans le stockage local du navigateur. Lorsqu’un lien ambassadeur est utilisé, un identifiant de parrainage aléatoire est conservé dans le stockage local pendant 90 jours au maximum afin d’attribuer une inscription marchande au partenaire correspondant; il ne sert pas aux statistiques d’audience. Le panier de commande et certains identifiants temporaires sont conservés dans le stockage de session du navigateur; ils ne sont pas des cookies.</p>
             </section>
             <section>
               <h2>Statistiques facultatives</h2>
               <p>Si vous y consentez, MaTable enregistre des événements de consultation sur ses propres serveurs : identifiant de session aléatoire, boutique consultée, chemin de page, vues de produits, clics sur l’ajout au panier et dates correspondantes. L’identifiant temporaire est conservé dans le stockage de session du navigateur. Ces événements servent à produire des statistiques internes et sont pseudonymisés, mais ne sont pas présentés comme anonymes. L’application n’utilise actuellement pas de cookie d’analyse tiers ni de régie publicitaire.</p>
+              <p>L’attribution via un lien ambassadeur est distincte des statistiques facultatives et reste active même si vous refusez celles-ci. L’identifiant aléatoire sert uniquement à rattacher une inscription marchande au partenaire et à assurer le suivi des commissions; il expire au plus tard après 90 jours. Les attributions déjà enregistrées sont conservées pour le suivi des commissions.</p>
             </section>
             <section>
               <h2>Gestion de vos choix</h2>
-              <p>Les traceurs essentiels ne peuvent pas être désactivés depuis ce réglage, car ils sont nécessaires au service. Les statistiques facultatives restent désactivées jusqu’à votre accord. Vous pouvez modifier votre choix avec le contrôle ci-dessous; le lien « Cookies » du pied de page permet de revenir à cette page.</p>
+              <p>Les statistiques facultatives restent désactivées jusqu’à votre accord. L’attribution des liens ambassadeurs est indépendante de ce choix et se limite au rattachement des inscriptions marchandes et au calcul des commissions. Vous pouvez modifier votre choix concernant les statistiques avec le contrôle ci-dessous; le lien « Cookies » du pied de page permet de revenir à cette page.</p>
             </section>
             <section>
               <h2>Durée et stockage</h2>

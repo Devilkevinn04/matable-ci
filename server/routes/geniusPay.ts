@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Router, type Request, type RequestHandler } from 'express';
-import { databaseMode, dbAll, dbGet, dbRun, dbTransaction } from '../../db.ts';
+import { databaseMode, dbAll, dbGet, dbRun, dbTransaction, type DatabaseTransaction } from '../../db.ts';
 import { computeIsShopOpen, getShopPublicationBlockReason, getSubscriptionPlanConfig, getSubscriptionState, normalizeWhatsAppPhone } from '../services/businessRules.ts';
 import { createGeniusPayCheckout, getGeniusPayPayment, getRenewedSubscriptionExpiry, GeniusPayApiError, isValidGeniusPaySignature } from '../services/geniusPay.ts';
 import {
@@ -21,6 +21,7 @@ import {
   getBoostCapacityScope,
 } from '../services/boosts.ts';
 import { BOOST_PLACEMENTS, getBoostPrice } from '../../src/utils/boostPricing.ts';
+import { calculateAmbassadorCommission } from '../../src/utils/ambassadors.ts';
 
 interface GeniusPayRouterOptions {
   shops: ShopRecord[];
@@ -151,6 +152,7 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
         return { status: 'boost_paid' as const, paymentId: payment.id };
       }
 
+      if (databaseMode === 'postgresql') await transaction.get('SELECT id FROM shops WHERE id = ? FOR UPDATE', [payment.shop_id]);
       const shopRecord = await transaction.get<{
         name: string;
         owner_email: string | null;
@@ -199,6 +201,16 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
         SET status = 'paid', provider_reference = ?, paid_at = ?
         WHERE id = ? AND status IN ('pending', 'expired')`, [input.providerReference, paidAt, payment.id]);
       if (paid.changes !== 1) return { status: 'duplicate' as const };
+      const referral = await transaction.get<{ ambassador_id: string }>('SELECT ambassador_id FROM ambassador_referrals WHERE shop_id = ?', [payment.shop_id]);
+      if (referral) {
+        const earlierPayment = await transaction.get<{ id: string }>(
+          `SELECT id FROM subscription_payment_intents WHERE shop_id = ? AND payment_type = 'subscription'
+           AND id <> ? AND status IN ('paid', 'refunded') LIMIT 1`, [payment.shop_id, payment.id],
+        );
+        if (!earlierPayment) await transaction.run(`INSERT INTO ambassador_commissions
+          (shop_id, ambassador_id, payment_id, amount, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (shop_id) DO NOTHING`,
+        [payment.shop_id, referral.ambassador_id, payment.id, calculateAmbassadorCommission(Number(payment.amount), payment.subscription_term), paidAt]);
+      }
       const updatedShop = await transaction.run(`UPDATE shops
         SET subscription_status = CASE WHEN subscription_admin_suspended_at IS NOT NULL THEN 'suspended' ELSE 'active' END,
           selected_subscription_tier = ?, subscription_tier = ?,
@@ -400,6 +412,27 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
     }
   };
 
+  const cancelPendingAmbassadorWithdrawalForRefund = async (transaction: DatabaseTransaction, paymentId: string, now: string) => {
+    const commission = await transaction.get<{ withdrawal_id: string | null }>(
+      'SELECT withdrawal_id FROM ambassador_commissions WHERE payment_id = ?', [paymentId],
+    );
+    if (!commission?.withdrawal_id) return;
+    const withdrawal = await transaction.get<{ status: string }>(
+      'SELECT status FROM ambassador_withdrawals WHERE id = ?', [commission.withdrawal_id],
+    );
+    if (!withdrawal || !['requested', 'approved'].includes(withdrawal.status)) return;
+    const cancelled = await transaction.run(`UPDATE ambassador_withdrawals
+      SET status = 'rejected', processed_at = ?, admin_reason = ?
+      WHERE id = ? AND status IN ('requested', 'approved')`,
+    [now, 'Demande annulée automatiquement après remboursement du paiement lié.', commission.withdrawal_id]);
+    if (cancelled.changes !== 1) return;
+    await transaction.run(`UPDATE ambassador_commissions SET status = 'approved', withdrawal_id = NULL
+      WHERE withdrawal_id = ? AND status = 'withdrawal_requested'`, [commission.withdrawal_id]);
+    await transaction.run(`INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at)
+      VALUES ('system', 'ambassador_withdrawal_cancelled_refund', NULL, ?, ?)`,
+    [JSON.stringify({ withdrawal_id: commission.withdrawal_id, payment_id: paymentId }), now]);
+  };
+
   const applyProviderStatus = async (input: {
     paymentId: string;
     providerReference: string;
@@ -429,6 +462,9 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       if (payment.status !== 'paid') return 'mismatch' as const;
       const refundedAmount = input.refundedAmount ?? input.amount;
       if (refundedAmount < Number(payment.amount)) {
+        await cancelPendingAmbassadorWithdrawalForRefund(transaction, input.paymentId, new Date().toISOString());
+        await transaction.run(`UPDATE ambassador_commissions SET status = CASE WHEN status = 'paid' THEN 'refund_review' ELSE 'cancelled' END
+          WHERE payment_id = ? AND status IN ('pending', 'approved', 'withdrawal_requested', 'paid')`, [input.paymentId]);
         await transaction.run(`INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at)
           VALUES ('system', 'geniuspay_partial_refund_review', ?, ?, ?)`, [payment.shop_id, JSON.stringify({
           payment_id: input.paymentId,
@@ -443,6 +479,9 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       const refunded = await transaction.run(`UPDATE subscription_payment_intents SET status = 'refunded'
         WHERE id = ? AND status = 'paid'`, [input.paymentId]);
       if (refunded.changes !== 1) return 'duplicate' as const;
+      await cancelPendingAmbassadorWithdrawalForRefund(transaction, input.paymentId, new Date().toISOString());
+      await transaction.run(`UPDATE ambassador_commissions SET status = CASE WHEN status = 'paid' THEN 'refund_review' ELSE 'cancelled' END
+        WHERE payment_id = ? AND status IN ('pending', 'approved', 'withdrawal_requested', 'paid')`, [input.paymentId]);
       if (payment.payment_type === 'promotion') {
         await transaction.run(`UPDATE shop_boosts SET status = 'cancelled', reservation_expires_at = NULL
           WHERE payment_intent_id = ? AND status IN ('scheduled', 'active')`, [input.paymentId]);

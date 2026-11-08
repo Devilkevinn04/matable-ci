@@ -8,6 +8,7 @@ import { TermsPrivacyConsent } from './TermsPrivacyConsent';
 import { ACQUISITION_SOURCES, normalizeAcquisitionSource } from '../utils/acquisitionSources';
 import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from '../utils/analyticsAttribution';
 import { hasAnalyticsConsent } from '../utils/cookieConsent';
+import { getAmbassadorToken } from '../utils/ambassadors';
 import { MerchantRegistrationProgress, MerchantShopPreview } from './AuthExperienceLayout';
 
 interface CustomerMerchantRegistrationFormProps {
@@ -33,6 +34,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
   const [showPin, setShowPin] = useState(false);
   const [email, setEmail] = useState('');
   const [acceptedTermsPrivacy, setAcceptedTermsPrivacy] = useState(false);
+  const [ambassadorCode, setAmbassadorCode] = useState('');
   // Campaign from ?src= / utm_source, kept only when the visitor accepted audience analytics.
   const [trackedCampaign] = useState(() => (hasAnalyticsConsent()
     ? getAnalyticsCampaignFromSearch(window.location.search) || getStoredAnalyticsCampaign()
@@ -65,6 +67,8 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
           accepted_terms_privacy: acceptedTermsPrivacy,
           acquisition_source: acquisitionSource || null,
           acquisition_campaign: trackedCampaign,
+          ambassador_token: await getAmbassadorToken(),
+          ambassador_code: ambassadorCode,
           welcome_message: getCategoryDefaults(category).welcomeMessage,
         }),
       });
@@ -159,6 +163,12 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
                 {ACQUISITION_SOURCES.map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}
               </select>
             </label>
+            <label className="block text-sm font-semibold text-[#47534b]">Code ambassadeur (facultatif)
+              <input value={ambassadorCode} onChange={(event) => setAmbassadorCode(event.target.value)} maxLength={24} className={fieldClass} autoComplete="off" />
+            </label>
+            <p className="text-xs leading-5 text-[#647067]">
+              Si vous arrivez par un lien ambassadeur, son attribution est conservée jusqu’à 90 jours pour rattacher votre inscription au bon partenaire. Ce suivi ne dépend pas de votre choix concernant les statistiques d’audience.
+            </p>
           </div>
         </div>
         </>}

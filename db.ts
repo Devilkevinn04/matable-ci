@@ -411,6 +411,49 @@ const sqliteSchema = `
     declared_source TEXT, campaign TEXT, created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_shop_acquisitions_created ON shop_acquisitions(created_at);
+  CREATE TABLE IF NOT EXISTS ambassadors (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT NOT NULL UNIQUE,
+    email TEXT, phone TEXT, password_hash TEXT, active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ambassador_invites (
+    token_hash TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_ambassador_invites_ambassador ON ambassador_invites(ambassador_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS ambassador_sessions (
+    token TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id) ON DELETE CASCADE,
+    expires_at INTEGER NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_ambassador_sessions_ambassador ON ambassador_sessions(ambassador_id, expires_at);
+  CREATE TABLE IF NOT EXISTS ambassador_clicks (
+    token_hash TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id),
+    created_at TEXT NOT NULL, expires_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ambassador_referrals (
+    shop_id INTEGER PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
+    ambassador_id TEXT NOT NULL REFERENCES ambassadors(id), created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ambassador_commissions (
+    shop_id INTEGER PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
+    ambassador_id TEXT NOT NULL REFERENCES ambassadors(id),
+    payment_id TEXT NOT NULL UNIQUE REFERENCES subscription_payment_intents(id),
+    amount INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL, approved_at TEXT, paid_at TEXT, payout_reference TEXT, withdrawal_id TEXT
+  );
+  CREATE TABLE IF NOT EXISTS ambassador_payouts (
+    id TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id),
+    shop_id INTEGER NOT NULL, shop_name TEXT NOT NULL, payment_id TEXT NOT NULL,
+    amount INTEGER NOT NULL, reference TEXT NOT NULL, paid_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ambassador_withdrawals (
+    id TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id),
+    amount INTEGER NOT NULL CHECK (amount > 0), status TEXT NOT NULL DEFAULT 'requested'
+      CHECK (status IN ('requested', 'approved', 'rejected', 'paid')),
+    payout_method TEXT NOT NULL, payout_phone TEXT NOT NULL,
+    created_at TEXT NOT NULL, processed_at TEXT, payout_reference TEXT, admin_reason TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_ambassador_withdrawals_ambassador ON ambassador_withdrawals(ambassador_id, created_at DESC);
   CREATE TABLE IF NOT EXISTS delivery_driver_identity_sessions (
     session_id TEXT PRIMARY KEY, driver_id INTEGER NOT NULL REFERENCES delivery_drivers(id) ON DELETE CASCADE,
     workflow_id TEXT NOT NULL, status TEXT NOT NULL, consent_at TEXT NOT NULL, consent_version TEXT NOT NULL,
@@ -669,6 +712,8 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('users', 'first_name', "TEXT NOT NULL DEFAULT ''");
   addColumn('users', 'last_name', "TEXT NOT NULL DEFAULT ''");
   addColumn('users', 'password_hash', 'TEXT');
+  addColumn('ambassadors', 'password_hash', 'TEXT');
+  addColumn('ambassador_commissions', 'withdrawal_id', 'TEXT');
   addColumn('users', 'is_active', 'INTEGER DEFAULT 1');
   addColumn('user_sessions', 'fingerprint', 'TEXT');
   addColumn('admin_sessions', 'role', "TEXT NOT NULL DEFAULT 'super_admin'");
@@ -1127,6 +1172,50 @@ export const postgresMigrations = [
     declared_source TEXT, campaign TEXT, created_at TEXT NOT NULL
   )`,
   'CREATE INDEX IF NOT EXISTS idx_shop_acquisitions_created ON shop_acquisitions(created_at)',
+  `CREATE TABLE IF NOT EXISTS ambassadors (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT NOT NULL UNIQUE,
+    email TEXT, phone TEXT, password_hash TEXT, active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS ambassador_invites (
+    token_hash TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_ambassador_invites_ambassador ON ambassador_invites(ambassador_id, created_at DESC)',
+  `CREATE TABLE IF NOT EXISTS ambassador_sessions (
+    token TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id) ON DELETE CASCADE,
+    expires_at BIGINT NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_ambassador_sessions_ambassador ON ambassador_sessions(ambassador_id, expires_at)',
+  `CREATE TABLE IF NOT EXISTS ambassador_clicks (
+    token_hash TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id),
+    created_at TEXT NOT NULL, expires_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS ambassador_referrals (
+    shop_id BIGINT PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
+    ambassador_id TEXT NOT NULL REFERENCES ambassadors(id), created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS ambassador_commissions (
+    shop_id BIGINT PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
+    ambassador_id TEXT NOT NULL REFERENCES ambassadors(id),
+    payment_id TEXT NOT NULL UNIQUE REFERENCES subscription_payment_intents(id),
+    amount INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL, approved_at TEXT, paid_at TEXT, payout_reference TEXT, withdrawal_id TEXT
+  )`,
+  'ALTER TABLE ambassador_commissions ADD COLUMN IF NOT EXISTS withdrawal_id TEXT',
+  `CREATE TABLE IF NOT EXISTS ambassador_payouts (
+    id TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id),
+    shop_id BIGINT NOT NULL, shop_name TEXT NOT NULL, payment_id TEXT NOT NULL,
+    amount INTEGER NOT NULL, reference TEXT NOT NULL, paid_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS ambassador_withdrawals (
+    id TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id),
+    amount INTEGER NOT NULL CHECK (amount > 0), status TEXT NOT NULL DEFAULT 'requested'
+      CHECK (status IN ('requested', 'approved', 'rejected', 'paid')),
+    payout_method TEXT NOT NULL, payout_phone TEXT NOT NULL,
+    created_at TEXT NOT NULL, processed_at TEXT, payout_reference TEXT, admin_reason TEXT
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_ambassador_withdrawals_ambassador ON ambassador_withdrawals(ambassador_id, created_at DESC)',
   `CREATE TABLE IF NOT EXISTS geniuspay_webhook_events (
     event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, payment_intent_id TEXT,
     provider_reference TEXT, payload_sha256 TEXT NOT NULL,

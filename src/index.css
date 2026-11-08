@@ -516,6 +516,110 @@ body::before {
   min-height: 100vh;
 }
 
+.ambassador-dashboard,
+.admin-ambassadors {
+  --panel-bg: rgba(255, 255, 255, 0.96);
+  --panel-border: rgba(15, 23, 42, 0.08);
+  --panel-shadow: 0 14px 34px rgba(13, 32, 26, 0.08);
+}
+
+.ambassador-dashboard [role="tablist"] {
+  border-top: 1px solid rgba(15, 23, 42, 0.05);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+@media (min-width: 640px) {
+  .ambassador-dashboard [role="tablist"] {
+    background: rgba(247, 245, 242, 0.9);
+    backdrop-filter: blur(14px);
+  }
+}
+
+@media (max-width: 639px) {
+  .ambassador-dashboard [role="tablist"] {
+    border-bottom: 0;
+  }
+}
+
+.ambassador-dashboard [role="tabpanel"] > section,
+.ambassador-dashboard [role="tabpanel"] > div,
+.ambassador-dashboard [role="tabpanel"] > form,
+.admin-ambassadors [data-admin-panel] {
+  border: 1px solid var(--panel-border);
+  border-radius: 1.1rem;
+  background: var(--panel-bg);
+  box-shadow: var(--panel-shadow);
+}
+
+.ambassador-dashboard [role="tabpanel"] > section,
+.ambassador-dashboard [role="tabpanel"] > div,
+.ambassador-dashboard [role="tabpanel"] > form {
+  padding: 1.1rem 1rem;
+}
+
+.ambassador-dashboard [role="tabpanel"] > section > * + *,
+.ambassador-dashboard [role="tabpanel"] > div > * + *,
+.ambassador-dashboard [role="tabpanel"] > form > * + * {
+  margin-top: 0.85rem;
+}
+
+.ambassador-dashboard [role="tabpanel"] .rounded-lg,
+.ambassador-dashboard [role="tabpanel"] .rounded-xl,
+.admin-ambassadors .rounded-lg,
+.admin-ambassadors .rounded-xl {
+  border-radius: 0.9rem;
+}
+
+.ambassador-dashboard [role="tabpanel"] input,
+.ambassador-dashboard [role="tabpanel"] select,
+.ambassador-dashboard [role="tabpanel"] textarea,
+.admin-ambassadors input,
+.admin-ambassadors select,
+.admin-ambassadors textarea {
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(255, 255, 255, 0.9);
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.ambassador-dashboard [role="tabpanel"] input:focus,
+.ambassador-dashboard [role="tabpanel"] select:focus,
+.ambassador-dashboard [role="tabpanel"] textarea:focus,
+.admin-ambassadors input:focus,
+.admin-ambassadors select:focus,
+.admin-ambassadors textarea:focus {
+  border-color: rgba(8, 127, 98, 0.8);
+  box-shadow: 0 0 0 4px rgba(8, 127, 98, 0.12);
+  background: white;
+}
+
+.ambassador-dashboard [role="tabpanel"] button:not([class*="border"]),
+.admin-ambassadors button:not([class*="border"]) {
+  box-shadow: 0 10px 22px rgba(8, 127, 98, 0.08);
+}
+
+.ambassador-dashboard [role="tabpanel"] button:hover:not(:disabled),
+.admin-ambassadors button:hover:not(:disabled) {
+  filter: brightness(0.99);
+}
+
+.admin-ambassadors [data-admin-panel] {
+  padding: 1.1rem 1rem;
+}
+
+.admin-ambassadors [data-admin-panel] > * + * {
+  margin-top: 0.9rem;
+}
+
+@media (max-width: 640px) {
+  .ambassador-dashboard [role="tabpanel"] > section,
+  .ambassador-dashboard [role="tabpanel"] > div,
+  .ambassador-dashboard [role="tabpanel"] > form,
+  .admin-ambassadors [data-admin-panel] {
+    border-radius: 1rem;
+    padding: 0.9rem 0.8rem;
+  }
+}
+
 h1, h2, h3, h4, .display-font {
   font-family: 'Bricolage Grotesque', 'Avenir Next', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   letter-spacing: -0.025em;
@@ -1607,4 +1711,17 @@ button:hover {
   .success-mark {
     animation: none;
   }
+}
+
+.ambassador-dashboard:not([data-dashboard-tab="withdrawals"]) [data-ambassador-panel="withdrawals"],
+.ambassador-dashboard:not([data-dashboard-tab="withdrawals"]) [aria-labelledby="payouts-title"],
+.ambassador-dashboard:not([data-dashboard-tab="account"]) details {
+  display: none;
+}
+
+.admin-ambassadors[data-admin-view="partners"] [data-admin-panel]:not([data-admin-panel="partners"]),
+.admin-ambassadors[data-admin-view="commissions"] [data-admin-panel]:not([data-admin-panel="commissions"]),
+.admin-ambassadors[data-admin-view="withdrawals"] [data-admin-panel]:not([data-admin-panel="withdrawals"]),
+.admin-ambassadors[data-admin-view="payouts"] [data-admin-panel]:not([data-admin-panel="payouts"]) {
+  display: none;
 }

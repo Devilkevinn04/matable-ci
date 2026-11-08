@@ -41,6 +41,7 @@ import { AdminSubscriptionPlanPricing } from './AdminSubscriptionPlanPricing';
 import { AdminSubscriptionPlanFeatures } from './AdminSubscriptionPlanFeatures';
 import { AdminHomepageMarketing } from './AdminHomepageMarketing';
 import { AdminProductPromotions } from './AdminProductPromotions';
+import { AdminAmbassadors } from './AdminAmbassadors';
 import { AnalyticsDailyBars } from './AnalyticsDailyBars';
 import { Link } from 'react-router-dom';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
@@ -81,7 +82,7 @@ const adminOrderTransitions: Record<AdminOrder['status'], AdminOrder['status'][]
 };
 
 type AdminRole = 'super_admin' | 'verification_admin';
-type AdminView = 'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'verification-shops' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'push' | 'moderation' | 'audit' | 'advertising' | 'promotions';
+type AdminView = 'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'verification-shops' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'push' | 'moderation' | 'audit' | 'advertising' | 'promotions' | 'ambassadors';
 
 interface VerificationShopSummary {
   id: number;
@@ -96,6 +97,20 @@ interface VerificationShopSummary {
 
 const adminAuditActionLabels: Record<string, string> = {
   admin_order_status_updated: 'Statut de commande modifié',
+  ambassador_created: 'Ambassadeur créé',
+  ambassador_profile_updated: 'Profil ambassadeur modifié',
+  ambassador_invite_created: 'Invitation ambassadeur créée',
+  ambassador_account_activated: 'Accès ambassadeur activé ou réinitialisé',
+  ambassador_password_changed: 'Mot de passe ambassadeur modifié',
+  ambassador_withdrawal_requested: 'Retrait ambassadeur demandé',
+  ambassador_withdrawal_approve: 'Retrait ambassadeur validé',
+  ambassador_withdrawal_reject: 'Retrait ambassadeur refusé',
+  ambassador_withdrawal_paid: 'Retrait ambassadeur payé',
+  ambassador_withdrawal_cancelled_refund: 'Retrait annulé après remboursement',
+  ambassador_status_updated: 'État ambassadeur modifié',
+  ambassador_commission_approve: 'Commission ambassadeur validée',
+  ambassador_commission_reject: 'Commission ambassadeur refusée',
+  ambassador_commission_paid: 'Versement ambassadeur enregistré',
   customer_report_processed: 'Signalement traité',
   customer_review_moderated: 'Avis modéré',
   identity_verification_request_prepared: 'Rappel de vérification préparé',
@@ -201,6 +216,8 @@ const adminAuditDetailLabels: Record<string, string> = {
   deleted_reviews: 'Avis supprimés',
   deleted_reports: 'Signalements supprimés',
   campaign_id: 'Campagne',
+  ambassador_id: 'Ambassadeur',
+  reference: 'Référence du versement',
   request_id: 'Demande partenaire',
   starts_at: 'Début de diffusion',
   ends_at: 'Fin de diffusion',
@@ -1529,6 +1546,7 @@ export const AdminDashboard: React.FC = () => {
         label: 'Marketing et partenariats',
         items: [
           { id: 'advertising', label: 'Publicité et partenaires', icon: Megaphone },
+          { id: 'ambassadors', label: 'Ambassadeurs', icon: Users },
           { id: 'promotions', label: 'Promotions', icon: Tag },
           { id: 'push', label: 'Annonces automatiques', icon: Send },
         ],
@@ -2294,6 +2312,8 @@ export const AdminDashboard: React.FC = () => {
             </>}
           </section>
         )}
+
+        {adminView === 'ambassadors' && adminRole === 'super_admin' && <AdminAmbassadors />}
 
         {adminView === 'subscriptions' && adminRole === 'super_admin' && (
           <section aria-labelledby="admin-subscriptions-title" className="space-y-5">

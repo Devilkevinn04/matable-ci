@@ -13,6 +13,8 @@ import { createCustomerEngagementRouter } from './server/routes/customerEngageme
 import { createMerchantOrdersRouter } from './server/routes/merchantOrders.ts';
 import { createOrderRouter } from './server/routes/orders.ts';
 import { createAdminRouter } from './server/routes/admin.ts';
+import { createAmbassadorRouters } from './server/routes/ambassadors.ts';
+import { createAmbassadorAuthRouter } from './server/routes/ambassadorAuth.ts';
 import { createPublicShopsRouter } from './server/routes/publicShops.ts';
 import { createShopManagementRouter } from './server/routes/shopManagement.ts';
 import { createShopRegistrationRouter } from './server/routes/shopRegistration.ts';
@@ -973,6 +975,10 @@ async function startServer() {
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: false, limit: '16kb' }));
   app.use('/api/admin', requireAdminAccess);
+  const ambassadorRouters = createAmbassadorRouters(rateLimitPublicRequest);
+  app.use('/api/admin/ambassadors', requireSuperAdminAccess, ambassadorRouters.adminRouter);
+  app.use('/api/ambassador-auth', createAmbassadorAuthRouter(rateLimitPublicRequest));
+  app.use('/api', ambassadorRouters.publicRouter);
   app.use('/api/admin', createAdminRouter({
     shops,
     products,
@@ -1334,7 +1340,7 @@ async function startServer() {
   };
   const isPrivateSeoPath = (pathname: string) => {
     const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
-    return ['/app', '/admin', '/compte', '/connexion', '/inscription', '/recuperation-acces', '/livreur']
+    return ['/app', '/admin', '/ambassadeur', '/compte', '/connexion', '/inscription', '/recuperation-acces', '/livreur']
       .some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`));
   };
   const isFrontendPagePath = (pathname: string) => pathname !== '/' && !pathname.startsWith('/api/') && !pathname.startsWith('/@') && !path.extname(pathname);

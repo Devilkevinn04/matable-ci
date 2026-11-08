@@ -8,6 +8,7 @@ import { trackLogin, trackLogout, trackSignup } from '../../utils/analyticsTrack
 import { normalizeAcquisitionSource } from '../../utils/acquisitionSources';
 import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from '../../utils/analyticsAttribution';
 import { hasAnalyticsConsent } from '../../utils/cookieConsent';
+import { getAmbassadorToken } from '../../utils/ambassadors';
 import { buildBulkProductPatch, type BulkProductAction } from './bulkActions';
 
 export type MerchantOrderFilter = 'all' | 'actionable' | OrderStatus;
@@ -41,6 +42,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [regCityOther, setRegCityOther] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regAcceptedTermsPrivacy, setRegAcceptedTermsPrivacy] = useState(false);
+  const [regAmbassadorCode, setRegAmbassadorCode] = useState('');
   const [regCategory, setRegCategory] = useState<ShopCategory>('fashion');
   // Campaign from ?src= / utm_source, kept only when the visitor accepted audience analytics.
   const [regTrackedCampaign] = useState(() => (typeof window !== 'undefined' && hasAnalyticsConsent()
@@ -388,6 +390,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
           accepted_terms_privacy: regAcceptedTermsPrivacy,
           acquisition_source: regAcquisitionSource || null,
           acquisition_campaign: regTrackedCampaign,
+          ambassador_token: await getAmbassadorToken(),
+          ambassador_code: regAmbassadorCode,
           welcome_message: CATEGORY_DEFAULTS[regCategory].welcomeMessage,
         }),
       });
@@ -883,6 +887,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     regEmail,
     regAcceptedTermsPrivacy,
     setRegAcceptedTermsPrivacy,
+    regAmbassadorCode,
+    setRegAmbassadorCode,
     regAcquisitionSource,
     setRegAcquisitionSource,
     regCategory,

@@ -26,6 +26,7 @@ const ProductModal = React.lazy(() => import('./components/MerchantDashboard/Pro
 const CustomerStorefront = React.lazy(() => import('./components/CustomerStorefront').then((module) => ({ default: module.CustomerStorefront })));
 const MerchantDashboard = React.lazy(() => import('./components/MerchantDashboard/index').then((module) => ({ default: module.MerchantDashboard })));
 const AdminDashboard = React.lazy(() => import('./components/AdminDashboard').then((module) => ({ default: module.AdminDashboard })));
+const AmbassadorDashboard = React.lazy(() => import('./components/AmbassadorDashboard').then((module) => ({ default: module.AmbassadorDashboard })));
 const PublicDirectory = React.lazy(() => import('./components/PublicDirectory').then((module) => ({ default: module.PublicDirectory })));
 const HowItWorksPage = React.lazy(() => import('./components/HowItWorksPage'));
 const UserGuidePage = React.lazy(() => import('./components/UserGuidePage').then((module) => ({ default: module.UserGuidePage })));
@@ -283,6 +284,7 @@ export default function App() {
   const [routeProgressVisible, setRouteProgressVisible] = useState(false);
   const path = location.pathname;
   const normalizedPath = path.replace(/^\//, '').replace(/\/$/, '');
+  const isAmbassadorRoute = path === '/ambassadeur' || path === '/ambassadeur/activer';
   const isShopDirectoryRoute = path.replace(/\/+$/, '') === '/boutiques';
   const isPromotionsPage = path.replace(/\/+$/, '') === '/promotions';
   const isHowItWorksRoute = path.replace(/\/+$/, '') === '/comment-ca-marche';
@@ -317,8 +319,9 @@ export default function App() {
   const isDeliveryCourierPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/delivery-courier';
   const isDeliveryPausedRoute = path === '/livreur';
   const isDeliveryCourierWorkspace = isDeliveryCourierPreview;
-  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isRecoveryPage || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierWorkspace || isDeliveryPausedRoute;
+  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isAmbassadorRoute || isRecoveryPage || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierWorkspace || isDeliveryPausedRoute;
   const isAnimatedPublicRoute = currentRole === 'storefront'
+    && !isAmbassadorRoute
     && customerView === 'none'
     && !isRecoveryPage
     && !isProductModalPreview
@@ -327,7 +330,7 @@ export default function App() {
     && !isAdvertisingPreview
     && !isDeliveryCourierWorkspace
     && !isDeliveryPausedRoute;
-  const isCustomerStorefront = currentRole === 'storefront' && path !== '/' && !isShopDirectoryRoute && !isPromotionsPage && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && !isDeliveryCourierWorkspace && !isDeliveryPausedRoute && customerView === 'none';
+  const isCustomerStorefront = currentRole === 'storefront' && !isAmbassadorRoute && path !== '/' && !isShopDirectoryRoute && !isPromotionsPage && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && !isDeliveryCourierWorkspace && !isDeliveryPausedRoute && customerView === 'none';
   const isUnknownStorefront = isCustomerStorefront && !isLoadingShops && !availableShops.some((shop) => shop.slug === normalizedPath);
   const isSingleSegmentStorefrontRoute = isCustomerStorefront
     && path.split('/').filter(Boolean).length === 1
@@ -404,7 +407,7 @@ export default function App() {
 
   useEffect(() => {
     const trackCurrentPage = () => {
-      if (isUnknownStorefront || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierPreview) return;
+      if (isUnknownStorefront || isAmbassadorRoute || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierPreview) return;
       // La vitrine est suivie par CustomerStorefront, qui connaît l'identifiant de la boutique.
       if (isCustomerStorefront && !isUnknownStorefront) return;
       const audience = currentRole === 'admin'
@@ -422,7 +425,7 @@ export default function App() {
     trackCurrentPage();
     window.addEventListener('matable-cookie-preferences-updated', trackCurrentPage);
     return () => window.removeEventListener('matable-cookie-preferences-updated', trackCurrentPage);
-  }, [path, currentRole, isRecoveryPage, isUnknownStorefront, isCustomerStorefront, isMobileDashboardPreview, isAdvertisingPreview, isDeliveryCourierPreview, isDeliveryCourierWorkspace]);
+  }, [path, currentRole, isRecoveryPage, isAmbassadorRoute, isUnknownStorefront, isCustomerStorefront, isMobileDashboardPreview, isAdvertisingPreview, isDeliveryCourierPreview, isDeliveryCourierWorkspace]);
 
   useEffect(() => {
     if (!shouldLoadShopCatalog) {
@@ -468,7 +471,7 @@ export default function App() {
   }, [shouldLoadCustomerSession]);
 
   useEffect(() => {
-    const isPrivateRoute = path === '/app' || path.startsWith('/app/') || path === '/admin' || path.startsWith('/admin/')
+    const isPrivateRoute = path === '/app' || path.startsWith('/app/') || path === '/admin' || path.startsWith('/admin/') || isAmbassadorRoute
       || path === '/compte' || path === '/connexion' || path === '/inscription' || isRecoveryPage;
     const isInvalidNestedRoute = (!legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && !isMerchantPlansPreview && !isMobileDashboardPreview && !isAdvertisingPreview && !isDeliveryCourierWorkspace && !isShopDirectoryRoute && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !discoveryPage && path.split('/').filter(Boolean).length > 1)
       || isUnknownStorefront;
@@ -502,6 +505,8 @@ export default function App() {
         ? faqMetadata
         : isRecoveryPage
           ? recoveryMetadata
+          : isAmbassadorRoute
+            ? { title: 'Espace ambassadeur | MaTable', description: 'Suivez les boutiques recommandées et vos commissions MaTable.' }
         : currentRole === 'admin'
           ? adminWorkspaceMetadata
         : currentRole === 'merchant'
@@ -534,7 +539,7 @@ export default function App() {
     if (twitterTitle) twitterTitle.content = metadata.title;
     const twitterDescription = document.head.querySelector<HTMLMetaElement>('meta[name="twitter:description"]');
     if (twitterDescription) twitterDescription.content = metadata.description;
-  }, [path, legalPage, isFaqPage, isRecoveryPage, discoveryPage, isShopDirectoryRoute, isPromotionsPage, isHowItWorksRoute, isUserGuideRoute, isMerchantPlansPage, isUnknownStorefront]);
+  }, [path, legalPage, isFaqPage, isRecoveryPage, isAmbassadorRoute, discoveryPage, isShopDirectoryRoute, isPromotionsPage, isHowItWorksRoute, isUserGuideRoute, isMerchantPlansPage, isUnknownStorefront]);
 
   const renderCustomerAuth = (initialMode: 'login' | 'register') => (
     <CustomerAuth
@@ -639,6 +644,8 @@ export default function App() {
                         : renderCustomerAuth('login')
                       } />
                       <Route path="/app/*" element={<MerchantDashboard openRegistration={normalizedPath === 'app/creer-boutique'} onBackToDirectory={() => navigate('/')} onCustomerLogin={() => navigate('/connexion')} onOpenStorefront={(slug) => navigate(`/${slug}`)} />} />
+                      <Route path="/ambassadeur" element={<AmbassadorDashboard />} />
+                      <Route path="/ambassadeur/activer" element={<AmbassadorDashboard />} />
                       <Route path="/admin/*" element={<AdminDashboard />} />
                       <Route path="/:slug" element={<StorefrontRoute customerUser={customerUser} onCustomerAuthenticated={setCustomerUser} />} />
                       <Route path="*" element={<NotFoundPage />} />

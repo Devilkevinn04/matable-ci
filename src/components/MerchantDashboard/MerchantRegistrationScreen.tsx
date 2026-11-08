@@ -23,6 +23,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
     showRegPin, setShowRegPin, regEmail, setRegEmail, regLoading,
     regAcceptedTermsPrivacy, setRegAcceptedTermsPrivacy,
     regAcquisitionSource, setRegAcquisitionSource,
+    regAmbassadorCode, setRegAmbassadorCode,
     handleRegisterShop, setIsRegisterModalOpen,
   } = state;
   const submitStep = (event: React.FormEvent<HTMLFormElement>) => {
@@ -121,6 +122,9 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
                 <option value="">Choisir une réponse</option>
                 {ACQUISITION_SOURCES.map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}
               </select>
+            </label>
+            <label className="block text-sm font-semibold text-[#47534b]">Code ambassadeur (facultatif)
+              <input value={regAmbassadorCode} onChange={(event) => setRegAmbassadorCode(event.target.value)} maxLength={24} autoComplete="off" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)]" />
             </label>
           </div>
         </div>
