@@ -16,6 +16,17 @@ basculent 30 jours après cette date. Aucun SMS n’est envoyé.
 Les connexions Super-admin et Admin de vérification exigent la MFA dès cette
 date, sans période de grâce.
 
+Les clients voient un rappel dans leur compte et peuvent vérifier leur adresse
+avec un code avant l’échéance. Les commerçants voient un rappel dans leur
+dashboard et dans leur profil ; une adresse saisie n’est enregistrée qu’après
+vérification. À l’échéance, le parcours de connexion guide les commerçants sans
+adresse vérifiée vers un formulaire protégé par leur numéro et leur PIN. Un
+avis e-mail unique peut être envoyé à tous les comptes existants qui ont déjà
+une adresse ; après déploiement, exécutez une fois sur le VPS :
+`docker exec matable-web node /app/scripts/send-email-mfa-rollout-notices.mjs`.
+Le suivi rend la commande idempotente. Les commerçants sans adresse ne peuvent
+pas recevoir cet avis et nécessitent un contact par un autre canal.
+
 Avant le démarrage en production, configurez dans l’environnement privé du
 serveur (sur le VPS Hostinger, `/srv/apps/matable/shared/app.env`) :
 `AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT` (date ISO UTC), `RESEND_API_KEY`,

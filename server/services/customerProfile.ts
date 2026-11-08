@@ -5,6 +5,7 @@ export interface CustomerProfileRow {
   last_name?: string | null;
   phone: string;
   email: string;
+  email_verified_at?: string | null;
   created_at?: string;
 }
 
@@ -19,6 +20,7 @@ export function toCustomerProfile(user: CustomerProfileRow) {
     last_name: lastName,
     phone: user.phone,
     email: user.email,
+    email_verified: Boolean(user.email_verified_at),
     ...(user.created_at ? { created_at: user.created_at } : {}),
   };
 }

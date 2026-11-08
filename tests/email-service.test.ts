@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   getResendEmailConfig,
+  sendAmbassadorAccessEmail,
+  sendAmbassadorApplicationEmail,
+  sendAmbassadorProgramEmail,
   sendCustomerPasswordResetEmail,
   sendCustomerOrderReceiptEmail,
   sendCustomerWelcomeEmail,
@@ -329,6 +332,133 @@ test('customer order receipt includes server totals and explains the pending res
     assert.match(requestBody.text, /ne confirme pas un paiement/i);
     assert.match(requestBody.text, /sans réponse sous 2 heures/i);
     assert.doesNotMatch(requestBody.html, /<script>|<img src=x|<i>Cocody/);
+  } finally {
+    if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
+    if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;
+  }
+});
+
+test('ambassador access email contains a single-use link and escapes the recipient name', async () => {
+  const previousApiKey = process.env.RESEND_API_KEY;
+  const previousFrom = process.env.RESEND_FROM_EMAIL;
+  process.env.RESEND_API_KEY = 'resend-key';
+  process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';
+
+  try {
+    let requestBody: any;
+    const result = await sendAmbassadorAccessEmail({
+      name: '<img src=x onerror=alert(1)> Awa',
+      email: 'ambassador@example.com',
+      inviteUrl: 'https://matable-ci.com/ambassadeur/activer?token=secure-token',
+      recovery: true,
+    }, async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ id: 'email_ambassador_123' }), { status: 200 });
+    });
+
+    assert.equal(result.sent, true);
+    assert.equal(requestBody.to[0], 'ambassador@example.com');
+    assert.match(requestBody.subject, /récupération/i);
+    assert.match(requestBody.text, /secure-token/);
+    assert.match(requestBody.text, /expire dans 7 jours/);
+    assert.match(requestBody.html, /&lt;img src=x onerror=alert\(1\)&gt; Awa/);
+    assert.doesNotMatch(requestBody.html, /<img[^>]*src=x/i);
+    assert.match(requestBody.html, /Réinitialiser mon accès/);
+  } finally {
+    if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
+    if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;
+  }
+});
+
+test('ambassador application emails confirm receipt and report decisions with escaped names', async () => {
+  const previousApiKey = process.env.RESEND_API_KEY;
+  const previousFrom = process.env.RESEND_FROM_EMAIL;
+  process.env.RESEND_API_KEY = 'resend-key';
+  process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';
+
+  try {
+    const sentPayloads: any[] = [];
+    const send = async (input: { status: 'received' | 'rejected' }) => sendAmbassadorApplicationEmail({
+      name: '<script>Awa</script>',
+      email: 'applicant@example.com',
+      status: input.status,
+      appUrl: 'https://matable-ci.com',
+    }, async (_url, init) => {
+      sentPayloads.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ id: `email_${input.status}` }), { status: 200 });
+    });
+
+    assert.equal((await send({ status: 'received' })).sent, true);
+    assert.equal((await send({ status: 'rejected' })).sent, true);
+    assert.equal(sentPayloads.length, 2);
+    assert.match(sentPayloads[0].subject, /reçu/i);
+    assert.match(sentPayloads[0].text, /Aucun compte ni code/);
+    assert.match(sentPayloads[0].html, /&lt;script&gt;Awa&lt;\/script&gt;/);
+    assert.match(sentPayloads[1].subject, /mise à jour/i);
+    assert.match(sentPayloads[1].text, /ne pouvons pas donner suite/i);
+    assert.doesNotMatch(sentPayloads[1].html, /<script>/);
+  } finally {
+    if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
+    if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;
+  }
+});
+
+test('ambassador program emails cover commission and withdrawal updates with escaped details', async () => {
+  const previousApiKey = process.env.RESEND_API_KEY;
+  const previousFrom = process.env.RESEND_FROM_EMAIL;
+  process.env.RESEND_API_KEY = 'resend-key';
+  process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';
+
+  try {
+    const sentPayloads: any[] = [];
+    const send = async (input: {
+      event: 'commission_approved' | 'commission_rejected' | 'commission_paid' | 'commission_cancelled'
+        | 'commission_refund_review' | 'withdrawal_requested' | 'withdrawal_approved' | 'withdrawal_rejected'
+        | 'withdrawal_cancelled' | 'withdrawal_paid';
+      reason?: string;
+      reference?: string;
+    }) => sendAmbassadorProgramEmail({
+      name: '<script>Kevin</script>',
+      email: 'ambassador@example.com',
+      amount: 1600,
+      shopName: '<Boutique & amie>',
+      appUrl: 'https://matable-ci.com',
+      ...input,
+    }, async (_url, init) => {
+      sentPayloads.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ id: `email_${input.event}` }), { status: 200 });
+    });
+
+    assert.equal((await send({ event: 'commission_approved' })).sent, true);
+    assert.equal((await send({ event: 'commission_rejected', reason: '<motif>' })).sent, true);
+    assert.equal((await send({ event: 'commission_paid', reference: '<ref>' })).sent, true);
+    assert.equal((await send({ event: 'commission_cancelled' })).sent, true);
+    assert.equal((await send({ event: 'commission_refund_review' })).sent, true);
+    assert.equal((await send({ event: 'withdrawal_requested' })).sent, true);
+    assert.equal((await send({ event: 'withdrawal_approved' })).sent, true);
+    assert.equal((await send({ event: 'withdrawal_rejected', reason: '<motif>' })).sent, true);
+    assert.equal((await send({ event: 'withdrawal_cancelled', reason: '<motif>' })).sent, true);
+    assert.equal((await send({ event: 'withdrawal_paid', reference: '<ref>' })).sent, true);
+    assert.equal(sentPayloads.length, 10);
+    assert.match(sentPayloads[0].subject, /commission.*validée/i);
+    assert.match(sentPayloads[0].text, /1\s?600 FCFA/);
+    assert.doesNotMatch(sentPayloads[1].html, /&lt;motif&gt;/);
+    assert.match(sentPayloads[2].html, /&lt;ref&gt;/);
+    assert.match(sentPayloads[3].text, /remboursement/i);
+    assert.match(sentPayloads[4].text, /examine la situation/i);
+    assert.match(sentPayloads[5].subject, /demande de retrait.*reçue/i);
+    assert.match(sentPayloads[6].text, /ne confirme pas encore le paiement/i);
+    assert.match(sentPayloads[7].text, /de nouveau disponible/i);
+    assert.match(sentPayloads[7].html, /&lt;motif&gt;/);
+    assert.match(sentPayloads[8].html, /&lt;motif&gt;/);
+    assert.match(sentPayloads[9].html, /Référence : &lt;ref&gt;/);
+    for (const [index, payload] of sentPayloads.entries()) {
+      assert.equal(payload.to[0], 'ambassador@example.com');
+      assert.match(payload.html, /&lt;script&gt;Kevin&lt;\/script&gt;/);
+      if (index < 5) assert.match(payload.html, /&lt;Boutique &amp; amie&gt;/);
+      assert.doesNotMatch(payload.html, /<script>|<Boutique/);
+      assert.match(payload.html, /https:\/\/matable-ci\.com\/ambassadeur/);
+    }
   } finally {
     if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
     if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;

@@ -13,6 +13,7 @@ import { normalizeSubscriptionTier, type SubscriptionTerm } from '../../src/util
 import { getDefaultSubscriptionPrices, getSubscriptionPriceForTerm, parseSubscriptionPrices } from '../services/subscriptionPricing.ts';
 import { getShopFromDatabase, mapShopRow } from '../repositories/shops.ts';
 import { sendMerchantSubscriptionReceiptEmail } from '../services/email.ts';
+import { notifyAmbassadorProgramEvent } from '../services/ambassadorNotifications.ts';
 import {
   BOOST_DURATIONS_DAYS,
   BOOST_MINIMUM_PRODUCT_COUNT,
@@ -416,21 +417,33 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
     const commission = await transaction.get<{ withdrawal_id: string | null }>(
       'SELECT withdrawal_id FROM ambassador_commissions WHERE payment_id = ?', [paymentId],
     );
-    if (!commission?.withdrawal_id) return;
-    const withdrawal = await transaction.get<{ status: string }>(
-      'SELECT status FROM ambassador_withdrawals WHERE id = ?', [commission.withdrawal_id],
+    if (!commission?.withdrawal_id) return null;
+    const withdrawal = await transaction.get<{
+      status: string; ambassador_id: string; ambassador_name: string; ambassador_email: string | null; amount: number;
+    }>(
+      `SELECT w.status, w.ambassador_id, a.name AS ambassador_name, a.email AS ambassador_email, w.amount
+       FROM ambassador_withdrawals w JOIN ambassadors a ON a.id = w.ambassador_id WHERE w.id = ?`,
+      [commission.withdrawal_id],
     );
-    if (!withdrawal || !['requested', 'approved'].includes(withdrawal.status)) return;
+    if (!withdrawal || !['requested', 'approved'].includes(withdrawal.status)) return null;
     const cancelled = await transaction.run(`UPDATE ambassador_withdrawals
       SET status = 'rejected', processed_at = ?, admin_reason = ?
       WHERE id = ? AND status IN ('requested', 'approved')`,
     [now, 'Demande annulée automatiquement après remboursement du paiement lié.', commission.withdrawal_id]);
-    if (cancelled.changes !== 1) return;
+    if (cancelled.changes !== 1) return null;
     await transaction.run(`UPDATE ambassador_commissions SET status = 'approved', withdrawal_id = NULL
       WHERE withdrawal_id = ? AND status = 'withdrawal_requested'`, [commission.withdrawal_id]);
     await transaction.run(`INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at)
       VALUES ('system', 'ambassador_withdrawal_cancelled_refund', NULL, ?, ?)`,
     [JSON.stringify({ withdrawal_id: commission.withdrawal_id, payment_id: paymentId }), now]);
+    return {
+      ambassadorId: withdrawal.ambassador_id,
+      name: withdrawal.ambassador_name,
+      email: withdrawal.ambassador_email,
+      event: 'withdrawal_cancelled' as const,
+      amount: Number(withdrawal.amount),
+      reason: 'La demande a été annulée automatiquement après le remboursement d’un paiement lié. Contactez l’assistance si vous avez des questions.',
+    };
   };
 
   const applyProviderStatus = async (input: {
@@ -440,7 +453,9 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
     refundedAmount?: number;
     paymentType: 'subscription' | 'promotion';
     status: 'failed' | 'cancelled' | 'expired' | 'refunded';
-  }) => dbTransaction(async (transaction) => {
+  }) => {
+    const notifications: Parameters<typeof notifyAmbassadorProgramEvent>[0][] = [];
+    const result = await dbTransaction(async (transaction) => {
     const payment = await transaction.get<{
       status: string;
       amount: number;
@@ -462,9 +477,27 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       if (payment.status !== 'paid') return 'mismatch' as const;
       const refundedAmount = input.refundedAmount ?? input.amount;
       if (refundedAmount < Number(payment.amount)) {
-        await cancelPendingAmbassadorWithdrawalForRefund(transaction, input.paymentId, new Date().toISOString());
-        await transaction.run(`UPDATE ambassador_commissions SET status = CASE WHEN status = 'paid' THEN 'refund_review' ELSE 'cancelled' END
+        const withdrawalNotification = await cancelPendingAmbassadorWithdrawalForRefund(transaction, input.paymentId, new Date().toISOString());
+        if (withdrawalNotification) notifications.push(withdrawalNotification);
+        const commissionUpdate = await transaction.run(`UPDATE ambassador_commissions SET status = CASE WHEN status = 'paid' THEN 'refund_review' ELSE 'cancelled' END
           WHERE payment_id = ? AND status IN ('pending', 'approved', 'withdrawal_requested', 'paid')`, [input.paymentId]);
+        if (commissionUpdate.changes) {
+          const commission = await transaction.get<{
+            ambassador_id: string; ambassador_name: string; ambassador_email: string | null;
+            amount: number; shop_name: string; status: string;
+          }>(`SELECT c.ambassador_id, a.name AS ambassador_name, a.email AS ambassador_email,
+                    c.amount, s.name AS shop_name, c.status
+             FROM ambassador_commissions c JOIN ambassadors a ON a.id = c.ambassador_id
+             JOIN shops s ON s.id = c.shop_id WHERE c.payment_id = ?`, [input.paymentId]);
+          if (commission) notifications.push({
+            ambassadorId: commission.ambassador_id,
+            name: commission.ambassador_name,
+            email: commission.ambassador_email,
+            event: commission.status === 'refund_review' ? 'commission_refund_review' : 'commission_cancelled',
+            amount: Number(commission.amount),
+            shopName: commission.shop_name,
+          });
+        }
         await transaction.run(`INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at)
           VALUES ('system', 'geniuspay_partial_refund_review', ?, ?, ?)`, [payment.shop_id, JSON.stringify({
           payment_id: input.paymentId,
@@ -479,9 +512,27 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       const refunded = await transaction.run(`UPDATE subscription_payment_intents SET status = 'refunded'
         WHERE id = ? AND status = 'paid'`, [input.paymentId]);
       if (refunded.changes !== 1) return 'duplicate' as const;
-      await cancelPendingAmbassadorWithdrawalForRefund(transaction, input.paymentId, new Date().toISOString());
-      await transaction.run(`UPDATE ambassador_commissions SET status = CASE WHEN status = 'paid' THEN 'refund_review' ELSE 'cancelled' END
+      const withdrawalNotification = await cancelPendingAmbassadorWithdrawalForRefund(transaction, input.paymentId, new Date().toISOString());
+      if (withdrawalNotification) notifications.push(withdrawalNotification);
+      const commissionUpdate = await transaction.run(`UPDATE ambassador_commissions SET status = CASE WHEN status = 'paid' THEN 'refund_review' ELSE 'cancelled' END
         WHERE payment_id = ? AND status IN ('pending', 'approved', 'withdrawal_requested', 'paid')`, [input.paymentId]);
+      if (commissionUpdate.changes) {
+        const commission = await transaction.get<{
+          ambassador_id: string; ambassador_name: string; ambassador_email: string | null;
+          amount: number; shop_name: string; status: string;
+        }>(`SELECT c.ambassador_id, a.name AS ambassador_name, a.email AS ambassador_email,
+                  c.amount, s.name AS shop_name, c.status
+           FROM ambassador_commissions c JOIN ambassadors a ON a.id = c.ambassador_id
+           JOIN shops s ON s.id = c.shop_id WHERE c.payment_id = ?`, [input.paymentId]);
+        if (commission) notifications.push({
+          ambassadorId: commission.ambassador_id,
+          name: commission.ambassador_name,
+          email: commission.ambassador_email,
+          event: commission.status === 'refund_review' ? 'commission_refund_review' : 'commission_cancelled',
+          amount: Number(commission.amount),
+          shopName: commission.shop_name,
+        });
+      }
       if (payment.payment_type === 'promotion') {
         await transaction.run(`UPDATE shop_boosts SET status = 'cancelled', reservation_expires_at = NULL
           WHERE payment_intent_id = ? AND status IN ('scheduled', 'active')`, [input.paymentId]);
@@ -521,7 +572,10 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       }
     }
     return input.status as 'failed' | 'cancelled' | 'expired';
-  });
+    });
+    for (const notification of notifications) await notifyAmbassadorProgramEvent(notification);
+    return result;
+  };
 
   router.post('/shops/:id/subscription-payments', rateLimitPaymentCreation, requireMerchantOwnShop, async (req, res) => {
     const shop = await getShopFromDatabase(Number(req.params.id));

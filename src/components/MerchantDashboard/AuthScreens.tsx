@@ -1,5 +1,5 @@
 import React from 'react';
-import { Store, Phone, Lock, ChevronRight, UserPlus, Eye, EyeOff, AlertTriangle, X } from 'lucide-react';
+import { Store, Phone, Lock, ChevronRight, UserPlus, Eye, EyeOff, AlertTriangle, X, Mail } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { ShopCategory } from '../../types';
 import { MerchantState } from './useMerchant';
@@ -29,6 +29,9 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
     showPinInput,
     setShowPinInput, authError, authLoading,
     pendingMfaChallenge, mfaCode, setMfaCode, setPendingMfaChallenge,
+    emailSetupRequired, emailSetupAddress, setEmailSetupAddress,
+    emailSetupCode, setEmailSetupCode, emailSetupChallenge,
+    handleStartEmailSetup, handleVerifyEmailSetup,
     handleLogin,
     setIsRegisterModalOpen, isRegisterModalOpen, handleRegisterShop, regName, setRegName, regCategory, setRegCategory, regCity, setRegCity, regCityOther, setRegCityOther, regPhone, setRegPhone, showRegPin, regPin, setRegPin, setShowRegPin, regEmail, setRegEmail, regLoading
   } = state;
@@ -86,6 +89,30 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
               <AlertTriangle className="w-4 h-4 shrink-0 text-[#b93712]" />
               <span>{generalAuthError}</span>
             </div>
+          )}
+
+          {emailSetupRequired && !pendingMfaChallenge && (
+            <section className="mb-5 space-y-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+              <div>
+                <h3 className="text-sm font-extrabold">Vérifiez votre adresse e-mail</h3>
+                <p className="mt-1 text-xs leading-5">La MFA protège votre espace commerçant. Saisissez une adresse que vous pouvez consulter ; votre numéro et votre PIN seront vérifiés avant l’envoi du code.</p>
+              </div>
+              <label className="block text-xs font-bold">
+                Adresse e-mail
+                <span className="relative mt-1.5 block">
+                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-800" />
+                  <input type="email" required maxLength={254} autoComplete="email" value={emailSetupAddress} onChange={(event) => setEmailSetupAddress(event.target.value)} className="min-h-11 w-full rounded-xl border border-amber-200 bg-white py-2 pl-10 pr-3 text-sm font-normal text-slate-900 outline-none focus:border-amber-600" placeholder="vous@exemple.ci" />
+                </span>
+              </label>
+              {emailSetupChallenge && <label className="block text-xs font-bold">
+                Code reçu par e-mail
+                <input type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{8}" maxLength={8} required value={emailSetupCode} onChange={(event) => setEmailSetupCode(event.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-1.5 min-h-11 w-full rounded-xl border border-amber-200 bg-white px-3 text-center font-mono text-lg tracking-[0.3em] text-slate-900 outline-none focus:border-amber-600" />
+              </label>}
+              <button type="button" disabled={authLoading || !emailSetupAddress.trim()} onClick={() => void (emailSetupChallenge ? handleVerifyEmailSetup() : handleStartEmailSetup())} className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-[var(--mt-green-deep)] px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">
+                {authLoading ? 'Vérification…' : emailSetupChallenge ? 'Vérifier l’adresse' : 'Envoyer le code'}
+              </button>
+              {emailSetupChallenge && <button type="button" disabled={authLoading} onClick={() => void handleStartEmailSetup()} className="block w-full text-center text-xs font-semibold underline underline-offset-2 disabled:opacity-50">Renvoyer un code</button>}
+            </section>
           )}
 
           <form onSubmit={handleLogin} aria-busy={authLoading} className="auth-form relative space-y-4">

@@ -34,6 +34,7 @@ export function mapShopRow(row: Record<string, unknown>): ShopRecord {
     owner_name: row.owner_name == null ? null : String(row.owner_name),
     owner_phone: row.owner_phone == null ? null : String(row.owner_phone),
     owner_email: row.owner_email == null ? null : String(row.owner_email),
+    owner_email_verified_at: row.owner_email_verified_at == null ? null : String(row.owner_email_verified_at),
     selected_subscription_tier: row.selected_subscription_tier == null ? undefined : String(row.selected_subscription_tier) as ShopRecord['selected_subscription_tier'],
     pending_subscription_tier: row.pending_subscription_tier == null ? null : String(row.pending_subscription_tier) as ShopRecord['pending_subscription_tier'],
     pending_subscription_effective_at: row.pending_subscription_effective_at == null ? null : String(row.pending_subscription_effective_at),

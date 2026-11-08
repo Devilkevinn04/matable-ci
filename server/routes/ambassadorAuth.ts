@@ -1,8 +1,10 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { Router, type Request, type RequestHandler, type Response } from 'express';
 import { dbAll, dbGet, dbRun, dbTransaction, databaseMode } from '../../db.ts';
+import { createAmbassadorInvite, hashAmbassadorToken } from '../services/ambassadorInvites.ts';
 import { buildSessionFingerprint, isRequestFingerprintMatch } from '../services/authSessions.ts';
+import { notifyAmbassadorProgramEvent } from '../services/ambassadorNotifications.ts';
 import { normalizeWhatsAppPhone } from '../services/businessRules.ts';
 import { clearLoginAttempts, isLoginRateLimited } from '../services/rateLimits.ts';
 import { isEmailMfaRequired, startEmailMfaChallenge, verifyEmailMfaChallenge } from '../services/emailMfa.ts';
@@ -29,7 +31,7 @@ function clearAmbassadorCookie(response: Response) {
 
 export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: number) => RequestHandler) {
   const router = Router();
-  const protectedPostPaths = new Set(['/activate', '/login', '/login/verify']);
+  const protectedPostPaths = new Set(['/activate', '/login', '/login/verify', '/request-access']);
   router.use((request, response, next) => {
     if (request.method !== 'POST' || !protectedPostPaths.has(request.path)) return next();
     return requireSameOriginJsonRequest(request, response, next);
@@ -71,10 +73,10 @@ export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: numb
     const expiresAt = Date.now() + SESSION_DURATION_MS;
     const now = new Date().toISOString();
     const result = await dbTransaction(async (transaction) => {
-      const invite = await transaction.get<{ ambassador_id: string }>(
-        `SELECT i.ambassador_id FROM ambassador_invites i JOIN ambassadors a ON a.id = i.ambassador_id
+      const invite = await transaction.get<{ ambassador_id: string; password_hash: string | null }>(
+        `SELECT i.ambassador_id, a.password_hash FROM ambassador_invites i JOIN ambassadors a ON a.id = i.ambassador_id
          WHERE i.token_hash = ? AND i.used_at IS NULL AND i.expires_at > ? AND a.active = 1${databaseMode === 'postgresql' ? ' FOR UPDATE OF i' : ''}`,
-        [createHash('sha256').update(token).digest('hex'), now],
+        [hashAmbassadorToken(token), now],
       );
       if (!invite) return false;
       const duplicateEmail = await transaction.get<{ id: string }>(
@@ -83,19 +85,57 @@ export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: numb
       );
       if (duplicateEmail) return false;
       const used = await transaction.run('UPDATE ambassador_invites SET used_at = ? WHERE token_hash = ? AND used_at IS NULL',
-        [now, createHash('sha256').update(token).digest('hex')]);
+        [now, hashAmbassadorToken(token)]);
       if (used.changes !== 1) return false;
       await transaction.run('UPDATE ambassadors SET password_hash = ? WHERE id = ?', [passwordHash, invite.ambassador_id]);
       await transaction.run('DELETE FROM ambassador_sessions WHERE ambassador_id = ?', [invite.ambassador_id]);
       await transaction.run('INSERT INTO ambassador_sessions (token, ambassador_id, expires_at, fingerprint, created_at) VALUES (?, ?, ?, ?, ?)',
         [sessionToken, invite.ambassador_id, expiresAt, fingerprint, now]);
       await transaction.run('INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
-        ['ambassador', 'ambassador_account_activated', null, JSON.stringify({ ambassador_id: invite.ambassador_id }), now]);
+        [
+          'ambassador',
+          invite.password_hash ? 'ambassador_account_recovered' : 'ambassador_account_activated',
+          null,
+          JSON.stringify({ ambassador_id: invite.ambassador_id }),
+          now,
+        ]);
       return true;
     });
     if (!result) return response.status(400).json({ error: 'Lien d’activation invalide, expiré ou déjà utilisé. Demandez un nouveau lien au support MaTable.' });
     setAmbassadorCookie(response, sessionToken);
     return response.json({ success: true });
+  });
+
+  router.post('/request-access', rateLimitPublicRequest(8), async (request, response) => {
+    const email = typeof request.body?.email === 'string' ? request.body.email.trim().toLowerCase() : '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      return response.status(400).json({ error: 'Saisissez une adresse e-mail valide.' });
+    }
+
+    const attemptKey = `ambassador-recovery:${request.ip}:${email}`;
+    if (await isLoginRateLimited(attemptKey)) {
+      return response.status(429).json({ error: 'Trop de demandes. Réessayez dans 15 minutes.' });
+    }
+
+    const matches = await dbAll<{ id: string; active: number; email: string | null }>(
+      'SELECT id, active, email FROM ambassadors WHERE LOWER(email) = ? LIMIT 2',
+      [email],
+    );
+    if (matches.length === 1 && matches[0].active && matches[0].email) {
+      const appUrl = String(process.env.APP_URL || 'https://matable-ci.com').trim();
+      await createAmbassadorInvite({
+        ambassadorId: matches[0].id,
+        appUrl,
+        recovery: true,
+        retainInviteOnEmailFailure: false,
+      });
+    }
+
+    response.setHeader('Cache-Control', 'no-store');
+    return response.status(202).json({
+      success: true,
+      message: 'Si un compte ambassadeur correspond à cette adresse, un lien de récupération va être envoyé.',
+    });
   });
 
   router.post('/login', rateLimitPublicRequest(15), async (request, response) => {
@@ -245,6 +285,13 @@ export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: numb
     });
     if (result.status === 'already_requested') return response.status(409).json({ error: 'Une demande de retrait est déjà en cours.' });
     if (result.status === 'no_available_balance') return response.status(409).json({ error: 'Aucune commission validée n’est disponible pour un retrait.' });
+    await notifyAmbassadorProgramEvent({
+      ambassadorId: session.ambassador.id,
+      name: session.ambassador.name,
+      email: session.ambassador.email,
+      event: 'withdrawal_requested',
+      amount: result.amount,
+    });
     return response.status(201).json({ withdrawal: { id: withdrawalId, amount: result.amount, status: 'requested' } });
   });
 
@@ -254,8 +301,8 @@ export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: numb
     const withdrawalId = String(request.params.id || '').trim();
     const now = new Date().toISOString();
     const cancelled = await dbTransaction(async (transaction) => {
-      const withdrawal = await transaction.get<{ id: string }>(
-        `SELECT id FROM ambassador_withdrawals WHERE id = ? AND ambassador_id = ? AND status = 'requested'${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+      const withdrawal = await transaction.get<{ id: string; amount: number }>(
+        `SELECT id, amount FROM ambassador_withdrawals WHERE id = ? AND ambassador_id = ? AND status = 'requested'${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
         [withdrawalId, session.ambassador.id],
       );
       if (!withdrawal) return false;
@@ -267,11 +314,18 @@ export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: numb
         WHERE withdrawal_id = ? AND status = 'withdrawal_requested'`, [withdrawalId]);
       await transaction.run('INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
         ['ambassador', 'ambassador_withdrawal_cancelled_by_owner', null, JSON.stringify({ ambassador_id: session.ambassador.id, withdrawal_id: withdrawalId }), now]);
-      return true;
+      return { amount: Number(withdrawal.amount) };
     });
-    return cancelled
-      ? response.json({ success: true })
-      : response.status(409).json({ error: 'Cette demande n’est plus annulable ; contactez l’assistance si une correction est nécessaire.' });
+    if (!cancelled) return response.status(409).json({ error: 'Cette demande n’est plus annulable ; contactez l’assistance si une correction est nécessaire.' });
+    await notifyAmbassadorProgramEvent({
+      ambassadorId: session.ambassador.id,
+      name: session.ambassador.name,
+      email: session.ambassador.email,
+      event: 'withdrawal_cancelled',
+      amount: cancelled.amount,
+      reason: 'Vous avez annulé la demande. Le solde est de nouveau disponible.',
+    });
+    return response.json({ success: true });
   });
 
   router.post('/password', rateLimitPublicRequest(10), async (request, response) => {

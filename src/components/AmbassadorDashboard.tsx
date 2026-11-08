@@ -3,6 +3,10 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Copy, CreditCard, Download, Eye, EyeOff, LayoutDashboard, LogOut, Mail, MessageCircle, Search, Share2, ShieldCheck, Store, Users, Wallet } from 'lucide-react';
 import { stringifyCsv } from '../utils/csv';
 import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
+import { SUBSCRIPTION_PLANS } from '../utils/subscriptionFeatures';
+import { getAmbassadorMonthlyStats, type AmbassadorMonthlyStats } from '../utils/ambassadors';
+import { useSubscriptionPrices } from '../utils/useSubscriptionPrices';
+import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 
 interface DashboardData {
   ambassador: { name: string; email: string; code: string };
@@ -41,17 +45,69 @@ const payoutMethodLabels: Record<PayoutMethod, string> = {
   wave: 'Wave', orange_money: 'Orange Money', mtn_momo: 'MTN MoMo', moov_money: 'Moov Money',
 };
 
+function AmbassadorMonthlyChart({
+  title,
+  rows,
+  valueFor,
+  formatValue,
+  concealed = false,
+}: {
+  title: string;
+  rows: AmbassadorMonthlyStats[];
+  valueFor: (row: AmbassadorMonthlyStats) => number;
+  formatValue: (value: number) => string;
+  concealed?: boolean;
+}) {
+  const maxValue = Math.max(1, ...rows.map(valueFor));
+  const accessibleSummary = concealed
+    ? `${title}. Montants masqués.`
+    : `${title} sur les six derniers mois : ${rows.map((row) => {
+      const date = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+        .format(new Date(`${row.month}-01T12:00:00.000Z`));
+      return `${date}, ${formatValue(valueFor(row))}`;
+    }).join('; ')}.`;
+
+  return <section className="rounded-xl border border-slate-200 bg-white p-4" aria-label={title}>
+    <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+    {concealed
+      ? <p className="mt-4 grid h-32 place-items-center rounded-lg bg-slate-50 text-sm text-slate-500">Montants masqués</p>
+      : <div className="mt-4 grid h-32 grid-cols-6 items-end gap-2" role="img" aria-label={accessibleSummary}>
+        {rows.map((row) => {
+          const value = valueFor(row);
+          const height = value ? Math.max(4, (value / maxValue) * 100) : 0;
+          return <div key={row.month} className="flex h-full min-w-0 flex-col items-center justify-end gap-2">
+            <div className="flex h-full w-full items-end justify-center">
+              <div
+                title={`${row.label} : ${formatValue(value)}`}
+                className="w-full max-w-8 rounded-t-md bg-emerald-800/85 transition-[height] duration-300"
+                style={{ height: `${height}%`, opacity: value ? 1 : 0.15 }}
+              />
+            </div>
+            <span className="text-[10px] font-medium text-slate-500">{row.label}</span>
+          </div>;
+        })}
+      </div>}
+  </section>;
+}
+
 export function AmbassadorDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { prices: subscriptionPrices, error: subscriptionPricesError } = useSubscriptionPrices();
   const isActivation = location.pathname === '/ambassadeur/activer';
+  const isApplication = location.pathname === '/ambassadeur/inscription';
   const activationToken = new URLSearchParams(location.search).get('token') || '';
   const supportWhatsAppUrl = getSupportWhatsAppUrl('Bonjour, j’ai besoin d’aide pour accéder à mon espace ambassadeur MaTable.');
   const supportUrl = supportWhatsAppUrl || 'mailto:assistance@matable-ci.com?subject=Acc%C3%A8s%20ambassadeur%20MaTable';
   const supportLabel = supportWhatsAppUrl ? 'Contacter l’assistance sur WhatsApp' : 'Écrire à l’assistance';
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [checking, setChecking] = useState(true);
+  const [applicantName, setApplicantName] = useState('');
+  const [applicantEmail, setApplicantEmail] = useState('');
+  const [applicantPhone, setApplicantPhone] = useState('');
+  const [applicationSubmitted, setApplicationSubmitted] = useState(false);
   const [email, setEmail] = useState('');
+  const [forgotAccess, setForgotAccess] = useState(false);
   const [password, setPassword] = useState('');
   const [pendingMfaChallenge, setPendingMfaChallenge] = useState('');
   const [mfaCode, setMfaCode] = useState('');
@@ -73,18 +129,18 @@ export function AmbassadorDashboard() {
   const [referralPage, setReferralPage] = useState(0);
   const [showAmounts, setShowAmounts] = useState(true);
 
-  const loadDashboard = async () => {
+  const loadDashboard = async (clearNotice = true) => {
     const response = await fetch('/api/ambassador-auth/dashboard', { credentials: 'include', cache: 'no-store' });
     if (!response.ok) {
       setDashboard(null);
       return false;
     }
     setDashboard(await response.json() as DashboardData);
-    setNotice('');
+    if (clearNotice) setNotice('');
     return true;
   };
   useEffect(() => {
-    if (isActivation) { setChecking(false); return; }
+    if (isActivation || isApplication) { setChecking(false); return; }
     setChecking(true);
     void fetch('/api/ambassador-auth/session', { credentials: 'include', cache: 'no-store' })
       .then(async (response) => {
@@ -94,17 +150,54 @@ export function AmbassadorDashboard() {
       })
       .catch(() => setDashboard(null))
       .finally(() => setChecking(false));
-  }, [isActivation]);
+  }, [isActivation, isApplication]);
+  useVisibilityPolling(async () => {
+    await loadDashboard(false);
+  }, 60_000, Boolean(dashboard) && !isActivation && !isApplication);
+
+  const submitApplication = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/ambassador-applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: applicantName, email: applicantEmail, phone: applicantPhone }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Impossible d’envoyer la candidature.');
+      setApplicationSubmitted(true);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : 'Impossible d’envoyer la candidature.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submitCredentials = async (event: React.FormEvent) => {
     event.preventDefault(); setBusy(true); setError(''); setNotice('');
     try {
-      const response = await fetch(pendingMfaChallenge ? '/api/ambassador-auth/login/verify' : `/api/ambassador-auth/${isActivation ? 'activate' : 'login'}`, {
+      const requestAccess = !isActivation && !pendingMfaChallenge && forgotAccess;
+      const response = await fetch(pendingMfaChallenge
+        ? '/api/ambassador-auth/login/verify'
+        : requestAccess
+          ? '/api/ambassador-auth/request-access'
+          : `/api/ambassador-auth/${isActivation ? 'activate' : 'login'}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify(pendingMfaChallenge ? { challenge_id: pendingMfaChallenge, code: mfaCode } : isActivation ? { token: activationToken, password } : { email, password }),
+        body: JSON.stringify(pendingMfaChallenge
+          ? { challenge_id: pendingMfaChallenge, code: mfaCode }
+          : requestAccess
+            ? { email }
+            : isActivation
+              ? { token: activationToken, password }
+              : { email, password }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Connexion impossible.');
+      if (requestAccess) {
+        setNotice(result.message || 'Si un compte correspond à cette adresse, un lien de récupération va être envoyé.');
+        return;
+      }
       if (result.mfa_required && typeof result.challenge_id === 'string') {
         setPendingMfaChallenge(result.challenge_id);
         setMfaCode('');
@@ -112,7 +205,7 @@ export function AmbassadorDashboard() {
         return;
       }
       if (isActivation) {
-        setNotice('Compte activé. Ouverture de votre espace…');
+        setNotice('Accès configuré. Ouverture de votre espace…');
         navigate('/ambassadeur', { replace: true });
       } else {
         setPendingMfaChallenge('');
@@ -144,13 +237,33 @@ export function AmbassadorDashboard() {
       setNotice('Code ambassadeur copié.');
     } catch { setError('Copie impossible dans ce navigateur.'); }
   };
-  const shareReferralLink = async () => {
-    const url = `${window.location.origin}/?ref=${encodeURIComponent(dashboard?.ambassador.code || '')}`;
-    const text = 'Découvrez MaTable.ci et créez la vitrine de votre commerce en ligne.';
+  const referralUrl = `${window.location.origin}/?ref=${encodeURIComponent(dashboard?.ambassador.code || '')}`;
+  const shareMessages = [
+    {
+      title: 'Message personnel',
+      text: 'Bonjour ! Je vous partage MaTable.ci, une plateforme pour créer la vitrine de votre commerce, présenter vos produits et recevoir des commandes sur WhatsApp. Découvrez la plateforme ici :',
+    },
+    {
+      title: 'Message court',
+      text: 'Vous avez un commerce ? Présentez votre boutique et vos produits en ligne avec MaTable.ci, puis échangez directement avec vos clients sur WhatsApp. Découvrez comment :',
+    },
+    {
+      title: 'Publication pour les réseaux sociaux',
+      text: 'Commerçants, donnez plus de visibilité à votre activité avec une vitrine en ligne MaTable.ci : présentez vos produits et facilitez le contact avec vos clients sur WhatsApp. En savoir plus :',
+    },
+  ];
+  const copyShareMessage = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(`${text} ${referralUrl}`);
+      setError('');
+      setNotice('Message et lien personnel copiés.');
+    } catch { setError('Copie impossible dans ce navigateur.'); }
+  };
+  const shareReferralLink = async (text = 'Découvrez MaTable.ci et créez la vitrine de votre commerce en ligne.') => {
     setError('');
     if (typeof navigator.share === 'function') {
       try {
-        await navigator.share({ title: 'MaTable.ci', text, url });
+        await navigator.share({ title: 'MaTable.ci', text, url: referralUrl });
         return;
       } catch (problem) {
         if (problem instanceof Error && problem.name === 'AbortError') return;
@@ -158,7 +271,7 @@ export function AmbassadorDashboard() {
         return;
       }
     }
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`;
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`${text} ${referralUrl}`)}`;
     window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
     setNotice('Message préparé pour WhatsApp. Si la fenêtre ne s’ouvre pas, copiez le lien directement.');
   };
@@ -254,29 +367,99 @@ export function AmbassadorDashboard() {
   const availableBalance = Number(numericSummary?.available_commissions) || 0;
   const withdrawals = dashboard?.withdrawals || [];
   const openWithdrawal = withdrawals.find((withdrawal) => ['requested', 'approved'].includes(withdrawal.status));
+  const monthlyStats = getAmbassadorMonthlyStats(dashboard?.referrals || [], dashboard?.payouts || []);
+  const referralCount = dashboard?.referrals.length || 0;
+  const publishedCount = dashboard?.referrals.filter((referral) => referral.publication_status === 'active').length || 0;
+  const payingCount = dashboard?.referrals.filter((referral) => referral.payment_status === 'paid').length || 0;
+  const publishedRate = referralCount ? Math.round((publishedCount / referralCount) * 100) : 0;
+  const payingRate = referralCount ? Math.round((payingCount / referralCount) * 100) : 0;
   if (checking) return <main className="grid min-h-screen place-items-center bg-[#f7f5f2] p-6"><p role="status" className="text-sm font-semibold text-slate-600">Chargement de votre espace…</p></main>;
+
+  if (isApplication) return <main className="min-h-screen bg-[#f7f5f2] px-4 py-8 sm:px-6 sm:py-12">
+    <div className="mx-auto max-w-5xl">
+      <header className="mx-auto mb-8 max-w-3xl text-center"><a href="/" className="text-sm font-black text-emerald-900">MaTable.ci</a><p className="mt-6 text-xs font-bold uppercase tracking-[0.16em] text-emerald-800">Partenariats</p><h1 className="mt-2 text-3xl font-black text-slate-950 sm:text-4xl">Recommandez MaTable, gagnez à la performance</h1><p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">Aidez les commerçants à mettre leur activité en ligne et recevez une prime lorsqu’une recommandation aboutit à un abonnement payé et vérifié.</p></header>
+      <section aria-labelledby="ambassador-commission-title" className="mb-6 rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm sm:p-7">
+        <h2 id="ambassador-commission-title" className="text-xl font-black text-slate-950">Une prime unique de 20 %</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">La prime correspond à 20 % du tarif mensuel de la formule choisie, calculée sur le premier paiement d’abonnement effectivement confirmé. Pour un paiement annuel, le montant annuel est divisé par dix avant le calcul.</p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          {Object.values(SUBSCRIPTION_PLANS).map((plan) => {
+            const monthlyPrice = subscriptionPrices?.[plan.tier];
+            const commission = monthlyPrice === undefined ? null : Math.round(monthlyPrice * 0.2);
+            return <article key={plan.tier} className="rounded-xl border border-slate-200 bg-[#fbfaf7] p-4">
+              <h3 className="font-black text-slate-900">{plan.label}</h3>
+              {monthlyPrice === undefined
+                ? <p className="mt-2 text-sm text-slate-600">{subscriptionPricesError ? 'Tarif momentanément indisponible.' : 'Chargement du tarif…'}</p>
+                : <><p className="mt-2 text-sm text-slate-600">{new Intl.NumberFormat('fr-FR').format(monthlyPrice)} FCFA / mois</p><p className="mt-1 text-lg font-black text-emerald-900">Prime indicative : {new Intl.NumberFormat('fr-FR').format(commission || 0)} FCFA</p></>}
+              <p className="mt-1 text-xs text-slate-500">Montant indicatif avant vérification, pour un premier abonnement payé.</p>
+            </article>;
+          })}
+        </div>
+        {subscriptionPricesError && <p role="status" className="mt-3 text-xs text-amber-900">Les tarifs exacts seront consultables lorsque le service sera disponible. La commission dépend du montant confirmé du paiement.</p>}
+      </section>
+      <div className="mb-6 grid gap-4 md:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <h2 className="text-lg font-black text-slate-950">Comment ça marche ?</h2>
+          <ol className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
+            <li><strong>1. Candidatez.</strong> Le Super Admin examine chaque demande avant toute activation.</li>
+            <li><strong>2. Partagez.</strong> Après acceptation, vous recevez un code et un lien personnels.</li>
+            <li><strong>3. Recevez votre prime.</strong> Une prime est examinée après le premier abonnement payé ; la boutique doit être publiée et la commission validée.</li>
+          </ol>
+        </section>
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <h2 className="text-lg font-black text-slate-950">Modalités importantes</h2>
+          <ul className="mt-4 space-y-2 text-sm leading-6 text-slate-700">
+            <li>Pas de cachet fixe ni de prime pour une simple inscription ou un essai gratuit.</li>
+            <li>Les commerçants peuvent commencer par deux mois d’essai Standard ou payer une formule directement.</li>
+            <li>Une seule prime par nouvelle boutique, sur son premier paiement confirmé ; aucun bonus de renouvellement.</li>
+            <li>Les remboursements annulent les primes non versées ; une auto-inscription ou une recommandation fictive n’est pas rémunérée.</li>
+            <li>Les commissions validées peuvent être retirées vers Wave, Orange Money, MTN MoMo ou Moov Money. Les versements sont manuels ; aucun transfert automatique n’est déclenché.</li>
+            <li>L’attribution par lien dépend du consentement au suivi facultatif ; un code peut aussi être saisi lors de l’inscription.</li>
+          </ul>
+        </section>
+      </div>
+      <div className="mx-auto max-w-2xl">
+      <section className="rounded-2xl border border-slate-200 bg-white px-4 py-6 shadow-sm sm:px-6" aria-labelledby="ambassador-application-title">
+        <h2 id="ambassador-application-title" className="text-lg font-black text-slate-900">Candidature</h2>
+        <p className="mt-1 text-sm leading-6 text-slate-600">Transmettez vos coordonnées. Nous vous contacterons après examen de votre demande.</p>
+        {applicationSubmitted
+          ? <p role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950">Votre candidature a été reçue. Elle sera examinée avant toute activation de compte ou de code ambassadeur. Si elle est approuvée, vous recevrez un lien d’activation à l’adresse indiquée.</p>
+          : <form onSubmit={(event) => void submitApplication(event)} className="mt-5 space-y-4">
+            <label className="block text-sm font-semibold text-slate-700">Nom complet<input required minLength={2} maxLength={100} autoComplete="name" value={applicantName} onChange={(event) => setApplicantName(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-lg border border-slate-300 px-3 text-sm font-normal text-slate-900" /></label>
+            <label className="block text-sm font-semibold text-slate-700">Adresse e-mail<input required type="email" maxLength={254} autoComplete="email" value={applicantEmail} onChange={(event) => setApplicantEmail(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-lg border border-slate-300 px-3 text-sm font-normal text-slate-900" /></label>
+            <label className="block text-sm font-semibold text-slate-700">Téléphone (facultatif)<input type="tel" maxLength={30} autoComplete="tel" value={applicantPhone} onChange={(event) => setApplicantPhone(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-lg border border-slate-300 px-3 text-sm font-normal text-slate-900" /></label>
+            <p className="rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-950">L’envoi de cette candidature ne crée pas encore de compte ni de code de recommandation. Le Super Admin doit d’abord l’approuver.</p>
+            {error && <p role="alert" className="text-sm font-semibold text-rose-800">{error}</p>}
+            <button type="submit" disabled={busy} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-900 px-4 text-sm font-bold text-white disabled:opacity-50">{busy ? 'Envoi en cours…' : 'Envoyer ma candidature'}<ArrowRight className="h-4 w-4" /></button>
+          </form>}
+        <a href="/ambassadeur" className="mt-4 block min-h-10 text-sm font-semibold text-slate-600 underline underline-offset-2">Retour à l’espace ambassadeur</a>
+      </section>
+      <p className="mt-4 text-center text-xs leading-5 text-slate-500">En envoyant votre candidature, vous autorisez MaTable à utiliser ces coordonnées pour examiner et gérer votre demande. Consultez notre <a href="/confidentialite" className="font-semibold underline">politique de confidentialité</a>. Les conditions du programme peuvent évoluer ; les modalités applicables seront confirmées lors de l’acceptation.</p>
+      </div>
+    </div>
+  </main>;
 
   if (!dashboard) return <main className="min-h-screen bg-[#f7f5f2] px-4 py-8 sm:px-6 sm:py-12">
     <div className="mx-auto max-w-md">
       <header className="mb-7"><a href="/" className="text-sm font-black text-emerald-900">MaTable.ci</a><p className="mt-6 text-xs font-bold uppercase tracking-[0.16em] text-emerald-800">Partenariats</p><h1 className="mt-2 text-3xl font-black text-slate-950">Espace ambassadeur</h1><p className="mt-3 text-sm leading-6 text-slate-600">Suivez les boutiques que vous avez recommandées et l’état de vos primes.</p></header>
       <section className="rounded-2xl border border-slate-200 bg-white px-4 py-6 shadow-sm sm:px-6" aria-labelledby="ambassador-auth-title">
-        <h2 id="ambassador-auth-title" className="text-lg font-black text-slate-900">{isActivation ? 'Activez votre accès' : 'Connexion'}</h2>
-        <p className="mt-1 text-sm text-slate-600">{isActivation ? 'Choisissez un mot de passe personnel pour sécuriser votre espace.' : 'Connectez-vous avec l’adresse e-mail associée à votre partenariat.'}</p>
+        <h2 id="ambassador-auth-title" className="text-lg font-black text-slate-900">{isActivation ? 'Configurez votre accès' : forgotAccess ? 'Récupérez votre accès' : 'Connexion'}</h2>
+        <p className="mt-1 text-sm text-slate-600">{isActivation ? 'Choisissez un mot de passe personnel pour sécuriser votre espace.' : forgotAccess ? 'Nous vous enverrons un lien à usage unique si cette adresse correspond à un compte ambassadeur.' : 'Connectez-vous avec l’adresse e-mail associée à votre partenariat.'}</p>
         <form onSubmit={(event) => void submitCredentials(event)} className="auth-form mt-5 space-y-4">
           {isActivation && !activationToken && <p role="alert" className="text-sm font-semibold text-rose-800">Lien d’activation manquant. Demandez un nouveau lien au support MaTable.</p>}
           {pendingMfaChallenge ? <label className="block text-sm font-semibold text-slate-700">Code de vérification par e-mail<span className="mt-1 block text-xs font-normal text-slate-500">Code à 8 chiffres, à usage unique, valide 10 minutes.</span><input required type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{8}" maxLength={8} value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-2 min-h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-center font-mono text-lg tracking-[0.3em] text-slate-900" /></label> : <>
           {!isActivation && <label className="block text-sm font-semibold text-slate-700">E-mail<input required type="email" autoComplete="username" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900" /></label>}
-          <label className="block text-sm font-semibold text-slate-700">{isActivation ? 'Nouveau mot de passe' : 'Mot de passe'}<span className="relative mt-1.5 block"><input required type={showPassword ? 'text' : 'password'} autoComplete={isActivation ? 'new-password' : 'current-password'} minLength={isActivation ? 12 : 1} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} className="min-h-12 w-full rounded-lg border border-slate-300 bg-white px-3 pr-12 text-sm font-normal text-slate-900" /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} aria-pressed={showPassword} className="absolute inset-y-0 right-0 grid w-12 place-items-center rounded-r-lg text-slate-500 hover:bg-slate-50">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></span></label>
+          {!forgotAccess && <label className="block text-sm font-semibold text-slate-700">{isActivation ? 'Nouveau mot de passe' : 'Mot de passe'}<span className="relative mt-1.5 block"><input required type={showPassword ? 'text' : 'password'} autoComplete={isActivation ? 'new-password' : 'current-password'} minLength={isActivation ? 12 : 1} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} className="min-h-12 w-full rounded-lg border border-slate-300 bg-white px-3 pr-12 text-sm font-normal text-slate-900" /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} aria-pressed={showPassword} className="absolute inset-y-0 right-0 grid w-12 place-items-center rounded-r-lg text-slate-500 hover:bg-slate-50">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></span></label>}
           </>}
           {isActivation && <label className="block text-sm font-semibold text-slate-700">Confirmer le mot de passe<input required type="password" autoComplete="new-password" minLength={12} maxLength={128} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900" /></label>}
           {isActivation && password && confirmation && password !== confirmation && <p className="text-xs font-semibold text-rose-800">Les deux mots de passe ne correspondent pas.</p>}
-          {!pendingMfaChallenge && !isActivation && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><a href={getSupportWhatsAppUrl(`Bonjour, j’ai oublié mon mot de passe de l’espace ambassadeur. Mon adresse e-mail est ${email || '[votre e-mail]'}.`) || `mailto:assistance@matable-ci.com?subject=R%C3%A9initialisation%20de%20mon%20acc%C3%A8s%20ambassadeur&body=${encodeURIComponent(`Bonjour, j’ai oublié mon mot de passe ambassadeur. Mon adresse e-mail est ${email || '[votre e-mail]'}.`)}`} target="_blank" rel="noreferrer" className="font-semibold text-emerald-900 underline underline-offset-2">Mot de passe oublié ?</a></div>}
+          {!pendingMfaChallenge && !isActivation && <button type="button" onClick={() => { setForgotAccess((current) => !current); setPassword(''); setNotice(''); setError(''); }} className="text-sm font-semibold text-emerald-900 underline underline-offset-2">{forgotAccess ? 'Retour à la connexion' : 'Mot de passe oublié ?'}</button>}
           {error && <p role="alert" className="text-sm font-semibold text-rose-800">{error}</p>}{notice && <p role="status" className="text-sm font-semibold text-emerald-800">{notice}</p>}
-          <button type="submit" disabled={busy || (isActivation && (!activationToken || password !== confirmation))} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-900 px-4 text-sm font-bold text-white disabled:opacity-50">{busy ? 'Veuillez patienter…' : pendingMfaChallenge ? 'Vérifier le code' : isActivation ? 'Activer mon compte' : 'Se connecter'}<ArrowRight className="h-4 w-4" /></button>
+          <button type="submit" disabled={busy || (isActivation && (!activationToken || password !== confirmation))} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-900 px-4 text-sm font-bold text-white disabled:opacity-50">{busy ? 'Veuillez patienter…' : pendingMfaChallenge ? 'Vérifier le code' : isActivation ? 'Continuer' : forgotAccess ? 'Envoyer le lien sécurisé' : 'Se connecter'}<ArrowRight className="h-4 w-4" /></button>
           {pendingMfaChallenge && <button type="button" onClick={() => { setPendingMfaChallenge(''); setMfaCode(''); setNotice(''); }} className="w-full text-center text-xs font-semibold text-slate-600 underline">Recommencer la connexion</button>}
         </form>
-        <p className="mt-4 text-xs leading-5 text-slate-500">{isActivation ? 'Le lien est à usage unique et expire après 7 jours. Utilisez un mot de passe d’au moins 12 caractères.' : 'Votre session reste active pendant 8 heures. Pour créer votre accès ou obtenir de l’aide, contactez l’assistance.'}</p>
-        <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-emerald-900 underline underline-offset-2">{supportWhatsAppUrl ? <MessageCircle className="h-4 w-4" /> : <Mail className="h-4 w-4" />}{isActivation ? 'Contacter l’assistance' : 'Demander un lien d’accès'}</a>
+        <p className="mt-4 text-xs leading-5 text-slate-500">{isActivation ? 'Le lien est à usage unique et expire après 7 jours. Utilisez un mot de passe d’au moins 12 caractères.' : forgotAccess ? 'Le lien expire après 7 jours et ne peut être utilisé qu’une seule fois. Le changement de mot de passe déconnectera les autres sessions.' : 'Votre session reste active pendant 8 heures. Pour créer votre accès ou obtenir de l’aide, contactez l’assistance.'}</p>
+        {(!forgotAccess || isActivation) && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-emerald-900 underline underline-offset-2">{supportWhatsAppUrl ? <MessageCircle className="h-4 w-4" /> : <Mail className="h-4 w-4" />}{isActivation ? 'Contacter l’assistance' : 'Demander un lien d’accès'}</a>}
+        {!isActivation && <a href="/ambassadeur/inscription" className="mt-3 block min-h-10 text-sm font-semibold text-emerald-900 underline underline-offset-2">Vous souhaitez devenir ambassadeur ? Déposer une candidature</a>}
         {isActivation && <a href="/ambassadeur" className="mt-3 block min-h-10 text-sm font-semibold text-slate-600 underline underline-offset-2">Retour à la connexion</a>}
       </section>
     </div>
@@ -319,9 +502,55 @@ export function AmbassadorDashboard() {
       {activeTab === 'overview' && <>
         <section aria-label="Vos résultats" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{metrics.map(({ label, value, icon: Icon }) => <article key={label} className="ambassador-stat-card flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#eaf7f3] text-emerald-900"><Icon className="h-5 w-5" /></span><div><p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">{label}</p><p className="mt-1 text-xl font-black tabular-nums text-slate-950">{label === 'Primes versées' ? (showAmounts ? value : '••••') : Number(value) || 0}</p></div></article>)}</section>
         <section aria-labelledby="commission-summary-title" className="ambassador-panel grid gap-3 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)] sm:grid-cols-3"><h2 id="commission-summary-title" className="sr-only">État des commissions</h2><p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">En vérification <strong className="ml-1 text-slate-950">{formatAmount(numericSummary?.pending_commissions)}</strong></p><p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">Validées, à retirer <strong className="ml-1 text-slate-950">{formatAmount(numericSummary?.available_commissions)}</strong></p><p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">Total des primes générées <strong className="ml-1 text-slate-950">{formatAmount(numericSummary?.total_commissions)}</strong></p><p className="text-xs leading-5 text-slate-500 sm:col-span-3">Une prime est unique et concerne le premier abonnement payé. Elle devient retirable après confirmation, publication et vérification.</p></section>
+        <section aria-labelledby="ambassador-statistics-title" className="ambassador-panel space-y-4 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+          <div><h2 id="ambassador-statistics-title" className="text-lg font-black text-slate-950">Vos statistiques</h2><p className="mt-1 text-xs leading-5 text-slate-500">Conversions calculées sur les boutiques attribuées à votre code, tous historiques confondus.</p></div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <article className="rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Boutiques publiées</p><p className="mt-1 text-2xl font-black text-slate-950">{referralCount ? `${publishedRate} %` : '—'}</p><p className="mt-1 text-xs text-slate-600">{publishedCount} publiée(s) sur {referralCount} inscription(s) attribuée(s)</p></article>
+            <article className="rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Commerçants payants</p><p className="mt-1 text-2xl font-black text-slate-950">{referralCount ? `${payingRate} %` : '—'}</p><p className="mt-1 text-xs text-slate-600">{payingCount} paiement(s) confirmé(s) sur {referralCount} inscription(s) attribuée(s)</p></article>
+          </div>
+          <p className="text-xs leading-5 text-slate-500">Les inscriptions correspondent aux boutiques créées avec attribution confirmée. Les clics ou vues du lien ne sont pas comptabilisés ici.</p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <AmbassadorMonthlyChart
+              title="Inscriptions attribuées — 6 derniers mois"
+              rows={monthlyStats}
+              valueFor={(row) => row.registrations}
+              formatValue={(value) => `${value} inscription${value > 1 ? 's' : ''}`}
+            />
+            <AmbassadorMonthlyChart
+              title="Primes versées — 6 derniers mois"
+              rows={monthlyStats}
+              valueFor={(row) => row.paidAmount}
+              formatValue={money}
+              concealed={!showAmounts}
+            />
+          </div>
+        </section>
         <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setActiveTab('withdrawals')} className="ambassador-primary-btn min-h-10 rounded-xl bg-[#123b32] px-4 text-sm font-bold text-white shadow-[0_12px_28px_rgba(18,59,50,0.18)]">Voir mes retraits</button><button type="button" onClick={() => setActiveTab('sharing')} className="ambassador-secondary-btn min-h-10 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800">Partager mon lien</button></div>
       </>}
-      {activeTab === 'sharing' && <section aria-labelledby="referral-title" className="ambassador-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]"><div><p className="text-[11px] font-black uppercase tracking-[0.15em] text-emerald-800">Faire connaître MaTable</p><h2 id="referral-title" className="mt-2 text-xl font-black text-slate-950">Votre lien de recommandation</h2><p className="mt-1 text-sm text-slate-600">Partagez ce lien aux commerçants que vous accompagnez.</p></div><div className="mt-4 rounded-2xl border border-emerald-900/15 bg-[#ebfaf5] px-4 py-5 sm:px-5"><p className="break-all text-sm font-semibold text-emerald-950">{window.location.origin}/?ref={dashboard.ambassador.code}</p><p className="mt-2 text-xs text-emerald-800">Code personnel : <strong>{dashboard.ambassador.code}</strong></p><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => void shareReferralLink()} className="ambassador-primary-btn inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#123b32] px-3 text-sm font-bold text-white"><MessageCircle className="h-4 w-4" />Partager</button><button type="button" onClick={() => void copyReferralLink()} className="ambassador-secondary-btn inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le lien</button><button type="button" onClick={() => void copyReferralCode()} className="ambassador-secondary-btn inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le code</button></div></div></section>}
+      {activeTab === 'sharing' && <section aria-labelledby="referral-title" className="ambassador-panel space-y-5 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+        <div><p className="text-[11px] font-black uppercase tracking-[0.15em] text-emerald-800">Faire connaître MaTable</p><h2 id="referral-title" className="mt-2 text-xl font-black text-slate-950">Vos outils de partage</h2><p className="mt-1 text-sm text-slate-600">Choisissez un message, puis partagez-le avec votre lien personnel.</p></div>
+        <div className="rounded-2xl border border-emerald-900/15 bg-[#ebfaf5] px-4 py-5 sm:px-5">
+          <h3 className="text-sm font-black text-emerald-950">Votre lien de recommandation</h3>
+          <p className="mt-2 break-all text-sm font-semibold text-emerald-950">{referralUrl}</p>
+          <p className="mt-2 text-xs text-emerald-800">Code personnel : <strong>{dashboard.ambassador.code}</strong></p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" onClick={() => void shareReferralLink()} className="ambassador-primary-btn inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#123b32] px-3 text-sm font-bold text-white"><MessageCircle className="h-4 w-4" />Partager le lien</button>
+            <button type="button" onClick={() => void copyReferralLink()} className="ambassador-secondary-btn inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le lien</button>
+            <button type="button" onClick={() => void copyReferralCode()} className="ambassador-secondary-btn inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le code</button>
+          </div>
+        </div>
+        <div className="space-y-3">
+          <h3 className="text-sm font-black text-slate-900">Messages prêts à envoyer</h3>
+          {shareMessages.map((message) => <article key={message.title} className="rounded-xl border border-slate-200 bg-white p-4">
+            <h4 className="text-sm font-bold text-slate-900">{message.title}</h4>
+            <p className="mt-2 text-sm leading-6 text-slate-700">{message.text} <span className="break-all font-semibold text-emerald-900">{referralUrl}</span></p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={() => void copyShareMessage(message.text)} className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-800"><Copy className="h-4 w-4" />Copier le message</button>
+              <button type="button" onClick={() => void shareReferralLink(message.text)} className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-emerald-900 px-3 text-xs font-bold text-white"><MessageCircle className="h-4 w-4" />Partager</button>
+            </div>
+          </article>)}
+        </div>
+      </section>}
       <section data-ambassador-panel="withdrawals" aria-labelledby="withdrawal-request-title" className="ambassador-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]"><div><p className="text-[11px] font-black uppercase tracking-[0.15em] text-emerald-800">Gestion des gains</p><h2 id="withdrawal-request-title" className="mt-2 text-xl font-black text-slate-950">Retraits</h2><p className="mt-1 text-sm text-slate-600">Demandez le transfert de toutes vos commissions validées. Chaque demande est contrôlée par l’équipe MaTable.</p></div>
         <div className="mt-4 grid gap-3 rounded-2xl border border-emerald-900/15 bg-[#ebfaf5] p-4 sm:grid-cols-3"><div><p className="text-[11px] font-black uppercase tracking-[0.12em] text-emerald-900">Disponible au retrait</p><p className="mt-1 text-xl font-black tabular-nums text-emerald-950">{formatAmount(availableBalance)}</p></div><div><p className="text-[11px] font-black uppercase tracking-[0.12em] text-emerald-900">En demande</p><p className="mt-1 text-xl font-black tabular-nums text-emerald-950">{formatAmount(numericSummary?.withdrawal_commissions)}</p></div><div><p className="text-[11px] font-black uppercase tracking-[0.12em] text-emerald-900">Déjà versé</p><p className="mt-1 text-xl font-black tabular-nums text-emerald-950">{formatAmount(numericSummary?.paid_commissions)}</p></div></div>
         {openWithdrawal ? <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-4"><p className="text-sm font-bold text-amber-950">Une demande de retrait est en cours.</p><p className="mt-1 text-sm text-amber-900">{formatAmount(openWithdrawal.amount)} · {withdrawalLabels[openWithdrawal.status]} · {new Date(openWithdrawal.created_at).toLocaleDateString('fr-FR')}</p><p className="mt-1 text-xs text-amber-900">Portefeuille : {payoutMethodLabels[openWithdrawal.payout_method as PayoutMethod] || openWithdrawal.payout_method} · {openWithdrawal.payout_phone}</p></div> : availableBalance > 0 ? <form onSubmit={(event) => void requestWithdrawal(event)} className="mt-4 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-700">Portefeuille mobile money<select required value={payoutMethod} onChange={(event) => setPayoutMethod(event.target.value as PayoutMethod)} className="mt-1 block min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm">{Object.entries(payoutMethodLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-xs font-semibold text-slate-700">Numéro de réception<input required type="tel" inputMode="tel" autoComplete="tel" value={payoutPhone} onChange={(event) => setPayoutPhone(event.target.value)} placeholder="+225 07 00 00 00 00" className="mt-1 block min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm" /></label><div className="sm:col-span-2"><button type="submit" disabled={requestingWithdrawal || !payoutPhone.trim()} className="ambassador-primary-btn inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-900 px-4 text-sm font-bold text-white disabled:opacity-40">{requestingWithdrawal ? 'Envoi…' : `Demander le retrait de ${formatAmount(availableBalance)}`}</button><p className="mt-2 text-xs leading-5 text-slate-500">Le montant demandé correspond à tout le solde validé. Le transfert n’est pas automatique ; MaTable le traite après vérification.</p></div></form> : <p className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-600">Aucune commission n’est disponible pour le retrait. Les primes deviennent disponibles après validation.</p>}        <div><h3 className="text-sm font-black text-slate-900">Historique des demandes</h3>{withdrawals.length === 0 ? <p className="mt-2 text-sm text-slate-600">Aucune demande de retrait pour le moment.</p> : <div className="mt-2 divide-y divide-slate-200">{withdrawals.map((withdrawal) => <article key={withdrawal.id} className="flex flex-wrap items-start justify-between gap-3 py-3"><div><p className="text-sm font-bold text-slate-900">{formatAmount(withdrawal.amount)} · {withdrawalLabels[withdrawal.status]}</p><p className="mt-1 text-xs text-slate-600">{payoutMethodLabels[withdrawal.payout_method as PayoutMethod] || withdrawal.payout_method} · {withdrawal.payout_phone} · Demandé le {new Date(withdrawal.created_at).toLocaleDateString('fr-FR')}</p>{withdrawal.payout_reference && <p className="mt-1 text-xs text-emerald-800">Référence : {withdrawal.payout_reference}</p>}{withdrawal.admin_reason && <p className="mt-1 text-xs text-rose-800">Motif : {withdrawal.admin_reason}</p>}</div>{withdrawal.processed_at && <time className="text-xs text-slate-500">Traité le {new Date(withdrawal.processed_at).toLocaleDateString('fr-FR')}</time>}</article>)}</div>}</div>

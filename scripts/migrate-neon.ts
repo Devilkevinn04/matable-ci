@@ -53,6 +53,8 @@ const migrationVersions = [
   '048_ambassadors',
   '049_ambassador_accounts',
   '050_ambassador_withdrawals',
+  '051_email_mfa_rollout_onboarding',
+  '052_ambassador_public_applications',
 ];
 const connectionString = process.env.DATABASE_URL;
 

@@ -24,6 +24,7 @@ export interface CustomerUser {
   last_name: string;
   phone: string;
   email: string;
+  email_verified?: boolean;
   created_at: string;
 }
 
@@ -501,6 +502,9 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMessage, setProfileMessage] = useState('');
   const [profileError, setProfileError] = useState('');
+  const [emailVerificationChallenge, setEmailVerificationChallenge] = useState('');
+  const [emailVerificationCode, setEmailVerificationCode] = useState('');
+  const [emailVerificationBusy, setEmailVerificationBusy] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -635,6 +639,36 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
       setProfileError(error instanceof Error ? error.message : 'Impossible d’enregistrer vos informations.');
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  const verifyCustomerEmail = async (verify: boolean) => {
+    setEmailVerificationBusy(true);
+    setProfileError('');
+    setProfileMessage('');
+    try {
+      const response = await fetch(`/api/auth/customer-email-verification/${verify ? 'verify' : 'start'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(verify ? { challenge_id: emailVerificationChallenge, code: emailVerificationCode } : {}),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de vérifier cette adresse e-mail.');
+      if (verify) {
+        onUserUpdated(data.user as CustomerUser);
+        setEmailVerificationChallenge('');
+        setEmailVerificationCode('');
+        setProfileMessage('Votre adresse e-mail est vérifiée pour la sécurité de votre compte.');
+      } else {
+        setEmailVerificationChallenge(data.challenge_id);
+        setEmailVerificationCode('');
+        setProfileMessage('Un code à 8 chiffres a été envoyé à votre adresse. Vérifiez aussi vos courriers indésirables.');
+      }
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : 'Impossible de vérifier cette adresse e-mail.');
+    } finally {
+      setEmailVerificationBusy(false);
     }
   };
 
@@ -790,6 +824,14 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
           </div>
         </div>
       </section>
+
+      {!user.email_verified && (
+        <div role="status" className="mx-auto mt-4 max-w-[1184px] rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 sm:mt-6 sm:px-6">
+          <p className="font-extrabold">Vérifiez votre adresse e-mail pour protéger votre compte.</p>
+          <p className="mt-1 leading-6">La connexion par code e-mail sera requise après la période de transition. Confirmez dès maintenant que vous pouvez recevoir les codes sur {user.email}.</p>
+          <button type="button" onClick={() => setActiveSection('profile')} className="mt-2 font-bold underline underline-offset-2">Vérifier mon adresse</button>
+        </div>
+      )}
 
       <div className="mx-auto grid min-w-0 max-w-[1184px] grid-cols-[minmax(0,1fr)] gap-6 px-4 py-4 sm:px-8 sm:py-8 lg:grid-cols-[260px_minmax(0,1fr)]">
 
@@ -1093,8 +1135,17 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
               </label>
               <label className="block text-sm font-bold text-[#47534b]">Adresse e-mail
                 <input type="email" value={user.email} readOnly className="mt-1.5 min-h-12 w-full rounded-xl border border-[#e8e0d6] bg-[#FAF8F2] px-3 text-sm font-medium text-[#647067]" />
-                <span className="mt-1 block text-xs font-normal text-[#81796f]">La modification de l’e-mail sera disponible avec la vérification de la nouvelle adresse.</span>
+                <span className="mt-1 block text-xs font-normal text-[#81796f]">{user.email_verified ? 'Adresse vérifiée.' : 'Un code sera envoyé à cette adresse pour confirmer que vous pouvez la consulter.'}</span>
               </label>
+              {!user.email_verified && <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                {emailVerificationChallenge && <label className="block text-sm font-bold text-[#47534b]">Code reçu par e-mail
+                  <input type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{8}" maxLength={8} value={emailVerificationCode} onChange={(event) => setEmailVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-1.5 min-h-12 w-full rounded-xl border border-amber-200 bg-white px-3 text-center font-mono text-lg tracking-[0.3em]" />
+                </label>}
+                <button type="button" disabled={emailVerificationBusy} onClick={() => void verifyCustomerEmail(Boolean(emailVerificationChallenge))} className="inline-flex min-h-11 items-center justify-center rounded-full bg-[var(--mt-green-deep)] px-5 text-sm font-bold text-white disabled:opacity-50">
+                  {emailVerificationBusy ? 'Vérification…' : emailVerificationChallenge ? 'Confirmer mon adresse' : 'Envoyer un code'}
+                </button>
+                {emailVerificationChallenge && <button type="button" disabled={emailVerificationBusy} onClick={() => void verifyCustomerEmail(false)} className="ml-3 text-sm font-bold text-[var(--mt-green-deep)] underline underline-offset-2">Renvoyer le code</button>}
+              </div>}
               {profileError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">{profileError}</p>}
               {profileMessage && <p role="status" className="flex items-center gap-2 rounded-xl border border-[#c8dbd0] bg-[#d1fae5] px-3 py-2.5 text-sm font-semibold text-[var(--mt-green-deep)]"><Check className="h-4 w-4" />{profileMessage}</p>}
               <button type="submit" disabled={profileSaving} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 text-sm font-bold text-white transition hover:bg-[var(--mt-green-primary)] disabled:cursor-wait disabled:opacity-60">{profileSaving ? 'Enregistrement…' : <><PencilLine className="h-4 w-4" />Enregistrer les modifications</>}</button>

@@ -646,6 +646,7 @@ export default function App() {
                       <Route path="/app/*" element={<MerchantDashboard openRegistration={normalizedPath === 'app/creer-boutique'} onBackToDirectory={() => navigate('/')} onCustomerLogin={() => navigate('/connexion')} onOpenStorefront={(slug) => navigate(`/${slug}`)} />} />
                       <Route path="/ambassadeur" element={<AmbassadorDashboard />} />
                       <Route path="/ambassadeur/activer" element={<AmbassadorDashboard />} />
+                      <Route path="/ambassadeur/inscription" element={<AmbassadorDashboard />} />
                       <Route path="/admin/*" element={<AdminDashboard />} />
                       <Route path="/:slug" element={<StorefrontRoute customerUser={customerUser} onCustomerAuthenticated={setCustomerUser} />} />
                       <Route path="*" element={<NotFoundPage />} />

@@ -871,12 +871,18 @@ const toSafeShop = (shop: ShopRecord) => {
     pin_code_hash: _pinCodeHash,
     owner_access_token_hash: _ownerAccessTokenHash,
     owner_email: _ownerEmail,
+    owner_email_verified_at: _ownerEmailVerifiedAt,
     subscription_plan_features: _subscriptionPlanFeatures,
     subscription_features_snapshot: _subscriptionFeaturesSnapshot,
     subscription_features_effective_at: _subscriptionFeaturesEffectiveAt,
     ...safeShop
   } = shop;
-  return { ...safeShop, owner_email_configured: Boolean(shop.owner_email), subscription };
+  return {
+    ...safeShop,
+    owner_email_configured: Boolean(shop.owner_email),
+    owner_email_verified: Boolean(shop.owner_email_verified_at),
+    subscription,
+  };
 };
 const verifyPin = (inputPin: string, storedHash: string) => {
   const pin = String(inputPin).trim();
@@ -1159,6 +1165,7 @@ async function startServer() {
     isShopCategory,
     normalizeCustomBannerImage: normalizeStoredCustomBannerImage,
     sanitizeTextField,
+    rateLimitPublicRequest,
   }));
   app.use('/api/shops', verificationRouters.merchantRouter);
 
@@ -1194,6 +1201,7 @@ async function startServer() {
     isWeakShopPin,
     toSafeShop,
     createMerchantSession,
+    revokeMerchantSessionsForShop,
     getCookie,
     clearSessionCookie,
     clearCustomerSessionCookie,

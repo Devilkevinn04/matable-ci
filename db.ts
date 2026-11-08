@@ -44,7 +44,7 @@ const sqliteSchema = `
     last_notification_sent_at TEXT, whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
     whatsapp_subscription_reminders_consent_at TEXT, email_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
     email_subscription_reminders_consent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
-    city TEXT, owner_name TEXT, owner_phone TEXT, owner_email TEXT, subscription_tier TEXT NOT NULL, theme_config TEXT, opening_hours TEXT,
+    city TEXT, owner_name TEXT, owner_phone TEXT, owner_email TEXT, owner_email_verified_at TEXT, subscription_tier TEXT NOT NULL, theme_config TEXT, opening_hours TEXT,
     owner_access_token_hash TEXT
   );
   CREATE TABLE IF NOT EXISTS merchant_account_consents (
@@ -310,6 +310,10 @@ const sqliteSchema = `
     email TEXT NOT NULL, code_hash TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
     expires_at INTEGER NOT NULL, created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS auth_email_rollout_notices (
+    subject_type TEXT NOT NULL, subject_id TEXT NOT NULL, created_at TEXT NOT NULL, sent_at TEXT,
+    PRIMARY KEY (subject_type, subject_id)
+  );
   CREATE INDEX IF NOT EXISTS idx_auth_email_challenges_subject
     ON auth_email_challenges(subject_type, subject_id, expires_at);
   CREATE TABLE IF NOT EXISTS request_rate_limits (
@@ -323,7 +327,7 @@ const sqliteSchema = `
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT NOT NULL,
     first_name TEXT NOT NULL DEFAULT '', last_name TEXT NOT NULL DEFAULT '',
-    email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE, email_verified_at TEXT, password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, is_active INTEGER NOT NULL DEFAULT 1
   );
   CREATE TABLE IF NOT EXISTS customer_password_reset_tokens (
@@ -423,6 +427,16 @@ const sqliteSchema = `
     email TEXT, phone TEXT, password_hash TEXT, active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS ambassador_applications (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at TEXT NOT NULL, decided_at TEXT, decision_reason TEXT,
+    ambassador_id TEXT REFERENCES ambassadors(id) ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_ambassador_applications_status_created
+    ON ambassador_applications(status, created_at DESC);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_ambassador_applications_pending_email
+    ON ambassador_applications(LOWER(email)) WHERE status = 'pending';
   CREATE TABLE IF NOT EXISTS ambassador_invites (
     token_hash TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id) ON DELETE CASCADE,
     expires_at TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL
@@ -510,6 +524,8 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'opening_hours', 'TEXT');
   addColumn('shops', 'catalog_updated_at', 'TEXT');
   addColumn('shops', 'owner_email', 'TEXT');
+  addColumn('shops', 'owner_email_verified_at', 'TEXT');
+  addColumn('users', 'email_verified_at', 'TEXT');
   addColumn('advertising_campaigns', 'charter_accepted_at', 'TEXT');
   addColumn('shops', 'owner_name', 'TEXT');
   addColumn('shops', 'owner_phone', 'TEXT');
@@ -770,7 +786,7 @@ export const postgresMigrations = [
     last_notification_sent_at TEXT, whatsapp_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
     whatsapp_subscription_reminders_consent_at TEXT, email_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0,
     email_subscription_reminders_consent_at TEXT, created_at TEXT NOT NULL, category TEXT NOT NULL,
-    city TEXT, owner_name TEXT, owner_phone TEXT, owner_email TEXT, subscription_tier TEXT NOT NULL, theme_config JSONB, opening_hours JSONB,
+    city TEXT, owner_name TEXT, owner_phone TEXT, owner_email TEXT, owner_email_verified_at TEXT, subscription_tier TEXT NOT NULL, theme_config JSONB, opening_hours JSONB,
     owner_access_token_hash TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS merchant_account_consents (
@@ -998,6 +1014,10 @@ export const postgresMigrations = [
     email TEXT NOT NULL, code_hash TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
     expires_at BIGINT NOT NULL, created_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS auth_email_rollout_notices (
+    subject_type TEXT NOT NULL, subject_id TEXT NOT NULL, created_at TEXT NOT NULL, sent_at TEXT,
+    PRIMARY KEY (subject_type, subject_id)
+  )`,
   'CREATE INDEX IF NOT EXISTS idx_auth_email_challenges_subject ON auth_email_challenges(subject_type, subject_id, expires_at)',
   'ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT \'super_admin\'',
   `CREATE TABLE IF NOT EXISTS request_rate_limits (
@@ -1047,6 +1067,7 @@ export const postgresMigrations = [
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS opening_hours JSONB',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_access_token_hash TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_email TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_email_verified_at TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_name TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS owner_phone TEXT',
   'CREATE INDEX IF NOT EXISTS idx_products_shop_id ON products(shop_id)',
@@ -1060,9 +1081,10 @@ export const postgresMigrations = [
   `CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL,
     first_name TEXT NOT NULL DEFAULT '', last_name TEXT NOT NULL DEFAULT '',
-    email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE, email_verified_at TEXT, password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, is_active INTEGER NOT NULL DEFAULT 1
   )`,
+  'ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TEXT',
   `CREATE TABLE IF NOT EXISTS customer_password_reset_tokens (
     token_hash TEXT PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1190,6 +1212,14 @@ export const postgresMigrations = [
     email TEXT, phone TEXT, password_hash TEXT, active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS ambassador_applications (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at TEXT NOT NULL, decided_at TEXT, decision_reason TEXT,
+    ambassador_id TEXT REFERENCES ambassadors(id) ON DELETE SET NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_ambassador_applications_status_created ON ambassador_applications(status, created_at DESC)',
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_ambassador_applications_pending_email ON ambassador_applications(LOWER(email)) WHERE status = 'pending'",
   `CREATE TABLE IF NOT EXISTS ambassador_invites (
     token_hash TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id) ON DELETE CASCADE,
     expires_at TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL

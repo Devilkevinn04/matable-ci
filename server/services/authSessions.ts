@@ -297,7 +297,7 @@ export function createAuthSessionHelpers({
       return { authenticated: false, userType: null, user: null };
     }
 
-    const user = await dbGet<{ id: number; name: string; first_name: string | null; last_name: string | null; phone: string; email: string; created_at: string; is_active: number }>('SELECT id, name, first_name, last_name, phone, email, created_at, is_active FROM users WHERE id = ?', [session.userId]);
+    const user = await dbGet<{ id: number; name: string; first_name: string | null; last_name: string | null; phone: string; email: string; email_verified_at: string | null; created_at: string; is_active: number }>('SELECT id, name, first_name, last_name, phone, email, email_verified_at, created_at, is_active FROM users WHERE id = ?', [session.userId]);
     if (!user || !user.is_active) {
       customerSessions.delete(token);
       await deleteCustomerSessionRecord(token);

@@ -37,6 +37,46 @@ export function isCommissionPayableForMonth(
   return Number.isFinite(approvedAt) && approvedAt < nextMonth;
 }
 
+export interface AmbassadorMonthlyStats {
+  month: string;
+  label: string;
+  registrations: number;
+  paidAmount: number;
+}
+
+export function getAmbassadorMonthlyStats(
+  referrals: Array<{ created_at: string }>,
+  payouts: Array<{ paid_at: string; amount: number }>,
+  now = new Date(),
+): AmbassadorMonthlyStats[] {
+  const months = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5 + index, 1));
+    const month = date.toISOString().slice(0, 7);
+    return {
+      month,
+      label: new Intl.DateTimeFormat('fr-FR', { month: 'short', timeZone: 'UTC' }).format(date),
+      registrations: 0,
+      paidAmount: 0,
+    };
+  });
+  const byMonth = new Map(months.map((entry) => [entry.month, entry]));
+
+  for (const referral of referrals) {
+    const timestamp = Date.parse(referral.created_at);
+    if (!Number.isFinite(timestamp)) continue;
+    const month = byMonth.get(new Date(timestamp).toISOString().slice(0, 7));
+    if (month) month.registrations += 1;
+  }
+  for (const payout of payouts) {
+    const timestamp = Date.parse(payout.paid_at);
+    const amount = Number(payout.amount);
+    if (!Number.isFinite(timestamp) || !Number.isSafeInteger(amount) || amount <= 0) continue;
+    const month = byMonth.get(new Date(timestamp).toISOString().slice(0, 7));
+    if (month) month.paidAmount += amount;
+  }
+  return months;
+}
+
 const REFERRAL_STORAGE_KEY = 'matable_ambassador_referral';
 let pendingCapture: Promise<string | null> | null = null;
 

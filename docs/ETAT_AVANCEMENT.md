@@ -16,6 +16,15 @@ vérifications des fournisseurs.
   configuration privée du VPS. Les comptes existants ont une période de
   transition de 30 jours à partir de la date de démarrage configurée ; les
   connexions Super-admin et Admin de vérification exigent la MFA dès cette date.
+- Le code contient désormais des rappels dans les comptes client et marchand,
+  une preuve d’adresse par code et un parcours guidé pour les boutiques sans
+  e-mail ou dont l’adresse doit être remplacée. À la connexion MFA réussie,
+  l’adresse est marquée vérifiée. Après déploiement, l’avis e-mail aux comptes
+  existants qui ont déjà une adresse reste une action manuelle, idempotente :
+  `docker exec matable-web node /app/scripts/send-email-mfa-rollout-notices.mjs`.
+  Les utilisateurs sans adresse e-mail ne peuvent être contactés par ce canal ;
+  il faut les informer par un autre moyen. Ces changements ne sont pas encore
+  confirmés en production tant que ce commit n’y a pas été déployé.
 - Une sauvegarde PostgreSQL datée du 8 novembre a été vérifiée par checksum et
   reconnue comme archive lisible par `pg_restore`.
 - Le timer systemd `matable-auto-deploy.timer` est actif sur le VPS. Il vérifie
@@ -76,6 +85,15 @@ de maintenance doit être planifié séparément.
 - Outils d’ambassadeurs et de campagnes/partenariats existent dans le code ;
   les commissions et demandes enregistrées ne réalisent pas de transferts
   financiers automatiques.
+- Les invitations et la récupération d’accès des ambassadeurs utilisent Resend
+  quand il est configuré. Les liens expirent après sept jours et sont à usage
+  unique ; la récupération ne révèle pas si l’adresse e-mail est enregistrée.
+  En cas d’échec d’envoi d’une invitation par l’administration, un lien de
+  secours est proposé dans la session d’administration.
+- La candidature publique des ambassadeurs est disponible sur
+  `/ambassadeur/inscription` ; le Super Admin peut copier ce lien depuis la
+  rubrique Partenaires. Une candidature ne crée aucun compte ni code avant
+  approbation ; le refus exige un motif et est journalisé.
 
 ## Fonctions en veille ou non autonomes
 

@@ -14,6 +14,7 @@
     "clean": "rm -rf dist build server.js",
     "archive:release": "python3 scripts/create-release-archive.py",
     "repair:order-shops": "node --import dotenv/config --import tsx scripts/repair-order-shop-attribution.ts",
+    "notify:email-mfa": "node --import dotenv/config --import tsx scripts/send-email-mfa-rollout-notices.ts",
     "test:postgres": "node scripts/run-postgres-tests.mjs",
     "db:backup": "node --import dotenv/config scripts/backup-postgres.mjs",
     "db:restore:validate": "node --import dotenv/config scripts/restore-validate-postgres.mjs",

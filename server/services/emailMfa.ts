@@ -1,13 +1,67 @@
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
-import { databaseMode, dbTransaction } from '../../db.ts';
-import { sendAuthCodeEmail } from './email.ts';
+import { databaseMode, dbRun, dbTransaction } from '../../db.ts';
+import { sendAuthCodeEmail, sendEmailMfaRolloutNotice } from './email.ts';
 
-export type EmailMfaSubject = 'admin' | 'ambassador' | 'customer' | 'merchant';
+export type EmailMfaSubject =
+  | 'admin'
+  | 'ambassador'
+  | 'customer'
+  | 'customer_email_setup'
+  | 'merchant'
+  | 'merchant_email_setup';
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_CODE_ATTEMPTS = 5;
 const ROLLOUT_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
 const EMAIL_ADDRESS_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+
+export function getEmailMfaDeadline(): string | null {
+  const rolloutStartedAt = Date.parse(String(process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT || '').trim());
+  if (!Number.isFinite(rolloutStartedAt)) return null;
+  return new Date(rolloutStartedAt + ROLLOUT_GRACE_MS).toISOString();
+}
+
+export async function sendEmailMfaRolloutNoticeOnce(input: {
+  subject: 'customer' | 'merchant';
+  subjectId: string;
+  email: string;
+  appUrl?: string;
+}): Promise<'sent' | 'already_sent' | 'failed'> {
+  const createdAt = new Date().toISOString();
+  const staleBefore = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const reservation = await dbRun(
+    `INSERT INTO auth_email_rollout_notices (subject_type, subject_id, created_at, sent_at)
+     VALUES (?, ?, ?, NULL)
+     ON CONFLICT(subject_type, subject_id) DO UPDATE
+       SET created_at = excluded.created_at
+       WHERE auth_email_rollout_notices.sent_at IS NULL
+         AND auth_email_rollout_notices.created_at < ?`,
+    [input.subject, input.subjectId, createdAt, staleBefore],
+  );
+  if (reservation.changes !== 1) return 'already_sent';
+
+  const delivery = await sendEmailMfaRolloutNotice({
+    email: input.email,
+    accountType: input.subject,
+    appUrl: input.appUrl,
+    deadlineAt: getEmailMfaDeadline(),
+  });
+  if (!delivery.sent) {
+    await dbRun(
+      'DELETE FROM auth_email_rollout_notices WHERE subject_type = ? AND subject_id = ? AND created_at = ? AND sent_at IS NULL',
+      [input.subject, input.subjectId, createdAt],
+    );
+    if (delivery.error !== 'email_disabled_in_test') {
+      console.error(`Unable to send email MFA rollout notice to ${input.subject} account ${input.subjectId}: ${delivery.error || 'unknown_error'}.`);
+    }
+    return 'failed';
+  }
+  await dbRun(
+    'UPDATE auth_email_rollout_notices SET sent_at = ? WHERE subject_type = ? AND subject_id = ? AND created_at = ? AND sent_at IS NULL',
+    [new Date().toISOString(), input.subject, input.subjectId, createdAt],
+  );
+  return 'sent';
+}
 
 function isValidSender(value: string): boolean {
   const sender = value.trim();

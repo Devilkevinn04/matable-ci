@@ -35,6 +35,10 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [pendingMfaChallenge, setPendingMfaChallenge] = useState('');
   const [mfaCode, setMfaCode] = useState('');
   const [mfaIsRegistration, setMfaIsRegistration] = useState(false);
+  const [emailSetupRequired, setEmailSetupRequired] = useState(false);
+  const [emailSetupAddress, setEmailSetupAddress] = useState('');
+  const [emailSetupCode, setEmailSetupCode] = useState('');
+  const [emailSetupChallenge, setEmailSetupChallenge] = useState('');
 
   // Quick Register Modal state
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
@@ -319,6 +323,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
       const data = await res.json();
       if (!res.ok) {
+        if (data.email_setup_required === true) setEmailSetupRequired(true);
         throw new Error(data.error || 'Code d’accès invalide.');
       }
 
@@ -381,6 +386,11 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
       const data = await res.json();
       if (!res.ok) {
+        if (data.email_setup_required === true) {
+          setEmailSetupRequired(true);
+          setAuthError(data.error || 'Vérifiez votre adresse e-mail pour continuer.');
+          return;
+        }
         throw new Error(data.error || 'Identifiants invalides');
       }
 
@@ -391,6 +401,54 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     } catch (err: unknown) {
       const error = err as Error;
       setAuthError(error.message || 'Erreur lors de la connexion');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleStartEmailSetup = async () => {
+    setAuthError(null);
+    setAuthLoading(true);
+    try {
+      const response = await fetch('/api/auth/merchant-email-setup/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneInput.trim(), pin: pinInput.trim(), email: emailSetupAddress.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible d’envoyer le code de vérification.');
+      setEmailSetupChallenge(data.challenge_id);
+      setEmailSetupCode('');
+      setAuthError('Un code à 8 chiffres a été envoyé à cette adresse. Vérifiez aussi vos courriers indésirables.');
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Impossible d’envoyer le code de vérification.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleVerifyEmailSetup = async () => {
+    setAuthError(null);
+    setAuthLoading(true);
+    try {
+      const response = await fetch('/api/auth/merchant-email-setup/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challenge_id: emailSetupChallenge, code: emailSetupCode }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de vérifier cette adresse e-mail.');
+      setEmailSetupRequired(false);
+      setEmailSetupChallenge('');
+      setEmailSetupCode('');
+      setEmailSetupAddress('');
+      setAuthError(null);
+      setCurrentShop(data.shop);
+      syncShopSettings(data.shop);
+      trackLogin('merchant', 'email');
+      loadShopData(data.shop.id);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Impossible de vérifier cette adresse e-mail.');
     } finally {
       setAuthLoading(false);
     }
@@ -982,6 +1040,14 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setAuthError,
     setAuthLoading,
     pendingMfaChallenge,
+    emailSetupRequired,
+    emailSetupAddress,
+    setEmailSetupAddress,
+    emailSetupCode,
+    setEmailSetupCode,
+    emailSetupChallenge,
+    handleStartEmailSetup,
+    handleVerifyEmailSetup,
     setPendingMfaChallenge,
     mfaCode,
     setMfaCode,

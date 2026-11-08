@@ -1,10 +1,12 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
 import { dbAll, dbGet, dbRun, dbTransaction, databaseMode } from '../../db.ts';
 import { AMBASSADOR_REFERRAL_DURATION_MS, normalizeAmbassadorCode } from '../../src/utils/ambassadors.ts';
+import { createAmbassadorInvite, hashAmbassadorToken } from '../services/ambassadorInvites.ts';
+import { notifyAmbassadorProgramEvent } from '../services/ambassadorNotifications.ts';
 import { normalizeWhatsAppPhone } from '../services/businessRules.ts';
-
-export const hashAmbassadorToken = (token: string) => createHash('sha256').update(token).digest('hex');
+import { requireSameOriginJsonRequest } from '../middleware/authRequestSecurity.ts';
+import { sendAmbassadorApplicationEmail } from '../services/email.ts';
 
 const normalizeIdentityName = (value: string | null | undefined) => String(value || '')
   .normalize('NFD')
@@ -17,6 +19,48 @@ const normalizeIdentityName = (value: string | null | undefined) => String(value
 export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number) => RequestHandler) {
   const publicRouter = Router();
   const adminRouter = Router();
+
+  publicRouter.post('/ambassador-applications', rateLimitPublicRequest(8), requireSameOriginJsonRequest, async (req, res) => {
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim().replace(/\s+/g, ' ') : '';
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const phone = typeof req.body?.phone === 'string' ? req.body.phone.trim() : '';
+    if (name.length < 2 || name.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+      || email.length > 254 || phone.length > 30) {
+      return res.status(400).json({ error: 'Vérifiez votre nom, votre adresse e-mail et votre téléphone.' });
+    }
+
+    const existingAmbassador = await dbGet<{ id: string }>(
+      'SELECT id FROM ambassadors WHERE LOWER(email) = ? LIMIT 1',
+      [email],
+    );
+    let applicationCreated = false;
+    if (!existingAmbassador) {
+      const now = new Date().toISOString();
+      const inserted = await dbRun(
+        'INSERT INTO ambassador_applications (id, name, email, phone, status, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING',
+        [randomUUID(), name, email, phone || null, 'pending', now],
+      );
+      applicationCreated = inserted.changes === 1;
+    }
+
+    if (applicationCreated) {
+      const delivery = await sendAmbassadorApplicationEmail({
+        name,
+        email,
+        status: 'received',
+        appUrl: String(process.env.APP_URL || 'https://matable-ci.com').trim(),
+      });
+      if (!delivery.sent && delivery.error !== 'email_disabled_in_test') {
+        console.error(`Unable to send ambassador application receipt: ${delivery.error || 'unknown_error'}.`);
+      }
+    }
+
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(202).json({
+      success: true,
+      message: 'Votre candidature a été reçue. Elle sera examinée avant toute activation de compte ou de code ambassadeur.',
+    });
+  });
 
   publicRouter.post('/ambassador-clicks', rateLimitPublicRequest(30), async (req, res) => {
     const code = normalizeAmbassadorCode(req.body?.code);
@@ -32,6 +76,10 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
   });
 
   adminRouter.get('/', async (_req, res) => {
+    const applications = await dbAll(
+      'SELECT id, name, email, phone, status, created_at, decided_at, decision_reason FROM ambassador_applications ORDER BY CASE WHEN status = ? THEN 0 ELSE 1 END, created_at DESC',
+      ['pending'],
+    );
     const ambassadors = await dbAll(`SELECT a.id, a.name, a.code, a.email, a.phone, a.active, a.created_at,
       CASE WHEN a.password_hash IS NULL THEN 0 ELSE 1 END AS has_account,
       (SELECT i.expires_at FROM ambassador_invites i WHERE i.ambassador_id = a.id AND i.used_at IS NULL
@@ -56,7 +104,97 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
       JOIN ambassadors a ON a.id = p.ambassador_id ORDER BY p.paid_at DESC`);
     const withdrawals = await dbAll(`SELECT w.*, a.name AS ambassador_name, a.email AS ambassador_email
       FROM ambassador_withdrawals w JOIN ambassadors a ON a.id = w.ambassador_id ORDER BY w.created_at DESC`);
-    res.json({ ambassadors, referrals, payouts, withdrawals });
+    res.json({ applications, ambassadors, referrals, payouts, withdrawals });
+  });
+
+  adminRouter.post('/applications/:id/:action', async (req, res) => {
+    const applicationId = String(req.params.id || '').trim();
+    const action = req.params.action;
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
+    if (!applicationId || !['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ error: 'Action de candidature invalide.' });
+    }
+    if (action === 'reject' && reason.length < 3) {
+      return res.status(400).json({ error: 'Indiquez un motif de refus de 3 à 500 caractères.' });
+    }
+
+    const now = new Date().toISOString();
+    const outcome = await dbTransaction(async (transaction) => {
+      const application = await transaction.get<{
+        id: string; name: string; email: string; phone: string | null; status: string;
+      }>(
+        `SELECT id, name, email, phone, status FROM ambassador_applications WHERE id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+        [applicationId],
+      );
+      if (!application) return { status: 'not_found' as const };
+      if (application.status !== 'pending') return { status: 'already_decided' as const };
+
+      if (action === 'reject') {
+        await transaction.run(
+          "UPDATE ambassador_applications SET status = 'rejected', decided_at = ?, decision_reason = ? WHERE id = ? AND status = 'pending'",
+          [now, reason, applicationId],
+        );
+        await transaction.run(
+          'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+          ['super_admin', 'ambassador_application_rejected', null, JSON.stringify({ application_id: applicationId, reason }), now],
+        );
+        return { status: 'rejected' as const, name: application.name, email: application.email };
+      }
+
+      const existing = await transaction.get<{ id: string }>(
+        'SELECT id FROM ambassadors WHERE LOWER(email) = ? LIMIT 1',
+        [application.email.toLowerCase()],
+      );
+      if (existing) return { status: 'duplicate_email' as const };
+
+      const ambassadorId = randomUUID();
+      const code = `MT${randomBytes(6).toString('hex').toUpperCase()}`;
+      await transaction.run(
+        'INSERT INTO ambassadors (id, name, code, email, phone, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [ambassadorId, application.name, code, application.email, application.phone, now],
+      );
+      const updated = await transaction.run(
+        "UPDATE ambassador_applications SET status = 'approved', decided_at = ?, ambassador_id = ? WHERE id = ? AND status = 'pending'",
+        [now, ambassadorId, applicationId],
+      );
+      if (updated.changes !== 1) throw new Error('La candidature a changé pendant son approbation.');
+      await transaction.run(
+        'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+        ['super_admin', 'ambassador_application_approved', null, JSON.stringify({ application_id: applicationId, ambassador_id: ambassadorId }), now],
+      );
+      return { status: 'approved' as const, ambassadorId };
+    });
+
+    if (outcome.status === 'not_found') return res.status(404).json({ error: 'Candidature introuvable.' });
+    if (outcome.status === 'already_decided') return res.status(409).json({ error: 'Cette candidature a déjà été traitée.' });
+    if (outcome.status === 'duplicate_email') return res.status(409).json({ error: 'Cette adresse est déjà associée à un compte ambassadeur.' });
+    if (outcome.status === 'rejected') {
+      const delivery = await sendAmbassadorApplicationEmail({
+        name: outcome.name,
+        email: outcome.email,
+        status: 'rejected',
+        appUrl: String(process.env.APP_URL || 'https://matable-ci.com').trim(),
+      });
+      if (!delivery.sent && delivery.error !== 'email_disabled_in_test') {
+        console.error(`Unable to send ambassador application decision: ${delivery.error || 'unknown_error'}.`);
+      }
+      return res.json({ success: true, status: 'rejected', email_sent: delivery.sent });
+    }
+
+    const appUrl = String(process.env.APP_URL || 'https://matable-ci.com').trim();
+    const invite = await createAmbassadorInvite({
+      ambassadorId: outcome.ambassadorId,
+      appUrl,
+      recovery: false,
+      retainInviteOnEmailFailure: true,
+    });
+    if (invite.status !== 'created') throw new Error(`Impossible de créer l’invitation du compte ambassadeur approuvé: ${invite.status}.`);
+    return res.json({
+      success: true,
+      status: 'approved',
+      email_sent: invite.emailSent,
+      ...(!invite.emailSent ? { invite_url: invite.inviteUrl, expires_at: invite.expiresAt } : {}),
+    });
   });
 
   adminRouter.post('/', async (req, res) => {
@@ -76,31 +214,21 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
   });
 
   adminRouter.post('/:id/invite', async (req, res) => {
-    const token = randomBytes(32).toString('hex');
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + 7 * 86400000).toISOString();
-    const appUrl = String(process.env.APP_URL || `${req.protocol}://${req.get('host') || ''}`).trim();
-    const inviteUrl = new URL('/ambassadeur/activer', appUrl);
-    inviteUrl.searchParams.set('token', token);
-    const result = await dbTransaction(async (transaction) => {
-      const ambassador = await transaction.get<{ id: string; email: string | null; active: number }>(
-        `SELECT id, email, active FROM ambassadors WHERE id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
-        [req.params.id],
-      );
-      if (!ambassador) return 'not_found' as const;
-      if (!ambassador.active) return 'inactive' as const;
-      if (!ambassador.email) return 'missing_email' as const;
-      await transaction.run('UPDATE ambassador_invites SET used_at = ? WHERE ambassador_id = ? AND used_at IS NULL', [now.toISOString(), ambassador.id]);
-      await transaction.run('INSERT INTO ambassador_invites (token_hash, ambassador_id, expires_at, created_at) VALUES (?, ?, ?, ?)',
-        [hashAmbassadorToken(token), ambassador.id, expiresAt, now.toISOString()]);
-      await transaction.run('INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
-        ['super_admin', 'ambassador_invite_created', null, JSON.stringify({ ambassador_id: ambassador.id, expires_at: expiresAt }), now.toISOString()]);
-      return 'created' as const;
+    const appUrl = String(process.env.APP_URL || 'https://matable-ci.com').trim();
+    const result = await createAmbassadorInvite({
+      ambassadorId: req.params.id,
+      appUrl,
+      recovery: false,
+      retainInviteOnEmailFailure: true,
     });
-    if (result === 'not_found') return res.status(404).json({ error: 'Ambassadeur introuvable.' });
-    if (result === 'inactive') return res.status(409).json({ error: 'Réactivez cet ambassadeur avant de générer un accès.' });
-    if (result === 'missing_email') return res.status(409).json({ error: 'Ajoutez une adresse e-mail à cet ambassadeur avant de générer son accès.' });
-    return res.status(201).json({ invite_url: inviteUrl.toString(), expires_at: expiresAt });
+    if (result.status === 'not_found') return res.status(404).json({ error: 'Ambassadeur introuvable.' });
+    if (result.status === 'inactive') return res.status(409).json({ error: 'Réactivez cet ambassadeur avant de générer un accès.' });
+    if (result.status === 'missing_email') return res.status(409).json({ error: 'Ajoutez une adresse e-mail à cet ambassadeur avant de générer son accès.' });
+    return res.status(201).json({
+      invite_url: result.inviteUrl,
+      expires_at: result.expiresAt,
+      email_sent: result.emailSent,
+    });
   });
 
   adminRouter.post('/withdrawals/:id/:action', async (req, res) => {
@@ -114,8 +242,13 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
     if (action === 'reject' && reason.length < 3) return res.status(400).json({ error: 'Documentez le motif du refus en 3 à 500 caractères.' });
     const now = new Date().toISOString();
     const result = await dbTransaction(async (transaction) => {
-      const withdrawal = await transaction.get<{ id: string; ambassador_id: string; amount: number; status: string }>(
-        `SELECT id, ambassador_id, amount, status FROM ambassador_withdrawals WHERE id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+      const withdrawal = await transaction.get<{
+        id: string; ambassador_id: string; amount: number; status: string;
+        ambassador_name: string; ambassador_email: string | null;
+      }>(
+        `SELECT w.id, w.ambassador_id, w.amount, w.status, a.name AS ambassador_name, a.email AS ambassador_email
+         FROM ambassador_withdrawals w JOIN ambassadors a ON a.id = w.ambassador_id
+         WHERE w.id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE OF w' : ''}`,
         [withdrawalId],
       );
       if (!withdrawal) return 'not_found' as const;
@@ -158,11 +291,24 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
       }
       await transaction.run('INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
         ['super_admin', `ambassador_withdrawal_${action}`, null, JSON.stringify({ withdrawal_id: withdrawalId, ambassador_id: withdrawal.ambassador_id, amount: withdrawal.amount, reference: reference || null, reason: reason || null }), now]);
-      return 'updated' as const;
+      return {
+        status: 'updated' as const,
+        notification: {
+          ambassadorId: withdrawal.ambassador_id,
+          name: withdrawal.ambassador_name,
+          email: withdrawal.ambassador_email,
+          event: action === 'approve' ? 'withdrawal_approved' as const
+            : action === 'reject' ? 'withdrawal_rejected' as const : 'withdrawal_paid' as const,
+          amount: Number(withdrawal.amount),
+          reference: action === 'paid' ? reference : null,
+          reason: action === 'reject' ? reason : null,
+        },
+      };
     });
     if (result === 'not_found') return res.status(404).json({ error: 'Demande de retrait introuvable.' });
     if (result === 'payment_review') return res.status(409).json({ error: 'Un paiement lié n’est plus confirmé. Examinez le dossier avant de traiter ce retrait.' });
     if (result === 'conflict') return res.status(409).json({ error: 'Cette demande a changé ou ne correspond plus aux commissions disponibles.' });
+    await notifyAmbassadorProgramEvent(result.notification);
     return res.json({ success: true });
   });
 
@@ -227,6 +373,18 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
     const now = new Date().toISOString();
     const result = await dbTransaction(async (transaction) => {
       let selfReferral = false;
+      const commission = await transaction.get<{
+        ambassador_id: string;
+        ambassador_name: string;
+        ambassador_email: string | null;
+        amount: number;
+        shop_name: string;
+      }>(`SELECT c.ambassador_id, a.name AS ambassador_name, a.email AS ambassador_email,
+                c.amount, s.name AS shop_name
+        FROM ambassador_commissions c
+        JOIN ambassadors a ON a.id = c.ambassador_id
+        JOIN shops s ON s.id = c.shop_id
+        WHERE c.shop_id = ?`, [shopId]);
       const update = action === 'approve'
         ? await (async () => {
           const referral = await transaction.get<{
@@ -277,10 +435,26 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
         await transaction.run('INSERT INTO ambassador_payouts (id, ambassador_id, shop_id, shop_name, payment_id, amount, reference, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
           [randomUUID(), commission.ambassador_id, shopId, commission.shop_name, commission.payment_id, commission.amount, reference, now]);
       }
-      return { changes: update.changes, selfReferral };
+      return {
+        changes: update.changes,
+        selfReferral,
+        notification: update.changes && commission ? {
+          ambassadorId: commission.ambassador_id,
+          name: commission.ambassador_name,
+          email: commission.ambassador_email,
+          event: action === 'approve' ? 'commission_approved' as const
+            : action === 'reject' ? 'commission_rejected' as const : 'commission_paid' as const,
+          amount: Number(commission.amount),
+          shopName: commission.shop_name,
+          reference: action === 'paid' ? reference : null,
+          reason: null,
+        } : null,
+      };
     });
     if (result.selfReferral) return res.status(409).json({ error: 'La commission ne peut pas être approuvée : les coordonnées ou le nom du commerçant correspondent à ceux de l’ambassadeur.' });
-    return result.changes ? res.json({ success: true }) : res.status(409).json({ error: 'Action impossible : vérifiez le statut du paiement, la publication et la commission.' });
+    if (!result.changes) return res.status(409).json({ error: 'Action impossible : vérifiez le statut du paiement, la publication et la commission.' });
+    if (result.notification) await notifyAmbassadorProgramEvent(result.notification);
+    return res.json({ success: true });
   });
 
   return { publicRouter, adminRouter };

@@ -17,6 +17,19 @@ constructions et les opérations sont journalisées dans systemd. Il n’y a ni 
 SSH ni secret GitHub à configurer : le dépôt est cloné en lecture seule depuis
 GitHub.
 
+Après déploiement du parcours de vérification MFA, envoyez l’avis aux comptes
+existants qui ont déjà une adresse e-mail avec la commande suivante. Elle est
+idempotente : les destinataires déjà traités ne reçoivent pas de doublon.
+L’exécution est séquentielle et prend environ une demi-seconde par compte.
+
+```sh
+docker exec matable-web node /app/scripts/send-email-mfa-rollout-notices.mjs
+```
+
+Les commerçants sans adresse ne peuvent pas recevoir de courriel ; ils doivent
+être informés par un autre canal. Leur parcours de connexion permet ensuite
+d’ajouter et de vérifier une adresse avec leur numéro et leur PIN.
+
 ## Installation initiale
 
 Après avoir poussé ces fichiers sur `main`, connectez-vous au VPS et exécutez
