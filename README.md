@@ -13,6 +13,8 @@ L’authentification ajoute un code e-mail à usage unique après le secret prin
 (clé admin, PIN marchand ou mot de passe). Les nouveaux comptes sont concernés
 à partir de `AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT` ; les comptes déjà existants
 basculent 30 jours après cette date. Aucun SMS n’est envoyé.
+Les connexions Super-admin et Admin de vérification exigent la MFA dès cette
+date, sans période de grâce.
 
 Avant le démarrage en production, configurez dans l’environnement privé du
 serveur (sur le VPS Hostinger, `/srv/apps/matable/shared/app.env`) :
@@ -27,10 +29,11 @@ la compromission simultanée du mot de passe et de la boîte e-mail.
 
 ## Déploiement VPS
 
-Le déploiement automatique du VPS Hostinger peut être activé avec le timer
-documenté dans [infra/hostinger/README.md](./infra/hostinger/README.md). Une
-fois installé, il surveille `main` et ne remplace que le service MaTable après
-la réussite des vérifications de construction et du contrôle de santé.
+Le déploiement automatique du VPS Hostinger est actif : son timer vérifie
+`main` périodiquement et ne remplace que le service MaTable après la réussite
+des vérifications de construction et du contrôle de santé. Voir le
+[guide de déploiement](./infra/hostinger/README.md) et
+[l’état d’avancement du projet](./docs/ETAT_AVANCEMENT.md).
 
 ## Identité visuelle du frontend
 

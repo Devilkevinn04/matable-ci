@@ -1,5 +1,10 @@
 # Déploiement automatique sur le VPS Hostinger
 
+Le timer a été installé et son premier déploiement automatique a réussi le
+8 novembre 2026. La procédure d’installation ci-dessous sert à reconstruire le
+service d’automatisation si nécessaire ; ne la relancez pas sur le VPS déjà
+configuré.
+
 Le timer systemd vérifie la branche `main` toutes les deux minutes. Quand un
 nouveau commit apparaît, le VPS clone ce commit, construit l’image avec le
 Dockerfile Hostinger (qui exécute lint, tests et build), puis remplace seulement

@@ -28,7 +28,11 @@ function hashCode(challengeId: string, code: string): string {
     .digest('hex');
 }
 
-export function isEmailMfaRequired(createdAt?: string | null, now = Date.now()): boolean {
+export function isEmailMfaRequired(
+  createdAt?: string | null,
+  now = Date.now(),
+  gracePeriodMs = ROLLOUT_GRACE_MS,
+): boolean {
   const rolloutValue = String(process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT || '').trim();
   const rolloutStartedAt = Date.parse(rolloutValue);
   if (!Number.isFinite(rolloutStartedAt)) {
@@ -39,7 +43,7 @@ export function isEmailMfaRequired(createdAt?: string | null, now = Date.now()):
   }
   const accountCreatedAt = createdAt ? Date.parse(createdAt) : NaN;
   return Number.isFinite(accountCreatedAt) && accountCreatedAt >= rolloutStartedAt
-    || now >= rolloutStartedAt + ROLLOUT_GRACE_MS;
+    || now >= rolloutStartedAt + gracePeriodMs;
 }
 
 export function assertEmailMfaConfiguration(): void {

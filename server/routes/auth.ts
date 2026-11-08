@@ -190,9 +190,15 @@ export function createAuthRouter(options: AuthRouterOptions) {
   const respondWithEmailMfa = async (
     req: Request,
     res: Response,
-    input: { subject: 'admin' | 'customer' | 'merchant'; subjectId: string; email: string; createdAt?: string | null },
+    input: {
+      subject: 'admin' | 'customer' | 'merchant';
+      subjectId: string;
+      email: string;
+      createdAt?: string | null;
+      requireAtRollout?: boolean;
+    },
   ) => {
-    if (!isEmailMfaRequired(input.createdAt)) return false;
+    if (!isEmailMfaRequired(input.createdAt, Date.now(), input.requireAtRollout ? 0 : undefined)) return false;
     const challenge = await startEmailMfaChallenge({
       subject: input.subject,
       subjectId: input.subjectId,
@@ -419,6 +425,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
       subject: 'admin',
       subjectId: requestedRole,
       email: adminEmail,
+      requireAtRollout: true,
     })) return;
 
     const token = randomUUID();

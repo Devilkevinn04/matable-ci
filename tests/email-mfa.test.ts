@@ -44,6 +44,8 @@ test('email MFA applies rollout rules and consumes expiring, single-use codes', 
     assert.equal(isEmailMfaRequired('2026-02-28T23:59:59.999Z', rollout + 1), false);
     assert.equal(isEmailMfaRequired('2026-03-01T00:00:00.000Z', rollout + 1), true);
     assert.equal(isEmailMfaRequired('2026-02-28T23:59:59.999Z', rollout + 30 * 24 * 60 * 60 * 1000), true);
+    assert.equal(isEmailMfaRequired(undefined, rollout + 1), false);
+    assert.equal(isEmailMfaRequired(undefined, rollout + 1, 0), true);
 
     const challenge = await startEmailMfaChallenge({
       subject: 'customer',
