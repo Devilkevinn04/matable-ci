@@ -1,5 +1,5 @@
 [Unit]
-Description=Check and deploy the latest MaTable main release
+Description=Check and deploy the approved MaTable production release
 After=docker.service network-online.target
 Wants=network-online.target
 Requires=docker.service
