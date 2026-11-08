@@ -10,7 +10,7 @@ import { clearLoginAttempts, getCustomerLoginLockSeconds, isLoginRateLimited, re
 import { getShopFromDatabase, loadShopsFromDatabase } from '../repositories/shops.ts';
 import { sendCustomerPasswordResetEmail, sendCustomerWelcomeEmail, sendMerchantPinResetEmail } from '../services/email.ts';
 import { normalizeWhatsAppPhone } from '../services/businessRules.ts';
-import { isEmailMfaRequired, startEmailMfaChallenge, verifyEmailMfaChallenge } from '../services/emailMfa.ts';
+import { isEmailMfaRequired, sendEmailMfaRolloutNoticeOnce, startEmailMfaChallenge, verifyEmailMfaChallenge } from '../services/emailMfa.ts';
 import { requireSameOriginJsonRequest } from '../middleware/authRequestSecurity.ts';
 
 interface MerchantSession {
@@ -93,6 +93,7 @@ interface AuthRouterOptions {
   isWeakShopPin: (pin: unknown) => boolean;
   toSafeShop: (shop: ShopRecord) => object;
   createMerchantSession: (res: Response, shopId: number, req: Request) => Promise<void>;
+  revokeMerchantSessionsForShop: (shopId: number) => Promise<void>;
   getCookie: (req: Request, name: string) => string | null;
   clearSessionCookie: (res: Response) => void;
   clearCustomerSessionCookie: (res: Response) => void;
@@ -125,6 +126,8 @@ export function createAuthRouter(options: AuthRouterOptions) {
   const router = Router();
   const protectedPostPaths = new Set([
     '/merchant-login',
+    '/merchant-email-setup/start',
+    '/merchant-email-setup/verify',
     '/merchant-login/verify',
     '/merchant-access-login',
     '/admin-login',
@@ -132,6 +135,8 @@ export function createAuthRouter(options: AuthRouterOptions) {
     '/customer-login',
     '/customer-register',
     '/customer-login/verify',
+    '/customer-email-verification/start',
+    '/customer-email-verification/verify',
     '/customer-oauth/link',
     '/customer-oauth/complete',
     '/customer-oauth/mfa-verify',
@@ -154,6 +159,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     isWeakShopPin,
     toSafeShop,
     createMerchantSession,
+    revokeMerchantSessionsForShop,
     getCookie,
     clearSessionCookie,
     clearCustomerSessionCookie,
@@ -196,9 +202,29 @@ export function createAuthRouter(options: AuthRouterOptions) {
       email: string;
       createdAt?: string | null;
       requireAtRollout?: boolean;
+      emailVerified?: boolean;
     },
   ) => {
-    if (!isEmailMfaRequired(input.createdAt, Date.now(), input.requireAtRollout ? 0 : undefined)) return false;
+    if (!isEmailMfaRequired(input.createdAt, Date.now(), input.requireAtRollout ? 0 : undefined)) {
+      if ((input.subject === 'customer' || input.subject === 'merchant')
+        && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())) {
+        void sendEmailMfaRolloutNoticeOnce({
+          subject: input.subject,
+          subjectId: input.subjectId,
+          email: input.email,
+          appUrl: process.env.APP_URL || `${req.protocol}://${req.get('host') || ''}`,
+        }).catch((error: unknown) => console.error(`Email MFA rollout notice could not be processed for ${input.subject} account ${input.subjectId}.`, error));
+      }
+      return false;
+    }
+    if (input.subject === 'merchant' && !input.emailVerified) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(428).json({
+        email_setup_required: true,
+        error: 'Vérifiez ou remplacez l’adresse e-mail du compte avant de vous connecter.',
+      });
+      return true;
+    }
     const challenge = await startEmailMfaChallenge({
       subject: input.subject,
       subjectId: input.subjectId,
@@ -206,6 +232,14 @@ export function createAuthRouter(options: AuthRouterOptions) {
       appUrl: process.env.APP_URL || `${req.protocol}://${req.get('host') || ''}`,
     });
     if ('error' in challenge) {
+      if (input.subject === 'merchant' && challenge.error === 'invalid_email') {
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(428).json({
+          email_setup_required: true,
+          error: 'Ajoutez et vérifiez une adresse e-mail pour sécuriser votre compte commerçant.',
+        });
+        return true;
+      }
       console.error(`Unable to send ${input.subject} authentication code: ${challenge.error}.`);
       res.status(503).json({ error: 'Connexion sécurisée indisponible : vérifiez la configuration de l’e-mail et l’adresse du compte.' });
       return true;
@@ -233,7 +267,17 @@ export function createAuthRouter(options: AuthRouterOptions) {
     user: CustomerProfileRow,
     returnTo: string,
   ) => {
-    if (!isEmailMfaRequired(user.created_at)) return false;
+    if (!isEmailMfaRequired(user.created_at)) {
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email.trim())) {
+        void sendEmailMfaRolloutNoticeOnce({
+          subject: 'customer',
+          subjectId: String(user.id),
+          email: user.email,
+          appUrl: process.env.APP_URL || `${req.protocol}://${req.get('host') || ''}`,
+        }).catch((error: unknown) => console.error(`Email MFA rollout notice could not be processed for customer account ${user.id}.`, error));
+      }
+      return false;
+    }
     const challenge = await startEmailMfaChallenge({
       subject: 'customer',
       subjectId: String(user.id),
@@ -310,6 +354,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
       subjectId: String(shop.id),
       email: shop.owner_email || '',
       createdAt: shop.created_at,
+      emailVerified: Boolean(shop.owner_email_verified_at),
     })) return;
 
     await createMerchantSession(res, shop.id, req);
@@ -328,10 +373,88 @@ export function createAuthRouter(options: AuthRouterOptions) {
         is_active: shop.is_active,
         publication_status: shop.publication_status,
         merchant_verification_status: shop.merchant_verification_status,
+        owner_email_configured: Boolean(shop.owner_email),
+        owner_email_verified: Boolean(shop.owner_email_verified_at),
         category: shop.category,
         theme_config: shop.theme_config,
       },
     });
+
+  });
+
+  router.post('/merchant-email-setup/start', rateLimitPublicRequest(10), async (req, res) => {
+    const phone = typeof req.body?.phone === 'string' ? req.body.phone.trim() : '';
+    const pin = typeof req.body?.pin === 'string' ? req.body.pin.trim() : '';
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!phone || phone.length > 32 || !/^\d{6}$/.test(pin)) {
+      return res.status(400).json({ error: 'Numéro de téléphone et PIN marchand requis.' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      return res.status(400).json({ error: 'Saisissez une adresse e-mail valide.' });
+    }
+    const attemptKey = `${req.ip}:${phone.replace(/\D/g, '')}:email-setup`;
+    if (await isLoginRateLimited(attemptKey)) return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
+    const normalizedPhone = normalizeWhatsAppPhone(phone);
+    const shops = normalizedPhone ? await loadShopsFromDatabase() : [];
+    const shop = shops.find((candidate) => normalizeWhatsAppPhone(candidate.whatsapp_number) === normalizedPhone);
+    if (!shop || !verifyPin(pin, shop.pin_code_hash) || !shop.is_active) {
+      return res.status(401).json({ error: 'Identifiants marchands invalides.' });
+    }
+    if (await isLoginRateLimited(`merchant:${shop.id}:email-setup`)) {
+      return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
+    }
+    const duplicateEmail = await dbGet<{ id: number }>(
+      'SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?) AND id <> ? LIMIT 1',
+      [email, shop.id],
+    );
+    if (duplicateEmail) {
+      return res.status(409).json({ error: 'Cette adresse e-mail est déjà associée à une autre boutique.' });
+    }
+    const challenge = await startEmailMfaChallenge({
+      subject: 'merchant_email_setup',
+      subjectId: String(shop.id),
+      email,
+      appUrl: process.env.APP_URL || `${req.protocol}://${req.get('host') || ''}`,
+    });
+    if ('error' in challenge) {
+      console.error(`Unable to send merchant email setup code: ${challenge.error}.`);
+      return res.status(503).json({ error: 'Impossible d’envoyer le code de vérification. Réessayez plus tard.' });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(202).json({ success: true, challenge_id: challenge.challengeId });
+  });
+
+  router.post('/merchant-email-setup/verify', rateLimitPublicRequest(10), async (req, res) => {
+    const result = await verifyEmailMfaChallenge({
+      challengeId: typeof req.body?.challenge_id === 'string' ? req.body.challenge_id : '',
+      code: typeof req.body?.code === 'string' ? req.body.code : '',
+      subject: 'merchant_email_setup',
+    });
+    if (typeof result === 'string') {
+      return res.status(401).json({ error: 'Code invalide, expiré ou déjà utilisé. Recommencez la vérification.' });
+    }
+    const shop = await getShopFromDatabase(Number(result.subjectId));
+    if (!shop || !shop.is_active) return res.status(401).json({ error: 'Cette boutique ne peut pas modifier son adresse.' });
+    const duplicateEmail = await dbGet<{ id: number }>(
+      'SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?) AND id <> ? LIMIT 1',
+      [result.email, shop.id],
+    );
+    if (duplicateEmail) return res.status(409).json({ error: 'Cette adresse e-mail est déjà associée à une autre boutique.' });
+    const verifiedAt = new Date().toISOString();
+    const emailChanged = result.email.trim().toLowerCase() !== String(shop.owner_email || '').trim().toLowerCase();
+    await dbRun(
+      `UPDATE shops SET owner_email = ?, owner_email_verified_at = ?,
+        email_subscription_reminders_enabled = 0, email_subscription_reminders_consent_at = NULL
+       WHERE id = ?`,
+      [result.email, verifiedAt, shop.id],
+    );
+    if (emailChanged) {
+      await dbRun('DELETE FROM merchant_pin_reset_tokens WHERE shop_id = ?', [shop.id]);
+      await revokeMerchantSessionsForShop(shop.id);
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    await createMerchantSession(res, shop.id, req);
+    return res.json({ success: true, email: result.email, shop: toSafeShop({ ...shop, owner_email: result.email, owner_email_verified_at: verifiedAt }) });
   });
 
   router.post('/logout', async (req, res) => {
@@ -385,6 +508,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
       subjectId: String(shop.id),
       email: shop.owner_email || '',
       createdAt: shop.created_at,
+      emailVerified: Boolean(shop.owner_email_verified_at),
     })) return;
     await createMerchantSession(res, shop.id, req);
     res.json({ success: true, shop: toSafeShop(shop) });
@@ -484,6 +608,11 @@ export function createAuthRouter(options: AuthRouterOptions) {
     if (result.email !== currentEmail) {
       return res.status(401).json({ error: 'L’adresse de connexion a changé. Recommencez la connexion.' });
     }
+    await dbRun(
+      'UPDATE shops SET owner_email_verified_at = COALESCE(owner_email_verified_at, ?) WHERE id = ?',
+      [new Date().toISOString(), shop.id],
+    );
+    shop.owner_email_verified_at ||= new Date().toISOString();
     await createMerchantSession(res, shop.id, req);
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, shop: toSafeShop(shop) });
@@ -745,13 +874,18 @@ export function createAuthRouter(options: AuthRouterOptions) {
       return res.status(result === 'locked' ? 429 : 401).json({ error: message });
     }
     const user = await dbGet<CustomerProfileRow & { is_active: number }>(
-      'SELECT id, name, first_name, last_name, phone, email, created_at, is_active FROM users WHERE id = ?',
+      'SELECT id, name, first_name, last_name, phone, email, email_verified_at, created_at, is_active FROM users WHERE id = ?',
       [Number(result.subjectId)],
     );
     if (!user?.is_active || user.email.trim().toLowerCase() !== result.email) {
       clearPendingOAuthMfaCookie(res);
       return res.status(401).json({ error: 'Le compte ou son adresse a changé. Recommencez la connexion.' });
     }
+    await dbRun(
+      'UPDATE users SET email_verified_at = COALESCE(email_verified_at, ?) WHERE id = ?',
+      [new Date().toISOString(), user.id],
+    );
+    user.email_verified_at ||= new Date().toISOString();
     const profile = await createCustomerSession(req, res, user);
     clearPendingOAuthMfaCookie(res);
     res.setHeader('Cache-Control', 'no-store');
@@ -956,16 +1090,64 @@ export function createAuthRouter(options: AuthRouterOptions) {
     });
     if (typeof result === 'string') return res.status(401).json({ error: 'Code invalide, expiré ou déjà utilisé. Recommencez la connexion.' });
     const user = await dbGet<CustomerProfileRow & { is_active: number }>(
-      'SELECT id, name, first_name, last_name, phone, email, created_at, is_active FROM users WHERE id = ?',
+      'SELECT id, name, first_name, last_name, phone, email, email_verified_at, created_at, is_active FROM users WHERE id = ?',
       [Number(result.subjectId)],
     );
     if (!user?.is_active) return res.status(401).json({ error: 'Ce compte ne peut pas ouvrir de session.' });
     if (user.email.trim().toLowerCase() !== result.email) {
       return res.status(401).json({ error: 'L’adresse de connexion a changé. Recommencez la connexion.' });
     }
+    await dbRun(
+      'UPDATE users SET email_verified_at = COALESCE(email_verified_at, ?) WHERE id = ?',
+      [new Date().toISOString(), user.id],
+    );
+    user.email_verified_at ||= new Date().toISOString();
     const profile = await createCustomerSession(req, res, user);
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, user: profile });
+  });
+
+  router.post('/customer-email-verification/start', rateLimitPublicRequest(10), async (req, res) => {
+    const session = await getCustomerSessionState(req, res);
+    if (!session.authenticated || !session.user) return res.status(401).json({ error: 'Authentification client requise.' });
+    const challenge = await startEmailMfaChallenge({
+      subject: 'customer_email_setup',
+      subjectId: String(session.user.id),
+      email: session.user.email,
+      appUrl: process.env.APP_URL || `${req.protocol}://${req.get('host') || ''}`,
+    });
+    if ('error' in challenge) {
+      console.error(`Unable to send customer email verification code: ${challenge.error}.`);
+      return res.status(503).json({ error: 'Impossible d’envoyer le code de vérification. Vérifiez la configuration de l’e-mail.' });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(202).json({ success: true, challenge_id: challenge.challengeId });
+  });
+
+  router.post('/customer-email-verification/verify', rateLimitPublicRequest(10), async (req, res) => {
+    const session = await getCustomerSessionState(req, res);
+    if (!session.authenticated || !session.user) return res.status(401).json({ error: 'Authentification client requise.' });
+    const result = await verifyEmailMfaChallenge({
+      challengeId: typeof req.body?.challenge_id === 'string' ? req.body.challenge_id : '',
+      code: typeof req.body?.code === 'string' ? req.body.code : '',
+      subject: 'customer_email_setup',
+    });
+    if (typeof result === 'string' || result.subjectId !== String(session.user.id)
+      || result.email.trim().toLowerCase() !== session.user.email.trim().toLowerCase()) {
+      return res.status(401).json({ error: 'Code invalide, expiré ou adresse modifiée. Recommencez la vérification.' });
+    }
+    const verifiedAt = new Date().toISOString();
+    await dbRun(
+      'UPDATE users SET email_verified_at = COALESCE(email_verified_at, ?) WHERE id = ?',
+      [verifiedAt, session.user.id],
+    );
+    const user = await dbGet<CustomerProfileRow>(
+      'SELECT id, name, first_name, last_name, phone, email, email_verified_at, created_at FROM users WHERE id = ?',
+      [session.user.id],
+    );
+    if (!user) return res.status(404).json({ error: 'Compte client introuvable.' });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, user: toCustomerProfile(user) });
   });
 
   router.post('/customer-password-reset-request', rateLimitPublicRequest(8), async (req, res) => {

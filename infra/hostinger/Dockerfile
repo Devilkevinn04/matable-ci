@@ -13,6 +13,7 @@ ARG VITE_WHATSAPP_ADMIN_PHONE=0102749775
 ENV VITE_WHATSAPP_ADMIN_PHONE=${VITE_WHATSAPP_ADMIN_PHONE}
 RUN make check \
     && ./node_modules/.bin/esbuild scripts/migrate-neon.ts --bundle --platform=node --format=esm --packages=external --outfile=build/migrate-postgres.mjs \
+    && ./node_modules/.bin/esbuild scripts/send-email-mfa-rollout-notices.ts --bundle --platform=node --format=esm --packages=external --outfile=build/send-email-mfa-rollout-notices.mjs \
     && npm prune --omit=dev \
     && printf 'BUILD_VERIFIED\n'
 
@@ -26,7 +27,7 @@ COPY --from=builder --chown=node:node /app/build ./build
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/migrations ./migrations
-COPY --from=builder --chown=node:node /app/scripts/smoke-production.mjs /app/scripts/check-production-readiness.mjs ./scripts/
+COPY --from=builder --chown=node:node /app/scripts/smoke-production.mjs /app/scripts/check-production-readiness.mjs /app/build/send-email-mfa-rollout-notices.mjs ./scripts/
 
 USER node
 EXPOSE 3000

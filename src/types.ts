@@ -74,6 +74,7 @@ export interface Shop {
   email_subscription_reminders_enabled?: boolean;
   email_subscription_reminders_consent_at?: string | null;
   owner_email_configured?: boolean;
+  owner_email_verified?: boolean;
   created_at: string;
   catalog_updated_at?: string | null;
   category: ShopCategory;

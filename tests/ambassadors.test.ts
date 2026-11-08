@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AMBASSADOR_REFERRAL_DURATION_MS, calculateAmbassadorCommission, clearAmbassadorReferral, getAmbassadorToken, getStoredAmbassadorCode, isCommissionPayableForMonth, normalizeAmbassadorCode, validAmbassadorReferral } from '../src/utils/ambassadors.ts';
+import { AMBASSADOR_REFERRAL_DURATION_MS, calculateAmbassadorCommission, clearAmbassadorReferral, getAmbassadorMonthlyStats, getAmbassadorToken, getStoredAmbassadorCode, isCommissionPayableForMonth, normalizeAmbassadorCode, validAmbassadorReferral } from '../src/utils/ambassadors.ts';
 
 test('ambassador referrals expire after 90 days and reject invalid codes and dates', () => {
   const now = 2 * AMBASSADOR_REFERRAL_DURATION_MS;
@@ -83,4 +83,27 @@ test('monthly payout preparation includes unpaid approved commissions through th
   assert.equal(isCommissionPayableForMonth({ ...commission, payment_status: 'refunded' }, '2026-10'), false);
   assert.equal(isCommissionPayableForMonth({ ...commission, approved_at: 'invalid' }, '2026-10'), false);
   assert.equal(isCommissionPayableForMonth(commission, '2026-13'), false);
+});
+
+test('ambassador monthly statistics count attributed registrations and paid commissions for six months', () => {
+  const stats = getAmbassadorMonthlyStats([
+    { created_at: '2026-06-02T10:00:00.000Z' },
+    { created_at: '2026-11-08T10:00:00.000Z' },
+    { created_at: 'invalid-date' },
+    { created_at: '2026-05-31T23:59:59.000Z' },
+  ], [
+    { paid_at: '2026-06-30T10:00:00.000Z', amount: 600 },
+    { paid_at: '2026-11-01T10:00:00.000Z', amount: 1000 },
+    { paid_at: '2026-11-02T10:00:00.000Z', amount: -50 },
+    { paid_at: 'invalid-date', amount: 500 },
+  ], new Date('2026-11-08T12:00:00.000Z'));
+
+  assert.equal(stats.length, 6);
+  assert.equal(stats[0].month, '2026-06');
+  assert.equal(stats[0].registrations, 1);
+  assert.equal(stats[0].paidAmount, 600);
+  assert.equal(stats[5].month, '2026-11');
+  assert.equal(stats[5].registrations, 1);
+  assert.equal(stats[5].paidAmount, 1000);
+  assert.equal(stats.reduce((sum, month) => sum + month.registrations, 0), 2);
 });

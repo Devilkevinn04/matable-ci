@@ -2906,6 +2906,7 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.equal(ownerProfile.payload.name, '');
   assert.equal(ownerProfile.payload.phone, '');
   assert.equal(ownerProfile.payload.email, merchantEmail);
+  assert.equal(ownerProfile.payload.email_verified, false);
 
   const invalidOwnerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`, {
     method: 'PATCH',
@@ -2934,7 +2935,7 @@ test('new merchant registration flow is local and immediately usable', async () 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: billingEmail, current_pin: '000000' }),
   });
-  assert.equal(missingCurrentPin.response.status, 401, JSON.stringify(missingCurrentPin.payload));
+  assert.equal(missingCurrentPin.response.status, 409, JSON.stringify(missingCurrentPin.payload));
 
   const updatedOwnerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`, {
     method: 'PATCH',
@@ -2942,7 +2943,6 @@ test('new merchant registration flow is local and immediately usable', async () 
     body: JSON.stringify({
       name: 'Responsable test',
       phone: '+225 07 00 00 00 00',
-      email: billingEmail.toUpperCase(),
       current_pin: '387254',
       pin_code: '830462',
     }),
@@ -2950,7 +2950,7 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.equal(updatedOwnerProfile.response.status, 200, JSON.stringify(updatedOwnerProfile.payload));
   assert.equal(updatedOwnerProfile.payload.name, 'Responsable test');
   assert.equal(updatedOwnerProfile.payload.phone, '+2250700000000');
-  assert.equal(updatedOwnerProfile.payload.email, billingEmail);
+  assert.equal(updatedOwnerProfile.payload.email, merchantEmail);
   assert.equal(updatedOwnerProfile.payload.pin_updated, true);
   cookieJar = secondaryMerchantCookies;
   const revokedMerchantSession = await apiFetch('/api/auth/session');
@@ -2964,15 +2964,16 @@ test('new merchant registration flow is local and immediately usable', async () 
     const updatedConsent = consentResetDb.prepare(
       'SELECT email_subscription_reminders_enabled, email_subscription_reminders_consent_at FROM shops WHERE id = ?',
     ).get(newShopId) as { email_subscription_reminders_enabled: number; email_subscription_reminders_consent_at: string | null };
-    assert.equal(updatedConsent.email_subscription_reminders_enabled, 0);
-    assert.equal(updatedConsent.email_subscription_reminders_consent_at, null);
+    assert.equal(updatedConsent.email_subscription_reminders_enabled, 1);
+    assert.ok(updatedConsent.email_subscription_reminders_consent_at);
   } finally {
     consentResetDb.close();
   }
   const verifiedOwnerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`);
   assert.equal(verifiedOwnerProfile.payload.name, 'Responsable test');
   assert.equal(verifiedOwnerProfile.payload.phone, '+2250700000000');
-  assert.equal(verifiedOwnerProfile.payload.email, billingEmail);
+  assert.equal(verifiedOwnerProfile.payload.email, merchantEmail);
+  assert.equal(verifiedOwnerProfile.payload.email_verified, false);
   const updatedMerchantDataExport = await apiFetch('/api/auth/merchant-data-export');
   assert.equal(updatedMerchantDataExport.response.status, 200, JSON.stringify(updatedMerchantDataExport.payload));
   assert.equal(updatedMerchantDataExport.payload.shop.owner_name, 'Responsable test');
@@ -2980,10 +2981,11 @@ test('new merchant registration flow is local and immediately usable', async () 
 
   const profileDb = new Database(TEST_DB_PATH, { readonly: true });
   try {
-    const savedProfile = profileDb.prepare('SELECT owner_name, owner_phone, owner_email, pin_code_hash FROM shops WHERE id = ?').get(newShopId) as { owner_name: string; owner_phone: string; owner_email: string; pin_code_hash: string };
+    const savedProfile = profileDb.prepare('SELECT owner_name, owner_phone, owner_email, owner_email_verified_at, pin_code_hash FROM shops WHERE id = ?').get(newShopId) as { owner_name: string; owner_phone: string; owner_email: string; owner_email_verified_at: string | null; pin_code_hash: string };
     assert.equal(savedProfile.owner_name, 'Responsable test');
     assert.equal(savedProfile.owner_phone, '+2250700000000');
-    assert.equal(savedProfile.owner_email, billingEmail);
+    assert.equal(savedProfile.owner_email, merchantEmail);
+    assert.equal(savedProfile.owner_email_verified_at, null);
     assert.ok(savedProfile.pin_code_hash);
   } finally {
     profileDb.close();

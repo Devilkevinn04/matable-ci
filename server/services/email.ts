@@ -190,6 +190,34 @@ export async function sendAuthCodeEmail(
   return sendTransactionalEmail({ to: params.email, subject, html, text }, fetchImplementation);
 }
 
+export async function sendEmailMfaRolloutNotice(
+  params: { email: string; accountType: 'customer' | 'merchant'; appUrl?: string; deadlineAt?: string | null },
+  fetchImplementation: typeof fetch = fetch,
+): Promise<{ sent: boolean; id?: string; error?: string }> {
+  const appUrl = resolveAppUrl(params.appUrl);
+  const accountLabel = params.accountType === 'merchant' ? 'votre espace commerçant' : 'votre compte client';
+  const deadlineLabel = params.deadlineAt && Number.isFinite(Date.parse(params.deadlineAt))
+    ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long', timeZone: 'Africa/Abidjan' }).format(new Date(params.deadlineAt))
+    : 'après une période de transition de 30 jours';
+  const subject = 'Sécurisez votre compte MaTable par e-mail';
+  const text = `Bonjour,\n\nPour mieux protéger ${accountLabel}, MaTable met en place une vérification par code e-mail lors de la connexion. La mesure sera requise à partir du ${deadlineLabel}. Vérifiez dès maintenant que vous pouvez consulter l’adresse associée à votre compte : ${appUrl}${params.accountType === 'merchant' ? '/app' : '/compte'}\n\nUn code à usage unique vous sera envoyé lors de la vérification. Ne le communiquez à personne.\n\nL’équipe MaTable`;
+  const destination = `${appUrl}${params.accountType === 'merchant' ? '/app' : '/compte'}`;
+  const html = renderBrandedEmail({
+    title: 'Sécurisez votre compte MaTable',
+    preheader: 'La vérification par code e-mail sera requise après la période de transition.',
+    appUrl,
+    contentHtml: `
+      <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">Sécurisez votre compte</h1>
+      <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Bonjour,</p>
+      <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Pour mieux protéger ${escapeHtml(accountLabel)}, MaTable met en place une vérification par code e-mail lors de la connexion. Elle deviendra obligatoire à partir du <strong>${escapeHtml(deadlineLabel)}</strong>.</p>
+      <p style="margin:0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Vérifiez dès maintenant que vous pouvez consulter l’adresse e-mail associée à votre compte. Un code à usage unique vous sera envoyé ; ne le communiquez à personne.</p>
+      ${renderEmailButton('Accéder à mon compte', destination)}
+      <p style="margin:18px 0 0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">L’équipe MaTable</p>
+    `,
+  });
+  return sendTransactionalEmail({ to: params.email, subject, html, text }, fetchImplementation);
+}
+
 export async function sendMerchantWelcomeEmail(
   params: {
     shopName: string;
@@ -304,6 +332,172 @@ export async function sendMerchantPinResetEmail(
     `,
   });
   return sendTransactionalEmail({ to: params.ownerEmail, subject, html, text }, fetchImplementation);
+}
+
+export async function sendAmbassadorAccessEmail(
+  params: {
+    name: string;
+    email: string;
+    inviteUrl: string;
+    recovery: boolean;
+    appUrl?: string;
+  },
+  fetchImplementation: typeof fetch = fetch,
+): Promise<{ sent: boolean; id?: string; error?: string }> {
+  const appUrl = resolveAppUrl(params.appUrl);
+  const subject = params.recovery
+    ? 'Récupération de votre accès ambassadeur MaTable'
+    : 'Votre candidature ambassadeur est acceptée — MaTable';
+  const action = params.recovery ? 'réinitialiser votre mot de passe' : 'activer votre compte';
+  const title = params.recovery ? 'Récupérer votre accès' : 'Votre candidature est acceptée';
+  const accessUrl = new URL(params.inviteUrl);
+  const message = params.recovery
+    ? 'Une demande a été faite pour réinitialiser votre mot de passe ambassadeur.'
+    : 'Votre candidature au programme ambassadeur MaTable a été acceptée. Vous pouvez maintenant activer votre compte.';
+  const text = `Bonjour ${params.name},\n\n${message} Ce lien à usage unique expire dans 7 jours :\n${accessUrl.toString()}\n\nSi vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail.`;
+  const html = renderBrandedEmail({
+    title,
+    preheader: params.recovery ? `Un lien sécurisé vous permet de ${action}.` : 'Votre candidature ambassadeur MaTable a été acceptée.',
+    appUrl,
+    contentHtml: `
+      <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">${escapeHtml(title)}</h1>
+      <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Bonjour ${escapeHtml(params.name)},</p>
+      <p style="margin:0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">${escapeHtml(message)} Le lien ci-dessous est à usage unique et expire dans 7 jours.</p>
+      ${renderEmailButton(params.recovery ? 'Réinitialiser mon accès' : 'Activer mon compte', accessUrl.toString())}
+      <p style="margin:14px 0 0;font-family:${EMAIL_FONT};font-size:11px;line-height:1.6;color:${BRAND.faint};">Si vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail. Votre mot de passe ne sera modifié qu’après ouverture du lien et choix d’un nouveau mot de passe.</p>
+    `,
+  });
+  return sendTransactionalEmail({ to: params.email, subject, html, text }, fetchImplementation);
+}
+
+export async function sendAmbassadorApplicationEmail(
+  params: {
+    name: string;
+    email: string;
+    status: 'received' | 'rejected';
+    appUrl?: string;
+  },
+  fetchImplementation: typeof fetch = fetch,
+): Promise<{ sent: boolean; id?: string; error?: string }> {
+  const appUrl = resolveAppUrl(params.appUrl);
+  const received = params.status === 'received';
+  const subject = received
+    ? 'Nous avons reçu votre candidature ambassadeur MaTable'
+    : 'Mise à jour de votre candidature ambassadeur MaTable';
+  const title = received ? 'Candidature reçue' : 'Suite donnée à votre candidature';
+  const message = received
+    ? 'Votre demande pour rejoindre le programme ambassadeur MaTable a bien été reçue. Notre équipe va l’examiner. Aucun compte ni code de recommandation n’est créé avant approbation.'
+    : 'Après examen, nous ne pouvons pas donner suite à votre candidature pour le moment. Vous pourrez déposer une nouvelle demande ultérieurement.';
+  const text = `Bonjour ${params.name},\n\n${message}\n\nPour en savoir plus sur le programme, consultez ${appUrl}/ambassadeur/inscription.`;
+  const html = renderBrandedEmail({
+    title,
+    preheader: received ? 'Votre demande a bien été enregistrée.' : 'Votre candidature a été examinée.',
+    appUrl,
+    contentHtml: `
+      <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">${escapeHtml(title)}</h1>
+      <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Bonjour ${escapeHtml(params.name)},</p>
+      <p style="margin:0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">${escapeHtml(message)}</p>
+      ${received ? '' : `<p style="margin:14px 0 0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Merci de l’intérêt que vous portez à MaTable.</p>`}
+      ${renderEmailButton('Consulter le programme', `${appUrl}/ambassadeur/inscription`)}
+    `,
+  });
+  return sendTransactionalEmail({ to: params.email, subject, html, text }, fetchImplementation);
+}
+
+export type AmbassadorProgramEmailEvent =
+  | 'commission_approved'
+  | 'commission_rejected'
+  | 'commission_paid'
+  | 'commission_cancelled'
+  | 'commission_refund_review'
+  | 'withdrawal_requested'
+  | 'withdrawal_approved'
+  | 'withdrawal_rejected'
+  | 'withdrawal_cancelled'
+  | 'withdrawal_paid';
+
+export async function sendAmbassadorProgramEmail(
+  params: {
+    name: string;
+    email: string;
+    event: AmbassadorProgramEmailEvent;
+    amount: number;
+    shopName?: string;
+    reference?: string | null;
+    reason?: string | null;
+    appUrl?: string;
+  },
+  fetchImplementation: typeof fetch = fetch,
+): Promise<{ sent: boolean; id?: string; error?: string }> {
+  const appUrl = resolveAppUrl(params.appUrl);
+  const amount = `${RECEIPT_AMOUNT_FORMATTER.format(params.amount)} FCFA`;
+  const eventCopy: Record<AmbassadorProgramEmailEvent, { subject: string; title: string; message: string }> = {
+    commission_approved: {
+      subject: 'Votre commission ambassadeur est validée — MaTable',
+      title: 'Commission validée',
+      message: `Votre commission de ${amount} pour ${params.shopName || 'une boutique recommandée'} a été vérifiée et est disponible pour un retrait.`,
+    },
+    commission_rejected: {
+      subject: 'Mise à jour de votre commission ambassadeur — MaTable',
+      title: 'Commission non retenue',
+      message: `Après vérification, la commission de ${amount} pour ${params.shopName || 'une boutique recommandée'} ne peut pas être versée. Pour toute question, contactez l’assistance MaTable.`,
+    },
+    commission_paid: {
+      subject: 'Votre commission ambassadeur a été versée — MaTable',
+      title: 'Commission versée',
+      message: `Le versement de votre commission de ${amount} pour ${params.shopName || 'une boutique recommandée'} a été enregistré.${params.reference ? ` Référence : ${params.reference}.` : ''}`,
+    },
+    commission_cancelled: {
+      subject: 'Mise à jour de votre commission ambassadeur — MaTable',
+      title: 'Commission annulée',
+      message: `La commission de ${amount} pour ${params.shopName || 'une boutique recommandée'} a été annulée à la suite d’un remboursement du paiement lié. Elle ne peut pas être versée.`,
+    },
+    commission_refund_review: {
+      subject: 'Vérification nécessaire concernant une commission — MaTable',
+      title: 'Commission en cours de vérification',
+      message: `Le paiement lié à votre commission de ${amount} pour ${params.shopName || 'une boutique recommandée'} a été remboursé après son versement. L’équipe MaTable examine la situation et vous contactera si une action est nécessaire.`,
+    },
+    withdrawal_requested: {
+      subject: 'Votre demande de retrait a été reçue — MaTable',
+      title: 'Demande de retrait reçue',
+      message: `Votre demande de retrait de ${amount} a été reçue. L’équipe MaTable va la vérifier avant le transfert.`,
+    },
+    withdrawal_approved: {
+      subject: 'Votre demande de retrait est validée — MaTable',
+      title: 'Demande de retrait validée',
+      message: `Votre demande de retrait de ${amount} est validée. Le transfert sera effectué manuellement ; cet e-mail ne confirme pas encore le paiement.`,
+    },
+    withdrawal_rejected: {
+      subject: 'Mise à jour de votre demande de retrait — MaTable',
+      title: 'Demande de retrait refusée',
+      message: `Votre demande de retrait de ${amount} n’a pas été acceptée. Le montant correspondant est de nouveau disponible dans votre solde.${params.reason ? ` Motif : ${params.reason}` : ''}`,
+    },
+    withdrawal_cancelled: {
+      subject: 'Votre demande de retrait a été annulée — MaTable',
+      title: 'Demande de retrait annulée',
+      message: `Votre demande de retrait de ${amount} a été annulée.${params.reason ? ` ${params.reason}` : ' Le montant correspondant est de nouveau disponible dans votre solde.'}`,
+    },
+    withdrawal_paid: {
+      subject: 'Votre retrait ambassadeur a été payé — MaTable',
+      title: 'Retrait payé',
+      message: `Le transfert de ${amount} a été enregistré comme effectué.${params.reference ? ` Référence : ${params.reference}.` : ''}`,
+    },
+  };
+  const copy = eventCopy[params.event];
+  const subject = copy.subject;
+  const text = `Bonjour ${params.name},\n\n${copy.message}\n\nConsultez votre espace ambassadeur : ${appUrl}/ambassadeur`;
+  const html = renderBrandedEmail({
+    title: copy.title,
+    preheader: copy.message,
+    appUrl,
+    contentHtml: `
+      <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">${escapeHtml(copy.title)}</h1>
+      <p style="margin:0 0 12px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Bonjour ${escapeHtml(params.name)},</p>
+      <p style="margin:0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">${escapeHtml(copy.message)}</p>
+      ${renderEmailButton('Accéder à mon espace ambassadeur', `${appUrl}/ambassadeur`)}
+    `,
+  });
+  return sendTransactionalEmail({ to: params.email, subject, html, text }, fetchImplementation);
 }
 
 export async function sendMerchantSubscriptionReminderEmail(

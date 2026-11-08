@@ -7,6 +7,11 @@ interface Ambassador {
   id: string; name: string; code: string; email: string | null; phone: string | null; active: number;
   has_account: number; invite_expires_at: string | null; registrations: number; published: number; paying: number; commissions: number;
 }
+interface AmbassadorApplication {
+  id: string; name: string; email: string; phone: string | null;
+  status: 'pending' | 'approved' | 'rejected'; created_at: string;
+  decided_at: string | null; decision_reason: string | null;
+}
 interface Referral {
   shop_id: number; shop_name: string; ambassador_id: string; ambassador_name: string; publication_status: string;
   owner_email: string | null; whatsapp_number: string; ambassador_email: string | null; ambassador_phone: string | null;
@@ -34,6 +39,8 @@ function decisionReason(details: string | null): string | null {
 
 export function AdminAmbassadors() {
   const [adminView, setAdminView] = useState<AdminAmbassadorView>('partners');
+  const [applications, setApplications] = useState<AmbassadorApplication[]>([]);
+  const [manualApplicationInvite, setManualApplicationInvite] = useState<{ url: string; expiresAt: string } | null>(null);
   const [ambassadors, setAmbassadors] = useState<Ambassador[]>([]);
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [payouts, setPayouts] = useState<Payout[]>([]);
@@ -45,7 +52,7 @@ export function AdminAmbassadors() {
   const [profileDraft, setProfileDraft] = useState({ name: '', email: '', phone: '' });
   const [references, setReferences] = useState<Record<number, string>>({});
   const [reasons, setReasons] = useState<Record<number, string>>({});
-  const [inviteLinks, setInviteLinks] = useState<Record<string, { url: string; expiresAt: string }>>({});
+  const [inviteLinks, setInviteLinks] = useState<Record<string, { url: string; expiresAt: string; emailSent: boolean }>>({});
   const [withdrawalReferences, setWithdrawalReferences] = useState<Record<string, string>>({});
   const [withdrawalReasons, setWithdrawalReasons] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState('pending');
@@ -58,11 +65,12 @@ export function AdminAmbassadors() {
     const response = await fetch('/api/admin/ambassadors', { credentials: 'include', cache: 'no-store' });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Chargement impossible.');
+    setApplications(data.applications || []);
     setAmbassadors(data.ambassadors);
     setReferrals(data.referrals);
     setPayouts(data.payouts);
     setWithdrawals(data.withdrawals);
-    return data as { ambassadors: Ambassador[]; referrals: Referral[]; payouts: Payout[]; withdrawals: Withdrawal[] };
+    return data as { applications: AmbassadorApplication[]; ambassadors: Ambassador[]; referrals: Referral[]; payouts: Payout[]; withdrawals: Withdrawal[] };
   };
   useEffect(() => { void load().catch((problem) => setError(problem.message)); }, []);
   const perform = async (path: string, method: string, body: object) => {
@@ -107,11 +115,54 @@ export function AdminAmbassadors() {
       const response = await fetch(`/api/admin/ambassadors/${ambassadorId}/invite`, { method: 'POST', credentials: 'include' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de créer le lien d’accès.');
-      setInviteLinks((current) => ({ ...current, [ambassadorId]: { url: data.invite_url, expiresAt: data.expires_at } }));
+      setInviteLinks((current) => ({
+        ...current,
+        [ambassadorId]: { url: data.invite_url, expiresAt: data.expires_at, emailSent: data.email_sent === true },
+      }));
       await load();
-      setNotice('Lien temporaire créé. Transmettez-le directement à l’ambassadeur ; il ne sera plus affiché après actualisation.');
+      setNotice(data.email_sent
+        ? 'Lien sécurisé envoyé par e-mail. Il expire dans 7 jours et ne peut être utilisé qu’une seule fois.'
+        : 'E-mail non envoyé. Le lien temporaire reste disponible ici pour une transmission manuelle sécurisée.');
     } catch (problem) { setError(problem instanceof Error ? problem.message : 'Impossible de créer le lien d’accès.'); }
     finally { setBusy(false); }
+  };
+  const processApplication = async (application: AmbassadorApplication, action: 'approve' | 'reject') => {
+    const reason = action === 'reject'
+      ? window.prompt('Motif du refus (obligatoire, 3 à 500 caractères) :')?.trim() || ''
+      : '';
+    if (action === 'reject' && reason.length < 3) {
+      if (reason) setError('Le motif de refus doit contenir au moins 3 caractères.');
+      return;
+    }
+    if (action === 'approve' && !window.confirm(`Approuver ${application.name} ? Un compte et un code ambassadeur seront créés, puis un lien d’activation sera envoyé à ${application.email}.`)) return;
+
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const response = await fetch(`/api/admin/ambassadors/applications/${application.id}/${action}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de traiter la candidature.');
+      await load();
+      if (action === 'reject') {
+        setNotice(data.email_sent
+          ? 'Candidature refusée, motif enregistré et candidat informé par e-mail.'
+          : 'Candidature refusée et motif enregistré, mais l’e-mail de notification n’a pas pu être envoyé.');
+      } else if (data.email_sent) {
+        setManualApplicationInvite(null);
+        setNotice('Candidature approuvée. Le lien d’activation a été envoyé par e-mail.');
+      } else {
+        setManualApplicationInvite({ url: data.invite_url, expiresAt: data.expires_at });
+        setNotice('Candidature approuvée, mais l’e-mail n’a pas été envoyé. Transmettez le lien ci-dessous directement au candidat.');
+      }
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : 'Impossible de traiter la candidature.');
+    } finally {
+      setBusy(false);
+    }
   };
   const processWithdrawal = async (withdrawal: Withdrawal, action: 'approve' | 'reject' | 'paid') => {
     const reference = withdrawalReferences[withdrawal.id] || '';
@@ -163,6 +214,16 @@ export function AdminAmbassadors() {
     <div role="group" aria-label="Rubriques ambassadeurs" className="overflow-x-auto border-b border-slate-200">
       <div className="flex min-w-max items-center gap-5">{adminTabs.map(({ id, label, icon: Icon, count }) => <button key={id} type="button" aria-pressed={adminView === id} onClick={() => setAdminView(id)} className={`inline-flex min-h-12 items-center gap-2 border-b-2 px-1 text-xs font-semibold transition-colors ${adminView === id ? 'border-emerald-900 text-emerald-950' : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900'}`}><Icon className="h-4 w-4" /><span>{label}{count ? ` · ${count}` : ''}</span></button>)}</div>
     </div>
+    <div data-admin-panel="partners" className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-sm font-black text-amber-950">Candidatures à examiner ({applications.filter((application) => application.status === 'pending').length})</h3><p className="mt-1 text-xs leading-5 text-amber-900">Aucun compte ni code de parrainage n’est créé avant approbation.</p></div><button type="button" onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/ambassadeur/inscription`).then(() => setNotice('Lien public de candidature copié.')).catch(() => setError('Copie impossible.'))} className="min-h-9 rounded-lg border border-amber-300 bg-white px-3 text-xs font-bold text-amber-950">Copier le lien de candidature</button></div>
+      {applications.filter((application) => application.status === 'pending').length === 0
+        ? <p className="text-sm text-amber-900">Aucune candidature en attente.</p>
+        : applications.filter((application) => application.status === 'pending').map((application) => <article key={application.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-amber-200 pt-3">
+          <div className="min-w-0"><strong className="text-sm text-slate-900">{application.name}</strong><p className="break-all text-xs text-slate-700">{application.email}{application.phone ? ` · ${application.phone}` : ''}</p><p className="text-xs text-slate-500">Reçue le {new Date(application.created_at).toLocaleString('fr-FR')}</p></div>
+          <div className="flex gap-2"><button type="button" disabled={busy} onClick={() => void processApplication(application, 'approve')} className="min-h-9 rounded-lg bg-emerald-800 px-3 text-xs font-bold text-white disabled:opacity-50">Approuver et inviter</button><button type="button" disabled={busy} onClick={() => void processApplication(application, 'reject')} className="min-h-9 rounded-lg border border-rose-300 px-3 text-xs font-bold text-rose-800 disabled:opacity-50">Refuser</button></div>
+        </article>)}
+      {manualApplicationInvite && <div className="space-y-2 rounded-lg border border-amber-300 bg-white p-3"><p className="text-xs font-bold text-amber-950">Lien de secours à usage unique · expire le {new Date(manualApplicationInvite.expiresAt).toLocaleString('fr-FR')}</p><div className="flex flex-wrap items-center gap-2"><a href={manualApplicationInvite.url} target="_blank" rel="noreferrer" className="break-all text-xs font-semibold text-emerald-800 underline">Ouvrir le lien d’activation</a><button type="button" onClick={() => void navigator.clipboard.writeText(manualApplicationInvite.url).then(() => setNotice('Lien d’activation copié.')).catch(() => setError('Copie impossible.'))} className="min-h-8 rounded border border-slate-300 px-2 text-xs font-bold">Copier</button></div><p className="text-xs text-slate-600">Transmettez-le uniquement au candidat approuvé. Il ne sera plus affiché après actualisation.</p></div>}
+    </div>
     <form data-admin-panel="partners" onSubmit={(event) => void create(event)} className="grid items-end gap-3 border-y border-slate-200 py-4 sm:grid-cols-2 xl:grid-cols-4">
       <label className="text-xs font-bold text-slate-700">Nom<input required minLength={2} maxLength={100} value={name} onChange={(event) => setName(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></label>
       <label className="text-xs font-bold text-slate-700">E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></label>
@@ -199,7 +260,7 @@ export function AdminAmbassadors() {
       <p className="mt-2 text-xs text-slate-600">{ambassador.registrations} inscriptions · {ambassador.published} boutiques publiées · {ambassador.paying} commerçants payants · {money(ambassador.commissions)} de commissions</p>
       <div className="mt-3 flex flex-wrap items-center gap-2"><button type="button" disabled={busy || !ambassador.active || !ambassador.email} onClick={() => void createInvite(ambassador.id)} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold disabled:opacity-40">{ambassador.has_account ? 'Créer un lien de réinitialisation' : invitePending ? 'Remplacer le lien d’activation' : 'Créer le lien d’activation'}</button><span className="text-xs text-slate-500">Lien à usage unique, valable 7 jours.</span></div>
       {ambassador.has_account && invitePending && <p className="mt-2 text-xs text-slate-600">L’accès actuel reste actif jusqu’à l’utilisation du nouveau lien ; la réinitialisation révoquera alors les sessions existantes.</p>}
-      {inviteLinks[ambassador.id] && <div className="mt-2 space-y-1 rounded-lg bg-emerald-50 p-3"><div className="flex flex-wrap items-center gap-2"><a href={inviteLinks[ambassador.id].url} target="_blank" rel="noreferrer" className="break-all text-xs font-semibold text-emerald-800 underline">Lien d’activation</a><button type="button" title="Copier le lien d’activation" aria-label={`Copier le lien d’activation de ${ambassador.name}`} onClick={() => void navigator.clipboard.writeText(inviteLinks[ambassador.id].url).then(() => setNotice('Lien copié.')).catch(() => setError('Copie impossible.'))} className="rounded border border-slate-300 p-1.5"><Copy className="h-4 w-4" /></button></div><p className="text-xs text-slate-500">Expire le {new Date(inviteLinks[ambassador.id].expiresAt).toLocaleString('fr-FR')}</p></div>}
+      {inviteLinks[ambassador.id] && !inviteLinks[ambassador.id].emailSent && <div className="mt-2 space-y-1 rounded-lg bg-amber-50 p-3"><p className="text-xs font-semibold text-amber-950">Envoi e-mail indisponible : transmettez ce lien uniquement à l’adresse de l’ambassadeur.</p><div className="flex flex-wrap items-center gap-2"><a href={inviteLinks[ambassador.id].url} target="_blank" rel="noreferrer" className="break-all text-xs font-semibold text-emerald-800 underline">Lien temporaire</a><button type="button" title="Copier le lien temporaire" aria-label={`Copier le lien d’accès de ${ambassador.name}`} onClick={() => void navigator.clipboard.writeText(inviteLinks[ambassador.id].url).then(() => setNotice('Lien copié.')).catch(() => setError('Copie impossible.'))} className="rounded border border-slate-300 p-1.5"><Copy className="h-4 w-4" /></button></div><p className="text-xs text-slate-500">Expire le {new Date(inviteLinks[ambassador.id].expiresAt).toLocaleString('fr-FR')}</p></div>}
     </article>})}</div>
     <div data-admin-panel="commissions" className="space-y-3 border-y border-slate-200 py-4"><h3 className="text-sm font-black text-slate-900">Préparation des versements</h3>
       <div className="flex flex-wrap items-end gap-3"><label className="text-xs font-bold text-slate-700">Mois de versement<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="mt-1 block min-h-10 rounded-lg border border-slate-300 px-3 text-sm" /></label>

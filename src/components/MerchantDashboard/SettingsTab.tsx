@@ -29,6 +29,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const [ownerName, setOwnerName] = useState('');
   const [ownerPhone, setOwnerPhone] = useState('');
   const [ownerEmail, setOwnerEmail] = useState('');
+  const [savedOwnerEmail, setSavedOwnerEmail] = useState('');
+  const [ownerEmailVerified, setOwnerEmailVerified] = useState(false);
+  const [ownerEmailChallenge, setOwnerEmailChallenge] = useState('');
+  const [ownerEmailCode, setOwnerEmailCode] = useState('');
+  const [ownerEmailVerifying, setOwnerEmailVerifying] = useState(false);
   const [ownerCurrentPin, setOwnerCurrentPin] = useState('');
   const [ownerEmailLoading, setOwnerEmailLoading] = useState(false);
   const [ownerProfileSaving, setOwnerProfileSaving] = useState(false);
@@ -92,7 +97,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
           setOwnerName(data.name || '');
           setOwnerPhone(data.phone || '');
           setOwnerEmail(data.email || '');
+          setSavedOwnerEmail(data.email || '');
+          setOwnerEmailVerified(Boolean(data.email_verified));
           setOwnerCurrentPin('');
+          setOwnerEmailChallenge('');
+          setOwnerEmailCode('');
         }
       })
       .catch((error: unknown) => {
@@ -117,7 +126,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
         body: JSON.stringify({
           name: ownerName.trim(),
           phone: ownerPhone.trim(),
-          email: ownerEmail.trim(),
           current_pin: ownerCurrentPin.trim() || undefined,
           pin_code: settingsNewPin.trim() || undefined,
         }),
@@ -126,21 +134,55 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
       if (!response.ok) throw new Error(data.error || 'Impossible d’enregistrer le profil.');
       setOwnerName(data.name || '');
       setOwnerPhone(data.phone || '');
-      setOwnerEmail(data.email);
       setOwnerCurrentPin('');
-      const emailChanged = data.email.toLowerCase() !== ownerEmail.trim().toLowerCase();
-      setCurrentShop((shop) => shop ? {
-        ...shop,
-        owner_email_configured: true,
-        email_subscription_reminders_enabled: emailChanged ? false : shop.email_subscription_reminders_enabled,
-        email_subscription_reminders_consent_at: emailChanged ? null : shop.email_subscription_reminders_consent_at,
-      } : shop);
       setSettingsNewPin('');
       toast.success(data.pin_updated ? 'Profil enregistré et code PIN modifié.' : 'Profil enregistré.');
     } catch (error) {
       setOwnerProfileError(error instanceof Error ? error.message : 'Impossible d’enregistrer le profil.');
     } finally {
       setOwnerProfileSaving(false);
+    }
+  };
+
+  const verifyOwnerEmail = async (verify: boolean) => {
+    if (!currentShop) return;
+    setOwnerEmailVerifying(true);
+    setOwnerProfileError('');
+    try {
+      const response = await fetch(`/api/shops/${currentShop.id}/owner-profile/email-verification/${verify ? 'verify' : 'start'}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(verify
+          ? { challenge_id: ownerEmailChallenge, code: ownerEmailCode, current_pin: ownerCurrentPin.trim() }
+          : { email: ownerEmail.trim(), current_pin: ownerCurrentPin.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Impossible de vérifier cette adresse e-mail.');
+      if (verify) {
+        setOwnerEmail(data.email);
+        setSavedOwnerEmail(data.email);
+        setOwnerEmailVerified(true);
+        setOwnerEmailChallenge('');
+        setOwnerEmailCode('');
+        setCurrentShop((shop) => shop ? {
+          ...shop,
+          owner_email_configured: true,
+          owner_email_verified: true,
+          email_subscription_reminders_enabled: false,
+          email_subscription_reminders_consent_at: null,
+        } : shop);
+        setOwnerCurrentPin('');
+        toast.success('Adresse e-mail vérifiée et enregistrée.');
+      } else {
+        setOwnerEmailChallenge(data.challenge_id);
+        setOwnerEmailCode('');
+        setOwnerProfileError('Un code à 8 chiffres a été envoyé à cette adresse. Vérifiez aussi vos courriers indésirables.');
+      }
+    } catch (error) {
+      setOwnerProfileError(error instanceof Error ? error.message : 'Impossible de vérifier cette adresse e-mail.');
+    } finally {
+      setOwnerEmailVerifying(false);
     }
   };
   const exportMerchantData = async () => {
@@ -194,6 +236,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
               </button>
             </section>}
 
+            {currentShop && !currentShop.owner_email_verified && (
+              <section role="status" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950 sm:p-5">
+                <h3 className="text-sm font-extrabold">Sécurisez l’accès à votre boutique</h3>
+                <p className="mt-1 text-sm leading-6">Vérifiez une adresse e-mail que vous pouvez consulter. La MFA e-mail sera requise après la période de transition ; sans adresse vérifiée, vous ne pourrez pas terminer la connexion.</p>
+                {settingsSubTab !== 'profile' && <button type="button" onClick={() => state.setSettingsSubTab('profile')} className="mt-2 text-sm font-bold underline underline-offset-2">Ajouter ou vérifier mon adresse</button>}
+              </section>
+            )}
+
             {settingsSubTab === 'profile' && (
               <form onSubmit={saveOwnerProfile} className="space-y-5 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
                 <div>
@@ -232,11 +282,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                   </label>
                   <label className="block text-sm font-semibold text-slate-800">
                     E-mail de facturation
-                    <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Requis pour le paiement et l’envoi des reçus.</span>
+                    <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Requis pour la MFA et les reçus. Une adresse ne sera enregistrée qu’après vérification.</span>
                     <input
                       type="email"
                       autoComplete="email"
-                      required
                       maxLength={254}
                       value={ownerEmail}
                       onChange={(event) => setOwnerEmail(event.target.value)}
@@ -244,6 +293,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       placeholder="vous@exemple.ci"
                       className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/15 disabled:bg-slate-50"
                     />
+                    {ownerEmailVerified && ownerEmail.trim().toLowerCase() === savedOwnerEmail.trim().toLowerCase()
+                      ? <span className="mt-1 block text-xs font-semibold text-emerald-800">Adresse vérifiée</span>
+                      : <span className="mt-1 block text-xs font-semibold text-amber-800">Adresse à vérifier</span>}
                   </label>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <label className="block text-sm font-bold text-slate-800">Modifier le code PIN</label>
@@ -272,7 +324,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 </div>
                 <label className="block max-w-md text-sm font-semibold text-slate-800">
                   Code PIN actuel
-                  <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Requis uniquement pour modifier l’e-mail de récupération ou le code PIN.</span>
+                  <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Requis pour vérifier l’e-mail ou modifier le code PIN.</span>
                   <input
                     type="password"
                     inputMode="numeric"
@@ -285,6 +337,18 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                     className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-mono tracking-widest outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/15 disabled:bg-slate-50"
                   />
                 </label>
+                {(!ownerEmailVerified || ownerEmail.trim().toLowerCase() !== savedOwnerEmail.trim().toLowerCase()) && (
+                  <div className="max-w-md space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    {ownerEmailChallenge && <label className="block text-sm font-semibold text-slate-800">
+                      Code reçu par e-mail
+                      <input type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{8}" maxLength={8} value={ownerEmailCode} onChange={(event) => setOwnerEmailCode(event.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-2 min-h-11 w-full rounded-xl border border-amber-200 bg-white px-3 text-center font-mono text-lg tracking-[0.3em]" />
+                    </label>}
+                    <button type="button" disabled={ownerEmailVerifying || ownerEmailLoading || !ownerEmail.trim() || !ownerCurrentPin.trim()} onClick={() => void verifyOwnerEmail(Boolean(ownerEmailChallenge))} className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-[var(--mt-green-deep)] px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-50">
+                      {ownerEmailVerifying ? 'Vérification…' : ownerEmailChallenge ? 'Confirmer l’adresse' : 'Envoyer un code de vérification'}
+                    </button>
+                    {ownerEmailChallenge && <button type="button" disabled={ownerEmailVerifying} onClick={() => void verifyOwnerEmail(false)} className="w-full text-center text-xs font-semibold text-slate-700 underline underline-offset-2 disabled:opacity-50">Renvoyer le code</button>}
+                  </div>
+                )}
                 <button type="submit" disabled={ownerEmailLoading || ownerProfileSaving} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--mt-green-primary)] px-5 text-sm font-extrabold text-white shadow-sm transition-colors hover:bg-[var(--mt-green-hover)] disabled:cursor-wait disabled:opacity-60 sm:w-auto">
                   {ownerProfileSaving ? 'Enregistrement…' : 'Enregistrer le profil'}
                 </button>

@@ -8,6 +8,19 @@ Dans la pull request, ajouter les noms et exemples dans `.env.production.example
 
 L’exploitant renseigne les variables serveur dans `/srv/apps/matable/shared/app.env` avant d’approuver le SHA. Ce fichier privé contient les valeurs de production. Transmettre les secrets par un canal prévu à cet effet et garder uniquement les noms et exemples dans Git.
 
+Après déploiement du parcours de vérification MFA, les avis aux comptes
+existants qui ont déjà une adresse e-mail peuvent être envoyés avec la commande
+suivante. Elle est idempotente : les destinataires déjà traités ne reçoivent
+pas de doublon.
+
+```sh
+docker exec matable-web node /app/scripts/send-email-mfa-rollout-notices.mjs
+```
+
+Les commerçants sans adresse ne peuvent pas recevoir de courriel ; ils doivent
+être informés par un autre canal. Leur parcours de connexion permet ensuite
+d’ajouter et de vérifier une adresse avec leur numéro et leur PIN.
+
 Les valeurs `VITE_*` sont publiques et intégrées au navigateur à la compilation. Le script transmet `VITE_WHATSAPP_ADMIN_PHONE` à Docker. Pour ajouter une autre variable de ce type, déclarer aussi son argument dans le Dockerfile et le transmettre dans le script de déploiement.
 
 Pour une migration de schéma, valider son exécution sur une copie de la base avant l’approbation. Le VPS conserve une sauvegarde PostgreSQL vérifiée avant chaque remplacement du conteneur. Le retour arrière rétablit l’image précédente. Prévoir la compatibilité du schéma avec cette image.

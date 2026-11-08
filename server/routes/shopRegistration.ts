@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { hashAmbassadorToken } from './ambassadors.ts';
+import { hashAmbassadorToken } from '../services/ambassadorInvites.ts';
 import { normalizeAmbassadorCode } from '../../src/utils/ambassadors.ts';
 import { Router, type RequestHandler } from 'express';
 import { databaseMode, dbTransaction } from '../../db.ts';

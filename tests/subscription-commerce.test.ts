@@ -653,6 +653,82 @@ test('ambassador attribution handles reused, expired, inactive, malformed, and c
   clearTestRateLimits();
 });
 
+test('public ambassador applications require approval before account and referral-code creation', async () => {
+  const applicationResponse = await fetch(`${BASE_URL}/api/ambassador-applications`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Candidature test',
+      email: 'application-ambassador@example.com',
+      phone: '+2250708091011',
+    }),
+  });
+  assert.equal(applicationResponse.status, 202);
+  assert.match((await applicationResponse.json()).message, /avant toute activation/i);
+  const repeatedApplicationResponse = await fetch(`${BASE_URL}/api/ambassador-applications`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Candidature test',
+      email: 'application-ambassador@example.com',
+      phone: '+2250708091011',
+    }),
+  });
+  assert.equal(repeatedApplicationResponse.status, 202);
+
+  const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'subscription-commerce-test-admin-key', role: 'super_admin' }),
+  });
+  const adminCookie = adminLogin.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(adminCookie);
+  const adminRequest = (path: string, method: string, body?: object) => fetch(`${BASE_URL}/api/admin/ambassadors${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: body && JSON.stringify(body),
+  });
+  let adminData = await (await adminRequest('', 'GET')).json();
+  const application = adminData.applications.find((entry: { email: string }) => entry.email === 'application-ambassador@example.com');
+  assert.ok(application);
+  assert.equal(application.status, 'pending');
+  assert.equal(adminData.ambassadors.some((entry: { email: string }) => entry.email === application.email), false);
+
+  const approvalResponse = await adminRequest(`/applications/${application.id}/approve`, 'POST', {});
+  assert.equal(approvalResponse.status, 200);
+  const approval = await approvalResponse.json();
+  assert.equal(approval.status, 'approved');
+  assert.equal(approval.email_sent, false);
+  assert.match(approval.invite_url, /\/ambassadeur\/activer\?token=/);
+
+  adminData = await (await adminRequest('', 'GET')).json();
+  const createdAmbassador = adminData.ambassadors.find((entry: { email: string }) => entry.email === application.email);
+  assert.ok(createdAmbassador);
+  assert.equal(createdAmbassador.code.startsWith('MT'), true);
+
+  const activationToken = new URL(approval.invite_url).searchParams.get('token');
+  const activationResponse = await fetch(`${BASE_URL}/api/ambassador-auth/activate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: activationToken, password: 'SecureAmbassadorPassword2026!' }),
+  });
+  assert.equal(activationResponse.status, 200, await activationResponse.clone().text());
+
+  await fetch(`${BASE_URL}/api/ambassador-applications`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Candidature refusée', email: 'rejected-application@example.com' }),
+  });
+  adminData = await (await adminRequest('', 'GET')).json();
+  const rejectedApplication = adminData.applications.find((entry: { email: string }) => entry.email === 'rejected-application@example.com');
+  assert.ok(rejectedApplication);
+  const rejectionResponse = await adminRequest(`/applications/${rejectedApplication.id}/reject`, 'POST', { reason: 'Informations insuffisantes.' });
+  assert.equal(rejectionResponse.status, 200);
+  adminData = await (await adminRequest('', 'GET')).json();
+  assert.equal(adminData.applications.find((entry: { id: string }) => entry.id === rejectedApplication.id).status, 'rejected');
+  assert.equal(adminData.ambassadors.some((entry: { email: string }) => entry.email === 'rejected-application@example.com'), false);
+});
+
 test('ambassador access uses one-time invitations and isolates each dashboard to its owner', async () => {
   const adminLogin = await fetch(`${BASE_URL}/api/auth/admin-login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -710,6 +786,15 @@ test('ambassador access uses one-time invitations and isolates each dashboard to
   assert.equal((await fetch(`${BASE_URL}/api/ambassador-auth/activate`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: replacementInviteToken, password }),
   })).status, 400);
+  const unknownRecoveryResponse = await fetch(`${BASE_URL}/api/ambassador-auth/request-access`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'unknown-ambassador@example.com' }),
+  });
+  const knownRecoveryResponse = await fetch(`${BASE_URL}/api/ambassador-auth/request-access`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'private-ambassador@example.com' }),
+  });
+  assert.equal(unknownRecoveryResponse.status, 202);
+  assert.equal(knownRecoveryResponse.status, 202);
+  assert.deepEqual(await unknownRecoveryResponse.json(), await knownRecoveryResponse.json());
   let dashboardResponse = await fetch(`${BASE_URL}/api/ambassador-auth/dashboard`, { headers: { Cookie: ambassadorCookie } });
   assert.equal(dashboardResponse.status, 200);
   let dashboard = await dashboardResponse.json();

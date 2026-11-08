@@ -18,6 +18,7 @@ test('email MFA applies rollout rules and consumes expiring, single-use codes', 
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'matable-email-mfa-'));
   const originalFetch = globalThis.fetch;
   let rejectEmailDelivery = false;
+  let emailRequests = 0;
   process.env.NODE_ENV = 'development';
   process.env.MATABLE_DB_PATH = path.join(directory, 'mfa.db');
   process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT = '2026-03-01T00:00:00.000Z';
@@ -28,6 +29,7 @@ test('email MFA applies rollout rules and consumes expiring, single-use codes', 
 
   let emailText = '';
   globalThis.fetch = async (_input, init) => {
+    emailRequests += 1;
     if (rejectEmailDelivery) return new Response(JSON.stringify({ message: 'provider_unavailable' }), { status: 503 });
     const requestBody = JSON.parse(String(init?.body || '{}')) as { text?: string };
     emailText = requestBody.text || '';
@@ -38,9 +40,16 @@ test('email MFA applies rollout rules and consumes expiring, single-use codes', 
   try {
     database = await import('../db.ts');
     await database.initializeDatabase();
-    const { isEmailMfaRequired, startEmailMfaChallenge, verifyEmailMfaChallenge } = await import('../server/services/emailMfa.ts');
+    const {
+      getEmailMfaDeadline,
+      isEmailMfaRequired,
+      sendEmailMfaRolloutNoticeOnce,
+      startEmailMfaChallenge,
+      verifyEmailMfaChallenge,
+    } = await import('../server/services/emailMfa.ts');
 
     const rollout = Date.parse(process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT);
+    assert.equal(getEmailMfaDeadline(), '2026-03-31T00:00:00.000Z');
     assert.equal(isEmailMfaRequired('2026-02-28T23:59:59.999Z', rollout + 1), false);
     assert.equal(isEmailMfaRequired('2026-03-01T00:00:00.000Z', rollout + 1), true);
     assert.equal(isEmailMfaRequired('2026-02-28T23:59:59.999Z', rollout + 30 * 24 * 60 * 60 * 1000), true);
@@ -63,6 +72,38 @@ test('email MFA applies rollout rules and consumes expiring, single-use codes', 
       email: 'customer@example.ci',
     });
     assert.equal(await verifyEmailMfaChallenge({ challengeId: challenge.challengeId, code: code || '', subject: 'customer' }), 'invalid');
+
+    const emailSetup = await startEmailMfaChallenge({
+      subject: 'merchant_email_setup',
+      subjectId: 'mfa-test-merchant',
+      email: 'merchant@example.ci',
+    });
+    assert.ok('challengeId' in emailSetup);
+    if (!('challengeId' in emailSetup)) return;
+    const setupCode = emailText.match(/(\d{8})/)?.[1];
+    assert.ok(setupCode);
+    assert.deepEqual(await verifyEmailMfaChallenge({
+      challengeId: emailSetup.challengeId,
+      code: setupCode || '',
+      subject: 'merchant_email_setup',
+    }), { subjectId: 'mfa-test-merchant', email: 'merchant@example.ci' });
+
+    const beforeNotice = emailRequests;
+    await sendEmailMfaRolloutNoticeOnce({
+      subject: 'customer',
+      subjectId: 'mfa-test-customer',
+      email: 'customer@example.ci',
+    });
+    await sendEmailMfaRolloutNoticeOnce({
+      subject: 'customer',
+      subjectId: 'mfa-test-customer',
+      email: 'customer@example.ci',
+    });
+    assert.equal(emailRequests, beforeNotice + 1);
+    assert.ok((await database.dbGet<{ sent_at: string }>(
+      'SELECT sent_at FROM auth_email_rollout_notices WHERE subject_type = ? AND subject_id = ?',
+      ['customer', 'mfa-test-customer'],
+    ))?.sent_at);
 
     const expiring = await startEmailMfaChallenge({
       subject: 'customer',

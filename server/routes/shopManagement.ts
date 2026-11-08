@@ -8,6 +8,7 @@ import { MediaStorageUnavailableError, MediaUploadValidationError, createMediaUp
 import { getVapidConfiguration, isAllowedPushEndpoint } from '../services/pushNotifications.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import { getDefaultSubscriptionPrices, parseSubscriptionPrices } from '../services/subscriptionPricing.ts';
+import { startEmailMfaChallenge, verifyEmailMfaChallenge } from '../services/emailMfa.ts';
 import type { ShopRecord } from '../types.ts';
 
 function getCalendarDayCount(startDate: string, endDate: string): number {
@@ -34,6 +35,7 @@ interface ShopManagementOptions {
   isShopCategory: (value: unknown) => value is ShopCategory;
   normalizeCustomBannerImage: (value: unknown, category: ShopCategory) => string;
   sanitizeTextField: (value: string | null | undefined, maxLength?: number) => string;
+  rateLimitPublicRequest: (limit?: number) => RequestHandler;
 }
 
 export function createShopManagementRouter(options: ShopManagementOptions) {
@@ -55,6 +57,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     isShopCategory,
     normalizeCustomBannerImage,
     sanitizeTextField,
+    rateLimitPublicRequest,
   } = options;
   const router = Router({ mergeParams: true });
   const hasChangedFields = (current: Record<string, unknown>, requested: Record<string, unknown>, fields: string[]) => fields.some((field) =>
@@ -72,16 +75,96 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       name: shop.owner_name || '',
       phone: shop.owner_phone || '',
       email: shop.owner_email || '',
+      email_verified: Boolean(shop.owner_email_verified_at),
     });
+  });
+
+  router.post('/:id/owner-profile/email-verification/start', rateLimitPublicRequest(5), requireMerchantOwnShop, async (req, res) => {
+    if (req.adminShopAccess) return res.status(403).json({ error: 'Le commerçant doit vérifier sa propre adresse e-mail.' });
+    const shop = await getShopFromDatabase(Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const pin = typeof req.body?.current_pin === 'string' ? req.body.current_pin.trim() : '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      return res.status(400).json({ error: 'Saisissez une adresse e-mail valide.' });
+    }
+    if (!verifyPin(pin, shop.pin_code_hash)) {
+      return res.status(401).json({ error: 'Saisissez votre code PIN actuel pour vérifier cette adresse.' });
+    }
+    const duplicateEmail = await dbAll<{ id: number }>(
+      'SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?) AND id <> ? LIMIT 1',
+      [email, shop.id],
+    );
+    if (duplicateEmail.length) {
+      return res.status(409).json({ error: 'Cette adresse e-mail est déjà associée à une autre boutique.' });
+    }
+    const challenge = await startEmailMfaChallenge({
+      subject: 'merchant_email_setup',
+      subjectId: String(shop.id),
+      email,
+      appUrl: process.env.APP_URL || `${req.protocol}://${req.get('host') || ''}`,
+    });
+    if ('error' in challenge) {
+      console.error(`Unable to send merchant email verification code: ${challenge.error}.`);
+      return res.status(503).json({ error: 'Impossible d’envoyer le code de vérification. Vérifiez la configuration de l’e-mail.' });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(202).json({ success: true, challenge_id: challenge.challengeId });
+  });
+
+  router.post('/:id/owner-profile/email-verification/verify', rateLimitPublicRequest(10), requireMerchantOwnShop, async (req, res) => {
+    if (req.adminShopAccess) return res.status(403).json({ error: 'Le commerçant doit vérifier sa propre adresse e-mail.' });
+    const shop = await getShopFromDatabase(Number(req.params.id));
+    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
+    const pin = typeof req.body?.current_pin === 'string' ? req.body.current_pin.trim() : '';
+    if (!verifyPin(pin, shop.pin_code_hash)) {
+      return res.status(401).json({ error: 'Saisissez votre code PIN actuel pour vérifier cette adresse.' });
+    }
+    const result = await verifyEmailMfaChallenge({
+      challengeId: typeof req.body?.challenge_id === 'string' ? req.body.challenge_id : '',
+      code: typeof req.body?.code === 'string' ? req.body.code : '',
+      subject: 'merchant_email_setup',
+    });
+    if (typeof result === 'string' || result.subjectId !== String(shop.id)) {
+      return res.status(401).json({ error: 'Code invalide, expiré ou déjà utilisé. Recommencez la vérification.' });
+    }
+    const duplicateEmail = await dbAll<{ id: number }>(
+      'SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?) AND id <> ? LIMIT 1',
+      [result.email, shop.id],
+    );
+    if (duplicateEmail.length) {
+      return res.status(409).json({ error: 'Cette adresse e-mail est déjà associée à une autre boutique.' });
+    }
+    const emailChanged = result.email.trim().toLowerCase() !== String(shop.owner_email || '').trim().toLowerCase();
+    const verifiedAt = new Date().toISOString();
+    await dbRun(
+      `UPDATE shops SET owner_email = ?, owner_email_verified_at = ?,
+        email_subscription_reminders_enabled = CASE WHEN ? THEN 0 ELSE email_subscription_reminders_enabled END,
+        email_subscription_reminders_consent_at = CASE WHEN ? THEN NULL ELSE email_subscription_reminders_consent_at END
+       WHERE id = ?`,
+      [result.email, verifiedAt, emailChanged, emailChanged, shop.id],
+    );
+    if (emailChanged) {
+      await dbRun('DELETE FROM merchant_pin_reset_tokens WHERE shop_id = ?', [shop.id]);
+      const currentSessionToken = getMerchantSessionToken(req);
+      if (currentSessionToken) await revokeOtherMerchantSessionsForShop(shop.id, currentSessionToken);
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, email: result.email, email_verified: true });
   });
 
   router.patch('/:id/owner-profile', requireMerchantOwnShop, async (req, res) => {
     const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
 
-    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    const email = typeof req.body?.email === 'string'
+      ? req.body.email.trim().toLowerCase()
+      : String(shop.owner_email || '').trim().toLowerCase();
+    if (email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)) {
       return res.status(400).json({ error: 'Saisissez une adresse e-mail valide.' });
+    }
+    if (email !== String(shop.owner_email || '').trim().toLowerCase()) {
+      return res.status(409).json({ error: 'Vérifiez la nouvelle adresse e-mail avant de l’enregistrer.' });
     }
     const name = Object.prototype.hasOwnProperty.call(req.body || {}, 'name')
       ? sanitizeTextField(typeof req.body.name === 'string' ? req.body.name.trim() : '', 100)
@@ -99,21 +182,12 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     if (rawPhone && !phone) {
       return res.status(400).json({ error: 'Saisissez un numéro ivoirien valide au format 01, 05 ou 07.' });
     }
-    const duplicateEmail = await dbAll<{ id: number }>(
-      'SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?) AND id <> ? LIMIT 1',
-      [email, shop.id],
-    );
-    if (duplicateEmail.length) {
-      return res.status(409).json({ error: 'Cette adresse e-mail est déjà associée à une autre boutique.' });
-    }
-
     const hasPinCode = Object.prototype.hasOwnProperty.call(req.body || {}, 'pin_code');
     const pinCode = typeof req.body?.pin_code === 'string' ? req.body.pin_code.trim() : '';
     if (hasPinCode && (typeof req.body.pin_code !== 'string' || isWeakShopPin(pinCode))) {
       return res.status(400).json({ error: 'Le code PIN est trop simple ou invalide. Utilisez un PIN de 6 chiffres fort.' });
     }
-    const sameEmail = email === String(shop.owner_email || '').toLowerCase();
-    const credentialsChanging = hasPinCode || !sameEmail;
+    const credentialsChanging = hasPinCode;
     const currentSessionToken = req.adminShopAccess ? null : getMerchantSessionToken(req);
     if (credentialsChanging && !req.adminShopAccess) {
       if (!currentSessionToken) return res.status(401).json({ error: 'Session marchand invalide ou expirée.' });
@@ -122,15 +196,15 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
         return res.status(401).json({ error: 'Saisissez votre code PIN actuel pour modifier les identifiants de récupération ou le PIN.' });
       }
     }
-    const emailRemindersEnabled = sameEmail && shop.email_subscription_reminders_enabled ? 1 : 0;
-    const emailRemindersConsentAt = sameEmail ? shop.email_subscription_reminders_consent_at ?? null : null;
+    const emailRemindersEnabled = shop.email_subscription_reminders_enabled ? 1 : 0;
+    const emailRemindersConsentAt = shop.email_subscription_reminders_consent_at ?? null;
     if (hasPinCode) {
       await dbRun(
         `UPDATE shops SET owner_name = ?, owner_phone = ?, owner_email = ?, pin_code_hash = ?,
           email_subscription_reminders_enabled = ?, email_subscription_reminders_consent_at = ?
           WHERE id = ?`,
         [
-          name || null, phone, email, hashPin(pinCode),
+          name || null, phone, shop.owner_email || null, hashPin(pinCode),
           emailRemindersEnabled,
           emailRemindersConsentAt,
           shop.id,
@@ -141,10 +215,10 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
         `UPDATE shops SET owner_name = ?, owner_phone = ?, owner_email = ?,
           email_subscription_reminders_enabled = ?, email_subscription_reminders_consent_at = ?
           WHERE id = ?`,
-        [name || null, phone, email, emailRemindersEnabled, emailRemindersConsentAt, shop.id],
+        [name || null, phone, shop.owner_email || null, emailRemindersEnabled, emailRemindersConsentAt, shop.id],
       );
     }
-    if (hasPinCode || !sameEmail) {
+    if (hasPinCode) {
       await dbRun('DELETE FROM merchant_pin_reset_tokens WHERE shop_id = ?', [shop.id]);
       if (req.adminShopAccess) {
         await revokeMerchantSessionsForShop(shop.id);
@@ -153,7 +227,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       }
     }
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ success: true, name: name || '', phone: phone || '', email, pin_updated: hasPinCode });
+    return res.json({ success: true, name: name || '', phone: phone || '', email: shop.owner_email || '', email_verified: Boolean(shop.owner_email_verified_at), pin_updated: hasPinCode });
   });
 
   router.post('/:id/start-trial', requireMerchantOwnShop, async (req, res) => {
