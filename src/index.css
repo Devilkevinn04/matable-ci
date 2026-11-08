@@ -1,5 +1,27 @@
 @import "tailwindcss";
 
+@layer components {
+  .auth-form input:not([type="checkbox"]):not([type="radio"]),
+  .auth-form textarea,
+  .auth-form select {
+    min-height: 3rem;
+    max-width: 100%;
+    border: 1px solid #d5ddd5;
+    border-radius: 0.875rem;
+    background-color: #fff;
+    color: #292d2a;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .auth-form input:not([type="checkbox"]):not([type="radio"]):focus,
+  .auth-form textarea:focus,
+  .auth-form select:focus {
+    border-color: var(--mt-green-primary);
+    outline: none;
+    box-shadow: 0 0 0 3px rgb(8 127 98 / 12%);
+  }
+}
+
 :root {
   --mt-green-primary: #087F62;
   --mt-green-hover: #066B52;

@@ -20,6 +20,10 @@ interface ShopManagementOptions {
   dbAll: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
   requireMerchantAccess: RequestHandler;
   requireMerchantOwnShop: RequestHandler;
+  verifyPin: (inputPin: string, storedHash: string) => boolean;
+  getMerchantSessionToken: (req: import('express').Request) => string | null;
+  revokeMerchantSessionsForShop: (shopId: number) => Promise<void>;
+  revokeOtherMerchantSessionsForShop: (shopId: number, currentToken: string) => Promise<void>;
   trialDurationMonths: number;
   rotateMerchantAccessTokenForShop: (shopId: number) => Promise<string>;
   persistShop: (shop: ShopRecord) => Promise<void>;
@@ -37,6 +41,10 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     dbAll,
     requireMerchantAccess,
     requireMerchantOwnShop,
+    verifyPin,
+    getMerchantSessionToken,
+    revokeMerchantSessionsForShop,
+    revokeOtherMerchantSessionsForShop,
     trialDurationMonths,
     rotateMerchantAccessTokenForShop,
     persistShop,
@@ -105,6 +113,15 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       return res.status(400).json({ error: 'Le code PIN est trop simple ou invalide. Utilisez un PIN de 6 chiffres fort.' });
     }
     const sameEmail = email === String(shop.owner_email || '').toLowerCase();
+    const credentialsChanging = hasPinCode || !sameEmail;
+    const currentSessionToken = req.adminShopAccess ? null : getMerchantSessionToken(req);
+    if (credentialsChanging && !req.adminShopAccess) {
+      if (!currentSessionToken) return res.status(401).json({ error: 'Session marchand invalide ou expirée.' });
+      const currentPin = typeof req.body?.current_pin === 'string' ? req.body.current_pin.trim() : '';
+      if (!verifyPin(currentPin, shop.pin_code_hash)) {
+        return res.status(401).json({ error: 'Saisissez votre code PIN actuel pour modifier les identifiants de récupération ou le PIN.' });
+      }
+    }
     const emailRemindersEnabled = sameEmail && shop.email_subscription_reminders_enabled ? 1 : 0;
     const emailRemindersConsentAt = sameEmail ? shop.email_subscription_reminders_consent_at ?? null : null;
     if (hasPinCode) {
@@ -129,6 +146,11 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     }
     if (hasPinCode || !sameEmail) {
       await dbRun('DELETE FROM merchant_pin_reset_tokens WHERE shop_id = ?', [shop.id]);
+      if (req.adminShopAccess) {
+        await revokeMerchantSessionsForShop(shop.id);
+      } else if (currentSessionToken) {
+        await revokeOtherMerchantSessionsForShop(shop.id, currentSessionToken);
+      }
     }
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, name: name || '', phone: phone || '', email, pin_updated: hasPinCode });

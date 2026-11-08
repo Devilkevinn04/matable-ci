@@ -305,6 +305,13 @@ const sqliteSchema = `
     token TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, fingerprint TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'super_admin', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS auth_email_challenges (
+    challenge_id TEXT PRIMARY KEY, subject_type TEXT NOT NULL, subject_id TEXT NOT NULL,
+    email TEXT NOT NULL, code_hash TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+    expires_at INTEGER NOT NULL, created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_auth_email_challenges_subject
+    ON auth_email_challenges(subject_type, subject_id, expires_at);
   CREATE TABLE IF NOT EXISTS request_rate_limits (
     key_hash TEXT PRIMARY KEY, request_count INTEGER NOT NULL, reset_at INTEGER NOT NULL
   );
@@ -986,6 +993,12 @@ export const postgresMigrations = [
     token TEXT PRIMARY KEY, expires_at BIGINT NOT NULL,
     fingerprint TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'super_admin', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS auth_email_challenges (
+    challenge_id TEXT PRIMARY KEY, subject_type TEXT NOT NULL, subject_id TEXT NOT NULL,
+    email TEXT NOT NULL, code_hash TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+    expires_at BIGINT NOT NULL, created_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_auth_email_challenges_subject ON auth_email_challenges(subject_type, subject_id, expires_at)',
   'ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT \'super_admin\'',
   `CREATE TABLE IF NOT EXISTS request_rate_limits (
     key_hash TEXT PRIMARY KEY, request_count INTEGER NOT NULL, reset_at BIGINT NOT NULL

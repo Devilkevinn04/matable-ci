@@ -5,6 +5,8 @@ import { dbAll, dbGet, dbRun, dbTransaction, databaseMode } from '../../db.ts';
 import { buildSessionFingerprint, isRequestFingerprintMatch } from '../services/authSessions.ts';
 import { normalizeWhatsAppPhone } from '../services/businessRules.ts';
 import { clearLoginAttempts, isLoginRateLimited } from '../services/rateLimits.ts';
+import { isEmailMfaRequired, startEmailMfaChallenge, verifyEmailMfaChallenge } from '../services/emailMfa.ts';
+import { requireSameOriginJsonRequest } from '../middleware/authRequestSecurity.ts';
 
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const INVITE_TOKEN_PATTERN = /^[a-f0-9]{64}$/;
@@ -27,6 +29,11 @@ function clearAmbassadorCookie(response: Response) {
 
 export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: number) => RequestHandler) {
   const router = Router();
+  const protectedPostPaths = new Set(['/activate', '/login', '/login/verify']);
+  router.use((request, response, next) => {
+    if (request.method !== 'POST' || !protectedPostPaths.has(request.path)) return next();
+    return requireSameOriginJsonRequest(request, response, next);
+  });
 
   const getSession = async (request: Request, response?: Response) => {
     const token = readCookie(request, 'matable_ambassador_session');
@@ -99,8 +106,8 @@ export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: numb
     }
     const attemptKey = `ambassador:${request.ip}:${email}`;
     if (await isLoginRateLimited(attemptKey)) return response.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
-    const matches = await dbAll<{ id: string; name: string; email: string; code: string; active: number; password_hash: string | null }>(
-      'SELECT id, name, email, code, active, password_hash FROM ambassadors WHERE LOWER(email) = ? LIMIT 2', [email],
+    const matches = await dbAll<{ id: string; name: string; email: string; code: string; active: number; password_hash: string | null; created_at: string }>(
+      'SELECT id, name, email, code, active, password_hash, created_at FROM ambassadors WHERE LOWER(email) = ? LIMIT 2', [email],
     );
     const ambassador = matches.length === 1 ? matches[0] : undefined;
     const validPassword = await bcrypt.compare(password, ambassador?.password_hash || DUMMY_PASSWORD_HASH);
@@ -108,6 +115,45 @@ export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: numb
       return response.status(401).json({ error: 'Identifiants incorrects ou compte désactivé.' });
     }
     await clearLoginAttempts(attemptKey);
+    if (isEmailMfaRequired(ambassador.created_at)) {
+      const challenge = await startEmailMfaChallenge({
+        subject: 'ambassador',
+        subjectId: ambassador.id,
+        email: ambassador.email,
+        appUrl: String(process.env.APP_URL || 'http://localhost:3000').trim() || 'http://localhost:3000',
+      });
+      if ('error' in challenge) {
+        console.error(`Unable to send ambassador authentication code: ${challenge.error}.`);
+        return response.status(503).json({ error: 'Le code de sécurité ne peut pas être envoyé pour le moment. Réessayez plus tard.' });
+      }
+      response.setHeader('Cache-Control', 'no-store');
+      return response.status(202).json({ success: true, mfa_required: true, challenge_id: challenge.challengeId, expires_at: new Date(challenge.expiresAt).toISOString() });
+    }
+    await dbRun('DELETE FROM ambassador_sessions WHERE expires_at <= ?', [Date.now()]);
+    const token = randomUUID();
+    const expiresAt = Date.now() + SESSION_DURATION_MS;
+    await dbRun('INSERT INTO ambassador_sessions (token, ambassador_id, expires_at, fingerprint, created_at) VALUES (?, ?, ?, ?, ?)',
+      [token, ambassador.id, expiresAt, buildSessionFingerprint(request), new Date().toISOString()]);
+    setAmbassadorCookie(response, token);
+    return response.json({ success: true });
+  });
+
+  router.post('/login/verify', rateLimitPublicRequest(10), async (request, response) => {
+    const challengeId = typeof request.body?.challenge_id === 'string' ? request.body.challenge_id : '';
+    const code = typeof request.body?.code === 'string' ? request.body.code : '';
+    const verified = await verifyEmailMfaChallenge({ challengeId, code, subject: 'ambassador' });
+    if (typeof verified === 'string') {
+      const message = verified === 'expired' ? 'Le code a expiré. Reconnectez-vous pour en recevoir un nouveau.'
+        : verified === 'locked' ? 'Trop de codes incorrects. Reconnectez-vous pour recommencer.'
+          : 'Code de vérification incorrect.';
+      return response.status(verified === 'locked' ? 429 : 401).json({ error: message });
+    }
+    const ambassador = await dbGet<{ id: string; email: string; active: number }>(
+      'SELECT id, email, active FROM ambassadors WHERE id = ?', [verified.subjectId],
+    );
+    if (!ambassador?.active || ambassador.email.trim().toLowerCase() !== verified.email) {
+      return response.status(401).json({ error: 'Le compte a changé. Reconnectez-vous.' });
+    }
     await dbRun('DELETE FROM ambassador_sessions WHERE expires_at <= ?', [Date.now()]);
     const token = randomUUID();
     const expiresAt = Date.now() + SESSION_DURATION_MS;

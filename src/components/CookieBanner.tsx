@@ -37,7 +37,7 @@ export const CookieBanner: React.FC = () => {
       <div className="cookie-banner-copy">
         <ShieldCheck className="h-5 w-5 shrink-0 text-[var(--mt-green-primary)]" aria-hidden="true" />
         <p>
-          Les liens ambassadeurs peuvent mémoriser un identifiant pendant 90 jours pour attribuer une inscription au bon partenaire, indépendamment de votre choix sur les statistiques d’audience.
+          Les liens ambassadeurs mémorisent un identifiant jusqu’à l’inscription ou 90 jours au maximum, puis l’effacent de cet appareil après inscription. Ce suivi est distinct des statistiques d’audience.
           <Link to="/cookies"> Personnaliser</Link>
         </p>
       </div>

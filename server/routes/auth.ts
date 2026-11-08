@@ -9,6 +9,9 @@ import { listCustomerSessionRecords, revokeOtherCustomerSessionRecords } from '.
 import { clearLoginAttempts, getCustomerLoginLockSeconds, isLoginRateLimited, recordCustomerLoginFailure } from '../services/rateLimits.ts';
 import { getShopFromDatabase, loadShopsFromDatabase } from '../repositories/shops.ts';
 import { sendCustomerPasswordResetEmail, sendCustomerWelcomeEmail, sendMerchantPinResetEmail } from '../services/email.ts';
+import { normalizeWhatsAppPhone } from '../services/businessRules.ts';
+import { isEmailMfaRequired, startEmailMfaChallenge, verifyEmailMfaChallenge } from '../services/emailMfa.ts';
+import { requireSameOriginJsonRequest } from '../middleware/authRequestSecurity.ts';
 
 interface MerchantSession {
   shopId: number;
@@ -120,6 +123,23 @@ const timingSafeEqual = (left: string, right: string) => {
 
 export function createAuthRouter(options: AuthRouterOptions) {
   const router = Router();
+  const protectedPostPaths = new Set([
+    '/merchant-login',
+    '/merchant-login/verify',
+    '/merchant-access-login',
+    '/admin-login',
+    '/admin-login/verify',
+    '/customer-login',
+    '/customer-register',
+    '/customer-login/verify',
+    '/customer-oauth/link',
+    '/customer-oauth/complete',
+    '/customer-oauth/mfa-verify',
+  ]);
+  router.use((req, res, next) => {
+    if (req.method !== 'POST' || !protectedPostPaths.has(req.path)) return next();
+    return requireSameOriginJsonRequest(req, res, next);
+  });
   const {
     sessionDurationMs,
     adminSessionDurationMs,
@@ -161,16 +181,73 @@ export function createAuthRouter(options: AuthRouterOptions) {
   const pendingOAuthLinks = new Map<string, PendingCustomerOAuthLink>();
   const pendingOAuthCookie = 'matable_oauth_pending';
   const pendingOAuthLinkCookie = 'matable_oauth_link';
+  const pendingOAuthMfaCookie = 'matable_oauth_mfa';
 
   const oauthProviderEnabled = (provider: CustomerOAuthProvider) => provider === 'google'
     ? Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET)
     : Boolean(process.env.APPLE_SERVICE_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY);
+
+  const respondWithEmailMfa = async (
+    req: Request,
+    res: Response,
+    input: { subject: 'admin' | 'customer' | 'merchant'; subjectId: string; email: string; createdAt?: string | null },
+  ) => {
+    if (!isEmailMfaRequired(input.createdAt)) return false;
+    const challenge = await startEmailMfaChallenge({
+      subject: input.subject,
+      subjectId: input.subjectId,
+      email: input.email,
+      appUrl: process.env.APP_URL || `${req.protocol}://${req.get('host') || ''}`,
+    });
+    if ('error' in challenge) {
+      console.error(`Unable to send ${input.subject} authentication code: ${challenge.error}.`);
+      res.status(503).json({ error: 'Connexion sécurisée indisponible : vérifiez la configuration de l’e-mail et l’adresse du compte.' });
+      return true;
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(202).json({
+      success: false,
+      mfa_required: true,
+      challenge_id: challenge.challengeId,
+      expires_at: new Date(challenge.expiresAt).toISOString(),
+    });
+    return true;
+  };
 
   const getOAuthOrigin = (req: Request) => {
     const baseUrl = String(process.env.APP_URL || `${req.protocol}://${req.get('host') || ''}`).trim();
     const parsed = new URL(baseUrl);
     if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') throw new Error('APP_URL HTTPS requis pour OAuth.');
     return parsed.origin;
+  };
+
+  const redirectCustomerOAuthMfa = async (
+    req: Request,
+    res: Response,
+    user: CustomerProfileRow,
+    returnTo: string,
+  ) => {
+    if (!isEmailMfaRequired(user.created_at)) return false;
+    const challenge = await startEmailMfaChallenge({
+      subject: 'customer',
+      subjectId: String(user.id),
+      email: user.email,
+      appUrl: process.env.APP_URL || `${req.protocol}://${req.get('host') || ''}`,
+    });
+    if ('error' in challenge) {
+      console.error(`Unable to send customer OAuth authentication code: ${challenge.error}.`);
+      const errorUrl = new URL('/connexion', getOAuthOrigin(req));
+      errorUrl.searchParams.set('oauth', 'error');
+      res.redirect(303, errorUrl.toString());
+      return true;
+    }
+    const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+    res.setHeader('Set-Cookie', `${pendingOAuthMfaCookie}=${encodeURIComponent(challenge.challengeId)}; Path=/api/auth/customer-oauth; HttpOnly; SameSite=Lax; Max-Age=600${secure}`);
+    const mfaUrl = new URL('/connexion', getOAuthOrigin(req));
+    mfaUrl.searchParams.set('oauth', 'mfa');
+    mfaUrl.searchParams.set('return_to', safeOAuthReturnTo(returnTo));
+    res.redirect(303, mfaUrl.toString());
+    return true;
   };
 
   const safeOAuthReturnTo = (value: unknown) => {
@@ -202,26 +279,36 @@ export function createAuthRouter(options: AuthRouterOptions) {
   };
 
   router.post('/merchant-login', async (req, res) => {
-    const { phone, pin } = req.body;
-    if (!phone || !pin) return res.status(400).json({ error: 'Numéro de téléphone et code PIN requis.' });
+    const phone = req.body?.phone;
+    const pin = req.body?.pin;
+    if (typeof phone !== 'string' || typeof pin !== 'string' || phone.length > 32 || !phone.trim() || !/^\d{6}$/.test(pin.trim())) {
+      return res.status(400).json({ error: 'Numéro de téléphone et code PIN requis.' });
+    }
 
-    const attemptKey = `${req.ip}:${String(phone).replace(/\D/g, '')}`;
+    const attemptKey = `${req.ip}:${phone.replace(/\D/g, '')}`;
     if (await isLoginRateLimited(attemptKey)) return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
 
-    const cleanInputPhone = phone.replace(/[^0-9]/g, '');
-    const candidates = await loadShopsFromDatabase();
-    const shop = candidates.find((candidate) => {
-      const cleanShopPhone = candidate.whatsapp_number.replace(/[^0-9]/g, '');
-      return cleanShopPhone.includes(cleanInputPhone)
-        || cleanInputPhone.includes(cleanShopPhone)
-        || cleanShopPhone.slice(-8) === cleanInputPhone.slice(-8);
-    });
+    const normalizedPhone = normalizeWhatsAppPhone(phone);
+    const candidates = normalizedPhone ? await loadShopsFromDatabase() : [];
+    const shop = candidates.find((candidate) =>
+      normalizeWhatsAppPhone(candidate.whatsapp_number) === normalizedPhone
+    );
 
     if (!shop) return res.status(404).json({ error: 'Aucune boutique associée à ce numéro de téléphone.' });
+    const shopAttemptKey = `merchant:${shop.id}`;
+    if (await isLoginRateLimited(shopAttemptKey)) return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
     if (!verifyPin(pin, shop.pin_code_hash)) return res.status(401).json({ error: 'Code PIN incorrect à 6 chiffres.' });
+
+    if (await respondWithEmailMfa(req, res, {
+      subject: 'merchant',
+      subjectId: String(shop.id),
+      email: shop.owner_email || '',
+      createdAt: shop.created_at,
+    })) return;
 
     await createMerchantSession(res, shop.id, req);
     await clearLoginAttempts(attemptKey);
+    await clearLoginAttempts(shopAttemptKey);
     res.json({
       success: true,
       shop: {
@@ -287,6 +374,12 @@ export function createAuthRouter(options: AuthRouterOptions) {
       [shop.id, tokenHash],
     );
     if (consumed.changes !== 1) return res.status(401).json({ error: 'Lien d’accès invalide.' });
+    if (await respondWithEmailMfa(req, res, {
+      subject: 'merchant',
+      subjectId: String(shop.id),
+      email: shop.owner_email || '',
+      createdAt: shop.created_at,
+    })) return;
     await createMerchantSession(res, shop.id, req);
     res.json({ success: true, shop: toSafeShop(shop) });
   });
@@ -297,6 +390,8 @@ export function createAuthRouter(options: AuthRouterOptions) {
       return res.status(400).json({ error: 'Rôle admin invalide.' });
     }
 
+    const submittedKey = typeof req.body?.key === 'string' ? req.body.key : '';
+    if (submittedKey.length > 512) return res.status(400).json({ error: 'Clé d’accès invalide.' });
     const configuredKey = requestedRole === 'verification_admin'
       ? String(process.env.VERIFICATION_ADMIN_ACCESS_KEY || '').trim()
       : String(process.env.ADMIN_ACCESS_KEY || '').trim();
@@ -310,13 +405,22 @@ export function createAuthRouter(options: AuthRouterOptions) {
 
     const adminAttemptKey = `${req.ip}:admin:${requestedRole}`;
     if (await isLoginRateLimited(adminAttemptKey)) return res.status(429).json({ error: 'Trop de tentatives de connexion admin. Réessayez plus tard.' });
-    if (!timingSafeEqual(String(req.body?.key || ''), configuredKey)) {
+    if (!timingSafeEqual(submittedKey, configuredKey)) {
       return res.status(401).json({
         error: requestedRole === 'verification_admin' ? 'Clé admin de vérification incorrecte.' : 'Clé super-admin incorrecte.',
       });
     }
 
     await clearLoginAttempts(adminAttemptKey);
+    const adminEmail = requestedRole === 'verification_admin'
+      ? String(process.env.VERIFICATION_ADMIN_MFA_EMAIL || '').trim().toLowerCase()
+      : String(process.env.ADMIN_MFA_EMAIL || '').trim().toLowerCase();
+    if (await respondWithEmailMfa(req, res, {
+      subject: 'admin',
+      subjectId: requestedRole,
+      email: adminEmail,
+    })) return;
+
     const token = randomUUID();
     const adminSession: AdminSession = {
       expiresAt: Date.now() + adminSessionDurationMs,
@@ -327,6 +431,55 @@ export function createAuthRouter(options: AuthRouterOptions) {
     await saveAdminSessionRecord(token, adminSession);
     setAdminSessionCookie(res, token);
     res.json({ success: true, role: requestedRole });
+  });
+
+  router.post('/admin-login/verify', rateLimitPublicRequest(10), async (req, res) => {
+    const result = await verifyEmailMfaChallenge({
+      challengeId: typeof req.body?.challenge_id === 'string' ? req.body.challenge_id : '',
+      code: typeof req.body?.code === 'string' ? req.body.code : '',
+      subject: 'admin',
+    });
+    if (typeof result === 'string') return res.status(401).json({ error: 'Code invalide, expiré ou déjà utilisé. Recommencez la connexion.' });
+    const role = result.subjectId;
+    if (role !== 'super_admin' && role !== 'verification_admin') {
+      return res.status(401).json({ error: 'Vérification de connexion invalide.' });
+    }
+    const configuredEmail = String(role === 'verification_admin'
+      ? process.env.VERIFICATION_ADMIN_MFA_EMAIL || ''
+      : process.env.ADMIN_MFA_EMAIL || '').trim().toLowerCase();
+    if (!configuredEmail || configuredEmail !== result.email) {
+      return res.status(401).json({ error: 'L’adresse de sécurité a changé. Recommencez la connexion.' });
+    }
+
+    const token = randomUUID();
+    const adminSession: AdminSession = {
+      expiresAt: Date.now() + adminSessionDurationMs,
+      fingerprint: buildSessionFingerprint(req),
+      role,
+    };
+    adminSessions.set(token, adminSession);
+    await saveAdminSessionRecord(token, adminSession);
+    setAdminSessionCookie(res, token);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, role });
+  });
+
+  router.post('/merchant-login/verify', rateLimitPublicRequest(10), async (req, res) => {
+    const result = await verifyEmailMfaChallenge({
+      challengeId: typeof req.body?.challenge_id === 'string' ? req.body.challenge_id : '',
+      code: typeof req.body?.code === 'string' ? req.body.code : '',
+      subject: 'merchant',
+    });
+    if (typeof result === 'string') return res.status(401).json({ error: 'Code invalide, expiré ou déjà utilisé. Recommencez la connexion.' });
+    const shop = await getShopFromDatabase(Number(result.subjectId));
+    if (!shop || !shop.is_active) return res.status(401).json({ error: 'Cette boutique ne peut pas ouvrir de session.' });
+    const currentEmail = String(shop.owner_email || '').trim().toLowerCase();
+    if (result.email !== currentEmail) {
+      return res.status(401).json({ error: 'L’adresse de connexion a changé. Recommencez la connexion.' });
+    }
+    await createMerchantSession(res, shop.id, req);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, shop: toSafeShop(shop) });
   });
 
   router.post('/admin-logout', async (req, res) => {
@@ -536,6 +689,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
         }
       }
 
+      if (await redirectCustomerOAuthMfa(req, res, user, transaction.returnTo)) return;
       await createCustomerSession(req, res, user);
       return res.redirect(303, transaction.returnTo || '/compte');
     } catch {
@@ -550,6 +704,52 @@ export function createAuthRouter(options: AuthRouterOptions) {
     const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
     res.append('Set-Cookie', `${pendingOAuthLinkCookie}=; Path=/api/auth/customer-oauth; HttpOnly; SameSite=Lax; Max-Age=0${secure}`);
   };
+
+  const clearPendingOAuthMfaCookie = (res: Response) => {
+    const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+    res.append('Set-Cookie', `${pendingOAuthMfaCookie}=; Path=/api/auth/customer-oauth; HttpOnly; SameSite=Lax; Max-Age=0${secure}`);
+  };
+
+  router.get('/customer-oauth/mfa-pending', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const challengeId = getCookie(req, pendingOAuthMfaCookie) || '';
+    const challenge = challengeId ? await dbGet<{ challenge_id: string; expires_at: number }>(
+      'SELECT challenge_id, expires_at FROM auth_email_challenges WHERE challenge_id = ? AND subject_type = ?',
+      [challengeId, 'customer'],
+    ) : undefined;
+    if (!challenge || Number(challenge.expires_at) <= Date.now()) {
+      clearPendingOAuthMfaCookie(res);
+      return res.json({ pending: false });
+    }
+    return res.json({ pending: true, challenge_id: challenge.challenge_id });
+  });
+
+  router.post('/customer-oauth/mfa-verify', rateLimitPublicRequest(10), async (req, res) => {
+    const challengeId = getCookie(req, pendingOAuthMfaCookie) || '';
+    const result = await verifyEmailMfaChallenge({
+      challengeId,
+      code: typeof req.body?.code === 'string' ? req.body.code : '',
+      subject: 'customer',
+    });
+    if (typeof result === 'string') {
+      const message = result === 'expired' ? 'Le code a expiré. Recommencez la connexion sociale.'
+        : result === 'locked' ? 'Trop de codes incorrects. Recommencez la connexion sociale.'
+          : 'Code de vérification incorrect.';
+      return res.status(result === 'locked' ? 429 : 401).json({ error: message });
+    }
+    const user = await dbGet<CustomerProfileRow & { is_active: number }>(
+      'SELECT id, name, first_name, last_name, phone, email, created_at, is_active FROM users WHERE id = ?',
+      [Number(result.subjectId)],
+    );
+    if (!user?.is_active || user.email.trim().toLowerCase() !== result.email) {
+      clearPendingOAuthMfaCookie(res);
+      return res.status(401).json({ error: 'Le compte ou son adresse a changé. Recommencez la connexion.' });
+    }
+    const profile = await createCustomerSession(req, res, user);
+    clearPendingOAuthMfaCookie(res);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, user: profile });
+  });
 
   router.get('/customer-oauth/link-pending', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -572,7 +772,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     }
 
     const password = typeof req.body?.password === 'string' ? req.body.password : '';
-    if (!password) return res.status(400).json({ error: 'Mot de passe requis pour associer ce compte.' });
+    if (!password || password.length > 128) return res.status(400).json({ error: 'Mot de passe invalide pour associer ce compte.' });
 
     const user = await dbGet<CustomerProfileRow & { is_active: number; password_hash: string }>(
       'SELECT id, name, first_name, last_name, phone, email, created_at, is_active, password_hash FROM users WHERE id = ?',
@@ -594,6 +794,12 @@ export function createAuthRouter(options: AuthRouterOptions) {
 
     pendingOAuthLinks.delete(linkId);
     clearPendingOAuthLinkCookie(res);
+    if (await respondWithEmailMfa(req, res, {
+      subject: 'customer',
+      subjectId: String(user.id),
+      email: user.email,
+      createdAt: user.created_at,
+    })) return;
     const profile = await createCustomerSession(req, res, user);
     return res.json({ success: true, user: profile, return_to: safeOAuthReturnTo(pending.returnTo) });
   });
@@ -662,6 +868,12 @@ export function createAuthRouter(options: AuthRouterOptions) {
     }
 
     pendingOAuthProfiles.delete(pendingId);
+    if (await respondWithEmailMfa(req, res, {
+      subject: 'customer',
+      subjectId: String(user.id),
+      email: user.email,
+      createdAt: user.created_at,
+    })) return;
     const profile = await createCustomerSession(req, res, user);
     const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
     res.append('Set-Cookie', `${pendingOAuthCookie}=; Path=/api/auth/customer-oauth; HttpOnly; SameSite=Lax; Max-Age=0${secure}`);
@@ -670,20 +882,24 @@ export function createAuthRouter(options: AuthRouterOptions) {
 
   router.post('/customer-register', rateLimitPublicRequest(20), async (req, res) => {
     const { first_name, last_name, phone, email, password } = req.body || {};
+    if (typeof first_name !== 'string' || typeof last_name !== 'string'
+      || typeof phone !== 'string' || typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Vérifiez les informations saisies.' });
+    }
     const safeFirstName = sanitizeTextField(String(first_name || ''), 60).trim();
     const safeLastName = sanitizeTextField(String(last_name || ''), 60).trim();
     const safeName = `${safeFirstName} ${safeLastName}`.trim();
-    const safePhone = String(phone || '').trim();
-    const safeEmail = String(email || '').trim().toLowerCase();
-    const safePassword = String(password || '');
+    const safePhone = phone.trim();
+    const safeEmail = email.trim().toLowerCase();
+    const safePassword = password;
 
     if (req.body?.accepted_terms_privacy !== true) {
       return res.status(400).json({ error: 'Veuillez accepter les CGU et la politique de confidentialité pour créer votre compte.' });
     }
     if (!safeFirstName || !safeLastName) return res.status(400).json({ error: 'Le prénom et le nom sont requis.' });
     if (!/^\+?225\d{8,12}$/.test(safePhone)) return res.status(400).json({ error: 'Le téléphone est requis au format ivoirien.' });
-    if (!safeEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) return res.status(400).json({ error: 'Un email valide est requis.' });
-    if (!safePassword || safePassword.length < 8) return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères.' });
+    if (!safeEmail || safeEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) return res.status(400).json({ error: 'Un email valide est requis.' });
+    if (safePassword.length < 8 || safePassword.length > 128) return res.status(400).json({ error: 'Le mot de passe doit contenir entre 8 et 128 caractères.' });
 
     const existing = await dbGet<{ id: number }>('SELECT id FROM users WHERE email = ? OR phone = ?', [safeEmail, safePhone]);
     if (existing) return res.status(409).json({ error: 'Un compte existe déjà avec cet email ou ce téléphone.' });
@@ -706,16 +922,43 @@ export function createAuthRouter(options: AuthRouterOptions) {
     const user = inserted ? await dbGet<{ id: number; name: string; first_name: string; last_name: string; phone: string; email: string; created_at: string }>('SELECT id, name, first_name, last_name, phone, email, created_at FROM users WHERE id = ?', [inserted.id]) : undefined;
     if (!user) return res.status(500).json({ error: 'Impossible de créer le compte.' });
 
+    const welcomeEmail = await sendCustomerWelcomeEmail({ customerName: user.name, customerEmail: user.email });
+    if (!welcomeEmail.sent && welcomeEmail.error !== 'email_disabled_in_test') {
+      console.error(`Customer welcome email could not be sent: ${welcomeEmail.error || 'unknown_error'}`);
+    }
+    if (await respondWithEmailMfa(req, res, {
+      subject: 'customer',
+      subjectId: String(user.id),
+      email: user.email,
+      createdAt: user.created_at,
+    })) return;
+
     const token = randomUUID();
     const session = { userId: user.id, expiresAt: Date.now() + sessionDurationMs, fingerprint: buildSessionFingerprint(req) };
     customerSessions.set(token, session);
     await saveCustomerSessionRecord(token, session);
     setCustomerSessionCookie(res, token, session.fingerprint);
-    const welcomeEmail = await sendCustomerWelcomeEmail({ customerName: user.name, customerEmail: user.email });
-    if (!welcomeEmail.sent && welcomeEmail.error !== 'email_disabled_in_test') {
-      console.error(`Customer welcome email could not be sent: ${welcomeEmail.error || 'unknown_error'}`);
-    }
     res.json({ success: true, user: toCustomerProfile(user) });
+  });
+
+  router.post('/customer-login/verify', rateLimitPublicRequest(10), async (req, res) => {
+    const result = await verifyEmailMfaChallenge({
+      challengeId: typeof req.body?.challenge_id === 'string' ? req.body.challenge_id : '',
+      code: typeof req.body?.code === 'string' ? req.body.code : '',
+      subject: 'customer',
+    });
+    if (typeof result === 'string') return res.status(401).json({ error: 'Code invalide, expiré ou déjà utilisé. Recommencez la connexion.' });
+    const user = await dbGet<CustomerProfileRow & { is_active: number }>(
+      'SELECT id, name, first_name, last_name, phone, email, created_at, is_active FROM users WHERE id = ?',
+      [Number(result.subjectId)],
+    );
+    if (!user?.is_active) return res.status(401).json({ error: 'Ce compte ne peut pas ouvrir de session.' });
+    if (user.email.trim().toLowerCase() !== result.email) {
+      return res.status(401).json({ error: 'L’adresse de connexion a changé. Recommencez la connexion.' });
+    }
+    const profile = await createCustomerSession(req, res, user);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, user: profile });
   });
 
   router.post('/customer-password-reset-request', rateLimitPublicRequest(8), async (req, res) => {
@@ -893,10 +1136,17 @@ export function createAuthRouter(options: AuthRouterOptions) {
   });
 
   router.post('/customer-login', rateLimitPublicRequest(20), async (req, res) => {
-    const { email, password } = req.body || {};
-    const safeEmail = String(email || '').trim().toLowerCase();
-    const safePassword = String(password || '');
-    if (!safeEmail || !safePassword) return res.status(400).json({ error: 'Email et mot de passe requis.' });
+    const email = req.body?.email;
+    const password = req.body?.password;
+    if (typeof email !== 'string' || typeof password !== 'string'
+      || email.length > 254 || password.length === 0 || password.length > 128) {
+      return res.status(400).json({ error: 'E-mail ou mot de passe invalide.' });
+    }
+    const safeEmail = email.trim().toLowerCase();
+    const safePassword = password;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) {
+      return res.status(400).json({ error: 'E-mail ou mot de passe invalide.' });
+    }
 
     const attemptKey = `customer:${getRateLimitClientAddress(req)}:${safeEmail}`;
     const lockSeconds = await getCustomerLoginLockSeconds(attemptKey);
@@ -914,6 +1164,12 @@ export function createAuthRouter(options: AuthRouterOptions) {
     }
 
     await clearLoginAttempts(attemptKey, 'customer-login');
+    if (await respondWithEmailMfa(req, res, {
+      subject: 'customer',
+      subjectId: String(user.id),
+      email: user.email,
+      createdAt: user.created_at,
+    })) return;
     const token = randomUUID();
     const session = { userId: user.id, expiresAt: Date.now() + sessionDurationMs, fingerprint: buildSessionFingerprint(req) };
     customerSessions.set(token, session);

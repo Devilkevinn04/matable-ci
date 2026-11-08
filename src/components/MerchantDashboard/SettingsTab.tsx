@@ -29,6 +29,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const [ownerName, setOwnerName] = useState('');
   const [ownerPhone, setOwnerPhone] = useState('');
   const [ownerEmail, setOwnerEmail] = useState('');
+  const [ownerCurrentPin, setOwnerCurrentPin] = useState('');
   const [ownerEmailLoading, setOwnerEmailLoading] = useState(false);
   const [ownerProfileSaving, setOwnerProfileSaving] = useState(false);
   const [ownerProfileError, setOwnerProfileError] = useState('');
@@ -91,6 +92,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
           setOwnerName(data.name || '');
           setOwnerPhone(data.phone || '');
           setOwnerEmail(data.email || '');
+          setOwnerCurrentPin('');
         }
       })
       .catch((error: unknown) => {
@@ -116,6 +118,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
           name: ownerName.trim(),
           phone: ownerPhone.trim(),
           email: ownerEmail.trim(),
+          current_pin: ownerCurrentPin.trim() || undefined,
           pin_code: settingsNewPin.trim() || undefined,
         }),
       });
@@ -124,6 +127,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
       setOwnerName(data.name || '');
       setOwnerPhone(data.phone || '');
       setOwnerEmail(data.email);
+      setOwnerCurrentPin('');
       const emailChanged = data.email.toLowerCase() !== ownerEmail.trim().toLowerCase();
       setCurrentShop((shop) => shop ? {
         ...shop,
@@ -266,6 +270,21 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                   </div>
                 </div>
                 </div>
+                <label className="block max-w-md text-sm font-semibold text-slate-800">
+                  Code PIN actuel
+                  <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Requis uniquement pour modifier l’e-mail de récupération ou le code PIN.</span>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="current-password"
+                    maxLength={6}
+                    value={ownerCurrentPin}
+                    onChange={(event) => setOwnerCurrentPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                    disabled={ownerEmailLoading || ownerProfileSaving}
+                    placeholder="PIN actuel à 6 chiffres"
+                    className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-mono tracking-widest outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/15 disabled:bg-slate-50"
+                  />
+                </label>
                 <button type="submit" disabled={ownerEmailLoading || ownerProfileSaving} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--mt-green-primary)] px-5 text-sm font-extrabold text-white shadow-sm transition-colors hover:bg-[var(--mt-green-hover)] disabled:cursor-wait disabled:opacity-60 sm:w-auto">
                   {ownerProfileSaving ? 'Enregistrement…' : 'Enregistrer le profil'}
                 </button>

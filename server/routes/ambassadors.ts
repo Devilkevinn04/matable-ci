@@ -6,6 +6,14 @@ import { normalizeWhatsAppPhone } from '../services/businessRules.ts';
 
 export const hashAmbassadorToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
+const normalizeIdentityName = (value: string | null | undefined) => String(value || '')
+  .normalize('NFD')
+  .replace(/\p{M}/gu, '')
+  .toLowerCase()
+  .replace(/[^\p{L}\p{N}]+/gu, ' ')
+  .trim()
+  .replace(/\s+/g, ' ');
+
 export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number) => RequestHandler) {
   const publicRouter = Router();
   const adminRouter = Router();
@@ -103,7 +111,7 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
     if (!withdrawalId || !['approve', 'reject', 'paid'].includes(action) || (action === 'paid' && !reference)) {
       return res.status(400).json({ error: 'Action ou référence de versement invalide.' });
     }
-    if (action === 'reject' && reason.length < 3) return res.status(400).json({ error: 'Indiquez un motif de refus de 3 à 500 caractères.' });
+    if (action === 'reject' && reason.length < 3) return res.status(400).json({ error: 'Documentez le motif du refus en 3 à 500 caractères.' });
     const now = new Date().toISOString();
     const result = await dbTransaction(async (transaction) => {
       const withdrawal = await transaction.get<{ id: string; ambassador_id: string; amount: number; status: string }>(
@@ -215,18 +223,21 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
     const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
     if (!Number.isSafeInteger(shopId) || shopId <= 0 || !['approve', 'reject', 'paid'].includes(action) || (action === 'paid' && !reference)) return res.status(400).json({ error: 'Action ou référence de versement invalide.' });
     if (reason.length > 500) return res.status(400).json({ error: 'Le motif ne peut pas dépasser 500 caractères.' });
-    if (action === 'reject' && reason.length < 3) return res.status(400).json({ error: 'Indiquez un motif de refus de 3 à 500 caractères.' });
+    if (['approve', 'reject'].includes(action) && reason.length < 3) return res.status(400).json({ error: 'Documentez le contrôle en 3 à 500 caractères avant de valider ou refuser la commission.' });
     const now = new Date().toISOString();
     const result = await dbTransaction(async (transaction) => {
       let selfReferral = false;
       const update = action === 'approve'
         ? await (async () => {
           const referral = await transaction.get<{
+            owner_name: string | null;
             owner_email: string | null;
             whatsapp_number: string;
+            ambassador_name: string;
             ambassador_email: string | null;
             ambassador_phone: string | null;
-          }>(`SELECT s.owner_email, s.whatsapp_number, a.email AS ambassador_email, a.phone AS ambassador_phone
+          }>(`SELECT s.owner_name, s.owner_email, s.whatsapp_number, a.name AS ambassador_name,
+                    a.email AS ambassador_email, a.phone AS ambassador_phone
             FROM ambassador_commissions c
             JOIN subscription_payment_intents p ON p.id = c.payment_id
             JOIN shops s ON s.id = c.shop_id
@@ -236,9 +247,14 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
           if (!referral) return { changes: 0 };
           const sameEmail = Boolean(referral.owner_email && referral.ambassador_email
             && referral.owner_email.toLowerCase() === referral.ambassador_email.toLowerCase());
+          const ownerName = normalizeIdentityName(referral.owner_name);
+          const ambassadorName = normalizeIdentityName(referral.ambassador_name);
+          const sameName = ownerName.split(' ').length > 1
+            && ambassadorName.split(' ').length > 1
+            && ownerName === ambassadorName;
           const shopPhone = normalizeWhatsAppPhone(referral.whatsapp_number);
           const ambassadorPhone = normalizeWhatsAppPhone(referral.ambassador_phone);
-          if (sameEmail || (shopPhone && ambassadorPhone && shopPhone === ambassadorPhone)) {
+          if (sameEmail || sameName || (shopPhone && ambassadorPhone && shopPhone === ambassadorPhone)) {
             selfReferral = true;
             return { changes: 0 };
           }
@@ -263,7 +279,7 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
       }
       return { changes: update.changes, selfReferral };
     });
-    if (result.selfReferral) return res.status(409).json({ error: 'La commission ne peut pas être approuvée : les coordonnées du commerçant correspondent à celles de l’ambassadeur.' });
+    if (result.selfReferral) return res.status(409).json({ error: 'La commission ne peut pas être approuvée : les coordonnées ou le nom du commerçant correspondent à ceux de l’ambassadeur.' });
     return result.changes ? res.json({ success: true }) : res.status(409).json({ error: 'Action impossible : vérifiez le statut du paiement, la publication et la commission.' });
   });
 

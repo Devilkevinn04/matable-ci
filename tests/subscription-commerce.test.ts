@@ -479,7 +479,7 @@ test('ambassador commissions follow the first confirmed subscription and refund'
   assert.equal(state.referrals[0].amount, 1600);
   assert.equal(state.referrals[0].status, 'pending');
   assert.equal((await adminRequest(`/commissions/${shop.shop.id}/reject`, 'POST', {})).status, 400);
-  assert.equal((await adminRequest(`/commissions/${shop.shop.id}/approve`, 'POST', {})).status, 409);
+  assert.equal((await adminRequest(`/commissions/${shop.shop.id}/approve`, 'POST', { reason: 'Vérification avant paiement' })).status, 409);
   const testDb = new Database(TEST_DB_PATH);
   testDb.prepare("UPDATE shops SET publication_status = 'active' WHERE id = ?").run(shop.shop.id);
   testDb.close();
@@ -489,7 +489,7 @@ test('ambassador commissions follow the first confirmed subscription and refund'
   selfReferralDb.close();
   const selfReferralApproval = await adminRequest(`/commissions/${shop.shop.id}/approve`, 'POST', { reason: 'Contrôle auto-parrainage' });
   assert.equal(selfReferralApproval.status, 409);
-  assert.match((await selfReferralApproval.json()).error, /coordonnées du commerçant correspondent/);
+  assert.match((await selfReferralApproval.json()).error, /coordonnées ou le nom du commerçant correspondent/);
   const resetAmbassadorPhoneDb = new Database(TEST_DB_PATH);
   resetAmbassadorPhoneDb.prepare('UPDATE ambassadors SET phone = NULL WHERE id = ?').run(ambassador.id);
   const ownerEmail = (resetAmbassadorPhoneDb.prepare('SELECT owner_email FROM shops WHERE id = ?')
@@ -500,6 +500,17 @@ test('ambassador commissions follow the first confirmed subscription and refund'
   const resetAmbassadorEmailDb = new Database(TEST_DB_PATH);
   resetAmbassadorEmailDb.prepare('UPDATE ambassadors SET email = ? WHERE id = ?').run('partner@example.com', ambassador.id);
   resetAmbassadorEmailDb.close();
+  assert.equal((await adminRequest(`/commissions/${shop.shop.id}/approve`, 'POST', {})).status, 400);
+  const selfReferralNameDb = new Database(TEST_DB_PATH);
+  selfReferralNameDb.prepare('UPDATE shops SET owner_name = ? WHERE id = ?').run('Élodie Traoré', shop.shop.id);
+  selfReferralNameDb.prepare('UPDATE ambassadors SET name = ? WHERE id = ?').run('Elodie-Traore', ambassador.id);
+  selfReferralNameDb.close();
+  const selfReferralNameApproval = await adminRequest(`/commissions/${shop.shop.id}/approve`, 'POST', { reason: 'Contrôle des noms' });
+  assert.equal(selfReferralNameApproval.status, 409);
+  assert.match((await selfReferralNameApproval.json()).error, /nom du commerçant correspondent/);
+  const restoreAmbassadorNameDb = new Database(TEST_DB_PATH);
+  restoreAmbassadorNameDb.prepare('UPDATE ambassadors SET name = ? WHERE id = ?').run('Partenaire test', ambassador.id);
+  restoreAmbassadorNameDb.close();
   assert.equal((await adminRequest(`/commissions/${shop.shop.id}/approve`, 'POST', { reason: 'Boutique et paiement vérifiés' })).status, 200);
   state = await (await adminRequest('', 'GET')).json();
   assert.equal(JSON.parse(state.referrals[0].decision_details).reason, 'Boutique et paiement vérifiés');
@@ -550,7 +561,7 @@ test('ambassador commissions follow the first confirmed subscription and refund'
   state = await (await adminRequest('', 'GET')).json();
   assert.equal(state.referrals[0].status, 'cancelled');
   assert.equal(JSON.parse(state.referrals[0].decision_details).reason, 'Auto-inscription vérifiée');
-  assert.equal((await adminRequest(`/commissions/${secondShop.shop.id}/approve`, 'POST', {})).status, 409);
+  assert.equal((await adminRequest(`/commissions/${secondShop.shop.id}/approve`, 'POST', { reason: 'Vérification de la commission annulée' })).status, 409);
 });
 
 test('ambassador attribution handles reused, expired, inactive, malformed, and conflicting referrals', async () => {

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, CheckCircle2, MessageCircleMore, ShieldCheck, Sparkles, Store } from 'lucide-react';
 import { ShopCategory } from '../../types';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../../utils/categoryDefaults';
@@ -8,6 +8,7 @@ import { AuthExperienceLayout, MerchantRegistrationProgress, MerchantShopPreview
 import { MerchantState } from './useMerchant';
 import { TermsPrivacyConsent } from '../TermsPrivacyConsent';
 import { ACQUISITION_SOURCES } from '../../utils/acquisitionSources';
+import { getAmbassadorToken, getStoredAmbassadorCode } from '../../utils/ambassadors';
 
 interface MerchantRegistrationScreenProps {
   state: MerchantState;
@@ -17,6 +18,7 @@ interface MerchantRegistrationScreenProps {
 export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProps> = ({ state, onBackToDirectory }) => {
   const [step, setStep] = useState<1 | 2>(1);
   const formRef = useRef<HTMLFormElement>(null);
+  const [linkedAmbassadorCode, setLinkedAmbassadorCode] = useState(getStoredAmbassadorCode);
   const {
     regName, setRegName, regCategory, setRegCategory, regCity, setRegCity,
     regCityOther, setRegCityOther, regPhone, setRegPhone, regPin, setRegPin,
@@ -26,6 +28,13 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
     regAmbassadorCode, setRegAmbassadorCode,
     handleRegisterShop, setIsRegisterModalOpen,
   } = state;
+  useEffect(() => {
+    const syncLinkedCode = () => setLinkedAmbassadorCode(getStoredAmbassadorCode());
+    syncLinkedCode();
+    void getAmbassadorToken().then(syncLinkedCode);
+    window.addEventListener('matable-ambassador-referral-updated', syncLinkedCode);
+    return () => window.removeEventListener('matable-ambassador-referral-updated', syncLinkedCode);
+  }, []);
   const submitStep = (event: React.FormEvent<HTMLFormElement>) => {
     if (step === 2) {
       handleRegisterShop(event);
@@ -86,7 +95,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
         </div>}
       </div>
 
-      <form ref={formRef} onSubmit={submitStep} className="space-y-4">
+      <form ref={formRef} onSubmit={submitStep} className="auth-form space-y-4">
         {step === 1 && (
         <div className="rounded-[18px] border border-[#eef0ea] bg-[#f7f5f2] p-3 sm:p-4">
           <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#47534b]">
@@ -96,7 +105,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-[#47534b]">
               Nom de la boutique
-              <input type="text" value={regName} onChange={(event) => setRegName(event.target.value)} required maxLength={100} autoComplete="organization" placeholder="Ex. : Atelier Awa" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none transition focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" />
+              <input type="text" value={regName} onChange={(event) => setRegName(event.target.value.slice(0, 100))} required maxLength={100} autoComplete="organization" placeholder="Ex. : Atelier Awa" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none transition focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" />
             </label>
 
             <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
@@ -126,6 +135,12 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
             <label className="block text-sm font-semibold text-[#47534b]">Code ambassadeur (facultatif)
               <input value={regAmbassadorCode} onChange={(event) => setRegAmbassadorCode(event.target.value)} maxLength={24} autoComplete="off" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)]" />
             </label>
+            <p className="text-xs leading-5 text-[#647067]">
+              {linkedAmbassadorCode
+                ? <>Lien ambassadeur détecté : <strong>{linkedAmbassadorCode}</strong>. Ce premier lien prévaut sur tout autre code saisi et sera effacé de cet appareil après l’inscription réussie.</>
+                : 'Un code saisi manuellement attribuera l’inscription au partenaire correspondant.'}
+              {' '}L’identifiant du lien expire au plus tard après 90 jours; ce suivi est indépendant des statistiques d’audience.
+            </p>
           </div>
         </div>
         )}
@@ -139,7 +154,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-[#47534b]">
               Numéro WhatsApp
-              <input type="tel" inputMode="tel" value={regPhone} onChange={(event) => setRegPhone(event.target.value)} required autoComplete="tel" placeholder="+225 07 00 00 00 00" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" />
+              <input type="tel" inputMode="tel" maxLength={16} value={regPhone} onChange={(event) => setRegPhone(event.target.value.slice(0, 16))} required autoComplete="tel" placeholder="+225 07 00 00 00 00" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" />
               <span className="mt-1 block text-xs font-normal text-[#68756c]">Ce numéro servira au contact avec vos clients et à retrouver votre espace.</span>
             </label>
 
@@ -154,7 +169,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
               </label>
               <label className="block text-sm font-semibold text-[#47534b]">
                 E-mail
-                <input type="email" value={regEmail} onChange={(event) => setRegEmail(event.target.value)} required autoComplete="email" placeholder="vous@exemple.ci" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" />
+                <input type="email" maxLength={254} value={regEmail} onChange={(event) => setRegEmail(event.target.value.slice(0, 254))} required autoComplete="email" placeholder="vous@exemple.ci" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" />
               </label>
             </div>
           </div>

@@ -29,6 +29,8 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [acceptedTermsPrivacy, setAcceptedTermsPrivacy] = useState(false);
+  const [pendingMfaChallenge, setPendingMfaChallenge] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,6 +44,18 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
     setError('');
     setIsSubmitting(true);
     try {
+      if (pendingMfaChallenge) {
+        const response = await fetch('/api/auth/customer-login/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ challenge_id: pendingMfaChallenge, code: mfaCode }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Code de vérification invalide.');
+        onAuthenticated(data.user);
+        return;
+      }
       const response = await fetch(mode === 'login' ? '/api/auth/customer-login' : '/api/auth/customer-register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -50,6 +64,12 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de continuer.');
+      if (data.mfa_required && typeof data.challenge_id === 'string') {
+        setPendingMfaChallenge(data.challenge_id);
+        setMfaCode('');
+        setError('Code envoyé à votre adresse e-mail. Vérifiez aussi vos courriers indésirables.');
+        return;
+      }
       onAuthenticated(data.user);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Une erreur est survenue.');
@@ -76,7 +96,7 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-[#f2eee8] p-1">
+      {!pendingMfaChallenge && <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-[#f2eee8] p-1">
         <button
           type="button"
           onClick={() => { setMode('login'); setAcceptedTermsPrivacy(false); setError(''); }}
@@ -91,24 +111,42 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
         >
           Créer un compte
         </button>
-      </div>
+      </div>}
 
       <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-[#dfd7ce] bg-white p-3 text-[11px] font-semibold text-[#47534b]">
         <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-[var(--mt-green-primary)]" /> Sécurisé</span>
         <span className="inline-flex items-center gap-1 text-[var(--mt-green-primary)]"><Sparkles className="h-3.5 w-3.5" /> Paiement sur WhatsApp</span>
       </div>
 
-      <div className="mt-4"><CustomerOAuthButtons returnTo={`${window.location.pathname}${window.location.search}`} /></div>
+      {!pendingMfaChallenge && <div className="mt-4"><CustomerOAuthButtons returnTo={`${window.location.pathname}${window.location.search}`} /></div>}
 
-      <form onSubmit={submit} className="mt-4 space-y-3">
+      <form onSubmit={submit} className="auth-form mt-4 space-y-3">
+        {pendingMfaChallenge ? (
+          <label className="block text-xs font-black text-[#292d2a]">
+            Code de vérification par e-mail
+            <span className="mt-1 block font-normal text-[#667168]">Code à 8 chiffres, à usage unique, valide 10 minutes.</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]{8}"
+              maxLength={8}
+              value={mfaCode}
+              onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 8))}
+              required
+              className="mt-2 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 text-center font-mono text-lg tracking-[0.3em] outline-none focus:border-[var(--mt-green-primary)]"
+            />
+          </label>
+        ) : <>
         {mode === 'register' && (
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-xs font-black text-[#292d2a]">
               Prénom
               <input
                 value={firstName}
-                onChange={(event) => setFirstName(event.target.value)}
+                onChange={(event) => setFirstName(event.target.value.slice(0, 60))}
                 required
+                maxLength={60}
                 autoComplete="given-name"
                 className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-normal outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[#dff3ec]"
                 placeholder="Votre prénom"
@@ -118,8 +156,9 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
               Nom
               <input
                 value={lastName}
-                onChange={(event) => setLastName(event.target.value)}
+                onChange={(event) => setLastName(event.target.value.slice(0, 60))}
                 required
+                maxLength={60}
                 autoComplete="family-name"
                 className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white px-3 py-2.5 text-sm font-normal outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[#dff3ec]"
                 placeholder="Votre nom"
@@ -133,7 +172,8 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
             Téléphone
             <input
               value={phone}
-              onChange={(event) => setPhone(event.target.value)}
+              onChange={(event) => setPhone(event.target.value.slice(0, 16))}
+              maxLength={16}
               required
               inputMode="tel"
               autoComplete="tel"
@@ -150,7 +190,8 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
             <input
               type="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => setEmail(event.target.value.slice(0, 254))}
+              maxLength={254}
               required
               autoComplete="email"
               className="mt-1 w-full rounded-xl border-2 border-[#ded8ce] bg-white py-2.5 pl-9 pr-3 text-sm font-normal outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[#dff3ec]"
@@ -165,7 +206,8 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
             <input
               type={showPassword ? 'text' : 'password'}
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) => setPassword(event.target.value.slice(0, 128))}
+              maxLength={128}
               required
               minLength={8}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
@@ -186,6 +228,7 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
         {mode === 'register' && (
           <TermsPrivacyConsent id="checkout-customer-terms-privacy" checked={acceptedTermsPrivacy} onChange={setAcceptedTermsPrivacy} />
         )}
+        </>}
 
         {error && (
           <p role="alert" aria-live="polite" className="rounded-xl border-2 border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
@@ -198,11 +241,13 @@ export const CustomerCheckoutAuth: React.FC<CustomerCheckoutAuthProps> = ({ onAu
           disabled={isSubmitting}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--mt-green-primary)] px-3 py-3 text-sm font-bold text-white transition hover:bg-[#145645] disabled:opacity-60"
         >
-          {isSubmitting ? 'Vérification...' : mode === 'register' ? 'Créer mon compte' : 'Se connecter'}
+          {isSubmitting ? 'Vérification...' : pendingMfaChallenge ? 'Vérifier le code' : mode === 'register' ? 'Créer mon compte' : 'Se connecter'}
           <ArrowRight className="h-4 w-4" />
         </button>
 
-        {mode === 'login' && (
+        {pendingMfaChallenge ? (
+          <button type="button" onClick={() => { setPendingMfaChallenge(''); setMfaCode(''); setError(''); }} className="block w-full py-1 text-center text-xs font-semibold text-[#47534b] underline underline-offset-2">Recommencer la connexion</button>
+        ) : mode === 'login' && (
           <Link to="/recuperation-acces?type=customer" className="block py-1 text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[var(--mt-green-deep)]">
             Mot de passe oublié ?
           </Link>

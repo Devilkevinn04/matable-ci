@@ -2882,6 +2882,16 @@ test('new merchant registration flow is local and immediately usable', async () 
     body: JSON.stringify({ phone, pin: '387254' }),
   });
   assert.equal(newPinLogin.response.status, 200);
+  const primaryMerchantCookies = cookieJar;
+  cookieJar = '';
+  const secondaryMerchantLogin = await apiFetch('/api/auth/merchant-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, pin: '387254' }),
+  });
+  assert.equal(secondaryMerchantLogin.response.status, 200);
+  const secondaryMerchantCookies = cookieJar;
+  cookieJar = primaryMerchantCookies;
 
   const emailReminderConsent = await apiFetch(`/api/shops/${newShopId}/subscription-email-reminder-consent`, {
     method: 'PATCH',
@@ -2919,6 +2929,13 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.equal(invalidPinProfile.response.status, 400, JSON.stringify(invalidPinProfile.payload));
 
   const billingEmail = `facturation-${Date.now()}@example.com`;
+  const missingCurrentPin = await apiFetch(`/api/shops/${newShopId}/owner-profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: billingEmail, current_pin: '000000' }),
+  });
+  assert.equal(missingCurrentPin.response.status, 401, JSON.stringify(missingCurrentPin.payload));
+
   const updatedOwnerProfile = await apiFetch(`/api/shops/${newShopId}/owner-profile`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -2926,6 +2943,7 @@ test('new merchant registration flow is local and immediately usable', async () 
       name: 'Responsable test',
       phone: '+225 07 00 00 00 00',
       email: billingEmail.toUpperCase(),
+      current_pin: '387254',
       pin_code: '830462',
     }),
   });
@@ -2934,6 +2952,13 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.equal(updatedOwnerProfile.payload.phone, '+2250700000000');
   assert.equal(updatedOwnerProfile.payload.email, billingEmail);
   assert.equal(updatedOwnerProfile.payload.pin_updated, true);
+  cookieJar = secondaryMerchantCookies;
+  const revokedMerchantSession = await apiFetch('/api/auth/session');
+  assert.equal(revokedMerchantSession.response.status, 200);
+  assert.equal(revokedMerchantSession.payload.authenticated, false);
+  cookieJar = primaryMerchantCookies;
+  const preservedMerchantSession = await apiFetch('/api/auth/session');
+  assert.equal(preservedMerchantSession.payload.authenticated, true);
   const consentResetDb = new Database(TEST_DB_PATH, { readonly: true });
   try {
     const updatedConsent = consentResetDb.prepare(
@@ -2997,6 +3022,29 @@ test('new merchant registration flow is local and immediately usable', async () 
   assert.equal(merchantLogin.response.status, 200, JSON.stringify(merchantLogin.payload));
   assert.equal(merchantLogin.payload.shop.is_active, true);
   assert.equal(merchantLogin.payload.shop.is_open, true);
+
+  const phoneDigits = phone.replace(/\D/g, '');
+  const prefixedPhoneLogin = await apiFetch('/api/auth/merchant-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: `1${phoneDigits}`, pin: '000000' }),
+  });
+  assert.equal(prefixedPhoneLogin.response.status, 404);
+  const loginPhoneVariants = [phone, phoneDigits.replace(/^225/, ''), `00${phoneDigits}`];
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const failedLogin = await apiFetch('/api/auth/merchant-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: loginPhoneVariants[attempt % loginPhoneVariants.length], pin: '000000' }),
+    });
+    assert.equal(failedLogin.response.status, 401);
+  }
+  const rateLimitedMerchantLogin = await apiFetch('/api/auth/merchant-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: `00${phoneDigits}`, pin: '000000' }),
+  });
+  assert.equal(rateLimitedMerchantLogin.response.status, 429);
 
   const ownerClosesShop = await apiFetch(`/api/shops/${newShopId}/toggle-status`, {
     method: 'PATCH',

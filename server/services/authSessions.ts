@@ -12,6 +12,8 @@ import {
   getAdminSessionRecord,
   getCustomerSessionRecord,
   getMerchantSessionRecord,
+  revokeMerchantSessionRecords,
+  revokeOtherMerchantSessionRecords,
   saveAdminSessionRecord,
   saveCustomerSessionRecord,
   saveMerchantSessionRecord,
@@ -445,6 +447,18 @@ export function createAuthSessionHelpers({
     }
   }
 
+  async function revokeMerchantSessionsForShop(shopId: number) {
+    clearMerchantSessionsForShop(shopId);
+    await revokeMerchantSessionRecords(shopId);
+  }
+
+  async function revokeOtherMerchantSessionsForShop(shopId: number, currentToken: string) {
+    for (const [token, session] of merchantSessions) {
+      if (session.shopId === shopId && token !== currentToken) merchantSessions.delete(token);
+    }
+    await revokeOtherMerchantSessionRecords(shopId, currentToken);
+  }
+
   return {
     merchantSessions,
     customerSessions,
@@ -473,6 +487,8 @@ export function createAuthSessionHelpers({
     requireMerchantOwnShop,
     requireMerchantIdentityOwnShop,
     clearMerchantSessionsForShop,
+    revokeMerchantSessionsForShop,
+    revokeOtherMerchantSessionsForShop,
     cleanupExpiredSessions,
   };
 }

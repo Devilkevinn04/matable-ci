@@ -25,6 +25,14 @@ export async function deleteMerchantSessionRecord(token: string) {
   await dbRun('DELETE FROM merchant_sessions WHERE token = ?', [hashSessionToken(token)]);
 }
 
+export async function revokeOtherMerchantSessionRecords(shopId: number, currentToken: string) {
+  return dbRun('DELETE FROM merchant_sessions WHERE shop_id = ? AND token <> ?', [shopId, hashSessionToken(currentToken)]);
+}
+
+export async function revokeMerchantSessionRecords(shopId: number) {
+  return dbRun('DELETE FROM merchant_sessions WHERE shop_id = ?', [shopId]);
+}
+
 export async function saveAdminSessionRecord(token: string, session: { expiresAt: number; fingerprint: string; role?: string }) {
   const role = session.role ?? 'super_admin';
   await dbRun(`

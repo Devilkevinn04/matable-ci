@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AMBASSADOR_REFERRAL_DURATION_MS, calculateAmbassadorCommission, getAmbassadorToken, isCommissionPayableForMonth, normalizeAmbassadorCode, validAmbassadorReferral } from '../src/utils/ambassadors.ts';
+import { AMBASSADOR_REFERRAL_DURATION_MS, calculateAmbassadorCommission, clearAmbassadorReferral, getAmbassadorToken, getStoredAmbassadorCode, isCommissionPayableForMonth, normalizeAmbassadorCode, validAmbassadorReferral } from '../src/utils/ambassadors.ts';
 
 test('ambassador referrals expire after 90 days and reject invalid codes and dates', () => {
   const now = 2 * AMBASSADOR_REFERRAL_DURATION_MS;
@@ -20,18 +20,21 @@ test('ambassador link attribution is retained when audience analytics are refuse
     setItem: (key: string, value: string) => { values.set(key, value); },
     removeItem: (key: string) => { values.delete(key); },
   };
+  const events: Event[] = [];
   let captures = 0;
+  let responseToken = 'a'.repeat(64);
+  let responseExpiry = new Date(Date.now() + AMBASSADOR_REFERRAL_DURATION_MS).toISOString();
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
-    value: { localStorage: storage, location: { search: '' } },
+    value: { localStorage: storage, location: { search: '' }, dispatchEvent: (event: Event) => { events.push(event); return true; } },
   });
   Object.defineProperty(globalThis, 'fetch', {
     configurable: true,
     value: async () => {
       captures += 1;
       return new Response(JSON.stringify({
-        token: 'a'.repeat(64),
-        expires_at: new Date(Date.now() + AMBASSADOR_REFERRAL_DURATION_MS).toISOString(),
+        token: responseToken,
+        expires_at: responseExpiry,
       }), { status: 201, headers: { 'Content-Type': 'application/json' } });
     },
   });
@@ -39,9 +42,22 @@ test('ambassador link attribution is retained when audience analytics are refuse
   try {
     const token = await getAmbassadorToken('KEVIN01');
     assert.equal(token, 'a'.repeat(64));
+    assert.equal(getStoredAmbassadorCode(), 'KEVIN01');
     assert.equal(captures, 1);
     assert.equal(await getAmbassadorToken('AUTRE01'), token);
     assert.equal(captures, 1);
+    clearAmbassadorReferral();
+    assert.equal(getStoredAmbassadorCode(), null);
+    assert.equal(await getAmbassadorToken(), null);
+    assert.equal(captures, 1);
+    assert.equal(events.at(-1)?.type, 'matable-ambassador-referral-updated');
+    responseToken = 'not-a-token';
+    assert.equal(await getAmbassadorToken('INVALID'), null);
+    responseToken = 'b'.repeat(64);
+    responseExpiry = 'invalid-date';
+    assert.equal(await getAmbassadorToken('INVALID'), null);
+    assert.equal(values.has('matable_ambassador_referral'), false);
+    assert.equal(captures, 3);
   } finally {
     if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
     else Reflect.deleteProperty(globalThis, 'window');

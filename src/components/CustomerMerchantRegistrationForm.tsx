@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, CheckCircle2, Eye, EyeOff, MessageCircleMore, ShieldCheck, Sparkles, Store } from 'lucide-react';
 import { ShopCategory } from '../types';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../utils/categoryDefaults';
@@ -8,7 +8,7 @@ import { TermsPrivacyConsent } from './TermsPrivacyConsent';
 import { ACQUISITION_SOURCES, normalizeAcquisitionSource } from '../utils/acquisitionSources';
 import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from '../utils/analyticsAttribution';
 import { hasAnalyticsConsent } from '../utils/cookieConsent';
-import { getAmbassadorToken } from '../utils/ambassadors';
+import { clearAmbassadorReferral, getAmbassadorToken, getStoredAmbassadorCode } from '../utils/ambassadors';
 import { MerchantRegistrationProgress, MerchantShopPreview } from './AuthExperienceLayout';
 
 interface CustomerMerchantRegistrationFormProps {
@@ -19,6 +19,8 @@ interface CustomerMerchantRegistrationFormProps {
 interface ShopRegistrationResponse {
   success: boolean;
   shop?: { id: number; slug: string };
+  mfa_required?: boolean;
+  challenge_id?: string;
   error?: string;
 }
 
@@ -35,6 +37,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
   const [email, setEmail] = useState('');
   const [acceptedTermsPrivacy, setAcceptedTermsPrivacy] = useState(false);
   const [ambassadorCode, setAmbassadorCode] = useState('');
+  const [linkedAmbassadorCode, setLinkedAmbassadorCode] = useState(getStoredAmbassadorCode);
   // Campaign from ?src= / utm_source, kept only when the visitor accepted audience analytics.
   const [trackedCampaign] = useState(() => (hasAnalyticsConsent()
     ? getAnalyticsCampaignFromSearch(window.location.search) || getStoredAnalyticsCampaign()
@@ -42,6 +45,16 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
   const [acquisitionSource, setAcquisitionSource] = useState(() => normalizeAcquisitionSource(trackedCampaign) || '');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingMfaChallenge, setPendingMfaChallenge] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+
+  useEffect(() => {
+    const syncLinkedCode = () => setLinkedAmbassadorCode(getStoredAmbassadorCode());
+    syncLinkedCode();
+    void getAmbassadorToken().then(syncLinkedCode);
+    window.addEventListener('matable-ambassador-referral-updated', syncLinkedCode);
+    return () => window.removeEventListener('matable-ambassador-referral-updated', syncLinkedCode);
+  }, []);
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -52,6 +65,19 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
     setError('');
     setIsSubmitting(true);
     try {
+      if (pendingMfaChallenge) {
+        const verification = await fetch('/api/auth/merchant-login/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ challenge_id: pendingMfaChallenge, code: mfaCode }),
+        });
+        const verified = await verification.json() as { error?: string };
+        if (!verification.ok) throw new Error(verified.error || 'Code de vérification invalide.');
+        clearAmbassadorReferral();
+        onCreated();
+        return;
+      }
       const response = await fetch('/api/shops', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -74,9 +100,16 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
       });
       const data = await response.json() as ShopRegistrationResponse;
       if (!response.ok) throw new Error(data.error || 'Impossible de créer votre boutique pour le moment.');
+      if (data.mfa_required && typeof data.challenge_id === 'string') {
+        setPendingMfaChallenge(data.challenge_id);
+        setMfaCode('');
+        setError('Code envoyé à votre adresse e-mail. Vérifiez aussi vos courriers indésirables.');
+        return;
+      }
       if (data.success !== true || !data.shop?.id || !data.shop.slug) {
         throw new Error('La création de la boutique n’a pas pu être confirmée. Réessayez.');
       }
+      clearAmbassadorReferral();
       onCreated();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Une erreur est survenue lors de la création de votre boutique.');
@@ -86,6 +119,24 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
   };
 
   const fieldClass = 'mt-1.5 min-h-11 w-full rounded-[12px] border border-[#deded5] bg-white px-3 py-2 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10';
+
+  if (pendingMfaChallenge) {
+    return (
+      <form onSubmit={submit} className="auth-form space-y-4 rounded-[18px] border border-[#d8e4d9] bg-white p-4">
+        <div>
+          <h3 className="font-display text-xl font-extrabold text-[#292d2a]">Vérifiez votre adresse e-mail</h3>
+          <p className="mt-1 text-sm leading-6 text-[#47534b]">Saisissez le code à 8 chiffres envoyé à l’adresse indiquée. Il est à usage unique et valide 10 minutes.</p>
+        </div>
+        <label className="block text-sm font-semibold text-[#47534b]">
+          Code de vérification
+          <input type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{8}" maxLength={8} required value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 8))} className={`${fieldClass} text-center font-mono text-lg tracking-[0.3em]`} />
+        </label>
+        {error && <p role="status" className="text-sm font-semibold text-[var(--mt-green-deep)]">{error}</p>}
+        <button type="submit" disabled={isSubmitting} className="min-h-11 w-full rounded-xl bg-[var(--mt-green-deep)] px-4 text-sm font-bold text-white disabled:opacity-60">{isSubmitting ? 'Vérification…' : 'Vérifier et ouvrir ma boutique'}</button>
+        <button type="button" onClick={() => { setPendingMfaChallenge(''); setMfaCode(''); setError(''); }} className="w-full text-center text-xs font-semibold text-[#47534b] underline">Recommencer l’inscription</button>
+      </form>
+    );
+  }
 
   const benefits = [
     { label: 'Vitrine locale', icon: Store },
@@ -121,7 +172,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f0ba80] text-[var(--mt-green-deep)]"><Store className="h-5 w-5" aria-hidden="true" /></span>
         <MerchantShopPreview name={name} category={getCategoryDefaults(category).label} city={city === 'Autre ville / commune' ? otherCity : city} />
       </div>
-      <form ref={formRef} onSubmit={submit} className="space-y-3">
+      <form ref={formRef} onSubmit={submit} className="auth-form space-y-3">
         {step === 1 && <>
         <div className="rounded-[18px] border border-[#eef0ea] bg-[#f7f5f2] p-3">
           <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#47534b]">
@@ -167,7 +218,10 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
               <input value={ambassadorCode} onChange={(event) => setAmbassadorCode(event.target.value)} maxLength={24} className={fieldClass} autoComplete="off" />
             </label>
             <p className="text-xs leading-5 text-[#647067]">
-              Si vous arrivez par un lien ambassadeur, son attribution est conservée jusqu’à 90 jours pour rattacher votre inscription au bon partenaire. Ce suivi ne dépend pas de votre choix concernant les statistiques d’audience.
+              {linkedAmbassadorCode
+                ? <>Lien ambassadeur détecté : <strong>{linkedAmbassadorCode}</strong>. C’est ce lien, le premier visité, qui attribuera l’inscription même si vous saisissez un autre code. Il sera effacé de cet appareil après l’inscription réussie.</>
+                : 'Un code saisi manuellement attribuera l’inscription au partenaire correspondant.'}
+              {' '}L’identifiant du lien expire au plus tard après 90 jours et ce suivi ne dépend pas de votre choix concernant les statistiques d’audience.
             </p>
           </div>
         </div>
@@ -182,7 +236,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-[#47534b]">
               Numéro WhatsApp
-              <input type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="tel" placeholder="+225 07 00 00 00 00" className={fieldClass} />
+              <input type="tel" inputMode="tel" maxLength={16} value={phone} onChange={(event) => setPhone(event.target.value.slice(0, 16))} required autoComplete="tel" placeholder="+225 07 00 00 00 00" className={fieldClass} />
             </label>
 
             <div className="grid gap-3 min-[430px]:grid-cols-2">
@@ -195,7 +249,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
               </label>
               <label className="block text-sm font-semibold text-[#47534b]">
                 E-mail
-                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" placeholder="vous@exemple.ci" className={fieldClass} />
+                <input type="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} required autoComplete="email" placeholder="vous@exemple.ci" className={fieldClass} />
               </label>
             </div>
           </div>

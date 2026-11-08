@@ -28,6 +28,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
     isSessionLoading, currentShop, phoneInput, setPhoneInput, pinInput, setPinInput,
     showPinInput,
     setShowPinInput, authError, authLoading,
+    pendingMfaChallenge, mfaCode, setMfaCode, setPendingMfaChallenge,
     handleLogin,
     setIsRegisterModalOpen, isRegisterModalOpen, handleRegisterShop, regName, setRegName, regCategory, setRegCategory, regCity, setRegCity, regCityOther, setRegCityOther, regPhone, setRegPhone, showRegPin, regPin, setRegPin, setShowRegPin, regEmail, setRegEmail, regLoading
   } = state;
@@ -60,17 +61,17 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
         title="Votre boutique, à portée de main."
         description="Gérez vos produits, vos commandes et votre vitrine locale depuis un seul espace."
         imageAlt="Une entrepreneure souriante, symbole des commerces de proximité"
-        topPrompt="Pas encore de boutique ?"
+        topPrompt={pendingMfaChallenge ? undefined : 'Pas encore de boutique ?'}
         onBack={onBackToDirectory}
-        topActionLabel="Créer ma boutique"
-        onTopAction={() => setIsRegisterModalOpen(true)}
+        topActionLabel={pendingMfaChallenge ? undefined : 'Créer ma boutique'}
+        onTopAction={pendingMfaChallenge ? undefined : () => setIsRegisterModalOpen(true)}
       >
         <div className="w-full">
-          <AuthAudienceSwitcher
+          {!pendingMfaChallenge && <AuthAudienceSwitcher
             activeAudience="merchant"
             onSelectCustomer={onCustomerLogin}
             onSelectMerchant={() => undefined}
-          />
+          />}
 
           <div className="mb-6">
             <p className="text-sm font-bold text-[var(--mt-orange-deep)]">Espace propriétaire</p>
@@ -87,7 +88,24 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
             </div>
           )}
 
-          <form onSubmit={handleLogin} aria-busy={authLoading} className="relative space-y-4">
+          <form onSubmit={handleLogin} aria-busy={authLoading} className="auth-form relative space-y-4">
+              {pendingMfaChallenge ? (
+                <label className="block text-xs font-bold text-[#47534b]">
+                  Code de vérification par e-mail
+                  <span className="mt-1 block font-normal">Code à 8 chiffres, à usage unique, valide 10 minutes.</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]{8}"
+                    maxLength={8}
+                    value={mfaCode}
+                    onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 8))}
+                    required
+                    className="mt-2 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 text-center font-mono text-lg tracking-[0.3em] outline-none focus:border-[var(--mt-green-hover)]"
+                  />
+                </label>
+              ) : <>
               <div>
                 <label htmlFor="merchant-login-phone" className="block text-xs font-bold text-[#47534b] mb-1">
                   Numéro WhatsApp de la boutique
@@ -139,18 +157,21 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                 </div>
                 {pinFieldError && <p id="merchant-pin-error" role="alert" className="mt-1.5 text-xs font-semibold text-[#b93712]">{pinFieldError}</p>}
               </div>
+              </>}
 
               <button
                 type="submit"
                 disabled={authLoading}
                 className="motion-interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--mt-green-hover)] disabled:cursor-wait disabled:opacity-60"
               >
-                <span>{authLoading ? 'Connexion...' : 'Se connecter'}</span>
+                <span>{authLoading ? 'Connexion...' : pendingMfaChallenge ? 'Vérifier le code' : 'Se connecter'}</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
             </form>
-          <Link to="/recuperation-acces?type=merchant" className="mt-3 block text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[var(--mt-green-deep)]">PIN ou accès oublié ?</Link>
-          <div className="relative mt-5 pt-4 border-t border-[var(--mt-gray-200)] text-center">
+          {pendingMfaChallenge
+            ? <button type="button" onClick={() => { setPendingMfaChallenge(''); setMfaCode(''); }} className="mt-3 block w-full text-center text-xs font-semibold text-[#47534b] underline underline-offset-2">Recommencer la connexion</button>
+            : <Link to="/recuperation-acces?type=merchant" className="mt-3 block text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[var(--mt-green-deep)]">PIN ou accès oublié ?</Link>}
+          {!pendingMfaChallenge && <div className="relative mt-5 pt-4 border-t border-[var(--mt-gray-200)] text-center">
             <p className="text-xs text-[#47534b] max-w-sm mx-auto mb-3">
               Vous n’avez pas encore de boutique ? Créez-la ici. Pour vous reconnecter ensuite, utilisez le numéro WhatsApp et le code PIN choisis à la création.
             </p>
@@ -162,11 +183,11 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
               <UserPlus className="w-4 h-4" />
               <span>Créer ma boutique</span>
             </button>
-          </div>
+          </div>}
 
-          <p className="text-center text-[11px] text-[var(--mt-gray-600)] mt-4">
+          {!pendingMfaChallenge && <p className="text-center text-[11px] text-[var(--mt-gray-600)] mt-4">
             MaTable • Espace boutique professionnel
-          </p>
+          </p>}
         </div>
 
         {/* REGISTER NEW SHOP MODAL */}

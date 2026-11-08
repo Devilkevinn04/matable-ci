@@ -328,6 +328,12 @@ test('escapes HTML in merchant-controlled shop metadata before rendering', () =>
   assert.equal(sanitizeTextField(rawMessage, 80), 'Bonjour');
 });
 
+test('normalizes bounded text fields and strips invisible control-direction overrides', () => {
+  assert.equal(sanitizeTextField('  Cafe\u0301\u202E\u0000  ', 20), 'Café');
+  assert.equal(sanitizeTextField('A'.repeat(3) + '😀', 4), 'AAA😀');
+  assert.equal(sanitizeTextField('A😀B', 2), 'A😀');
+});
+
 test('normalizes Ivorian numbers consistently and rejects malformed order customer data', () => {
   assert.equal(normalizeCustomerPhone('0708091011'), '+2250708091011');
   assert.equal(normalizeCustomerPhone('+2250708091011'), '+2250708091011');
@@ -380,6 +386,12 @@ test('rejects placeholder production app URLs', () => {
     ADMIN_ACCESS_KEY: process.env.ADMIN_ACCESS_KEY,
     VERIFICATION_ADMIN_ACCESS_KEY: process.env.VERIFICATION_ADMIN_ACCESS_KEY,
     AD_EVENT_SIGNING_SECRET: process.env.AD_EVENT_SIGNING_SECRET,
+    AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT: process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT,
+    AUTH_EMAIL_MFA_PEPPER: process.env.AUTH_EMAIL_MFA_PEPPER,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
+    ADMIN_MFA_EMAIL: process.env.ADMIN_MFA_EMAIL,
+    VERIFICATION_ADMIN_MFA_EMAIL: process.env.VERIFICATION_ADMIN_MFA_EMAIL,
     APP_URL: process.env.APP_URL,
     PORT: process.env.PORT,
     MATABLE_DB_PATH: process.env.MATABLE_DB_PATH,
@@ -391,6 +403,12 @@ test('rejects placeholder production app URLs', () => {
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
     process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
     process.env.AD_EVENT_SIGNING_SECRET = 'production-ad-event-signing-secret-2026-strong';
+    process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT = '2026-01-01T00:00:00.000Z';
+    process.env.AUTH_EMAIL_MFA_PEPPER = 'test-email-mfa-pepper-that-is-over-32-characters';
+    process.env.RESEND_API_KEY = 're_test_key';
+    process.env.RESEND_FROM_EMAIL = 'noreply@matable-ci.com';
+    process.env.ADMIN_MFA_EMAIL = 'admin@matable-ci.com';
+    process.env.VERIFICATION_ADMIN_MFA_EMAIL = 'verification@matable-ci.com';
     process.env.APP_URL = 'https://example.com';
     process.env.PORT = '3000';
     process.env.MATABLE_DB_PATH = './data/matable.db';
@@ -402,6 +420,12 @@ test('rejects placeholder production app URLs', () => {
     if (previous.ADMIN_ACCESS_KEY === undefined) delete process.env.ADMIN_ACCESS_KEY; else process.env.ADMIN_ACCESS_KEY = previous.ADMIN_ACCESS_KEY;
     if (previous.VERIFICATION_ADMIN_ACCESS_KEY === undefined) delete process.env.VERIFICATION_ADMIN_ACCESS_KEY; else process.env.VERIFICATION_ADMIN_ACCESS_KEY = previous.VERIFICATION_ADMIN_ACCESS_KEY;
     if (previous.AD_EVENT_SIGNING_SECRET === undefined) delete process.env.AD_EVENT_SIGNING_SECRET; else process.env.AD_EVENT_SIGNING_SECRET = previous.AD_EVENT_SIGNING_SECRET;
+    if (previous.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT === undefined) delete process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT; else process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT = previous.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT;
+    if (previous.AUTH_EMAIL_MFA_PEPPER === undefined) delete process.env.AUTH_EMAIL_MFA_PEPPER; else process.env.AUTH_EMAIL_MFA_PEPPER = previous.AUTH_EMAIL_MFA_PEPPER;
+    if (previous.RESEND_API_KEY === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previous.RESEND_API_KEY;
+    if (previous.RESEND_FROM_EMAIL === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previous.RESEND_FROM_EMAIL;
+    if (previous.ADMIN_MFA_EMAIL === undefined) delete process.env.ADMIN_MFA_EMAIL; else process.env.ADMIN_MFA_EMAIL = previous.ADMIN_MFA_EMAIL;
+    if (previous.VERIFICATION_ADMIN_MFA_EMAIL === undefined) delete process.env.VERIFICATION_ADMIN_MFA_EMAIL; else process.env.VERIFICATION_ADMIN_MFA_EMAIL = previous.VERIFICATION_ADMIN_MFA_EMAIL;
     if (previous.APP_URL === undefined) delete process.env.APP_URL; else process.env.APP_URL = previous.APP_URL;
     if (previous.PORT === undefined) delete process.env.PORT; else process.env.PORT = previous.PORT;
     if (previous.MATABLE_DB_PATH === undefined) delete process.env.MATABLE_DB_PATH; else process.env.MATABLE_DB_PATH = previous.MATABLE_DB_PATH;
@@ -414,6 +438,12 @@ test('rejects unsafe production configuration', () => {
     ADMIN_ACCESS_KEY: process.env.ADMIN_ACCESS_KEY,
     VERIFICATION_ADMIN_ACCESS_KEY: process.env.VERIFICATION_ADMIN_ACCESS_KEY,
     AD_EVENT_SIGNING_SECRET: process.env.AD_EVENT_SIGNING_SECRET,
+    AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT: process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT,
+    AUTH_EMAIL_MFA_PEPPER: process.env.AUTH_EMAIL_MFA_PEPPER,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
+    ADMIN_MFA_EMAIL: process.env.ADMIN_MFA_EMAIL,
+    VERIFICATION_ADMIN_MFA_EMAIL: process.env.VERIFICATION_ADMIN_MFA_EMAIL,
     APP_URL: process.env.APP_URL,
     PORT: process.env.PORT,
     MATABLE_DB_PATH: process.env.MATABLE_DB_PATH,
@@ -425,6 +455,12 @@ test('rejects unsafe production configuration', () => {
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
     process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
     process.env.AD_EVENT_SIGNING_SECRET = 'production-ad-event-signing-secret-2026-strong';
+    process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT = '2026-01-01T00:00:00.000Z';
+    process.env.AUTH_EMAIL_MFA_PEPPER = 'test-email-mfa-pepper-that-is-over-32-characters';
+    process.env.RESEND_API_KEY = 're_test_key';
+    process.env.RESEND_FROM_EMAIL = 'noreply@matable-ci.com';
+    process.env.ADMIN_MFA_EMAIL = 'admin@matable-ci.com';
+    process.env.VERIFICATION_ADMIN_MFA_EMAIL = 'verification@matable-ci.com';
     process.env.APP_URL = 'https://matable-ci.com';
     process.env.PORT = '3000';
     process.env.MATABLE_DB_PATH = './data/matable.db';
@@ -461,6 +497,12 @@ test('requires the ad event signing secret only when advertising delivery is ena
     'ADMIN_ACCESS_KEY',
     'VERIFICATION_ADMIN_ACCESS_KEY',
     'AD_EVENT_SIGNING_SECRET',
+    'AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT',
+    'AUTH_EMAIL_MFA_PEPPER',
+    'RESEND_API_KEY',
+    'RESEND_FROM_EMAIL',
+    'ADMIN_MFA_EMAIL',
+    'VERIFICATION_ADMIN_MFA_EMAIL',
     'ADVERTISING_BETA_ENABLED',
     'APP_URL',
     'PORT',
@@ -473,6 +515,12 @@ test('requires the ad event signing secret only when advertising delivery is ena
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
     process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
     process.env.AD_EVENT_SIGNING_SECRET = '';
+    process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT = '2026-01-01T00:00:00.000Z';
+    process.env.AUTH_EMAIL_MFA_PEPPER = 'test-email-mfa-pepper-that-is-over-32-characters';
+    process.env.RESEND_API_KEY = 're_test_key';
+    process.env.RESEND_FROM_EMAIL = 'noreply@matable-ci.com';
+    process.env.ADMIN_MFA_EMAIL = 'admin@matable-ci.com';
+    process.env.VERIFICATION_ADMIN_MFA_EMAIL = 'verification@matable-ci.com';
     process.env.ADVERTISING_BETA_ENABLED = 'false';
     process.env.APP_URL = 'https://matable-ci.com';
     process.env.PORT = '3000';

@@ -61,6 +61,11 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
   const [pendingOAuthProfile, setPendingOAuthProfile] = useState<PendingOAuthProfile | null>(null);
   const [pendingOAuthLink, setPendingOAuthLink] = useState<PendingOAuthLink | null>(null);
   const [acceptedTermsPrivacy, setAcceptedTermsPrivacy] = useState(false);
+  const [pendingMfaChallenge, setPendingMfaChallenge] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaRegistration, setMfaRegistration] = useState(false);
+  const [pendingOAuthMfa, setPendingOAuthMfa] = useState(false);
+  const [mfaReturnTo, setMfaReturnTo] = useState('');
   const requestedReturnTo = new URLSearchParams(window.location.search).get('return_to');
   const customerReturnTo = requestedReturnTo?.startsWith('/')
     && !requestedReturnTo.startsWith('//')
@@ -87,6 +92,27 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
     const params = new URLSearchParams(window.location.search);
     if (params.get('oauth') === 'error') setError('La connexion Google/Apple n’a pas abouti. Réessayez ou utilisez votre adresse e-mail.');
     const oauthState = params.get('oauth');
+    if (oauthState === 'mfa') {
+      let active = true;
+      fetch('/api/auth/customer-oauth/mfa-pending', { credentials: 'include', cache: 'no-store' })
+        .then(async (response) => {
+          const data = await response.json();
+          if (!response.ok || !data.pending || typeof data.challenge_id !== 'string') {
+            throw new Error('Cette vérification a expiré. Relancez la connexion sociale.');
+          }
+          if (!active) return;
+          setPendingMfaChallenge(data.challenge_id);
+          setPendingOAuthMfa(true);
+          setMfaReturnTo(customerReturnTo);
+          setMode('login');
+          setAccountType('customer');
+          setError('Code envoyé à votre adresse e-mail. Vérifiez aussi vos courriers indésirables.');
+        })
+        .catch((caught: unknown) => {
+          if (active) setError(caught instanceof Error ? caught.message : 'Cette vérification a expiré. Relancez la connexion sociale.');
+        });
+      return () => { active = false; };
+    }
     if (oauthState !== 'complete' && oauthState !== 'link') return;
 
     let active = true;
@@ -125,6 +151,29 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
     setError('');
     setIsSubmitting(true);
     try {
+      if (pendingMfaChallenge) {
+        const response = await fetch(pendingOAuthMfa ? '/api/auth/customer-oauth/mfa-verify' : '/api/auth/customer-login/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(pendingOAuthMfa
+            ? { code: mfaCode }
+            : { challenge_id: pendingMfaChallenge, code: mfaCode }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Code de vérification invalide.');
+        setPendingMfaChallenge('');
+        setMfaCode('');
+        setPendingOAuthMfa(false);
+        if (mfaReturnTo) {
+          window.location.assign(mfaReturnTo);
+          return;
+        }
+        if (mfaRegistration) trackSignup('customer', 'email');
+        else trackLogin('customer', 'email');
+        onAuthenticated(data.user);
+        return;
+      }
       if (pendingOAuthLink) {
         const response = await fetch('/api/auth/customer-oauth/link', {
           method: 'POST',
@@ -134,6 +183,14 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Impossible d’associer ce compte.');
+        if (data.mfa_required && typeof data.challenge_id === 'string') {
+          setPendingMfaChallenge(data.challenge_id);
+          setMfaCode('');
+          setPendingOAuthMfa(false);
+          setMfaReturnTo(typeof data.return_to === 'string' ? data.return_to : customerReturnTo);
+          setError('Code envoyé à votre adresse e-mail. Vérifiez aussi vos courriers indésirables.');
+          return;
+        }
         trackLogin('customer', pendingOAuthLink.provider);
         const returnTo = typeof data.return_to === 'string' && data.return_to.startsWith('/') && !data.return_to.startsWith('//') ? data.return_to : '/compte';
         window.location.assign(returnTo);
@@ -148,6 +205,15 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Impossible de terminer la création du compte.');
+        if (data.mfa_required && typeof data.challenge_id === 'string') {
+          setPendingMfaChallenge(data.challenge_id);
+          setMfaCode('');
+          setMfaRegistration(true);
+          setPendingOAuthMfa(false);
+          setMfaReturnTo(typeof data.return_to === 'string' ? data.return_to : customerReturnTo);
+          setError('Code envoyé à votre adresse e-mail. Vérifiez aussi vos courriers indésirables.');
+          return;
+        }
         trackSignup('customer', 'google');
         const returnTo = typeof data.return_to === 'string' && data.return_to.startsWith('/') && !data.return_to.startsWith('//') ? data.return_to : '/compte';
         window.location.assign(returnTo);
@@ -161,6 +227,15 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Impossible de terminer la demande.');
+      if (data.mfa_required && typeof data.challenge_id === 'string') {
+        setPendingMfaChallenge(data.challenge_id);
+        setMfaCode('');
+        setMfaRegistration(mode === 'register');
+        setPendingOAuthMfa(false);
+        setMfaReturnTo('');
+        setError('Code envoyé à votre adresse e-mail. Vérifiez aussi vos courriers indésirables.');
+        return;
+      }
       if (mode === 'login') trackLogin('customer', 'email');
       else trackSignup('customer', 'email');
       onAuthenticated(data.user);
@@ -190,12 +265,12 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
           : 'Créez votre compte et commencez à découvrir, soutenir et suivre les commerces de votre quartier.'}
       imageAlt={mode === 'register' && accountType === 'merchant' ? 'Aperçu de la création de votre vitrine locale' : 'Illustration MaTable sur le commerce local'}
       onBack={onBack}
-      topPrompt={mode === 'register' && accountType === 'merchant' ? 'Déjà commerçant ?' : mode === 'login' ? 'Pas encore de compte ?' : 'Déjà un compte ?'}
-      topActionLabel={mode === 'register' && accountType === 'merchant' ? 'Se connecter' : mode === 'login' ? 'Créer un compte' : 'Se connecter'}
-      onTopAction={mode === 'register' && accountType === 'merchant' ? onMerchantLogin : () => switchMode(mode === 'login' ? 'register' : 'login')}
+      topPrompt={pendingMfaChallenge ? undefined : mode === 'register' && accountType === 'merchant' ? 'Déjà commerçant ?' : mode === 'login' ? 'Pas encore de compte ?' : 'Déjà un compte ?'}
+      topActionLabel={pendingMfaChallenge ? undefined : mode === 'register' && accountType === 'merchant' ? 'Se connecter' : mode === 'login' ? 'Créer un compte' : 'Se connecter'}
+      onTopAction={pendingMfaChallenge ? undefined : mode === 'register' && accountType === 'merchant' ? onMerchantLogin : () => switchMode(mode === 'login' ? 'register' : 'login')}
     >
       <div className="mb-6">
-        {mode === 'login' && !pendingOAuthProfile && !pendingOAuthLink && (
+        {mode === 'login' && !pendingOAuthProfile && !pendingOAuthLink && !pendingMfaChallenge && (
           <AuthAudienceSwitcher
             activeAudience="customer"
             onSelectCustomer={() => undefined}
@@ -207,7 +282,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
         <p className="mt-2 text-sm leading-6 text-[#667168]">{pendingOAuthProfile ? `Compte associé à ${pendingOAuthProfile.email}. Ajoutez votre téléphone pour commander.` : pendingOAuthLink ? `Un compte MaTable existe déjà avec ${pendingOAuthLink.email}. Saisissez votre mot de passe pour y associer ${oauthLinkProviderLabel}.` : mode === 'login' ? 'Accédez à votre compte MaTable.' : accountType === 'merchant' ? 'Renseignez les informations de votre boutique pour démarrer.' : 'Rejoignez MaTable en quelques secondes.'}</p>
       </div>
 
-      {mode === 'register' && !pendingOAuthProfile && (
+      {mode === 'register' && !pendingOAuthProfile && !pendingMfaChallenge && (
         <div className="mb-5 grid grid-cols-2 rounded-full bg-[#f0eee7] p-1" role="group" aria-label="Type de compte">
           <button type="button" onClick={() => { setAccountType('customer'); setAcceptedTermsPrivacy(false); }} aria-pressed={accountType === 'customer'} className={`flex min-h-11 items-center justify-center gap-2 rounded-full px-3 text-sm font-bold transition ${accountType === 'customer' ? 'bg-[var(--mt-green-deep)] text-white shadow-sm' : 'text-[#59655c] hover:bg-white/70'}`}>
             <UserRound className="h-4 w-4" /> Client
@@ -221,19 +296,39 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
       {mode === 'register' && accountType === 'merchant' ? (
         <CustomerMerchantRegistrationForm onCreated={onMerchantRegister} onLogin={onMerchantLogin} />
       ) : (
-        <form onSubmit={submit} className="space-y-4">
-          {!pendingOAuthProfile && !pendingOAuthLink && <CustomerOAuthButtons returnTo={customerReturnTo} />}
-          {mode === 'register' && <div className="grid gap-3 min-[390px]:grid-cols-2 sm:gap-4"><label className="block text-sm font-semibold text-[#47534b]">Prénom<input value={firstName} onChange={(event) => setFirstName(event.target.value)} required autoComplete="given-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="Votre prénom" /></label><label className="block text-sm font-semibold text-[#47534b]">Nom<input value={lastName} onChange={(event) => setLastName(event.target.value)} required autoComplete="family-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="Votre nom" /></label></div>}
-          {mode === 'register' && <label className="block text-sm font-semibold text-[#47534b]">Numéro de téléphone<input type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required autoComplete="tel" aria-invalid={Boolean(phoneFieldError)} aria-describedby={phoneFieldError ? 'customer-phone-error' : undefined} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="+225 07 00 00 00 00" />{phoneFieldError && <span id="customer-phone-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{phoneFieldError}</span>}</label>}
+        <form onSubmit={submit} className="auth-form space-y-4">
+          {!pendingMfaChallenge && !pendingOAuthProfile && !pendingOAuthLink && <CustomerOAuthButtons returnTo={customerReturnTo} />}
+          {pendingMfaChallenge ? (
+            <label className="block text-sm font-semibold text-[#47534b]">
+              Code de vérification par e-mail
+              <span className="mt-1 block text-xs font-normal text-[#667168]">Code à 8 chiffres, à usage unique, valide 10 minutes.</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{8}"
+                maxLength={8}
+                value={mfaCode}
+                onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 8))}
+                required
+                className="mt-2 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-center font-mono text-lg tracking-[0.3em] outline-none focus:border-[var(--mt-green-primary)]"
+              />
+            </label>
+          ) : <>
+          {mode === 'register' && <div className="grid gap-3 min-[390px]:grid-cols-2 sm:gap-4"><label className="block text-sm font-semibold text-[#47534b]">Prénom<input value={firstName} onChange={(event) => setFirstName(event.target.value.slice(0, 60))} required maxLength={60} autoComplete="given-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="Votre prénom" /></label><label className="block text-sm font-semibold text-[#47534b]">Nom<input value={lastName} onChange={(event) => setLastName(event.target.value.slice(0, 60))} required maxLength={60} autoComplete="family-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="Votre nom" /></label></div>}
+          {mode === 'register' && <label className="block text-sm font-semibold text-[#47534b]">Numéro de téléphone<input type="tel" inputMode="tel" maxLength={16} value={phone} onChange={(event) => setPhone(event.target.value.slice(0, 16))} required autoComplete="tel" aria-invalid={Boolean(phoneFieldError)} aria-describedby={phoneFieldError ? 'customer-phone-error' : undefined} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="+225 07 00 00 00 00" />{phoneFieldError && <span id="customer-phone-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{phoneFieldError}</span>}</label>}
           {pendingOAuthLink && <label className="block text-sm font-semibold text-[#47534b]">Adresse e-mail<input type="email" value={pendingOAuthLink.email} readOnly autoComplete="email" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-[#f7f6f1] px-4 py-3 text-sm font-normal text-[#292d2a] outline-none" /></label>}
-          {!pendingOAuthProfile && !pendingOAuthLink && <label className="block text-sm font-semibold text-[#47534b]">Adresse e-mail<div className="relative mt-1.5"><Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#869188]" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" aria-invalid={Boolean(emailFieldError)} aria-describedby={emailFieldError ? 'customer-email-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-11 pr-4 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="vous@exemple.ci" /></div>{emailFieldError && <span id="customer-email-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{emailFieldError}</span>}</label>}
-          {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#47534b]">Mot de passe<div className="relative mt-1.5"><input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} aria-invalid={Boolean(passwordFieldError)} aria-describedby={passwordFieldError ? 'customer-password-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 pr-12 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="8 caractères minimum" /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} aria-pressed={showPassword} className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-[#647067] transition hover:bg-[#f3f1eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]">{showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}</button></div>{passwordFieldError && <span id="customer-password-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{passwordFieldError}</span>}</label>}
+          {!pendingOAuthProfile && !pendingOAuthLink && <label className="block text-sm font-semibold text-[#47534b]">Adresse e-mail<div className="relative mt-1.5"><Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#869188]" /><input type="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} required autoComplete="email" aria-invalid={Boolean(emailFieldError)} aria-describedby={emailFieldError ? 'customer-email-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-11 pr-4 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="vous@exemple.ci" /></div>{emailFieldError && <span id="customer-email-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{emailFieldError}</span>}</label>}
+          {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#47534b]">Mot de passe<div className="relative mt-1.5"><input type={showPassword ? 'text' : 'password'} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value.slice(0, 128))} required minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} aria-invalid={Boolean(passwordFieldError)} aria-describedby={passwordFieldError ? 'customer-password-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 pr-12 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="8 caractères minimum" /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} aria-pressed={showPassword} className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-[#647067] transition hover:bg-[#f3f1eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]">{showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}</button></div>{passwordFieldError && <span id="customer-password-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{passwordFieldError}</span>}</label>}
           {(pendingOAuthProfile || mode === 'register') && (
             <TermsPrivacyConsent id="customer-account-terms-privacy" checked={acceptedTermsPrivacy} onChange={setAcceptedTermsPrivacy} />
           )}
+          </>}
           {error && <p role="alert" className="rounded-xl border border-[#F97316]/30 bg-[#fff0e8] px-3 py-2.5 text-sm font-semibold text-[#a33e24]">{error}</p>}
-          <button type="submit" disabled={isSubmitting} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--mt-green-primary)] disabled:cursor-wait disabled:opacity-60">{isSubmitting ? 'Vérification...' : pendingOAuthLink ? 'Associer mon compte' : pendingOAuthProfile ? 'Terminer mon inscription' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'} <ArrowRight className="h-4 w-4" /></button>
-          {mode === 'login' && <Link to="/recuperation-acces?type=customer" className="block text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[var(--mt-green-deep)]">Mot de passe oublié ?</Link>}
+          <button type="submit" disabled={isSubmitting} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--mt-green-primary)] disabled:cursor-wait disabled:opacity-60">{isSubmitting ? 'Vérification...' : pendingMfaChallenge ? 'Vérifier le code' : pendingOAuthLink ? 'Associer mon compte' : pendingOAuthProfile ? 'Terminer mon inscription' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'} <ArrowRight className="h-4 w-4" /></button>
+          {pendingMfaChallenge
+            ? <button type="button" onClick={() => { setPendingMfaChallenge(''); setMfaCode(''); setPendingOAuthMfa(false); setMfaReturnTo(''); setError(''); }} className="block w-full text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[var(--mt-green-deep)]">Recommencer la connexion</button>
+            : mode === 'login' && <Link to="/recuperation-acces?type=customer" className="block text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[var(--mt-green-deep)]">Mot de passe oublié ?</Link>}
           <p className="flex items-center justify-center gap-2 pt-1 text-center text-xs text-[#778179]"><ShieldCheck className="h-4 w-4 text-[var(--mt-green-primary)]" /> Vos identifiants restent privés.</p>
         </form>
       )}

@@ -169,6 +169,27 @@ export async function sendTransactionalEmail(
   }
 }
 
+export async function sendAuthCodeEmail(
+  params: { email: string; code: string; appUrl?: string },
+  fetchImplementation: typeof fetch = fetch,
+): Promise<{ sent: boolean; id?: string; error?: string }> {
+  const appUrl = resolveAppUrl(params.appUrl);
+  const subject = 'Votre code de connexion MaTable';
+  const text = `Votre code de vérification MaTable est ${params.code}. Il expire dans 10 minutes. Si vous n’êtes pas à l’origine de cette demande, ignorez cet e-mail.`;
+  const html = renderBrandedEmail({
+    title: 'Code de connexion MaTable',
+    preheader: 'Votre code de vérification expire dans 10 minutes.',
+    appUrl,
+    contentHtml: `
+      <h1 style="margin:0 0 14px;font-family:${EMAIL_FONT};font-size:21px;font-weight:800;line-height:1.25;color:${BRAND.deep};">Code de connexion</h1>
+      <p style="margin:0 0 16px;font-family:${EMAIL_FONT};font-size:14px;line-height:1.65;color:${BRAND.body};">Saisissez ce code dans la fenêtre de connexion MaTable :</p>
+      <p style="margin:0;padding:16px;border:1px solid ${BRAND.line};border-radius:12px;background:${BRAND.cream};font-family:monospace;font-size:28px;font-weight:800;letter-spacing:8px;text-align:center;color:${BRAND.deep};">${escapeHtml(params.code)}</p>
+      <p style="margin:16px 0 0;font-family:${EMAIL_FONT};font-size:12px;line-height:1.6;color:${BRAND.muted};">Ce code expire dans 10 minutes et ne peut être utilisé qu’une seule fois. Ne le communiquez à personne, y compris au support MaTable.</p>
+    `,
+  });
+  return sendTransactionalEmail({ to: params.email, subject, html, text }, fetchImplementation);
+}
+
 export async function sendMerchantWelcomeEmail(
   params: {
     shopName: string;

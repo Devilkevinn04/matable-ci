@@ -8,6 +8,8 @@ import { slugifyShopName } from '../../src/utils/shopSlug.ts';
 import { normalizeAcquisitionCampaign, normalizeAcquisitionSource } from '../../src/utils/acquisitionSources.ts';
 import { persistShopInTransaction } from '../repositories/shops.ts';
 import { sendMerchantWelcomeEmail } from '../services/email.ts';
+import { isEmailMfaRequired, startEmailMfaChallenge } from '../services/emailMfa.ts';
+import { requireSameOriginJsonRequest } from '../middleware/authRequestSecurity.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
 import type { ShopRecord } from '../types.ts';
 
@@ -54,10 +56,19 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
   } = options;
   const router = Router();
 
-  router.post('/', rateLimitPublicRequest(10), async (req, res) => {
+  router.post('/', requireSameOriginJsonRequest, rateLimitPublicRequest(10), async (req, res) => {
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      return res.status(400).json({ error: 'Le formulaire est invalide.' });
+    }
+    if (req.body.accepted_terms_privacy !== true) {
+      return res.status(400).json({ error: 'Veuillez accepter les CGU et la politique de confidentialité pour créer une boutique.' });
+    }
     const { name, whatsapp_number, pin_code, pin, category, city, welcome_message, theme_config, opening_hours } = req.body;
-    const ownerEmail = String(req.body?.email || '').trim().toLowerCase();
-    const acceptedTermsPrivacy = req.body?.accepted_terms_privacy === true;
+    const ownerEmail = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (typeof name !== 'string' || typeof whatsapp_number !== 'string'
+      || (city !== undefined && typeof city !== 'string')) {
+      return res.status(400).json({ error: 'Le nom et le numéro WhatsApp sont obligatoires.' });
+    }
     // Optional and never blocking: an unknown value is simply not recorded.
     const declaredSource = normalizeAcquisitionSource(req.body?.acquisition_source);
     const acquisitionCampaign = normalizeAcquisitionCampaign(req.body?.acquisition_campaign);
@@ -79,19 +90,20 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       manual_override: Boolean(opening_hours?.manual_override),
     };
     const deliveryZones = Array.isArray(requestedThemeConfig.delivery_zones)
-      ? requestedThemeConfig.delivery_zones.slice(0, 8).map((zone: any) => ({
-          label: String(zone?.label || 'Zone locale'),
-          mode: zone?.mode === 'sur_place' || zone?.mode === 'retirer' ? zone.mode : 'livraison',
-          fee: Number(zone?.fee || 0),
-          description: zone?.description ? String(zone.description).slice(0, 120) : undefined,
-        }))
+      ? requestedThemeConfig.delivery_zones.slice(0, 8).map((zone: unknown) => {
+          const value = zone && typeof zone === 'object' ? zone as Record<string, unknown> : {};
+          const rawFee = Number(value.fee || 0);
+          return {
+            label: sanitizeTextField(typeof value.label === 'string' ? value.label : 'Zone locale', 80),
+            mode: value.mode === 'sur_place' || value.mode === 'retirer' ? value.mode : 'livraison',
+            fee: Number.isFinite(rawFee) ? Math.min(1_000_000, Math.max(0, rawFee)) : 0,
+            description: typeof value.description === 'string' ? sanitizeTextField(value.description, 120) : undefined,
+          };
+        })
       : [];
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail) || ownerEmail.length > 254) {
+    if (typeof req.body.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail) || ownerEmail.length > 254) {
       return res.status(400).json({ error: 'Une adresse e-mail valide est obligatoire pour le responsable.' });
-    }
-    if (!acceptedTermsPrivacy) {
-      return res.status(400).json({ error: 'Veuillez accepter les CGU et la politique de confidentialité pour créer une boutique.' });
     }
     const isValidTime = (value: string) => {
       if (!/^\d{2}:\d{2}$/.test(value)) return false;
@@ -105,7 +117,8 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     )) {
       return res.status(400).json({ error: 'Un planning actif doit inclure des heures valides et au moins un jour d’ouverture.' });
     }
-    if (safeName.length < 2 || !whatsapp_number || !/^[0-9]{6}$/.test(String(effectivePin || '').trim())) {
+    if (safeName.length < 2 || whatsapp_number.length > 32 || !whatsapp_number.trim()
+      || typeof effectivePin !== 'string' || !/^[0-9]{6}$/.test(effectivePin.trim())) {
       return res.status(400).json({ error: 'Nom, numéro WhatsApp et code PIN requis.' });
     }
     if (isWeakShopPin(effectivePin)) {
@@ -242,6 +255,27 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       }
     } catch (error) {
       console.warn(`Merchant welcome email failed for ${ownerEmail}:`, error);
+    }
+
+    if (isEmailMfaRequired(newShop.created_at)) {
+      const challenge = await startEmailMfaChallenge({
+        subject: 'merchant',
+        subjectId: String(newShop.id),
+        email: ownerEmail,
+        appUrl: String(process.env.APP_URL || 'http://localhost:3000').trim() || 'http://localhost:3000',
+      });
+      if ('error' in challenge) {
+        console.error(`Unable to send merchant registration authentication code: ${challenge.error}.`);
+        return res.status(503).json({ error: 'Boutique créée, mais la vérification e-mail est indisponible. Connectez-vous avec votre téléphone et votre PIN après configuration de l’e-mail.' });
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(202).json({
+        success: true,
+        mfa_required: true,
+        challenge_id: challenge.challengeId,
+        expires_at: new Date(challenge.expiresAt).toISOString(),
+        shop: toSafeShop(newShop),
+      });
     }
 
     await createMerchantSession(res, newShop.id, req);

@@ -40,6 +40,33 @@ export function isCommissionPayableForMonth(
 const REFERRAL_STORAGE_KEY = 'matable_ambassador_referral';
 let pendingCapture: Promise<string | null> | null = null;
 
+export function getStoredAmbassadorCode(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(REFERRAL_STORAGE_KEY) || 'null') as {
+      token?: unknown;
+      code?: unknown;
+      expiresAt?: unknown;
+    } | null;
+    const expiresAt = typeof stored?.expiresAt === 'string' ? Date.parse(stored.expiresAt) : NaN;
+    if (typeof stored?.token !== 'string' || !/^[a-f0-9]{64}$/.test(stored.token)
+      || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
+    return normalizeAmbassadorCode(stored.code);
+  } catch {
+    return null;
+  }
+}
+
+export function clearAmbassadorReferral(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(REFERRAL_STORAGE_KEY);
+    window.dispatchEvent(new Event('matable-ambassador-referral-updated'));
+  } catch {
+    return;
+  }
+}
+
 export async function getAmbassadorToken(codeValue?: unknown): Promise<string | null> {
   if (typeof window === 'undefined') return null;
   try {
@@ -58,7 +85,13 @@ export async function getAmbassadorToken(codeValue?: unknown): Promise<string | 
       });
       if (!response.ok) return null;
       const result = await response.json() as { token: string; expires_at: string };
-      window.localStorage.setItem(REFERRAL_STORAGE_KEY, JSON.stringify({ token: result.token, expiresAt: result.expires_at }));
+      const expiresAt = typeof result.expires_at === 'string' ? Date.parse(result.expires_at) : NaN;
+      if (typeof result.token !== 'string' || !/^[a-f0-9]{64}$/.test(result.token)
+        || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
+      window.localStorage.setItem(REFERRAL_STORAGE_KEY, JSON.stringify({
+        token: result.token, code, expiresAt: result.expires_at,
+      }));
+      window.dispatchEvent(new Event('matable-ambassador-referral-updated'));
       return result.token;
     } catch { return null; }
   })();

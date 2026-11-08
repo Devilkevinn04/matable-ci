@@ -7,6 +7,24 @@ déplace aucune route métier pour l’instant.
 
 Application React + Vite + Express pour la gestion de vitrines locales, de commandes WhatsApp et de tableaux de bord MaTable.
 
+## Sécurité des connexions
+
+L’authentification ajoute un code e-mail à usage unique après le secret principal
+(clé admin, PIN marchand ou mot de passe). Les nouveaux comptes sont concernés
+à partir de `AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT` ; les comptes déjà existants
+basculent 30 jours après cette date. Aucun SMS n’est envoyé.
+
+Avant le démarrage en production, configurez dans l’environnement privé du
+serveur (sur le VPS Hostinger, `/srv/apps/matable/shared/app.env`) :
+`AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT` (date ISO UTC), `RESEND_API_KEY`,
+`AUTH_EMAIL_MFA_PEPPER` (clé forte générée par l’hébergeur),
+`RESEND_FROM_EMAIL`, `ADMIN_MFA_EMAIL` et
+`VERIFICATION_ADMIN_MFA_EMAIL`. Les valeurs sont des paramètres d’hébergement,
+pas des secrets ou adresses à ajouter au dépôt. Le serveur refuse de démarrer
+si ces paramètres de MFA sont absents ou invalides. Resend doit être configuré
+avec un domaine expéditeur vérifié. Cette MFA par e-mail ne protège pas contre
+la compromission simultanée du mot de passe et de la boîte e-mail.
+
 ## Identité visuelle du frontend
 
 Les couleurs partagées sont définies dans `src/index.css` : vert émeraude

@@ -53,6 +53,8 @@ export function AmbassadorDashboard() {
   const [checking, setChecking] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [pendingMfaChallenge, setPendingMfaChallenge] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [confirmation, setConfirmation] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -97,16 +99,24 @@ export function AmbassadorDashboard() {
   const submitCredentials = async (event: React.FormEvent) => {
     event.preventDefault(); setBusy(true); setError(''); setNotice('');
     try {
-      const response = await fetch(`/api/ambassador-auth/${isActivation ? 'activate' : 'login'}`, {
+      const response = await fetch(pendingMfaChallenge ? '/api/ambassador-auth/login/verify' : `/api/ambassador-auth/${isActivation ? 'activate' : 'login'}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify(isActivation ? { token: activationToken, password } : { email, password }),
+        body: JSON.stringify(pendingMfaChallenge ? { challenge_id: pendingMfaChallenge, code: mfaCode } : isActivation ? { token: activationToken, password } : { email, password }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Connexion impossible.');
+      if (result.mfa_required && typeof result.challenge_id === 'string') {
+        setPendingMfaChallenge(result.challenge_id);
+        setMfaCode('');
+        setNotice('Code envoyé à votre adresse e-mail. Vérifiez aussi vos courriers indésirables.');
+        return;
+      }
       if (isActivation) {
         setNotice('Compte activé. Ouverture de votre espace…');
         navigate('/ambassadeur', { replace: true });
       } else {
+        setPendingMfaChallenge('');
+        setMfaCode('');
         if (!await loadDashboard()) throw new Error('La session n’a pas pu être ouverte. Réessayez.');
       }
     } catch (problem) { setError(problem instanceof Error ? problem.message : 'Opération impossible.'); }
@@ -114,7 +124,12 @@ export function AmbassadorDashboard() {
   };
 
   const logout = async () => {
-    await fetch('/api/ambassador-auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined);
+    await fetch('/api/ambassador-auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({}),
+    }).catch(() => undefined);
     setDashboard(null); setPassword(''); setNotice('');
   };
   const copyReferralLink = async () => {
@@ -247,15 +262,18 @@ export function AmbassadorDashboard() {
       <section className="rounded-2xl border border-slate-200 bg-white px-4 py-6 shadow-sm sm:px-6" aria-labelledby="ambassador-auth-title">
         <h2 id="ambassador-auth-title" className="text-lg font-black text-slate-900">{isActivation ? 'Activez votre accès' : 'Connexion'}</h2>
         <p className="mt-1 text-sm text-slate-600">{isActivation ? 'Choisissez un mot de passe personnel pour sécuriser votre espace.' : 'Connectez-vous avec l’adresse e-mail associée à votre partenariat.'}</p>
-        <form onSubmit={(event) => void submitCredentials(event)} className="mt-5 space-y-4">
+        <form onSubmit={(event) => void submitCredentials(event)} className="auth-form mt-5 space-y-4">
           {isActivation && !activationToken && <p role="alert" className="text-sm font-semibold text-rose-800">Lien d’activation manquant. Demandez un nouveau lien au support MaTable.</p>}
+          {pendingMfaChallenge ? <label className="block text-sm font-semibold text-slate-700">Code de vérification par e-mail<span className="mt-1 block text-xs font-normal text-slate-500">Code à 8 chiffres, à usage unique, valide 10 minutes.</span><input required type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{8}" maxLength={8} value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-2 min-h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-center font-mono text-lg tracking-[0.3em] text-slate-900" /></label> : <>
           {!isActivation && <label className="block text-sm font-semibold text-slate-700">E-mail<input required type="email" autoComplete="username" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900" /></label>}
           <label className="block text-sm font-semibold text-slate-700">{isActivation ? 'Nouveau mot de passe' : 'Mot de passe'}<span className="relative mt-1.5 block"><input required type={showPassword ? 'text' : 'password'} autoComplete={isActivation ? 'new-password' : 'current-password'} minLength={isActivation ? 12 : 1} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} className="min-h-12 w-full rounded-lg border border-slate-300 bg-white px-3 pr-12 text-sm font-normal text-slate-900" /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} aria-pressed={showPassword} className="absolute inset-y-0 right-0 grid w-12 place-items-center rounded-r-lg text-slate-500 hover:bg-slate-50">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></span></label>
+          </>}
           {isActivation && <label className="block text-sm font-semibold text-slate-700">Confirmer le mot de passe<input required type="password" autoComplete="new-password" minLength={12} maxLength={128} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900" /></label>}
           {isActivation && password && confirmation && password !== confirmation && <p className="text-xs font-semibold text-rose-800">Les deux mots de passe ne correspondent pas.</p>}
-          {!isActivation && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><a href={getSupportWhatsAppUrl(`Bonjour, j’ai oublié mon mot de passe de l’espace ambassadeur. Mon adresse e-mail est ${email || '[votre e-mail]'}.`) || `mailto:assistance@matable-ci.com?subject=R%C3%A9initialisation%20de%20mon%20acc%C3%A8s%20ambassadeur&body=${encodeURIComponent(`Bonjour, j’ai oublié mon mot de passe ambassadeur. Mon adresse e-mail est ${email || '[votre e-mail]'}.`)}`} target="_blank" rel="noreferrer" className="font-semibold text-emerald-900 underline underline-offset-2">Mot de passe oublié ?</a></div>}
+          {!pendingMfaChallenge && !isActivation && <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><a href={getSupportWhatsAppUrl(`Bonjour, j’ai oublié mon mot de passe de l’espace ambassadeur. Mon adresse e-mail est ${email || '[votre e-mail]'}.`) || `mailto:assistance@matable-ci.com?subject=R%C3%A9initialisation%20de%20mon%20acc%C3%A8s%20ambassadeur&body=${encodeURIComponent(`Bonjour, j’ai oublié mon mot de passe ambassadeur. Mon adresse e-mail est ${email || '[votre e-mail]'}.`)}`} target="_blank" rel="noreferrer" className="font-semibold text-emerald-900 underline underline-offset-2">Mot de passe oublié ?</a></div>}
           {error && <p role="alert" className="text-sm font-semibold text-rose-800">{error}</p>}{notice && <p role="status" className="text-sm font-semibold text-emerald-800">{notice}</p>}
-          <button type="submit" disabled={busy || (isActivation && (!activationToken || password !== confirmation))} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-900 px-4 text-sm font-bold text-white disabled:opacity-50">{busy ? 'Veuillez patienter…' : isActivation ? 'Activer mon compte' : 'Se connecter'}<ArrowRight className="h-4 w-4" /></button>
+          <button type="submit" disabled={busy || (isActivation && (!activationToken || password !== confirmation))} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-900 px-4 text-sm font-bold text-white disabled:opacity-50">{busy ? 'Veuillez patienter…' : pendingMfaChallenge ? 'Vérifier le code' : isActivation ? 'Activer mon compte' : 'Se connecter'}<ArrowRight className="h-4 w-4" /></button>
+          {pendingMfaChallenge && <button type="button" onClick={() => { setPendingMfaChallenge(''); setMfaCode(''); setNotice(''); }} className="w-full text-center text-xs font-semibold text-slate-600 underline">Recommencer la connexion</button>}
         </form>
         <p className="mt-4 text-xs leading-5 text-slate-500">{isActivation ? 'Le lien est à usage unique et expire après 7 jours. Utilisez un mot de passe d’au moins 12 caractères.' : 'Votre session reste active pendant 8 heures. Pour créer votre accès ou obtenir de l’aide, contactez l’assistance.'}</p>
         <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-emerald-900 underline underline-offset-2">{supportWhatsAppUrl ? <MessageCircle className="h-4 w-4" /> : <Mail className="h-4 w-4" />}{isActivation ? 'Contacter l’assistance' : 'Demander un lien d’accès'}</a>

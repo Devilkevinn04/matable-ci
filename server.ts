@@ -31,6 +31,7 @@ import { buildSessionFingerprint, createAuthSessionHelpers, isRequestFingerprint
 import { createSeoHtmlHelpers } from './server/services/seoHtml.ts';
 import { getWhatsAppSubscriptionReminderConfig, sendWhatsAppSubscriptionReminder } from './server/services/whatsappNotifications.ts';
 import { getResendEmailConfig, sendMerchantSubscriptionReminderEmail } from './server/services/email.ts';
+import { assertEmailMfaConfiguration } from './server/services/emailMfa.ts';
 import { getDefaultSubscriptionPrices, parseSubscriptionPrices } from './server/services/subscriptionPricing.ts';
 import {
   DEFAULT_SUBSCRIPTION_PRO_FEATURES,
@@ -249,10 +250,13 @@ async function processSubscriptionAutomation() {
 
 export function sanitizeTextField(value: string | null | undefined, maxLength = 200): string {
   const clean = String(value ?? '')
+    .normalize('NFC')
     .replace(/<[^>]*>/g, '')
     .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/[\u202A-\u202E\u2066-\u2069]/g, '')
     .trim();
-  return clean.length > maxLength ? clean.slice(0, maxLength) : clean;
+  const characters = Array.from(clean);
+  return characters.length > maxLength ? characters.slice(0, maxLength).join('') : clean;
 }
 
 export function validateCustomerOrderInput(input: {
@@ -740,6 +744,8 @@ const {
   requireMerchantOwnShop,
   requireMerchantIdentityOwnShop,
   clearMerchantSessionsForShop,
+  revokeMerchantSessionsForShop,
+  revokeOtherMerchantSessionsForShop,
   cleanupExpiredSessions,
 } = createAuthSessionHelpers({ shops, refreshSubscriptionState });
 
@@ -756,13 +762,26 @@ export function validateRuntimeConfig(): void {
   }
 
   const advertisingBetaEnabled = process.env.ADVERTISING_BETA_ENABLED === 'true';
-  const requiredKeys = ['ADMIN_ACCESS_KEY', 'VERIFICATION_ADMIN_ACCESS_KEY', 'APP_URL', 'PORT', 'DATABASE_URL'];
+  const requiredKeys = [
+    'ADMIN_ACCESS_KEY',
+    'VERIFICATION_ADMIN_ACCESS_KEY',
+    'APP_URL',
+    'PORT',
+    'DATABASE_URL',
+    'AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT',
+    'AUTH_EMAIL_MFA_PEPPER',
+    'RESEND_API_KEY',
+    'RESEND_FROM_EMAIL',
+    'ADMIN_MFA_EMAIL',
+    'VERIFICATION_ADMIN_MFA_EMAIL',
+  ];
   if (advertisingBetaEnabled) requiredKeys.push('AD_EVENT_SIGNING_SECRET');
   const missing = requiredKeys.filter((key) => !String(process.env[key] || '').trim());
 
   if (missing.length > 0) {
     throw new Error(`Configuration production incomplète : ${missing.join(', ')}.`);
   }
+  assertEmailMfaConfiguration();
 
   const adminAccessKey = String(process.env.ADMIN_ACCESS_KEY || '').trim();
   if (adminAccessKey.length < 32 || /change_me|demo|example|legacy/i.test(adminAccessKey)) {
@@ -1126,6 +1145,10 @@ async function startServer() {
     dbAll,
     requireMerchantAccess,
     requireMerchantOwnShop,
+    verifyPin,
+    getMerchantSessionToken: (req) => getCookie(req, 'matable_session'),
+    revokeMerchantSessionsForShop,
+    revokeOtherMerchantSessionsForShop,
     trialDurationMonths: TRIAL_DURATION_MONTHS,
     rotateMerchantAccessTokenForShop,
     persistShop,
@@ -1343,6 +1366,10 @@ async function startServer() {
     return ['/app', '/admin', '/ambassadeur', '/compte', '/connexion', '/inscription', '/recuperation-acces', '/livreur']
       .some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`));
   };
+  app.use((req, res, next) => {
+    if (isPrivateSeoPath(req.path)) res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    next();
+  });
   const isFrontendPagePath = (pathname: string) => pathname !== '/' && !pathname.startsWith('/api/') && !pathname.startsWith('/@') && !path.extname(pathname);
   const publicPageSeoMetadata: Record<string, { title: string; description: string }> = {
     '/promotions': {

@@ -27,6 +27,14 @@ services:
         value: false
       - key: VERIFICATION_ADMIN_ACCESS_KEY
         sync: false
+      - key: AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT
+        sync: false
+      - key: AUTH_EMAIL_MFA_PEPPER
+        generateValue: true
+      - key: ADMIN_MFA_EMAIL
+        sync: false
+      - key: VERIFICATION_ADMIN_MFA_EMAIL
+        sync: false
       - key: DIDIT_API_KEY
         sync: false
       - key: DIDIT_WORKFLOW_ID

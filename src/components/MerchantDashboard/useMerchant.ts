@@ -8,7 +8,7 @@ import { trackLogin, trackLogout, trackSignup } from '../../utils/analyticsTrack
 import { normalizeAcquisitionSource } from '../../utils/acquisitionSources';
 import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from '../../utils/analyticsAttribution';
 import { hasAnalyticsConsent } from '../../utils/cookieConsent';
-import { getAmbassadorToken } from '../../utils/ambassadors';
+import { clearAmbassadorReferral, getAmbassadorToken } from '../../utils/ambassadors';
 import { buildBulkProductPatch, type BulkProductAction } from './bulkActions';
 
 export type MerchantOrderFilter = 'all' | 'actionable' | OrderStatus;
@@ -32,6 +32,9 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [authMode, setAuthMode] = useState<'private' | 'quick'>('private');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [pendingMfaChallenge, setPendingMfaChallenge] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaIsRegistration, setMfaIsRegistration] = useState(false);
 
   // Quick Register Modal state
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
@@ -174,6 +177,14 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     }).then(async (res) => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Lien privé invalide.');
+      if (data.mfa_required && typeof data.challenge_id === 'string') {
+        setPendingMfaChallenge(data.challenge_id);
+        setMfaCode('');
+        setMfaIsRegistration(false);
+        setAuthError('Code envoyé à votre adresse e-mail. Vérifiez aussi vos courriers indésirables.');
+        setIsSessionLoading(false);
+        return;
+      }
       openSession(data);
     }).catch((error: Error) => {
       setAuthError(error.message);
@@ -337,6 +348,28 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setAuthLoading(true);
 
     try {
+      if (pendingMfaChallenge) {
+        const res = await fetch('/api/auth/merchant-login/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ challenge_id: pendingMfaChallenge, code: mfaCode }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Code de vérification invalide.');
+        setPendingMfaChallenge('');
+        setMfaCode('');
+        setAuthError(null);
+        setCurrentShop(data.shop);
+        syncShopSettings(data.shop);
+        if (mfaIsRegistration) {
+          clearAmbassadorReferral();
+          trackSignup('merchant', 'email');
+        }
+        else trackLogin('merchant', 'email');
+        loadShopData(data.shop.id);
+        return;
+      }
       const res = await fetch('/api/auth/merchant-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -401,6 +434,16 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
         throw new Error(data.error || 'Erreur lors de la création de la boutique');
       }
 
+      if (data.mfa_required && typeof data.challenge_id === 'string') {
+        setPendingMfaChallenge(data.challenge_id);
+        setMfaCode('');
+        setMfaIsRegistration(true);
+        setAuthError('Code envoyé à votre adresse e-mail. Vérifiez aussi vos courriers indésirables.');
+        setIsRegisterModalOpen(false);
+        return;
+      }
+
+      clearAmbassadorReferral();
       setCurrentShop(data.shop);
       syncShopSettings(data.shop);
       setIsRegisterModalOpen(false);
@@ -938,6 +981,10 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setAuthMode,
     setAuthError,
     setAuthLoading,
+    pendingMfaChallenge,
+    setPendingMfaChallenge,
+    mfaCode,
+    setMfaCode,
     setIsRegisterModalOpen,
     setRegName,
     setRegPhone,
