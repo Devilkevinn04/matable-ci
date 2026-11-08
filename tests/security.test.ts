@@ -527,6 +527,12 @@ test('requires the ad event signing secret only when advertising delivery is ena
 
     assert.doesNotThrow(() => validateRuntimeConfig());
 
+    process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';
+    assert.doesNotThrow(() => validateRuntimeConfig());
+    process.env.RESEND_FROM_EMAIL = 'MaTable <invalid-address>';
+    assert.throws(() => validateRuntimeConfig(), /RESEND_FROM_EMAIL doit contenir une adresse e-mail valide/);
+    process.env.RESEND_FROM_EMAIL = 'noreply@matable-ci.com';
+
     process.env.ADVERTISING_BETA_ENABLED = 'true';
     assert.throws(() => validateRuntimeConfig(), /Configuration production incomplète : AD_EVENT_SIGNING_SECRET/);
 

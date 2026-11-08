@@ -7,6 +7,16 @@ export type EmailMfaSubject = 'admin' | 'ambassador' | 'customer' | 'merchant';
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_CODE_ATTEMPTS = 5;
 const ROLLOUT_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
+const EMAIL_ADDRESS_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+
+function isValidSender(value: string): boolean {
+  const sender = value.trim();
+  const displayNameMatch = /^(.*?)\s*<([^<>]+)>$/.exec(sender);
+  if (!displayNameMatch) return EMAIL_ADDRESS_PATTERN.test(sender);
+
+  const [, displayName, email] = displayNameMatch;
+  return Boolean(displayName.trim()) && EMAIL_ADDRESS_PATTERN.test(email);
+}
 
 function hashCode(challengeId: string, code: string): string {
   const pepper = String(process.env.AUTH_EMAIL_MFA_PEPPER || '');
@@ -49,7 +59,11 @@ export function assertEmailMfaConfiguration(): void {
     throw new Error('AUTH_EMAIL_MFA_PEPPER doit contenir au moins 32 caractères.');
   }
   for (const key of ['RESEND_FROM_EMAIL', 'ADMIN_MFA_EMAIL', 'VERIFICATION_ADMIN_MFA_EMAIL']) {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(process.env[key]).trim())) {
+    const value = String(process.env[key]).trim();
+    const valid = key === 'RESEND_FROM_EMAIL'
+      ? isValidSender(value)
+      : EMAIL_ADDRESS_PATTERN.test(value);
+    if (!valid) {
       throw new Error(`${key} doit contenir une adresse e-mail valide.`);
     }
   }
