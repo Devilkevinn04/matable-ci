@@ -1,0 +1,11 @@
+[Unit]
+Description=Check and deploy the latest MaTable main release
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/matable-auto-deploy
+User=root
+Group=root

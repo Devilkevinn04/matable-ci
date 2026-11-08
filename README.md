@@ -25,6 +25,13 @@ si ces paramètres de MFA sont absents ou invalides. Resend doit être configur�
 avec un domaine expéditeur vérifié. Cette MFA par e-mail ne protège pas contre
 la compromission simultanée du mot de passe et de la boîte e-mail.
 
+## Déploiement VPS
+
+Le déploiement automatique du VPS Hostinger peut être activé avec le timer
+documenté dans [infra/hostinger/README.md](./infra/hostinger/README.md). Une
+fois installé, il surveille `main` et ne remplace que le service MaTable après
+la réussite des vérifications de construction et du contrôle de santé.
+
 ## Identité visuelle du frontend
 
 Les couleurs partagées sont définies dans `src/index.css` : vert émeraude
