@@ -2,6 +2,7 @@ import { Router, type Request } from 'express';
 import { isShopPubliclyVisible } from '../services/businessRules.ts';
 import { loadShopsFromDatabase } from '../repositories/shops.ts';
 import { getPublicDiscoveryPages } from '../../src/utils/discoverySeo.ts';
+import { SEO_ARTICLES } from '../../src/utils/seoArticles.ts';
 
 interface SeoRouterOptions {
   getPublicOrigin: (req: Request) => string;
@@ -27,6 +28,7 @@ export function createSeoRouter({ getPublicOrigin, escapeHtml }: SeoRouterOption
       `${origin}/comment-ca-marche`,
       `${origin}/faq`,
       `${origin}/guide`,
+      ...SEO_ARTICLES.map((article) => `${origin}/guide/${article.slug}`),
       ...publicShops.map((shop) => `${origin}/${encodeURIComponent(shop.slug)}`),
       ...getPublicDiscoveryPages(publicShops).map((page) => `${origin}${page.path}`),
     ];

@@ -89,9 +89,9 @@ export const Navigation: React.FC<NavigationProps> = ({
         value={searchQuery}
         onChange={(event) => setSearchQuery(event.target.value)}
         placeholder="Boutique, produit, quartier…"
-        className="min-h-9 min-w-0 flex-1 border-0 bg-transparent text-xs text-[var(--mt-gray-900)] outline-none placeholder:text-[#7b817d] sm:text-sm"
+        className="min-h-11 min-w-0 flex-1 border-0 bg-transparent text-xs text-[var(--mt-gray-900)] outline-none placeholder:text-[#7b817d] sm:text-sm"
       />
-      <button type="submit" aria-label="Rechercher" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--mt-green-primary)] text-white transition hover:bg-[var(--mt-green-hover)]">
+      <button type="submit" aria-label="Rechercher" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--mt-green-primary)] text-white transition hover:bg-[var(--mt-green-hover)]">
         <Search className="h-4 w-4" aria-hidden="true" />
       </button>
     </form>

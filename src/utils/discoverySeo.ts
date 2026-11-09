@@ -31,6 +31,19 @@ const categoryPhrases: Record<ShopCategory, string> = {
   automotive: 'automobiles',
   other: 'de commerces locaux',
 };
+const localCategoryNames: Record<ShopCategory, string> = {
+  fashion: 'boutiques de mode et friperies',
+  food: 'restaurants',
+  beauty: 'boutiques de beauté',
+  electronics: 'boutiques d’électronique',
+  home: 'boutiques maison et décoration',
+  services: 'prestataires de services',
+  health: 'commerces de santé',
+  crafts: 'boutiques d’artisanat',
+  education: 'centres de formation',
+  automotive: 'commerces automobiles',
+  other: 'commerces locaux',
+};
 
 export function getDiscoveryCityLabel(city: string): string {
   const primaryCity = city.split(/[\/|]/, 1)[0].replace(/\s*\([^)]*\)/g, '').trim();
@@ -73,10 +86,26 @@ function makeCityPage(city: string, citySlug: string, shopCount: number): Discov
   };
 }
 
+function makeCityCategoryPage(category: ShopCategory, city: string, citySlug: string, shopCount: number): DiscoveryPage {
+  const categoryName = localCategoryNames[category];
+  const heading = `${categoryName[0].toUpperCase()}${categoryName.slice(1)} à ${city}`;
+  return {
+    path: `/boutiques/ville/${citySlug}/categorie/${category}`,
+    title: `${heading} | MaTable`,
+    description: `Trouvez des ${categoryName} à ${city}. Parcourez les vitrines, consultez les produits et contactez directement les commerçants.`,
+    heading,
+    category,
+    city,
+    citySlug,
+    shopCount,
+  };
+}
+
 export function getPublicDiscoveryPages(shops: readonly DiscoveryShop[]): DiscoveryPage[] {
   const pages: DiscoveryPage[] = [];
   const shopsByCategory = new Map<ShopCategory, number>();
   const shopsByCity = new Map<string, { city: string; count: number }>();
+  const shopsByCityCategory = new Map<string, { city: string; citySlug: string; category: ShopCategory; count: number }>();
 
   for (const shop of shops) {
     if (isShopCategory(shop.category)) {
@@ -88,6 +117,16 @@ export function getPublicDiscoveryPages(shops: readonly DiscoveryShop[]): Discov
       if (citySlug && !['cote-d-ivoire', 'cote-divoire'].includes(citySlug)) {
         const existing = shopsByCity.get(citySlug);
         shopsByCity.set(citySlug, { city: existing?.city || city, count: (existing?.count || 0) + 1 });
+        if (isShopCategory(shop.category)) {
+          const key = `${citySlug}:${shop.category}`;
+          const localExisting = shopsByCityCategory.get(key);
+          shopsByCityCategory.set(key, {
+            city: localExisting?.city || city,
+            citySlug,
+            category: shop.category,
+            count: (localExisting?.count || 0) + 1,
+          });
+        }
       }
     }
   }
@@ -99,6 +138,12 @@ export function getPublicDiscoveryPages(shops: readonly DiscoveryShop[]): Discov
 
   for (const [citySlug, group] of shopsByCity) {
     if (group.count >= MINIMUM_SHOPS_PER_DISCOVERY_PAGE) pages.push(makeCityPage(group.city, citySlug, group.count));
+  }
+
+  for (const group of shopsByCityCategory.values()) {
+    if (group.count >= MINIMUM_SHOPS_PER_DISCOVERY_PAGE) {
+      pages.push(makeCityCategoryPage(group.category, group.city, group.citySlug, group.count));
+    }
   }
 
   return pages;

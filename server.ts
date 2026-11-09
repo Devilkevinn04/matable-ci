@@ -82,6 +82,7 @@ import { normalizeCustomerPhone } from './src/utils/normalizeCustomerPhone.ts';
 import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from './src/utils/subscriptionFeatures.ts';
 import type { ShopCategory } from './src/utils/categoryDefaults.ts';
 import { findPublicDiscoveryPage } from './src/utils/discoverySeo.ts';
+import { SEO_ARTICLES } from './src/utils/seoArticles.ts';
 import { getPublicDomainRedirect, getSecureRedirectUrl } from './server/services/hostRedirect.ts';
 import { PUBLIC_PRODUCT_IMAGE_PATH, parseRequestedImageWidth, resizeProductImage, resolveProductImageRequest } from './server/services/publicProductImages.ts';
 
@@ -1388,6 +1389,10 @@ async function startServer() {
       title: 'Guide personnel | MaTable',
       description: 'Votre guide pratique MaTable, adapté à votre espace client, marchand ou administration.',
     },
+    ...Object.fromEntries(SEO_ARTICLES.map((article) => [
+      `/guide/${article.slug}`,
+      { title: article.title, description: article.description },
+    ])),
   };
 
   app.use(createSeoRouter({ getPublicOrigin, escapeHtml }));
@@ -1473,6 +1478,7 @@ async function startServer() {
         injectDiscoverySeo: injectCurrentDiscoverySeo,
         injectShopDirectorySeo: injectCurrentShopDirectorySeo,
         injectShopOpenGraph: injectCurrentShopOpenGraph,
+        injectSeoArticle: injectCurrentSeoArticle,
       } = createSeoHtmlHelpers({
         shops: seoShops,
         products: seoProducts,
@@ -1503,6 +1509,17 @@ async function startServer() {
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
           return res.status(200).set({ 'Content-Type': 'text/html' }).end(await injectMerchantPlansSeo(transformed, req));
+        } catch (error) {
+          return next(error);
+        }
+      }
+      const seoArticle = SEO_ARTICLES.find((article) => req.path === `/guide/${article.slug}`);
+      if (seoArticle && shouldServePublicHtml(req)) {
+        try {
+          const indexHtmlPath = path.join(process.cwd(), 'index.html');
+          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
+          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectCurrentSeoArticle(transformed, req, seoArticle));
         } catch (error) {
           return next(error);
         }
@@ -1635,6 +1652,7 @@ async function startServer() {
         injectMerchantPlansSeo: injectCurrentMerchantPlansSeo,
         injectPublicPageSeo: injectCurrentPublicPageSeo,
         injectShopOpenGraph: injectCurrentShopOpenGraph,
+        injectSeoArticle: injectCurrentSeoArticle,
       } = createSeoHtmlHelpers({
         shops: seoShops,
         products: seoProducts,
@@ -1658,6 +1676,10 @@ async function startServer() {
       const discoveryPage = findPublicDiscoveryPage(req.path, seoShops.filter((shop) => isShopPubliclyVisible(shop)));
 
       const publicPageSeo = publicPageSeoMetadata[req.path.replace(/\/+$/, '')] || null;
+      const seoArticle = SEO_ARTICLES.find((article) => req.path === `/guide/${article.slug}`);
+      if (seoArticle && baseHtml && shouldServePublicHtml(req)) {
+        return res.status(200).set({ 'Content-Type': 'text/html' }).send(injectCurrentSeoArticle(baseHtml, req, seoArticle));
+      }
       if (publicPageSeo && baseHtml && shouldServePublicHtml(req)) {
         return res.status(200).set({ 'Content-Type': 'text/html' }).send(
           injectCurrentPublicPageSeo(baseHtml, req, publicPageSeo.title, publicPageSeo.description),

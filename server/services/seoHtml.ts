@@ -8,6 +8,7 @@ import { FAQ_SECTIONS } from '../../src/utils/faqContent.ts';
 import { SUBSCRIPTION_PLANS, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../../src/utils/subscriptionFeatures.ts';
 import type { SubscriptionPrices } from './subscriptionPricing.ts';
 import { toPublicProductImageUrl } from './publicProductImages.ts';
+import type { SeoArticle } from '../../src/utils/seoArticles.ts';
 
 interface SeoHtmlHelperOptions {
   shops: ShopRecord[];
@@ -51,6 +52,53 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       .replace(/<link rel="canonical" href=".*?" \/>/, '')
       .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
       .replace('</head>', `  ${tags}\n  </head>`);
+  };
+
+  const injectSeoArticle = (html: string, req: Request, article: SeoArticle) => {
+    const origin = getPublicOrigin(req);
+    const canonical = `${origin}${req.path.replace(/\/+$/, '')}`;
+    const articleBody = article.sections.map((section) => `${section.heading}\n${section.paragraphs.join('\n')}`).join('\n\n');
+    const structuredData = {
+      '@context': 'https://schema.org',
+      '@type': 'Article',
+      headline: article.heading,
+      description: article.description,
+      articleBody,
+      inLanguage: 'fr-CI',
+      mainEntityOfPage: canonical,
+      author: { '@type': 'Organization', name: 'MaTable', url: `${origin}/` },
+      publisher: { '@type': 'Organization', name: 'MaTable', url: `${origin}/` },
+    };
+    const jsonLd = JSON.stringify(structuredData).replace(/</g, '\\u003c');
+    const tags = [
+      `<title>${escapeHtml(article.title)}</title>`,
+      `<meta name="description" content="${escapeHtml(article.description)}" />`,
+      '<meta name="robots" content="index, follow, max-image-preview:large" />',
+      `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
+      `<meta property="og:title" content="${escapeHtml(article.title)}" />`,
+      `<meta property="og:description" content="${escapeHtml(article.description)}" />`,
+      '<meta property="og:type" content="article" />',
+      `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
+      `<meta property="og:image" content="${escapeHtml(`${origin}/brand-kit/social-share.png`)}" />`,
+      '<meta property="og:locale" content="fr_CI" />',
+      '<meta name="twitter:card" content="summary_large_image" />',
+      `<meta name="twitter:title" content="${escapeHtml(article.title)}" />`,
+      `<meta name="twitter:description" content="${escapeHtml(article.description)}" />`,
+      `<meta name="twitter:image" content="${escapeHtml(`${origin}/brand-kit/social-share.png`)}" />`,
+      `<script type="application/ld+json">${jsonLd}</script>`,
+    ].join('\n  ');
+    const articleSections = article.sections
+      .map((section) => `<section><h2>${escapeHtml(section.heading)}</h2>${section.paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('')}</section>`)
+      .join('');
+    const fallback = `<noscript><main><article><h1>${escapeHtml(article.heading)}</h1>${articleSections}<p><a href="${escapeHtml(`${origin}${article.ctaHref}`)}">${escapeHtml(article.ctaLabel)}</a></p></article></main></noscript>`;
+    return html
+      .replace(/<title>.*?<\/title>/, '')
+      .replace(/<meta name="description" content=".*?" \/>/, '')
+      .replace(/<meta name="robots" content=".*?" \/>/, '')
+      .replace(/<link rel="canonical" href=".*?" \/>/, '')
+      .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
+      .replace('</head>', `  ${tags}\n  </head>`)
+      .replace('</body>', `${fallback}\n  </body>`);
   };
 
   const injectFaqSeo = (html: string, req: Request) => {
@@ -424,6 +472,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
     getPublicOrigin,
     injectNoIndexSeo,
     injectPublicPageSeo,
+    injectSeoArticle,
     injectFaqSeo,
     injectHowItWorksSeo,
     injectMerchantPlansSeo,

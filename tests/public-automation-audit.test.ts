@@ -268,6 +268,8 @@ test('robots and sitemap routes are served by the SEO router', async () => {
   assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/commercants<\/loc>/);
   assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/comment-ca-marche<\/loc>/);
   assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/guide<\/loc>/);
+  assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/guide\/vendre-en-ligne-a-abidjan<\/loc>/);
+  assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/guide\/commander-sans-compte<\/loc>/);
   assert.match(sitemapXml, /\/boutiques\/categorie\/fashion/);
   assert.match(sitemapXml, /\/boutiques\/ville\/abidjan/);
 });
@@ -341,6 +343,20 @@ test('promotions and personal guide routes are directly accessible and indexable
     assert.ok(html.includes('<meta name="robots" content="index, follow, max-image-preview:large" />'));
     assert.ok(html.includes(page.description));
   }
+});
+
+test('SEO advice articles expose crawlable content and canonical article metadata', async () => {
+  const response = await fetch(`${BASE_URL}/guide/commander-sans-compte`, {
+    headers: { 'User-Agent': 'Googlebot', Accept: 'text/html' },
+  });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<title>Comment commander sans créer de compte \| MaTable<\/title>/);
+  assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:43124\/guide\/commander-sans-compte"/);
+  assert.match(html, /"@type":"Article"/);
+  assert.match(html, /<noscript><main><article><h1>Comment commander chez un commerçant sans créer de compte \?/);
+  assert.match(html, /La création d’un compte client est facultative/);
+  assert.doesNotMatch(html, /<meta name="robots" content="noindex/);
 });
 
 test('merchant plans page exposes current prices and indexable SEO metadata', async () => {

@@ -9,6 +9,7 @@ import type { CustomerUser } from './components/CustomerAuth';
 import type { MerchantState } from './components/MerchantDashboard/useMerchant';
 import type { Shop } from './types';
 import { findPublicDiscoveryPage } from './utils/discoverySeo';
+import { findSeoArticle } from './utils/seoArticles';
 import { getCanonicalOrigin } from './utils/seoCanonical';
 import { trackPageView, trackLogout } from './utils/analyticsTracker';
 import { navigateWithTransition } from './utils/navigateWithTransition';
@@ -30,6 +31,7 @@ const AmbassadorDashboard = React.lazy(() => import('./components/AmbassadorDash
 const PublicDirectory = React.lazy(() => import('./components/PublicDirectory').then((module) => ({ default: module.PublicDirectory })));
 const HowItWorksPage = React.lazy(() => import('./components/HowItWorksPage'));
 const UserGuidePage = React.lazy(() => import('./components/UserGuidePage').then((module) => ({ default: module.UserGuidePage })));
+const SeoArticlePage = React.lazy(() => import('./components/SeoArticlePage').then((module) => ({ default: module.SeoArticlePage })));
 const MerchantPlansPage = React.lazy(() => import('./components/MerchantPlansPage').then((module) => ({ default: module.MerchantPlansPage })));
 const MerchantTrialOnboarding = React.lazy(() => import('./components/MerchantDashboard/MerchantTrialOnboarding').then((module) => ({ default: module.MerchantTrialOnboarding })));
 const MobileDashboardPreview = React.lazy(() => import('./components/MobileDashboardPreview'));
@@ -312,6 +314,7 @@ export default function App() {
   const [shopsRetryKey, setShopsRetryKey] = useState(0);
   const [customerUser, setCustomerUser] = useState<CustomerUser | null>(null);
   const discoveryPage = useMemo(() => findPublicDiscoveryPage(path, availableShops), [path, availableShops]);
+  const seoArticle = findSeoArticle(path);
   const isDiscoveryRoute = path.startsWith('/boutiques/');
   const isMerchantPlansPage = path.replace(/\/+$/, '') === '/commercants';
   const isProductModalPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/article-form';
@@ -332,7 +335,7 @@ export default function App() {
     && !isAdvertisingPreview
     && !isDeliveryCourierWorkspace
     && !isDeliveryPausedRoute;
-  const isCustomerStorefront = currentRole === 'storefront' && !isAmbassadorRoute && path !== '/' && !isShopDirectoryRoute && !isPromotionsPage && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && !isDeliveryCourierWorkspace && !isDeliveryPausedRoute && customerView === 'none';
+  const isCustomerStorefront = currentRole === 'storefront' && !isAmbassadorRoute && path !== '/' && !isShopDirectoryRoute && !isPromotionsPage && !isHowItWorksRoute && !isUserGuideRoute && !seoArticle && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && !isDeliveryCourierWorkspace && !isDeliveryPausedRoute && customerView === 'none';
   const isUnknownStorefront = isCustomerStorefront && !isLoadingShops && !availableShops.some((shop) => shop.slug === normalizedPath);
   const isSingleSegmentStorefrontRoute = isCustomerStorefront
     && path.split('/').filter(Boolean).length === 1
@@ -475,7 +478,7 @@ export default function App() {
   useEffect(() => {
     const isPrivateRoute = path === '/app' || path.startsWith('/app/') || path === '/admin' || path.startsWith('/admin/') || isAmbassadorRoute
       || path === '/compte' || path === '/connexion' || path === '/inscription' || isRecoveryPage || isCustomerPasswordResetPage || isMerchantPinResetPage;
-    const isInvalidNestedRoute = (!legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && !isMerchantPlansPreview && !isMobileDashboardPreview && !isAdvertisingPreview && !isDeliveryCourierWorkspace && !isShopDirectoryRoute && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !discoveryPage && path.split('/').filter(Boolean).length > 1)
+    const isInvalidNestedRoute = (!legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && !isMerchantPlansPreview && !isMobileDashboardPreview && !isAdvertisingPreview && !isDeliveryCourierWorkspace && !isShopDirectoryRoute && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !discoveryPage && !seoArticle && path.split('/').filter(Boolean).length > 1)
       || isUnknownStorefront;
     const metadata = isProductModalPreview
       ? { title: 'Aperçu du formulaire article | MaTable', description: 'Prévisualisation locale du formulaire de création d’article.' }
@@ -501,6 +504,8 @@ export default function App() {
         ? howItWorksMetadata
       : isUserGuideRoute
         ? userGuideMetadata
+      : seoArticle
+        ? { title: seoArticle.title, description: seoArticle.description }
       : discoveryPage
         ? { title: discoveryPage.title, description: discoveryPage.description }
       : isFaqPage
@@ -545,7 +550,7 @@ export default function App() {
     if (twitterTitle) twitterTitle.content = metadata.title;
     const twitterDescription = document.head.querySelector<HTMLMetaElement>('meta[name="twitter:description"]');
     if (twitterDescription) twitterDescription.content = metadata.description;
-  }, [path, legalPage, isFaqPage, isRecoveryPage, isAmbassadorRoute, discoveryPage, isShopDirectoryRoute, isPromotionsPage, isHowItWorksRoute, isUserGuideRoute, isMerchantPlansPage, isUnknownStorefront]);
+  }, [path, legalPage, isFaqPage, isRecoveryPage, isAmbassadorRoute, discoveryPage, seoArticle, isShopDirectoryRoute, isPromotionsPage, isHowItWorksRoute, isUserGuideRoute, isMerchantPlansPage, isUnknownStorefront]);
 
   const renderCustomerAuth = (initialMode: 'login' | 'register') => (
     <CustomerAuth
@@ -628,6 +633,7 @@ export default function App() {
                       <Route path="/promotions" element={<PublicDirectory shops={availableShops} isLoading={isLoadingShops} loadError={shopsLoadError} onRetry={() => setShopsRetryKey(key => key + 1)} onOpenShop={(slug) => navigateWithTransition(navigate, `/${slug}`)} onOpenDirectory={(query) => navigate(query?.trim() ? `/boutiques?q=${encodeURIComponent(query.trim())}` : '/boutiques')} isPromotionsPage />} />
                       <Route path="/comment-ca-marche" element={<HowItWorksPage />} />
                       <Route path="/guide" element={<UserGuidePage />} />
+                      <Route path="/guide/:slug" element={seoArticle ? <SeoArticlePage article={seoArticle} /> : <NotFoundPage />} />
                       <Route path="/commercants" element={<MerchantPlansPage />} />
                       <Route path="/faq" element={<FaqPage />} />
                       <Route path="/recuperation-acces" element={<AccountRecoveryPage initialAccountType={new URLSearchParams(location.search).get('type') === 'merchant' ? 'merchant' : 'customer'} onBack={() => navigate(new URLSearchParams(location.search).get('type') === 'merchant' ? '/app' : '/connexion')} />} />

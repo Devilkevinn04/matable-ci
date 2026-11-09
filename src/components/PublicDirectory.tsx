@@ -12,6 +12,7 @@ import { PublicPartnerCarousel, type PublicPermanentPartner } from './PublicPart
 import { formatFCFA } from '../utils/format';
 import { getResponsiveImageProps } from '../utils/responsiveImages';
 import { handlePublicImageError } from '../utils/imageFallback';
+import { getProductImageAlt } from '../utils/productImageAlt';
 import { useAutoScrollRail } from '../hooks/useAutoScrollRail';
 import { AnimatedHome } from './AnimatedHome';
 
@@ -162,7 +163,7 @@ const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[]; isLoading?: boolean
           return <li key={shop.slug}>
             <Link to={`/${encodeURIComponent(shop.slug)}`} className="group flex min-h-[64px] items-center gap-3 rounded-2xl border border-[#e3ece6] bg-white p-2 pr-3 transition hover:border-[#b9d5ca] hover:shadow-[0_8px_18px_rgba(20,40,30,.08)]">
               <span className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-[#e9f5ee]">
-                {product && <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), shop.category), 320)} sizes="64px" alt="" loading="lazy" className="h-full w-full object-cover" onError={handlePublicImageError} />}
+                {product && <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), shop.category), 320)} sizes="64px" alt={getProductImageAlt(product.title, shop.name, shop.city)} loading="lazy" className="h-full w-full object-cover" onError={handlePublicImageError} />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -241,9 +242,14 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
     }
     return [...byLabel.values()].sort((left, right) => right.count - left.count).slice(0, MAX_HERO_NEIGHBOURHOODS);
   })();
-  const relatedDiscoveryPages = discoveryPage?.city
-    ? discoveryPages.filter((page) => page.category)
-    : cityPages;
+  const relatedDiscoveryPages = discoveryPage?.citySlug && discoveryPage.category
+    ? discoveryPages.filter((page) => page.citySlug === discoveryPage.citySlug && page.path !== discoveryPage.path
+      || page.category === discoveryPage.category && !page.citySlug)
+    : discoveryPage?.citySlug
+      ? discoveryPages.filter((page) => page.citySlug === discoveryPage.citySlug && page.category)
+      : discoveryPage?.category
+        ? discoveryPages.filter((page) => page.category === discoveryPage.category && page.citySlug)
+        : cityPages;
   const categoryLabel = (value?: string) => {
     if (value === 'food' || value?.toLowerCase().includes('rest')) return 'Restauration';
     if (isShopCategory(value)) return getCategoryDefaults(value).label;
@@ -411,7 +417,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       className="min-h-10 min-w-0 flex-1 border-0 bg-transparent px-1.5 text-sm outline-none placeholder:text-[#898178] sm:min-h-11 sm:px-2 sm:text-base"
     />
     {query && <button type="button" onClick={() => setQuery('')} aria-label="Effacer la recherche" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X className="h-4 w-4" /></button>}
-    <button type="submit" className={`inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl px-2.5 text-xs font-bold text-white transition sm:min-h-11 sm:px-5 sm:text-sm ${isShopDirectoryPage ? 'bg-[var(--mt-orange-deep)] hover:bg-[#a53a1d]' : 'bg-[var(--mt-green-deep)] hover:bg-[var(--mt-green-hover)]'}`}>
+    <button type="submit" className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl px-2.5 text-xs font-bold text-white transition sm:px-5 sm:text-sm ${isShopDirectoryPage ? 'bg-[var(--mt-orange-deep)] hover:bg-[#a53a1d]' : 'bg-[var(--mt-green-deep)] hover:bg-[var(--mt-green-hover)]'}`}>
       <span className="sm:hidden">Chercher</span>
       <span className="hidden sm:inline">{isShopDirectoryPage ? 'Rechercher' : 'Voir les boutiques'}</span>
     </button>
@@ -472,7 +478,9 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
           <nav aria-label="Fil d’Ariane" className="mb-5 text-sm text-[var(--mt-gray-600)]">
             <Link to="/" className="font-semibold text-[var(--mt-green-deep)] hover:underline">Accueil</Link>
             <span aria-hidden="true" className="px-2">/</span>
-            <span>{discoveryPage.city || (discoveryPage.category ? categoryLabel(discoveryPage.category) : 'Boutiques')}</span>
+            <span>{discoveryPage.city && discoveryPage.category
+              ? `${discoveryPage.city} · ${categoryLabel(discoveryPage.category)}`
+              : discoveryPage.city || (discoveryPage.category ? categoryLabel(discoveryPage.category) : 'Boutiques')}</span>
           </nav>
           <p className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-[var(--mt-orange-deep)] sm:text-sm">Commerce local · Côte d’Ivoire</p>
           <h1 className="max-w-3xl font-display text-3xl font-extrabold leading-tight tracking-[-0.04em] sm:text-5xl">{discoveryPage.heading}</h1>
@@ -482,7 +490,9 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <span className="self-center pr-1 text-sm font-bold text-[#47534b]">{discoveryPage.city ? 'Explorer les catégories :' : 'Explorer par ville :'}</span>
               {relatedDiscoveryPages.map((page) => (
                 <Link key={page.path} to={page.path} className="rounded-full border border-[#e0d5c6] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--mt-green-deep)] transition hover:border-[var(--mt-green-hover)]">
-                  {page.city || (page.category ? categoryLabel(page.category) : '')}
+                  {page.city && page.category
+                    ? `${categoryLabel(page.category)} à ${page.city}`
+                    : page.city || (page.category ? categoryLabel(page.category) : '')}
                 </Link>
               ))}
             </nav>
@@ -697,7 +707,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                         {shop.products_preview.slice(0, 2).map((product) => (
                           <span key={product.id} className="flex min-w-0 flex-1 items-center gap-1.5">
                             <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#e9f5ee]">
-                              <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), shop.category), 320)} sizes="64px" alt="" loading="lazy" className="h-full w-full object-cover" onError={handlePublicImageError} />
+                              <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), shop.category), 320)} sizes="64px" alt={getProductImageAlt(product.title, shop.name, shop.city)} loading="lazy" className="h-full w-full object-cover" onError={handlePublicImageError} />
                             </span>
                             <span className="min-w-0">
                               <span className="block truncate text-xs font-semibold text-[#47534b]">{product.title}</span>
@@ -916,7 +926,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                     {shop.products_preview.slice(0, 2).map((product) => (
                       <span key={product.id} className="flex min-w-0 flex-1 items-center gap-1.5">
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#e9f5ee]">
-                          <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), shop.category), 320)} sizes="64px" alt="" loading="lazy" className="h-full w-full object-cover" onError={handlePublicImageError} />
+                          <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), shop.category), 320)} sizes="64px" alt={getProductImageAlt(product.title, shop.name, shop.city)} loading="lazy" className="h-full w-full object-cover" onError={handlePublicImageError} />
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-xs font-semibold text-[#47534b]">{product.title}</span>
@@ -982,7 +992,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               {(activeDemoShop.products_preview || []).map((product) => {
                 const quantity = demoBasket[product.id] || 0;
                 return <li key={product.id} className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-3">
-                  <img src={product.image_url} alt="" className="h-16 w-16 shrink-0 rounded-xl bg-[#e9f5ee] object-cover" onError={handlePublicImageError} />
+                  <img src={product.image_url} alt={getProductImageAlt(product.title, activeDemoShop.name, activeDemoShop.city)} className="h-16 w-16 shrink-0 rounded-xl bg-[#e9f5ee] object-cover" onError={handlePublicImageError} />
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-sm font-bold text-[var(--mt-gray-900)]">{product.title}</h3>
                     <p className="mt-1 text-sm font-extrabold text-[var(--mt-green-deep)]">{formatFCFA(product.price)}</p>

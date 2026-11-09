@@ -227,10 +227,10 @@ export function MerchantPlansPage() {
               <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-[#625f58] sm:text-base">Les mêmes bases pour vendre. Plus d’outils et de visibilité à mesure que votre activité avance.</p>
             </div>
             <div className="inline-flex w-fit items-center gap-1 rounded-full border border-[#d7d0c4] bg-white p-1.5 shadow-[0_8px_24px_rgba(38,35,28,.08)]" role="group" aria-label="Durée de l’abonnement">
-              <button type="button" aria-pressed={term === 'monthly'} onClick={() => setTerm('monthly')} className={`min-h-10 rounded-full px-4 text-xs font-bold transition ${term === 'monthly' ? 'bg-[var(--mt-green-hover)] text-white' : 'text-[#5c5a53] hover:bg-[#f6f4ef]'}`}>
+              <button type="button" aria-pressed={term === 'monthly'} onClick={() => setTerm('monthly')} className={`min-h-11 rounded-full px-4 text-xs font-bold transition ${term === 'monthly' ? 'bg-[var(--mt-green-hover)] text-white' : 'text-[#5c5a53] hover:bg-[#f6f4ef]'}`}>
                 Mensuel
               </button>
-              <button type="button" aria-pressed={term === 'annual'} onClick={() => setTerm('annual')} className={`min-h-10 rounded-full px-4 text-xs font-bold transition ${term === 'annual' ? 'bg-[var(--mt-green-hover)] text-white' : 'text-[#5c5a53] hover:bg-[#f6f4ef]'}`}>
+              <button type="button" aria-pressed={term === 'annual'} onClick={() => setTerm('annual')} className={`min-h-11 rounded-full px-4 text-xs font-bold transition ${term === 'annual' ? 'bg-[var(--mt-green-hover)] text-white' : 'text-[#5c5a53] hover:bg-[#f6f4ef]'}`}>
               Annuel <span className={`ml-1 rounded-full px-2 py-1 text-[10px] font-black ${term === 'annual' ? 'bg-[#f0ba80] text-[#292d2a]' : 'bg-[#fff1df] text-[#8b4c1e]'}`}>2 mois offerts</span>
               </button>
             </div>

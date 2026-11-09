@@ -18,9 +18,9 @@ export const TermsPrivacyConsent: React.FC<TermsPrivacyConsentProps> = ({ id, ch
     />
     <span>
       J’accepte les{' '}
-      <a href="/cgu" target="_blank" rel="noreferrer" className="font-bold text-[var(--mt-green-primary)] underline underline-offset-2">Conditions générales d’utilisation</a>
+      <a href="/cgu" target="_blank" rel="noreferrer" className="inline-block align-middle font-bold leading-6 text-[var(--mt-green-primary)] underline underline-offset-2">Conditions générales d’utilisation</a>
       {' '}et la{' '}
-      <a href="/confidentialite" target="_blank" rel="noreferrer" className="font-bold text-[var(--mt-green-primary)] underline underline-offset-2">Politique de confidentialité</a>.
+      <a href="/confidentialite" target="_blank" rel="noreferrer" className="inline-block align-middle font-bold leading-6 text-[var(--mt-green-primary)] underline underline-offset-2">Politique de confidentialité</a>.
     </span>
   </label>
 );

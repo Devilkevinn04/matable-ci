@@ -7,6 +7,7 @@ import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { formatFCFA } from '../utils/format';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
 import { cachedFetchJson } from '../utils/requestCache';
+import { getProductImageAlt } from '../utils/productImageAlt';
 
 export interface PublicCampaign {
   id: string;
@@ -275,7 +276,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
           {visibleCampaigns.map((item) => (
             <button key={item.id} data-ad-campaign-id={item.id} type="button" onClick={() => { void sendEvent('click', item); onOpenShop(item.shop.slug); }} className="group flex min-h-24 min-w-0 items-center gap-3 overflow-hidden rounded-2xl border border-[#e0d5c6] bg-white p-2.5 text-left shadow-[0_2px_12px_rgba(20,40,30,.05)] transition hover:-translate-y-0.5 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.09)]">
               <span className="relative h-[76px] w-[92px] shrink-0 overflow-hidden rounded-xl bg-[#e9f5ee]">
-                <img src={item.product?.image_url || item.shop.image_url} alt="" loading="lazy" className="h-full w-full object-cover" onError={handlePublicImageError} />
+                <img src={item.product?.image_url || item.shop.image_url} alt={item.product ? getProductImageAlt(item.product.title, item.shop.name, item.shop.city) : `Vitrine de ${item.shop.name}${item.shop.city ? ` à ${item.shop.city}` : ''}`} loading="lazy" className="h-full w-full object-cover" onError={handlePublicImageError} />
                 <span className="absolute left-1.5 top-1.5 rounded-full bg-white/95 px-2 py-0.5 text-xs font-black uppercase text-[#8f351d]">Sponsorisé</span>
               </span>
               <span className="min-w-0 flex-1">
@@ -373,7 +374,7 @@ export const PublicCampaignCarousel: React.FC<PublicCampaignCarouselProps> = ({ 
     >
       <button type="button" onClick={() => { void sendEvent('click'); onOpenShop(campaign.shop.slug); }} className="group flex h-full w-full flex-col text-left">
         <span className="relative aspect-[4/3] w-full overflow-hidden bg-[#d1fae5]">
-          <img src={product.thumbnail_url || product.image_url} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]" onError={handlePublicImageError} />
+          <img src={product.thumbnail_url || product.image_url} alt={getProductImageAlt(product.title, campaign.shop.name, campaign.shop.city)} loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.04]" onError={handlePublicImageError} />
           <span className="absolute left-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-black uppercase text-[#8f351d]">Sponsorisé</span>
           <span className="absolute bottom-2 left-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-bold text-[var(--mt-green-deep)]">{formatFCFA(product.price)}</span>
         </span>

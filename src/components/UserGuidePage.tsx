@@ -239,6 +239,17 @@ export function UserGuidePage() {
         <div className="mt-6">
           <GuideChecklist role={role} accountId={accountId} />
         </div>
+        <section aria-labelledby="public-guides-title" className="mt-8 rounded-2xl border border-[#e4ded5] bg-white p-5 sm:p-6">
+          <h2 id="public-guides-title" className="font-display text-xl font-extrabold text-[var(--mt-green-deep)]">Guides pratiques MaTable</h2>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <Link to="/guide/vendre-en-ligne-a-abidjan" className="rounded-xl bg-[var(--mt-gray-50)] p-3 text-sm font-bold text-[var(--mt-green-deep)] transition hover:bg-[#e9f5ee]">
+              Comment vendre en ligne à Abidjan
+            </Link>
+            <Link to="/guide/commander-sans-compte" className="rounded-xl bg-[var(--mt-gray-50)] p-3 text-sm font-bold text-[var(--mt-green-deep)] transition hover:bg-[#e9f5ee]">
+              Commander sans créer de compte
+            </Link>
+          </div>
+        </section>
       </div>
     </main>
   );
