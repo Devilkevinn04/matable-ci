@@ -8,7 +8,7 @@ import { trackLogin, trackLogout, trackSignup } from '../../utils/analyticsTrack
 import { normalizeAcquisitionSource } from '../../utils/acquisitionSources';
 import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from '../../utils/analyticsAttribution';
 import { hasAnalyticsConsent } from '../../utils/cookieConsent';
-import { clearAmbassadorReferral, getAmbassadorToken } from '../../utils/ambassadors';
+import { clearAmbassadorReferral, getAmbassadorToken, getStoredAmbassadorCode } from '../../utils/ambassadors';
 import { buildBulkProductPatch, type BulkProductAction } from './bulkActions';
 
 export type MerchantOrderFilter = 'all' | 'actionable' | OrderStatus;
@@ -482,7 +482,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
           acquisition_source: regAcquisitionSource || null,
           acquisition_campaign: regTrackedCampaign,
           ambassador_token: await getAmbassadorToken(),
-          ambassador_code: regAmbassadorCode,
+          ambassador_code: getStoredAmbassadorCode() || regAmbassadorCode,
           welcome_message: CATEGORY_DEFAULTS[regCategory].welcomeMessage,
         }),
       });

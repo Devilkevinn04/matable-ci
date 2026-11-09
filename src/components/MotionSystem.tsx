@@ -11,7 +11,7 @@ export const MotionReveal: React.FC<MotionRevealProps> = ({ children, className,
   const prefersReducedMotion = useReducedMotion() === true;
 
   return <motion.div
-    initial={false}
+    initial={prefersReducedMotion ? false : { opacity: 0, y: 16 }}
     whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0, scale: 1 }}
     viewport={{ once: true, amount: 0.16 }}
     transition={prefersReducedMotion ? undefined : { duration: 0.48, delay, ease: [0.22, 1, 0.36, 1] }}

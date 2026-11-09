@@ -77,7 +77,7 @@ export function generateWhatsAppOrderReceipt(
     `🧾 *COMMANDE MATABLE #${order.id}*`,
     `${sanitizeWhatsAppText(shop.name)} · ${getCategoryDefaults(shop.category).label}`,
   ].join('\n'));
-  blocks.push('⏳ *DEMANDE EN ATTENTE* · La boutique doit accepter ou refuser sous 2 heures ; les articles sont réservés pendant ce délai.');
+  blocks.push('*DEMANDE EN ATTENTE* · La boutique doit accepter ou refuser sous 2 heures ; les articles sont réservés pendant ce délai.');
 
   const customerLines = ['*CLIENT*', sanitizeWhatsAppText(order.customer_name)];
   const customerPhone = sanitizeWhatsAppText(order.customer_phone);

@@ -1312,7 +1312,7 @@ export const AdminDashboard: React.FC = () => {
       showNotice('Impossible d\'ouvrir un nouvel onglet. Vérifiez les paramètres de votre navigateur.');
       return;
     }
-    newTab.document.write('<html><head><title>Chargement…</title></head><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc"><p style="color:#64748b;font-size:14px">⏳ Chargement de l\'espace commerçant…</p></body></html>');
+    newTab.document.write('<html><head><title>Chargement…</title></head><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc"><p role="status" style="display:flex;align-items:center;gap:10px;color:#64748b;font-size:14px"><span aria-hidden="true" style="width:16px;height:16px;border:2px solid #d1d5db;border-top-color:#087f62;border-radius:50%;animation:spin .8s linear infinite"></span>Chargement de l\'espace commerçant…</p><style>@keyframes spin{to{transform:rotate(360deg)}}</style></body></html>');
     newTab.document.close();
     newTab.location.href = `/app?admin_shop_id=${shopId}`;
     showNotice('Espace boutique ouvert en mode super-admin.');

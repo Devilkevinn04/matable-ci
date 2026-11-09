@@ -16,14 +16,14 @@ Le commerçant peut profiter de deux mois d'essai Standard ou payer avant la fin
 
 ## Attribution et contrôle
 
-- Un seul ambassadeur par nouvelle boutique. Un premier lien valide est conservé pendant 90 jours avec l'accord du visiteur ; il prévaut sur un code saisi ultérieurement. Sans cet accord, un code peut être saisi volontairement à l'inscription.
+- Un seul ambassadeur par nouvelle boutique. Le premier lien valide est conservé jusqu'à 90 jours, indépendamment du consentement aux statistiques d'audience, et prévaut sur un code saisi ultérieurement. Si le navigateur bloque le stockage ou si la capture du lien échoue, le code du lien est transmis à l'inscription et validé par le serveur ; le code peut aussi être saisi manuellement.
 - La prime est générée sur le premier paiement d'abonnement confirmé, y compris si la boutique n'est pas encore publiée. Elle reste en attente tant que le Super Admin ne l'a pas vérifiée et que la boutique n'est pas publiée.
 - Avant validation, vérifier que le commerçant est réellement nouveau, que la boutique est authentique et qu'il ne s'agit pas d'une auto-inscription. Les correspondances de coordonnées sont des alertes, pas une preuve exhaustive de fraude.
 - Un remboursement total ou partiel annule la prime non versée. Si la prime a déjà été versée, elle est signalée pour examen et régularisation manuelle. Un renouvellement ne crée pas de seconde prime.
 - Effectuer les versements une fois par mois après vérification. Le module enregistre une référence de versement effectué ; il ne transfère pas d'argent et ne programme pas de paiement automatique.
 - Dans le Super Admin, la liste mensuelle affiche les primes encore non versées et validées jusqu'à la fin du mois choisi, y compris les reports des mois précédents. L'export CSV est un instantané actualisé, pas une preuve de paiement ni une reconstitution historique ; vérifier à nouveau chaque commission avant de payer.
 - Le refus d'une commission nécessite un motif conservé dans le journal d'audit. Un motif peut aussi être ajouté lors de la validation.
-- Les liens nécessitent le consentement au suivi facultatif, un navigateur acceptant le stockage local et une visite avant l'inscription. En cas de refus, de changement d'appareil ou de suppression du stockage, utiliser le code à l'inscription.
+- L'attribution ambassadeur sert uniquement à rattacher une inscription à un partenaire et reste distincte des statistiques facultatives. En cas de changement d'appareil ou de suppression des données du navigateur avant l'inscription, saisir le code ambassadeur lors de l'inscription.
 
 ## Espace ambassadeur
 

@@ -15,10 +15,21 @@ test('ambassador link attribution is retained when audience analytics are refuse
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const originalFetch = Object.getOwnPropertyDescriptor(globalThis, 'fetch');
   const values = new Map<string, string>([['matable_cookie_preferences', JSON.stringify({ essential: true, analytics: false })]]);
+  let storageUnavailable = false;
+  let responseStatus = 201;
   const storage = {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => { values.set(key, value); },
-    removeItem: (key: string) => { values.delete(key); },
+    getItem: (key: string) => {
+      if (storageUnavailable) throw new Error('Storage unavailable');
+      return values.get(key) ?? null;
+    },
+    setItem: (key: string, value: string) => {
+      if (storageUnavailable) throw new Error('Storage unavailable');
+      values.set(key, value);
+    },
+    removeItem: (key: string) => {
+      if (storageUnavailable) throw new Error('Storage unavailable');
+      values.delete(key);
+    },
   };
   const events: Event[] = [];
   let captures = 0;
@@ -35,7 +46,7 @@ test('ambassador link attribution is retained when audience analytics are refuse
       return new Response(JSON.stringify({
         token: responseToken,
         expires_at: responseExpiry,
-      }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+      }), { status: responseStatus, headers: { 'Content-Type': 'application/json' } });
     },
   });
 
@@ -58,6 +69,28 @@ test('ambassador link attribution is retained when audience analytics are refuse
     assert.equal(await getAmbassadorToken('INVALID'), null);
     assert.equal(values.has('matable_ambassador_referral'), false);
     assert.equal(captures, 3);
+
+    clearAmbassadorReferral();
+    storageUnavailable = true;
+    responseToken = 'c'.repeat(64);
+    responseExpiry = new Date(Date.now() + AMBASSADOR_REFERRAL_DURATION_MS).toISOString();
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        localStorage: storage,
+        location: { search: '?ref=KEVIN02' },
+        dispatchEvent: (event: Event) => { events.push(event); return true; },
+      },
+    });
+    assert.equal(await getAmbassadorToken(), responseToken);
+    assert.equal(getStoredAmbassadorCode(), 'KEVIN02');
+    assert.equal(await getAmbassadorToken(), responseToken);
+    clearAmbassadorReferral();
+    assert.equal(getStoredAmbassadorCode(), null);
+
+    responseStatus = 503;
+    assert.equal(await getAmbassadorToken('KEVIN03'), null);
+    assert.equal(getStoredAmbassadorCode(), 'KEVIN03');
   } finally {
     if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
     else Reflect.deleteProperty(globalThis, 'window');

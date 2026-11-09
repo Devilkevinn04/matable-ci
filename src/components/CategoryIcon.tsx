@@ -2,12 +2,12 @@ import React from 'react';
 import {
   BookOpen,
   Car,
+  Droplets,
   HeartPulse,
   Home,
   Laptop,
   Scissors,
   Shirt,
-  Sparkles,
   Store,
   UtensilsCrossed,
   Wrench,
@@ -17,7 +17,7 @@ import type { ShopCategory } from '../utils/categoryDefaults';
 const CATEGORY_ICONS: Record<ShopCategory, React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>> = {
   fashion: Shirt,
   food: UtensilsCrossed,
-  beauty: Sparkles,
+  beauty: Droplets,
   electronics: Laptop,
   home: Home,
   services: Wrench,

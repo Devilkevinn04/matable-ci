@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowUpRight, BadgeCheck, Megaphone, ShieldCheck, Store } from 'lucide-react';
+import { ArrowUpRight, BadgeCheck, CookingPot, Droplets, Megaphone, Package, ShieldCheck, Shirt, ShoppingBag, Store, Utensils } from 'lucide-react';
 import { PublicPartnerCarousel, type PublicPermanentPartner } from './PublicPartnerCarousel';
 
 type PreviewView = 'public' | 'merchant' | 'admin';
@@ -87,7 +87,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <article className="relative isolate flex min-h-48 flex-col justify-end overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_75%_22%,#f4cd9c_0,transparent_28%),linear-gradient(135deg,var(--mt-green-hover),#31816a_58%,#b6d7c4)] p-4 text-white sm:row-span-2 sm:min-h-full sm:p-6">
-                  <span aria-hidden="true" className="absolute -right-8 top-8 -z-10 flex h-48 w-48 items-center justify-center rounded-full border-[18px] border-white/20 text-7xl sm:h-60 sm:w-60 sm:text-8xl">👜</span>
+                  <span aria-hidden="true" className="absolute -right-8 top-8 -z-10 flex h-48 w-48 items-center justify-center rounded-full border-[18px] border-white/20 text-white/20 sm:h-60 sm:w-60"><ShoppingBag className="h-28 w-28 stroke-[1.2] sm:h-36 sm:w-36" /></span>
                   <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#8f351d]">
                     <Megaphone className="h-3 w-3" aria-hidden="true" /> Sponsorisé · Exemple
                   </span>
@@ -99,11 +99,11 @@ export const AdvertisingPreviewPage: React.FC = () => {
                   </span>
                 </article>
                 {[
-                  { shop: 'Chez Aminata', category: 'Restauration', city: 'Abidjan', image: '🍲', tone: 'from-[#f7d8c5] to-[#ead8b6]' },
-                  { shop: 'L’Éclat d’Abidjan', category: 'Beauté', city: 'Grand-Bassam', image: '🧴', tone: 'from-[#eee1ee] to-[#d3e5db]' },
+                  { shop: 'Chez Aminata', category: 'Restauration', city: 'Abidjan', icon: CookingPot, tone: 'from-[#f7d8c5] to-[#ead8b6]' },
+                  { shop: 'L’Éclat d’Abidjan', category: 'Beauté', city: 'Grand-Bassam', icon: Droplets, tone: 'from-[#eee1ee] to-[#d3e5db]' },
                 ].map((shop) => (
                   <article key={shop.shop} className={`relative flex min-h-28 items-center gap-3 overflow-hidden rounded-2xl border border-[#e7dfd3] bg-gradient-to-br ${shop.tone} p-3 sm:min-h-36 sm:p-4`}>
-                    <span aria-hidden="true" className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-white/65 text-4xl sm:h-20 sm:w-20">{shop.image}</span>
+                    <span aria-hidden="true" className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-white/65 text-[var(--mt-green-deep)] sm:h-20 sm:w-20"><shop.icon className="h-8 w-8 sm:h-10 sm:w-10" /></span>
                     <span className="min-w-0">
                       <span className="block text-[9px] font-black uppercase tracking-wide text-[#8f351d]">{shop.category}</span>
                       <span className="mt-1 block truncate font-display text-sm font-extrabold text-[#292d2a] sm:text-base">{shop.shop}</span>
@@ -117,7 +117,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
             </section>
 
             <section aria-label="Bannière publicitaire principale" className="relative isolate flex min-h-[260px] flex-col justify-between overflow-hidden rounded-3xl bg-[radial-gradient(circle_at_79%_24%,#f4ce9c_0,transparent_25%),linear-gradient(110deg,#9c3423,#e36b3e_55%,#f2a05c)] p-5 text-white shadow-[0_12px_32px_rgba(20,40,30,.13)] sm:min-h-[330px] sm:p-8 lg:min-h-[370px] lg:flex-row lg:items-end">
-              <div aria-hidden="true" className="pointer-events-none absolute -right-8 top-8 -z-10 flex h-52 w-52 items-center justify-center rounded-full border-[20px] border-white/30 text-7xl sm:right-10 sm:top-10 sm:h-64 sm:w-64 sm:text-8xl">{isBanner ? '🏬' : '👜'}</div>
+              <div aria-hidden="true" className="pointer-events-none absolute -right-8 top-8 -z-10 flex h-52 w-52 items-center justify-center rounded-full border-[20px] border-white/30 text-white/25 sm:right-10 sm:top-10 sm:h-64 sm:w-64">{isBanner ? <Store className="h-32 w-32 stroke-[1.2] sm:h-40 sm:w-40" /> : <ShoppingBag className="h-32 w-32 stroke-[1.2] sm:h-40 sm:w-40" />}</div>
               <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-[#8f351d] shadow">
                 <Megaphone className="h-3.5 w-3.5" aria-hidden="true" /> Sponsorisé · Bannière principale
               </span>
@@ -143,7 +143,7 @@ export const AdvertisingPreviewPage: React.FC = () => {
                 </div>
 
                 <div className="relative isolate flex min-h-48 flex-col justify-end overflow-hidden bg-[radial-gradient(circle_at_78%_20%,#f4cd9c_0,transparent_27%),linear-gradient(135deg,var(--mt-green-hover),#31816a_58%,#b6d7c4)] p-5 text-white sm:min-h-56 sm:p-7 lg:min-h-full">
-                  <span aria-hidden="true" className="pointer-events-none absolute -right-8 top-4 -z-10 flex h-48 w-48 items-center justify-center rounded-full border-[18px] border-white/20 text-7xl sm:h-60 sm:w-60 sm:text-8xl">👜</span>
+                  <span aria-hidden="true" className="pointer-events-none absolute -right-8 top-4 -z-10 flex h-48 w-48 items-center justify-center rounded-full border-[18px] border-white/20 text-white/20 sm:h-60 sm:w-60"><ShoppingBag className="h-28 w-28 stroke-[1.2] sm:h-36 sm:w-36" /></span>
                   <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#8f351d]"><Megaphone className="h-3 w-3" aria-hidden="true" /> Campagne produit · exemple</span>
                   <p className="mt-8 text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">{previewCampaign.shop} · {previewCampaign.city}</p>
                   <h4 className="mt-1 max-w-sm font-display text-xl font-black leading-tight sm:text-3xl">{previewCampaign.headline}</h4>
@@ -164,12 +164,12 @@ export const AdvertisingPreviewPage: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {[
-                  { title: previewCampaign.product, shop: previewCampaign.shop, image: '👜', tone: 'from-[#f5dfc4] to-[#e8c69a]', price: previewCampaign.price },
-                  { title: 'Jus de bissap maison', shop: 'Chez Aminata', image: '🥤', tone: 'from-[#f7d8d3] to-[#e8aaa0]', price: '2 500 FCFA' },
-                  { title: 'Coffret soin karité', shop: 'L’Éclat d’Abidjan', image: '🧴', tone: 'from-[#e8deef] to-[#c9b4d5]', price: '8 000 FCFA' },
+                  { title: previewCampaign.product, shop: previewCampaign.shop, icon: ShoppingBag, tone: 'from-[#f5dfc4] to-[#e8c69a]', price: previewCampaign.price },
+                  { title: 'Jus de bissap maison', shop: 'Chez Aminata', icon: Droplets, tone: 'from-[#f7d8d3] to-[#e8aaa0]', price: '2 500 FCFA' },
+                  { title: 'Coffret soin karité', shop: 'L’Éclat d’Abidjan', icon: Package, tone: 'from-[#e8deef] to-[#c9b4d5]', price: '8 000 FCFA' },
                 ].map((tile, index) => (
                   <article key={tile.title} className={`relative overflow-hidden rounded-2xl border border-[#e0d5c6] bg-gradient-to-br ${tile.tone} p-4 shadow-sm sm:min-h-36`}>
-                    <span className="absolute right-3 top-3 flex h-16 w-16 items-center justify-center rounded-full bg-white/55 text-4xl sm:h-20 sm:w-20">{tile.image}</span>
+                    <span className="absolute right-3 top-3 flex h-16 w-16 items-center justify-center rounded-full bg-white/55 text-[var(--mt-green-deep)] sm:h-20 sm:w-20"><tile.icon className="h-8 w-8 sm:h-10 sm:w-10" aria-hidden="true" /></span>
                     <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-[#8f351d]"><Megaphone className="h-3 w-3" aria-hidden="true" /> Sponsorisé</span>
                     <div className="relative mt-3 max-w-[72%]">
                       <h4 className="line-clamp-2 text-sm font-black text-[#292d2a]">{tile.title}</h4>
@@ -188,14 +188,14 @@ export const AdvertisingPreviewPage: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
                 {[
-                  { title: 'Chemise lin naturel', shop: 'Atelier Awa', image: '👔', price: '16 000 FCFA' },
-                  { title: 'Plateau en bois sculpté', shop: 'Maison Kouadio', image: '🪵', price: '12 000 FCFA' },
-                  { title: 'Sac Kente tissé à la main', shop: previewCampaign.shop, image: '👜', price: previewCampaign.price, promoted: true },
-                  { title: 'Pommade karité & coco', shop: 'L’Éclat d’Abidjan', image: '🧴', price: '4 500 FCFA' },
+                  { title: 'Chemise lin naturel', shop: 'Atelier Awa', icon: Shirt, price: '16 000 FCFA' },
+                  { title: 'Plateau en bois sculpté', shop: 'Maison Kouadio', icon: Utensils, price: '12 000 FCFA' },
+                  { title: 'Sac Kente tissé à la main', shop: previewCampaign.shop, icon: ShoppingBag, price: previewCampaign.price, promoted: true },
+                  { title: 'Pommade karité & coco', shop: 'L’Éclat d’Abidjan', icon: Droplets, price: '4 500 FCFA' },
                 ].map((product) => (
                   <article key={product.title} className="overflow-hidden rounded-2xl border border-[#e0d5c6] bg-white shadow-sm">
                     <div className={`relative flex aspect-[4/3] items-center justify-center bg-gradient-to-br ${product.promoted ? 'from-[#f3d3a9] to-[#d7e9dd]' : 'from-[#eef3ed] to-[#d9e9df]'}`}>
-                      <span className="text-6xl" aria-hidden="true">{product.image}</span>
+                      <product.icon className="h-16 w-16 text-[var(--mt-green-primary)]" aria-hidden="true" />
                       {product.promoted && <span className="absolute left-2 top-2 rounded-full bg-white px-2.5 py-1 text-[9px] font-black uppercase text-[#8f351d]">Sponsorisé</span>}
                     </div>
                     <div className="p-3">

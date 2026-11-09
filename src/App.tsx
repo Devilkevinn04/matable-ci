@@ -284,7 +284,7 @@ export default function App() {
   const [routeProgressVisible, setRouteProgressVisible] = useState(false);
   const path = location.pathname;
   const normalizedPath = path.replace(/^\//, '').replace(/\/$/, '');
-  const isAmbassadorRoute = path === '/ambassadeur' || path === '/ambassadeur/activer';
+  const isAmbassadorRoute = path === '/ambassadeur' || path === '/ambassadeur/activer' || path === '/ambassadeur/inscription';
   const isShopDirectoryRoute = path.replace(/\/+$/, '') === '/boutiques';
   const isPromotionsPage = path.replace(/\/+$/, '') === '/promotions';
   const isHowItWorksRoute = path.replace(/\/+$/, '') === '/comment-ca-marche';

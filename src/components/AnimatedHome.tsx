@@ -12,7 +12,6 @@ interface AnimatedHomeShop {
   name: string;
   category?: string;
   city?: string;
-  is_verified?: boolean;
   products_preview?: { title: string; description?: string | null; image_url: string; thumbnail_url?: string; price: number }[];
 }
 
@@ -89,7 +88,6 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
       })),
     [shops],
   );
-  const verifiedShopCount = safeShops.filter((shop) => shop.is_verified).length;
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [typedPlaceholder, setTypedPlaceholder] = useState('Plat, produit, quartier…');
@@ -138,10 +136,6 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
       <section className="relative overflow-hidden border-y border-[var(--mt-gray-200)] bg-[var(--mt-gray-50)]">
         <div className="relative mx-auto grid max-w-[1440px] gap-8 px-5 pb-12 pt-12 sm:px-10 sm:pb-20 sm:pt-20 lg:min-h-[680px] lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-4 lg:px-16">
           <div className="relative z-10 min-w-0 max-w-2xl">
-            {verifiedShopCount > 0 && <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--mt-green-soft)] bg-white px-4 py-2 text-sm font-bold text-[var(--mt-green-deep)] shadow-sm">
-              <span className="h-2.5 w-2.5 rounded-full bg-[var(--mt-green-primary)]" />
-              {verifiedShopCount} boutiques vérifiées à Abidjan
-            </p>}
             <h1 className="font-display text-[clamp(2.9rem,6.2vw,5.25rem)] font-extrabold leading-[.98] tracking-[-.035em] text-[var(--mt-green-deep)]">
               <span className="sr-only">Le commerce local, tout près de chez vous.</span>
               <span aria-hidden="true">

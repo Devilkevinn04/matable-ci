@@ -617,7 +617,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                           <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <span><strong>{order.delivery_location}</strong></span>
                           {order.delivery_note && <span className="text-slate-500 italic">({order.delivery_note})</span>}
-                          {order.delivery_slot && <span className="text-amber-700 font-bold ml-1.5">⏰ {order.delivery_slot}</span>}
+                          {order.delivery_slot && <span className="ml-1.5 inline-flex items-center gap-1 font-bold text-amber-700"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" />{order.delivery_slot}</span>}
                         </p>
 
                         <div className="bg-slate-50 p-2.5 rounded-xl text-xs text-slate-600 flex flex-wrap gap-2">

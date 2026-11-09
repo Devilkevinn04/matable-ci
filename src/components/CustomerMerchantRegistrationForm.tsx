@@ -94,7 +94,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
           acquisition_source: acquisitionSource || null,
           acquisition_campaign: trackedCampaign,
           ambassador_token: await getAmbassadorToken(),
-          ambassador_code: ambassadorCode,
+          ambassador_code: getStoredAmbassadorCode() || ambassadorCode,
           welcome_message: getCategoryDefaults(category).welcomeMessage,
         }),
       });

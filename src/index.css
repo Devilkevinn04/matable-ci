@@ -107,6 +107,11 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes mt-page-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes mt-rise {
   from { transform: translateY(105%); }
   to { transform: translateY(0); }
@@ -199,6 +204,89 @@
 
 .mt-pop {
   animation: mt-pop 450ms var(--mt-motion-ease) both;
+}
+
+@keyframes ambassador-auth-enter {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ambassador-orbit-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.035); }
+}
+
+.ambassador-auth-header {
+  animation: ambassador-auth-enter 620ms var(--mt-motion-ease-entrance) both;
+}
+
+.ambassador-auth-story > :first-child {
+  animation: ambassador-auth-enter 620ms 80ms var(--mt-motion-ease-entrance) both;
+}
+
+.ambassador-auth-story > h1 {
+  animation: ambassador-auth-enter 700ms 140ms var(--mt-motion-ease-entrance) both;
+}
+
+.ambassador-auth-story > p {
+  animation: ambassador-auth-enter 620ms 220ms var(--mt-motion-ease-entrance) both;
+}
+
+.ambassador-auth-story > div,
+.ambassador-auth-story > section {
+  animation: ambassador-auth-enter 650ms 300ms var(--mt-motion-ease-entrance) both;
+}
+
+.ambassador-auth-card {
+  animation: ambassador-auth-enter 720ms 180ms var(--mt-motion-ease-entrance) both;
+}
+
+.ambassador-step-card {
+  transition: transform 220ms var(--mt-motion-ease), border-color 220ms ease, background-color 220ms ease, box-shadow 220ms ease;
+}
+
+.ambassador-step-card:hover {
+  transform: translateX(4px);
+  border-color: rgb(231 183 125 / 30%);
+  background-color: rgb(255 255 255 / 6%);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 8%);
+}
+
+.ambassador-commission-card {
+  transition: transform 240ms var(--mt-motion-ease), border-color 240ms ease, background-color 240ms ease;
+}
+
+.ambassador-commission-card:hover {
+  transform: translateY(-3px);
+  border-color: rgb(231 183 125 / 38%);
+  background-color: rgb(231 183 125 / 10%);
+}
+
+.ambassador-auth-orbit {
+  animation: ambassador-orbit-breathe 12s ease-in-out infinite;
+}
+
+.ambassador-auth-orbit-delayed {
+  animation-delay: -6s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambassador-auth-header,
+  .ambassador-auth-story > *,
+  .ambassador-auth-card,
+  .ambassador-auth-orbit {
+    animation: none;
+  }
+
+  .ambassador-step-card,
+  .ambassador-commission-card {
+    transition: none;
+  }
+
+  .ambassador-step-card:hover,
+  .ambassador-commission-card:hover {
+    transform: none;
+  }
 }
 
 .mt-wall {
@@ -323,6 +411,11 @@ button, a, summary, [role="tab"] {
 .motion-interactive:active {
   translate: 0 0;
   scale: 0.98;
+}
+
+.app-shell > main,
+.app-shell > div {
+  animation: mt-page-enter 420ms var(--mt-motion-ease-entrance) both;
 }
 
 .carousel-rail {
@@ -473,6 +566,10 @@ button, a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .app-shell > main,
+  .app-shell > div {
+    animation: none;
+  }
   html {
     scroll-behavior: auto;
   }

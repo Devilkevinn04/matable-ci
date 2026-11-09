@@ -79,45 +79,69 @@ export function getAmbassadorMonthlyStats(
 
 const REFERRAL_STORAGE_KEY = 'matable_ambassador_referral';
 let pendingCapture: Promise<string | null> | null = null;
+let inMemoryReferralCode: AmbassadorReferral | null = null;
+let inMemoryReferralToken: { code: string; token: string; expiresAt: number } | null = null;
 
-export function getStoredAmbassadorCode(): string | null {
-  if (typeof window === 'undefined') return null;
+function getInMemoryReferralCode(): string | null {
+  const referral = validAmbassadorReferral(inMemoryReferralCode);
+  if (!referral) {
+    inMemoryReferralCode = null;
+    inMemoryReferralToken = null;
+    return null;
+  }
+  return referral.code;
+}
+
+function getStoredReferral(): { code: string; token: string; expiresAt: number } | null {
   try {
     const stored = JSON.parse(window.localStorage.getItem(REFERRAL_STORAGE_KEY) || 'null') as {
       token?: unknown;
       code?: unknown;
       expiresAt?: unknown;
     } | null;
+    const code = normalizeAmbassadorCode(stored?.code);
     const expiresAt = typeof stored?.expiresAt === 'string' ? Date.parse(stored.expiresAt) : NaN;
     if (typeof stored?.token !== 'string' || !/^[a-f0-9]{64}$/.test(stored.token)
-      || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
-    return normalizeAmbassadorCode(stored.code);
+      || !code || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
+    const referral = { code, token: stored.token, expiresAt };
+    inMemoryReferralCode = { code, capturedAt: expiresAt - AMBASSADOR_REFERRAL_DURATION_MS };
+    inMemoryReferralToken = referral;
+    return referral;
   } catch {
     return null;
   }
 }
 
+export function getStoredAmbassadorCode(): string | null {
+  if (typeof window === 'undefined') return null;
+  return getStoredReferral()?.code ?? getInMemoryReferralCode();
+}
+
 export function clearAmbassadorReferral(): void {
   if (typeof window === 'undefined') return;
+  inMemoryReferralCode = null;
+  inMemoryReferralToken = null;
   try {
     window.localStorage.removeItem(REFERRAL_STORAGE_KEY);
-    window.dispatchEvent(new Event('matable-ambassador-referral-updated'));
   } catch {
-    return;
+    // Referral attribution still works for the current page when storage is unavailable.
   }
+  window.dispatchEvent(new Event('matable-ambassador-referral-updated'));
 }
 
 export async function getAmbassadorToken(codeValue?: unknown): Promise<string | null> {
   if (typeof window === 'undefined') return null;
-  try {
-    const stored = JSON.parse(window.localStorage.getItem(REFERRAL_STORAGE_KEY) || 'null') as { token?: unknown; expiresAt?: unknown } | null;
-    if (stored && typeof stored.token === 'string' && /^[a-f0-9]{64}$/.test(stored.token)
-      && typeof stored.expiresAt === 'string' && Date.parse(stored.expiresAt) > Date.now()) return stored.token;
-    window.localStorage.removeItem(REFERRAL_STORAGE_KEY);
-  } catch { return null; }
+  const storedReferral = getStoredReferral();
+  if (storedReferral) return storedReferral.token;
+  const memoryToken = inMemoryReferralToken && inMemoryReferralToken.expiresAt > Date.now()
+    ? inMemoryReferralToken.token
+    : null;
+  if (memoryToken) return memoryToken;
   if (pendingCapture) return pendingCapture;
-  const code = normalizeAmbassadorCode(codeValue ?? new URLSearchParams(window.location.search).get('ref'));
+  const code = getInMemoryReferralCode()
+    ?? normalizeAmbassadorCode(codeValue ?? new URLSearchParams(window.location.search).get('ref'));
   if (!code) return null;
+  inMemoryReferralCode = { code, capturedAt: Date.now() };
   pendingCapture = (async () => {
     try {
       const response = await fetch('/api/ambassador-clicks', {
@@ -128,12 +152,21 @@ export async function getAmbassadorToken(codeValue?: unknown): Promise<string | 
       const expiresAt = typeof result.expires_at === 'string' ? Date.parse(result.expires_at) : NaN;
       if (typeof result.token !== 'string' || !/^[a-f0-9]{64}$/.test(result.token)
         || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return null;
-      window.localStorage.setItem(REFERRAL_STORAGE_KEY, JSON.stringify({
-        token: result.token, code, expiresAt: result.expires_at,
-      }));
+      inMemoryReferralCode = { code, capturedAt: Date.now() };
+      inMemoryReferralToken = { token: result.token, code, expiresAt };
+      try {
+        window.localStorage.setItem(REFERRAL_STORAGE_KEY, JSON.stringify({
+          token: result.token, code, expiresAt: result.expires_at,
+        }));
+      } catch {
+        // Keep the token in memory for this page; registration can still submit the code.
+      }
       window.dispatchEvent(new Event('matable-ambassador-referral-updated'));
       return result.token;
-    } catch { return null; }
+    } catch {
+      window.dispatchEvent(new Event('matable-ambassador-referral-updated'));
+      return null;
+    }
   })();
   try { return await pendingCapture; } finally { pendingCapture = null; }
 }

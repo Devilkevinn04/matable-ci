@@ -7,7 +7,6 @@ import { getAmbassadorToken } from './utils/ambassadors';
 
 const initialAmbassadorCode = new URLSearchParams(window.location.search).get('ref');
 void getAmbassadorToken(initialAmbassadorCode);
-window.addEventListener('matable-cookie-preferences-updated', () => { void getAmbassadorToken(initialAmbassadorCode); });
 
 try {
   window.localStorage.removeItem('matable_registration_links');
