@@ -73,7 +73,6 @@ test('Render host page views redirect to the public domain, API and webhooks do 
   assert.equal(getPublicDomainRedirect({ ...base, nodeEnv: 'development', path: '/', originalUrl: '/' }), null);
   assert.equal(getPublicDomainRedirect({ ...base, appUrl: '', path: '/', originalUrl: '/' }), null);
 });
-
 test('HTTP redirects prefer the configured public origin over a forged Host header', async () => {
   const { getSecureRedirectUrl } = await import('../server/services/hostRedirect.ts');
   assert.equal(
