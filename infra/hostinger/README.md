@@ -1,26 +1,17 @@
-# Déploiement automatique sur le VPS Hostinger
+# Publier MaTable sur Hostinger
 
-Le timer a été installé et son premier déploiement automatique a réussi le
-8 novembre 2026. La procédure d’installation ci-dessous sert à reconstruire le
-service d’automatisation si nécessaire ; ne la relancez pas sur le VPS déjà
-configuré.
+Kevin prépare une branche et lance `npm ci` puis `make check` avant d’ouvrir sa pull request vers `main`. Après la revue, il indique le SHA complet à publier. L’exploitant fait avancer `production` jusqu’à ce SHA après avoir vérifié les variables et les éventuelles migrations. Le déploiement tourne sur le VPS, indépendamment de GitHub Actions.
 
-Le timer systemd vérifie la branche `main` toutes les deux minutes. Quand un
-nouveau commit apparaît, le VPS clone ce commit, construit l’image avec le
-Dockerfile Hostinger (qui exécute lint, tests et build), puis remplace seulement
-le service `web` de MaTable. Le conteneur PostgreSQL et les autres applications
-du VPS ne sont pas redémarrés.
+## Variables de production
 
-Le déploiement attend jusqu’à trois minutes que le contrôle de santé passe. En
-cas d’échec, il restaure `release.env` et relance l’image précédente. Les
-constructions et les opérations sont journalisées dans systemd. Il n’y a ni clé
-SSH ni secret GitHub à configurer : le dépôt est cloné en lecture seule depuis
-GitHub.
+Dans la pull request, ajouter les noms et exemples dans `.env.production.example`, et préciser le rôle de chaque variable, si elle est obligatoire, et si elle s’applique au serveur ou à la compilation.
 
-Après déploiement du parcours de vérification MFA, envoyez l’avis aux comptes
-existants qui ont déjà une adresse e-mail avec la commande suivante. Elle est
-idempotente : les destinataires déjà traités ne reçoivent pas de doublon.
-L’exécution est séquentielle et prend environ une demi-seconde par compte.
+L’exploitant renseigne les variables serveur dans `/srv/apps/matable/shared/app.env` avant d’approuver le SHA. Ce fichier privé contient les valeurs de production. Transmettre les secrets par un canal prévu à cet effet et garder uniquement les noms et exemples dans Git.
+
+Après déploiement du parcours de vérification MFA, les avis aux comptes
+existants qui ont déjà une adresse e-mail peuvent être envoyés avec la commande
+suivante. Elle est idempotente : les destinataires déjà traités ne reçoivent
+pas de doublon.
 
 ```sh
 docker exec matable-web node /app/scripts/send-email-mfa-rollout-notices.mjs
@@ -30,55 +21,29 @@ Les commerçants sans adresse ne peuvent pas recevoir de courriel ; ils doivent
 être informés par un autre canal. Leur parcours de connexion permet ensuite
 d’ajouter et de vérifier une adresse avec leur numéro et leur PIN.
 
-## Installation initiale
+Les valeurs `VITE_*` sont publiques et intégrées au navigateur à la compilation. Le script transmet `VITE_WHATSAPP_ADMIN_PHONE` à Docker. Pour ajouter une autre variable de ce type, déclarer aussi son argument dans le Dockerfile et le transmettre dans le script de déploiement.
 
-Après avoir poussé ces fichiers sur `main`, connectez-vous au VPS et exécutez
-ce bloc. Il télécharge la révision actuelle, installe le script et le timer,
-puis active la vérification périodique :
+Pour une migration de schéma, valider son exécution sur une copie de la base avant l’approbation. Le VPS conserve une sauvegarde PostgreSQL vérifiée avant chaque remplacement du conteneur. Le retour arrière rétablit l’image précédente. Prévoir la compatibilité du schéma avec cette image.
 
-```sh
-set -eu
-RELEASE=/srv/apps/matable/releases/auto-deploy-setup
-if [ -e "$RELEASE" ]; then
-  echo "Le dossier $RELEASE existe déjà ; arrêtez-vous et demandez de l’aide."
-  exit 1
-fi
+## Publication sur le VPS
 
-git clone --depth 1 --branch main \
-  https://github.com/Devilkevinn04/matable-ci.git "$RELEASE"
-install -o root -g root -m 0750 \
-  "$RELEASE/infra/hostinger/auto-deploy.sh" \
-  /usr/local/sbin/matable-auto-deploy
-install -o root -g root -m 0644 \
-  "$RELEASE/infra/hostinger/matable-auto-deploy.service" \
-  /etc/systemd/system/matable-auto-deploy.service
-install -o root -g root -m 0644 \
-  "$RELEASE/infra/hostinger/matable-auto-deploy.timer" \
-  /etc/systemd/system/matable-auto-deploy.timer
-systemctl daemon-reload
-systemctl enable --now matable-auto-deploy.timer
-systemctl status --no-pager matable-auto-deploy.timer
-```
-
-Le script ne déploie pas les branches de fonctionnalité : seules les
-modifications poussées sur `main` sont candidates. L’installation du timer ne
-redémarre pas l’application ; le premier passage ne fait rien si l’image
-actuellement déployée correspond déjà au dernier commit.
-
-## Vérification et arrêt
+Après avoir fait avancer la branche `production` vers le commit revu, se connecter au VPS et utiliser le Makefile installé et détenu par root :
 
 ```sh
-systemctl list-timers matable-auto-deploy.timer
-journalctl -u matable-auto-deploy.service -n 100 --no-pager
+make -f /srv/apps/matable/Makefile production-approve VERSION=<sha-complet>
+make -f /srv/apps/matable/Makefile production-status
 ```
 
-Pour suspendre les déploiements automatiques sans arrêter MaTable :
+Le timer regarde `production` environ toutes les deux minutes et exige que sa tête corresponde au SHA approuvé sur le VPS. La construction exécute `make check`, puis le service remplace le conteneur web. En cas d’échec de démarrage, il remet l’image précédente et suspend la révision jusqu’à une nouvelle approbation. Après la publication, ouvrir le site et tester la fonctionnalité modifiée.
+
+Le script et le Makefile installés sont entretenus par l’exploitant. Pour les actualiser, vérifier le changement dans le dépôt puis installer les fichiers approuvés aux chemins `/usr/local/sbin/matable-auto-deploy` et `/srv/apps/matable/Makefile`. La configuration Docker Compose du VPS demeure sous `/srv/apps/matable/current/infra/hostinger/` et les versions construites sous `/srv/apps/matable/releases/`.
+
+## Portainer
+
+Sur ton poste, ouvrir le tunnel et le laisser tourner :
 
 ```sh
-systemctl disable --now matable-auto-deploy.timer
+ssh -NT -o ExitOnForwardFailure=yes -L 127.0.0.1:19000:127.0.0.1:9000 root@72.61.102.243
 ```
 
-L’image précédente et les copies de `release.env` sont conservées sur le VPS.
-Un changement de schéma de base non rétrocompatible ou une opération de
-maintenance nécessitant une fenêtre d’arrêt doit toujours être planifié
-séparément ; le retour arrière automatique porte sur l’image applicative.
+Ouvrir `http://127.0.0.1:19000` et se connecter avec le compte `admin`. Le mot de passe initial est dans `/srv/apps/matable/portainer/admin-password` et est lisible uniquement par root. Dans l’environnement local, ouvrir `Containers`, puis `matable-web` pour voir son état ou ses logs. Le timer et Docker Compose pilotent la publication. Le compte Portainer d’administration est réservé à l’exploitant du VPS.

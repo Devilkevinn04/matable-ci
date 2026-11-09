@@ -11,9 +11,7 @@ COPY . .
 
 ARG VITE_WHATSAPP_ADMIN_PHONE=0102749775
 ENV VITE_WHATSAPP_ADMIN_PHONE=${VITE_WHATSAPP_ADMIN_PHONE}
-RUN npm run lint \
-    && npm run test:ci \
-    && npm run build \
+RUN make check \
     && ./node_modules/.bin/esbuild scripts/migrate-neon.ts --bundle --platform=node --format=esm --packages=external --outfile=build/migrate-postgres.mjs \
     && ./node_modules/.bin/esbuild scripts/send-email-mfa-rollout-notices.ts --bundle --platform=node --format=esm --packages=external --outfile=build/send-email-mfa-rollout-notices.mjs \
     && npm prune --omit=dev \
