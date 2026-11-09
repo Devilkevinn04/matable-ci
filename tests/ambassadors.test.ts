@@ -120,10 +120,10 @@ test('monthly payout preparation includes unpaid approved commissions through th
 
 test('ambassador monthly statistics count attributed registrations and paid commissions for six months', () => {
   const stats = getAmbassadorMonthlyStats([
-    { created_at: '2026-06-02T10:00:00.000Z' },
-    { created_at: '2026-11-08T10:00:00.000Z' },
-    { created_at: 'invalid-date' },
-    { created_at: '2026-05-31T23:59:59.000Z' },
+    { created_at: '2026-06-02T10:00:00.000Z', publication_status: 'active', payment_status: 'paid' },
+    { created_at: '2026-11-08T10:00:00.000Z', publication_status: 'draft', payment_status: 'pending' },
+    { created_at: 'invalid-date', publication_status: 'active', payment_status: 'paid' },
+    { created_at: '2026-05-31T23:59:59.000Z', publication_status: 'active', payment_status: 'paid' },
   ], [
     { paid_at: '2026-06-30T10:00:00.000Z', amount: 600 },
     { paid_at: '2026-11-01T10:00:00.000Z', amount: 1000 },
@@ -134,9 +134,13 @@ test('ambassador monthly statistics count attributed registrations and paid comm
   assert.equal(stats.length, 6);
   assert.equal(stats[0].month, '2026-06');
   assert.equal(stats[0].registrations, 1);
+  assert.equal(stats[0].published, 1);
+  assert.equal(stats[0].paying, 1);
   assert.equal(stats[0].paidAmount, 600);
   assert.equal(stats[5].month, '2026-11');
   assert.equal(stats[5].registrations, 1);
+  assert.equal(stats[5].published, 0);
+  assert.equal(stats[5].paying, 0);
   assert.equal(stats[5].paidAmount, 1000);
   assert.equal(stats.reduce((sum, month) => sum + month.registrations, 0), 2);
 });

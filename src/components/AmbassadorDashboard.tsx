@@ -689,6 +689,34 @@ export function AmbassadorDashboard() {
               concealed={!showAmounts}
             />
           </div>
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-labelledby="ambassador-cohorts-title">
+            <div className="border-b border-slate-100 p-4">
+              <h3 id="ambassador-cohorts-title" className="text-sm font-bold text-slate-900">Suivi des inscriptions par mois</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Pour chaque mois d’inscription, état actuel des boutiques attribuées — ce tableau ne date pas les conversions.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[32rem] text-left text-xs">
+                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th scope="col" className="px-4 py-3 font-bold">Mois d’inscription</th>
+                    <th scope="col" className="px-4 py-3 text-right font-bold">Attribuées</th>
+                    <th scope="col" className="px-4 py-3 text-right font-bold">Publiées aujourd’hui</th>
+                    <th scope="col" className="px-4 py-3 text-right font-bold">Paiement confirmé aujourd’hui</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {monthlyStats.map((row) => (
+                    <tr key={row.month}>
+                      <th scope="row" className="whitespace-nowrap px-4 py-3 font-semibold capitalize text-slate-800">{row.label}</th>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.registrations}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.published}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.paying}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </section>
         <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setActiveTab('withdrawals')} className="ambassador-primary-btn min-h-10 rounded-xl bg-[#123b32] px-4 text-sm font-bold text-white shadow-[0_12px_28px_rgba(18,59,50,0.18)]">Voir mes retraits</button><button type="button" onClick={() => setActiveTab('sharing')} className="ambassador-secondary-btn min-h-10 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800">Partager mon lien</button></div>
       </>}

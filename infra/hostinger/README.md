@@ -25,6 +25,25 @@ Les valeurs `VITE_*` sont publiques et intégrées au navigateur à la compilati
 
 Pour une migration de schéma, valider son exécution sur une copie de la base avant l’approbation. Le VPS conserve une sauvegarde PostgreSQL vérifiée avant chaque remplacement du conteneur. Le retour arrière rétablit l’image précédente. Prévoir la compatibilité du schéma avec cette image.
 
+## Sauvegardes PostgreSQL quotidiennes
+
+Le service `matable-postgres-backup.timer` lance chaque nuit une sauvegarde PostgreSQL dans `/srv/apps/matable/backups`. Le script valide l’archive avec `pg_restore --list`, écrit son empreinte SHA-256 et conserve 14 jours de sauvegardes programmées. Les sauvegardes pré-déploiement ne sont pas concernées par cette purge.
+
+Après avoir revu le script et les unités du commit approuvé, l’exploitant les installe une fois sur le VPS :
+
+```sh
+install -o root -g root -m 0750 /srv/apps/matable/current/infra/hostinger/backup-postgres.sh /usr/local/sbin/matable-postgres-backup
+install -o root -g root -m 0644 /srv/apps/matable/current/infra/hostinger/matable-postgres-backup.service /etc/systemd/system/matable-postgres-backup.service
+install -o root -g root -m 0644 /srv/apps/matable/current/infra/hostinger/matable-postgres-backup.timer /etc/systemd/system/matable-postgres-backup.timer
+systemctl daemon-reload
+systemctl enable --now matable-postgres-backup.timer
+systemctl start matable-postgres-backup.service
+systemctl status matable-postgres-backup.service --no-pager
+systemctl list-timers matable-postgres-backup.timer --no-pager
+```
+
+Consulter les exécutions avec `journalctl -u matable-postgres-backup.service`. Cette politique conserve les sauvegardes sur le VPS uniquement : elle ne protège pas contre la perte ou l’indisponibilité de ce serveur. Une copie hors site devra être configurée séparément.
+
 ## Publication sur le VPS
 
 Après avoir fait avancer la branche `production` vers le commit revu, se connecter au VPS et utiliser le Makefile installé et détenu par root :

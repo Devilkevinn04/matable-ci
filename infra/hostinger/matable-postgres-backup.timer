@@ -1,0 +1,10 @@
+[Unit]
+Description=Schedule daily MaTable PostgreSQL backups
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

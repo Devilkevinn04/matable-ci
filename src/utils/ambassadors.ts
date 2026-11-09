@@ -41,11 +41,13 @@ export interface AmbassadorMonthlyStats {
   month: string;
   label: string;
   registrations: number;
+  published: number;
+  paying: number;
   paidAmount: number;
 }
 
 export function getAmbassadorMonthlyStats(
-  referrals: Array<{ created_at: string }>,
+  referrals: Array<{ created_at: string; publication_status?: string | null; payment_status?: string | null }>,
   payouts: Array<{ paid_at: string; amount: number }>,
   now = new Date(),
 ): AmbassadorMonthlyStats[] {
@@ -56,6 +58,8 @@ export function getAmbassadorMonthlyStats(
       month,
       label: new Intl.DateTimeFormat('fr-FR', { month: 'short', timeZone: 'UTC' }).format(date),
       registrations: 0,
+      published: 0,
+      paying: 0,
       paidAmount: 0,
     };
   });
@@ -65,7 +69,11 @@ export function getAmbassadorMonthlyStats(
     const timestamp = Date.parse(referral.created_at);
     if (!Number.isFinite(timestamp)) continue;
     const month = byMonth.get(new Date(timestamp).toISOString().slice(0, 7));
-    if (month) month.registrations += 1;
+    if (month) {
+      month.registrations += 1;
+      if (referral.publication_status === 'active') month.published += 1;
+      if (referral.payment_status === 'paid') month.paying += 1;
+    }
   }
   for (const payout of payouts) {
     const timestamp = Date.parse(payout.paid_at);
