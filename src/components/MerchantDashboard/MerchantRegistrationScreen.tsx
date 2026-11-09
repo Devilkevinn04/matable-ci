@@ -53,6 +53,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
   return (
     <AuthExperienceLayout
       eyebrow="Votre commerce, en ligne"
+      motionKey={`merchant-registration-${step}`}
       title="Faites découvrir votre boutique."
       description="Créez votre vitrine locale et recevez les commandes de vos clients directement sur WhatsApp."
       imageAlt="Aperçu dynamique de la vitrine de votre boutique"
@@ -163,9 +164,9 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
                 Code PIN (6 chiffres)
                 <div className="relative">
                   <input type={showRegPin ? 'text' : 'password'} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={regPin} onChange={(event) => setRegPin(event.target.value.replace(/\D/g, '').slice(0, 6))} required autoComplete="new-password" placeholder="6 chiffres" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 pr-14 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" />
-                  <span className="mt-1 block text-xs font-normal text-[#68756c]">Choisissez un code que vous pourrez mémoriser.</span>
                   <button type="button" onClick={() => setShowRegPin((visible) => !visible)} className="absolute right-1 top-[calc(50%+3px)] flex h-11 -translate-y-1/2 items-center rounded-full px-3 text-xs font-bold text-[var(--mt-green-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)]">{showRegPin ? 'Masquer' : 'Afficher'}</button>
                 </div>
+                <span className="mt-1 block text-xs font-normal text-[#68756c]">Choisissez un code que vous pourrez mémoriser.</span>
               </label>
               <label className="block text-sm font-semibold text-[#47534b]">
                 E-mail

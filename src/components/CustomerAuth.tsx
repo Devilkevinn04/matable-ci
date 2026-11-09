@@ -258,6 +258,7 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
   return (
     <AuthExperienceLayout
       eyebrow={mode === 'register' && accountType === 'merchant' ? 'Votre commerce, en ligne' : 'Du local, tout simplement'}
+      motionKey={`${mode}-${accountType}-${pendingMfaChallenge ? 'mfa' : pendingOAuthProfile ? 'oauth-profile' : pendingOAuthLink ? 'oauth-link' : 'form'}`}
       title={mode === 'register' && accountType === 'merchant' ? 'Faites découvrir votre boutique.' : mode === 'login' ? 'Bienvenue sur MaTable' : 'Rejoignez la communauté MaTable'}
       description={mode === 'register' && accountType === 'merchant'
         ? 'Créez votre vitrine locale et recevez les commandes de vos clients directement sur WhatsApp.'

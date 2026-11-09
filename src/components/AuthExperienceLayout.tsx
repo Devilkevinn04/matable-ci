@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, ArrowRight, BadgeCheck, CheckCircle2, MapPin, MessageCircle, ShoppingBag, Store, UserRound } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BadgeCheck, CheckCircle2, MapPin, MessageCircle, ShieldCheck, ShoppingBag, Sparkles, Store, UserRound } from 'lucide-react';
 
 export const MerchantRegistrationProgress: React.FC<{ step: 1 | 2 }> = ({ step }) => (
   <ol aria-label="Étapes de création de boutique" className="grid grid-cols-2 gap-2">
@@ -57,6 +57,7 @@ interface AuthExperienceLayoutProps {
   onBack?: () => void;
   imageAlt?: string;
   storyCard?: React.ReactNode;
+  motionKey?: string | number;
 }
 
 export const BrandMark: React.FC<{ className?: string }> = ({ className = '' }) => (
@@ -92,13 +93,25 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
   onBack,
   imageAlt = 'Une cliente découvre le commerce local en Côte d’Ivoire',
   storyCard,
+  motionKey,
 }) => (
-  <main className="min-h-[100svh] bg-[#f1eee6] px-3 py-3 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-    <div className="mx-auto grid w-full max-w-[1240px] gap-3 lg:min-h-[min(820px,calc(100svh-4rem))] lg:grid-cols-[.94fr_1.06fr] lg:gap-5">
-      <section className="relative isolate flex min-h-[250px] flex-col overflow-hidden rounded-[24px] bg-[var(--mt-green-deep)] p-5 text-white sm:min-h-[300px] sm:rounded-[30px] sm:p-8 lg:min-h-[700px] lg:p-10">
-        <div aria-hidden="true" className="pointer-events-none absolute -right-20 -top-28 -z-10 h-80 w-80 rounded-full border border-white/10 sm:h-[28rem] sm:w-[28rem]" />
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-36 -left-20 -z-10 h-80 w-80 rounded-full bg-[#f0ba80]/10 blur-3xl" />
-        <div className="flex items-center gap-3">
+  <main className="auth-experience-page min-h-[100svh] bg-[#f1eee6] px-3 py-3 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+    <div className="auth-experience-grid relative z-10 mx-auto grid w-full max-w-[1240px] gap-3 lg:min-h-[min(820px,calc(100svh-4rem))] lg:grid-cols-[.94fr_1.06fr] lg:gap-5">
+      <section className="auth-experience-story relative isolate flex min-h-[250px] flex-col overflow-hidden rounded-[24px] bg-[var(--mt-green-deep)] p-5 text-white sm:min-h-[300px] sm:rounded-[30px] sm:p-8 lg:min-h-[700px] lg:p-10">
+        <div aria-hidden="true" className="auth-experience-orbit pointer-events-none absolute -right-20 -top-28 -z-10 h-80 w-80 rounded-full border border-white/10 sm:h-[28rem] sm:w-[28rem]" />
+        <div aria-hidden="true" className="auth-experience-glow pointer-events-none absolute -bottom-36 -left-20 -z-10 h-80 w-80 rounded-full bg-[#f0ba80]/10 blur-3xl" />
+        <div className="auth-experience-scene pointer-events-none absolute right-4 top-[49%] z-0 hidden h-[250px] w-[270px] lg:block" aria-hidden="true">
+          <div className="auth-scene-orbit auth-scene-orbit-one" />
+          <div className="auth-scene-orbit auth-scene-orbit-two" />
+          <div className="auth-scene-store">
+            <div className="auth-scene-store-awning"><span /><span /><span /><span /><span /></div>
+            <div className="auth-scene-store-window"><Store className="h-12 w-12" strokeWidth={1.2} /></div>
+            <div className="auth-scene-store-base"><span /><span /></div>
+          </div>
+          <div className="auth-scene-chip auth-scene-chip-top"><Sparkles className="h-3.5 w-3.5" /> Une vitrine à vous</div>
+          <div className="auth-scene-chip auth-scene-chip-bottom"><ShieldCheck className="h-3.5 w-3.5" /> Simple &amp; sécurisé</div>
+        </div>
+        <div className="auth-experience-brand flex items-center gap-3">
           <BrandMark className="bg-white/95" />
           <div>
             <p className="text-[19px] font-extrabold leading-none tracking-tight">MaTable</p>
@@ -106,7 +119,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
           </div>
         </div>
 
-        <div className="relative z-10 mt-6 max-w-[460px] sm:mt-9 lg:mt-14">
+        <div className="auth-experience-copy relative z-10 mt-6 max-w-[460px] sm:mt-9 lg:mt-14">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#f0ba80] sm:text-xs">{eyebrow}</p>
           <h1 className="mt-2 text-[27px] font-extrabold leading-[1.07] tracking-[-0.035em] sm:mt-3 sm:text-[42px] lg:text-[48px]">{title}</h1>
           <p className="mt-3 max-w-[410px] text-sm leading-6 text-white/80 sm:mt-4 sm:text-base">{description}</p>
@@ -115,7 +128,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
         <div
           role="img"
           aria-label={imageAlt}
-          className="relative z-10 mt-5 flex max-w-[430px] items-center gap-3 rounded-[22px] border border-white/15 bg-white/[0.08] p-3 backdrop-blur sm:mt-6 sm:gap-4 sm:p-4 lg:mt-auto lg:p-5"
+          className="auth-experience-preview relative z-10 mt-5 flex max-w-[430px] items-center gap-3 rounded-[22px] border border-white/15 bg-white/[0.08] p-3 backdrop-blur sm:mt-6 sm:gap-4 sm:p-4 lg:mt-auto lg:p-5"
         >
           {storyCard ?? (
             <>
@@ -137,7 +150,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
         </div>
       </section>
 
-      <section className="flex min-w-0 flex-col rounded-[24px] border border-[#e8e2d8] bg-[#fffefa] px-4 py-4 shadow-[0_14px_40px_rgba(37,35,31,0.06)] sm:rounded-[30px] sm:px-8 sm:py-6 lg:px-10 lg:py-7">
+      <section className="auth-experience-card flex min-w-0 flex-col rounded-[24px] border border-[#e8e2d8] bg-[#fffefa] px-4 py-4 shadow-[0_14px_40px_rgba(37,35,31,0.06)] sm:rounded-[30px] sm:px-8 sm:py-6 lg:px-10 lg:py-7">
         <div className="flex min-h-10 items-center justify-between gap-3">
           {onBack ? (
             <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-full px-2 py-2 text-sm font-semibold text-[#426458] transition hover:bg-[#edf3ec]">
@@ -155,7 +168,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
         </div>
 
         <div className="flex flex-1 items-center justify-center py-3 sm:py-6 lg:py-4">
-          <div className="w-full max-w-[460px]">
+          <div key={motionKey ?? title} className="auth-experience-content w-full max-w-[460px]">
             {children}
           </div>
         </div>

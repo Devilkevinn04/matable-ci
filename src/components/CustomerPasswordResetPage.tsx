@@ -42,6 +42,7 @@ export const CustomerPasswordResetPage: React.FC<CustomerPasswordResetPageProps>
   return (
     <AuthExperienceLayout
       eyebrow="Sécurité du compte"
+      motionKey={completed ? 'password-reset-complete' : token ? 'password-reset-form' : 'password-reset-invalid'}
       title="Choisissez un nouveau mot de passe."
       description="Le lien de réinitialisation est temporaire et ne peut être utilisé qu’une seule fois."
       imageAlt="Sécurisation d’un compte client MaTable"

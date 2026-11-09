@@ -20,7 +20,7 @@ Le commerçant peut profiter de deux mois d'essai Standard ou payer avant la fin
 - La prime est générée sur le premier paiement d'abonnement confirmé, y compris si la boutique n'est pas encore publiée. Elle reste en attente tant que le Super Admin ne l'a pas vérifiée et que la boutique n'est pas publiée.
 - Avant validation, vérifier que le commerçant est réellement nouveau, que la boutique est authentique et qu'il ne s'agit pas d'une auto-inscription. Les correspondances de coordonnées sont des alertes, pas une preuve exhaustive de fraude.
 - Un remboursement total ou partiel annule la prime non versée. Si la prime a déjà été versée, elle est signalée pour examen et régularisation manuelle. Un renouvellement ne crée pas de seconde prime.
-- Effectuer les versements une fois par mois après vérification. Le module enregistre une référence de versement effectué ; il ne transfère pas d'argent et ne programme pas de paiement automatique.
+- Traiter les demandes de retrait approuvées dans les cinq premiers jours ouvrés (hors week-ends et jours fériés) du mois suivant, sans seuil minimum. Une demande approuvée après cette période passe au prochain cycle. Le module enregistre une référence de versement effectué ; il ne transfère pas d'argent et ne programme pas de paiement automatique.
 - Dans le Super Admin, la liste mensuelle affiche les primes encore non versées et validées jusqu'à la fin du mois choisi, y compris les reports des mois précédents. L'export CSV est un instantané actualisé, pas une preuve de paiement ni une reconstitution historique ; vérifier à nouveau chaque commission avant de payer.
 - Le refus d'une commission nécessite un motif conservé dans le journal d'audit. Un motif peut aussi être ajouté lors de la validation.
 - L'attribution ambassadeur sert uniquement à rattacher une inscription à un partenaire et reste distincte des statistiques facultatives. En cas de changement d'appareil ou de suppression des données du navigateur avant l'inscription, saisir le code ambassadeur lors de l'inscription.
@@ -36,6 +36,18 @@ L'ambassadeur peut demander le retrait de tout son solde de commissions validée
 Le tableau de bord actualise les données toutes les 60 secondes lorsque l'espace est ouvert et actualise immédiatement les données lorsque l'utilisateur revient sur l'onglet du navigateur. Les messages de confirmation affichés à l'écran ne sont pas effacés par cet actualisage.
 
 Lorsque son adresse e-mail est renseignée et Resend configuré, l'ambassadeur reçoit un e-mail lors de la validation, du refus ou du versement d'une commission, ou si un remboursement l'affecte. Il est également informé à la réception, l'approbation, au refus, à l'annulation ou au paiement d'une demande de retrait. Une approbation de retrait ne confirme pas le transfert : seul l'état « payé » avec sa référence le fait. En cas d'échec d'envoi, l'opération reste enregistrée et l'erreur est journalisée côté serveur ; aucun renvoi automatique n'est prévu. Les notifications ne remplacent donc pas la consultation du dashboard.
+
+## Procédure manuelle de retrait et rapprochement
+
+À chaque cycle mensuel, le Super Admin traite dans les cinq premiers jours ouvrés (hors week-ends et jours fériés) les demandes approuvées au moment du traitement. Il n'y a pas de seuil minimum. Les demandes approuvées après ce cycle sont reportées au suivant. Cette règle organise le traitement administratif ; elle ne déclenche aucun transfert automatique.
+
+1. Dans l'onglet Retraits, vérifier l'identité de l'ambassadeur, le portefeuille sélectionné, le numéro destinataire et le montant. En cas de doute ou de changement de coordonnées, confirmer les informations par un canal déjà connu avant de valider la demande.
+2. Vérifier que le montant correspond aux commissions du retrait, que les paiements d'abonnement sont toujours confirmés et qu'aucun remboursement ou signalement n'est en attente. En cas d'anomalie, ne pas payer ; documenter le refus afin de remettre les commissions à disposition.
+3. Après validation, effectuer le transfert manuellement depuis le service de paiement approprié. Juste avant de confirmer, contrôler une seconde fois le numéro, le portefeuille et le montant. Ne jamais demander ni conserver le code PIN du bénéficiaire.
+4. Une fois le transfert confirmé par le service, enregistrer dans MaTable sa référence effective. Ne pas marquer comme payé si le transfert est en attente, échoué ou si aucune référence vérifiable n'est disponible.
+5. Pour le rapprochement mensuel, exporter depuis l'onglet Retraits le CSV des retraits payés du mois. Comparer chaque ligne à l'historique du service de paiement par référence, montant, date et destinataire ; investiguer les références absentes, les écarts de montant et les transferts sans ligne correspondante. Conserver le relevé externe selon les règles d'accès et de conservation de l'entreprise.
+
+Le CSV est un outil de rapprochement, pas une preuve indépendante que le transfert a abouti. Seul l'historique du portefeuille ou du service utilisé confirme le mouvement de fonds.
 
 ## Message au partenaire
 

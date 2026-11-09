@@ -47,6 +47,7 @@ export const AccountRecoveryPage: React.FC<AccountRecoveryPageProps> = ({ initia
   return (
     <AuthExperienceLayout
       eyebrow="Assistance compte"
+      motionKey={`${accountType}-${requestSent ? 'sent' : 'request'}`}
       title="Retrouver l’accès à votre compte."
       description={accountType === 'customer'
         ? 'Recevez un lien sécurisé pour choisir un nouveau mot de passe client.'

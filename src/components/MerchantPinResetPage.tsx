@@ -42,6 +42,7 @@ export const MerchantPinResetPage: React.FC<MerchantPinResetPageProps> = ({ toke
   return (
     <AuthExperienceLayout
       eyebrow="Sécurité du compte"
+      motionKey={completed ? 'pin-reset-complete' : token ? 'pin-reset-form' : 'pin-reset-invalid'}
       title="Choisissez un nouveau PIN."
       description="Le lien confirme l’accès à l’adresse e-mail de la boutique et ne peut être utilisé qu’une seule fois."
       imageAlt="Sécurisation d’un compte commerçant MaTable"

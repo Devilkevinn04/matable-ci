@@ -41,6 +41,12 @@ const withdrawalLabels: Record<DashboardData['withdrawals'][number]['status'], s
   requested: 'En attente de validation', approved: 'Validée, en attente de transfert',
   rejected: 'Refusée', paid: 'Payée',
 };
+const withdrawalStatusClasses: Record<DashboardData['withdrawals'][number]['status'], string> = {
+  requested: 'border-amber-200 bg-amber-100 text-amber-900',
+  approved: 'border-sky-200 bg-sky-100 text-sky-900',
+  rejected: 'border-rose-200 bg-rose-100 text-rose-900',
+  paid: 'border-emerald-200 bg-emerald-100 text-emerald-900',
+};
 const payoutMethodLabels: Record<PayoutMethod, string> = {
   wave: 'Wave', orange_money: 'Orange Money', mtn_momo: 'MTN MoMo', moov_money: 'Moov Money',
 };
@@ -454,7 +460,7 @@ export function AmbassadorDashboard() {
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#e8eee8] text-[#174c3d]"><Handshake className="h-5 w-5" aria-hidden="true" /></span>
           </div>
           <p className="mt-3 text-sm leading-6 text-[#72766f]">Laissez-nous vos coordonnées. Notre équipe examinera votre candidature et vous répondra par e-mail.</p>
-          <form onSubmit={(event) => void submitApplication(event)} className="auth-form mt-7 space-y-4">
+          <form key={applicationSubmitted ? 'application-submitted' : 'application-form'} onSubmit={(event) => void submitApplication(event)} className="auth-form ambassador-auth-form mt-7 space-y-4">
             <label className="block text-xs font-bold text-[#3d4b44]">
               Nom complet
               <input required minLength={2} maxLength={100} autoComplete="name" value={applicantName} onChange={(event) => setApplicantName(event.target.value)} placeholder="Votre prénom et nom" className="mt-1.5 min-h-12 w-full rounded-2xl border border-[#deded5] bg-white px-4 text-sm font-normal text-[#292d2a] outline-none transition placeholder:text-[#a3a59f] focus:border-[#17644d] focus:ring-4 focus:ring-[#17644d]/10" />
@@ -574,7 +580,7 @@ export function AmbassadorDashboard() {
                 : 'Connectez-vous pour suivre votre réseau et vos gains.'}
         </p>
 
-        <form onSubmit={(event) => void submitCredentials(event)} className="auth-form mt-7 space-y-4">
+        <form key={isActivation ? 'activation' : forgotAccess ? 'recovery' : pendingMfaChallenge ? 'mfa' : 'login'} onSubmit={(event) => void submitCredentials(event)} className="auth-form ambassador-auth-form mt-7 space-y-4">
           {isActivation && !activationToken && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold leading-5 text-rose-800">Lien d’activation manquant. Demandez un nouveau lien au support MaTable.</p>}
           {pendingMfaChallenge ? (
             <label className="block text-xs font-bold text-[#3d4b44]">
@@ -663,7 +669,6 @@ export function AmbassadorDashboard() {
     </nav>
     <div id={`ambassador-panel-${activeTab}`} role="tabpanel" aria-labelledby={`ambassador-tab-${activeTab}`} tabIndex={0} className="mx-auto max-w-5xl space-y-7 px-4 pb-24 pt-5 outline-none sm:px-6 sm:pb-8 sm:pt-8">
       {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">{error}</p>}{notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">{notice}</p>}
-      {activeTab === 'withdrawals' && openWithdrawal?.status === 'requested' && <button type="button" disabled={requestingWithdrawal} onClick={() => void cancelWithdrawal(openWithdrawal.id)} className="min-h-9 rounded-lg border border-rose-300 bg-rose-50 px-3 text-xs font-bold text-rose-800 shadow-sm transition hover:bg-rose-100 disabled:opacity-50">Annuler la demande en cours</button>}
       {activeTab === 'overview' && <>
         <section aria-label="Vos résultats" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{metrics.map(({ label, value, icon: Icon }) => <article key={label} className="ambassador-stat-card flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#eaf7f3] text-emerald-900"><Icon className="h-5 w-5" /></span><div><p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">{label}</p><p className="mt-1 text-xl font-black tabular-nums text-slate-950">{label === 'Primes versées' ? (showAmounts ? value : '••••') : Number(value) || 0}</p></div></article>)}</section>
         <section aria-labelledby="commission-summary-title" className="ambassador-panel grid gap-3 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)] sm:grid-cols-3"><h2 id="commission-summary-title" className="sr-only">État des commissions</h2><p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">En vérification <strong className="ml-1 text-slate-950">{formatAmount(numericSummary?.pending_commissions)}</strong></p><p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">Validées, à retirer <strong className="ml-1 text-slate-950">{formatAmount(numericSummary?.available_commissions)}</strong></p><p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">Total des primes générées <strong className="ml-1 text-slate-950">{formatAmount(numericSummary?.total_commissions)}</strong></p><p className="text-xs leading-5 text-slate-500 sm:col-span-3">Une prime est unique et concerne le premier abonnement payé. Elle devient retirable après confirmation, publication et vérification.</p></section>
@@ -700,8 +705,8 @@ export function AmbassadorDashboard() {
                   <tr>
                     <th scope="col" className="px-4 py-3 font-bold">Mois d’inscription</th>
                     <th scope="col" className="px-4 py-3 text-right font-bold">Attribuées</th>
-                    <th scope="col" className="px-4 py-3 text-right font-bold">Publiées aujourd’hui</th>
-                    <th scope="col" className="px-4 py-3 text-right font-bold">Paiement confirmé aujourd’hui</th>
+                    <th scope="col" className="px-4 py-3 text-right font-bold">Publiées (état actuel)</th>
+                    <th scope="col" className="px-4 py-3 text-right font-bold">Payantes (état actuel)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -744,9 +749,53 @@ export function AmbassadorDashboard() {
           </article>)}
         </div>
       </section>}
-      <section data-ambassador-panel="withdrawals" aria-labelledby="withdrawal-request-title" className="ambassador-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]"><div><p className="text-[11px] font-black uppercase tracking-[0.15em] text-emerald-800">Gestion des gains</p><h2 id="withdrawal-request-title" className="mt-2 text-xl font-black text-slate-950">Retraits</h2><p className="mt-1 text-sm text-slate-600">Demandez le transfert de toutes vos commissions validées. Chaque demande est contrôlée par l’équipe MaTable.</p></div>
-        <div className="mt-4 grid gap-3 rounded-2xl border border-emerald-900/15 bg-[#ebfaf5] p-4 sm:grid-cols-3"><div><p className="text-[11px] font-black uppercase tracking-[0.12em] text-emerald-900">Disponible au retrait</p><p className="mt-1 text-xl font-black tabular-nums text-emerald-950">{formatAmount(availableBalance)}</p></div><div><p className="text-[11px] font-black uppercase tracking-[0.12em] text-emerald-900">En demande</p><p className="mt-1 text-xl font-black tabular-nums text-emerald-950">{formatAmount(numericSummary?.withdrawal_commissions)}</p></div><div><p className="text-[11px] font-black uppercase tracking-[0.12em] text-emerald-900">Déjà versé</p><p className="mt-1 text-xl font-black tabular-nums text-emerald-950">{formatAmount(numericSummary?.paid_commissions)}</p></div></div>
-        {openWithdrawal ? <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-4"><p className="text-sm font-bold text-amber-950">Une demande de retrait est en cours.</p><p className="mt-1 text-sm text-amber-900">{formatAmount(openWithdrawal.amount)} · {withdrawalLabels[openWithdrawal.status]} · {new Date(openWithdrawal.created_at).toLocaleDateString('fr-FR')}</p><p className="mt-1 text-xs text-amber-900">Portefeuille : {payoutMethodLabels[openWithdrawal.payout_method as PayoutMethod] || openWithdrawal.payout_method} · {openWithdrawal.payout_phone}</p></div> : availableBalance > 0 ? <form onSubmit={(event) => void requestWithdrawal(event)} className="mt-4 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-700">Portefeuille mobile money<select required value={payoutMethod} onChange={(event) => setPayoutMethod(event.target.value as PayoutMethod)} className="mt-1 block min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm">{Object.entries(payoutMethodLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-xs font-semibold text-slate-700">Numéro de réception<input required type="tel" inputMode="tel" autoComplete="tel" value={payoutPhone} onChange={(event) => setPayoutPhone(event.target.value)} placeholder="+225 07 00 00 00 00" className="mt-1 block min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm" /></label><div className="sm:col-span-2"><button type="submit" disabled={requestingWithdrawal || !payoutPhone.trim()} className="ambassador-primary-btn inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-900 px-4 text-sm font-bold text-white disabled:opacity-40">{requestingWithdrawal ? 'Envoi…' : `Demander le retrait de ${formatAmount(availableBalance)}`}</button><p className="mt-2 text-xs leading-5 text-slate-500">Le montant demandé correspond à tout le solde validé. Le transfert n’est pas automatique ; MaTable le traite après vérification.</p></div></form> : <p className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-600">Aucune commission n’est disponible pour le retrait. Les primes deviennent disponibles après validation.</p>}        <div><h3 className="text-sm font-black text-slate-900">Historique des demandes</h3>{withdrawals.length === 0 ? <p className="mt-2 text-sm text-slate-600">Aucune demande de retrait pour le moment.</p> : <div className="mt-2 divide-y divide-slate-200">{withdrawals.map((withdrawal) => <article key={withdrawal.id} className="flex flex-wrap items-start justify-between gap-3 py-3"><div><p className="text-sm font-bold text-slate-900">{formatAmount(withdrawal.amount)} · {withdrawalLabels[withdrawal.status]}</p><p className="mt-1 text-xs text-slate-600">{payoutMethodLabels[withdrawal.payout_method as PayoutMethod] || withdrawal.payout_method} · {withdrawal.payout_phone} · Demandé le {new Date(withdrawal.created_at).toLocaleDateString('fr-FR')}</p>{withdrawal.payout_reference && <p className="mt-1 text-xs text-emerald-800">Référence : {withdrawal.payout_reference}</p>}{withdrawal.admin_reason && <p className="mt-1 text-xs text-rose-800">Motif : {withdrawal.admin_reason}</p>}</div>{withdrawal.processed_at && <time className="text-xs text-slate-500">Traité le {new Date(withdrawal.processed_at).toLocaleDateString('fr-FR')}</time>}</article>)}</div>}</div>
+      <section data-ambassador-panel="withdrawals" aria-labelledby="withdrawal-request-title" className="ambassador-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[0.15em] text-emerald-800">Gestion des gains</p>
+          <h2 id="withdrawal-request-title" className="mt-2 text-xl font-black text-slate-950">Retraits</h2>
+          <p className="mt-1 text-sm text-slate-600">Demandez le retrait de vos commissions validées. Aucun seuil minimum n’est requis.</p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">Les demandes approuvées sont traitées dans les cinq premiers jours ouvrés (hors week-ends et jours fériés) du mois suivant. Le transfert est manuel et n’est confirmé qu’après vérification.</p>
+        </div>
+        <div className="mt-4 grid gap-3 rounded-2xl border border-emerald-900/15 bg-[#ebfaf5] p-4 sm:grid-cols-3">
+          <div><p className="text-[11px] font-black uppercase tracking-[0.12em] text-emerald-900">Disponible au retrait</p><p className="mt-1 text-xl font-black tabular-nums text-emerald-950">{formatAmount(availableBalance)}</p></div>
+          <div><p className="text-[11px] font-black uppercase tracking-[0.12em] text-emerald-900">En demande</p><p className="mt-1 text-xl font-black tabular-nums text-emerald-950">{formatAmount(numericSummary?.withdrawal_commissions)}</p></div>
+          <div><p className="text-[11px] font-black uppercase tracking-[0.12em] text-emerald-900">Déjà versé</p><p className="mt-1 text-xl font-black tabular-nums text-emerald-950">{formatAmount(numericSummary?.paid_commissions)}</p></div>
+        </div>
+        {openWithdrawal ? <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-amber-950">{openWithdrawal.status === 'requested' ? 'Votre demande est en cours de vérification.' : 'Votre demande est validée et attend son transfert.'}</p>
+              <p className="mt-1 text-sm text-amber-900">{formatAmount(openWithdrawal.amount)} · Demandée le {new Date(openWithdrawal.created_at).toLocaleDateString('fr-FR')}</p>
+              <p className="mt-1 break-words text-xs text-amber-900">Portefeuille : {payoutMethodLabels[openWithdrawal.payout_method as PayoutMethod] || openWithdrawal.payout_method} · {openWithdrawal.payout_phone}</p>
+            </div>
+            <span className={`inline-flex shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold ${withdrawalStatusClasses[openWithdrawal.status]}`}>{withdrawalLabels[openWithdrawal.status]}</span>
+          </div>
+          {openWithdrawal.status === 'requested'
+            ? <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-amber-200 pt-3">
+              <p className="text-xs leading-5 text-amber-900">Vous pouvez annuler la demande tant qu’elle n’a pas été validée.</p>
+              <button type="button" disabled={requestingWithdrawal} onClick={() => void cancelWithdrawal(openWithdrawal.id)} className="min-h-10 rounded-lg border border-rose-300 bg-white px-3 text-xs font-bold text-rose-800 transition hover:bg-rose-50 disabled:opacity-50">Annuler la demande</button>
+            </div>
+            : <p className="mt-3 border-t border-amber-200 pt-3 text-xs leading-5 text-amber-900">Le statut passera à « Payée » après confirmation du transfert par MaTable.</p>}
+        </div> : availableBalance > 0 ? <form onSubmit={(event) => void requestWithdrawal(event)} className="mt-4 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
+          <label className="text-xs font-semibold text-slate-700">Portefeuille mobile money<select required value={payoutMethod} onChange={(event) => setPayoutMethod(event.target.value as PayoutMethod)} className="mt-1 block min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm">{Object.entries(payoutMethodLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label className="text-xs font-semibold text-slate-700">Numéro de réception<input required type="tel" inputMode="tel" autoComplete="tel" value={payoutPhone} onChange={(event) => setPayoutPhone(event.target.value)} placeholder="+225 07 00 00 00 00" className="mt-1 block min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm" /></label>
+          <div className="sm:col-span-2">
+            <button type="submit" disabled={requestingWithdrawal || !payoutPhone.trim()} className="ambassador-primary-btn inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-900 px-4 text-sm font-bold text-white disabled:opacity-40 sm:w-auto">{requestingWithdrawal ? 'Envoi…' : `Demander le retrait de ${formatAmount(availableBalance)}`}</button>
+            <p className="mt-2 text-xs leading-5 text-slate-500">La demande porte sur tout le solde validé ({formatAmount(availableBalance)}). Vérifiez le numéro avant l’envoi ; vous pourrez annuler la demande tant qu’elle n’est pas validée.</p>
+          </div>
+        </form> : <p className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-600">Aucune commission n’est disponible pour le retrait. Les primes deviennent disponibles après validation, sans montant minimum.</p>}
+        <div className="mt-6">
+          <h3 className="text-sm font-black text-slate-900">Historique des demandes</h3>
+          {withdrawals.length === 0 ? <p className="mt-2 text-sm text-slate-600">Aucune demande de retrait pour le moment.</p> : <div className="mt-2 space-y-2">{withdrawals.map((withdrawal) => <article key={withdrawal.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-bold text-slate-900">{formatAmount(withdrawal.amount)}</p><span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${withdrawalStatusClasses[withdrawal.status]}`}>{withdrawalLabels[withdrawal.status]}</span></div>
+              <p className="mt-1 break-words text-xs text-slate-600">{payoutMethodLabels[withdrawal.payout_method as PayoutMethod] || withdrawal.payout_method} · {withdrawal.payout_phone} · Demandée le {new Date(withdrawal.created_at).toLocaleDateString('fr-FR')}</p>
+              {withdrawal.payout_reference && <p className="mt-1 break-all text-xs font-semibold text-emerald-800">Référence : {withdrawal.payout_reference}</p>}
+              {withdrawal.admin_reason && <p className="mt-1 break-words text-xs text-rose-800">Motif : {withdrawal.admin_reason}</p>}
+            </div>
+            {withdrawal.processed_at && <time className="shrink-0 text-xs text-slate-500">Traitée le {new Date(withdrawal.processed_at).toLocaleDateString('fr-FR')}</time>}
+          </article>)}</div>}
+        </div>
       </section>
       {activeTab === 'overview' && <section className="border-t border-slate-200 pt-4"><h2 className="text-sm font-black text-slate-900">Dernières boutiques recommandées</h2><p className="mt-1 text-xs text-slate-500">Les coordonnées privées des commerçants restent confidentielles.</p>{dashboard.referrals.length === 0 ? <p className="mt-3 text-sm text-slate-600">Aucune inscription attribuée pour le moment.</p> : <div className="mt-2 divide-y divide-slate-200">{dashboard.referrals.slice(0, 3).map((referral, index) => <article key={`${referral.shop_name}-${referral.created_at}-${index}`} className="flex flex-wrap justify-between gap-2 py-3"><div><p className="text-sm font-bold text-slate-900">{referral.shop_name}</p><p className="mt-1 text-xs text-slate-600">{referral.publication_status === 'active' ? 'Boutique publiée' : 'Publication en cours'} · {new Date(referral.created_at).toLocaleDateString('fr-FR')}</p></div><span className="text-xs font-semibold text-slate-600">{referral.commission_status ? commissionLabels[referral.commission_status] || referral.commission_status : 'En attente du paiement'}</span></article>)}</div>}{dashboard.referrals.length > 3 && <button type="button" onClick={() => setActiveTab('shops')} className="mt-2 text-sm font-bold text-emerald-900 underline underline-offset-2">Voir les {dashboard.referrals.length} boutiques</button>}</section>}
       {activeTab === 'shops' && <section aria-labelledby="referrals-title">

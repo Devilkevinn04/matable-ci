@@ -292,6 +292,8 @@ export default function App() {
   const legalPage = legalPageMap[normalizedPath] || null;
   const isFaqPage = normalizedPath === 'faq';
   const isRecoveryPage = normalizedPath === 'recuperation-acces';
+  const isCustomerPasswordResetPage = path === '/reinitialiser-mot-de-passe';
+  const isMerchantPinResetPage = path === '/reinitialiser-pin-commercant';
   const currentRole: 'storefront' | 'merchant' | 'admin' = path === '/admin' || path.startsWith('/admin/')
     ? 'admin'
     : path === '/app' || path.startsWith('/app/')
@@ -472,7 +474,7 @@ export default function App() {
 
   useEffect(() => {
     const isPrivateRoute = path === '/app' || path.startsWith('/app/') || path === '/admin' || path.startsWith('/admin/') || isAmbassadorRoute
-      || path === '/compte' || path === '/connexion' || path === '/inscription' || isRecoveryPage;
+      || path === '/compte' || path === '/connexion' || path === '/inscription' || isRecoveryPage || isCustomerPasswordResetPage || isMerchantPinResetPage;
     const isInvalidNestedRoute = (!legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && !isMerchantPlansPreview && !isMobileDashboardPreview && !isAdvertisingPreview && !isDeliveryCourierWorkspace && !isShopDirectoryRoute && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !discoveryPage && path.split('/').filter(Boolean).length > 1)
       || isUnknownStorefront;
     const metadata = isProductModalPreview
@@ -503,6 +505,10 @@ export default function App() {
         ? { title: discoveryPage.title, description: discoveryPage.description }
       : isFaqPage
         ? faqMetadata
+      : isCustomerPasswordResetPage
+        ? { title: 'Réinitialiser le mot de passe | MaTable', description: 'Choisissez un nouveau mot de passe pour votre compte client MaTable.' }
+      : isMerchantPinResetPage
+        ? { title: 'Réinitialiser le PIN commerçant | MaTable', description: 'Choisissez un nouveau PIN pour votre compte commerçant MaTable.' }
         : isRecoveryPage
           ? recoveryMetadata
           : isAmbassadorRoute

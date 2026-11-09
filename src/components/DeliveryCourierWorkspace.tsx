@@ -553,7 +553,7 @@ export function DeliveryCourierWorkspace() {
         : null;
 
   return (
-    <main className="min-h-screen bg-[var(--mt-gray-50)] px-3 pb-10 pt-4 text-slate-900 sm:px-6 sm:pt-8">
+    <main className={`delivery-workspace-page ${!loading && serviceAvailable && !driver ? 'delivery-auth-page' : ''} min-h-screen bg-[var(--mt-gray-50)] px-3 pb-10 pt-4 text-slate-900 sm:px-6 sm:pt-8`}>
       <style>{`@page { size: A5 portrait; margin: 10mm; }
 @media print {
   body * { visibility: hidden !important; }
@@ -599,11 +599,11 @@ export function DeliveryCourierWorkspace() {
             )}
           </section>
         ) : !driver ? (
-          <section className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+          <section key={mode} className="delivery-auth-card mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-emerald-900"><Bike className="h-5 w-5" /></span>
             <h1 className="mt-3 text-xl font-black text-slate-950">Espace livreur MaTable</h1>
             <p className="mt-1 text-sm leading-5 text-slate-600">{mode === 'login' ? 'Connectez-vous avec votre numéro et votre code PIN.' : 'Créez votre compte, puis vérifiez votre identité avec Didit pour activer l’accès aux courses.'}</p>
-            <form className="mt-4 space-y-3" onSubmit={(event) => void submitAccount(event)}>
+            <form className="auth-form mt-4 space-y-3" onSubmit={(event) => void submitAccount(event)}>
               {mode === 'register' && (
                 <label className="block text-xs font-bold text-slate-700">Nom complet
                   <input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={80} required className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm" />

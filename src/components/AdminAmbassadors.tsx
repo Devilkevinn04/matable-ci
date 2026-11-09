@@ -28,6 +28,12 @@ interface Withdrawal {
 type AdminAmbassadorView = 'partners' | 'commissions' | 'withdrawals' | 'payouts';
 const statusLabels: Record<string, string> = { pending: 'À vérifier', approved: 'Validée', withdrawal_requested: 'Retrait demandé', paid: 'Versée', cancelled: 'Annulée', refund_review: 'Remboursement à examiner' };
 const withdrawalStatusLabels: Record<Withdrawal['status'], string> = { requested: 'À examiner', approved: 'À payer', rejected: 'Refusée', paid: 'Payée' };
+const withdrawalStatusClasses: Record<Withdrawal['status'], string> = {
+  requested: 'border-amber-200 bg-amber-100 text-amber-900',
+  approved: 'border-sky-200 bg-sky-100 text-sky-900',
+  rejected: 'border-rose-200 bg-rose-100 text-rose-900',
+  paid: 'border-emerald-200 bg-emerald-100 text-emerald-900',
+};
 const payoutMethodLabels: Record<string, string> = { wave: 'Wave', orange_money: 'Orange Money', mtn_momo: 'MTN MoMo', moov_money: 'Moov Money' };
 const money = (value: number) => `${new Intl.NumberFormat('fr-FR').format(value)} FCFA`;
 function decisionReason(details: string | null): string | null {
@@ -57,6 +63,7 @@ export function AdminAmbassadors() {
   const [withdrawalReasons, setWithdrawalReasons] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState('pending');
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [withdrawalMonth, setWithdrawalMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -201,6 +208,29 @@ export function AdminAmbassadors() {
     } catch (problem) { setError(problem instanceof Error ? problem.message : 'Export impossible.'); }
     finally { setBusy(false); }
   };
+  const exportWithdrawalReconciliation = async () => {
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const current = await load();
+      const rows = current.withdrawals.filter((withdrawal) => withdrawal.status === 'paid'
+        && withdrawal.processed_at?.slice(0, 7) === withdrawalMonth);
+      if (!rows.length) { setNotice('Aucun retrait payé à rapprocher pour ce mois.'); return; }
+      const csv = stringifyCsv([
+        ['ID retrait', 'Ambassadeur', 'Portefeuille', 'Numéro bénéficiaire', 'Montant FCFA', 'Date de traitement UTC', 'Référence du transfert'],
+        ...rows.map((withdrawal) => [
+          withdrawal.id, withdrawal.ambassador_name,
+          payoutMethodLabels[withdrawal.payout_method] || withdrawal.payout_method,
+          withdrawal.payout_phone, Number(withdrawal.amount), withdrawal.processed_at, withdrawal.payout_reference,
+        ]),
+      ]);
+      const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' }));
+      const link = document.createElement('a');
+      link.href = url; link.download = `matable-rapprochement-retraits-${withdrawalMonth}.csv`; link.click();
+      URL.revokeObjectURL(url);
+      setNotice('Retraits payés actualisés et exportés pour rapprochement.');
+    } catch (problem) { setError(problem instanceof Error ? problem.message : 'Export du rapprochement impossible.'); }
+    finally { setBusy(false); }
+  };
 
   const adminTabs: { id: AdminAmbassadorView; label: string; icon: typeof Users; count?: number }[] = [
     { id: 'partners', label: 'Partenaires', icon: Users, count: ambassadors.length },
@@ -208,6 +238,10 @@ export function AdminAmbassadors() {
     { id: 'withdrawals', label: 'Retraits', icon: Wallet, count: withdrawals.filter((withdrawal) => ['requested', 'approved'].includes(withdrawal.status)).length },
     { id: 'payouts', label: 'Historique', icon: Store },
   ];
+  const pendingWithdrawalCount = withdrawals.filter((withdrawal) => withdrawal.status === 'requested').length;
+  const approvedWithdrawals = withdrawals.filter((withdrawal) => withdrawal.status === 'approved');
+  const paidWithdrawalCount = withdrawals.filter((withdrawal) => withdrawal.status === 'paid'
+    && withdrawal.processed_at?.slice(0, 7) === withdrawalMonth).length;
   return <section data-admin-view={adminView} className="admin-ambassadors space-y-6" aria-labelledby="ambassadors-title">
     <header className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase text-emerald-800">Partenariats</p><h2 id="ambassadors-title" className="mt-1 text-xl font-black text-slate-900">Ambassadeurs</h2></div><button type="button" title="Actualiser" aria-label="Actualiser" onClick={() => void load().catch((problem) => setError(problem.message))} className="rounded-lg border border-slate-300 p-2"><RefreshCw className="h-5 w-5" /></button></header>
     {error && <p role="alert" className="text-sm font-semibold text-rose-800">{error}</p>}{notice && <p role="status" className="text-sm font-semibold text-emerald-800">{notice}</p>}
@@ -283,13 +317,47 @@ export function AdminAmbassadors() {
         </article>;
       })}
     </div>
-    <div data-admin-panel="withdrawals" className="space-y-3 border-y border-slate-200 py-4"><div className="flex flex-wrap items-end justify-between gap-2"><div><h3 className="text-sm font-black text-slate-900">Demandes de retrait ({withdrawals.length})</h3><p className="mt-1 text-xs text-slate-500">Les transferts restent manuels. Vérifiez le numéro et le portefeuille avant paiement.</p></div><p className="text-sm font-bold text-slate-800">À payer · {money(withdrawals.filter((withdrawal) => withdrawal.status === 'approved').reduce((total, withdrawal) => total + Number(withdrawal.amount), 0))}</p></div>
-      {withdrawals.length === 0 ? <p className="border-t border-slate-200 py-5 text-sm text-slate-500">Aucune demande de retrait.</p> : withdrawals.map((withdrawal) => <article key={withdrawal.id} className="border-t border-slate-200 py-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h4 className="text-sm font-bold text-slate-900">{withdrawal.ambassador_name} · {money(Number(withdrawal.amount))}</h4><p className="mt-1 text-xs text-slate-600">{payoutMethodLabels[withdrawal.payout_method] || withdrawal.payout_method} · {withdrawal.payout_phone} · Demandé le {new Date(withdrawal.created_at).toLocaleDateString('fr-FR')}</p>{withdrawal.ambassador_email && <p className="mt-1 text-xs text-slate-500">{withdrawal.ambassador_email}</p>}</div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{withdrawalStatusLabels[withdrawal.status]}</span></div>
-        {withdrawal.admin_reason && <p className="mt-2 text-xs text-rose-800">Motif : {withdrawal.admin_reason}</p>}
-        {withdrawal.status === 'requested' && <div className="mt-3 space-y-2"><label className="block max-w-xl text-xs font-semibold text-slate-700">Motif (obligatoire en cas de refus)<textarea value={withdrawalReasons[withdrawal.id] || ''} onChange={(event) => setWithdrawalReasons((current) => ({ ...current, [withdrawal.id]: event.target.value }))} maxLength={500} rows={2} className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label><div className="flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={() => void processWithdrawal(withdrawal, 'approve')} className="min-h-9 rounded-lg bg-emerald-800 px-3 text-xs font-bold text-white disabled:opacity-40">Valider la demande</button><button type="button" disabled={busy} onClick={() => void processWithdrawal(withdrawal, 'reject')} className="min-h-9 rounded-lg border border-rose-300 px-3 text-xs font-bold text-rose-800 disabled:opacity-40">Refuser</button></div></div>}
-        {withdrawal.status === 'approved' && <div className="mt-3 flex flex-wrap items-end gap-2"><label className="block min-w-56 flex-1 text-xs font-semibold text-slate-700">Référence du transfert effectué<input value={withdrawalReferences[withdrawal.id] || ''} onChange={(event) => setWithdrawalReferences((current) => ({ ...current, [withdrawal.id]: event.target.value }))} maxLength={160} className="mt-1 block min-h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></label><button type="button" disabled={busy} onClick={() => void processWithdrawal(withdrawal, 'paid')} className="min-h-10 rounded-lg bg-emerald-800 px-3 text-xs font-bold text-white disabled:opacity-40">Enregistrer le paiement</button><button type="button" disabled={busy} onClick={() => void processWithdrawal(withdrawal, 'reject')} className="min-h-10 rounded-lg border border-rose-300 px-3 text-xs font-bold text-rose-800 disabled:opacity-40">Refuser</button></div>}
-        {withdrawal.status === 'paid' && <p className="mt-2 text-xs text-emerald-800">Payé le {withdrawal.processed_at ? new Date(withdrawal.processed_at).toLocaleDateString('fr-FR') : 'date inconnue'} · Réf. {withdrawal.payout_reference}</p>}
-      </article>)}
+    <div data-admin-panel="withdrawals" className="space-y-4">
+      <header className="space-y-1">
+        <h3 className="text-base font-black text-slate-900">Demandes de retrait</h3>
+        <p className="text-xs leading-5 text-slate-600">Traiter les demandes approuvées dans les cinq premiers jours ouvrés (hors week-ends et jours fériés) du mois suivant, sans seuil minimum. Les transferts restent manuels.</p>
+      </header>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-[11px] font-bold uppercase tracking-wide text-amber-900">À examiner</p><p className="mt-1 text-xl font-black tabular-nums text-amber-950">{pendingWithdrawalCount}</p></div>
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-3"><p className="text-[11px] font-bold uppercase tracking-wide text-sky-900">À payer · demandes validées</p><p className="mt-1 text-xl font-black tabular-nums text-sky-950">{money(approvedWithdrawals.reduce((total, withdrawal) => total + Number(withdrawal.amount), 0))}</p></div>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><p className="text-[11px] font-bold uppercase tracking-wide text-emerald-900">Payées ce mois</p><p className="mt-1 text-xl font-black tabular-nums text-emerald-950">{paidWithdrawalCount}</p></div>
+      </div>
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-end sm:justify-between sm:p-4">
+        <p className="max-w-xl text-xs leading-5 text-slate-600">Pour rapprocher les transferts, comparez chaque référence, montant, date et destinataire à l’historique du portefeuille.</p>
+        <div className="grid gap-2 sm:flex sm:items-end">
+          <label className="text-xs font-bold text-slate-700">Mois du rapprochement<input type="month" value={withdrawalMonth} onChange={(event) => setWithdrawalMonth(event.target.value)} className="mt-1 block min-h-10 w-full rounded-lg border border-slate-300 px-3 text-sm sm:w-auto" /></label>
+          <button type="button" disabled={busy || !withdrawalMonth} onClick={() => void exportWithdrawalReconciliation()} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold disabled:opacity-40"><Download className="h-4 w-4" />Exporter les paiements du mois</button>
+        </div>
+      </div>
+      {withdrawals.length === 0 ? <p className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">Aucune demande de retrait pour le moment.</p> : <div className="space-y-3">{withdrawals.map((withdrawal) => <article key={withdrawal.id} className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h4 className="break-words text-sm font-bold text-slate-900">{withdrawal.ambassador_name} · {money(Number(withdrawal.amount))}</h4>
+            <p className="mt-1 break-words text-xs text-slate-600">{payoutMethodLabels[withdrawal.payout_method] || withdrawal.payout_method} · {withdrawal.payout_phone} · Demandé le {new Date(withdrawal.created_at).toLocaleDateString('fr-FR')}</p>
+            {withdrawal.ambassador_email && <p className="mt-1 break-all text-xs text-slate-500">{withdrawal.ambassador_email}</p>}
+          </div>
+          <span className={`inline-flex shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold ${withdrawalStatusClasses[withdrawal.status]}`}>{withdrawalStatusLabels[withdrawal.status]}</span>
+        </div>
+        {withdrawal.admin_reason && <p className="mt-2 break-words text-xs text-rose-800">Motif : {withdrawal.admin_reason}</p>}
+        {withdrawal.status === 'requested' && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+          <label className="block max-w-xl text-xs font-semibold text-slate-700">Motif (obligatoire en cas de refus)<textarea value={withdrawalReasons[withdrawal.id] || ''} onChange={(event) => setWithdrawalReasons((current) => ({ ...current, [withdrawal.id]: event.target.value }))} maxLength={500} rows={2} className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" /></label>
+          <div className="flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={() => void processWithdrawal(withdrawal, 'approve')} className="min-h-10 flex-1 rounded-lg bg-emerald-800 px-3 text-xs font-bold text-white disabled:opacity-40 sm:flex-none">Valider la demande</button><button type="button" disabled={busy} onClick={() => void processWithdrawal(withdrawal, 'reject')} className="min-h-10 flex-1 rounded-lg border border-rose-300 px-3 text-xs font-bold text-rose-800 disabled:opacity-40 sm:flex-none">Refuser</button></div>
+        </div>}
+        {withdrawal.status === 'approved' && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+          <p className="text-xs leading-5 text-slate-600">Après avoir effectué le transfert et confirmé son succès, saisissez sa référence pour clôturer la demande.</p>
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
+            <label className="block min-w-0 flex-1 text-xs font-semibold text-slate-700">Référence du transfert effectué<input value={withdrawalReferences[withdrawal.id] || ''} onChange={(event) => setWithdrawalReferences((current) => ({ ...current, [withdrawal.id]: event.target.value }))} maxLength={160} className="mt-1 block min-h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></label>
+            <button type="button" disabled={busy} onClick={() => void processWithdrawal(withdrawal, 'paid')} className="min-h-10 rounded-lg bg-emerald-800 px-3 text-xs font-bold text-white disabled:opacity-40">Enregistrer le paiement</button>
+            <button type="button" disabled={busy} onClick={() => void processWithdrawal(withdrawal, 'reject')} className="min-h-10 rounded-lg border border-rose-300 px-3 text-xs font-bold text-rose-800 disabled:opacity-40">Refuser</button>
+          </div>
+        </div>}
+        {withdrawal.status === 'paid' && <p className="mt-3 break-all border-t border-slate-100 pt-3 text-xs text-emerald-800">Payé le {withdrawal.processed_at ? new Date(withdrawal.processed_at).toLocaleDateString('fr-FR') : 'date inconnue'} · Réf. {withdrawal.payout_reference}</p>}
+      </article>)}</div>}
     </div>
     <div data-admin-panel="payouts" className="space-y-3"><h3 className="text-sm font-black text-slate-900">Historique des versements</h3>{payouts.length === 0 && <p className="text-sm text-slate-500">Aucun versement enregistré.</p>}{payouts.map((payout) => <div key={payout.id} className="border-b border-slate-200 py-2 text-sm text-slate-700"><strong>{payout.ambassador_name}</strong> · {payout.shop_name} · {money(Number(payout.amount))}<p className="break-words text-xs text-slate-500">{new Date(payout.paid_at).toLocaleDateString('fr-FR')} · {payout.reference}</p></div>)}</div>
   </section>;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   ShieldCheck,
@@ -83,6 +83,94 @@ const adminOrderTransitions: Record<AdminOrder['status'], AdminOrder['status'][]
 
 type AdminRole = 'super_admin' | 'verification_admin';
 type AdminView = 'overview' | 'shops' | 'orders' | 'customers' | 'identity' | 'verification-shops' | 'audience' | 'finance' | 'subscriptions' | 'operations' | 'push' | 'moderation' | 'audit' | 'advertising' | 'promotions' | 'ambassadors';
+
+type DashboardMetricTone = 'emerald' | 'sky' | 'orange' | 'amber' | 'rose';
+
+interface DashboardMetricCardProps {
+  label: string;
+  value: string;
+  detail: string;
+  current?: number;
+  previous?: number;
+  percentagePoints?: boolean;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: DashboardMetricTone;
+  series?: number[];
+  periodLabel: string;
+}
+
+const dashboardMetricTones: Record<DashboardMetricTone, { icon: string; bar: string; accent: string }> = {
+  emerald: { icon: 'bg-emerald-50 text-emerald-800 ring-emerald-100', bar: 'bg-emerald-600', accent: 'bg-emerald-500' },
+  sky: { icon: 'bg-sky-50 text-sky-800 ring-sky-100', bar: 'bg-sky-600', accent: 'bg-sky-500' },
+  orange: { icon: 'bg-orange-50 text-orange-800 ring-orange-100', bar: 'bg-orange-600', accent: 'bg-orange-500' },
+  amber: { icon: 'bg-amber-50 text-amber-800 ring-amber-100', bar: 'bg-amber-600', accent: 'bg-amber-500' },
+  rose: { icon: 'bg-rose-50 text-rose-800 ring-rose-100', bar: 'bg-rose-600', accent: 'bg-rose-500' },
+};
+
+function DashboardMetricCard({
+  label,
+  value,
+  detail,
+  current,
+  previous,
+  percentagePoints,
+  icon: Icon,
+  tone,
+  series = [],
+  periodLabel,
+}: DashboardMetricCardProps) {
+  const styles = dashboardMetricTones[tone];
+  const sampledSeries = series.length > 12
+    ? Array.from({ length: 12 }, (_, index) => series[Math.round(index * (series.length - 1) / 11)])
+    : series;
+  const seriesMax = Math.max(1, ...sampledSeries);
+  const hasComparison = current !== undefined && previous !== undefined;
+  const isStable = hasComparison && current === previous;
+  const change = hasComparison ? formatAudienceChange(current, previous, percentagePoints) : null;
+  const comparisonTone = !hasComparison
+    ? 'bg-slate-100 text-slate-500'
+    : isStable
+      ? 'bg-slate-100 text-slate-600'
+      : current > previous
+        ? 'bg-emerald-50 text-emerald-800'
+        : 'bg-amber-50 text-amber-800';
+  const comparisonLabel = !hasComparison
+    ? 'Comparaison en cours'
+    : isStable
+      ? 'Stable'
+      : change;
+
+  return (
+    <article className="group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_4px_16px_rgba(15,23,42,.04)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(15,23,42,.08)] sm:p-5">
+      <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-1 ${styles.accent}`} />
+      <div className="flex items-start justify-between gap-3">
+        <p className="min-h-10 text-xs font-bold leading-5 text-slate-600">{label}</p>
+        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 ${styles.icon}`}>
+          <Icon className="h-4 w-4" aria-hidden="true" />
+        </span>
+      </div>
+      <p className="mt-1 break-words text-2xl font-black tracking-tight text-[#183b31] sm:text-3xl">{value}</p>
+      <p className="mt-1 min-h-8 text-[11px] leading-4 text-slate-500">{detail}</p>
+      <div className="mt-3 flex min-w-0 items-center justify-between gap-2 border-t border-slate-100 pt-3">
+        <span className={`min-w-0 truncate rounded-full px-2.5 py-1 text-[10px] font-black tabular-nums ${comparisonTone}`}>
+          {comparisonLabel}
+        </span>
+        <span className="shrink-0 text-[10px] font-semibold text-slate-400">{periodLabel}</span>
+      </div>
+      <div aria-hidden="true" className="mt-3 flex h-7 items-end gap-1">
+        {sampledSeries.length > 0
+          ? sampledSeries.map((point, index) => (
+            <span
+              key={index}
+              className={`min-w-0 flex-1 rounded-t-sm ${styles.bar} transition-[height] duration-300`}
+              style={{ height: `${point > 0 ? Math.max(12, point / seriesMax * 100) : 5}%`, opacity: point > 0 ? 0.78 : 0.12 }}
+            />
+          ))
+          : <span className="h-1 w-full rounded-full bg-slate-100" />}
+      </div>
+    </article>
+  );
+}
 
 interface VerificationShopSummary {
   id: number;
@@ -271,7 +359,6 @@ export const AdminDashboard: React.FC = () => {
   const [showAdminKey, setShowAdminKey] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -291,6 +378,9 @@ export const AdminDashboard: React.FC = () => {
   const [deleteShopLoading, setDeleteShopLoading] = useState(false);
   const [deleteShopError, setDeleteShopError] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
+  const [analyticsError, setAnalyticsError] = useState('');
+  const [analyticsUpdatedAt, setAnalyticsUpdatedAt] = useState<string | null>(null);
+  const analyticsRequestId = useRef(0);
   const [analyticsDays, setAnalyticsDays] = useState(30);
   const [audienceShopSearch, setAudienceShopSearch] = useState('');
   const [audienceShopSort, setAudienceShopSort] = useState<'views' | 'sessions' | 'orders' | 'sales' | 'conversion' | 'name'>('views');
@@ -368,7 +458,6 @@ export const AdminDashboard: React.FC = () => {
 
   const fetchAdminShops = async () => {
     try {
-      setLoading(true);
       const sessionRes = await fetch('/api/auth/session', { method: 'GET' });
       if (!sessionRes.ok) {
         setIsAuthenticated(false);
@@ -403,7 +492,6 @@ export const AdminDashboard: React.FC = () => {
         const data = await res.json();
         setShops(data);
         setIsAuthenticated(true);
-        await fetchAnalytics(analyticsDays);
         if (role === 'super_admin') {
           await fetchFinance(financeDays);
           await fetchSubscriptions();
@@ -417,8 +505,6 @@ export const AdminDashboard: React.FC = () => {
       }
     } catch (e) {
       console.error(e);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -654,13 +740,18 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const fetchAnalytics = async (days: number) => {
+    const requestId = ++analyticsRequestId.current;
+    setAnalyticsError('');
     try {
-      const res = await fetch(`/api/admin/analytics?days=${days}`);
+      const res = await fetch(`/api/admin/analytics?days=${days}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('Impossible de charger les données d’audience.');
-      setAnalytics(await res.json());
+      const data = await res.json() as AdminAnalytics;
+      if (requestId !== analyticsRequestId.current) return;
+      setAnalytics(data);
+      setAnalyticsUpdatedAt(new Date().toISOString());
     } catch (error) {
-      console.error(error);
-      showNotice('Les données d’audience sont momentanément indisponibles.');
+      if (requestId !== analyticsRequestId.current) return;
+      setAnalyticsError(error instanceof Error ? error.message : 'Les données d’audience sont momentanément indisponibles.');
     }
   };
 
@@ -730,6 +821,12 @@ export const AdminDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!isAuthenticated || adminRole !== 'super_admin' || !['overview', 'audience'].includes(adminView)) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    void fetchAnalytics(analyticsDays);
+  }, [isAuthenticated, adminRole, adminView, analyticsDays]);
+
+  useEffect(() => {
     if (isAuthenticated && adminView === 'moderation') void fetchContentModeration();
   }, [isAuthenticated, adminView]);
 
@@ -741,6 +838,11 @@ export const AdminDashboard: React.FC = () => {
     refreshOverviewQueues,
     30_000,
     isAuthenticated && adminRole === 'super_admin' && adminView === 'overview',
+  );
+  useVisibilityPolling(
+    () => fetchAnalytics(analyticsDays),
+    30_000,
+    isAuthenticated && adminRole === 'super_admin' && ['overview', 'audience'].includes(adminView),
   );
   useVisibilityPolling(
     pollAdminHealth,
@@ -836,6 +938,8 @@ export const AdminDashboard: React.FC = () => {
     setOverviewPendingOrderCount(null);
     setOverviewPendingOrdersError('');
     setAnalytics(null);
+    setAnalyticsError('');
+    setAnalyticsUpdatedAt(null);
     setFinance(null);
     setContentModeration({ reviews: [], reports: [] });
     setContentModerationLoaded(false);
@@ -1640,16 +1744,6 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => fetchAdminShops()}
-                disabled={loading}
-                aria-label="Actualiser les boutiques"
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-xs font-black text-[var(--mt-gray-900)] shadow-[4px_4px_0_rgba(33,23,18,0.96)] border-[2px] border-[var(--mt-gray-900)] transition hover:translate-y-[-1px] disabled:opacity-60"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                <span>Actualiser</span>
-              </button>
               <button type="button" onClick={() => void handleAdminLogout()} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border-2 border-[var(--mt-gray-900)] bg-white px-3 py-2 text-xs font-black text-[var(--mt-gray-900)] transition hover:bg-rose-50">
                 <LogOut className="h-4 w-4" /> Déconnexion
               </button>
@@ -1761,33 +1855,41 @@ export const AdminDashboard: React.FC = () => {
                 <div>
                   <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-100"><BarChart3 className="h-3.5 w-3.5" aria-hidden="true" /> Aperçu de la plateforme</p>
                   <h2 id="admin-overview-title" className="mt-3 text-2xl font-black tracking-tight sm:text-3xl">Activité de MaTable</h2>
-                  <p className="mt-2 max-w-xl text-xs leading-5 text-emerald-50/80 sm:text-sm">Les indicateurs ci-dessous résument les boutiques, les visiteurs et les commandes sur la période choisie.</p>
+                  <p className="mt-2 max-w-xl text-xs leading-5 text-emerald-50/80 sm:text-sm">Les indicateurs résument les boutiques, les sessions d’audience consenties et les commandes sur la période choisie.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <label className="sr-only" htmlFor="admin-overview-days">Période des statistiques</label>
-                  <select id="admin-overview-days" value={analyticsDays} onChange={(event) => { const days = Number(event.target.value); setAnalyticsDays(days); void fetchAnalytics(days); }} className="min-h-10 rounded-full border border-white/25 bg-white/10 px-4 text-xs font-extrabold text-white focus:bg-[#123e32]">
+                  <select id="admin-overview-days" value={analyticsDays} onChange={(event) => setAnalyticsDays(Number(event.target.value))} className="min-h-10 rounded-full border border-white/25 bg-white/10 px-4 text-xs font-extrabold text-white focus:bg-[#123e32]">
                     <option value={7}>7 derniers jours</option>
                     <option value={30}>30 derniers jours</option>
                     <option value={90}>90 derniers jours</option>
                   </select>
-                  <button type="button" onClick={() => void fetchAnalytics(analyticsDays)} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-white/25 px-4 text-xs font-bold text-white transition hover:bg-white/10"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Actualiser</button>
                 </div>
               </div>
               <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-white/15 pt-4 text-[11px] text-emerald-50/80">
                 <p>{analytics ? `Données du ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${analytics.daily[0]?.date || new Date().toISOString().slice(0, 10)}T12:00:00`))} au ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(`${analytics.daily.at(-1)?.date || new Date().toISOString().slice(0, 10)}T12:00:00`))}` : 'Chargement des données de la période…'}</p>
-                <p>Actualisation automatique toutes les 30 secondes</p>
+                <p>{analyticsUpdatedAt
+                  ? `Dernière mise à jour ${new Intl.DateTimeFormat('fr-FR', { timeStyle: 'short' }).format(new Date(analyticsUpdatedAt))} · actualisation toutes les 30 s si l’onglet est visible`
+                  : 'Chargement des statistiques…'}</p>
               </div>
             </header>
+            {analyticsError && (
+              <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900">
+                Mise à jour impossible : {analyticsError}
+                {analytics && ` Les dernières données disponibles (${analytics.days} jours) sont conservées.`}
+              </p>
+            )}
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {[
+              {([
                 {
-                  label: 'Visiteurs distincts',
+                  label: 'Sessions d’audience',
                   value: analytics ? new Intl.NumberFormat('fr-FR').format(analytics.totals.unique_visitors) : '—',
-                  detail: 'Personnes ayant accepté les statistiques.',
+                  detail: 'Sessions mesurées après consentement, pas des personnes uniques.',
                   current: analytics?.totals.unique_visitors,
                   previous: analytics?.previous.unique_visitors,
+                  series: analytics?.daily.map((day) => day.unique_visitors) || [],
                   icon: Eye,
-                  tone: 'green',
+                  tone: 'emerald',
                 },
                 {
                   label: 'Commandes reçues',
@@ -1795,18 +1897,20 @@ export const AdminDashboard: React.FC = () => {
                   detail: 'Hors commandes annulées ou expirées.',
                   current: analytics?.totals.orders,
                   previous: analytics?.previous.orders,
+                  series: analytics?.daily.map((day) => day.orders) || [],
                   icon: ShoppingBag,
                   tone: 'orange',
                 },
                 {
-                  label: 'Ratio commandes / visiteurs',
+                  label: 'Commandes / sessions',
                   value: analytics ? `${analytics.totals.conversion_rate.toLocaleString('fr-FR')} %` : '—',
-                  detail: 'Ratio brut ; peut dépasser 100 % si des visiteurs commandent plusieurs fois.',
+                  detail: 'Ratio indicatif des totaux ; ne relie pas une session à une commande.',
                   current: analytics?.totals.conversion_rate,
                   previous: analytics?.previous.conversion_rate,
                   percentagePoints: true,
+                  series: analytics?.daily.map((day) => day.unique_visitors ? day.orders / day.unique_visitors * 100 : 0) || [],
                   icon: TrendingUp,
-                  tone: 'blue',
+                  tone: 'sky',
                 },
                 {
                   label: 'Montant demandé',
@@ -1814,42 +1918,17 @@ export const AdminDashboard: React.FC = () => {
                   detail: 'Valeur des commandes, non encaissée par MaTable.',
                   current: analytics?.totals.sales,
                   previous: analytics?.previous.sales,
+                  series: analytics?.daily.map((day) => day.sales) || [],
                   icon: DollarSign,
-                  tone: 'gold',
+                  tone: 'amber',
                 },
-              ].map((metric) => {
-                const tones = {
-                  green: 'bg-emerald-50 text-emerald-800 ring-emerald-100',
-                  blue: 'bg-sky-50 text-sky-800 ring-sky-100',
-                  orange: 'bg-orange-50 text-orange-800 ring-orange-100',
-                  gold: 'bg-amber-50 text-amber-800 ring-amber-100',
-                };
-                const change = metric.current === undefined || metric.previous === undefined
-                  ? null
-                  : formatAudienceChange(metric.current, metric.previous, metric.percentagePoints);
-                const isStable = metric.current === metric.previous;
-                const isPositive = metric.current !== undefined && metric.previous !== undefined && metric.current > metric.previous;
-                const comparison = change === null
-                  ? 'Comparaison en cours'
-                  : isStable
-                    ? 'Stable par rapport à la période précédente'
-                    : metric.previous === 0
-                      ? 'Nouvelle activité · aucune sur la période précédente'
-                      : `${change} par rapport à la période précédente`;
-                return (
-                  <article key={metric.label} className="flex min-w-0 flex-col rounded-2xl border border-[#e7dfd3] bg-white p-4 shadow-[0_3px_12px_rgba(41,45,42,.03)] sm:p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="min-h-10 text-xs font-bold leading-5 text-slate-600">{metric.label}</p>
-                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 ${tones[metric.tone]}`}><metric.icon className="h-4 w-4" aria-hidden="true" /></span>
-                    </div>
-                    <p className="mt-2 break-words text-2xl font-black tracking-tight text-[#183b31] sm:text-3xl">{metric.value}</p>
-                    <p className="mt-1 min-h-8 text-[11px] leading-4 text-slate-500">{metric.detail}</p>
-                    <p className={`mt-3 border-t border-slate-100 pt-2 text-[10px] font-bold ${change === null ? 'text-slate-400' : isStable ? 'text-slate-500' : isPositive ? 'text-emerald-700' : 'text-orange-800'}`}>
-                      {comparison}
-                    </p>
-                  </article>
-                );
-              })}
+              ] satisfies Omit<DashboardMetricCardProps, 'periodLabel'>[]).map((metric) => (
+                <DashboardMetricCard
+                  key={metric.label}
+                  {...metric}
+                  periodLabel={analytics ? `vs ${analytics.days} j` : 'chargement'}
+                />
+              ))}
             </div>
             <section aria-label="État du réseau de boutiques" className="flex flex-col gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
               <div className="flex min-w-0 items-center gap-3">
@@ -1969,7 +2048,7 @@ export const AdminDashboard: React.FC = () => {
                   <div className="mt-2 grid gap-2 text-xs leading-5 text-slate-600 sm:grid-cols-3">
                     <p><strong className="text-slate-800">Boutiques actives :</strong> les comptes peuvent utiliser MaTable ; cela ne confirme pas que leur vitrine est publiée.</p>
                     <p><strong className="text-slate-800">Valeur des commandes :</strong> sommes demandées dans les commandes ; les paiements client-commerçant ne sont pas encaissés ni suivis par MaTable.</p>
-                    <p><strong className="text-slate-800">Visiteurs distincts :</strong> sessions anonymisées comptées uniquement après consentement aux statistiques.</p>
+                    <p><strong className="text-slate-800">Sessions d’audience :</strong> sessions anonymisées comptées uniquement après consentement aux statistiques; elles ne correspondent pas forcément à des personnes distinctes.</p>
                   </div>
                 </section>
                 <section aria-labelledby="admin-top-shops-title" className="min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
@@ -2120,48 +2199,64 @@ export const AdminDashboard: React.FC = () => {
         <motion.section
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="chart-panel p-4 md:p-5"
+          className="space-y-5 rounded-[1.5rem] border border-[#e7dfd3] bg-[#fffdf8] p-3 shadow-[0_12px_30px_rgba(33,23,18,.05)] sm:p-5 md:p-6"
         >
-          <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-            <div className="col-span-2 flex min-w-0 items-center gap-2 sm:col-span-1">
-              <Activity className="w-5 h-5 text-rose-600" />
-              <div>
-                <h2 className="font-black text-slate-900 text-sm">Audience et acquisition</h2>
-                <p className="text-[11px] text-slate-500 leading-4">Mesures agrégées pour comprendre d’où vient le trafic et quelles boutiques sont consultées.</p>
+          <header className="overflow-hidden rounded-2xl bg-gradient-to-br from-[#123e32] via-[#174c3d] to-[#1d5b47] p-4 text-white shadow-[0_12px_28px_rgba(18,62,50,.16)] sm:p-5">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/10 ring-1 ring-white/15">
+                  <Activity className="h-5 w-5 text-emerald-100" aria-hidden="true" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-100">Mesure consentie · rapports agrégés</p>
+                  <h2 className="mt-1 text-lg font-black tracking-tight sm:text-xl">Audience et acquisition</h2>
+                  <p className="mt-1 max-w-2xl text-xs leading-5 text-emerald-50/80">Sessions anonymisées après consentement. Elles ne représentent pas nécessairement des personnes distinctes.</p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
+                <div role="group" aria-label="Période d’audience" className="flex min-h-10 items-center gap-1 rounded-xl border border-white/15 bg-black/10 p-1">
+                  {[7, 30, 90].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      aria-pressed={analyticsDays === days}
+                      onClick={() => setAnalyticsDays(days)}
+                      className={`min-h-8 flex-1 rounded-lg px-3 text-xs font-bold transition sm:flex-none ${analyticsDays === days ? 'bg-white text-[#123e32] shadow-sm' : 'text-white/80 hover:bg-white/10 hover:text-white'}`}
+                    >
+                      {days} j
+                    </button>
+                  ))}
+                </div>
+                <button type="button" onClick={() => exportOperationsCsv(`matable-audience-${new Date().toISOString().slice(0, 10)}.csv`, ['Boutique', 'Pages vues consenties', 'Sessions distinctes', 'Commandes valides', 'Valeur des commandes FCFA', 'Commandes / sessions (%)'], filteredAudienceShops.map(shop => [shop.shop_name, shop.page_views, shop.unique_visitors, shop.orders, shop.sales, shop.conversion_rate]))} disabled={!filteredAudienceShops.length} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-white px-3 text-xs font-bold text-[#123e32] transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50">
+                  <Download className="h-4 w-4" aria-hidden="true" />Exporter les boutiques
+                </button>
               </div>
             </div>
-            <select
-              value={analyticsDays}
-              onChange={event => { const days = Number(event.target.value); setAnalyticsDays(days); fetchAnalytics(days); }}
-              aria-label="Période d’audience"
-              className="min-w-0 w-full rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-bold text-slate-700 outline-none sm:w-auto"
-            >
-              <option value={7}>7 derniers jours</option>
-              <option value={30}>30 derniers jours</option>
-              <option value={90}>90 derniers jours</option>
-            </select>
-            <button type="button" onClick={() => exportOperationsCsv(`matable-audience-${new Date().toISOString().slice(0, 10)}.csv`, ['Boutique', 'Pages vues consenties', 'Sessions distinctes', 'Commandes valides', 'Valeur des commandes FCFA', 'Commandes / sessions (%)'], filteredAudienceShops.map(shop => [shop.shop_name, shop.page_views, shop.unique_visitors, shop.orders, shop.sales, shop.conversion_rate]))} disabled={!filteredAudienceShops.length} className="inline-flex min-h-10 min-w-0 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-bold text-slate-700 disabled:opacity-50 sm:w-auto sm:px-3">
-              <Download className="h-4 w-4" />Exporter les boutiques filtrées
-            </button>
-          </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/15 pt-3 text-[10px] font-medium text-emerald-50/75">
+              <span>{analytics ? `${analytics.days} derniers jours · données agrégées` : 'Chargement des données…'}</span>
+              <span>{analyticsUpdatedAt
+                ? `Mis à jour à ${new Intl.DateTimeFormat('fr-FR', { timeStyle: 'short' }).format(new Date(analyticsUpdatedAt))} · auto toutes les 30 s si visible`
+                : 'Actualisation en cours'}</span>
+            </div>
+          </header>
 
+          {analyticsError && (
+            <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900">
+              Mise à jour impossible : {analyticsError}
+              {analytics && ` Les dernières données disponibles (${analytics.days} jours) sont conservées.`}
+            </p>
+          )}
           {analytics ? (
             <>
-              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-                {[
-                  { label: 'Pages vues mesurées', value: new Intl.NumberFormat('fr-FR').format(analytics.totals.page_views), detail: 'Même page, session et boutique : une fois par jour au plus', current: analytics.totals.page_views, previous: analytics.previous.page_views, icon: Eye, tone: 'text-slate-700' },
-                  { label: 'Sessions distinctes', value: new Intl.NumberFormat('fr-FR').format(analytics.totals.unique_visitors), detail: 'Navigations temporaires, pas des personnes identifiées', current: analytics.totals.unique_visitors, previous: analytics.previous.unique_visitors, icon: Users, tone: 'text-sky-700' },
-                  { label: 'Commandes non annulées', value: new Intl.NumberFormat('fr-FR').format(analytics.totals.orders), detail: 'Commandes annulées et expirées exclues', current: analytics.totals.orders, previous: analytics.previous.orders, icon: ShoppingBag, tone: 'text-emerald-700' },
-                  { label: 'Montant des commandes', value: `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} FCFA`, detail: 'Montant demandé, pas un encaissement confirmé', current: analytics.totals.sales, previous: analytics.previous.sales, icon: DollarSign, tone: 'text-amber-700' },
-                  { label: 'Commandes / sessions', value: `${analytics.totals.conversion_rate.toLocaleString('fr-FR')}%`, detail: 'Commandes ÷ sessions distinctes; pas une attribution de vente', current: analytics.totals.conversion_rate, previous: analytics.previous.conversion_rate, percentagePoints: true, icon: TrendingUp, tone: 'text-rose-700' },
-                ].map(({ label, value, detail, current, previous, percentagePoints, icon: Icon, tone }) => (
-                  <div key={label} className="metric-card p-3">
-                    <Icon className={`w-4 h-4 ${tone} mb-3`} />
-                    <span className="block min-h-8 text-xs font-semibold leading-4 text-slate-600">{label}</span>
-                    <strong className="mt-1 block break-words text-lg tabular-nums text-slate-900">{value}</strong>
-                    <span className="mt-1 block min-h-8 text-[10px] leading-4 text-slate-500">{detail}</span>
-                    <span className="mt-1 block text-[10px] leading-4 text-slate-500">{formatAudienceChange(current, previous, percentagePoints)} vs {analytics.days} jours précédents</span>
-                  </div>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+                {([
+                  { label: 'Pages vues mesurées', value: new Intl.NumberFormat('fr-FR').format(analytics.totals.page_views), detail: 'Une même page est comptée une fois par session et par jour.', current: analytics.totals.page_views, previous: analytics.previous.page_views, series: analytics.daily.map((day) => day.page_views), icon: Eye, tone: 'emerald' },
+                  { label: 'Sessions distinctes', value: new Intl.NumberFormat('fr-FR').format(analytics.totals.unique_visitors), detail: 'Sessions anonymisées; pas des personnes identifiées.', current: analytics.totals.unique_visitors, previous: analytics.previous.unique_visitors, series: analytics.daily.map((day) => day.unique_visitors), icon: Users, tone: 'sky' },
+                  { label: 'Commandes non annulées', value: new Intl.NumberFormat('fr-FR').format(analytics.totals.orders), detail: 'Commandes annulées et expirées exclues.', current: analytics.totals.orders, previous: analytics.previous.orders, series: analytics.daily.map((day) => day.orders), icon: ShoppingBag, tone: 'orange' },
+                  { label: 'Montant des commandes', value: `${new Intl.NumberFormat('fr-FR').format(analytics.totals.sales)} FCFA`, detail: 'Montant demandé, pas un encaissement confirmé.', current: analytics.totals.sales, previous: analytics.previous.sales, series: analytics.daily.map((day) => day.sales), icon: DollarSign, tone: 'amber' },
+                  { label: 'Commandes / sessions', value: `${analytics.totals.conversion_rate.toLocaleString('fr-FR')} %`, detail: 'Ratio indicatif; ne prouve pas une attribution de vente.', current: analytics.totals.conversion_rate, previous: analytics.previous.conversion_rate, percentagePoints: true, series: analytics.daily.map((day) => day.unique_visitors ? day.orders / day.unique_visitors * 100 : 0), icon: TrendingUp, tone: 'rose' },
+                ] satisfies Omit<DashboardMetricCardProps, 'periodLabel'>[]).map((metric) => (
+                  <DashboardMetricCard key={metric.label} {...metric} periodLabel={`vs ${analytics.days} j`} />
                 ))}
               </div>
 
@@ -2173,7 +2268,7 @@ export const AdminDashboard: React.FC = () => {
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-sm font-black text-slate-800">Pages vues consenties par jour</h3>
-                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-800">{analyticsDays} jours</span>
+                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-800">{analytics.days} jours</span>
                   </div>
                   <div className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-2">
                     <div className="flex h-44 flex-col justify-between pb-6 text-right text-[10px] tabular-nums text-slate-500">
@@ -2380,9 +2475,9 @@ export const AdminDashboard: React.FC = () => {
                 </div>
                 <details className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                   <summary className="cursor-pointer text-xs font-bold text-slate-700">Activité de la plateforme sur 7 jours</summary>
-                  <p className="mt-2 text-xs text-slate-500">Visiteurs distincts mesurés, boutiques créées et clics WhatsApp suivis. Les visiteurs dépendent du consentement statistique.</p>
+                  <p className="mt-2 text-xs text-slate-500">Sessions anonymisées mesurées après consentement, boutiques créées et clics WhatsApp suivis.</p>
                   <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Visiteurs</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.unique_visitors}</strong></div>
+                    <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Sessions d’audience</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.unique_visitors}</strong></div>
                     <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Boutiques créées</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.shops_created}</strong></div>
                     <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Clics WhatsApp</p><strong className="text-xl font-black text-slate-900">{subscriptions.weekly_activity.whatsapp_clicks}</strong></div>
                   </div>
@@ -2685,7 +2780,7 @@ export const AdminDashboard: React.FC = () => {
               <Activity className="w-5 h-5 text-emerald-600" />
               <div>
                 <h2 className="font-black text-slate-900 text-sm">Centre opérationnel</h2>
-                <p className="text-[11px] text-slate-500">État du service, stockage et outils de contact propriétaire.</p>
+                <p className="text-[11px] text-slate-500">État applicatif et outils de contact. Les sauvegardes et la release ne sont pas supervisées ici.</p>
               </div>
             </div>
             <button type="button" onClick={() => void fetchOperations()} disabled={operationsLoading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">
@@ -2745,6 +2840,21 @@ export const AdminDashboard: React.FC = () => {
               )}
             </section>
           )}
+          <section aria-label="Statut des sauvegardes et de la release" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-xs font-black text-amber-950">Sauvegardes et déploiements</h3>
+              <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-900">Non supervisés ici</span>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-amber-950">
+              L’état du service ne confirme ni l’exécution du timer et la validité de la dernière sauvegarde, ni le SHA réellement déployé. Un service sain ne garantit donc pas qu’une sauvegarde récente est disponible.
+            </p>
+            <details className="mt-2">
+              <summary className="cursor-pointer text-xs font-bold text-amber-950">Vérifications VPS</summary>
+              <pre className="mt-2 overflow-x-auto rounded-lg bg-white/80 p-3 text-[10px] leading-5 text-slate-800">{`systemctl list-timers matable-postgres-backup.timer --no-pager
+journalctl -u matable-postgres-backup.service -n 10 --no-pager -o cat
+make -f /srv/apps/matable/Makefile production-status`}</pre>
+            </details>
+          </section>
 
           {adminRole === 'super_admin' && <div className="mt-5 border-t border-slate-200 pt-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
