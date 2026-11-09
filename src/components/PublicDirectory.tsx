@@ -34,7 +34,18 @@ interface DirectoryShop {
   theme_color?: string;
   opening_hours?: { enabled?: boolean; open_time?: string; close_time?: string; days?: number[] };
   theme_config?: { custom_banner_url?: string; primary_color?: string; logo_url?: string; event_mode_enabled?: boolean; event_type?: string; event_banner_text?: string };
-  products_preview?: { id: number; title: string; image_url: string; thumbnail_url?: string; price: number }[];
+  products_preview?: {
+    id: number;
+    title: string;
+    image_url: string;
+    thumbnail_url?: string;
+    price: number;
+    sale_price?: number | null;
+    sale_starts_at?: string | null;
+    sale_ends_at?: string | null;
+    in_stock?: boolean;
+    created_at?: string | null;
+  }[];
 }
 
 interface PublicDirectoryProps {

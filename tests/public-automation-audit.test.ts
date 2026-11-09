@@ -413,6 +413,31 @@ test('category landing pages expose server-rendered SEO metadata to social crawl
   assert.equal((html.match(/property="og:title"/g) || []).length, 1);
 });
 
+test('public directory previews expose accurate product availability, sale, and freshness fields', async () => {
+  const response = await fetch(`${BASE_URL}/api/v1/catalog/storefronts`);
+  assert.equal(response.status, 200);
+  const directory = await response.json() as Array<{
+    products_preview?: Array<{
+      id: number;
+      in_stock: boolean;
+      created_at: string | null;
+      sale_price: number | null;
+      sale_starts_at: string | null;
+      sale_ends_at: string | null;
+    }>;
+  }>;
+  const product = directory.flatMap((shop) => shop.products_preview || []).find((preview) => preview.id > 0);
+
+  assert.ok(product, 'A public product preview is required.');
+  assert.equal(product.in_stock, true);
+  assert.equal(Object.hasOwn(product, 'stock'), false);
+  assert.ok(Object.hasOwn(product, 'created_at'));
+  assert.ok(Object.hasOwn(product, 'sale_price'));
+  assert.ok(Object.hasOwn(product, 'sale_starts_at'));
+  assert.ok(Object.hasOwn(product, 'sale_ends_at'));
+  assert.ok(product.created_at === null || Number.isFinite(Date.parse(product.created_at)));
+});
+
 test('public product feed filters by category and city and ranks consented interactions in aggregate', async () => {
   const directoryResponse = await fetch(`${BASE_URL}/api/v1/catalog/storefronts`);
   assert.equal(directoryResponse.status, 200);
@@ -1136,6 +1161,18 @@ test('shop pages expose canonical SEO metadata for social sharing and indexing',
   assert.match(html, /<meta name="description"/i);
   assert.match(html, /<link rel="canonical" href=".*\/boutique-seo-test"/i);
   assert.match(html, /og:title|og:image|twitter:card/i);
+  const testDb = new Database(TEST_DB_PATH);
+  try {
+    testDb.prepare('UPDATE shops SET name = ? WHERE id = ?').run('PUFF SEO Test', createdPayload.shop.id);
+  } finally {
+    testDb.close();
+  }
+  const excludedShopPage = await fetch(`${BASE_URL}/${encodeURIComponent(createdPayload.shop.slug)}`);
+  assert.equal(excludedShopPage.status, 200, 'The storefront remains accessible by its URL');
+  assert.match(await excludedShopPage.text(), /<meta name="robots" content="noindex, nofollow" \/>/);
+  const sitemap = await fetch(`${BASE_URL}/sitemap.xml`);
+  assert.equal(sitemap.status, 200);
+  assert.equal((await sitemap.text()).includes(createdPayload.shop.slug), false);
 });
 
 test('free onboarding keeps the shop active without subscription controls', async () => {

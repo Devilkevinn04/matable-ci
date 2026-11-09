@@ -4,6 +4,7 @@ import { escapeHtml, isShopPubliclyVisible } from './businessRules.ts';
 import { getCategoryDefaults } from '../../src/utils/categoryDefaults.ts';
 import { findPublicDiscoveryPage, toDiscoveryCitySlug } from '../../src/utils/discoverySeo.ts';
 import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
+import { isShopExcludedFromPublicIndex } from '../../src/utils/shopIndexing.ts';
 import { FAQ_SECTIONS } from '../../src/utils/faqContent.ts';
 import { SUBSCRIPTION_PLANS, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../../src/utils/subscriptionFeatures.ts';
 import type { SubscriptionPrices } from './subscriptionPricing.ts';
@@ -269,6 +270,9 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
     const shopUrl = `${origin}/${encodeURIComponent(targetShop.slug)}`;
     const title = `${sanitizeTextField(targetShop.name, 100)} — Boutique locale en Côte d’Ivoire | MaTable`;
     const description = sanitizeTextField(targetShop.welcome_message || `Découvrez le catalogue de ${targetShop.name} et commandez directement sur WhatsApp.`, 160);
+    const robots = isShopExcludedFromPublicIndex(targetShop.name)
+      ? 'noindex, nofollow'
+      : 'index, follow, max-image-preview:large';
     const defaultImage = `${origin}/brand-kit/social-share.png`;
     const customImage = targetShop.theme_config?.custom_banner_url;
     const image = customImage && /^https?:\/\//i.test(String(customImage)) ? String(customImage) : defaultImage;
@@ -310,7 +314,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
     const meta = [
       `<title>${escapeHtml(title)}</title>`,
       `<meta name="description" content="${escapeHtml(description)}" />`,
-      `<meta name="robots" content="index, follow, max-image-preview:large" />`,
+      `<meta name="robots" content="${robots}" />`,
       `<link rel="canonical" href="${escapeHtml(shopUrl)}" />`,
       `<meta property="og:title" content="${escapeHtml(title)}" />`,
       `<meta property="og:description" content="${escapeHtml(description)}" />`,

@@ -210,9 +210,9 @@ export function createPublicShopsRouter({
           publicShopIds,
         ),
         dbAll<Record<string, unknown>>(
-          `SELECT id, shop_id, title, description, image_url, thumbnail_url, price FROM (
-             SELECT id, shop_id, title, description, image_url, thumbnail_url, price,
-               ROW_NUMBER() OVER (PARTITION BY shop_id ORDER BY id) AS preview_rank
+          `SELECT id, shop_id, title, description, image_url, thumbnail_url, price, sale_price, sale_starts_at, sale_ends_at, stock, created_at FROM (
+             SELECT id, shop_id, title, description, image_url, thumbnail_url, price, sale_price, sale_starts_at, sale_ends_at, stock, created_at,
+               ROW_NUMBER() OVER (PARTITION BY shop_id ORDER BY created_at DESC, id DESC) AS preview_rank
              FROM products
              WHERE shop_id IN (${publicShopIds.map(() => '?').join(', ')}) AND is_available = 1 AND stock > 0
            ) AS ranked_products WHERE preview_rank <= 3`,
@@ -221,7 +221,18 @@ export function createPublicShopsRouter({
       ])
       : [[], []];
     const productCounts = new Map(productCountRows.map((row) => [Number(row.shop_id), Number(row.count) || 0]));
-    const productsPreviewByShop = new Map<number, { id: number; title: string; image_url: string; thumbnail_url: string; price: number }[]>();
+    const productsPreviewByShop = new Map<number, {
+      id: number;
+      title: string;
+      image_url: string;
+      thumbnail_url: string;
+      price: number;
+      sale_price: number | null;
+      sale_starts_at: string | null;
+      sale_ends_at: string | null;
+      in_stock: boolean;
+      created_at: string | null;
+    }[]>();
     for (const row of previewRows) {
       if (isAgeRestrictedProduct({ title: String(row.title || ''), description: String(row.description || '') })) continue;
       const shopId = Number(row.shop_id);
@@ -232,6 +243,11 @@ export function createPublicShopsRouter({
         image_url: toPublicProductImageUrl(Number(row.id), String(row.image_url || '')),
         thumbnail_url: toPublicProductImageUrl(Number(row.id), String(row.thumbnail_url || row.image_url || ''), 998),
         price: Number(row.price),
+        sale_price: row.sale_price == null ? null : Number(row.sale_price),
+        sale_starts_at: row.sale_starts_at == null ? null : String(row.sale_starts_at),
+        sale_ends_at: row.sale_ends_at == null ? null : String(row.sale_ends_at),
+        in_stock: Number(row.stock) > 0,
+        created_at: row.created_at == null ? null : String(row.created_at),
       });
       productsPreviewByShop.set(shopId, previews);
     }

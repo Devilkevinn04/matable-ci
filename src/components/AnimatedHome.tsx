@@ -1,19 +1,36 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, MapPin, Search, ShieldCheck } from 'lucide-react';
+import { ArrowRight, BadgePercent, CheckCircle2, MapPin, Search, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getProductImageForDisplay } from '../utils/categoryDefaults';
 import { formatFCFA } from '../utils/format';
+import { getActiveProductPrice, getProductSaleStatus } from '../utils/productPricing';
 import { getResponsiveImageProps } from '../utils/responsiveImages';
 import { handlePublicImageError } from '../utils/imageFallback';
 import { isAgeRestrictedProduct } from '../utils/ageRestrictedProducts';
+import { isShopExcludedFromPublicIndex } from '../utils/shopIndexing';
 import { getProductImageAlt } from '../utils/productImageAlt';
+import { getDiscoveryCityLabel } from '../utils/discoverySeo';
+import { MotionReveal } from './MotionSystem';
 
 interface AnimatedHomeShop {
   slug: string;
   name: string;
   category?: string;
   city?: string;
-  products_preview?: { title: string; description?: string | null; image_url: string; thumbnail_url?: string; price: number }[];
+  is_verified?: boolean;
+  products_preview?: {
+    id: number;
+    title: string;
+    description?: string | null;
+    image_url: string;
+    thumbnail_url?: string;
+    price: number;
+    sale_price?: number | null;
+    sale_starts_at?: string | null;
+    sale_ends_at?: string | null;
+    in_stock?: boolean;
+    created_at?: string | null;
+  }[];
 }
 
 interface AnimatedHomeProps {
@@ -57,23 +74,27 @@ const ProductWall: React.FC<ProductWallProps> = ({ products }) => {
         {columns.map((column, columnIndex) => (
           <div key={columnIndex} className={`${columnIndex === 2 ? 'hidden sm:block' : ''} overflow-hidden`}>
             <div className={`mt-wall-track flex flex-col gap-3 sm:gap-[18px] ${columnIndex === 1 ? 'mt-wall-track-reverse' : ''}`} style={{ animationDuration: `${[40, 52, 46][columnIndex]}s` }}>
-              {[...column, ...column].map(({ shop, product }, index) => (
-                <div key={`${shop.slug}-${product.title}-${index}`} className="shrink-0 rounded-[22px] border border-[var(--mt-gray-200)] bg-white p-2 shadow-[0_18px_38px_rgb(33_38_34_/_18%)] sm:rounded-[22px]">
-                  <span className="block aspect-[4/5] overflow-hidden rounded-2xl bg-[var(--mt-gray-50)]">
-                    <img {...getResponsiveImageProps(getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category), 420)} alt={getProductImageAlt(product.title, shop.name, shop.city)} className="h-full w-full object-cover" loading="lazy" onError={handlePublicImageError} />
-                  </span>
-                  <span className="block truncate px-1 pt-2 text-[15px] font-bold text-[var(--mt-gray-900)]">{product.title}</span>
-                  <span className="block truncate px-1 text-xs text-[var(--mt-gray-600)]">{shop.name}</span>
-                  <span className="mt-1 inline-flex rounded-full bg-[#fff7ed] px-2 py-1 text-xs font-extrabold text-[var(--mt-orange-deep)]">{formatFCFA(product.price)}</span>
-                </div>
-              ))}
+              {[...column, ...column].map(({ shop, product }, index) => {
+                const isPromotion = getProductSaleStatus(product) === 'active';
+                return (
+                  <div key={`${shop.slug}-${product.title}-${index}`} className="shrink-0 rounded-[22px] border border-[var(--mt-gray-200)] bg-white p-2 shadow-[0_18px_38px_rgb(33_38_34_/_18%)] sm:rounded-[22px]">
+                    <span className="relative block aspect-[4/5] overflow-hidden rounded-2xl bg-[var(--mt-gray-50)]">
+                      <img {...getResponsiveImageProps(getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category), 420)} alt={getProductImageAlt(product.title, shop.name, shop.city)} className="h-full w-full object-cover" loading="lazy" onError={handlePublicImageError} />
+                      {isPromotion && <span className="absolute left-2 top-2 rounded-full bg-[#c2410c] px-2 py-1 text-[10px] font-extrabold text-white">Promo</span>}
+                      {shop.is_verified && <span className="absolute right-2 top-2 rounded-full bg-white/95 px-2 py-1 text-[10px] font-extrabold text-[var(--mt-green-deep)]">Vérifié</span>}
+                    </span>
+                    <span className="block truncate px-1 pt-2 text-[15px] font-bold text-[var(--mt-gray-900)]">{product.title}</span>
+                    <span className="block truncate px-1 text-xs text-[var(--mt-gray-600)]">{shop.name}</span>
+                    <span className="mt-1 inline-flex flex-wrap items-baseline gap-1 rounded-full bg-[#fff7ed] px-2 py-1 text-xs font-extrabold text-[var(--mt-orange-deep)]">
+                      {formatFCFA(getActiveProductPrice(product))}
+                      {isPromotion && <del className="text-[10px] font-semibold text-[var(--mt-gray-600)]">{formatFCFA(product.price)}</del>}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}
-      </div>
-      <div className="absolute right-2 top-10 flex items-center gap-3 rounded-2xl border border-[var(--mt-gray-200)] bg-white px-4 py-3 shadow-[0_18px_38px_rgb(33_38_34_/_16%)] sm:right-8">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--mt-green-soft)] text-[var(--mt-green-primary)]"><ShieldCheck className="h-5 w-5" aria-hidden="true" /></span>
-        <span><strong className="block text-sm">Vérifié</strong><span className="text-xs text-[var(--mt-gray-600)]">Identité contrôlée</span></span>
       </div>
     </div>
   );
@@ -82,7 +103,7 @@ const ProductWall: React.FC<ProductWallProps> = ({ products }) => {
 export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, neighbourhoods, onOpenDirectory }) => {
   const safeShops = useMemo(
     () => shops
-      .filter((shop) => !/\b(?:puff|vape|tabac)\b/i.test(shop.name))
+      .filter((shop) => !isShopExcludedFromPublicIndex(shop.name))
       .map((shop) => ({
         ...shop,
         products_preview: (shop.products_preview || []).filter((product) => !isAgeRestrictedProduct({ title: product.title, description: product.description || null })),
@@ -92,11 +113,40 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [typedPlaceholder, setTypedPlaceholder] = useState('Plat, produit, quartier…');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedNeighborhood, setSelectedNeighborhood] = useState('all');
+  const [productSort, setProductSort] = useState<'recommended' | 'newest' | 'price'>('recommended');
+  const [visibleProductCount, setVisibleProductCount] = useState(12);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const products = useMemo(
-    () => safeShops.flatMap((shop) => (shop.products_preview || []).slice(0, 2).map((product) => ({ shop, product }))).slice(0, 12),
+    () => safeShops.flatMap((shop) => (shop.products_preview || []).map((product) => ({ shop, product }))),
     [safeShops],
   );
-  const featuredShops = safeShops.filter((shop) => shop.products_preview?.length).slice(0, 6);
+  const visibleNeighborhoods = useMemo(
+    () => [...new Map(neighbourhoods.map((place) => [place.label.trim().toLocaleLowerCase(), place.label.trim()])).values()],
+    [neighbourhoods],
+  );
+  const filteredProducts = useMemo(() => {
+    const filtered = products.filter(({ shop }) => {
+      const matchesCategory = selectedCategory === 'all' || shop.category === selectedCategory;
+      const matchesNeighborhood = selectedNeighborhood === 'all'
+        || (shop.city || '').toLocaleLowerCase().includes(selectedNeighborhood.toLocaleLowerCase());
+      return matchesCategory && matchesNeighborhood;
+    });
+
+    if (productSort === 'newest') {
+      filtered.sort((left, right) => (Date.parse(right.product.created_at || '') || 0) - (Date.parse(left.product.created_at || '') || 0));
+    } else if (productSort === 'price') {
+      filtered.sort((left, right) => getActiveProductPrice(left.product, now) - getActiveProductPrice(right.product, now));
+    }
+
+    return filtered;
+  }, [now, products, productSort, selectedCategory, selectedNeighborhood]);
+  const visibleProducts = filteredProducts.slice(0, visibleProductCount);
   const marqueeCities = repeatToFill(neighbourhoods.length > 0 ? neighbourhoods : [{ label: 'Abidjan', path: '/boutiques?q=Abidjan' }]);
   const marqueeCategories = repeatToFill((categories.length > 0 ? categories.map(categoryLabel) : ['Restauration', 'Mode', 'Beauté', 'Maison']).filter((label) => label !== 'Autres'));
 
@@ -181,44 +231,96 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
         <div className="home-marquee-reverse mt-loop flex w-max gap-8 whitespace-nowrap">{[...marqueeCategories, ...marqueeCategories].map((label, index) => <React.Fragment key={`${label}-${index}`}><span>{label}</span><span aria-hidden="true">·</span></React.Fragment>)}</div>
       </div>
 
-      <section className="mx-auto max-w-[1280px] px-5 py-16 sm:px-10 sm:py-24">
+      <section className="mx-auto max-w-[1280px] px-4 py-10 sm:px-10 sm:py-24">
         <div className="flex flex-wrap items-end justify-between gap-5">
           <div>
-            <h2 className="font-display text-4xl font-extrabold tracking-[-.06em] sm:text-6xl">Les boutiques <em className="not-italic text-[var(--mt-orange-deep)]">à la une</em></h2>
-            <p className="mt-4 max-w-xl text-base leading-7 text-[#68716b] sm:text-lg">Chaque vitrine est tenue par le commerçant lui-même, avec ses plats, ses produits et ses prix du jour.</p>
+            <h2 className="font-display text-3xl font-extrabold tracking-[-.06em] sm:text-6xl">À découvrir <em className="not-italic text-[var(--mt-orange-deep)]">près de vous</em></h2>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-[#68716b] sm:mt-4 sm:text-lg sm:leading-7">Des produits et des plats proposés par les boutiques de votre quartier, avec leurs prix.</p>
           </div>
-          <Link to="/boutiques" className="inline-flex items-center gap-2 text-lg font-extrabold text-[#15513e]">Toutes les boutiques <ArrowRight className="h-5 w-5" /></Link>
+          <Link to="/boutiques" className="inline-flex min-h-11 items-center gap-2 text-sm font-extrabold text-[#15513e] sm:text-lg">Explorer les boutiques <ArrowRight className="h-5 w-5" /></Link>
         </div>
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {featuredShops.map((shop) => {
-            const product = shop.products_preview?.[0];
-            return <Link key={shop.slug} to={`/${encodeURIComponent(shop.slug)}`} className="group overflow-hidden rounded-[28px] bg-[#103e32] text-white shadow-[0_18px_40px_rgba(16,62,50,.14)]">
-              <div className="relative aspect-[1.2] overflow-hidden">
-                {product && <img {...getResponsiveImageProps(getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category), 720)} alt={getProductImageAlt(product.title, shop.name, shop.city)} className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" loading="lazy" onError={handlePublicImageError} />}
-                <span className="absolute left-4 top-4 rounded-full bg-white px-3 py-1 text-xs font-extrabold text-[#c2410c]">{categoryLabel(shop.category)}</span>
-              </div>
-              <div className="p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <span><strong className="block text-lg">{shop.name}</strong><span className="mt-1 flex items-center gap-1 text-sm text-white/70"><MapPin className="h-3.5 w-3.5" />{shop.city || 'Côte d’Ivoire'}</span></span>
-                  <ArrowRight className="h-5 w-5 shrink-0 transition-transform group-hover:translate-x-1" />
-                </div>
-                {(shop.products_preview || []).slice(0, 2).length > 0 && <div className="mt-4 flex min-w-0 gap-2 border-t border-white/15 pt-3">
-                  {(shop.products_preview || []).slice(0, 2).map((previewProduct) => (
-                    <span key={previewProduct.title} className="flex min-w-0 flex-1 items-center gap-2">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/10">
-                        <img {...getResponsiveImageProps(getProductImageForDisplay(previewProduct.thumbnail_url || previewProduct.image_url, shop.category), 320)} sizes="72px" alt={getProductImageAlt(previewProduct.title, shop.name, shop.city)} loading="lazy" className="h-full w-full object-cover" onError={handlePublicImageError} />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-xs font-semibold text-white/90">{previewProduct.title}</span>
-                        <span className="block truncate text-xs font-extrabold text-[var(--mt-orange-soft)]">{formatFCFA(previewProduct.price)}</span>
-                      </span>
-                    </span>
-                  ))}
-                </div>}
-              </div>
-            </Link>;
-          })}
+        <div className="mt-5 space-y-3 sm:mt-8 sm:space-y-4">
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0" aria-label="Filtrer les produits par catégorie">
+            <button type="button" aria-pressed={selectedCategory === 'all'} onClick={() => { setSelectedCategory('all'); setVisibleProductCount(12); }} className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-bold transition ${selectedCategory === 'all' ? 'bg-[#103e32] text-white' : 'border border-[#e7e2d9] bg-white text-[#47534b] hover:border-[#b9d5ca]'}`}>Tout</button>
+            {categories.map((category) => (
+              <button key={category} type="button" aria-pressed={selectedCategory === category} onClick={() => { setSelectedCategory(category); setVisibleProductCount(12); }} className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-bold transition ${selectedCategory === category ? 'bg-[#103e32] text-white' : 'border border-[#e7e2d9] bg-white text-[#47534b] hover:border-[#b9d5ca]'}`}>{categoryLabel(category)}</button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-between">
+            <label className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#e7e2d9] bg-white px-3 text-xs font-semibold text-[#47534b] sm:max-w-[260px] sm:text-sm">
+              <MapPin className="h-4 w-4 shrink-0 text-[#15513e]" aria-hidden="true" />
+              <span className="shrink-0">Ville / quartier</span>
+              <select value={selectedNeighborhood} onChange={(event) => { setSelectedNeighborhood(event.target.value); setVisibleProductCount(12); }} aria-label="Filtrer les produits par quartier" className="min-w-0 flex-1 truncate bg-transparent py-2 outline-none">
+                <option value="all">Tous</option>
+                {visibleNeighborhoods.map((neighborhood) => <option key={neighborhood} value={neighborhood}>{neighborhood}</option>)}
+              </select>
+            </label>
+            <label className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#e7e2d9] bg-white px-3 text-xs font-semibold text-[#47534b] sm:max-w-[250px] sm:text-sm">
+              <Sparkles className="h-4 w-4 shrink-0 text-[#c2410c]" aria-hidden="true" />
+              <span className="shrink-0">Trier</span>
+              <select value={productSort} onChange={(event) => {
+                const value = event.currentTarget.value;
+                if (value === 'recommended' || value === 'newest' || value === 'price') setProductSort(value);
+                setVisibleProductCount(12);
+              }} aria-label="Trier les produits" className="min-w-0 flex-1 bg-transparent py-2 outline-none">
+                <option value="recommended">Recommandés</option>
+                <option value="newest">Nouveautés</option>
+                <option value="price">Prix croissant</option>
+              </select>
+            </label>
+          </div>
         </div>
+        {filteredProducts.length === 0 ? (
+          <div className="mt-5 rounded-2xl border border-dashed border-[#d6d0c6] bg-white p-6 text-center">
+            <p className="text-sm font-semibold text-[#68716b]">Aucun produit dans cette sélection. Essayez un autre quartier ou une autre catégorie.</p>
+            <button type="button" onClick={() => { setSelectedCategory('all'); setSelectedNeighborhood('all'); }} className="mt-3 min-h-10 rounded-full bg-[#103e32] px-4 text-sm font-bold text-white">Effacer les filtres</button>
+          </div>
+        ) : (
+          <>
+            <p className="mt-4 text-xs font-semibold text-[#68716b]" aria-live="polite">{filteredProducts.length} produit{filteredProducts.length === 1 ? '' : 's'} à découvrir</p>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-6 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4" aria-live="polite">
+              {visibleProducts.map(({ shop, product }, index) => {
+                const activePrice = getActiveProductPrice(product, now);
+                const isPromotion = getProductSaleStatus(product, now) === 'active';
+                const isNew = product.created_at
+                  ? now - Date.parse(product.created_at) >= 0
+                    && now - Date.parse(product.created_at) < 21 * 24 * 60 * 60 * 1000
+                  : false;
+                const city = shop.city ? getDiscoveryCityLabel(shop.city) : '';
+                return (
+                  <MotionReveal key={`${shop.slug}-${product.id}`} delay={Math.min(index, 8) * 0.035} className="h-full min-w-0">
+                    <Link to={`/${encodeURIComponent(shop.slug)}#product-${product.id}`} className="group block h-full min-w-0 overflow-hidden rounded-2xl border border-[#e7e2d9] bg-white shadow-[0_8px_24px_rgba(16,62,50,.07)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_32px_rgba(16,62,50,.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15513e] focus-visible:ring-offset-2 sm:rounded-[24px]">
+                      <span className="relative block aspect-square overflow-hidden bg-[#f2eee8]">
+                        <img {...getResponsiveImageProps(getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category), 480)} alt={getProductImageAlt(product.title, shop.name, shop.city)} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" onError={handlePublicImageError} />
+                        <span className="absolute left-2 top-2 flex max-w-[calc(100%-1rem)] flex-wrap gap-1 sm:left-3 sm:top-3">
+                          {isPromotion && <span className="inline-flex items-center gap-1 rounded-full bg-[#c2410c] px-2 py-1 text-[9px] font-extrabold text-white sm:px-2.5 sm:text-[10px]"><BadgePercent className="h-3 w-3" aria-hidden="true" />Promo</span>}
+                          {isNew && <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[9px] font-extrabold text-[#15513e] shadow-sm sm:px-2.5 sm:text-[10px]"><Sparkles className="h-3 w-3" aria-hidden="true" />Nouveau</span>}
+                        </span>
+                        {product.in_stock && <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[9px] font-bold text-[#15513e] sm:bottom-3 sm:left-3 sm:text-[10px]"><CheckCircle2 className="h-3 w-3" aria-hidden="true" />Disponible</span>}
+                      </span>
+                      <span className="block min-w-0 p-2.5 sm:p-4">
+                        <strong className="block truncate text-sm font-extrabold text-[#173c32] sm:text-base">{product.title}</strong>
+                        <span className="mt-1 flex min-w-0 items-center gap-1 text-[11px] text-[#68716b] sm:text-sm">
+                          <MapPin className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
+                          <span className="truncate">{shop.name}{city ? ` · ${city}` : ''}</span>
+                        </span>
+                        <span className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-2">
+                          <span className={`truncate text-sm font-black sm:text-base ${isPromotion ? 'text-[#c2410c]' : 'text-[#173c32]'}`}>{formatFCFA(activePrice)}</span>
+                          {isPromotion && <del className="truncate text-[10px] font-semibold text-[#68716b] sm:text-xs">{formatFCFA(product.price)}</del>}
+                        </span>
+                      </span>
+                    </Link>
+                  </MotionReveal>
+                );
+              })}
+            </div>
+            {visibleProductCount < filteredProducts.length && (
+              <button type="button" onClick={() => setVisibleProductCount((count) => count + 12)} className="mx-auto mt-5 flex min-h-11 items-center gap-2 rounded-full border border-[#cbd9d0] bg-white px-5 text-sm font-extrabold text-[#15513e] transition hover:bg-[#eff6f1]">
+                Voir plus de produits <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          </>
+        )}
       </section>
 
       <section className="bg-[var(--mt-green-primary)] px-5 py-16 text-white sm:px-10 sm:py-24">

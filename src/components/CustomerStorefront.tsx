@@ -4,7 +4,7 @@ import { StorefrontLoadingSkeleton } from './Skeletons';
 import { InstallAppPrompt } from './InstallAppPrompt';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useMediaQuery } from '../hooks/useMediaQuery';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { 
   ShoppingBag, 
@@ -89,6 +89,7 @@ const paymentMethodIcons: Record<Order['payment_method_preference'], React.Compo
 export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug, customerUser, onCustomerAuthenticated }) => {
   const toast = useToast();
   const prefersReducedMotion = useReducedMotion();
+  const location = useLocation();
   const [shop, setShop] = useState<Shop | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [saleRefresh, setSaleRefresh] = useState(Date.now());
@@ -203,6 +204,18 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       return matchesSearch && matchesCategory;
     });
   }, [products, searchQuery, selectedCategory, ageVerified]);
+
+  useEffect(() => {
+    const productAnchor = /^#product-(\d+)$/.exec(location.hash);
+    if (!productAnchor || loading || products.length === 0) return undefined;
+
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById(`product-${productAnchor[1]}`)
+        || document.getElementById('store-catalogue');
+      target?.scrollIntoView({ behavior: prefersReducedMotion ? 'instant' : 'smooth', block: 'start' });
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [location.hash, loading, products, prefersReducedMotion]);
 
   useEffect(() => {
     if (!shop?.id || !isCartOpen) return;
@@ -1264,7 +1277,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               const activeModifiers = selectedModifiers[product.id] || [];
               const cartIndex = cart.findIndex((item) => item.product.id === product.id);
               return (
-                <div key={product.id} data-analytics-product-id={product.id} className="min-w-0">
+                <div id={`product-${product.id}`} key={product.id} data-analytics-product-id={product.id} className="min-w-0 scroll-mt-24">
                   <CustomerProductCard
                     product={product}
                     category={shop.category}

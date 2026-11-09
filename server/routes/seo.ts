@@ -3,6 +3,7 @@ import { isShopPubliclyVisible } from '../services/businessRules.ts';
 import { loadShopsFromDatabase } from '../repositories/shops.ts';
 import { getPublicDiscoveryPages } from '../../src/utils/discoverySeo.ts';
 import { SEO_ARTICLES } from '../../src/utils/seoArticles.ts';
+import { isShopExcludedFromPublicIndex } from '../../src/utils/shopIndexing.ts';
 
 interface SeoRouterOptions {
   getPublicOrigin: (req: Request) => string;
@@ -19,7 +20,8 @@ export function createSeoRouter({ getPublicOrigin, escapeHtml }: SeoRouterOption
 
   router.get('/sitemap.xml', async (req, res) => {
     const origin = getPublicOrigin(req);
-    const publicShops = (await loadShopsFromDatabase()).filter((shop) => isShopPubliclyVisible(shop));
+    const publicShops = (await loadShopsFromDatabase()).filter((shop) =>
+      isShopPubliclyVisible(shop) && !isShopExcludedFromPublicIndex(shop.name));
     const urls = [
       `${origin}/`,
       `${origin}/boutiques`,
