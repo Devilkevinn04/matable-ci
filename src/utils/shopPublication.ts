@@ -27,8 +27,10 @@ export function hasShopPublicationSubscriptionAccess(
 export function isShopPubliclyVisible(shop: PublicationShop, currentDate = new Date()): boolean {
   const publicationStatus = shop.publication_status ?? (shop.is_active ? 'active' : 'suspended');
   const verificationStatus = shop.business_verification_status || shop.merchant_verification_status || 'not_required';
+  const legacyVerifiedPublication = shop.business_verification_status === 'pending'
+    && shop.merchant_verification_status === 'verified';
   return shop.is_active
     && publicationStatus === 'active'
-    && ['not_required', 'verified', 'approved'].includes(verificationStatus)
+    && (['not_required', 'verified', 'approved'].includes(verificationStatus) || legacyVerifiedPublication)
     && hasShopPublicationSubscriptionAccess(shop.subscription, currentDate);
 }

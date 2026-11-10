@@ -158,6 +158,9 @@ test('a Didit-verified shop stays visible during payment grace but cannot bypass
   assert.equal(isShopPubliclyVisible({ ...shop, publication_status: 'draft' }, currentDate), false);
   assert.equal(isShopPubliclyVisible({ ...shop, publication_status: 'suspended' }, currentDate), false);
   assert.equal(isShopPubliclyVisible({ ...shop, merchant_verification_status: 'pending' }, currentDate), false);
+  assert.equal(isShopPubliclyVisible({ ...shop, business_verification_status: 'pending' }, currentDate), true);
+  assert.equal(isShopPubliclyVisible({ ...shop, business_verification_status: 'pending', merchant_verification_status: 'pending' }, currentDate), false);
+  assert.equal(isShopPubliclyVisible({ ...shop, publication_status: 'draft', business_verification_status: 'pending' }, currentDate), false);
   const pastDue = { ...shop, subscription_status: 'past_due', trial_end: '2026-09-30T00:00:00.000Z' };
   assert.equal(isShopPubliclyVisible(pastDue, currentDate), true);
   assert.equal(canReceiveShopOrders(pastDue, currentDate), true);

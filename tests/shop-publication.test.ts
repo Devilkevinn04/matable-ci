@@ -27,7 +27,9 @@ test('shop visibility follows business verification, publication and subscriptio
   assert.equal(isShopPubliclyVisible(visibleShop), true);
   assert.equal(isShopPubliclyVisible({ ...visibleShop, publication_status: 'draft' }), false);
   assert.equal(isShopPubliclyVisible({ ...visibleShop, subscription: undefined }), false);
-  assert.equal(isShopPubliclyVisible({ ...visibleShop, business_verification_status: 'pending', merchant_verification_status: 'verified' }), false);
+  assert.equal(isShopPubliclyVisible({ ...visibleShop, business_verification_status: 'pending', merchant_verification_status: 'verified' }), true);
+  assert.equal(isShopPubliclyVisible({ ...visibleShop, business_verification_status: 'pending', merchant_verification_status: 'pending' }), false);
+  assert.equal(isShopPubliclyVisible({ ...visibleShop, publication_status: 'draft', business_verification_status: 'pending', merchant_verification_status: 'verified' }), false);
   assert.equal(isShopPubliclyVisible({ ...visibleShop, business_verification_status: 'approved', merchant_verification_status: 'pending' }), true);
   assert.equal(isShopPubliclyVisible({ ...visibleShop, is_active: false }), false);
 });

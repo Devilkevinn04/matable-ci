@@ -77,7 +77,11 @@ export function canPublishShop(shop: ShopRecord, currentDate = new Date()): bool
 export function isShopPubliclyVisible(shop: ShopRecord, currentDate = new Date()): boolean {
   const publicationStatus = shop.publication_status ?? (shop.is_active ? 'active' : 'suspended');
   if (!shop.is_active || publicationStatus === 'suspended') return false;
-  return publicationStatus === 'active' && canPublishShop(shop, currentDate);
+  if (publicationStatus !== 'active') return false;
+  const legacyVerifiedPublication = shop.business_verification_status === 'pending'
+    && shop.merchant_verification_status === 'verified';
+  return canPublishShop(shop, currentDate)
+    || (legacyVerifiedPublication && canPublishShop({ ...shop, business_verification_status: 'approved' }, currentDate));
 }
 
 export function canReceiveShopOrders(shop: ShopRecord, currentDate = new Date()): boolean {
