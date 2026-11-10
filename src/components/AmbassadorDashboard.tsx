@@ -177,6 +177,18 @@ export function AmbassadorDashboard() {
   const [linkStatsError, setLinkStatsError] = useState('');
   const linkStatsRequestId = useRef(0);
 
+  const openAccessRecovery = () => {
+    setForgotAccess(true);
+    setEmail('');
+    setPassword('');
+    setConfirmation('');
+    setError('');
+    setNotice('');
+    navigate('/ambassadeur');
+  };
+  const activationLinkRejected = isActivation
+    && (!activationToken || error.startsWith('Lien d’activation invalide'));
+
   const loadDashboard = async (clearNotice = true) => {
     const response = await fetch('/api/ambassador-auth/dashboard', { credentials: 'include', cache: 'no-store' });
     if (!response.ok) {
@@ -685,7 +697,7 @@ export function AmbassadorDashboard() {
         </p>
 
         <form key={isActivation ? 'activation' : forgotAccess ? 'recovery' : pendingMfaChallenge ? 'mfa' : 'login'} onSubmit={(event) => void submitCredentials(event)} className="auth-form ambassador-auth-form mt-7 space-y-4">
-          {isActivation && !activationToken && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold leading-5 text-rose-800">Lien d’activation manquant. Demandez un nouveau lien au support MaTable.</p>}
+          {isActivation && !activationToken && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold leading-5 text-rose-800">Lien d’activation manquant. Vous pouvez demander un nouveau lien sécurisé ci-dessous.</p>}
           {pendingMfaChallenge ? (
             <label className="block text-xs font-bold text-[#3d4b44]">
               Code de vérification
@@ -712,6 +724,7 @@ export function AmbassadorDashboard() {
           {isActivation && password && confirmation && password !== confirmation && <p className="text-xs font-semibold text-rose-800">Les deux mots de passe ne correspondent pas.</p>}
           {!pendingMfaChallenge && !isActivation && <button type="button" onClick={() => { setForgotAccess((current) => !current); setPassword(''); setNotice(''); setError(''); }} className="min-h-9 text-xs font-bold text-[#17644d] transition hover:text-[#a66e35]">{forgotAccess ? '← Retour à la connexion' : 'Mot de passe oublié ?'}</button>}
           {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold leading-5 text-rose-800">{error}</p>}
+          {activationLinkRejected && <button type="button" onClick={openAccessRecovery} className="min-h-11 w-full rounded-xl border border-[#17644d]/20 bg-white px-4 text-sm font-bold text-[#17644d] transition hover:bg-[#edf3ef] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#17644d]/15">Demander un nouveau lien par e-mail</button>}
           {notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold leading-5 text-emerald-900">{notice}</p>}
           <button type="submit" disabled={busy || (isActivation && (!activationToken || password !== confirmation))} className="group inline-flex min-h-[52px] w-full items-center justify-between rounded-2xl bg-[#174c3d] px-5 text-sm font-extrabold text-white shadow-[0_10px_22px_rgba(23,76,61,.19)] transition hover:bg-[#0f624b] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#17644d]/20 disabled:cursor-wait disabled:opacity-55">
             <span>{busy ? 'Veuillez patienter…' : pendingMfaChallenge ? 'Vérifier le code' : isActivation ? 'Activer mon espace' : forgotAccess ? 'Recevoir mon lien sécurisé' : 'Accéder à mon espace'}</span>
