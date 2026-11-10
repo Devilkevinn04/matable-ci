@@ -111,7 +111,7 @@ async function submitAndApproveShop(shopId: number, merchantCookie: string, tier
   });
   assert.equal(trialStart.status, 200, await trialStart.text());
   const database = new Database(TEST_DB_PATH);
-  database.prepare("UPDATE shops SET merchant_verification_status = 'verified' WHERE id = ?").run(shopId);
+  database.prepare("UPDATE shops SET merchant_verification_status = 'verified', business_verification_status = 'approved' WHERE id = ?").run(shopId);
   database.close();
   const publication = await fetch(`${BASE_URL}/api/shops/${shopId}/publication-status`, {
     method: 'PATCH',

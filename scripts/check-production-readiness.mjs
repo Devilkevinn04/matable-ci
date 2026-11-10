@@ -48,7 +48,7 @@ function checkSecret(key, { minimum = 32 } = {}) {
   return secret;
 }
 
-function checkOptionalGroup(label, keys, { required = false } = {}) {
+function checkOptionalGroup(label, keys, { required = false, allowPartial = false } = {}) {
   const missing = keys.filter((key) => !isSet(key));
   if (missing.length === 0) {
     pass(`${label} : configuration complète.`);
@@ -59,7 +59,9 @@ function checkOptionalGroup(label, keys, { required = false } = {}) {
     else warn(`${label} désactivé : ${keys.join(', ')} absent(s).`);
     return false;
   }
-  fail(`${label} : configuration partielle, variables manquantes → ${missing.join(', ')}.`);
+  const message = `${label} : configuration partielle, variables manquantes → ${missing.join(', ')}.`;
+  if (allowPartial) warn(message);
+  else fail(message);
   return false;
 }
 
@@ -119,7 +121,11 @@ if (deliveryEnabled) warn('DELIVERY_OPERATIONS_ENABLED=true : les migrations liv
 
 // --- Intégrations facultatives --------------------------------------------
 
-checkOptionalGroup('Vérification Didit', ['DIDIT_API_KEY', 'DIDIT_WORKFLOW_ID', 'DIDIT_WEBHOOK_SECRET']);
+checkOptionalGroup('Vérification Didit (facultative, contrôle manuel disponible)', [
+  'DIDIT_API_KEY',
+  'DIDIT_WORKFLOW_ID',
+  'DIDIT_WEBHOOK_SECRET',
+], { allowPartial: true });
 if (isSet('DIDIT_DRIVER_WORKFLOW_ID') && !isSet('DIDIT_WORKFLOW_ID')) {
   warn('DIDIT_DRIVER_WORKFLOW_ID est défini sans DIDIT_WORKFLOW_ID de secours.');
 }
@@ -143,6 +149,26 @@ checkOptionalGroup('Rappels WhatsApp', [
   'WHATSAPP_GRAPH_API_VERSION',
 ]);
 checkOptionalGroup('Stockage public R2', ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_PUBLIC_BASE_URL']);
+const privateVerificationStorageConfigured = checkOptionalGroup(
+  'Stockage privé des justificatifs',
+  ['R2_PRIVATE_BUCKET', 'R2_PRIVATE_ACCESS_KEY_ID', 'R2_PRIVATE_SECRET_ACCESS_KEY'],
+  { required: true },
+);
+const privateVerificationEndpoint = value('R2_PRIVATE_ENDPOINT')
+  || value('R2_ENDPOINT')
+  || value('CLOUDFLARE_R2_ENDPOINT')
+  || value('AWS_S3_ENDPOINT')
+  || value('AWS_ENDPOINT_URL_S3');
+if (!privateVerificationEndpoint) fail('Stockage privé des justificatifs : endpoint R2 absent.');
+if (privateVerificationStorageConfigured) {
+  const privateBucket = value('R2_PRIVATE_BUCKET');
+  const publicBucket = value('R2_BUCKET')
+    || value('CLOUDFLARE_R2_BUCKET')
+    || value('AWS_S3_BUCKET')
+    || value('S3_BUCKET');
+  if (privateBucket === publicBucket) fail('Le bucket privé des justificatifs doit être distinct du bucket média public.');
+  else pass('Le bucket privé des justificatifs est distinct du bucket média public.');
+}
 checkOptionalGroup('Connexion Google', ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET']);
 checkOptionalGroup('Connexion Apple', ['APPLE_SERVICE_ID', 'APPLE_TEAM_ID', 'APPLE_KEY_ID', 'APPLE_PRIVATE_KEY']);
 

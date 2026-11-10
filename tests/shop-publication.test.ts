@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { hasShopPublicationSubscriptionAccess, isShopPubliclyVisible } from '../src/utils/shopPublication.ts';
 import type { Shop } from '../src/types.ts';
 
-const visibleShop: Pick<Shop, 'is_active' | 'publication_status' | 'merchant_verification_status' | 'subscription'> = {
+const visibleShop: Pick<Shop, 'is_active' | 'publication_status' | 'merchant_verification_status' | 'business_verification_status' | 'subscription'> = {
   is_active: true,
   publication_status: 'active',
   merchant_verification_status: 'verified',
+  business_verification_status: 'approved',
   subscription: {
     plan: 'standard',
     planFeatures: undefined,
@@ -22,11 +23,12 @@ const visibleShop: Pick<Shop, 'is_active' | 'publication_status' | 'merchant_ver
   },
 };
 
-test('shop is visible only when publication, identity and subscription requirements pass', () => {
+test('shop visibility follows business verification, publication and subscription requirements', () => {
   assert.equal(isShopPubliclyVisible(visibleShop), true);
   assert.equal(isShopPubliclyVisible({ ...visibleShop, publication_status: 'draft' }), false);
   assert.equal(isShopPubliclyVisible({ ...visibleShop, subscription: undefined }), false);
-  assert.equal(isShopPubliclyVisible({ ...visibleShop, merchant_verification_status: 'pending' }), false);
+  assert.equal(isShopPubliclyVisible({ ...visibleShop, business_verification_status: 'pending', merchant_verification_status: 'verified' }), false);
+  assert.equal(isShopPubliclyVisible({ ...visibleShop, business_verification_status: 'approved', merchant_verification_status: 'pending' }), true);
   assert.equal(isShopPubliclyVisible({ ...visibleShop, is_active: false }), false);
 });
 

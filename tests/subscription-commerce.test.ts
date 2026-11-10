@@ -149,7 +149,7 @@ test('Pro subscription exposes consented product stats and activates discounted 
   assert.equal(unverifiedBoost.status, 409);
 
   const verificationDb = new Database(TEST_DB_PATH);
-  verificationDb.prepare("UPDATE shops SET merchant_verification_status = 'verified' WHERE id = ?").run(shopId);
+  verificationDb.prepare("UPDATE shops SET merchant_verification_status = 'verified', business_verification_status = 'approved' WHERE id = ?").run(shopId);
   verificationDb.close();
   const publication = await fetch(`${BASE_URL}/api/shops/${shopId}/publication-status`, {
     method: 'PATCH',

@@ -31,7 +31,7 @@ const shopSteps = [
   'Créez la boutique avec son nom, son numéro WhatsApp, sa commune et sa catégorie. Gardez le PIN choisi pour vous reconnecter.',
   'Complétez la vitrine : coordonnées, horaires, présentation et identité visuelle.',
   'Ajoutez vos produits, leurs prix, leur disponibilité et des photos à jour.',
-  'Soumettez la vérification d’identité du responsable. Elle est nécessaire avant la publication.',
+  'Soumettez les photos de votre commerce pour un examen manuel. L’identité est vérifiée séparément.',
   'Choisissez une formule et réglez-la avec GeniusPay. Aucun prélèvement automatique n’est effectué.',
   'Publiez la boutique après les étapes requises, puis gérez les demandes des clients depuis votre espace et échangez avec eux sur WhatsApp.',
 ];

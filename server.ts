@@ -85,6 +85,7 @@ import { findPublicDiscoveryPage } from './src/utils/discoverySeo.ts';
 import { SEO_ARTICLES } from './src/utils/seoArticles.ts';
 import { getPublicDomainRedirect, getSecureRedirectUrl } from './server/services/hostRedirect.ts';
 import { PUBLIC_PRODUCT_IMAGE_PATH, parseRequestedImageWidth, resizeProductImage, resolveProductImageRequest } from './server/services/publicProductImages.ts';
+import { purgeExpiredVerificationDocuments } from './server/services/privateVerificationRetention.ts';
 
 export { buildSessionFingerprint, isRequestFingerprintMatch };
 
@@ -923,6 +924,8 @@ async function startServer() {
     dbAll,
     dbTransaction,
     requireMerchantIdentityOwnShop,
+    requireSuperAdminAccess,
+    refreshRuntimeDataFromDatabase,
     rateLimitPublicRequest,
   });
 
@@ -1052,6 +1055,15 @@ async function startServer() {
     };
   }, maintenanceHtml));
   await initializeDatabase();
+  const runVerificationDocumentRetention = async () => {
+    try {
+      await purgeExpiredVerificationDocuments(dbAll, dbRun);
+    } catch (error) {
+      console.error('Scheduled private verification document cleanup failed.', error);
+    }
+  };
+  await runVerificationDocumentRetention();
+  setInterval(() => { void runVerificationDocumentRetention(); }, 60 * 60 * 1000).unref();
   await advertisingRouters.reconcileExpiredCampaigns();
   setInterval(() => {
     void advertisingRouters.reconcileExpiredCampaigns().catch((error: unknown) => {

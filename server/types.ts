@@ -49,6 +49,10 @@ export interface ShopRecord {
   publication_status?: PublicationStatus;
   featured_until?: string | null;
   merchant_verification_status?: MerchantVerificationStatus;
+  business_verification_status?: 'not_submitted' | 'pending' | 'under_review' | 'action_required' | 'approved' | 'rejected';
+  identity_verification_status?: 'not_submitted' | 'pending' | 'under_review' | 'action_required' | 'approved' | 'rejected';
+  business_verification_method?: 'manual' | null;
+  identity_verification_method?: 'manual' | 'didit' | null;
   selected_subscription_tier?: SubscriptionTier;
   pending_subscription_tier?: SubscriptionTier | null;
   pending_subscription_effective_at?: string | null;

@@ -12,7 +12,7 @@ import { listShopDeliveryOptionRows } from '../services/deliveryQuoting.ts';
 import { toPublicProductImageUrl, withPublicProductImages } from '../services/publicProductImages.ts';
 
 const publicShopColumns = `id, name, slug, theme_color, welcome_message, is_open, is_active,
-  publication_status, featured_until, merchant_verification_status, selected_subscription_tier,
+  publication_status, featured_until, merchant_verification_status, business_verification_status, selected_subscription_tier,
   subscription_status, trial_start, trial_end, subscription_expires_at,
   subscription_admin_override_status, subscription_admin_override_tier, subscription_admin_override_until,
   created_at, category, city, theme_config, opening_hours`;
@@ -285,7 +285,8 @@ export function createPublicShopsRouter({
           boost_placements: boostPlacementsByShop.get(shop.id) || [],
           is_active: shop.is_active,
           publication_status: shop.publication_status,
-          is_verified: shop.merchant_verification_status === 'verified',
+          is_verified: shop.business_verification_status === 'approved'
+            && shop.merchant_verification_status === 'verified',
           category: shop.category,
           city: shop.city,
           theme_config: shop.theme_config,
@@ -326,7 +327,7 @@ export function createPublicShopsRouter({
     const isIdQuery = !Number.isNaN(Number(slug));
     const shopRow = await dbGet<Record<string, unknown>>(
       `SELECT id, name, slug, whatsapp_number, theme_color, welcome_message, is_open, is_active,
-        publication_status, featured_until, merchant_verification_status, selected_subscription_tier,
+        publication_status, featured_until, merchant_verification_status, business_verification_status, selected_subscription_tier,
         subscription_status, trial_start, trial_end, subscription_expires_at,
         subscription_admin_override_status, subscription_admin_override_tier, subscription_admin_override_until,
         created_at, catalog_updated_at, category, city, theme_config, opening_hours

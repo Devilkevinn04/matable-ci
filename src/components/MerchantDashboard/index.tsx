@@ -177,9 +177,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   useEffect(() => {
     const shop = merchantState.currentShop;
-    if (!shop || shop.admin_mode || !shop.merchant_verification_status
-      || ['not_required', 'verified'].includes(shop.merchant_verification_status)) return;
-    if (!['pending', 'rejected'].includes(shop.merchant_verification_status)) return;
+    const identityStatus = shop?.identity_verification_status || shop?.merchant_verification_status;
+    if (!shop || shop.admin_mode || !identityStatus
+      || ['not_required', 'not_submitted', 'approved', 'verified'].includes(identityStatus)) return;
+    if (!['pending', 'rejected', 'action_required'].includes(identityStatus)) return;
 
     const guideKey = `matable:merchant-identity-guide:${shop.id}`;
     try {
@@ -442,10 +443,17 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   if (!merchantState.currentShop) return <AuthScreens state={merchantState} onBackToDirectory={onBackToDirectory} onCustomerLogin={onCustomerLogin} />;
 
-  const identityVerificationRequired = Boolean(merchantState.currentShop.merchant_verification_status
-    && !['not_required', 'verified'].includes(merchantState.currentShop.merchant_verification_status));
+  const identityStatus = merchantState.currentShop.identity_verification_status
+    || merchantState.currentShop.merchant_verification_status
+    || 'pending';
+  const identityVerificationRequired = !['not_required', 'not_submitted', 'approved', 'verified'].includes(identityStatus);
+  const businessVerificationStatus = merchantState.currentShop.business_verification_status
+    || (['not_required', 'verified'].includes(merchantState.currentShop.merchant_verification_status || '') ? 'approved' : 'pending');
+  const isBusinessVerified = Boolean(merchantState.currentShop.admin_mode || businessVerificationStatus === 'approved');
+  const businessVerificationRequired = !isBusinessVerified;
   if (!merchantState.currentShop.admin_mode
     && !identityVerificationRequired
+    && !businessVerificationRequired
     && merchantState.currentShop.subscription?.status === 'not_started') {
     return (
       <>
@@ -460,6 +468,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   }
   if (!merchantState.currentShop.admin_mode
     && !identityVerificationRequired
+    && !businessVerificationRequired
     && ['expired', 'past_due', 'suspended', 'cancelled'].includes(merchantState.currentShop.subscription?.status || '')) {
     return <>
       {paymentReturnBanner}
@@ -476,7 +485,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const actionableOrderCount = orders.filter((order) =>
     !['delivered', 'cancelled', 'rejected', 'expired'].includes(order.status || 'pending'),
   ).length;
-  const isShopVerified = !currentShop.merchant_verification_status || ['not_required', 'verified'].includes(currentShop.merchant_verification_status);
   const hasPublicationSubscriptionAccess = hasShopPublicationSubscriptionAccess(currentShop.subscription);
   const isAdminSuspended = !currentShop.is_active || currentShop.publication_status === 'suspended';
   const isShopPublished = isShopPubliclyVisible(currentShop);
@@ -503,7 +511,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     || (['trialing', 'active'].includes(subscriptionStatus)
       && subscriptionDaysRemaining !== null
       && subscriptionDaysRemaining <= 14);
-  const identityStatus = currentShop.merchant_verification_status || 'pending';
   const settingsNavigationGroups: {
     label: string;
     items: {
@@ -540,7 +547,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       ],
     },
   ];
-  const priorityNotificationCount = Number(!isShopVerified) + Number(subscriptionNeedsAttention);
+  const priorityNotificationCount = Number(businessVerificationRequired) + Number(subscriptionNeedsAttention);
   const mobileNotificationCount = priorityNotificationCount
     + Number(actionableOrderCount > 0)
     + Number(outOfStockCount > 0)
@@ -681,11 +688,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     setSubscriptionReminderDay(null);
   }
 
-  const identityAlertCopy = identityStatus === 'rejected'
-    ? { title: 'Vérification à reprendre', description: 'Didit n’a pas transmis le motif détaillé à MaTable. Consultez les indications affichées par Didit ou contactez l’assistance.' }
+  const identityAlertCopy = identityStatus === 'rejected' || identityStatus === 'action_required'
+    ? { title: 'Action requise pour votre identité', description: 'Consultez le motif dans Vérification boutique et identité puis ajoutez les justificatifs demandés.' }
     : ['submitted', 'under_review'].includes(identityStatus)
-      ? { title: 'Vérification en cours', description: 'La vérification est en cours. Votre boutique sera publiable une fois l’identité confirmée.' }
-      : { title: 'Vérifiez votre identité', description: 'Cette étape est nécessaire pour publier votre boutique et recevoir des commandes.' };
+      ? { title: 'Examen de l’identité en cours', description: 'Le statut sera actualisé dans votre espace. La publication du commerce est examinée séparément.' }
+      : { title: 'Complétez votre dossier d’identité', description: 'Vous pouvez transmettre les justificatifs depuis Vérification boutique et identité. Ce contrôle reste distinct de l’approbation du commerce.' };
 
   const subscriptionAlertCopy = subscriptionStatus === 'past_due'
     ? { title: 'Abonnement à régulariser', description: 'Consultez votre forfait pour réactiver les fonctions liées à votre abonnement.' }
@@ -764,8 +771,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               </button>
               {isAdminSuspended ? (
                 <span className="max-w-16 truncate text-[9px] font-bold text-rose-700" title="Suspendue par l’administration">Suspendue</span>
-              ) : !isShopVerified ? (
-                <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('verification'); }} className="max-w-16 truncate text-[9px] font-bold text-amber-800">Vérifier</button>
+              ) : !isBusinessVerified ? (
+                <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('verification'); }} className="max-w-16 truncate text-[9px] font-bold text-amber-800">À vérifier</button>
               ) : !hasPublicationSubscriptionAccess ? (
                 <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="max-w-16 truncate text-[9px] font-bold text-amber-800">Forfait</button>
               ) : !isShopPublished ? (
@@ -789,9 +796,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <span className="truncate">{currentShop.is_open ? 'Boutique ouverte' : 'Boutique fermée'}</span>
             </button>
 
-            {!isShopVerified ? (
+            {!isBusinessVerified ? (
               <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('verification'); }} className="flex min-h-10 min-w-0 flex-1 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-[11px] font-bold text-amber-950 transition-colors hover:bg-amber-100 sm:text-xs md:flex-none">
-                <span className="truncate">Identité à vérifier</span>
+                <span className="truncate">Boutique à vérifier</span>
               </button>
             ) : isAdminSuspended ? (
               <span className="flex min-h-10 min-w-0 flex-1 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-center text-[11px] font-bold text-rose-950 sm:text-xs md:flex-none">
@@ -879,16 +886,25 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         </section>
       )}
 
-      {activeTab === 'overview' && (identityVerificationRequired || subscriptionNeedsAttention || isAdminSuspended || actionableOrderCount > 0 || outOfStockCount > 0 || lowStockCount > 0) && (
+      {activeTab === 'overview' && (businessVerificationRequired || identityVerificationRequired || subscriptionNeedsAttention || isAdminSuspended || actionableOrderCount > 0 || outOfStockCount > 0 || lowStockCount > 0) && (
         <section aria-labelledby="merchant-priority-notifications" aria-live="polite" className="mx-auto w-full max-w-7xl space-y-2 px-4 pt-3 lg:ml-64 lg:w-auto lg:max-w-none">
           <h2 id="merchant-priority-notifications" className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">À faire en priorité</h2>
+          {businessVerificationRequired && (
+            <article className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-amber-950 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
+                <div><h3 className="text-sm font-extrabold">Vérification de la boutique à compléter</h3><p className="mt-1 text-xs leading-5">Ajoutez les photos demandées dans votre dossier. La publication pourra être activée après l’examen du commerce.</p></div>
+              </div>
+              <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('verification'); }} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-amber-950 px-4 text-xs font-bold text-white hover:bg-amber-900">Compléter mon dossier</button>
+            </article>
+          )}
           {identityVerificationRequired && (
             <article className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-amber-950 sm:flex-row sm:items-center sm:justify-between sm:p-4">
               <div className="flex min-w-0 items-start gap-3">
                 <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
-                <div><h3 className="text-sm font-extrabold">{identityAlertCopy.title}</h3><p className="mt-1 text-xs leading-5">{identityAlertCopy.description} La boutique reste en veille jusque-là.</p></div>
+                <div><h3 className="text-sm font-extrabold">{identityAlertCopy.title}</h3><p className="mt-1 text-xs leading-5">{identityAlertCopy.description}</p></div>
               </div>
-              <button type="button" onClick={openIdentityVerification} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-amber-950 px-4 text-xs font-bold text-white hover:bg-amber-900">{identityStatus === 'rejected' ? 'Reprendre la vérification' : ['submitted', 'under_review'].includes(identityStatus) ? 'Voir le statut' : 'Commencer la vérification'}</button>
+              <button type="button" onClick={openIdentityVerification} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-amber-950 px-4 text-xs font-bold text-white hover:bg-amber-900">{['rejected', 'action_required'].includes(identityStatus) ? 'Voir les corrections' : ['submitted', 'under_review'].includes(identityStatus) ? 'Voir le statut' : 'Compléter le dossier'}</button>
             </article>
           )}
           {isAdminSuspended && (
@@ -928,7 +944,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <div className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 shadow-sm ring-1 ring-[#e8e0d6]">
                 <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Étapes requises</span>
                 <span className="rounded-full bg-[#d1fae5] px-2.5 py-1 text-xs font-black text-[var(--mt-green-hover)]">
-                  {[Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), products.length > 0, isShopVerified, hasPublicationSubscriptionAccess, isShopPublished].filter(Boolean).length}/5
+                  {[Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), products.length > 0, isBusinessVerified, hasPublicationSubscriptionAccess, isShopPublished].filter(Boolean).length}/5
                 </span>
               </div>
               <button
@@ -950,11 +966,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 { label: 'Nom et coordonnées', detail: 'Nom, WhatsApp et localisation', done: Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), action: () => { setActiveTab('settings'); setSettingsSubTab('general'); } },
                 { label: 'Ajouter un logo (facultatif)', detail: 'Aidez vos clients à vous reconnaître', done: Boolean(currentShop.theme_config?.logo_url), action: () => { setActiveTab('settings'); setSettingsSubTab('themes'); } },
                 { label: 'Ajouter vos premiers produits', detail: `${products.length} article${products.length === 1 ? '' : 's'} · limite du forfait : ${Number.isFinite(dashboardProductLimit) ? dashboardProductLimit : 'illimitée'}`, done: products.length > 0, action: () => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); } },
-                { label: 'Vérifier votre identité', detail: isShopVerified ? 'Identité confirmée' : 'Requis avant la publication', done: isShopVerified, action: () => { setActiveTab('settings'); setSettingsSubTab('verification'); } },
+                { label: 'Faire examiner votre boutique', detail: isBusinessVerified ? 'Commerce examiné' : 'Requis avant la publication', done: isBusinessVerified, action: () => { setActiveTab('settings'); setSettingsSubTab('verification'); } },
                 { label: 'Essai ou abonnement actif', detail: hasPublicationSubscriptionAccess ? 'Votre accès est actif' : 'Choisissez une formule pour publier', done: hasPublicationSubscriptionAccess, action: () => { setActiveTab('settings'); setSettingsSubTab('subscription'); } },
                 { label: 'Publier votre boutique', detail: isShopPublished ? 'Votre vitrine est visible' : 'Activez la publication après les étapes requises', done: isShopPublished, action: () => {
                   if (isShopPublished) onOpenStorefront(currentShop.slug);
-                  else if (!isShopVerified) { setActiveTab('settings'); setSettingsSubTab('verification'); }
+                  else if (!isBusinessVerified) { setActiveTab('settings'); setSettingsSubTab('verification'); }
                   else if (!hasPublicationSubscriptionAccess) { setActiveTab('settings'); setSettingsSubTab('subscription'); }
                   else void handlePublicationStatusChange('active');
                 } },
@@ -976,8 +992,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Action clé</p>
                   <h3 className="mt-1 text-lg font-black text-[var(--mt-gray-900)]">
-                    {!isShopVerified
-                      ? 'Vérifier mon identité'
+                    {!isBusinessVerified
+                      ? 'Faire examiner ma boutique'
                       : isAdminSuspended
                         ? 'Suspension administrative'
                         : isShopPublished
@@ -993,8 +1009,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               </div>
 
               <p className="mt-3 text-sm leading-6 text-[#4b5a52]">
-                {!isShopVerified
-                  ? 'La vérification de votre identité est nécessaire avant que votre boutique soit visible publiquement.'
+                {!isBusinessVerified
+                  ? 'La vérification de votre boutique est nécessaire avant sa publication. Le contrôle d’identité reste indépendant.'
                   : isAdminSuspended
                     ? 'Votre boutique a une restriction administrative. Contactez l’assistance pour la réactiver.'
                     : isShopPublished
@@ -1007,7 +1023,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={!isShopVerified
+                  onClick={!isBusinessVerified
                     ? () => { setActiveTab('settings'); setSettingsSubTab('verification'); }
                     : isAdminSuspended
                       ? () => toast.error('Contactez l’administration pour faire réexaminer la suspension.')
@@ -1065,7 +1081,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             {[
               { id: 'visibility' as const, label: 'Campagnes et boosts', icon: TrendingUp, badge: '' },
               { id: 'subscription' as const, label: 'Abonnement', icon: CreditCard, badge: subscriptionNeedsAttention ? 'Échéance' : '' },
-              { id: 'verification' as const, label: identityStatus === 'verified' ? 'Identité vérifiée' : 'Vérification d’identité', icon: ShieldCheck, badge: identityVerificationRequired ? 'À faire' : '' },
+              { id: 'verification' as const, label: 'Boutique et identité', icon: ShieldCheck, badge: businessVerificationRequired ? 'Boutique à valider' : identityVerificationRequired ? 'Identité en attente' : '' },
             ].map(({ id, label, icon: Icon, badge }) => (
               <button key={id} type="button" aria-current={activeTab === 'settings' && settingsSubTab === id ? 'page' : undefined} onClick={() => { setSettingsSubTab(id); setActiveTab('settings'); }} className={`flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold transition sm:text-sm ${activeTab === 'settings' && settingsSubTab === id ? 'bg-[var(--mt-green-hover)] text-white' : 'text-white/90 hover:bg-[var(--mt-green-hover)] hover:text-white'}`}>
                 <Icon className="h-4 w-4 shrink-0" /><span className="flex-1">{label}</span>{badge && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-900">{badge}</span>}
@@ -1153,7 +1169,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <h3 id="merchant-shop-card-title" className="font-black text-[var(--mt-green-hover)]">{currentShop.name}</h3>
-                        {isShopVerified && <span className="rounded-full bg-[#e2eee8] px-2 py-0.5 text-[10px] font-bold text-[var(--mt-green-hover)]">Vérifiée</span>}
+                        {isBusinessVerified && <span className="rounded-full bg-[#e2eee8] px-2 py-0.5 text-[10px] font-bold text-[var(--mt-green-hover)]">Commerce examiné</span>}
                       </div>
                       <p className="mt-1 text-xs text-slate-500">{currentShop.city || 'Localisation à compléter'} · {currentShop.is_open ? 'Ouverte' : 'Fermée'}</p>
                       <button type="button" onClick={() => { setActiveTab('settings'); setSettingsSubTab('general'); }} className="mt-3 min-h-10 w-full rounded-full border border-[var(--mt-green-hover)] px-3 text-xs font-bold text-[var(--mt-green-hover)] hover:bg-[#d1fae5]">Modifier ma boutique</button>
@@ -1245,10 +1261,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             <span className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-100 text-amber-900"><ShieldCheck className="h-6 w-6" /></span>
             <p className="mt-4 text-[10px] font-black uppercase tracking-[0.14em] text-amber-800">Première étape</p>
             <h2 id="identity-guide-title" className="mt-1 pr-8 text-2xl font-black text-[var(--mt-gray-900)]">Bienvenue dans votre espace boutique</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Pour apparaître dans l’annuaire et recevoir des commandes, commencez par vérifier l’identité du responsable. Vous pourrez ensuite compléter votre vitrine et la publier.</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Ajoutez les justificatifs du commerce pour que l’équipe puisse examiner votre boutique. L’identité est vérifiée séparément; une boutique approuvée peut être publiée même si l’identité reste en attente.</p>
             <ol className="mt-5 space-y-3">
               {[
-                ['Vérifier votre identité', 'Étape nécessaire avant la publication.'],
+                ['Faire examiner votre boutique', 'Photos du commerce requises avant la publication.'],
                 ['Compléter votre vitrine', 'Ajoutez un logo, vos coordonnées et vos produits.'],
                 ['Publier et partager', 'Vos clients pourront découvrir la boutique et vous contacter.'],
               ].map(([title, description], index) => <li key={title} className="flex items-start gap-3 rounded-xl border border-[#e7dfd3] bg-white p-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#d1fae5] text-xs font-black text-[var(--mt-green-hover)]">{index + 1}</span><span><strong className="block text-sm text-[var(--mt-gray-900)]">{title}</strong><span className="mt-0.5 block text-xs leading-5 text-slate-600">{description}</span></span></li>)}
@@ -1329,7 +1345,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 <div className="overflow-hidden rounded-xl border border-[#e9e5dc] bg-white">
                   {[
                     { id: 'subscription' as const, label: 'Mon abonnement', icon: CreditCard, badge: subscriptionNeedsAttention ? 'Échéance' : currentShop.subscription?.plan || '' },
-                    { id: 'verification' as const, label: identityStatus === 'verified' ? 'Identité vérifiée' : 'Vérification d’identité', icon: ShieldCheck, badge: identityVerificationRequired ? 'À faire' : '' },
+                    { id: 'verification' as const, label: 'Boutique et identité', icon: ShieldCheck, badge: businessVerificationRequired ? 'Boutique à valider' : identityVerificationRequired ? 'Identité en attente' : '' },
                     { id: 'notifications' as const, label: 'Notifications', icon: Bell, badge: '' },
                     { id: 'profile' as const, label: 'Profil et mes données', icon: Key, badge: '' },
                   ].map(({ id, label, icon: Icon, badge }) => (

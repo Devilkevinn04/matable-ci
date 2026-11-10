@@ -48,8 +48,8 @@ export function getShopPublicationBlockReason(
   currentDate = new Date(),
 ): 'inactive' | 'verification' | 'subscription' | null {
   if (!shop.is_active) return 'inactive';
-  const verificationStatus = shop.merchant_verification_status || 'not_required';
-  if (verificationStatus !== 'verified' && verificationStatus !== 'not_required') return 'verification';
+  const businessStatus = shop.business_verification_status || shop.merchant_verification_status || 'not_required';
+  if (businessStatus !== 'approved' && businessStatus !== 'verified' && businessStatus !== 'not_required') return 'verification';
   const subscription = getSubscriptionState(shop, currentDate);
   if (subscription.status === 'past_due' && isShopInSubscriptionGracePeriod(shop, currentDate)) return null;
   if (subscription.status !== 'trialing' && subscription.status !== 'active') return 'subscription';

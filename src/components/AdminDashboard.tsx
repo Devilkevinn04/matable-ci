@@ -34,6 +34,7 @@ import {
   Star,
 } from 'lucide-react';
 import { AdminIdentityVerificationPanel, statusLabels as verificationStatusLabels } from './AdminIdentityVerificationPanel';
+import { AdminManualVerificationPanel } from './AdminManualVerificationPanel';
 import { AdminShopList } from './AdminShopList';
 import { getAcquisitionSourceLabel } from '../utils/acquisitionSources';
 import { AdminPushAnnouncements } from './AdminPushAnnouncements';
@@ -3089,11 +3090,14 @@ make -f /srv/apps/matable/Makefile production-status`}</pre>
         )}
 
         {adminView === 'identity' && (
+        <>
+        {adminRole === 'super_admin' && <AdminManualVerificationPanel />}
         <AdminIdentityVerificationPanel
           selectedShopId={selectedVerificationShopId}
           requestingShopId={verificationRequestShopId}
           onRequestVerification={(shopId) => void requestOwnerIdentityVerification(shopId)}
         />
+        </>
         )}
 
         {adminView === 'verification-shops' && adminRole === 'verification_admin' && (

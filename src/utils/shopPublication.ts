@@ -3,7 +3,7 @@ import { getSubscriptionAccessCutoff, getSubscriptionGraceCutoff } from './subsc
 
 type PublicationShop = Pick<
   Shop,
-  'is_active' | 'publication_status' | 'merchant_verification_status' | 'subscription'
+  'is_active' | 'publication_status' | 'merchant_verification_status' | 'business_verification_status' | 'subscription'
 >;
 
 export function hasShopPublicationSubscriptionAccess(
@@ -26,9 +26,9 @@ export function hasShopPublicationSubscriptionAccess(
 
 export function isShopPubliclyVisible(shop: PublicationShop, currentDate = new Date()): boolean {
   const publicationStatus = shop.publication_status ?? (shop.is_active ? 'active' : 'suspended');
-  const verificationStatus = shop.merchant_verification_status || 'not_required';
+  const verificationStatus = shop.business_verification_status || shop.merchant_verification_status || 'not_required';
   return shop.is_active
     && publicationStatus === 'active'
-    && ['not_required', 'verified'].includes(verificationStatus)
+    && ['not_required', 'verified', 'approved'].includes(verificationStatus)
     && hasShopPublicationSubscriptionAccess(shop.subscription, currentDate);
 }

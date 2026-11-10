@@ -8,6 +8,8 @@ Dans la pull request, ajouter les noms et exemples dans `.env.production.example
 
 L’exploitant renseigne les variables serveur dans `/srv/apps/matable/shared/app.env` avant d’approuver le SHA. Ce fichier privé contient les valeurs de production. Transmettre les secrets par un canal prévu à cet effet et garder uniquement les noms et exemples dans Git.
 
+Pour la vérification manuelle des commerçants, ajouter dans ce fichier `R2_PRIVATE_BUCKET`, `R2_PRIVATE_ENDPOINT`, `R2_PRIVATE_ACCESS_KEY_ID` et `R2_PRIVATE_SECRET_ACCESS_KEY`. Utiliser un bucket privé distinct du bucket média public, sans domaine public, et un jeton limité à la lecture/écriture des objets de ce seul bucket. Les variables ajoutées à un autre stack Portainer ne configurent pas `matable-web` si ce service n’est pas défini dans ce stack.
+
 Après déploiement du parcours de vérification MFA, les avis aux comptes
 existants qui ont déjà une adresse e-mail peuvent être envoyés avec la commande
 suivante. Elle est idempotente : les destinataires déjà traités ne reçoivent

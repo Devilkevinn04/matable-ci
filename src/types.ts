@@ -68,6 +68,10 @@ export interface Shop {
   publication_status?: 'draft' | 'active' | 'suspended';
   featured_until?: string | null;
   merchant_verification_status?: 'not_required' | 'pending' | 'submitted' | 'under_review' | 'verified' | 'rejected';
+  business_verification_status?: 'not_submitted' | 'pending' | 'under_review' | 'action_required' | 'approved' | 'rejected';
+  identity_verification_status?: 'not_submitted' | 'pending' | 'under_review' | 'action_required' | 'approved' | 'rejected';
+  business_verification_method?: 'manual' | null;
+  identity_verification_method?: 'manual' | 'didit' | null;
   last_notification_sent_at: string | null;
   whatsapp_subscription_reminders_enabled?: boolean;
   whatsapp_subscription_reminders_consent_at?: string | null;
