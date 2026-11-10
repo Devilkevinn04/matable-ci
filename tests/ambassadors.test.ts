@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AMBASSADOR_REFERRAL_DURATION_MS, calculateAmbassadorCommission, clearAmbassadorReferral, getAmbassadorMonthlyStats, getAmbassadorToken, getStoredAmbassadorCode, isCommissionPayableForMonth, normalizeAmbassadorCode, validAmbassadorReferral } from '../src/utils/ambassadors.ts';
+import { AMBASSADOR_REFERRAL_DURATION_MS, buildAmbassadorReferralUrl, calculateAmbassadorCommission, clearAmbassadorReferral, getAmbassadorMonthlyStats, getAmbassadorToken, getStoredAmbassadorCode, isCommissionPayableForMonth, normalizeAmbassadorCode, validAmbassadorReferral } from '../src/utils/ambassadors.ts';
 
 test('ambassador referrals expire after 90 days and reject invalid codes and dates', () => {
   const now = 2 * AMBASSADOR_REFERRAL_DURATION_MS;
@@ -9,6 +9,11 @@ test('ambassador referrals expire after 90 days and reject invalid codes and dat
   assert.deepEqual(validAmbassadorReferral({ code: 'kevin01', capturedAt: now - 1 }, now), { code: 'KEVIN01', capturedAt: now - 1 });
   assert.equal(validAmbassadorReferral({ code: 'KEVIN01', capturedAt: now - AMBASSADOR_REFERRAL_DURATION_MS }, now), null);
   assert.equal(validAmbassadorReferral({ code: 'KEVIN01', capturedAt: now + 1 }, now), null);
+});
+
+test('ambassador referral links open shop creation with a normalized code', () => {
+  assert.equal(buildAmbassadorReferralUrl(' kevin01 ', 'https://matable-ci.com'), 'https://matable-ci.com/app/creer-boutique?ref=KEVIN01');
+  assert.throws(() => buildAmbassadorReferralUrl('bad code', 'https://matable-ci.com'));
 });
 
 test('ambassador link attribution is retained when audience analytics are refused', async () => {
@@ -71,6 +76,11 @@ test('ambassador link attribution is retained when audience analytics are refuse
     assert.equal(captures, 3);
 
     clearAmbassadorReferral();
+    responseStatus = 404;
+    assert.equal(await getAmbassadorToken('INACTIVE'), null);
+    assert.equal(getStoredAmbassadorCode(), null);
+    assert.equal(events.at(-1)?.type, 'matable-ambassador-referral-updated');
+    responseStatus = 201;
     storageUnavailable = true;
     responseToken = 'c'.repeat(64);
     responseExpiry = new Date(Date.now() + AMBASSADOR_REFERRAL_DURATION_MS).toISOString();

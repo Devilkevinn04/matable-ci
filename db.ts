@@ -451,10 +451,20 @@ const sqliteSchema = `
     token_hash TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id),
     created_at TEXT NOT NULL, expires_at TEXT NOT NULL
   );
+  CREATE INDEX IF NOT EXISTS idx_ambassador_clicks_ambassador_created
+    ON ambassador_clicks(ambassador_id, created_at);
+  CREATE TABLE IF NOT EXISTS ambassador_link_click_events (
+    event_id TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_ambassador_link_click_events_ambassador_created
+    ON ambassador_link_click_events(ambassador_id, created_at);
   CREATE TABLE IF NOT EXISTS ambassador_referrals (
     shop_id INTEGER PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
     ambassador_id TEXT NOT NULL REFERENCES ambassadors(id), created_at TEXT NOT NULL
   );
+  CREATE INDEX IF NOT EXISTS idx_ambassador_referrals_ambassador_created
+    ON ambassador_referrals(ambassador_id, created_at);
   CREATE TABLE IF NOT EXISTS ambassador_commissions (
     shop_id INTEGER PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
     ambassador_id TEXT NOT NULL REFERENCES ambassadors(id),
@@ -711,6 +721,18 @@ function migrateSqlite(connection: Database.Database) {
       connection.exec(`UPDATE analytics_events SET audience = 'public' WHERE audience IS NULL`);
       connection.prepare('INSERT INTO didit_schema_migrations (name, applied_at) VALUES (?, ?)')
         .run(analyticsAudienceBackfillName, new Date().toISOString());
+    })();
+  }
+  const ambassadorLinkClickBackfillName = 'ambassador_link_click_events_v1';
+  const ambassadorLinkClickBackfillApplied = connection.prepare(
+    'SELECT name FROM didit_schema_migrations WHERE name = ?',
+  ).get(ambassadorLinkClickBackfillName);
+  if (!ambassadorLinkClickBackfillApplied) {
+    connection.transaction(() => {
+      connection.exec(`INSERT OR IGNORE INTO ambassador_link_click_events (event_id, ambassador_id, created_at)
+        SELECT token_hash, ambassador_id, created_at FROM ambassador_clicks`);
+      connection.prepare('INSERT INTO didit_schema_migrations (name, applied_at) VALUES (?, ?)')
+        .run(ambassadorLinkClickBackfillName, new Date().toISOString());
     })();
   }
   addColumn('orders', 'attribution_campaign', 'TEXT');
@@ -1234,10 +1256,17 @@ export const postgresMigrations = [
     token_hash TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id),
     created_at TEXT NOT NULL, expires_at TEXT NOT NULL
   )`,
+  'CREATE INDEX IF NOT EXISTS idx_ambassador_clicks_ambassador_created ON ambassador_clicks(ambassador_id, created_at)',
+  `CREATE TABLE IF NOT EXISTS ambassador_link_click_events (
+    event_id TEXT PRIMARY KEY, ambassador_id TEXT NOT NULL REFERENCES ambassadors(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_ambassador_link_click_events_ambassador_created ON ambassador_link_click_events(ambassador_id, created_at)',
   `CREATE TABLE IF NOT EXISTS ambassador_referrals (
     shop_id BIGINT PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
     ambassador_id TEXT NOT NULL REFERENCES ambassadors(id), created_at TEXT NOT NULL
   )`,
+  'CREATE INDEX IF NOT EXISTS idx_ambassador_referrals_ambassador_created ON ambassador_referrals(ambassador_id, created_at)',
   `CREATE TABLE IF NOT EXISTS ambassador_commissions (
     shop_id BIGINT PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
     ambassador_id TEXT NOT NULL REFERENCES ambassadors(id),
@@ -1438,6 +1467,14 @@ export async function initializeDatabase() {
       await client.query('BEGIN');
       for (const migration of postgresMigrations) await client.query(migration);
       const analyticsBackfills = [
+        {
+          name: 'ambassador_link_click_events_v1',
+          statements: [
+            `INSERT INTO ambassador_link_click_events (event_id, ambassador_id, created_at)
+              SELECT token_hash, ambassador_id, created_at FROM ambassador_clicks
+              ON CONFLICT (event_id) DO NOTHING`,
+          ],
+        },
         {
           name: 'analytics_intelligence_v1',
           statements: [

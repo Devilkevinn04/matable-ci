@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Copy, CreditCard, Download, RefreshCw, Store, Users, Wallet } from 'lucide-react';
-import { isCommissionPayableForMonth } from '../utils/ambassadors';
+import { buildAmbassadorReferralUrl, isCommissionPayableForMonth } from '../utils/ambassadors';
 import { stringifyCsv } from '../utils/csv';
 
 interface Ambassador {
   id: string; name: string; code: string; email: string | null; phone: string | null; active: number;
   has_account: number; invite_expires_at: string | null; registrations: number; published: number; paying: number; commissions: number;
+  total_clicks: number; active_tokens: number; total_referrals: number; conversion_rate: number; last_click_at: string | null;
+  clicks_7d: number; clicks_30d: number; clicks_90d: number;
+  referrals_7d: number; referrals_30d: number; referrals_90d: number;
+  conversion_7d: number; conversion_30d: number; conversion_90d: number;
 }
 interface AmbassadorApplication {
   id: string; name: string; email: string; phone: string | null;
@@ -64,6 +68,7 @@ export function AdminAmbassadors() {
   const [filter, setFilter] = useState('pending');
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [withdrawalMonth, setWithdrawalMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [selectedRange, setSelectedRange] = useState<'7d' | '30d' | '90d'>('30d');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -208,6 +213,34 @@ export function AdminAmbassadors() {
     } catch (problem) { setError(problem instanceof Error ? problem.message : 'Export impossible.'); }
     finally { setBusy(false); }
   };
+  const exportLinkPerformance = async () => {
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const current = await load();
+      const rows = current.ambassadors.map((ambassador) => [
+        ambassador.name,
+        ambassador.code,
+        ambassador.email || '',
+        ambassador.phone || '',
+        ambassador.total_clicks,
+        ambassador.active_tokens,
+        ambassador.total_referrals,
+        Number(ambassador.conversion_rate || 0),
+        ambassador.last_click_at ? new Date(ambassador.last_click_at).toISOString() : '',
+      ]);
+      if (!rows.length) { setNotice('Aucun ambassadeur n’a encore de statistiques de lien.'); return; }
+      const csv = stringifyCsv([
+        ['Ambassadeur', 'Code', 'E-mail', 'Téléphone', 'Visites totales', 'Jetons actifs', 'Inscriptions', 'Taux conversion %', 'Dernière visite UTC'],
+        ...rows,
+      ]);
+      const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' }));
+      const link = document.createElement('a');
+      link.href = url; link.download = 'matable-performance-liens-ambassadeurs.csv'; link.click();
+      URL.revokeObjectURL(url);
+      setNotice('Performance des liens exportée au format CSV.');
+    } catch (problem) { setError(problem instanceof Error ? problem.message : 'Export de performance impossible.'); }
+    finally { setBusy(false); }
+  };
   const exportWithdrawalReconciliation = async () => {
     setBusy(true); setError(''); setNotice('');
     try {
@@ -242,6 +275,13 @@ export function AdminAmbassadors() {
   const approvedWithdrawals = withdrawals.filter((withdrawal) => withdrawal.status === 'approved');
   const paidWithdrawalCount = withdrawals.filter((withdrawal) => withdrawal.status === 'paid'
     && withdrawal.processed_at?.slice(0, 7) === withdrawalMonth).length;
+  const rangeLabel = { '7d': '7 jours', '30d': '30 jours', '90d': '90 jours' } as const;
+  const selectedRangeStats = {
+    7: { clicks: ambassadors.reduce((total, ambassador) => total + ambassador.clicks_7d, 0), referrals: ambassadors.reduce((total, ambassador) => total + ambassador.referrals_7d, 0) },
+    30: { clicks: ambassadors.reduce((total, ambassador) => total + ambassador.clicks_30d, 0), referrals: ambassadors.reduce((total, ambassador) => total + ambassador.referrals_30d, 0) },
+    90: { clicks: ambassadors.reduce((total, ambassador) => total + ambassador.clicks_90d, 0), referrals: ambassadors.reduce((total, ambassador) => total + ambassador.referrals_90d, 0) },
+  } as const;
+  const selectedRangeSummary = selectedRangeStats[selectedRange === '7d' ? 7 : selectedRange === '30d' ? 30 : 90];
   return <section data-admin-view={adminView} className="admin-ambassadors space-y-6" aria-labelledby="ambassadors-title">
     <header className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase text-emerald-800">Partenariats</p><h2 id="ambassadors-title" className="mt-1 text-xl font-black text-slate-900">Ambassadeurs</h2></div><button type="button" title="Actualiser" aria-label="Actualiser" onClick={() => void load().catch((problem) => setError(problem.message))} className="rounded-lg border border-slate-300 p-2"><RefreshCw className="h-5 w-5" /></button></header>
     {error && <p role="alert" className="text-sm font-semibold text-rose-800">{error}</p>}{notice && <p role="status" className="text-sm font-semibold text-emerald-800">{notice}</p>}
@@ -264,6 +304,29 @@ export function AdminAmbassadors() {
       <label className="text-xs font-bold text-slate-700">Téléphone<input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" /></label>
       <button disabled={busy} className="min-h-10 rounded-lg bg-emerald-800 px-4 text-sm font-bold text-white disabled:opacity-50">Créer un ambassadeur</button>
     </form>
+    <div data-admin-panel="partners" className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-black text-slate-900">Performance des liens</h3>
+          <p className="mt-1 text-xs text-slate-600">Suivi global des visites de liens, jetons d’attribution actifs et inscriptions par ambassadeur.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600">
+            Période
+            <select value={selectedRange} onChange={(event) => setSelectedRange(event.target.value as '7d' | '30d' | '90d')} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800">
+              {Object.entries(rangeLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <button type="button" disabled={busy} onClick={() => void exportLinkPerformance()} className="min-h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 disabled:opacity-40">Exporter CSV</button>
+        </div>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Visites du lien</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-900">{selectedRangeSummary.clicks}</p></div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Liens actifs</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-900">{ambassadors.reduce((total, ambassador) => total + ambassador.active_tokens, 0)}</p></div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Inscriptions</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-900">{selectedRangeSummary.referrals}</p></div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Taux moyen</p><p className="mt-1 text-2xl font-black tabular-nums text-slate-900">{selectedRangeSummary.clicks ? `${((selectedRangeSummary.referrals * 100) / selectedRangeSummary.clicks).toFixed(1)}%` : '0%'}</p></div>
+      </div>
+    </div>
     <div data-admin-panel="partners" className="space-y-3"><h3 className="text-sm font-black text-slate-900">Comptes ambassadeurs ({ambassadors.length})</h3>{ambassadors.length === 0 && <p className="text-sm text-slate-500">Aucun ambassadeur.</p>}{ambassadors.map((ambassador) => {
       const inviteExpiry = ambassador.invite_expires_at ? Date.parse(ambassador.invite_expires_at) : NaN;
       const invitePending = Number.isFinite(inviteExpiry) && inviteExpiry > Date.now();
@@ -290,7 +353,25 @@ export function AdminAmbassadors() {
         <label className="text-xs font-semibold text-slate-700 sm:col-span-2">Téléphone<input type="tel" maxLength={30} value={profileDraft.phone} onChange={(event) => setProfileDraft((draft) => ({ ...draft, phone: event.target.value }))} className="mt-1 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm sm:max-w-sm" /></label>
         <div className="flex flex-wrap gap-2 sm:col-span-2"><button type="submit" disabled={busy} className="min-h-10 rounded-lg bg-emerald-900 px-4 text-xs font-bold text-white disabled:opacity-50">Enregistrer le profil</button><button type="button" disabled={busy} onClick={() => setEditingAmbassadorId(null)} className="min-h-10 rounded-lg border border-slate-300 px-4 text-xs font-bold text-slate-700">Annuler</button></div>
       </form>}
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600"><span className="break-all">{`${window.location.origin}/?ref=${ambassador.code}`}</span><button type="button" title="Copier le lien" aria-label={`Copier le lien de ${ambassador.name}`} onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/?ref=${ambassador.code}`).then(() => setNotice('Lien copié.')).catch(() => setError('Copie impossible.'))} className="rounded border border-slate-300 p-1.5"><Copy className="h-4 w-4" /></button></div>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600"><span className="break-all">{buildAmbassadorReferralUrl(ambassador.code, window.location.origin)}</span><button type="button" title="Copier le lien" aria-label={`Copier le lien de ${ambassador.name}`} onClick={() => void navigator.clipboard.writeText(buildAmbassadorReferralUrl(ambassador.code, window.location.origin)).then(() => setNotice('Lien copié.')).catch(() => setError('Copie impossible.'))} className="rounded border border-slate-300 p-1.5"><Copy className="h-4 w-4" /></button></div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Visites du lien</p>
+          <p className="mt-1 text-lg font-black tabular-nums text-slate-900">{ambassador.total_clicks}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Liens actifs</p>
+          <p className="mt-1 text-lg font-black tabular-nums text-slate-900">{ambassador.active_tokens}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Inscriptions</p>
+          <p className="mt-1 text-lg font-black tabular-nums text-slate-900">{ambassador.total_referrals}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Taux</p>
+          <p className="mt-1 text-lg font-black tabular-nums text-slate-900">{ambassador.conversion_rate}%</p>
+        </div>
+      </div>
       <p className="mt-2 text-xs text-slate-600">{ambassador.registrations} inscriptions · {ambassador.published} boutiques publiées · {ambassador.paying} commerçants payants · {money(ambassador.commissions)} de commissions</p>
       <div className="mt-3 flex flex-wrap items-center gap-2"><button type="button" disabled={busy || !ambassador.active || !ambassador.email} onClick={() => void createInvite(ambassador.id)} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold disabled:opacity-40">{ambassador.has_account ? 'Créer un lien de réinitialisation' : invitePending ? 'Remplacer le lien d’activation' : 'Créer le lien d’activation'}</button><span className="text-xs text-slate-500">Lien à usage unique, valable 7 jours.</span></div>
       {ambassador.has_account && invitePending && <p className="mt-2 text-xs text-slate-600">L’accès actuel reste actif jusqu’à l’utilisation du nouveau lien ; la réinitialisation révoquera alors les sessions existantes.</p>}

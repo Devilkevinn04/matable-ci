@@ -432,6 +432,8 @@ test('ambassador commissions follow the first confirmed subscription and refund'
     method, headers: { 'Content-Type': 'application/json', Cookie: adminCookie }, body: body && JSON.stringify(body),
   });
   assert.equal((await fetch(`${BASE_URL}/api/admin/ambassadors`)).status, 401);
+  assert.equal((await fetch(`${BASE_URL}/api/admin/ambassadors/overview`)).status, 401);
+  assert.equal((await adminRequest('/overview?days=14', 'GET')).status, 400);
   const createdAmbassador = await adminRequest('', 'POST', { name: 'Partenaire test', email: 'partner@example.com' });
   assert.equal(createdAmbassador.status, 201);
   const ambassador = await createdAmbassador.json();
@@ -440,6 +442,19 @@ test('ambassador commissions follow the first confirmed subscription and refund'
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: ambassador.code }),
   });
   assert.equal(click.status, 201);
+  assert.equal(click.headers.get('cache-control'), 'no-store');
+  assert.equal((await fetch(`${BASE_URL}/api/ambassador-link-visits`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: 'https://attacker.example' },
+    body: JSON.stringify({ code: ambassador.code }),
+  })).status, 403);
+  const linkVisit = await fetch(`${BASE_URL}/api/ambassador-link-visits`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: ambassador.code }),
+  });
+  assert.equal(linkVisit.status, 201);
+  assert.equal((await fetch(`${BASE_URL}/api/ambassador-link-visits`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'INCONNU' }),
+  })).status, 404);
   const { token } = await click.json();
   const invalidCode = await fetch(`${BASE_URL}/api/shops`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -452,6 +467,15 @@ test('ambassador commissions follow the first confirmed subscription and refund'
   });
   const shop = await created.json();
   assert.equal(created.status, 200, JSON.stringify(shop));
+  const ambassadorOverviewResponse = await adminRequest('/overview?days=7', 'GET');
+  assert.equal(ambassadorOverviewResponse.status, 200);
+  const ambassadorOverview = await ambassadorOverviewResponse.json();
+  assert.equal(ambassadorOverview.ambassadors_total, 2);
+  assert.equal(ambassadorOverview.ambassadors_active, 2);
+  assert.equal(ambassadorOverview.clicks, 1);
+  assert.equal(ambassadorOverview.referrals, 1);
+  assert.equal(ambassadorOverview.active_link_tokens, 1);
+  assert.equal(ambassadorOverview.conversion_rate, 100);
   const merchantLogin = await fetch(`${BASE_URL}/api/auth/merchant-access-login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ access_token: shop.owner_access_token }),
   });
@@ -772,6 +796,7 @@ test('ambassador access uses one-time invitations and isolates each dashboard to
   const replacementInvite = await replacementInviteResponse.json();
   const replacementInviteToken = new URL(replacementInvite.invite_url).searchParams.get('token');
   assert.equal((await fetch(`${BASE_URL}/api/ambassador-auth/dashboard`)).status, 401);
+  assert.equal((await fetch(`${BASE_URL}/api/ambassador-auth/link-stats?all=1`)).status, 401);
   const weakPassword = await fetch(`${BASE_URL}/api/ambassador-auth/activate`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: replacementInviteToken, password: 'short' }),
   });
@@ -805,6 +830,25 @@ test('ambassador access uses one-time invitations and isolates each dashboard to
   assert.equal(Number(activeAmbassador.has_account), 1);
   assert.equal(activeAmbassador.invite_expires_at, null);
 
+  const referralClickResponse = await fetch(`${BASE_URL}/api/ambassador-clicks`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: ambassador.code }),
+  });
+  assert.equal(referralClickResponse.status, 201);
+  const firstVisit = await fetch(`${BASE_URL}/api/ambassador-link-visits`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: ambassador.code }),
+  });
+  assert.equal(firstVisit.status, 201);
+  const expireReferralClickDb = new Database(TEST_DB_PATH);
+  expireReferralClickDb.prepare('UPDATE ambassador_clicks SET expires_at = ? WHERE ambassador_id = ?')
+    .run(new Date(Date.now() - 1000).toISOString(), ambassador.id);
+  expireReferralClickDb.close();
+  assert.equal((await fetch(`${BASE_URL}/api/ambassador-clicks`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: ambassador.code }),
+  })).status, 201);
+  const secondVisit = await fetch(`${BASE_URL}/api/ambassador-link-visits`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: ambassador.code }),
+  });
+  assert.equal(secondVisit.status, 201);
   const referredShop = await fetch(`${BASE_URL}/api/shops`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: 'Boutique confidentielle', whatsapp_number: `+22505${String(Date.now()).slice(-8)}`, email: `private-shop-${Date.now()}@example.com`, pin_code: '224466', category: 'beauty', city: 'Abidjan', accepted_terms_privacy: true, ambassador_code: ambassador.code }),
@@ -818,6 +862,32 @@ test('ambassador access uses one-time invitations and isolates each dashboard to
   assert.equal(dashboard.referrals[0].shop_name, 'Boutique confidentielle');
   assert.equal('owner_email' in dashboard.referrals[0], false);
   assert.equal('whatsapp_number' in dashboard.referrals[0], false);
+  const today = new Date().toISOString().slice(0, 10);
+  const currentDayStatsResponse = await fetch(`${BASE_URL}/api/ambassador-auth/link-stats?from=${today}&to=${today}`, {
+    headers: { Cookie: ambassadorCookie },
+  });
+  assert.equal(currentDayStatsResponse.status, 200);
+  const currentDayStats = await currentDayStatsResponse.json();
+  assert.equal(currentDayStats.from, today);
+  assert.equal(currentDayStats.to, today);
+  assert.equal(currentDayStats.total_clicks, 2);
+  assert.equal(currentDayStats.total_referrals, 1);
+  assert.equal(currentDayStats.conversion_rate, 50);
+  assert.deepEqual(currentDayStats.activity, [{ date: today, clicks: 2, referrals: 1 }]);
+  const allTimeStatsResponse = await fetch(`${BASE_URL}/api/ambassador-auth/link-stats?all=1`, {
+    headers: { Cookie: ambassadorCookie },
+  });
+  assert.equal(allTimeStatsResponse.status, 200);
+  const allTimeStats = await allTimeStatsResponse.json();
+  assert.equal(allTimeStats.from, null);
+  assert.equal(allTimeStats.total_clicks, 2);
+  assert.equal(allTimeStats.total_referrals, 1);
+  assert.equal((await fetch(`${BASE_URL}/api/ambassador-auth/link-stats?from=2026-02-31&to=2026-03-01`, {
+    headers: { Cookie: ambassadorCookie },
+  })).status, 400);
+  assert.equal((await fetch(`${BASE_URL}/api/ambassador-auth/link-stats?from=${today}&to=2020-01-01`, {
+    headers: { Cookie: ambassadorCookie },
+  })).status, 400);
 
   const merchantLoginResponse = await fetch(`${BASE_URL}/api/auth/merchant-access-login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ access_token: referredShopPayload.owner_access_token }),

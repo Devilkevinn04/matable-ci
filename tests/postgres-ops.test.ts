@@ -69,18 +69,18 @@ test('PostgreSQL URL and inspection validation rejects unsafe inputs', () => {
   assert.throws(() => parseDatabaseInspection('not-valid'), /Could not validate/);
 });
 
-test('every versioned SQL migration is registered with the PostgreSQL migration runner', async () => {
+test('the PostgreSQL migration runner discovers every numbered SQL migration', async () => {
   const migrationDirectory = path.resolve('migrations');
   const migrationFiles = (await fs.readdir(migrationDirectory))
-    .filter((file) => file.endsWith('.sql'))
+    .filter((file) => /^\d{3}_[a-z0-9_-]+\.sql$/i.test(file))
     .map((file) => file.slice(0, -'.sql'.length))
     .sort();
   const migrationRunner = await fs.readFile(path.resolve('scripts/migrate-neon.ts'), 'utf8');
-  const registeredMigrations = [...migrationRunner.matchAll(/^\s*'(\d{3}_[^']+)',?$/gm)]
-    .map((match) => match[1])
-    .sort();
-
-  assert.deepEqual(registeredMigrations, migrationFiles);
+  assert.match(migrationRunner, /fs\.readdir\(path\.join\(process\.cwd\(\), 'migrations'\)\)/);
+  assert.match(migrationRunner, /\.filter\(\(file\) => \/\^\\d\{3\}_\[a-z0-9_-\]\+\\\.sql\$\/i\.test\(file\)\)/);
+  assert.match(migrationRunner, /migrationFiles\.map\(\(file\) => file\.slice\(0, -4\)\)/);
+  assert.ok(migrationFiles.includes('053_ambassador_link_stats_history'));
+  assert.ok(migrationFiles.includes('054_ambassador_link_click_events'));
 });
 
 test('backup output is validated, checksummed, and never overwrites existing files', async (t) => {

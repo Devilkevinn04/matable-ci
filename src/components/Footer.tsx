@@ -1,74 +1,76 @@
 import React from 'react';
-import { ArrowUpRight, MapPin, Store } from 'lucide-react';
+import { ArrowUpRight, MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface FooterProps {
   compact?: boolean;
 }
 
-const linkClassName = 'footer-link inline-flex min-h-11 w-fit items-center text-sm text-white/75 transition-colors hover:text-white focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)]';
+const linkClassName = 'footer-link inline-flex min-h-8 w-fit items-center text-[13px] text-white/70 transition-colors hover:text-white focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] sm:min-h-9 sm:text-sm';
 
 export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
-  <footer className={`${compact ? 'mt-6' : ''} relative isolate overflow-hidden overflow-x-clip border-t border-[#164d3b] bg-[var(--mt-green-deep)] text-white`}>
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-      <div className="absolute -right-28 -top-40 h-96 w-96 rounded-full border border-white/[.08] sm:right-[8%]" />
-      <div className="absolute -bottom-48 -left-28 h-96 w-96 rounded-full border border-[var(--mt-orange-soft)]/10" />
-    </div>
+  <footer className={`${compact ? 'mt-4' : ''} relative overflow-hidden border-t border-white/10 bg-[var(--mt-green-deep)] text-white`}>
+    <div className={`mx-auto max-w-[1280px] px-5 sm:px-8 lg:px-10 ${compact ? 'py-6 sm:py-7' : 'py-8 sm:py-10'}`}>
+      <section className="mb-7 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[.045] p-4 sm:mb-9 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5">
+        <div className="max-w-xl">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--mt-orange-soft)]">Vous êtes commerçant ?</p>
+          <h2 className="mt-1 text-lg font-extrabold leading-snug text-white sm:text-xl">Faites découvrir votre boutique sur MaTable.</h2>
+          <p className="mt-1 text-sm leading-5 text-white/70">Présentez vos produits et échangez directement avec vos clients.</p>
+        </div>
+        <Link to="/commercants" className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-full bg-white px-5 text-sm font-extrabold text-[var(--mt-green-deep)] transition-colors hover:bg-[#fff0df] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--mt-green-deep)] sm:w-auto">
+          Présenter ma boutique
+          <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      </section>
 
-    <div className={`relative z-10 mx-auto max-w-[1280px] px-5 sm:px-8 lg:px-10 ${compact ? 'py-7 sm:py-8' : 'py-9 sm:py-12'}`}>
-      <div className="grid gap-9 lg:grid-cols-[1.05fr_1.4fr] lg:gap-16">
-        <section aria-labelledby="footer-brand-title" className="max-w-md">
-          <Link to="/" aria-label="MaTable, accueil" className="inline-flex max-w-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--mt-green-deep)]">
-            <img id="footer-brand-title" src="/brand-kit/logo-reversed.svg" alt="MaTable — Vos commerces, ici" className="h-auto w-[250px] max-w-full" />
+      <div className="grid grid-cols-2 gap-x-5 gap-y-7 sm:gap-x-8 lg:grid-cols-4 md:gap-8">
+        <section aria-labelledby="footer-brand-title" className="col-span-2 max-w-sm md:col-span-1">
+          <Link to="/" aria-label="MaTable, accueil" className="inline-flex max-w-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--mt-green-deep)]">
+            <img id="footer-brand-title" src="/brand-kit/logo-reversed.svg" alt="MaTable — Vos commerces, ici" className="h-auto w-40 max-w-full sm:w-48" />
           </Link>
-          <p className="mt-4 max-w-sm text-sm leading-6 text-white/75">
+          <p className="mt-3 max-w-xs text-sm leading-5 text-white/70">
             Les boutiques, les produits et les talents de Côte d’Ivoire, réunis au même endroit.
           </p>
-          <p className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-[var(--mt-orange-soft)]">
-            <MapPin className="h-4 w-4" aria-hidden="true" />
+          <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--mt-orange-soft)]">
+            <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             Le commerce local, partout en Côte d’Ivoire
           </p>
         </section>
 
-        <div className="space-y-5">
-        <nav className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3 sm:gap-x-8" aria-label="Navigation et informations">
+        <nav className="contents" aria-label="Découvrir MaTable">
           <section aria-labelledby="footer-discover-title">
-            <h2 id="footer-discover-title" className="text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-orange-soft)]">Découvrir</h2>
-            <ul className="mt-4 flex list-none flex-col gap-3 p-0">
+            <h2 id="footer-discover-title" className="text-sm font-bold text-white">Découvrir</h2>
+            <ul className="mt-2 flex list-none flex-col gap-0.5 p-0">
               <li><Link to="/boutiques" className={linkClassName}>Boutiques</Link></li>
               <li><Link to="/promotions" className={linkClassName}>Promotions</Link></li>
               <li><Link to="/comment-ca-marche" className={linkClassName}>Comment ça marche</Link></li>
               <li><Link to="/faq" className={linkClassName}>Questions fréquentes</Link></li>
             </ul>
           </section>
+        </nav>
 
+        <nav className="contents" aria-label="Espace commerçant">
           <section aria-labelledby="footer-merchants-title">
-            <h2 id="footer-merchants-title" className="text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-orange-soft)]">Pour les commerçants</h2>
-            <ul className="mt-4 flex list-none flex-col gap-3 p-0">
+            <h2 id="footer-merchants-title" className="text-sm font-bold text-white">Commerçants</h2>
+            <ul className="mt-2 flex list-none flex-col gap-0.5 p-0">
               <li><Link to="/commercants" className={linkClassName}>Espace commerçant</Link></li>
               <li><Link to="/guide" className={linkClassName}>Guide personnalisé</Link></li>
             </ul>
           </section>
-
-          <section aria-labelledby="footer-legal-title" className="col-span-2 sm:col-span-1">
-            <h2 id="footer-legal-title" className="text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-orange-soft)]">Informations</h2>
-            <ul className="mt-4 flex list-none flex-col gap-3 p-0">
-              <li><Link to="/mentions-legales" className={linkClassName}>Mentions légales</Link></li>
-              <li><Link to="/confidentialite" className={linkClassName}>Confidentialité</Link></li>
-              <li><Link to="/cgu" className={linkClassName}>Conditions d’utilisation</Link></li>
-              <li><Link to="/cookies" className={linkClassName}>Cookies</Link></li>
-            </ul>
-          </section>
         </nav>
-          <Link to="/commercants" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full bg-white px-4 text-xs font-extrabold text-[var(--mt-green-deep)] transition hover:bg-[#fff0df] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--mt-green-deep)]">
-            <Store className="h-4 w-4 shrink-0" aria-hidden="true" />
-            Présenter ma boutique
-            <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          </Link>
-        </div>
+
+        <nav className="col-span-2 md:col-span-1" aria-label="Informations légales">
+          <h2 id="footer-legal-title" className="text-sm font-bold text-white">Informations</h2>
+          <ul className="mt-2 grid list-none grid-cols-2 gap-x-3 gap-y-0.5 p-0 md:grid-cols-1">
+            <li><Link to="/mentions-legales" className={linkClassName}>Mentions légales</Link></li>
+            <li><Link to="/confidentialite" className={linkClassName}>Confidentialité</Link></li>
+            <li><Link to="/cgu" className={linkClassName}>Conditions d’utilisation</Link></li>
+            <li><Link to="/cookies" className={linkClassName}>Cookies</Link></li>
+          </ul>
+        </nav>
       </div>
 
-      <div className="mt-9 flex flex-col gap-2 border-t border-white/15 pt-5 text-xs text-white/65 sm:mt-10 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-6 flex flex-col gap-1.5 border-t border-white/15 pt-4 text-xs leading-5 text-white/60 sm:mt-8 sm:flex-row sm:items-center sm:justify-between">
         <p>© {new Date().getFullYear()} MaTable · Commerce local en Côte d’Ivoire</p>
         <p>Fait pour rapprocher les commerces et leurs clients.</p>
       </div>

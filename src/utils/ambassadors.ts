@@ -11,6 +11,14 @@ export function normalizeAmbassadorCode(value: unknown): string | null {
   return /^[A-Z0-9]{4,24}$/.test(code) ? code : null;
 }
 
+export function buildAmbassadorReferralUrl(codeValue: unknown, origin: string): string {
+  const code = normalizeAmbassadorCode(codeValue);
+  if (!code) throw new Error('Code ambassadeur invalide.');
+  const url = new URL('/app/creer-boutique', origin);
+  url.searchParams.set('ref', code);
+  return url.toString();
+}
+
 export function validAmbassadorReferral(value: unknown, now = Date.now()): AmbassadorReferral | null {
   if (!value || typeof value !== 'object') return null;
   const referral = value as Partial<AmbassadorReferral>;
@@ -155,7 +163,13 @@ export async function getAmbassadorToken(codeValue?: unknown): Promise<string | 
       const response = await fetch('/api/ambassador-clicks', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }),
       });
-      if (!response.ok) return null;
+      if (!response.ok) {
+        if (response.status === 404 && inMemoryReferralCode?.code === code) {
+          inMemoryReferralCode = null;
+          window.dispatchEvent(new Event('matable-ambassador-referral-updated'));
+        }
+        return null;
+      }
       const result = await response.json() as { token: string; expires_at: string };
       const expiresAt = typeof result.expires_at === 'string' ? Date.parse(result.expires_at) : NaN;
       if (typeof result.token !== 'string' || !/^[a-f0-9]{64}$/.test(result.token)
@@ -177,4 +191,23 @@ export async function getAmbassadorToken(codeValue?: unknown): Promise<string | 
     }
   })();
   try { return await pendingCapture; } finally { pendingCapture = null; }
+}
+
+export async function trackAmbassadorLinkVisit(codeValue?: unknown): Promise<void> {
+  if (typeof window === 'undefined') return;
+  const code = normalizeAmbassadorCode(codeValue ?? new URLSearchParams(window.location.search).get('ref'));
+  if (!code) return;
+  try {
+    const response = await fetch('/api/ambassador-link-visits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+      keepalive: true,
+    });
+    if (!response.ok && response.status !== 404) {
+      console.warn(`Ambassador link visit was not recorded (${response.status}).`);
+    }
+  } catch (error) {
+    console.warn('Ambassador link visit could not be recorded.', error);
+  }
 }

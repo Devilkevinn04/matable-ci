@@ -183,6 +183,17 @@ interface VerificationShopSummary {
   created_at: string;
 }
 
+interface AdminAmbassadorOverview {
+  days: number;
+  ambassadors_total: number;
+  ambassadors_active: number;
+  clicks: number;
+  referrals: number;
+  active_link_tokens: number;
+  pending_applications: number;
+  conversion_rate: number;
+}
+
 const adminAuditActionLabels: Record<string, string> = {
   admin_order_status_updated: 'Statut de commande modifié',
   ambassador_created: 'Ambassadeur créé',
@@ -382,6 +393,9 @@ export const AdminDashboard: React.FC = () => {
   const [analyticsUpdatedAt, setAnalyticsUpdatedAt] = useState<string | null>(null);
   const analyticsRequestId = useRef(0);
   const [analyticsDays, setAnalyticsDays] = useState(30);
+  const [ambassadorOverview, setAmbassadorOverview] = useState<AdminAmbassadorOverview | null>(null);
+  const [ambassadorOverviewError, setAmbassadorOverviewError] = useState('');
+  const ambassadorOverviewRequestId = useRef(0);
   const [audienceShopSearch, setAudienceShopSearch] = useState('');
   const [audienceShopSort, setAudienceShopSort] = useState<'views' | 'sessions' | 'orders' | 'sales' | 'conversion' | 'name'>('views');
   const [finance, setFinance] = useState<AdminFinance | null>(null);
@@ -755,6 +769,21 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const fetchAmbassadorOverview = async (days: number) => {
+    const requestId = ++ambassadorOverviewRequestId.current;
+    setAmbassadorOverviewError('');
+    try {
+      const response = await fetch(`/api/admin/ambassadors/overview?days=${days}`, { cache: 'no-store' });
+      const data = await response.json() as AdminAmbassadorOverview & { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Impossible de charger les statistiques ambassadeurs.');
+      if (requestId !== ambassadorOverviewRequestId.current) return;
+      setAmbassadorOverview(data);
+    } catch (error) {
+      if (requestId !== ambassadorOverviewRequestId.current) return;
+      setAmbassadorOverviewError(error instanceof Error ? error.message : 'Les statistiques ambassadeurs sont momentanément indisponibles.');
+    }
+  };
+
   const fetchFinance = async (
     days: number,
     page = financePaymentsPage,
@@ -843,6 +872,11 @@ export const AdminDashboard: React.FC = () => {
     () => fetchAnalytics(analyticsDays),
     30_000,
     isAuthenticated && adminRole === 'super_admin' && ['overview', 'audience'].includes(adminView),
+  );
+  useVisibilityPolling(
+    () => fetchAmbassadorOverview(analyticsDays),
+    30_000,
+    isAuthenticated && adminRole === 'super_admin' && adminView === 'overview',
   );
   useVisibilityPolling(
     pollAdminHealth,
@@ -1930,6 +1964,35 @@ export const AdminDashboard: React.FC = () => {
                 />
               ))}
             </div>
+            <section aria-labelledby="admin-ambassador-overview-title" className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-800"><Users className="h-3.5 w-3.5" aria-hidden="true" /> Acquisition partenaire</p>
+                  <h3 id="admin-ambassador-overview-title" className="mt-1 text-base font-black text-slate-900">Réseau d’ambassadeurs</h3>
+                  <p className="mt-1 text-xs text-slate-600">Performance des liens sur les {ambassadorOverview?.days ?? analyticsDays} derniers jours.</p>
+                </div>
+                <button type="button" onClick={() => setAdminView('ambassadors')} className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-emerald-200 px-3 text-xs font-bold text-emerald-900 hover:bg-emerald-50">
+                  Gérer les ambassadeurs <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+              {ambassadorOverviewError && <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900">Mise à jour des statistiques ambassadeurs impossible : {ambassadorOverviewError}</p>}
+              <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">
+                {[
+                  { label: 'Actifs', value: ambassadorOverview ? `${ambassadorOverview.ambassadors_active} / ${ambassadorOverview.ambassadors_total}` : '—' },
+                  { label: 'Clics', value: ambassadorOverview ? new Intl.NumberFormat('fr-FR').format(ambassadorOverview.clicks) : '—' },
+                  { label: 'Inscriptions', value: ambassadorOverview ? new Intl.NumberFormat('fr-FR').format(ambassadorOverview.referrals) : '—' },
+                  { label: 'Jetons de lien actifs', value: ambassadorOverview ? new Intl.NumberFormat('fr-FR').format(ambassadorOverview.active_link_tokens) : '—' },
+                  { label: 'Conversion indicative', value: ambassadorOverview ? `${ambassadorOverview.conversion_rate.toLocaleString('fr-FR')} %` : '—' },
+                  { label: 'Candidatures à traiter', value: ambassadorOverview ? new Intl.NumberFormat('fr-FR').format(ambassadorOverview.pending_applications) : '—' },
+                ].map((metric) => (
+                  <div key={metric.label} className="rounded-xl bg-emerald-50/70 p-3">
+                    <p className="text-[10px] font-bold leading-4 text-slate-600">{metric.label}</p>
+                    <p className="mt-1 text-lg font-black tabular-nums text-[#183b31]">{metric.value}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-[10px] leading-4 text-slate-500">La conversion est le ratio global inscriptions / clics sur la période ; elle ne représente pas un parcours individuel attribué.</p>
+            </section>
             <section aria-label="État du réseau de boutiques" className="flex flex-col gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
               <div className="flex min-w-0 items-center gap-3">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Store className="h-4 w-4" aria-hidden="true" /></span>

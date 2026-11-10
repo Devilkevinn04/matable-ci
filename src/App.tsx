@@ -546,6 +546,33 @@ export default function App() {
     if (openGraphDescription) openGraphDescription.content = metadata.description;
     const openGraphUrl = document.head.querySelector<HTMLMetaElement>('meta[property="og:url"]');
     if (openGraphUrl) openGraphUrl.content = canonicalUrl;
+    const shareImageUrl = `${getCanonicalOrigin(window.location.origin)}/brand-kit/social-share.png`;
+    const defaultOpenGraphImage = document.head.querySelector<HTMLMetaElement>('meta[property="og:image"]');
+    if (defaultOpenGraphImage) defaultOpenGraphImage.content = shareImageUrl;
+    else {
+      const ogImage = document.createElement('meta');
+      ogImage.setAttribute('property', 'og:image');
+      ogImage.content = shareImageUrl;
+      document.head.appendChild(ogImage);
+    }
+    const secureOpenGraphImage = document.head.querySelector<HTMLMetaElement>('meta[property="og:image:secure_url"]');
+    if (secureOpenGraphImage) secureOpenGraphImage.content = shareImageUrl;
+    else {
+      const secureOgImage = document.createElement('meta');
+      secureOgImage.setAttribute('property', 'og:image:secure_url');
+      secureOgImage.content = shareImageUrl;
+      document.head.appendChild(secureOgImage);
+    }
+    const defaultTwitterImage = document.head.querySelector<HTMLMetaElement>('meta[name="twitter:image"]');
+    if (defaultTwitterImage) defaultTwitterImage.content = shareImageUrl;
+    else {
+      const twitterImage = document.createElement('meta');
+      twitterImage.setAttribute('name', 'twitter:image');
+      twitterImage.content = shareImageUrl;
+      document.head.appendChild(twitterImage);
+    }
+    const defaultTwitterCard = document.head.querySelector<HTMLMetaElement>('meta[name="twitter:card"]');
+    if (defaultTwitterCard) defaultTwitterCard.content = 'summary_large_image';
     const twitterTitle = document.head.querySelector<HTMLMetaElement>('meta[name="twitter:title"]');
     if (twitterTitle) twitterTitle.content = metadata.title;
     const twitterDescription = document.head.querySelector<HTMLMetaElement>('meta[name="twitter:description"]');

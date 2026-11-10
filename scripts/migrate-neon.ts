@@ -2,60 +2,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import pg from 'pg';
 
-const migrationVersions = [
-  '001_client_sessions_and_product_attributes',
-  '002_shared_id_allocator',
-  '003_merchant_identity_verification',
-  '004_merchant_verification_status_and_retention',
-  '005_order_whatsapp_tracking',
-  '006_product_gallery_images',
-  '007_merchant_owner_email',
-  '008_customer_first_last_name',
-  '009_merchant_identity_prototype',
-  '010_shop_publication_status',
-  '011_merchant_identity_decision_method',
-  '012_merchant_identity_document_back',
-  '013_customer_oauth_identities',
-  '014_shop_featured_until',
-  '015_kadevpay_subscription_payments',
-  '016_subscription_payment_type',
-  '017_admin_subscription_actions',
-  '018_platform_maintenance_and_analytics_sources',
-  '019_subscription_terms_and_shop_boosts',
-  '020_product_creation_timestamps',
-  '021_customer_favorites_and_likes',
-  '022_customer_reviews_and_reports',
-  '023_didit_merchant_verification',
-  '024_analytics_campaign_attribution',
-  '025_boost_placements_and_reminders',
-  '026_merchant_push_notifications',
-  '027_geniuspay_webhook_events',
-  '028_subscription_plan_prices',
-  '029_scheduled_subscription_tier',
-  '030_subscription_lifecycle_controls',
-  '031_subscription_plan_features',
-  '032_subscription_admin_overrides',
-  '033_advertising_beta',
-  '034_product_sales',
-  '035_delivery_zone_tariffs',
-  '036_delivery_mvp',
-  '037_order_contact_audits',
-  '038_delivery_tickets_proofs_payments',
-  '039_delivery_notifications',
-  '040_delivery_order_fees',
-  '041_analytics_intelligence',
-  '042_delivery_driver_didit_verification',
-  '043_didit_session_resume',
-  '044_shop_acquisitions',
-  '045_transactional_email_preferences',
-  '046_merchant_pin_reset_tokens',
-  '047_align_pro_photo_limit',
-  '048_ambassadors',
-  '049_ambassador_accounts',
-  '050_ambassador_withdrawals',
-  '051_email_mfa_rollout_onboarding',
-  '052_ambassador_public_applications',
-];
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
@@ -70,8 +16,15 @@ if (!/^postgres(?:ql)?:\/\//i.test(connectionString)) {
 
 const pool = new pg.Pool({ connectionString, max: 1, connectionTimeoutMillis: 10000 });
 let client: pg.PoolClient | undefined;
+let migrationVersions: string[] = [];
 
 try {
+  const migrationFiles = (await fs.readdir(path.join(process.cwd(), 'migrations')))
+    .filter((file) => /^\d{3}_[a-z0-9_-]+\.sql$/i.test(file))
+    .sort();
+  migrationVersions = migrationFiles.map((file) => file.slice(0, -4));
+  if (migrationVersions.length === 0) throw new Error('No numbered SQL migrations were found.');
+
   client = await pool.connect();
   await client.query('BEGIN');
 
@@ -96,11 +49,10 @@ try {
   `);
 
   const statuses: { migration: string; status: string }[] = [];
-  for (const migrationVersion of migrationVersions) {
+  for (const [index, migrationVersion] of migrationVersions.entries()) {
     const alreadyApplied = await client.query('SELECT 1 FROM schema_migrations WHERE version = $1', [migrationVersion]);
     if (alreadyApplied.rowCount === 0) {
-      const migrationPath = path.join(process.cwd(), 'migrations', `${migrationVersion}.sql`);
-      const migrationSql = await fs.readFile(migrationPath, 'utf8');
+      const migrationSql = await fs.readFile(path.join(process.cwd(), 'migrations', migrationFiles[index]), 'utf8');
       await client.query(migrationSql);
       await client.query('INSERT INTO schema_migrations (version) VALUES ($1)', [migrationVersion]);
       statuses.push({ migration: migrationVersion, status: 'applied' });

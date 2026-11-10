@@ -62,24 +62,86 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
     });
   });
 
-  publicRouter.post('/ambassador-clicks', rateLimitPublicRequest(30), async (req, res) => {
+  publicRouter.post('/ambassador-clicks', rateLimitPublicRequest(30), requireSameOriginJsonRequest, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
     const code = normalizeAmbassadorCode(req.body?.code);
     const ambassador = code && await dbGet<{ id: string }>('SELECT id FROM ambassadors WHERE code = ? AND active = 1', [code]);
     if (!ambassador) return res.status(404).json({ error: 'Code ambassadeur invalide.' });
     const now = new Date();
     const token = randomBytes(32).toString('hex');
     const expiresAt = new Date(now.getTime() + AMBASSADOR_REFERRAL_DURATION_MS).toISOString();
-    await dbRun('DELETE FROM ambassador_clicks WHERE expires_at <= ?', [now.toISOString()]);
     await dbRun('INSERT INTO ambassador_clicks (token_hash, ambassador_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
       [hashAmbassadorToken(token), ambassador.id, now.toISOString(), expiresAt]);
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(201).json({ token, expires_at: expiresAt });
   });
 
+  publicRouter.post('/ambassador-link-visits', rateLimitPublicRequest(30), requireSameOriginJsonRequest, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const code = normalizeAmbassadorCode(req.body?.code);
+    const ambassador = code && await dbGet<{ id: string }>(
+      'SELECT id FROM ambassadors WHERE code = ? AND active = 1',
+      [code],
+    );
+    if (!ambassador) return res.status(404).json({ error: 'Code ambassadeur invalide.' });
+    await dbRun(
+      'INSERT INTO ambassador_link_click_events (event_id, ambassador_id, created_at) VALUES (?, ?, ?)',
+      [randomUUID(), ambassador.id, new Date().toISOString()],
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(201).json({ success: true });
+  });
+
+  adminRouter.get('/overview', async (req, res) => {
+    const requestedDays = typeof req.query.days === 'string' ? req.query.days : '30';
+    if (!['7', '30', '90'].includes(requestedDays)) {
+      return res.status(400).json({ error: 'Période de statistiques invalide.' });
+    }
+
+    const days = Number(requestedDays);
+    const since = new Date(Date.now() - (days - 1) * 24 * 60 * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
+    const summary = await dbGet<{
+      ambassadors_total: number | string;
+      ambassadors_active: number | string;
+      clicks: number | string;
+      referrals: number | string;
+      active_link_tokens: number | string;
+      pending_applications: number | string;
+    }>(`SELECT
+      (SELECT COUNT(*) FROM ambassadors) AS ambassadors_total,
+      (SELECT COUNT(*) FROM ambassadors WHERE active = 1) AS ambassadors_active,
+      (SELECT COUNT(*) FROM ambassador_link_click_events WHERE created_at >= ?) AS clicks,
+      (SELECT COUNT(*) FROM ambassador_referrals WHERE created_at >= ?) AS referrals,
+      (SELECT COUNT(*) FROM ambassador_clicks WHERE expires_at > ?) AS active_link_tokens,
+      (SELECT COUNT(*) FROM ambassador_applications WHERE status = 'pending') AS pending_applications`,
+    [since, since, now]);
+
+    if (!summary) throw new Error('Impossible de calculer les statistiques ambassadeurs.');
+    const clicks = Number(summary.clicks);
+    const referrals = Number(summary.referrals);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      days,
+      ambassadors_total: Number(summary.ambassadors_total),
+      ambassadors_active: Number(summary.ambassadors_active),
+      clicks,
+      referrals,
+      active_link_tokens: Number(summary.active_link_tokens),
+      pending_applications: Number(summary.pending_applications),
+      conversion_rate: clicks > 0 ? Math.round((referrals / clicks) * 10000) / 100 : 0,
+    });
+  });
+
   adminRouter.get('/', async (_req, res) => {
+    const now = new Date().toISOString();
     const applications = await dbAll(
       'SELECT id, name, email, phone, status, created_at, decided_at, decision_reason FROM ambassador_applications ORDER BY CASE WHEN status = ? THEN 0 ELSE 1 END, created_at DESC',
       ['pending'],
     );
+    const sevenDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysAgo = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString();
+    const ninetyDaysAgo = new Date(Date.now() - 89 * 24 * 60 * 60 * 1000).toISOString();
     const ambassadors = await dbAll(`SELECT a.id, a.name, a.code, a.email, a.phone, a.active, a.created_at,
       CASE WHEN a.password_hash IS NULL THEN 0 ELSE 1 END AS has_account,
       (SELECT i.expires_at FROM ambassador_invites i WHERE i.ambassador_id = a.id AND i.used_at IS NULL
@@ -87,8 +149,47 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
       (SELECT COUNT(*) FROM ambassador_referrals r WHERE r.ambassador_id = a.id) AS registrations,
       (SELECT COUNT(*) FROM ambassador_referrals r JOIN shops s ON s.id = r.shop_id WHERE r.ambassador_id = a.id AND s.publication_status = 'active') AS published,
       (SELECT COUNT(*) FROM ambassador_commissions c JOIN subscription_payment_intents p ON p.id = c.payment_id WHERE c.ambassador_id = a.id AND p.status = 'paid' AND c.status <> 'cancelled') AS paying,
-      (SELECT COALESCE(SUM(c.amount), 0) FROM ambassador_commissions c WHERE c.ambassador_id = a.id AND c.status IN ('pending', 'approved', 'withdrawal_requested', 'paid')) AS commissions
-      FROM ambassadors a ORDER BY a.created_at DESC`);
+      (SELECT COALESCE(SUM(c.amount), 0) FROM ambassador_commissions c WHERE c.ambassador_id = a.id AND c.status IN ('pending', 'approved', 'withdrawal_requested', 'paid')) AS commissions,
+      (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = a.id) AS total_clicks,
+      (SELECT COUNT(*) FROM ambassador_clicks WHERE ambassador_id = a.id AND expires_at > ?) AS active_tokens,
+      (SELECT COUNT(*) FROM ambassador_referrals WHERE ambassador_id = a.id) AS total_referrals,
+      CASE WHEN (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = a.id) > 0 THEN
+        ROUND(((SELECT COUNT(*) FROM ambassador_referrals WHERE ambassador_id = a.id) * 100.0) / (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = a.id), 2)
+      ELSE 0 END AS conversion_rate,
+      (SELECT MAX(created_at) FROM ambassador_link_click_events WHERE ambassador_id = a.id) AS last_click_at,
+      (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = a.id AND created_at >= ?) AS clicks_7d,
+      (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = a.id AND created_at >= ?) AS clicks_30d,
+      (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = a.id AND created_at >= ?) AS clicks_90d,
+      (SELECT COUNT(*) FROM ambassador_referrals WHERE ambassador_id = a.id AND created_at >= ?) AS referrals_7d,
+      (SELECT COUNT(*) FROM ambassador_referrals WHERE ambassador_id = a.id AND created_at >= ?) AS referrals_30d,
+      (SELECT COUNT(*) FROM ambassador_referrals WHERE ambassador_id = a.id AND created_at >= ?) AS referrals_90d,
+      CASE WHEN (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = a.id AND created_at >= ?) > 0 THEN
+        ROUND(((SELECT COUNT(*) FROM ambassador_referrals WHERE ambassador_id = a.id AND created_at >= ?) * 100.0) / (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = a.id AND created_at >= ?), 2)
+      ELSE 0 END AS conversion_7d,
+      CASE WHEN (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = a.id AND created_at >= ?) > 0 THEN
+        ROUND(((SELECT COUNT(*) FROM ambassador_referrals WHERE ambassador_id = a.id AND created_at >= ?) * 100.0) / (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = a.id AND created_at >= ?), 2)
+      ELSE 0 END AS conversion_30d,
+      CASE WHEN (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = a.id AND created_at >= ?) > 0 THEN
+        ROUND(((SELECT COUNT(*) FROM ambassador_referrals WHERE ambassador_id = a.id AND created_at >= ?) * 100.0) / (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = a.id AND created_at >= ?), 2)
+      ELSE 0 END AS conversion_90d
+      FROM ambassadors a ORDER BY a.created_at DESC`, [
+      now,
+      sevenDaysAgo,
+      thirtyDaysAgo,
+      ninetyDaysAgo,
+      sevenDaysAgo,
+      thirtyDaysAgo,
+      ninetyDaysAgo,
+      sevenDaysAgo,
+      sevenDaysAgo,
+      sevenDaysAgo,
+      thirtyDaysAgo,
+      thirtyDaysAgo,
+      thirtyDaysAgo,
+      ninetyDaysAgo,
+      ninetyDaysAgo,
+      ninetyDaysAgo,
+    ]);
     const referrals = await dbAll(`SELECT r.shop_id, r.ambassador_id, r.created_at, s.name AS shop_name,
       s.owner_email, s.whatsapp_number, s.publication_status, a.name AS ambassador_name,
       a.email AS ambassador_email, a.phone AS ambassador_phone,

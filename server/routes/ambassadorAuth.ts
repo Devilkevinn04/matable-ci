@@ -241,9 +241,180 @@ export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: numb
     const withdrawals = await dbAll(`SELECT id, amount, status, payout_method, payout_phone,
       created_at, processed_at, payout_reference, admin_reason FROM ambassador_withdrawals
       WHERE ambassador_id = ? ORDER BY created_at DESC`, [ambassadorId]);
+    const now = new Date().toISOString();
+    const linkStats = await dbGet<{ total_clicks: number; active_tokens: number; total_referrals: number; conversion_rate: number; last_click_at: string | null; last_referral_at: string | null }>(`
+      SELECT
+        COALESCE((SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = ?), 0) AS total_clicks,
+        COALESCE((SELECT COUNT(*) FROM ambassador_clicks WHERE ambassador_id = ? AND expires_at > ?), 0) AS active_tokens,
+        COALESCE((SELECT COUNT(*) FROM ambassador_referrals WHERE ambassador_id = ?), 0) AS total_referrals,
+        CASE
+          WHEN (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = ?) > 0 THEN
+            ROUND(((SELECT COUNT(*) FROM ambassador_referrals WHERE ambassador_id = ?) * 100.0) / (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = ?), 2)
+          ELSE 0
+        END AS conversion_rate,
+        (SELECT MAX(created_at) FROM ambassador_link_click_events WHERE ambassador_id = ?) AS last_click_at,
+        (SELECT MAX(created_at) FROM ambassador_referrals WHERE ambassador_id = ?) AS last_referral_at
+    `, [ambassadorId, ambassadorId, now, ambassadorId, ambassadorId, ambassadorId, ambassadorId, ambassadorId, ambassadorId]);
+    const rangeDays = [7, 30, 90];
+    const linkStatsByRange = Object.fromEntries(await Promise.all(rangeDays.map(async (days) => {
+      const startDate = new Date(Date.now() - (days - 1) * 24 * 60 * 60 * 1000).toISOString();
+      const rangeData = await dbGet<{ total_clicks: number; total_referrals: number; conversion_rate: number; last_click_at: string | null; last_referral_at: string | null }>(`
+        SELECT
+          COALESCE((SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = ? AND created_at >= ?), 0) AS total_clicks,
+          COALESCE((SELECT COUNT(*) FROM ambassador_referrals WHERE ambassador_id = ? AND created_at >= ?), 0) AS total_referrals,
+          CASE
+            WHEN (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = ? AND created_at >= ?) > 0 THEN
+              ROUND(((SELECT COUNT(*) FROM ambassador_referrals WHERE ambassador_id = ? AND created_at >= ?) * 100.0) / (SELECT COUNT(*) FROM ambassador_link_click_events WHERE ambassador_id = ? AND created_at >= ?), 2)
+            ELSE 0
+          END AS conversion_rate,
+          (SELECT MAX(created_at) FROM ambassador_link_click_events WHERE ambassador_id = ? AND created_at >= ?) AS last_click_at,
+          (SELECT MAX(created_at) FROM ambassador_referrals WHERE ambassador_id = ? AND created_at >= ?) AS last_referral_at
+      `, [ambassadorId, startDate, ambassadorId, startDate, ambassadorId, startDate, ambassadorId, startDate, ambassadorId, startDate, ambassadorId, startDate, ambassadorId, startDate]);
+      return [`${days}d`, {
+        total_clicks: Number(rangeData?.total_clicks || 0),
+        total_referrals: Number(rangeData?.total_referrals || 0),
+        conversion_rate: Number(rangeData?.conversion_rate || 0),
+        last_click_at: rangeData?.last_click_at || null,
+        last_referral_at: rangeData?.last_referral_at || null,
+      }];
+    })));
+    const windowStart = new Date(Date.now() - 89 * 24 * 60 * 60 * 1000).toISOString();
+    const linkActivityRows = await dbAll<{ day: string; clicks: number }>(databaseMode === 'postgresql'
+      ? `SELECT DATE(created_at) AS day, COUNT(*) AS clicks FROM ambassador_link_click_events WHERE ambassador_id = ? AND created_at >= ? GROUP BY DATE(created_at)`
+      : `SELECT date(created_at) AS day, COUNT(*) AS clicks FROM ambassador_link_click_events WHERE ambassador_id = ? AND created_at >= ? GROUP BY date(created_at)`,
+      [ambassadorId, windowStart],
+    );
+    const referralActivityRows = await dbAll<{ day: string; referrals: number }>(databaseMode === 'postgresql'
+      ? `SELECT DATE(created_at) AS day, COUNT(*) AS referrals FROM ambassador_referrals WHERE ambassador_id = ? AND created_at >= ? GROUP BY DATE(created_at)`
+      : `SELECT date(created_at) AS day, COUNT(*) AS referrals FROM ambassador_referrals WHERE ambassador_id = ? AND created_at >= ? GROUP BY date(created_at)`,
+      [ambassadorId, windowStart],
+    );
+    const linkActivityByDay = new Map<string, { clicks: number; referrals: number }>();
+    for (const row of linkActivityRows) {
+      const day = String(row.day).slice(0, 10);
+      linkActivityByDay.set(day, { clicks: Number(row.clicks || 0), referrals: Number(linkActivityByDay.get(day)?.referrals || 0) });
+    }
+    for (const row of referralActivityRows) {
+      const day = String(row.day).slice(0, 10);
+      const current = linkActivityByDay.get(day) || { clicks: 0, referrals: 0 };
+      current.referrals = Number(row.referrals || 0);
+      linkActivityByDay.set(day, current);
+    }
+    const activityDates = Array.from({ length: 90 }, (_, index) => {
+      const date = new Date();
+      date.setUTCHours(0, 0, 0, 0);
+      date.setUTCDate(date.getUTCDate() - (89 - index));
+      return date.toISOString().slice(0, 10);
+    });
+    const linkActivity = activityDates.map((day) => {
+      const stats = linkActivityByDay.get(day) || { clicks: 0, referrals: 0 };
+      return {
+        date: day,
+        clicks: Number(stats.clicks || 0),
+        referrals: Number(stats.referrals || 0),
+        conversion_rate: stats.clicks > 0 ? Number(((stats.referrals * 100) / stats.clicks).toFixed(1)) : 0,
+      };
+    });
+    const recentLinkEvents = await dbAll<{ type: string; created_at: string; shop_name: string | null }>(`
+      SELECT 'click' AS type, created_at, NULL AS shop_name FROM ambassador_link_click_events WHERE ambassador_id = ?
+      UNION ALL
+      SELECT 'referral' AS type, r.created_at, s.name AS shop_name
+      FROM ambassador_referrals r LEFT JOIN shops s ON s.id = r.shop_id WHERE r.ambassador_id = ?
+      ORDER BY created_at DESC LIMIT 12
+    `, [ambassadorId, ambassadorId]);
     return response.json({ ambassador: {
       name: session.ambassador.name, email: session.ambassador.email, code: session.ambassador.code,
-    }, summary, referrals, payouts, withdrawals });
+    }, summary, referrals, payouts, withdrawals, link_stats: {
+      total_clicks: Number(linkStats?.total_clicks || 0),
+      active_tokens: Number(linkStats?.active_tokens || 0),
+      total_referrals: Number(linkStats?.total_referrals || 0),
+      conversion_rate: Number(linkStats?.conversion_rate || 0),
+      last_click_at: linkStats?.last_click_at || null,
+      last_referral_at: linkStats?.last_referral_at || null,
+    }, link_stats_by_range: linkStatsByRange, link_activity: linkActivity, recent_link_events: recentLinkEvents.map((event) => ({
+      type: event.type,
+      created_at: event.created_at,
+      shop_name: event.shop_name,
+      label: event.type === 'click' ? 'Clic sur le lien' : `Inscription attribuée${event.shop_name ? ` · ${event.shop_name}` : ''}`,
+    })) });
+  });
+
+  router.get('/link-stats', async (request, response) => {
+    const session = await getSession(request, response);
+    if (!session) return response.status(401).json({ error: 'Connexion ambassadeur requise.' });
+    const allTime = request.query.all === '1';
+    const from = typeof request.query.from === 'string' ? request.query.from : '';
+    const to = typeof request.query.to === 'string' ? request.query.to : '';
+    if ((allTime && (from || to)) || (!allTime && (!from || !to))) {
+      return response.status(400).json({ error: 'Indiquez une période complète ou demandez les statistiques depuis le début.' });
+    }
+
+    const isValidDate = (value: string) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+      const parsed = new Date(`${value}T00:00:00.000Z`);
+      return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+    };
+    const today = new Date().toISOString().slice(0, 10);
+    if (!allTime && (!isValidDate(from) || !isValidDate(to) || from > to || to > today)) {
+      return response.status(400).json({ error: 'Les dates demandées sont invalides.' });
+    }
+
+    const ambassadorId = session.ambassador.id;
+    const where = allTime ? '' : ' AND created_at >= ? AND created_at < ?';
+    const endExclusive = allTime
+      ? null
+      : new Date(new Date(`${to}T00:00:00.000Z`).getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const params: unknown[] = allTime
+      ? [ambassadorId]
+      : [ambassadorId, `${from}T00:00:00.000Z`, endExclusive];
+    const [clickStats, referralStats, clickActivity, referralActivity] = await Promise.all([
+      dbGet<{ total: number | string; last_at: string | null }>(
+        `SELECT COUNT(*) AS total, MAX(created_at) AS last_at FROM ambassador_link_click_events WHERE ambassador_id = ?${where}`,
+        params,
+      ),
+      dbGet<{ total: number | string; last_at: string | null }>(
+        `SELECT COUNT(*) AS total, MAX(created_at) AS last_at FROM ambassador_referrals WHERE ambassador_id = ?${where}`,
+        params,
+      ),
+      dbAll<{ day: string; total: number | string }>(
+        databaseMode === 'postgresql'
+          ? `SELECT DATE(created_at) AS day, COUNT(*) AS total FROM ambassador_link_click_events WHERE ambassador_id = ?${where} GROUP BY DATE(created_at)`
+          : `SELECT date(created_at) AS day, COUNT(*) AS total FROM ambassador_link_click_events WHERE ambassador_id = ?${where} GROUP BY date(created_at)`,
+        params,
+      ),
+      dbAll<{ day: string; total: number | string }>(
+        databaseMode === 'postgresql'
+          ? `SELECT DATE(created_at) AS day, COUNT(*) AS total FROM ambassador_referrals WHERE ambassador_id = ?${where} GROUP BY DATE(created_at)`
+          : `SELECT date(created_at) AS day, COUNT(*) AS total FROM ambassador_referrals WHERE ambassador_id = ?${where} GROUP BY date(created_at)`,
+        params,
+      ),
+    ]);
+
+    const activityByDay = new Map<string, { clicks: number; referrals: number }>();
+    for (const row of clickActivity) {
+      activityByDay.set(String(row.day).slice(0, 10), { clicks: Number(row.total), referrals: 0 });
+    }
+    for (const row of referralActivity) {
+      const day = String(row.day).slice(0, 10);
+      const current = activityByDay.get(day) || { clicks: 0, referrals: 0 };
+      current.referrals = Number(row.total);
+      activityByDay.set(day, current);
+    }
+    const totalClicks = Number(clickStats?.total || 0);
+    const totalReferrals = Number(referralStats?.total || 0);
+    response.setHeader('Cache-Control', 'no-store');
+    return response.json({
+      from: allTime ? null : from,
+      to: allTime ? null : to,
+      total_clicks: totalClicks,
+      total_referrals: totalReferrals,
+      conversion_rate: totalClicks > 0 ? Math.round((totalReferrals / totalClicks) * 10000) / 100 : 0,
+      last_click_at: clickStats?.last_at || null,
+      last_referral_at: referralStats?.last_at || null,
+      activity: [...activityByDay.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([date, counts]) => ({ date, ...counts })),
+    });
   });
 
   router.post('/withdrawals', rateLimitPublicRequest(10), async (request, response) => {

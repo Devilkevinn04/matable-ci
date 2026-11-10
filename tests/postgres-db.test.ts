@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
 if (!hasDatabaseUrl && process.env.REQUIRE_POSTGRES_TESTS === '1') {
@@ -10,7 +13,7 @@ test('PostgreSQL migrations and database adapter support parameterized transacti
   skip: !hasDatabaseUrl,
 }, async () => {
   process.env.NODE_ENV = 'production';
-  const { closeDatabase, dbAll, dbGet, dbTransaction, initializeDatabase } = await import('../db.ts');
+  const { closeDatabase, dbAll, dbGet, dbRun, dbTransaction, initializeDatabase } = await import('../db.ts');
 
   try {
     await initializeDatabase();
@@ -66,13 +69,55 @@ test('PostgreSQL migrations and database adapter support parameterized transacti
     const analyticsBackfills = await dbAll<{ name: string }>(`
       SELECT name
       FROM didit_schema_migrations
-      WHERE name IN ('analytics_intelligence_v1', 'analytics_intelligence_v2')
+      WHERE name IN ('ambassador_link_click_events_v1', 'analytics_intelligence_v1', 'analytics_intelligence_v2')
       ORDER BY name
     `);
     assert.deepEqual(
       analyticsBackfills.map((row) => row.name),
-      ['analytics_intelligence_v1', 'analytics_intelligence_v2'],
+      ['ambassador_link_click_events_v1', 'analytics_intelligence_v1', 'analytics_intelligence_v2'],
     );
+
+    const ambassadorId = randomUUID();
+    const tokenHash = `test-${randomUUID()}`;
+    const clickAt = new Date().toISOString();
+    try {
+      await dbRun(
+        'INSERT INTO ambassadors (id, name, code, created_at) VALUES (?, ?, ?, ?)',
+        [ambassadorId, 'Migration test', `T${randomUUID().replace(/-/g, '').slice(0, 7).toUpperCase()}`, clickAt],
+      );
+      await dbRun(
+        'INSERT INTO ambassador_clicks (token_hash, ambassador_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
+        [tokenHash, ambassadorId, clickAt, new Date(Date.now() + 60_000).toISOString()],
+      );
+      await dbRun('DELETE FROM didit_schema_migrations WHERE name = ?', ['ambassador_link_click_events_v1']);
+      await initializeDatabase();
+      const backfilledEvent = await dbGet<{ ambassador_id: string; created_at: string }>(
+        'SELECT ambassador_id, created_at FROM ambassador_link_click_events WHERE event_id = ?',
+        [tokenHash],
+      );
+      assert.deepEqual(backfilledEvent, { ambassador_id: ambassadorId, created_at: clickAt });
+      const clickEventsMigration = await fs.readFile(
+        path.resolve('migrations/054_ambassador_link_click_events.sql'),
+        'utf8',
+      );
+      const migrationStatements = clickEventsMigration.split(';').map((statement) => statement.trim()).filter(Boolean);
+      for (const statement of migrationStatements) await dbRun(statement);
+      for (const statement of migrationStatements) await dbRun(statement);
+      const event = await dbGet<{ ambassador_id: string; created_at: string }>(
+        'SELECT ambassador_id, created_at FROM ambassador_link_click_events WHERE event_id = ?',
+        [tokenHash],
+      );
+      assert.deepEqual(event, { ambassador_id: ambassadorId, created_at: clickAt });
+      const eventColumns = await dbAll<{ column_name: string }>(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'ambassador_link_click_events'
+        ORDER BY ordinal_position
+      `);
+      assert.deepEqual(eventColumns.map(({ column_name }) => column_name), ['event_id', 'ambassador_id', 'created_at']);
+    } finally {
+      await dbRun('DELETE FROM ambassador_clicks WHERE token_hash = ?', [tokenHash]);
+      await dbRun('DELETE FROM ambassadors WHERE id = ?', [ambassadorId]);
+    }
 
     const insertedId = await dbTransaction(async (query) => {
       await query.run('CREATE TEMP TABLE matable_pg_adapter_test (id BIGSERIAL PRIMARY KEY, value TEXT NOT NULL)');

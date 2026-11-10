@@ -323,11 +323,11 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
         )}
       </section>
 
-      <section className="bg-[var(--mt-green-primary)] px-5 py-16 text-white sm:px-10 sm:py-24">
+      <section className="bg-[var(--mt-green-primary)] px-5 py-10 text-white sm:px-10 sm:py-14">
         <div className="mx-auto max-w-[1080px]">
-          <h2 className="max-w-4xl font-display text-4xl font-extrabold tracking-[-.06em] text-white sm:text-6xl">Vous vendez ? <em className="not-italic text-[var(--mt-orange-soft)]">Ouvrez votre vitrine.</em></h2>
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-white/85">Vos produits en photo, vos prix, vos horaires, et les commandes qui arrivent directement sur votre WhatsApp.</p>
-          <Link to="/commercants" className="mt-8 inline-flex min-h-12 items-center gap-2 rounded-full bg-white px-6 font-extrabold text-[var(--mt-green-deep)] hover:bg-[var(--mt-gray-50)]">Ajouter ma boutique <ArrowRight className="h-4 w-4" /></Link>
+          <h2 className="max-w-4xl font-display text-3xl font-extrabold tracking-[-.06em] sm:text-5xl">Vous vendez ? <em className="not-italic text-[var(--mt-orange-soft)]">Ouvrez votre vitrine.</em></h2>
+          <p className="mt-3 max-w-2xl text-base leading-7 text-white/85 sm:text-lg">Vos produits en photo, vos prix, vos horaires, et les commandes qui arrivent directement sur votre WhatsApp.</p>
+          <Link to="/commercants" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-5 font-extrabold text-[var(--mt-green-deep)] transition hover:bg-[var(--mt-gray-50)]">Ajouter ma boutique <ArrowRight className="h-4 w-4" /></Link>
         </div>
       </section>
     </main>

@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowDownRight, ArrowRight, BadgeCheck, Check, Copy, CreditCard, Download, Eye, EyeOff, Handshake, LayoutDashboard, LockKeyhole, LogOut, Mail, MessageCircle, Search, Share2, ShieldCheck, Store, Users, Wallet } from 'lucide-react';
 import { stringifyCsv } from '../utils/csv';
 import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
 import { SUBSCRIPTION_PLANS } from '../utils/subscriptionFeatures';
-import { getAmbassadorMonthlyStats, type AmbassadorMonthlyStats } from '../utils/ambassadors';
+import { buildAmbassadorReferralUrl, getAmbassadorMonthlyStats, type AmbassadorMonthlyStats } from '../utils/ambassadors';
 import { useSubscriptionPrices } from '../utils/useSubscriptionPrices';
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 
@@ -16,6 +16,19 @@ interface DashboardData {
     approved_commissions: number | string; paid_commissions: number | string;
     available_commissions: number | string; withdrawal_commissions: number | string;
   };
+  link_stats: {
+    total_clicks: number;
+    active_tokens: number;
+    total_referrals: number;
+    conversion_rate: number;
+    last_click_at: string | null;
+    last_referral_at: string | null;
+  };
+  link_stats_by_range: Record<string, {
+    total_clicks: number; total_referrals: number; conversion_rate: number; last_click_at: string | null; last_referral_at: string | null;
+  }>;
+  link_activity: Array<{ date: string; clicks: number; referrals: number; conversion_rate: number }>;
+  recent_link_events: Array<{ type: 'click' | 'referral'; created_at: string; shop_name: string | null; label: string }>;
   referrals: Array<{
     shop_name: string; created_at: string; publication_status: string; tier: string | null;
     subscription_term: string | null; payment_status: string | null; commission_amount: number | null;
@@ -29,7 +42,28 @@ interface DashboardData {
   }>;
 }
 
+interface AmbassadorLinkStats {
+  from: string | null;
+  to: string | null;
+  total_clicks: number;
+  total_referrals: number;
+  conversion_rate: number;
+  last_click_at: string | null;
+  last_referral_at: string | null;
+  activity: Array<{ date: string; clicks: number; referrals: number }>;
+}
+
 const money = (value: number | string | null | undefined) => `${new Intl.NumberFormat('fr-FR').format(Number(value) || 0)} FCFA`;
+const localDateInputValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+const formatDateInputLabel = (value: string) => {
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? 'date à sélectionner' : new Intl.DateTimeFormat('fr-FR').format(date);
+};
 const commissionLabels: Record<string, string> = {
   pending: 'En cours de vérification', approved: 'Validée, en attente de versement',
   paid: 'Versée', cancelled: 'Non éligible', refund_review: 'Remboursement à examiner',
@@ -134,6 +168,14 @@ export function AmbassadorDashboard() {
   const [dateRange, setDateRange] = useState<'all' | '30' | '90'>('all');
   const [referralPage, setReferralPage] = useState(0);
   const [showAmounts, setShowAmounts] = useState(true);
+  const [selectedRange, setSelectedRange] = useState<'today' | '7d' | '30d' | '90d' | 'all' | 'custom'>('today');
+  const todayDate = localDateInputValue(new Date());
+  const [customStartDate, setCustomStartDate] = useState(todayDate);
+  const [customEndDate, setCustomEndDate] = useState(todayDate);
+  const [selectedLinkStats, setSelectedLinkStats] = useState<AmbassadorLinkStats | null>(null);
+  const [linkStatsLoading, setLinkStatsLoading] = useState(false);
+  const [linkStatsError, setLinkStatsError] = useState('');
+  const linkStatsRequestId = useRef(0);
 
   const loadDashboard = async (clearNotice = true) => {
     const response = await fetch('/api/ambassador-auth/dashboard', { credentials: 'include', cache: 'no-store' });
@@ -160,6 +202,75 @@ export function AmbassadorDashboard() {
   useVisibilityPolling(async () => {
     await loadDashboard(false);
   }, 60_000, Boolean(dashboard) && !isActivation && !isApplication);
+
+  useEffect(() => {
+    if (!dashboard || activeTab !== 'sharing') return;
+    const requestId = ++linkStatsRequestId.current;
+    const currentDate = localDateInputValue(new Date());
+    const query = new URLSearchParams();
+    if (selectedRange === 'all') {
+      query.set('all', '1');
+    } else {
+      let from = customStartDate;
+      let to = customEndDate;
+      if (selectedRange === 'today') {
+        from = currentDate;
+        to = currentDate;
+      } else if (selectedRange !== 'custom') {
+        const days = Number(selectedRange.replace('d', ''));
+        const start = new Date();
+        start.setDate(start.getDate() - days + 1);
+        from = localDateInputValue(start);
+        to = currentDate;
+      }
+      const isValidDate = (value: string) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+        const parsed = new Date(`${value}T12:00:00`);
+        return !Number.isNaN(parsed.getTime()) && localDateInputValue(parsed) === value;
+      };
+      if (!isValidDate(from) || !isValidDate(to)) {
+        setSelectedLinkStats(null);
+        setLinkStatsError('Choisissez une date de début et une date de fin.');
+        setLinkStatsLoading(false);
+        return;
+      }
+      if (from > to) {
+        setSelectedLinkStats(null);
+        setLinkStatsError('La date de début doit précéder ou être égale à la date de fin.');
+        setLinkStatsLoading(false);
+        return;
+      }
+      if (to > currentDate) {
+        setSelectedLinkStats(null);
+        setLinkStatsError('La date de fin ne peut pas être dans le futur.');
+        setLinkStatsLoading(false);
+        return;
+      }
+      query.set('from', from);
+      query.set('to', to);
+    }
+
+    setSelectedLinkStats(null);
+    setLinkStatsLoading(true);
+    setLinkStatsError('');
+    void fetch(`/api/ambassador-auth/link-stats?${query}`, { credentials: 'include', cache: 'no-store' })
+      .then(async (response) => {
+        const result = await response.json() as AmbassadorLinkStats & { error?: string };
+        if (!response.ok) throw new Error(result.error || 'Impossible de charger les statistiques du lien.');
+        if (requestId === linkStatsRequestId.current) setSelectedLinkStats(result);
+      })
+      .catch((problem: unknown) => {
+        if (requestId === linkStatsRequestId.current) {
+          setLinkStatsError(problem instanceof Error ? problem.message : 'Les statistiques du lien sont momentanément indisponibles.');
+        }
+      })
+      .finally(() => {
+        if (requestId === linkStatsRequestId.current) setLinkStatsLoading(false);
+      });
+    return () => {
+      linkStatsRequestId.current += 1;
+    };
+  }, [activeTab, dashboard, selectedRange, customStartDate, customEndDate]);
 
   const submitApplication = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -233,7 +344,7 @@ export function AmbassadorDashboard() {
   };
   const copyReferralLink = async () => {
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/?ref=${encodeURIComponent(dashboard?.ambassador.code || '')}`);
+      await navigator.clipboard.writeText(buildAmbassadorReferralUrl(dashboard?.ambassador.code, window.location.origin));
       setNotice('Lien de recommandation copié.');
     } catch { setError('Copie impossible dans ce navigateur.'); }
   };
@@ -243,33 +354,26 @@ export function AmbassadorDashboard() {
       setNotice('Code ambassadeur copié.');
     } catch { setError('Copie impossible dans ce navigateur.'); }
   };
-  const referralUrl = `${window.location.origin}/?ref=${encodeURIComponent(dashboard?.ambassador.code || '')}`;
-  const shareMessages = [
-    {
-      title: 'Message personnel',
-      text: 'Bonjour ! Je vous partage MaTable.ci, une plateforme pour créer la vitrine de votre commerce, présenter vos produits et recevoir des commandes sur WhatsApp. Découvrez la plateforme ici :',
-    },
-    {
-      title: 'Message court',
-      text: 'Vous avez un commerce ? Présentez votre boutique et vos produits en ligne avec MaTable.ci, puis échangez directement avec vos clients sur WhatsApp. Découvrez comment :',
-    },
-    {
-      title: 'Publication pour les réseaux sociaux',
-      text: 'Commerçants, donnez plus de visibilité à votre activité avec une vitrine en ligne MaTable.ci : présentez vos produits et facilitez le contact avec vos clients sur WhatsApp. En savoir plus :',
-    },
-  ];
-  const copyShareMessage = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(`${text} ${referralUrl}`);
-      setError('');
-      setNotice('Message et lien personnel copiés.');
-    } catch { setError('Copie impossible dans ce navigateur.'); }
+  const referralUrl = dashboard ? buildAmbassadorReferralUrl(dashboard.ambassador.code, window.location.origin) : '';
+  const rangeLabel = { today: 'Aujourd’hui', '7d': '7 derniers jours', '30d': '30 derniers jours', '90d': '90 derniers jours', all: 'Depuis le début', custom: 'Période personnalisée' } as const;
+  const rangeStats = selectedLinkStats || {
+    total_clicks: 0,
+    total_referrals: 0,
+    conversion_rate: 0,
+    last_click_at: null,
+    last_referral_at: null,
   };
-  const shareReferralLink = async (text = 'Découvrez MaTable.ci et créez la vitrine de votre commerce en ligne.') => {
+  const visibleActivity = selectedLinkStats?.activity || [];
+  const selectedPeriodDescription = selectedRange === 'today'
+    ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'full' }).format(new Date(`${localDateInputValue(new Date())}T12:00:00`))
+    : selectedRange === 'custom'
+      ? `${formatDateInputLabel(customStartDate)} – ${formatDateInputLabel(customEndDate)}`
+      : rangeLabel[selectedRange];
+  const shareReferralLink = async () => {
     setError('');
     if (typeof navigator.share === 'function') {
       try {
-        await navigator.share({ title: 'MaTable.ci', text, url: referralUrl });
+        await navigator.share({ title: 'Mon lien ambassadeur MaTable', url: referralUrl });
         return;
       } catch (problem) {
         if (problem instanceof Error && problem.name === 'AbortError') return;
@@ -277,9 +381,9 @@ export function AmbassadorDashboard() {
         return;
       }
     }
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`${text} ${referralUrl}`)}`;
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(referralUrl)}`;
     window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-    setNotice('Message préparé pour WhatsApp. Si la fenêtre ne s’ouvre pas, copiez le lien directement.');
+    setNotice('Lien ouvert dans WhatsApp. Vous pouvez ajouter votre propre message avant de l’envoyer.');
   };
   const cancelWithdrawal = async (withdrawalId: string) => {
     if (!window.confirm('Annuler cette demande avant sa validation ? Le solde redeviendra disponible.')) return;
@@ -678,7 +782,7 @@ export function AmbassadorDashboard() {
             <article className="rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Boutiques publiées</p><p className="mt-1 text-2xl font-black text-slate-950">{referralCount ? `${publishedRate} %` : '—'}</p><p className="mt-1 text-xs text-slate-600">{publishedCount} publiée(s) sur {referralCount} inscription(s) attribuée(s)</p></article>
             <article className="rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Commerçants payants</p><p className="mt-1 text-2xl font-black text-slate-950">{referralCount ? `${payingRate} %` : '—'}</p><p className="mt-1 text-xs text-slate-600">{payingCount} paiement(s) confirmé(s) sur {referralCount} inscription(s) attribuée(s)</p></article>
           </div>
-          <p className="text-xs leading-5 text-slate-500">Les inscriptions correspondent aux boutiques créées avec attribution confirmée. Les clics ou vues du lien ne sont pas comptabilisés ici.</p>
+          <p className="text-xs leading-5 text-slate-500">Les inscriptions correspondent aux boutiques créées avec attribution confirmée. Les visites du lien sont comptées séparément, sans identifier les visiteurs.</p>
           <div className="grid gap-3 lg:grid-cols-2">
             <AmbassadorMonthlyChart
               title="Inscriptions attribuées — 6 derniers mois"
@@ -726,7 +830,97 @@ export function AmbassadorDashboard() {
         <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setActiveTab('withdrawals')} className="ambassador-primary-btn min-h-10 rounded-xl bg-[#123b32] px-4 text-sm font-bold text-white shadow-[0_12px_28px_rgba(18,59,50,0.18)]">Voir mes retraits</button><button type="button" onClick={() => setActiveTab('sharing')} className="ambassador-secondary-btn min-h-10 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800">Partager mon lien</button></div>
       </>}
       {activeTab === 'sharing' && <section aria-labelledby="referral-title" className="ambassador-panel space-y-5 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
-        <div><p className="text-[11px] font-black uppercase tracking-[0.15em] text-emerald-800">Faire connaître MaTable</p><h2 id="referral-title" className="mt-2 text-xl font-black text-slate-950">Vos outils de partage</h2><p className="mt-1 text-sm text-slate-600">Choisissez un message, puis partagez-le avec votre lien personnel.</p></div>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div><p className="text-[11px] font-black uppercase tracking-[0.15em] text-emerald-800">Faire connaître MaTable</p><h2 id="referral-title" className="mt-2 text-xl font-black text-slate-950">Votre lien et ses résultats</h2><p className="mt-1 text-sm text-slate-600">Copiez votre lien ou partagez-le. Vous pouvez ajouter votre propre message.</p></div>
+          <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+            Période
+            <select value={selectedRange} onChange={(event) => setSelectedRange(event.target.value as typeof selectedRange)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800">
+              <option value="today">Aujourd’hui</option>
+              <option value="7d">7 derniers jours</option>
+              <option value="30d">30 derniers jours</option>
+              <option value="90d">90 derniers jours</option>
+              <option value="all">Depuis le début</option>
+              <option value="custom">Choisir les dates</option>
+            </select>
+          </label>
+        </div>
+        {selectedRange === 'custom' && <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <label className="text-xs font-semibold text-slate-700">Du
+            <input type="date" value={customStartDate} max={todayDate} onChange={(event) => setCustomStartDate(event.target.value)} className="mt-1 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
+          </label>
+          <label className="text-xs font-semibold text-slate-700">Au
+            <input type="date" value={customEndDate} max={todayDate} onChange={(event) => setCustomEndDate(event.target.value)} className="mt-1 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
+          </label>
+          <p className="text-xs text-slate-500 sm:pb-3">Les statistiques se mettent à jour avec les dates choisies.</p>
+        </div>}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Visites du lien</p>
+            <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{linkStatsLoading ? '…' : new Intl.NumberFormat('fr-FR').format(rangeStats.total_clicks)}</p>
+            <p className="mt-1 text-[11px] text-slate-500">{rangeStats.last_click_at ? `Dernière visite : ${new Date(rangeStats.last_click_at).toLocaleDateString('fr-FR')}` : 'Aucune visite sur la période'}</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Boutiques inscrites</p>
+            <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{linkStatsLoading ? '…' : new Intl.NumberFormat('fr-FR').format(rangeStats.total_referrals)}</p>
+            <p className="mt-1 text-[11px] text-slate-500">{rangeStats.last_referral_at ? `Dernière inscription : ${new Date(rangeStats.last_referral_at).toLocaleDateString('fr-FR')}` : 'Aucune inscription attribuée sur la période'}</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Taux de conversion</p>
+            <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{linkStatsLoading ? '…' : `${rangeStats.conversion_rate}%`}</p>
+            <p className="mt-1 text-[11px] text-slate-500">Inscriptions attribuées ÷ visites du lien</p>
+          </article>
+        </div>
+        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-black text-slate-900">Détail par jour</h3>
+              <p className="mt-1 text-xs text-slate-500">Visites du lien et inscriptions attribuées par jour · {selectedPeriodDescription}.</p>
+            </div>
+          </div>
+          {linkStatsError && <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900">{linkStatsError}</p>}
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[11px] font-semibold text-slate-600" aria-label="Légende des résultats">
+            <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-sky-600" aria-hidden="true" />Visites du lien</span>
+            <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-700" aria-hidden="true" />Boutiques inscrites avec votre code ou lien</span>
+          </div>
+          <div className="mt-3 max-h-80 overflow-auto rounded-xl border border-slate-200 bg-white">
+            <table className="w-full min-w-[30rem] border-collapse text-left text-xs">
+              <caption className="sr-only">Visites du lien et inscriptions attribuées par jour · {selectedPeriodDescription}</caption>
+              <thead className="sticky top-0 bg-slate-100 text-[10px] font-black uppercase tracking-[0.08em] text-slate-600">
+                <tr><th scope="col" className="px-3 py-2.5">Date</th><th scope="col" className="px-3 py-2.5">Visites</th><th scope="col" className="px-3 py-2.5">Inscriptions attribuées</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {linkStatsLoading
+                  ? <tr><td colSpan={3} className="px-3 py-5 text-center text-slate-500">Chargement des statistiques…</td></tr>
+                  : visibleActivity.length === 0
+                    ? <tr><td colSpan={3} className="px-3 py-5 text-center text-slate-500">Aucune activité enregistrée pour cette période.</td></tr>
+                    : [...visibleActivity].reverse().map((day) => (
+                  <tr key={day.date} className="hover:bg-slate-50">
+                    <th scope="row" className="whitespace-nowrap px-3 py-2 font-semibold text-slate-700">{new Date(`${day.date}T12:00:00.000Z`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', timeZone: 'UTC' })}</th>
+                    <td className="px-3 py-2 font-bold tabular-nums text-sky-800">{day.clicks}</td>
+                    <td className="px-3 py-2 font-bold tabular-nums text-emerald-800">{day.referrals}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-[11px] leading-5 text-slate-500">Le taux de conversion correspond au nombre d’inscriptions attribuées divisé par les visites du lien enregistrées sur la période. Une inscription peut aussi être attribuée avec votre code, même sans visite suivie.</p>
+        </section>
+        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <h3 className="text-sm font-black text-slate-900">Activité récente du lien</h3>
+          <div className="mt-3 space-y-2">
+            {dashboard.recent_link_events.length === 0 ? <p className="text-sm text-slate-600">Aucune activité enregistrée pour ce lien pour le moment.</p> : dashboard.recent_link_events.slice(0, 8).map((event) => (
+              <div key={`${event.type}-${event.created_at}-${event.shop_name ?? 'no-shop'}`} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">{event.label}</p>
+                  <p className="text-[11px] text-slate-500">{new Date(event.created_at).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                </div>
+                <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${event.type === 'click' ? 'border-sky-200 bg-sky-100 text-sky-900' : 'border-emerald-200 bg-emerald-100 text-emerald-800'}`}>
+                  {event.type === 'click' ? 'visite du lien' : 'inscription'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
         <div className="rounded-2xl border border-emerald-900/15 bg-[#ebfaf5] px-4 py-5 sm:px-5">
           <h3 className="text-sm font-black text-emerald-950">Votre lien de recommandation</h3>
           <p className="mt-2 break-all text-sm font-semibold text-emerald-950">{referralUrl}</p>
@@ -736,17 +930,6 @@ export function AmbassadorDashboard() {
             <button type="button" onClick={() => void copyReferralLink()} className="ambassador-secondary-btn inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le lien</button>
             <button type="button" onClick={() => void copyReferralCode()} className="ambassador-secondary-btn inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le code</button>
           </div>
-        </div>
-        <div className="space-y-3">
-          <h3 className="text-sm font-black text-slate-900">Messages prêts à envoyer</h3>
-          {shareMessages.map((message) => <article key={message.title} className="rounded-xl border border-slate-200 bg-white p-4">
-            <h4 className="text-sm font-bold text-slate-900">{message.title}</h4>
-            <p className="mt-2 text-sm leading-6 text-slate-700">{message.text} <span className="break-all font-semibold text-emerald-900">{referralUrl}</span></p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" onClick={() => void copyShareMessage(message.text)} className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-800"><Copy className="h-4 w-4" />Copier le message</button>
-              <button type="button" onClick={() => void shareReferralLink(message.text)} className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-emerald-900 px-3 text-xs font-bold text-white"><MessageCircle className="h-4 w-4" />Partager</button>
-            </div>
-          </article>)}
         </div>
       </section>}
       <section data-ambassador-panel="withdrawals" aria-labelledby="withdrawal-request-title" className="ambassador-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">

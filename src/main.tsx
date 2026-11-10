@@ -3,10 +3,11 @@ import {createRoot} from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.tsx';
 import './index.css';
-import { getAmbassadorToken } from './utils/ambassadors';
+import { getAmbassadorToken, trackAmbassadorLinkVisit } from './utils/ambassadors';
 
 const initialAmbassadorCode = new URLSearchParams(window.location.search).get('ref');
 void getAmbassadorToken(initialAmbassadorCode);
+void trackAmbassadorLinkVisit(initialAmbassadorCode);
 
 try {
   window.localStorage.removeItem('matable_registration_links');
