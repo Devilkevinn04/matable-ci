@@ -855,7 +855,7 @@ export function AmbassadorDashboard() {
           <div><p className="text-[11px] font-black uppercase tracking-[0.15em] text-emerald-800">Faire connaître MaTable</p><h2 id="referral-title" className="mt-2 text-xl font-black text-slate-950">Votre lien et ses résultats</h2><p className="mt-1 text-sm text-slate-600">Copiez votre lien ou partagez-le. Vous pouvez ajouter votre propre message.</p></div>
           <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
             Période
-            <select value={selectedRange} onChange={(event) => setSelectedRange(event.target.value as typeof selectedRange)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800">
+            <select value={selectedRange} onChange={(event) => setSelectedRange(event.target.value as typeof selectedRange)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800">
               <option value="today">Aujourd’hui</option>
               <option value="7d">7 derniers jours</option>
               <option value="30d">30 derniers jours</option>
@@ -874,7 +874,17 @@ export function AmbassadorDashboard() {
           </label>
           <p className="text-xs text-slate-500 sm:pb-3">Les statistiques se mettent à jour avec les dates choisies.</p>
         </div>}
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-emerald-900/15 bg-[#ebfaf5] px-4 py-4 sm:px-5">
+          <h3 className="text-sm font-black text-emerald-950">Votre lien de recommandation</h3>
+          <p className="mt-2 break-all text-sm font-semibold text-emerald-950">{referralUrl}</p>
+          <p className="mt-2 text-xs text-emerald-800">Code personnel : <strong>{dashboard.ambassador.code}</strong></p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" onClick={() => void shareReferralLink()} className="ambassador-primary-btn inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#123b32] px-3 text-sm font-bold text-white"><MessageCircle className="h-4 w-4" />Partager le lien</button>
+            <button type="button" onClick={() => void copyReferralLink()} className="ambassador-secondary-btn inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le lien</button>
+            <button type="button" onClick={() => void copyReferralCode()} className="ambassador-secondary-btn inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le code</button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Visites du lien</p>
             <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{linkStatsLoading ? '…' : new Intl.NumberFormat('fr-FR').format(rangeStats.total_clicks)}</p>
@@ -891,6 +901,11 @@ export function AmbassadorDashboard() {
             <p className="mt-1 text-[11px] text-slate-500">Inscriptions attribuées ÷ visites du lien</p>
           </article>
         </div>
+        <details className="rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+          <summary className="min-h-11 cursor-pointer py-2 text-sm font-bold text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-800">
+            Voir le détail des visites et l’activité récente
+          </summary>
+          <div className="mt-3 space-y-5">
         <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -943,16 +958,8 @@ export function AmbassadorDashboard() {
             ))}
           </div>
         </section>
-        <div className="rounded-2xl border border-emerald-900/15 bg-[#ebfaf5] px-4 py-5 sm:px-5">
-          <h3 className="text-sm font-black text-emerald-950">Votre lien de recommandation</h3>
-          <p className="mt-2 break-all text-sm font-semibold text-emerald-950">{referralUrl}</p>
-          <p className="mt-2 text-xs text-emerald-800">Code personnel : <strong>{dashboard.ambassador.code}</strong></p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" onClick={() => void shareReferralLink()} className="ambassador-primary-btn inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#123b32] px-3 text-sm font-bold text-white"><MessageCircle className="h-4 w-4" />Partager le lien</button>
-            <button type="button" onClick={() => void copyReferralLink()} className="ambassador-secondary-btn inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le lien</button>
-            <button type="button" onClick={() => void copyReferralCode()} className="ambassador-secondary-btn inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le code</button>
           </div>
-        </div>
+        </details>
       </section>}
       <section data-ambassador-panel="withdrawals" aria-labelledby="withdrawal-request-title" className="ambassador-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
         <div>
