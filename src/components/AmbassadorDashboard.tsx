@@ -712,14 +712,14 @@ export function AmbassadorDashboard() {
             {!forgotAccess && <label className="block text-xs font-bold text-[#3d4b44]">
               {isActivation ? 'Créer un mot de passe' : 'Mot de passe'}
               <span className="relative mt-1.5 block">
-                <input required type={showPassword ? 'text' : 'password'} autoComplete={isActivation ? 'new-password' : 'current-password'} minLength={isActivation ? 12 : 1} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} className="min-h-12 w-full rounded-2xl border border-[#deded5] bg-white px-4 pr-12 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[#17644d] focus:ring-4 focus:ring-[#17644d]/10" />
+                <input required type={showPassword ? 'text' : 'password'} autoComplete={isActivation ? 'new-password' : 'current-password'} minLength={isActivation ? 8 : 1} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} className="min-h-12 w-full rounded-2xl border border-[#deded5] bg-white px-4 pr-12 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[#17644d] focus:ring-4 focus:ring-[#17644d]/10" />
                 <button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} aria-pressed={showPassword} className="absolute inset-y-0 right-0 grid w-12 place-items-center rounded-r-2xl text-[#7d827b] transition hover:bg-[#f3f1eb]">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
               </span>
             </label>}
           </>}
           {isActivation && <label className="block text-xs font-bold text-[#3d4b44]">
             Confirmer le mot de passe
-            <input required type="password" autoComplete="new-password" minLength={12} maxLength={128} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-2xl border border-[#deded5] bg-white px-4 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[#17644d] focus:ring-4 focus:ring-[#17644d]/10" />
+            <input required type="password" autoComplete="new-password" minLength={8} maxLength={128} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-2xl border border-[#deded5] bg-white px-4 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[#17644d] focus:ring-4 focus:ring-[#17644d]/10" />
           </label>}
           {isActivation && password && confirmation && password !== confirmation && <p className="text-xs font-semibold text-rose-800">Les deux mots de passe ne correspondent pas.</p>}
           {!pendingMfaChallenge && !isActivation && <button type="button" onClick={() => { setForgotAccess((current) => !current); setPassword(''); setNotice(''); setError(''); }} className="min-h-9 text-xs font-bold text-[#17644d] transition hover:text-[#a66e35]">{forgotAccess ? '← Retour à la connexion' : 'Mot de passe oublié ?'}</button>}
@@ -738,7 +738,7 @@ export function AmbassadorDashboard() {
             <p className="text-xs font-bold text-[#455349]">{isActivation ? 'Invitation personnelle et sécurisée' : 'Vos accès restent confidentiels'}</p>
             <p className="mt-1 text-[10px] leading-5 text-[#84877f]">
               {isActivation
-                ? 'Lien à usage unique valable 7 jours · mot de passe de 12 caractères minimum.'
+                ? 'Lien à usage unique valable 7 jours · 8 caractères minimum. Une phrase longue et unique est recommandée.'
                 : forgotAccess
                   ? 'Le lien expire après 7 jours et ne peut être utilisé qu’une seule fois.'
                   : 'Session de 8 heures · vérification supplémentaire par e-mail si nécessaire.'}
@@ -1020,11 +1020,11 @@ export function AmbassadorDashboard() {
         <section aria-labelledby="account-security-title" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-800">Sécurité</p>
           <h2 id="account-security-title" className="mt-1 text-xl font-black text-slate-950">Modifier le mot de passe</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Choisissez au moins 12 caractères. Les autres appareils seront déconnectés après la modification.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Choisissez au moins 8 caractères. Une phrase longue et unique est recommandée. Les autres appareils seront déconnectés après la modification.</p>
           <form onSubmit={(event) => void changePassword(event)} className="mt-5 grid gap-4">
             <label className="text-sm font-semibold text-slate-700">Mot de passe actuel<input required type="password" autoComplete="current-password" maxLength={128} value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="mt-1.5 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" /></label>
-            <label className="text-sm font-semibold text-slate-700">Nouveau mot de passe<input required type="password" autoComplete="new-password" minLength={12} maxLength={128} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="mt-1.5 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" /></label>
-            <label className="text-sm font-semibold text-slate-700">Confirmer le nouveau mot de passe<input required type="password" autoComplete="new-password" minLength={12} maxLength={128} value={newPasswordConfirmation} onChange={(event) => setNewPasswordConfirmation(event.target.value)} className="mt-1.5 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" /></label>
+            <label className="text-sm font-semibold text-slate-700">Nouveau mot de passe<input required type="password" autoComplete="new-password" minLength={8} maxLength={128} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="mt-1.5 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" /></label>
+            <label className="text-sm font-semibold text-slate-700">Confirmer le nouveau mot de passe<input required type="password" autoComplete="new-password" minLength={8} maxLength={128} value={newPasswordConfirmation} onChange={(event) => setNewPasswordConfirmation(event.target.value)} className="mt-1.5 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" /></label>
             {newPasswordConfirmation && newPassword !== newPasswordConfirmation && <p className="text-sm font-semibold text-rose-800">Les deux nouveaux mots de passe ne correspondent pas.</p>}
             <button type="submit" disabled={busy || newPassword !== newPasswordConfirmation} className="min-h-11 w-full rounded-lg bg-emerald-900 px-4 text-sm font-bold text-white disabled:opacity-40 sm:w-fit">{busy ? 'Enregistrement…' : 'Mettre à jour le mot de passe'}</button>
           </form>
