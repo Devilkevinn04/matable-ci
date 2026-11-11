@@ -66,7 +66,7 @@ export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: numb
     const token = typeof request.body?.token === 'string' ? request.body.token.trim() : '';
     const password = typeof request.body?.password === 'string' ? request.body.password : '';
     if (!INVITE_TOKEN_PATTERN.test(token)) return response.status(400).json({ error: 'Lien d’activation invalide ou expiré.' });
-    if (password.length < 12 || password.length > 128) return response.status(400).json({ error: 'Choisissez un mot de passe de 12 à 128 caractères.' });
+    if (password.length < 8 || password.length > 128) return response.status(400).json({ error: 'Choisissez un mot de passe de 8 à 128 caractères.' });
     const passwordHash = await bcrypt.hash(password, 10);
     const sessionToken = randomUUID();
     const fingerprint = buildSessionFingerprint(request);
@@ -505,7 +505,7 @@ export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: numb
     const currentPassword = typeof request.body?.current_password === 'string' ? request.body.current_password : '';
     const newPassword = typeof request.body?.new_password === 'string' ? request.body.new_password : '';
     if (!currentPassword || currentPassword.length > 128) return response.status(400).json({ error: 'Saisissez votre mot de passe actuel.' });
-    if (newPassword.length < 12 || newPassword.length > 128) return response.status(400).json({ error: 'Choisissez un nouveau mot de passe de 12 à 128 caractères.' });
+    if (newPassword.length < 8 || newPassword.length > 128) return response.status(400).json({ error: 'Choisissez un nouveau mot de passe de 8 à 128 caractères.' });
     const account = await dbGet<{ password_hash: string | null }>('SELECT password_hash FROM ambassadors WHERE id = ?', [session.ambassador.id]);
     if (!account?.password_hash || !await bcrypt.compare(currentPassword, account.password_hash)) {
       return response.status(401).json({ error: 'Le mot de passe actuel est incorrect.' });

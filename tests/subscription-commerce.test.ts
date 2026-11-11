@@ -806,10 +806,10 @@ test('ambassador access uses one-time invitations and isolates each dashboard to
   assert.equal((await fetch(`${BASE_URL}/api/ambassador-auth/dashboard`)).status, 401);
   assert.equal((await fetch(`${BASE_URL}/api/ambassador-auth/link-stats?all=1`)).status, 401);
   const weakPassword = await fetch(`${BASE_URL}/api/ambassador-auth/activate`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: replacementInviteToken, password: 'short' }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: replacementInviteToken, password: 'Abcd123' }),
   });
   assert.equal(weakPassword.status, 400);
-  const password = 'SecureAmbassadorPassword2026!';
+  const password = 'Ambass8!';
   const activationResponse = await fetch(`${BASE_URL}/api/ambassador-auth/activate`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: replacementInviteToken, password }),
   });
@@ -1033,7 +1033,11 @@ test('ambassador access uses one-time invitations and isolates each dashboard to
     method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: renewedCookie },
     body: JSON.stringify({ current_password: 'incorrect-password', new_password: 'UpdatedAmbassadorPassword2026!' }),
   })).status, 401);
-  const changedPassword = 'UpdatedAmbassadorPassword2026!';
+  assert.equal((await fetch(`${BASE_URL}/api/ambassador-auth/password`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: renewedCookie },
+    body: JSON.stringify({ current_password: replacementPassword, new_password: 'Abcd123' }),
+  })).status, 400);
+  const changedPassword = 'Nouveau8';
   const passwordChange = await fetch(`${BASE_URL}/api/ambassador-auth/password`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: renewedCookie },
     body: JSON.stringify({ current_password: replacementPassword, new_password: changedPassword }),
