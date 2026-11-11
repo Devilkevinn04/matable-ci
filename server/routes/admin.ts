@@ -164,7 +164,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
       WHERE p.sale_price IS NOT NULL
     `;
     const filteredPromotionsQuery = requestedStatus === 'all'
-      ? promotionsQuery
+      ? `SELECT * FROM (${promotionsQuery}) promotions`
       : `SELECT * FROM (${promotionsQuery}) promotions WHERE sale_status = ?`;
     const filteredParams: unknown[] = requestedStatus === 'all'
       ? [now, now]

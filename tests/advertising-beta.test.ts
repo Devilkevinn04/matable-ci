@@ -165,6 +165,9 @@ test('advertising beta enforces roles, merchant ownership, moderation, consented
   assert.equal(promotionOverview.payload.summary.scheduled, 1);
   assert.equal(promotionOverview.payload.promotions[0].product_id, firstShop.productId);
   assert.equal(promotionOverview.payload.promotions[0].sale_status, 'scheduled');
+  const allPromotions = await api('/api/admin/product-sales?status=all&page=1', { headers: { Cookie: admin } });
+  assert.equal(allPromotions.response.status, 200, JSON.stringify(allPromotions.payload));
+  assert.equal(allPromotions.payload.total, 1);
   const invalidPromotionFilter = await api('/api/admin/product-sales?status=all%3BDELETE', { headers: { Cookie: admin } });
   assert.equal(invalidPromotionFilter.response.status, 400);
 
