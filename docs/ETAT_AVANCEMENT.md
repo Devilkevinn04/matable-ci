@@ -1,15 +1,17 @@
 # État d’avancement de MaTable
 
 État au **11 novembre 2026**, d’après le code, les tests locaux et les contrôles
-de production indiqués ci-dessous. Les changements non publiés du worktree ne
-sont pas déclarés déployés. Ce document décrit l’étendue fonctionnelle
+de production indiqués ci-dessous. Ce document décrit l’étendue fonctionnelle
 actuelle ; il ne remplace pas les guides détaillés ni les vérifications des
 fournisseurs.
 
-## Changements locaux récents — non déployés
+## Corrections récemment déployées
 
-Le worktree contient des changements non commités, à distinguer du code
-actuellement déployé. Les contrôles locaux couvrent notamment :
+La PR #2 (`fix: address audit findings`) a été fusionnée vers `production` et
+déployée le 11 novembre 2026 sous le commit `fdc2bc8`. Le conteneur était
+`healthy` après bascule ; le smoke test public post-déploiement a réussi ses 47
+contrôles. Le parcours d’âge n’a pas été vérifié en direct faute de boutique de
+production avec un produit réservé aux adultes.
 
 - La politique CSP autorise les origines HTTPS des stockages configurés pour
   les téléversements directs vers R2.
@@ -32,7 +34,7 @@ actuellement déployé. Les contrôles locaux couvrent notamment :
 - `AGE_VERIFICATION_SECRET` est exigé en production et sa configuration est
   vérifiée au démarrage.
 
-La validation locale du 11 novembre 2026 a exécuté `npm run test:ci` :
+La validation locale avant déploiement a exécuté `npm run test:ci` :
 303 tests (302 réussis, aucun échec et un ignoré) ; `npm run lint` et
 `npm run build` ont réussi. Le test navigateur local du contrôle d’âge a aussi
 confirmé le refus d’une date mineure, l’accès après une date admissible et
@@ -47,15 +49,12 @@ représente pas le fournisseur de paiement actuellement utilisé.
 
 ## Production et déploiement
 
-Vérifications publiques réalisées le **11 novembre 2026** : le conteneur
-`matable-web` était sain avec une image taguée au commit `0d73d7c`, le secret
-`AGE_VERIFICATION_SECRET` était présent et suffisamment long, et
+Vérifications publiques réalisées le **11 novembre 2026** : après le
+déploiement du commit `fdc2bc8`, le conteneur `matable-web` était sain et
 `https://matable-ci.com/health` répondait avec l’état `ok`. Le smoke test public
 en lecture seule a réussi ses 47 contrôles (pages, API, ressources et
-en-têtes). Cela ne valide pas le parcours de contrôle d’âge en production :
-aucune boutique de test avec produit réservé aux adultes n’a été identifiée.
-Les modifications non commitées de la section précédente ne sont donc pas
-encore déployées.
+en-têtes). Le secret `AGE_VERIFICATION_SECRET` était présent et suffisamment
+long.
 
 - Le site est hébergé sur un VPS Hostinger, avec l’application dans Docker et
   PostgreSQL dans un conteneur séparé.
@@ -77,15 +76,16 @@ encore déployées.
   n’est pas confirmé par les vérifications consignées ici.
 - Une sauvegarde PostgreSQL datée du 8 novembre a été vérifiée par checksum et
   reconnue comme archive lisible par `pg_restore`.
-- Le timer systemd `matable-auto-deploy.timer` est actif sur le VPS. Il vérifie
-  `main` périodiquement ; son premier passage a construit puis déployé le
-  commit `3d3dcc2`, et le service était sain après déploiement.
-- Pour chaque nouveau commit sur `main`, le VPS récupère les sources, exécute
-  le lint, les tests CI et le build dans Docker, puis ne remplace que le service
-  Web MaTable. Le contrôle de santé a jusqu’à trois minutes ; en cas d’échec,
-  la configuration précédente et son image sont remises en service. Les
-  changements sur une autre branche ne sont pas déployés tant qu’ils ne sont
-  pas fusionnés dans `main`.
+- Le timer systemd `matable-auto-deploy.timer` est actif sur le VPS. Lors de
+  l’audit du déploiement, son override exécutait un outil installé hors du
+  dépôt, qui lisait `MATABLE_RELEASE_SHA` dans Portainer et suivait encore la
+  branche `production`. Cette dérive a rendu la dernière publication
+  inutilement complexe.
+- La procédure cible est désormais une seule branche de livraison : PR vers
+  `main`, puis approbation SSH du SHA fusionné. La synchronisation initiale de
+  `main` avec la version déployée et l’installation du script versionné restent
+  à effectuer ; jusqu’à cette migration, continuer à utiliser l’ancienne
+  procédure opérationnelle.
 
 L’automatisation ne rend pas les changements de schéma incompatibles
 automatiquement réversibles. Une migration qui supprime ou transforme des

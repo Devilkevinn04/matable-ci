@@ -6,6 +6,6 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/matable-auto-deploy
+ExecStart=/usr/local/sbin/matable-portainer-deploy
 User=root
 Group=root

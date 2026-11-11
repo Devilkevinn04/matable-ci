@@ -1,6 +1,27 @@
 # Publier MaTable sur Hostinger
 
-Kevin prépare une branche et lance `npm ci` puis `make check` avant d’ouvrir sa pull request vers `main`. Après la revue, il indique le SHA complet à publier. L’exploitant fait avancer `production` jusqu’à ce SHA après avoir vérifié les variables et les éventuelles migrations. Le déploiement tourne sur le VPS, indépendamment de GitHub Actions.
+Le dépôt utilise un seul flux de livraison : une branche de travail courte,
+une pull request vers `main`, puis une approbation SSH du SHA fusionné. Il n’y a
+pas de branche de release à fusionner ensuite vers `production`. Le VPS suit
+`main`, mais ne déploie que le SHA explicitement approuvé.
+
+Après la fusion de la pull request, récupérer le SHA complet de `main`, vérifier
+les changements de schéma et les variables nécessaires, puis lancer depuis le
+VPS :
+
+```sh
+make -f /srv/apps/matable/Makefile production-approve VERSION=<sha-complet-de-main>
+make -f /srv/apps/matable/Makefile production-status
+```
+
+Le timer lance alors le build et le déploiement ; aucune mise à jour de
+`MATABLE_RELEASE_SHA` dans Portainer n’est nécessaire. Portainer reste réservé
+à la configuration et aux secrets du stack, pas à la sélection du commit.
+
+Lors de la migration initiale, `main` doit d’abord être synchronisée avec la
+version déjà en production. La pull request de synchronisation peut donc
+contenir les commits précédemment publiés uniquement sur `production`. Après
+cette opération unique, les nouvelles pull requests ciblent `main`.
 
 ## Variables de production
 
@@ -46,18 +67,44 @@ systemctl list-timers matable-postgres-backup.timer --no-pager
 
 Consulter les exécutions avec `journalctl -u matable-postgres-backup.service`. Cette politique conserve les sauvegardes sur le VPS uniquement : elle ne protège pas contre la perte ou l’indisponibilité de ce serveur. Une copie hors site devra être configurée séparément.
 
-## Publication sur le VPS
+## Outils du VPS
 
-Après avoir fait avancer la branche `production` vers le commit revu, se connecter au VPS et utiliser le Makefile installé et détenu par root :
+Le service systemd exécute
+`/usr/local/sbin/matable-portainer-deploy`; ce script doit rester identique à
+`infra/hostinger/portainer-deploy.py` dans le dépôt. Le timer regarde `main`
+environ toutes les deux minutes et vérifie que le SHA approuvé par SSH est
+toujours sa tête. Le build exécute `make check` dans Docker, sauvegarde et
+valide PostgreSQL avant de remplacer le service Web. En cas d’échec, la
+configuration et l’image précédentes sont restaurées ; une nouvelle
+approbation SSH est nécessaire pour réessayer.
+
+Après fusion de la pull request qui modifie les outils de livraison, récupérer
+`main` sur le poste de travail et transférer les deux fichiers approuvés :
 
 ```sh
-make -f /srv/apps/matable/Makefile production-approve VERSION=<sha-complet>
+git switch main
+git pull --ff-only origin main
+scp infra/hostinger/portainer-deploy.py root@72.61.102.243:/tmp/matable-portainer-deploy.new
+scp Makefile root@72.61.102.243:/tmp/matable-Makefile.new
+```
+
+Puis, sur le VPS, installer ces fichiers, approuver la tête actuelle de `main`
+et vérifier le statut :
+
+```sh
+python3 -m py_compile /tmp/matable-portainer-deploy.new
+install -o root -g root -m 0750 /tmp/matable-portainer-deploy.new /usr/local/sbin/matable-portainer-deploy
+install -o root -g root -m 0644 /tmp/matable-Makefile.new /srv/apps/matable/Makefile
+rm -- /tmp/matable-portainer-deploy.new /tmp/matable-Makefile.new
+make -f /srv/apps/matable/Makefile production-approve VERSION=<sha-complet-de-main>
 make -f /srv/apps/matable/Makefile production-status
 ```
 
-Le timer regarde `production` environ toutes les deux minutes et exige que sa tête corresponde au SHA approuvé sur le VPS. La construction exécute `make check`, puis le service remplace le conteneur web. En cas d’échec de démarrage, il remet l’image précédente et suspend la révision jusqu’à une nouvelle approbation. Après la publication, ouvrir le site et tester la fonctionnalité modifiée.
-
-Le script et le Makefile installés sont entretenus par l’exploitant. Pour les actualiser, vérifier le changement dans le dépôt puis installer les fichiers approuvés aux chemins `/usr/local/sbin/matable-auto-deploy` et `/srv/apps/matable/Makefile`. La configuration Docker Compose du VPS demeure sous `/srv/apps/matable/current/infra/hostinger/` et les versions construites sous `/srv/apps/matable/releases/`.
+Les chemins Compose et de déploiement restent sous
+`/srv/apps/matable/current/infra/hostinger/`; les versions construites se
+trouvent dans `/srv/apps/matable/releases/`. Ne modifie pas l’override systemd
+Portainer : il pointe déjà vers le script actif. La prochaine publication se
+fait uniquement par PR vers `main`, puis `production-approve` en SSH.
 
 ## Portainer
 
