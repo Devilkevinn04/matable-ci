@@ -1,11 +1,61 @@
 # État d’avancement de MaTable
 
-État au **8 novembre 2026**, d’après le code du dépôt et les vérifications de
-production effectuées pendant cette session. Ce document décrit l’étendue
-fonctionnelle actuelle ; il ne remplace pas les guides détaillés ni les
-vérifications des fournisseurs.
+État au **11 novembre 2026**, d’après le code, les tests locaux et les contrôles
+de production indiqués ci-dessous. Les changements non publiés du worktree ne
+sont pas déclarés déployés. Ce document décrit l’étendue fonctionnelle
+actuelle ; il ne remplace pas les guides détaillés ni les vérifications des
+fournisseurs.
+
+## Changements locaux récents — non déployés
+
+Le worktree contient des changements non commités, à distinguer du code
+actuellement déployé. Les contrôles locaux couvrent notamment :
+
+- La politique CSP autorise les origines HTTPS des stockages configurés pour
+  les téléversements directs vers R2.
+- La tâche périodique de nettoyage des sessions journalise ses erreurs au lieu
+  de laisser un rejet non traité.
+- La déduplication analytics est atomique via un index unique ; la migration
+  retire les doublons historiques en conservant le premier événement.
+- L’adresse de facturation GeniusPay est utilisée pour le paiement sans
+  remplacer l’adresse propriétaire vérifiée, utilisée notamment pour le MFA.
+- La vérification MFA de connexion admin reste accessible pendant le mode
+  maintenance.
+- Les tailles et couleurs de commande sont contrôlées par type et par rapport
+  aux options du produit ; les modificateurs acceptés sont normalisés et leur
+  supplément est recalculé côté serveur.
+- Les favoris et mentions J’aime ne s’appliquent pas aux produits indisponibles.
+- Les produits soumis au contrôle d’âge nécessitent un jeton HMAC limité à la
+  boutique, valable 30 minutes, pour le catalogue et la commande. La date de
+  naissance déclarative n’est pas conservée ; ce contrôle n’est pas une preuve
+  d’identité. Le catalogue concerné n’est pas mis en cache.
+- `AGE_VERIFICATION_SECRET` est exigé en production et sa configuration est
+  vérifiée au démarrage.
+
+La validation locale du 11 novembre 2026 a exécuté `npm run test:ci` :
+303 tests (302 réussis, aucun échec et un ignoré) ; `npm run lint` et
+`npm run build` ont réussi. Le test navigateur local du contrôle d’âge a aussi
+confirmé le refus d’une date mineure, l’accès après une date admissible et
+l’absence de stockage de la date dans le navigateur. Les tests GeniusPay sont
+dans `tests/geniuspay.test.ts`.
+
+Le nom historique `migrations/015_kadevpay_subscription_payments.sql` est
+conservé volontairement : le runner enregistre le nom complet de chaque
+migration dans `schema_migrations`. Le renommer ferait apparaître une nouvelle
+version et pourrait réexécuter une migration déjà appliquée ; son nom ne
+représente pas le fournisseur de paiement actuellement utilisé.
 
 ## Production et déploiement
+
+Vérifications publiques réalisées le **11 novembre 2026** : le conteneur
+`matable-web` était sain avec une image taguée au commit `0d73d7c`, le secret
+`AGE_VERIFICATION_SECRET` était présent et suffisamment long, et
+`https://matable-ci.com/health` répondait avec l’état `ok`. Le smoke test public
+en lecture seule a réussi ses 47 contrôles (pages, API, ressources et
+en-têtes). Cela ne valide pas le parcours de contrôle d’âge en production :
+aucune boutique de test avec produit réservé aux adultes n’a été identifiée.
+Les modifications non commitées de la section précédente ne sont donc pas
+encore déployées.
 
 - Le site est hébergé sur un VPS Hostinger, avec l’application dans Docker et
   PostgreSQL dans un conteneur séparé.
@@ -23,8 +73,8 @@ vérifications des fournisseurs.
   existants qui ont déjà une adresse reste une action manuelle, idempotente :
   `docker exec matable-web node /app/scripts/send-email-mfa-rollout-notices.mjs`.
   Les utilisateurs sans adresse e-mail ne peuvent être contactés par ce canal ;
-  il faut les informer par un autre moyen. Ces changements ne sont pas encore
-  confirmés en production tant que ce commit n’y a pas été déployé.
+  il faut les informer par un autre moyen. Leur déploiement en production
+  n’est pas confirmé par les vérifications consignées ici.
 - Une sauvegarde PostgreSQL datée du 8 novembre a été vérifiée par checksum et
   reconnue comme archive lisible par `pg_restore`.
 - Le timer systemd `matable-auto-deploy.timer` est actif sur le VPS. Il vérifie

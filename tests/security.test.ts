@@ -389,6 +389,7 @@ test('rejects placeholder production app URLs', () => {
     ADMIN_ACCESS_KEY: process.env.ADMIN_ACCESS_KEY,
     VERIFICATION_ADMIN_ACCESS_KEY: process.env.VERIFICATION_ADMIN_ACCESS_KEY,
     AD_EVENT_SIGNING_SECRET: process.env.AD_EVENT_SIGNING_SECRET,
+    AGE_VERIFICATION_SECRET: process.env.AGE_VERIFICATION_SECRET,
     AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT: process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT,
     AUTH_EMAIL_MFA_PEPPER: process.env.AUTH_EMAIL_MFA_PEPPER,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
@@ -406,6 +407,7 @@ test('rejects placeholder production app URLs', () => {
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
     process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
     process.env.AD_EVENT_SIGNING_SECRET = 'production-ad-event-signing-secret-2026-strong';
+    process.env.AGE_VERIFICATION_SECRET = 'production-age-verification-secret-2026-strong';
     process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT = '2026-01-01T00:00:00.000Z';
     process.env.AUTH_EMAIL_MFA_PEPPER = 'test-email-mfa-pepper-that-is-over-32-characters';
     process.env.RESEND_API_KEY = 're_test_key';
@@ -441,6 +443,7 @@ test('rejects unsafe production configuration', () => {
     ADMIN_ACCESS_KEY: process.env.ADMIN_ACCESS_KEY,
     VERIFICATION_ADMIN_ACCESS_KEY: process.env.VERIFICATION_ADMIN_ACCESS_KEY,
     AD_EVENT_SIGNING_SECRET: process.env.AD_EVENT_SIGNING_SECRET,
+    AGE_VERIFICATION_SECRET: process.env.AGE_VERIFICATION_SECRET,
     AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT: process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT,
     AUTH_EMAIL_MFA_PEPPER: process.env.AUTH_EMAIL_MFA_PEPPER,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
@@ -458,6 +461,7 @@ test('rejects unsafe production configuration', () => {
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
     process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
     process.env.AD_EVENT_SIGNING_SECRET = 'production-ad-event-signing-secret-2026-strong';
+    process.env.AGE_VERIFICATION_SECRET = 'production-age-verification-secret-2026-strong';
     process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT = '2026-01-01T00:00:00.000Z';
     process.env.AUTH_EMAIL_MFA_PEPPER = 'test-email-mfa-pepper-that-is-over-32-characters';
     process.env.RESEND_API_KEY = 're_test_key';
@@ -500,6 +504,7 @@ test('requires the ad event signing secret only when advertising delivery is ena
     'ADMIN_ACCESS_KEY',
     'VERIFICATION_ADMIN_ACCESS_KEY',
     'AD_EVENT_SIGNING_SECRET',
+    'AGE_VERIFICATION_SECRET',
     'AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT',
     'AUTH_EMAIL_MFA_PEPPER',
     'RESEND_API_KEY',
@@ -518,6 +523,7 @@ test('requires the ad event signing secret only when advertising delivery is ena
     process.env.ADMIN_ACCESS_KEY = 'production-admin-access-key-2026-strong';
     process.env.VERIFICATION_ADMIN_ACCESS_KEY = 'production-verification-key-2026-strong';
     process.env.AD_EVENT_SIGNING_SECRET = '';
+    process.env.AGE_VERIFICATION_SECRET = 'production-age-verification-secret-2026-strong';
     process.env.AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT = '2026-01-01T00:00:00.000Z';
     process.env.AUTH_EMAIL_MFA_PEPPER = 'test-email-mfa-pepper-that-is-over-32-characters';
     process.env.RESEND_API_KEY = 're_test_key';
@@ -528,6 +534,9 @@ test('requires the ad event signing secret only when advertising delivery is ena
     process.env.APP_URL = 'https://matable-ci.com';
     process.env.PORT = '3000';
 
+    process.env.AGE_VERIFICATION_SECRET = '';
+    assert.throws(() => validateRuntimeConfig(), /Configuration production incomplète : AGE_VERIFICATION_SECRET/);
+    process.env.AGE_VERIFICATION_SECRET = 'production-age-verification-secret-2026-strong';
     assert.doesNotThrow(() => validateRuntimeConfig());
 
     process.env.RESEND_FROM_EMAIL = 'MaTable <welcome@matable-ci.com>';

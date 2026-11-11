@@ -142,7 +142,7 @@ export interface ProductRecord {
     name: string;
     required?: boolean;
     max_selections?: number;
-    options: { label: string; price_delta: number }[];
+    options: ({ label: string; price_delta: number } | string)[];
   }[];
   attributes?: Record<string, string>;
 }

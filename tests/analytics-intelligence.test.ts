@@ -155,6 +155,27 @@ test('batch analytics keeps consented aggregates, strips PII and deduplicates pa
   }
 });
 
+test('concurrent analytics requests store only one daily deduplicated event', async () => {
+  const sessionId = `analytics-race-${Date.now()}`;
+  const event = { event_type: 'page_view', session_id: sessionId, path: '/race-check' };
+  const responses = await Promise.all([
+    postJson('/api/analytics/events', { events: [event] }),
+    postJson('/api/analytics/events', { events: [event] }),
+  ]);
+  assert.deepEqual(responses.map((response) => response.status), [204, 204]);
+
+  const database = new Database(TEST_DB_PATH, { readonly: true });
+  try {
+    const row = database.prepare(`
+      SELECT COUNT(*) AS count FROM analytics_events
+      WHERE session_id = ? AND event_type = 'page_view' AND path = '/race-check'
+    `).get(sessionId) as { count: number };
+    assert.equal(row.count, 1);
+  } finally {
+    database.close();
+  }
+});
+
 test('legacy analytics endpoints stay compatible and enrich the schema', async () => {
   const pageView = await postJson('/api/analytics/page-view', {
     session_id: 'legacy-session-0001',

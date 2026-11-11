@@ -6,6 +6,9 @@ import pg from 'pg';
 const { Pool } = pg;
 const usePostgres = process.env.NODE_ENV === 'production';
 export const databaseMode = usePostgres ? 'postgresql' : 'sqlite';
+export const ANALYTICS_EVENT_DEDUPLICATION_INDEX_SQL = `CREATE UNIQUE INDEX IF NOT EXISTS idx_analytics_events_dedup
+  ON analytics_events (COALESCE(shop_id, 0), event_type, session_id, path, substr(created_at, 1, 10))
+  WHERE event_type IN ('page_view', 'product_view', 'login', 'signup')`;
 
 const postgresPool = usePostgres
   ? new Pool({ connectionString: process.env.DATABASE_URL, max: Number(process.env.PG_POOL_MAX || 10) })
@@ -765,6 +768,24 @@ function migrateSqlite(connection: Database.Database) {
       connection.exec(`UPDATE analytics_events SET audience = 'public' WHERE audience IS NULL`);
       connection.prepare('INSERT INTO didit_schema_migrations (name, applied_at) VALUES (?, ?)')
         .run(analyticsAudienceBackfillName, new Date().toISOString());
+    })();
+  }
+  const analyticsDeduplicationMigrationName = 'analytics_event_deduplication_v1';
+  const analyticsDeduplicationMigrationApplied = connection.prepare(
+    'SELECT name FROM didit_schema_migrations WHERE name = ?',
+  ).get(analyticsDeduplicationMigrationName);
+  if (!analyticsDeduplicationMigrationApplied) {
+    connection.transaction(() => {
+      connection.exec(`DELETE FROM analytics_events
+        WHERE event_type IN ('page_view', 'product_view', 'login', 'signup')
+          AND id NOT IN (
+            SELECT MIN(id) FROM analytics_events
+            WHERE event_type IN ('page_view', 'product_view', 'login', 'signup')
+            GROUP BY COALESCE(shop_id, 0), event_type, session_id, path, substr(created_at, 1, 10)
+          )`);
+      connection.exec(ANALYTICS_EVENT_DEDUPLICATION_INDEX_SQL);
+      connection.prepare('INSERT INTO didit_schema_migrations (name, applied_at) VALUES (?, ?)')
+        .run(analyticsDeduplicationMigrationName, new Date().toISOString());
     })();
   }
   const ambassadorLinkClickBackfillName = 'ambassador_link_click_events_v1';
@@ -1605,6 +1626,25 @@ export async function initializeDatabase() {
           publication_status = CASE WHEN is_active = 0 THEN 'suspended' ELSE 'draft' END`);
         await client.query('DROP TABLE IF EXISTS merchant_identity_verifications');
         await client.query('INSERT INTO didit_schema_migrations (name, applied_at) VALUES ($1, $2)', [migrationName, new Date().toISOString()]);
+      }
+      const analyticsDeduplicationMigrationName = 'analytics_event_deduplication_v1';
+      const analyticsDeduplicationMigration = await client.query(
+        'SELECT name FROM didit_schema_migrations WHERE name = $1',
+        [analyticsDeduplicationMigrationName],
+      );
+      if (analyticsDeduplicationMigration.rowCount === 0) {
+        await client.query(`DELETE FROM analytics_events
+          WHERE event_type IN ('page_view', 'product_view', 'login', 'signup')
+            AND id NOT IN (
+              SELECT MIN(id) FROM analytics_events
+              WHERE event_type IN ('page_view', 'product_view', 'login', 'signup')
+              GROUP BY COALESCE(shop_id, 0), event_type, session_id, path, substr(created_at, 1, 10)
+            )`);
+        await client.query(ANALYTICS_EVENT_DEDUPLICATION_INDEX_SQL);
+        await client.query(
+          'INSERT INTO didit_schema_migrations (name, applied_at) VALUES ($1, $2)',
+          [analyticsDeduplicationMigrationName, new Date().toISOString()],
+        );
       }
       await client.query('COMMIT');
     } catch (error) {

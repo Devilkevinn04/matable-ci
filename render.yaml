@@ -31,6 +31,8 @@ services:
         sync: false
       - key: AUTH_EMAIL_MFA_PEPPER
         generateValue: true
+      - key: AGE_VERIFICATION_SECRET
+        generateValue: true
       - key: ADMIN_MFA_EMAIL
         sync: false
       - key: VERIFICATION_ADMIN_MFA_EMAIL
@@ -82,6 +84,15 @@ services:
       - key: R2_ACCESS_KEY_ID
         sync: false
       - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      # Bucket privé séparé pour les justificatifs de vérification manuelle.
+      - key: R2_PRIVATE_BUCKET
+        sync: false
+      - key: R2_PRIVATE_ENDPOINT
+        sync: false
+      - key: R2_PRIVATE_ACCESS_KEY_ID
+        sync: false
+      - key: R2_PRIVATE_SECRET_ACCESS_KEY
         sync: false
       - key: R2_PUBLIC_BASE_URL
         sync: false

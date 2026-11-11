@@ -772,6 +772,7 @@ export function validateRuntimeConfig(): void {
     'DATABASE_URL',
     'AUTH_EMAIL_MFA_ROLLOUT_STARTED_AT',
     'AUTH_EMAIL_MFA_PEPPER',
+    'AGE_VERIFICATION_SECRET',
     'RESEND_API_KEY',
     'RESEND_FROM_EMAIL',
     'ADMIN_MFA_EMAIL',
@@ -801,6 +802,10 @@ export function validateRuntimeConfig(): void {
   if ((advertisingBetaEnabled || adEventSigningSecret)
     && (adEventSigningSecret.length < 32 || /change_me|demo|example|legacy/i.test(adEventSigningSecret))) {
     throw new Error('AD_EVENT_SIGNING_SECRET doit être une clé forte, unique et longue d’au moins 32 caractères en production.');
+  }
+  const ageVerificationSecret = String(process.env.AGE_VERIFICATION_SECRET || '').trim();
+  if (ageVerificationSecret.length < 32 || /change_me|demo|example|legacy/i.test(ageVerificationSecret)) {
+    throw new Error('AGE_VERIFICATION_SECRET doit être une clé forte, unique et longue d’au moins 32 caractères en production.');
   }
 
   if (DEMO_MODE) {
@@ -856,15 +861,27 @@ export async function rotateMerchantAccessTokenForShop(shopId: number, previousT
   return token;
 }
 
-setInterval(async () => {
-  await cleanupExpiredSessions();
-  try {
-    await dbRun('DELETE FROM didit_webhook_events WHERE received_at < ?', [new Date(Date.now() - 30 * 86400000).toISOString()]);
-    for (const shop of await loadShopsFromDatabase()) await refreshSubscriptionState(shop);
-  } catch (error) {
-    console.error('Unable to synchronize expired subscriptions or clean expired Didit events.', error);
-  }
-  await processSubscriptionAutomation();
+setInterval(() => {
+  void (async () => {
+    try {
+      await cleanupExpiredSessions();
+    } catch (error) {
+      console.error('Unable to clean expired sessions.', error);
+    }
+
+    try {
+      await dbRun('DELETE FROM didit_webhook_events WHERE received_at < ?', [new Date(Date.now() - 30 * 86400000).toISOString()]);
+      for (const shop of await loadShopsFromDatabase()) await refreshSubscriptionState(shop);
+    } catch (error) {
+      console.error('Unable to synchronize expired subscriptions or clean expired Didit events.', error);
+    }
+
+    try {
+      await processSubscriptionAutomation();
+    } catch (error) {
+      console.error('Subscription automation cycle failed.', error);
+    }
+  })();
 }, 15 * 60 * 1000).unref();
 
 const toSafeShop = (shop: ShopRecord) => {
@@ -1137,6 +1154,7 @@ async function startServer() {
     isAdminShopSession: async (req, shopId) =>
       Number(req.params.slug) === shopId && Boolean(await getAdminSession(req)),
     deliveryOperationsEnabled: DELIVERY_OPERATIONS_ENABLED,
+    rateLimitPublicRequest,
   });
   app.get(`${PUBLIC_PRODUCT_IMAGE_PATH}/:productId/:file`, async (req, res) => {
     const productId = Number(req.params.productId);
