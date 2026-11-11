@@ -8,6 +8,7 @@ const commonEnvironment = {
   DATABASE_URL: 'postgresql://readiness-test.invalid/matable',
   ADMIN_ACCESS_KEY: 'test-admin-key-that-is-at-least-32-chars',
   VERIFICATION_ADMIN_ACCESS_KEY: 'test-verification-key-at-least-32-chars',
+  AGE_VERIFICATION_SECRET: 'test-age-verification-secret-at-least-32-chars',
   DIDIT_API_KEY: '',
   DIDIT_WORKFLOW_ID: '',
   DIDIT_WEBHOOK_SECRET: '',
@@ -53,6 +54,16 @@ test('production readiness rejects missing private verification storage', () => 
   assert.match(result.output, /Stockage privé des justificatifs : aucune variable configurée/);
   assert.match(result.output, /Stockage privé des justificatifs : endpoint R2 absent/);
   assert.notEqual(result.status, 0);
+});
+
+test('production readiness requires a strong age-verification signing secret', () => {
+  const missingSecret = runReadinessCheck({ AGE_VERIFICATION_SECRET: '' });
+  assert.match(missingSecret.output, /AGE_VERIFICATION_SECRET est obligatoire/);
+  assert.notEqual(missingSecret.status, 0);
+
+  const weakSecret = runReadinessCheck({ AGE_VERIFICATION_SECRET: 'short' });
+  assert.match(weakSecret.output, /AGE_VERIFICATION_SECRET doit contenir au moins 32 caractères/);
+  assert.notEqual(weakSecret.status, 0);
 });
 
 test('production readiness rejects reusing the public media bucket for identity documents', () => {

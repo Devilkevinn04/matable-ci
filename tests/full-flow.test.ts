@@ -1538,6 +1538,40 @@ test('customer favorites and product likes are private, persistent, and toggleab
   });
   assert.equal(removedProductFavorite.payload.is_favorite, false);
 
+  const restoredProductFavorite = await apiFetch('/api/customer-engagement/favorites', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target_type: 'product', target_id: product.id }),
+  });
+  assert.equal(restoredProductFavorite.payload.is_favorite, true);
+  const restoredProductLike = await apiFetch(`/api/customer-engagement/products/${product.id}/like`, { method: 'POST' });
+  assert.equal(restoredProductLike.payload.is_liked, true);
+  const testDb = new Database(TEST_DB_PATH);
+  testDb.prepare('UPDATE products SET is_available = 0 WHERE id = ?').run(product.id);
+  testDb.close();
+  const unavailableFavorite = await apiFetch('/api/customer-engagement/favorites', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target_type: 'product', target_id: product.id }),
+  });
+  assert.equal(unavailableFavorite.response.status, 404);
+  const unavailableLike = await apiFetch(`/api/customer-engagement/products/${product.id}/like`, { method: 'POST' });
+  assert.equal(unavailableLike.response.status, 404);
+  const unavailableState = await apiFetch('/api/customer-engagement/state');
+  assert.equal(unavailableState.payload.favorite_product_ids.includes(product.id), false);
+  assert.equal(unavailableState.payload.liked_product_ids.includes(product.id), false);
+  const restoreDb = new Database(TEST_DB_PATH);
+  restoreDb.prepare('UPDATE products SET is_available = 1 WHERE id = ?').run(product.id);
+  restoreDb.close();
+  const cleanedUpFavorite = await apiFetch('/api/customer-engagement/favorites', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target_type: 'product', target_id: product.id }),
+  });
+  assert.equal(cleanedUpFavorite.payload.is_favorite, false);
+  const cleanedUpLike = await apiFetch(`/api/customer-engagement/products/${product.id}/like`, { method: 'POST' });
+  assert.equal(cleanedUpLike.payload.is_liked, false);
+
   const logout = await apiFetch('/api/auth/customer-logout', { method: 'POST' });
   assert.equal(logout.response.status, 200);
 });
@@ -1702,6 +1736,21 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   const publishedShop = publishedDirectory.payload.find((shop: any) => shop.id === shopId);
   assert.equal(publishedShop.is_verified, true);
   assert.equal('merchant_verification_status' in publishedShop, false);
+
+  const invalidVariantOrder = await apiFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shopId,
+      customer_name: 'Client vérification',
+      customer_phone: uniquePhone(),
+      delivery_location: 'Cocody Angré',
+      items: [{ product_id: productId, quantity: 1, selected_size: { value: 'M' } }],
+    }),
+  });
+  assert.equal(invalidVariantOrder.response.status, 400, JSON.stringify(invalidVariantOrder.payload));
+  const stockAfterInvalidVariant = await apiFetch(`/api/shops/${shopId}/products`);
+  assert.equal(stockAfterInvalidVariant.payload[0].stock, 6);
 
   const invalidOrderEmail = await apiFetch('/api/orders', {
     method: 'POST',

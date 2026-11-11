@@ -26,6 +26,8 @@ une adresse ; après déploiement, exécutez une fois sur le VPS :
 `docker exec matable-web node /app/scripts/send-email-mfa-rollout-notices.mjs`.
 Le suivi rend la commande idempotente. Les commerçants sans adresse ne peuvent
 pas recevoir cet avis et nécessitent un contact par un autre canal.
+L’adresse de facturation saisie pour un paiement GeniusPay ne remplace pas
+l’adresse propriétaire servant à la connexion et au MFA.
 
 Avant le démarrage en production, configurez dans l’environnement privé du
 serveur (sur le VPS Hostinger, `/srv/apps/matable/shared/app.env`) :
@@ -154,6 +156,7 @@ APP_URL="http://localhost:3000"
 TRUST_PROXY_HOPS="0"
 ADMIN_ACCESS_KEY="CHANGE_ME_ADMIN_KEY"
 VERIFICATION_ADMIN_ACCESS_KEY="CHANGE_ME_VERIFICATION_ADMIN_KEY"
+AGE_VERIFICATION_SECRET=""
 AD_EVENT_SIGNING_SECRET=""
 ADVERTISING_BETA_ENABLED="false"
 DIDIT_API_KEY=""
@@ -387,7 +390,7 @@ Le service Render décrit dans `render.yaml` exécute `npm ci --include=dev && n
 
 Vercel convient au frontend statique, mais ne doit pas héberger directement ce serveur Express avec une base locale. Une base PostgreSQL externe est nécessaire.
 
-Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `DATABASE_URL`, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` fortes, uniques et distinctes, `ADVERTISING_BETA_ENABLED=false`, les trois variables Didit et `TRUST_PROXY_HOPS` adapté au reverse proxy. Les cinq variables R2 (`R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_PUBLIC_BASE_URL`) sont facultatives au démarrage mais requises pour le téléversement d’images ; sans elles, l’interface bascule sur des images base64 compressées. `AD_EVENT_SIGNING_SECRET` est nécessaire uniquement si `ADVERTISING_BETA_ENABLED=true`; dans ce cas, configurez une clé forte, unique et d’au moins 32 caractères. Ne déverrouillez la bêta publicitaire qu’après les contrôles de préproduction décrits ci-dessus.
+Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `DATABASE_URL`, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` fortes, uniques et distinctes, `AGE_VERIFICATION_SECRET` forte, unique et d’au moins 32 caractères, `ADVERTISING_BETA_ENABLED=false`, les trois variables Didit et `TRUST_PROXY_HOPS` adapté au reverse proxy. Le contrôle d’âge demande une date de naissance déclarative, vérifiée côté serveur ; elle n’est pas stockée. Un jeton signé, limité à la boutique et valable 30 minutes, autorise temporairement l’accès au catalogue adulte et à la commande. Cette déclaration n’est pas une vérification d’identité. Les cinq variables R2 (`R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_PUBLIC_BASE_URL`) sont facultatives au démarrage mais requises pour le téléversement d’images ; sans elles, l’interface bascule sur des images base64 compressées. `AD_EVENT_SIGNING_SECRET` est nécessaire uniquement si `ADVERTISING_BETA_ENABLED=true`; dans ce cas, configurez une clé forte, unique et d’au moins 32 caractères. Ne déverrouillez la bêta publicitaire qu’après les contrôles de préproduction décrits ci-dessus.
 
 ## Build production
 

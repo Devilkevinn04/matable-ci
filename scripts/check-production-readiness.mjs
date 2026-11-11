@@ -96,6 +96,7 @@ if (databaseUrl && !/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
 
 const adminKey = checkSecret('ADMIN_ACCESS_KEY');
 const verificationKey = checkSecret('VERIFICATION_ADMIN_ACCESS_KEY');
+checkSecret('AGE_VERIFICATION_SECRET');
 if (adminKey && verificationKey && adminKey === verificationKey) {
   fail('ADMIN_ACCESS_KEY et VERIFICATION_ADMIN_ACCESS_KEY doivent être différentes.');
 }

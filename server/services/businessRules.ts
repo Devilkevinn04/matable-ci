@@ -98,7 +98,9 @@ export function getProductUnitPriceWithModifiers(product: ProductRecord, selecte
   for (const group of product.modifier_groups) {
     for (const option of group.options) {
       const label = typeof option === 'string' ? option : option.label;
-      if (selected.has(label)) modifierTotal += typeof option === 'string' ? 0 : Number(option.price_delta || 0);
+      if (selected.has(label) && typeof option !== 'string') {
+        modifierTotal += Number(option.price_delta || 0);
+      }
     }
   }
   return basePrice + modifierTotal;
@@ -108,10 +110,12 @@ export function getValidSelectedModifiers(product: ProductRecord, selectedModifi
   const selected = new Set(selectedModifiers.map((value) => value.trim()).filter(Boolean));
   const valid: string[] = [];
   for (const group of product.modifier_groups || []) {
-    const labels = group.options.map((option) => option.label).filter((label) => selected.has(label));
+    const labels = group.options
+      .map((option) => typeof option === 'string' ? option : option.label)
+      .filter((label, index, options) => selected.has(label) && options.indexOf(label) === index);
     valid.push(...labels.slice(0, Math.max(1, Number(group.max_selections || 1))));
   }
-  return valid;
+  return [...new Set(valid)];
 }
 
 export function normalizeWhatsAppPhone(phone: unknown): string | null {
