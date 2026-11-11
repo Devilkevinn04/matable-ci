@@ -787,7 +787,7 @@ export function AmbassadorDashboard() {
     <div id={`ambassador-panel-${activeTab}`} role="tabpanel" aria-labelledby={`ambassador-tab-${activeTab}`} tabIndex={0} className="mx-auto max-w-5xl space-y-7 px-4 pb-24 pt-5 outline-none sm:px-6 sm:pb-8 sm:pt-8">
       {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">{error}</p>}{notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">{notice}</p>}
       {activeTab === 'overview' && <>
-        <section aria-label="Vos résultats" className="grid grid-cols-2 gap-3 lg:grid-cols-4">{metrics.map(({ label, value, icon: Icon }) => <article key={label} className="ambassador-stat-card flex min-w-0 items-center gap-2 rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-[0_12px_30px_rgba(15,23,42,0.04)] sm:gap-3 sm:p-4"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#eaf7f3] text-emerald-900 sm:h-11 sm:w-11"><Icon className="h-5 w-5" /></span><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-500 sm:text-[11px] sm:tracking-[0.12em]">{label}</p><p className="mt-1 text-lg font-black tabular-nums text-slate-950 sm:text-xl">{label === 'Primes versées' ? (showAmounts ? value : '••••') : Number(value) || 0}</p></div></article>)}</section>
+        <section aria-label="Vos résultats" className="grid grid-cols-2 gap-3 lg:grid-cols-4">{metrics.map(({ label, value, icon: Icon }) => <article key={label} className="ambassador-stat-card flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-[0_12px_30px_rgba(15,23,42,0.04)] sm:flex-row sm:items-center sm:gap-3 sm:p-4"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#eaf7f3] text-emerald-900 sm:h-11 sm:w-11"><Icon className="h-5 w-5" /></span><div className="w-full min-w-0"><p className="break-words text-[10px] font-black uppercase tracking-[0.04em] text-slate-500 sm:text-[11px] sm:tracking-[0.12em]">{label}</p><p className="mt-1 text-lg font-black tabular-nums text-slate-950 sm:text-xl">{label === 'Primes versées' ? (showAmounts ? value : '••••') : Number(value) || 0}</p></div></article>)}</section>
         <section aria-labelledby="commission-summary-title" className="ambassador-panel grid gap-3 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)] sm:grid-cols-3"><h2 id="commission-summary-title" className="sr-only">État des commissions</h2><p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">En vérification <strong className="ml-1 text-slate-950">{formatAmount(numericSummary?.pending_commissions)}</strong></p><p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">Validées, à retirer <strong className="ml-1 text-slate-950">{formatAmount(numericSummary?.available_commissions)}</strong></p><p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">Total des primes générées <strong className="ml-1 text-slate-950">{formatAmount(numericSummary?.total_commissions)}</strong></p><p className="text-xs leading-5 text-slate-500 sm:col-span-3">Une prime est unique et concerne le premier abonnement payé. Elle devient retirable après confirmation, publication et vérification.</p></section>
         <section aria-labelledby="ambassador-statistics-title" className="ambassador-panel space-y-4 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
           <div><h2 id="ambassador-statistics-title" className="text-lg font-black text-slate-950">Vos statistiques</h2><p className="mt-1 text-xs leading-5 text-slate-500">Conversions calculées sur les boutiques attribuées à votre code, tous historiques confondus.</p></div>
@@ -795,50 +795,58 @@ export function AmbassadorDashboard() {
             <article className="rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Boutiques publiées</p><p className="mt-1 text-2xl font-black text-slate-950">{referralCount ? `${publishedRate} %` : '—'}</p><p className="mt-1 text-xs text-slate-600">{publishedCount} publiée(s) sur {referralCount} inscription(s) attribuée(s)</p></article>
             <article className="rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Commerçants payants</p><p className="mt-1 text-2xl font-black text-slate-950">{referralCount ? `${payingRate} %` : '—'}</p><p className="mt-1 text-xs text-slate-600">{payingCount} paiement(s) confirmé(s) sur {referralCount} inscription(s) attribuée(s)</p></article>
           </div>
-          <p className="text-xs leading-5 text-slate-500">Les inscriptions correspondent aux boutiques créées avec attribution confirmée. Les visites du lien sont comptées séparément, sans identifier les visiteurs.</p>
-          <div className="grid gap-3 lg:grid-cols-2">
-            <AmbassadorMonthlyChart
-              title="Inscriptions attribuées — 6 derniers mois"
-              rows={monthlyStats}
-              valueFor={(row) => row.registrations}
-              formatValue={(value) => `${value} inscription${value > 1 ? 's' : ''}`}
-            />
-            <AmbassadorMonthlyChart
-              title="Primes versées — 6 derniers mois"
-              rows={monthlyStats}
-              valueFor={(row) => row.paidAmount}
-              formatValue={money}
-              concealed={!showAmounts}
-            />
-          </div>
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-labelledby="ambassador-cohorts-title">
-            <div className="border-b border-slate-100 p-4">
-              <h3 id="ambassador-cohorts-title" className="text-sm font-bold text-slate-900">Suivi des inscriptions par mois</h3>
-              <p className="mt-1 text-xs leading-5 text-slate-500">Pour chaque mois d’inscription, état actuel des boutiques attribuées — ce tableau ne date pas les conversions.</p>
+          <details className="rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+            <summary className="min-h-11 cursor-pointer py-2 text-sm font-bold text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-800">
+              Voir l’évolution et le détail par mois
+            </summary>
+            <div className="mt-3 space-y-4">
+              <p className="text-xs leading-5 text-slate-500">Les inscriptions correspondent aux boutiques créées avec attribution confirmée. Les visites du lien sont comptées séparément, sans identifier les visiteurs.</p>
+              <div className="grid gap-3 lg:grid-cols-2">
+                <AmbassadorMonthlyChart
+                  title="Inscriptions attribuées — 6 derniers mois"
+                  rows={monthlyStats}
+                  valueFor={(row) => row.registrations}
+                  formatValue={(value) => `${value} inscription${value > 1 ? 's' : ''}`}
+                />
+                <AmbassadorMonthlyChart
+                  title="Primes versées — 6 derniers mois"
+                  rows={monthlyStats}
+                  valueFor={(row) => row.paidAmount}
+                  formatValue={money}
+                  concealed={!showAmounts}
+                />
+              </div>
+              <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-labelledby="ambassador-cohorts-title">
+                <div className="border-b border-slate-100 p-4">
+                  <h3 id="ambassador-cohorts-title" className="text-sm font-bold text-slate-900">Suivi des inscriptions par mois</h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">Pour chaque mois d’inscription, état actuel des boutiques attribuées — ce tableau ne date pas les conversions.</p>
+                </div>
+                <p className="px-4 pb-3 text-[11px] text-slate-500 sm:hidden">Faites glisser le tableau horizontalement pour voir toutes les colonnes.</p>
+                <div className="overflow-x-auto" role="region" aria-label="Tableau de suivi des inscriptions par mois" tabIndex={0}>
+                  <table className="w-full min-w-[32rem] text-left text-xs">
+                    <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th scope="col" className="px-4 py-3 font-bold">Mois d’inscription</th>
+                        <th scope="col" className="px-4 py-3 text-right font-bold">Attribuées</th>
+                        <th scope="col" className="px-4 py-3 text-right font-bold">Publiées (état actuel)</th>
+                        <th scope="col" className="px-4 py-3 text-right font-bold">Payantes (état actuel)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {monthlyStats.map((row) => (
+                        <tr key={row.month}>
+                          <th scope="row" className="whitespace-nowrap px-4 py-3 font-semibold capitalize text-slate-800">{row.label}</th>
+                          <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.registrations}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.published}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.paying}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[32rem] text-left text-xs">
-                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th scope="col" className="px-4 py-3 font-bold">Mois d’inscription</th>
-                    <th scope="col" className="px-4 py-3 text-right font-bold">Attribuées</th>
-                    <th scope="col" className="px-4 py-3 text-right font-bold">Publiées (état actuel)</th>
-                    <th scope="col" className="px-4 py-3 text-right font-bold">Payantes (état actuel)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {monthlyStats.map((row) => (
-                    <tr key={row.month}>
-                      <th scope="row" className="whitespace-nowrap px-4 py-3 font-semibold capitalize text-slate-800">{row.label}</th>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.registrations}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.published}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.paying}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          </details>
         </section>
         <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setActiveTab('withdrawals')} className="ambassador-primary-btn min-h-10 rounded-xl bg-[#123b32] px-4 text-sm font-bold text-white shadow-[0_12px_28px_rgba(18,59,50,0.18)]">Voir mes retraits</button><button type="button" onClick={() => setActiveTab('sharing')} className="ambassador-secondary-btn min-h-10 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800">Partager mon lien</button></div>
       </>}
@@ -847,7 +855,7 @@ export function AmbassadorDashboard() {
           <div><p className="text-[11px] font-black uppercase tracking-[0.15em] text-emerald-800">Faire connaître MaTable</p><h2 id="referral-title" className="mt-2 text-xl font-black text-slate-950">Votre lien et ses résultats</h2><p className="mt-1 text-sm text-slate-600">Copiez votre lien ou partagez-le. Vous pouvez ajouter votre propre message.</p></div>
           <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
             Période
-            <select value={selectedRange} onChange={(event) => setSelectedRange(event.target.value as typeof selectedRange)} className="min-h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800">
+            <select value={selectedRange} onChange={(event) => setSelectedRange(event.target.value as typeof selectedRange)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800">
               <option value="today">Aujourd’hui</option>
               <option value="7d">7 derniers jours</option>
               <option value="30d">30 derniers jours</option>
@@ -866,7 +874,17 @@ export function AmbassadorDashboard() {
           </label>
           <p className="text-xs text-slate-500 sm:pb-3">Les statistiques se mettent à jour avec les dates choisies.</p>
         </div>}
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-emerald-900/15 bg-[#ebfaf5] px-4 py-4 sm:px-5">
+          <h3 className="text-sm font-black text-emerald-950">Votre lien de recommandation</h3>
+          <p className="mt-2 break-all text-sm font-semibold text-emerald-950">{referralUrl}</p>
+          <p className="mt-2 text-xs text-emerald-800">Code personnel : <strong>{dashboard.ambassador.code}</strong></p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" onClick={() => void shareReferralLink()} className="ambassador-primary-btn inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#123b32] px-3 text-sm font-bold text-white"><MessageCircle className="h-4 w-4" />Partager le lien</button>
+            <button type="button" onClick={() => void copyReferralLink()} className="ambassador-secondary-btn inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le lien</button>
+            <button type="button" onClick={() => void copyReferralCode()} className="ambassador-secondary-btn inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le code</button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Visites du lien</p>
             <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{linkStatsLoading ? '…' : new Intl.NumberFormat('fr-FR').format(rangeStats.total_clicks)}</p>
@@ -883,6 +901,11 @@ export function AmbassadorDashboard() {
             <p className="mt-1 text-[11px] text-slate-500">Inscriptions attribuées ÷ visites du lien</p>
           </article>
         </div>
+        <details className="rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+          <summary className="min-h-11 cursor-pointer py-2 text-sm font-bold text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-800">
+            Voir le détail des visites et l’activité récente
+          </summary>
+          <div className="mt-3 space-y-5">
         <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -895,7 +918,8 @@ export function AmbassadorDashboard() {
             <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-sky-600" aria-hidden="true" />Visites du lien</span>
             <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-700" aria-hidden="true" />Boutiques inscrites avec votre code ou lien</span>
           </div>
-          <div className="mt-3 max-h-80 overflow-auto rounded-xl border border-slate-200 bg-white">
+          <p className="mt-2 text-[11px] text-slate-500 sm:hidden">Faites glisser le tableau horizontalement pour voir toutes les colonnes.</p>
+          <div className="mt-3 max-h-80 overflow-auto rounded-xl border border-slate-200 bg-white" role="region" aria-label="Détail des visites et inscriptions par jour" tabIndex={0}>
             <table className="w-full min-w-[30rem] border-collapse text-left text-xs">
               <caption className="sr-only">Visites du lien et inscriptions attribuées par jour · {selectedPeriodDescription}</caption>
               <thead className="sticky top-0 bg-slate-100 text-[10px] font-black uppercase tracking-[0.08em] text-slate-600">
@@ -934,16 +958,8 @@ export function AmbassadorDashboard() {
             ))}
           </div>
         </section>
-        <div className="rounded-2xl border border-emerald-900/15 bg-[#ebfaf5] px-4 py-5 sm:px-5">
-          <h3 className="text-sm font-black text-emerald-950">Votre lien de recommandation</h3>
-          <p className="mt-2 break-all text-sm font-semibold text-emerald-950">{referralUrl}</p>
-          <p className="mt-2 text-xs text-emerald-800">Code personnel : <strong>{dashboard.ambassador.code}</strong></p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" onClick={() => void shareReferralLink()} className="ambassador-primary-btn inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#123b32] px-3 text-sm font-bold text-white"><MessageCircle className="h-4 w-4" />Partager le lien</button>
-            <button type="button" onClick={() => void copyReferralLink()} className="ambassador-secondary-btn inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le lien</button>
-            <button type="button" onClick={() => void copyReferralCode()} className="ambassador-secondary-btn inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-900/25 bg-white px-3 text-sm font-bold text-emerald-950"><Copy className="h-4 w-4" />Copier le code</button>
           </div>
-        </div>
+        </details>
       </section>}
       <section data-ambassador-panel="withdrawals" aria-labelledby="withdrawal-request-title" className="ambassador-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
         <div>
