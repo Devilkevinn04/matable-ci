@@ -795,51 +795,58 @@ export function AmbassadorDashboard() {
             <article className="rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Boutiques publiées</p><p className="mt-1 text-2xl font-black text-slate-950">{referralCount ? `${publishedRate} %` : '—'}</p><p className="mt-1 text-xs text-slate-600">{publishedCount} publiée(s) sur {referralCount} inscription(s) attribuée(s)</p></article>
             <article className="rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Commerçants payants</p><p className="mt-1 text-2xl font-black text-slate-950">{referralCount ? `${payingRate} %` : '—'}</p><p className="mt-1 text-xs text-slate-600">{payingCount} paiement(s) confirmé(s) sur {referralCount} inscription(s) attribuée(s)</p></article>
           </div>
-          <p className="text-xs leading-5 text-slate-500">Les inscriptions correspondent aux boutiques créées avec attribution confirmée. Les visites du lien sont comptées séparément, sans identifier les visiteurs.</p>
-          <div className="grid gap-3 lg:grid-cols-2">
-            <AmbassadorMonthlyChart
-              title="Inscriptions attribuées — 6 derniers mois"
-              rows={monthlyStats}
-              valueFor={(row) => row.registrations}
-              formatValue={(value) => `${value} inscription${value > 1 ? 's' : ''}`}
-            />
-            <AmbassadorMonthlyChart
-              title="Primes versées — 6 derniers mois"
-              rows={monthlyStats}
-              valueFor={(row) => row.paidAmount}
-              formatValue={money}
-              concealed={!showAmounts}
-            />
-          </div>
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-labelledby="ambassador-cohorts-title">
-            <div className="border-b border-slate-100 p-4">
-              <h3 id="ambassador-cohorts-title" className="text-sm font-bold text-slate-900">Suivi des inscriptions par mois</h3>
-              <p className="mt-1 text-xs leading-5 text-slate-500">Pour chaque mois d’inscription, état actuel des boutiques attribuées — ce tableau ne date pas les conversions.</p>
+          <details className="rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+            <summary className="min-h-11 cursor-pointer py-2 text-sm font-bold text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-800">
+              Voir l’évolution et le détail par mois
+            </summary>
+            <div className="mt-3 space-y-4">
+              <p className="text-xs leading-5 text-slate-500">Les inscriptions correspondent aux boutiques créées avec attribution confirmée. Les visites du lien sont comptées séparément, sans identifier les visiteurs.</p>
+              <div className="grid gap-3 lg:grid-cols-2">
+                <AmbassadorMonthlyChart
+                  title="Inscriptions attribuées — 6 derniers mois"
+                  rows={monthlyStats}
+                  valueFor={(row) => row.registrations}
+                  formatValue={(value) => `${value} inscription${value > 1 ? 's' : ''}`}
+                />
+                <AmbassadorMonthlyChart
+                  title="Primes versées — 6 derniers mois"
+                  rows={monthlyStats}
+                  valueFor={(row) => row.paidAmount}
+                  formatValue={money}
+                  concealed={!showAmounts}
+                />
+              </div>
+              <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-labelledby="ambassador-cohorts-title">
+                <div className="border-b border-slate-100 p-4">
+                  <h3 id="ambassador-cohorts-title" className="text-sm font-bold text-slate-900">Suivi des inscriptions par mois</h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">Pour chaque mois d’inscription, état actuel des boutiques attribuées — ce tableau ne date pas les conversions.</p>
+                </div>
+                <p className="px-4 pb-3 text-[11px] text-slate-500 sm:hidden">Faites glisser le tableau horizontalement pour voir toutes les colonnes.</p>
+                <div className="overflow-x-auto" role="region" aria-label="Tableau de suivi des inscriptions par mois" tabIndex={0}>
+                  <table className="w-full min-w-[32rem] text-left text-xs">
+                    <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th scope="col" className="px-4 py-3 font-bold">Mois d’inscription</th>
+                        <th scope="col" className="px-4 py-3 text-right font-bold">Attribuées</th>
+                        <th scope="col" className="px-4 py-3 text-right font-bold">Publiées (état actuel)</th>
+                        <th scope="col" className="px-4 py-3 text-right font-bold">Payantes (état actuel)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {monthlyStats.map((row) => (
+                        <tr key={row.month}>
+                          <th scope="row" className="whitespace-nowrap px-4 py-3 font-semibold capitalize text-slate-800">{row.label}</th>
+                          <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.registrations}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.published}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.paying}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
             </div>
-            <p className="px-4 pb-3 text-[11px] text-slate-500 sm:hidden">Faites glisser le tableau horizontalement pour voir toutes les colonnes.</p>
-            <div className="overflow-x-auto" role="region" aria-label="Tableau de suivi des inscriptions par mois" tabIndex={0}>
-              <table className="w-full min-w-[32rem] text-left text-xs">
-                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th scope="col" className="px-4 py-3 font-bold">Mois d’inscription</th>
-                    <th scope="col" className="px-4 py-3 text-right font-bold">Attribuées</th>
-                    <th scope="col" className="px-4 py-3 text-right font-bold">Publiées (état actuel)</th>
-                    <th scope="col" className="px-4 py-3 text-right font-bold">Payantes (état actuel)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {monthlyStats.map((row) => (
-                    <tr key={row.month}>
-                      <th scope="row" className="whitespace-nowrap px-4 py-3 font-semibold capitalize text-slate-800">{row.label}</th>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.registrations}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.published}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.paying}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          </details>
         </section>
         <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setActiveTab('withdrawals')} className="ambassador-primary-btn min-h-10 rounded-xl bg-[#123b32] px-4 text-sm font-bold text-white shadow-[0_12px_28px_rgba(18,59,50,0.18)]">Voir mes retraits</button><button type="button" onClick={() => setActiveTab('sharing')} className="ambassador-secondary-btn min-h-10 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800">Partager mon lien</button></div>
       </>}
