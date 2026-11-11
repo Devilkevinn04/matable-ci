@@ -874,6 +874,10 @@ button, a, summary, [role="tab"] {
   animation: mt-page-enter 420ms var(--mt-motion-ease-entrance) both;
 }
 
+.app-shell > main.ambassador-dashboard {
+  animation: mt-page-fade 420ms var(--mt-motion-ease-entrance) both;
+}
+
 .app-shell > .admin-dashboard {
   animation: mt-page-fade 420ms var(--mt-motion-ease-entrance) both;
 }
