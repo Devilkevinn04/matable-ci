@@ -6,6 +6,9 @@ import pg from 'pg';
 const { Pool } = pg;
 const usePostgres = process.env.NODE_ENV === 'production';
 export const databaseMode = usePostgres ? 'postgresql' : 'sqlite';
+export const ANALYTICS_EVENT_DEDUPLICATION_INDEX_SQL = `CREATE UNIQUE INDEX IF NOT EXISTS idx_analytics_events_dedup
+  ON analytics_events (COALESCE(shop_id, 0), event_type, session_id, path, substr(created_at, 1, 10))
+  WHERE event_type IN ('page_view', 'product_view', 'login', 'signup')`;
 
 const postgresPool = usePostgres
   ? new Pool({ connectionString: process.env.DATABASE_URL, max: Number(process.env.PG_POOL_MAX || 10) })
@@ -32,6 +35,9 @@ const sqliteSchema = `
     publication_status TEXT NOT NULL DEFAULT 'draft', featured_until TEXT,
     payment_status TEXT NOT NULL DEFAULT 'approved', payment_deadline_at TEXT,
     merchant_verification_status TEXT NOT NULL DEFAULT 'not_required',
+    business_verification_status TEXT NOT NULL DEFAULT 'pending',
+    identity_verification_status TEXT NOT NULL DEFAULT 'pending',
+    business_verification_method TEXT, identity_verification_method TEXT,
     selected_subscription_tier TEXT, subscription_expires_at TEXT,
     pending_subscription_tier TEXT, pending_subscription_effective_at TEXT,
     subscription_cancel_at TEXT, subscription_admin_suspended_at TEXT,
@@ -54,6 +60,29 @@ const sqliteSchema = `
     privacy_document TEXT NOT NULL,
     accepted_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS merchant_verification_consents (
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    consent_version TEXT NOT NULL,
+    consent_at TEXT NOT NULL,
+    PRIMARY KEY (shop_id, consent_version)
+  );
+  CREATE TABLE IF NOT EXISTS merchant_verification_documents (
+    id TEXT PRIMARY KEY,
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    document_type TEXT NOT NULL CHECK (document_type IN ('storefront', 'interior', 'products', 'identity_front', 'identity_back', 'identity_passport')),
+    object_key TEXT NOT NULL UNIQUE,
+    upload_key TEXT,
+    upload_expires_at TEXT,
+    content_type TEXT NOT NULL CHECK (content_type IN ('image/jpeg', 'image/png', 'image/webp')),
+    file_size INTEGER NOT NULL CHECK (file_size > 0 AND file_size <= 10485760),
+    status TEXT NOT NULL DEFAULT 'pending_upload' CHECK (status IN ('pending_upload', 'available')),
+    created_at TEXT NOT NULL,
+    expires_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_merchant_verification_documents_shop_type
+    ON merchant_verification_documents(shop_id, document_type, status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_merchant_verification_documents_expiry
+    ON merchant_verification_documents(expires_at) WHERE expires_at IS NOT NULL;
   CREATE TABLE IF NOT EXISTS subscription_email_reminder_deliveries (
     shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
     expires_at TEXT NOT NULL, days_before INTEGER NOT NULL, attempted_at TEXT NOT NULL,
@@ -528,6 +557,8 @@ function migrateSqlite(connection: Database.Database) {
     if (!columns(table).some((column) => column.name === name)) connection.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
   };
 
+  addColumn('merchant_verification_documents', 'upload_key', 'TEXT');
+  addColumn('merchant_verification_documents', 'upload_expires_at', 'TEXT');
   const hadPublicationStatus = columns('shops').some((column) => column.name === 'publication_status');
   addColumn('shops', 'publication_status', "TEXT NOT NULL DEFAULT 'draft'");
   addColumn('shops', 'featured_until', 'TEXT');
@@ -543,6 +574,22 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('shops', 'payment_status', "TEXT DEFAULT 'approved'");
   addColumn('shops', 'payment_deadline_at', 'TEXT');
   addColumn('shops', 'merchant_verification_status', "TEXT NOT NULL DEFAULT 'not_required'");
+  addColumn('shops', 'business_verification_status', "TEXT NOT NULL DEFAULT 'pending'");
+  addColumn('shops', 'identity_verification_status', "TEXT NOT NULL DEFAULT 'pending'");
+  addColumn('shops', 'business_verification_method', 'TEXT');
+  addColumn('shops', 'identity_verification_method', 'TEXT');
+  connection.exec(`UPDATE shops SET
+    identity_verification_status = CASE merchant_verification_status
+      WHEN 'verified' THEN 'approved'
+      WHEN 'under_review' THEN 'under_review'
+      WHEN 'rejected' THEN 'action_required'
+      WHEN 'not_required' THEN 'not_submitted'
+      ELSE 'pending'
+    END,
+    identity_verification_method = CASE WHEN merchant_verification_status IN ('not_required', 'pending') THEN NULL ELSE 'didit' END
+    WHERE identity_verification_method IS NULL`);
+  connection.exec('CREATE INDEX IF NOT EXISTS idx_shops_business_verification_status ON shops(business_verification_status, created_at DESC)');
+  connection.exec('CREATE INDEX IF NOT EXISTS idx_shops_identity_verification_status ON shops(identity_verification_status, created_at DESC)');
   addColumn('shops', 'selected_subscription_tier', 'TEXT');
   addColumn('shops', 'subscription_status', "TEXT NOT NULL DEFAULT 'active'");
   addColumn('shops', 'trial_start', 'TEXT');
@@ -723,6 +770,24 @@ function migrateSqlite(connection: Database.Database) {
         .run(analyticsAudienceBackfillName, new Date().toISOString());
     })();
   }
+  const analyticsDeduplicationMigrationName = 'analytics_event_deduplication_v1';
+  const analyticsDeduplicationMigrationApplied = connection.prepare(
+    'SELECT name FROM didit_schema_migrations WHERE name = ?',
+  ).get(analyticsDeduplicationMigrationName);
+  if (!analyticsDeduplicationMigrationApplied) {
+    connection.transaction(() => {
+      connection.exec(`DELETE FROM analytics_events
+        WHERE event_type IN ('page_view', 'product_view', 'login', 'signup')
+          AND id NOT IN (
+            SELECT MIN(id) FROM analytics_events
+            WHERE event_type IN ('page_view', 'product_view', 'login', 'signup')
+            GROUP BY COALESCE(shop_id, 0), event_type, session_id, path, substr(created_at, 1, 10)
+          )`);
+      connection.exec(ANALYTICS_EVENT_DEDUPLICATION_INDEX_SQL);
+      connection.prepare('INSERT INTO didit_schema_migrations (name, applied_at) VALUES (?, ?)')
+        .run(analyticsDeduplicationMigrationName, new Date().toISOString());
+    })();
+  }
   const ambassadorLinkClickBackfillName = 'ambassador_link_click_events_v1';
   const ambassadorLinkClickBackfillApplied = connection.prepare(
     'SELECT name FROM didit_schema_migrations WHERE name = ?',
@@ -783,6 +848,8 @@ function migrateLegacyKyc(connection: Database.Database) {
   if (applied) return;
   connection.transaction(() => {
     connection.exec(`UPDATE shops SET merchant_verification_status = 'pending',
+      business_verification_status = 'pending', identity_verification_status = 'pending',
+      business_verification_method = NULL, identity_verification_method = NULL,
       publication_status = CASE WHEN is_active = 0 THEN 'suspended' ELSE 'draft' END`);
     connection.exec('DROP TABLE IF EXISTS merchant_identity_verifications');
     connection.prepare('INSERT INTO didit_schema_migrations (name, applied_at) VALUES (?, ?)').run(migrationName, new Date().toISOString());
@@ -797,6 +864,9 @@ export const postgresMigrations = [
     publication_status TEXT NOT NULL DEFAULT 'draft', featured_until TEXT,
     payment_status TEXT NOT NULL DEFAULT 'approved', payment_deadline_at TEXT,
     merchant_verification_status TEXT NOT NULL DEFAULT 'not_required',
+    business_verification_status TEXT NOT NULL DEFAULT 'pending',
+    identity_verification_status TEXT NOT NULL DEFAULT 'pending',
+    business_verification_method TEXT, identity_verification_method TEXT,
     selected_subscription_tier TEXT, subscription_expires_at TEXT,
     pending_subscription_tier TEXT, pending_subscription_effective_at TEXT,
     subscription_cancel_at TEXT, subscription_admin_suspended_at TEXT,
@@ -1186,6 +1256,22 @@ export const postgresMigrations = [
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE shops ADD COLUMN IF NOT EXISTS merchant_verification_status TEXT NOT NULL DEFAULT 'not_required'",
+  "ALTER TABLE shops ADD COLUMN IF NOT EXISTS business_verification_status TEXT NOT NULL DEFAULT 'pending'",
+  "ALTER TABLE shops ADD COLUMN IF NOT EXISTS identity_verification_status TEXT NOT NULL DEFAULT 'pending'",
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS business_verification_method TEXT',
+  'ALTER TABLE shops ADD COLUMN IF NOT EXISTS identity_verification_method TEXT',
+  `UPDATE shops SET
+    identity_verification_status = CASE merchant_verification_status
+      WHEN 'verified' THEN 'approved'
+      WHEN 'under_review' THEN 'under_review'
+      WHEN 'rejected' THEN 'action_required'
+      WHEN 'not_required' THEN 'not_submitted'
+      ELSE 'pending'
+    END,
+    identity_verification_method = CASE WHEN merchant_verification_status IN ('not_required', 'pending') THEN NULL ELSE 'didit' END
+    WHERE identity_verification_method IS NULL`,
+  'CREATE INDEX IF NOT EXISTS idx_shops_business_verification_status ON shops(business_verification_status, created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_shops_identity_verification_status ON shops(identity_verification_status, created_at DESC)',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS publication_status TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS featured_until TEXT',
   'ALTER TABLE shops ADD COLUMN IF NOT EXISTS email_subscription_reminders_enabled INTEGER NOT NULL DEFAULT 0',
@@ -1223,6 +1309,27 @@ export const postgresMigrations = [
   'ALTER TABLE didit_verification_sessions ADD COLUMN IF NOT EXISTS decision_fetched_at TEXT',
   'CREATE INDEX IF NOT EXISTS idx_didit_sessions_shop_created ON didit_verification_sessions(shop_id, created_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_didit_sessions_created ON didit_verification_sessions(created_at)',
+  `CREATE TABLE IF NOT EXISTS merchant_verification_consents (
+    shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    consent_version TEXT NOT NULL, consent_at TEXT NOT NULL,
+    PRIMARY KEY (shop_id, consent_version)
+  )`,
+  `CREATE TABLE IF NOT EXISTS merchant_verification_documents (
+    id TEXT PRIMARY KEY,
+    shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    document_type TEXT NOT NULL CHECK (document_type IN ('storefront', 'interior', 'products', 'identity_front', 'identity_back', 'identity_passport')),
+    object_key TEXT NOT NULL UNIQUE,
+    upload_key TEXT,
+    upload_expires_at TEXT,
+    content_type TEXT NOT NULL CHECK (content_type IN ('image/jpeg', 'image/png', 'image/webp')),
+    file_size INTEGER NOT NULL CHECK (file_size > 0 AND file_size <= 10485760),
+    status TEXT NOT NULL DEFAULT 'pending_upload' CHECK (status IN ('pending_upload', 'available')),
+    created_at TEXT NOT NULL, expires_at TEXT
+  )`,
+  'ALTER TABLE merchant_verification_documents ADD COLUMN IF NOT EXISTS upload_key TEXT',
+  'ALTER TABLE merchant_verification_documents ADD COLUMN IF NOT EXISTS upload_expires_at TEXT',
+  'CREATE INDEX IF NOT EXISTS idx_merchant_verification_documents_shop_type ON merchant_verification_documents(shop_id, document_type, status, created_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_merchant_verification_documents_expiry ON merchant_verification_documents(expires_at) WHERE expires_at IS NOT NULL',
   'CREATE TABLE IF NOT EXISTS didit_webhook_events (event_id TEXT PRIMARY KEY, received_at TEXT NOT NULL)',
   `CREATE TABLE IF NOT EXISTS shop_acquisitions (
     shop_id BIGINT PRIMARY KEY REFERENCES shops(id) ON DELETE CASCADE,
@@ -1514,9 +1621,30 @@ export async function initializeDatabase() {
       const migration = await client.query('SELECT name FROM didit_schema_migrations WHERE name = $1', [migrationName]);
       if (migration.rowCount === 0) {
         await client.query(`UPDATE shops SET merchant_verification_status = 'pending',
+          business_verification_status = 'pending', identity_verification_status = 'pending',
+          business_verification_method = NULL, identity_verification_method = NULL,
           publication_status = CASE WHEN is_active = 0 THEN 'suspended' ELSE 'draft' END`);
         await client.query('DROP TABLE IF EXISTS merchant_identity_verifications');
         await client.query('INSERT INTO didit_schema_migrations (name, applied_at) VALUES ($1, $2)', [migrationName, new Date().toISOString()]);
+      }
+      const analyticsDeduplicationMigrationName = 'analytics_event_deduplication_v1';
+      const analyticsDeduplicationMigration = await client.query(
+        'SELECT name FROM didit_schema_migrations WHERE name = $1',
+        [analyticsDeduplicationMigrationName],
+      );
+      if (analyticsDeduplicationMigration.rowCount === 0) {
+        await client.query(`DELETE FROM analytics_events
+          WHERE event_type IN ('page_view', 'product_view', 'login', 'signup')
+            AND id NOT IN (
+              SELECT MIN(id) FROM analytics_events
+              WHERE event_type IN ('page_view', 'product_view', 'login', 'signup')
+              GROUP BY COALESCE(shop_id, 0), event_type, session_id, path, substr(created_at, 1, 10)
+            )`);
+        await client.query(ANALYTICS_EVENT_DEDUPLICATION_INDEX_SQL);
+        await client.query(
+          'INSERT INTO didit_schema_migrations (name, applied_at) VALUES ($1, $2)',
+          [analyticsDeduplicationMigrationName, new Date().toISOString()],
+        );
       }
       await client.query('COMMIT');
     } catch (error) {

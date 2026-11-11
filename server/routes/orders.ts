@@ -5,6 +5,7 @@ import { mapProductRow } from '../repositories/products.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import type { OrderRecord, ProductRecord, ShopRecord } from '../types.ts';
 import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
+import { isAgeVerificationTokenValid } from '../services/ageVerification.ts';
 import { normalizeAnalyticsCampaign } from '../../src/utils/analyticsAttribution.ts';
 import {
   dispatchStockTransitionPush,
@@ -176,7 +177,27 @@ export function createOrderRouter({
           if (!product) {
             throw Object.assign(new Error(`Article #${productId} introuvable dans le catalogue.`), { statusCode: 400 });
           }
-          if (!req.body?.age_confirmed && isAgeRestrictedProduct(product)) {
+          const selectedSize = item.selected_size;
+          if (selectedSize !== undefined && selectedSize !== null && typeof selectedSize !== 'string') {
+            throw Object.assign(new Error(`Taille invalide pour "${product.title}".`), { statusCode: 400, product_id: product.id });
+          }
+          const normalizedSize = typeof selectedSize === 'string' ? selectedSize.trim() : '';
+          if (normalizedSize && !product.sizes?.includes(normalizedSize)) {
+            throw Object.assign(new Error(`Taille indisponible pour "${product.title}".`), { statusCode: 400, product_id: product.id });
+          }
+          const selectedColor = item.selected_color;
+          if (selectedColor !== undefined && selectedColor !== null && typeof selectedColor !== 'string') {
+            throw Object.assign(new Error(`Couleur invalide pour "${product.title}".`), { statusCode: 400, product_id: product.id });
+          }
+          const normalizedColor = typeof selectedColor === 'string' ? selectedColor.trim() : '';
+          const colorOptions = Array.isArray(product.colors)
+            ? product.colors.map((color) => typeof color === 'string' ? color : color.name)
+            : [];
+          if (normalizedColor && !colorOptions.includes(normalizedColor)) {
+            throw Object.assign(new Error(`Couleur indisponible pour "${product.title}".`), { statusCode: 400, product_id: product.id });
+          }
+          if (isAgeRestrictedProduct(product)
+            && !isAgeVerificationTokenValid(req.body?.age_verification_token, shop.id)) {
             throw Object.assign(new Error('Une confirmation de majorité est requise pour commander ces produits.'), { statusCode: 403 });
           }
           const stockQuantity = reservedProductIds.has(product.id) ? 0 : (requestedQuantities.get(product.id) || 0);
@@ -201,6 +222,11 @@ export function createOrderRouter({
             reservedProductIds.add(product.id);
           }
 
+          if (item.selected_modifiers !== undefined
+            && (!Array.isArray(item.selected_modifiers)
+              || item.selected_modifiers.some((modifier: unknown) => typeof modifier !== 'string'))) {
+            throw Object.assign(new Error(`Options invalides pour "${product.title}".`), { statusCode: 400, product_id: product.id });
+          }
           const selectedModifiers = Array.isArray(item.selected_modifiers) ? item.selected_modifiers : [];
           const validSelectedModifiers = getValidSelectedModifiers(product, selectedModifiers);
           for (const group of product.modifier_groups || []) {
@@ -218,8 +244,8 @@ export function createOrderRouter({
             product_title: product.title,
             quantity: Number(item.quantity),
             unit_price: unitPrice,
-            selected_size: item.selected_size,
-            selected_color: item.selected_color,
+            selected_size: normalizedSize || undefined,
+            selected_color: normalizedColor || undefined,
             selected_modifiers: validSelectedModifiers,
           });
         }

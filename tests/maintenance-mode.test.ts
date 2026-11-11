@@ -24,6 +24,10 @@ test('blocks public pages and customer or merchant APIs during maintenance', () 
   }
 });
 
+test('allows admin MFA verification during maintenance', () => {
+  assert.equal(isMaintenanceExemptRequest({ path: '/api/auth/admin-login/verify', method: 'POST' }), true);
+});
+
 test('returns a private 503 maintenance page and escapes its configured message', async () => {
   let responseStatus = 0;
   let responseBody = '';

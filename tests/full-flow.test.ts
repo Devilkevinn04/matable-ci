@@ -795,6 +795,7 @@ test('super-admin can grant, revoke, and clear a temporary subscription override
     .run('Boutique Dérogation', `derogation-${randomUUID()}`, uniquePhone(),
       'test-pin-hash', new Date().toISOString(), 'food');
   const shopId = Number(insertedShop.lastInsertRowid);
+  testDb.prepare("UPDATE shops SET business_verification_status = 'approved' WHERE id = ?").run(shopId);
   try {
     const login = await apiFetch('/api/auth/admin-login', {
       method: 'POST',
@@ -917,6 +918,7 @@ test('verification admin is limited to identity follow-up and content moderation
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key: 'verification-admin-demo-key', role: 'verification_admin' }),
   });
+
   assert.equal(verificationLogin.response.status, 200, JSON.stringify(verificationLogin.payload));
   assert.equal(verificationLogin.payload.role, 'verification_admin');
 
@@ -1006,6 +1008,75 @@ test('verification admin is limited to identity follow-up and content moderation
 
   const logout = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
   assert.equal(logout.response.status, 200, JSON.stringify(logout.payload));
+});
+
+test('super-admin manual verification keeps business and identity decisions independent and audited', async () => {
+  const previousCookieJar = cookieJar;
+  cookieJar = '';
+  const shopId = 99001;
+  const database = new Database(TEST_DB_PATH);
+  database.prepare(`INSERT INTO shops
+    (id, name, slug, whatsapp_number, pin_code_hash, created_at, category, subscription_tier)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    shopId, 'Dossier manuel test', 'dossier-manuel-test', '+2250700000000', 'test-hash',
+    new Date().toISOString(), 'other', 'standard',
+  );
+  database.close();
+  try {
+    const login = await apiFetch('/api/auth/admin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'super-admin-demo-key', role: 'super_admin' }),
+    });
+    assert.equal(login.response.status, 200);
+    const superAdminCookies = cookieJar;
+    const queue = await apiFetch('/api/admin/identity-verifications/manual');
+    assert.equal(queue.response.status, 200, JSON.stringify(queue.payload));
+    const record = queue.payload.verifications.find((item: { shop_id: number }) => item.shop_id === shopId);
+    assert.equal(record.business_status, 'pending');
+    assert.equal(record.identity_status, 'pending');
+
+    cookieJar = '';
+    const verificationLogin = await apiFetch('/api/auth/admin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'verification-admin-demo-key', role: 'verification_admin' }),
+    });
+    assert.equal(verificationLogin.response.status, 200);
+    const restrictedQueue = await apiFetch('/api/admin/identity-verifications/manual');
+    assert.equal(restrictedQueue.response.status, 403);
+
+    cookieJar = superAdminCookies;
+    const approveWithoutSecureDocuments = await apiFetch(`/api/admin/identity-verifications/manual/${shopId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        verification_type: 'identity', status: 'approved', reason: 'Contrôle terminé', expected_status: 'pending',
+      }),
+    });
+    assert.equal(approveWithoutSecureDocuments.response.status, 400);
+    assert.match(approveWithoutSecureDocuments.payload.error, /passeport|faces/i);
+
+    const businessReview = await apiFetch(`/api/admin/identity-verifications/manual/${shopId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        verification_type: 'business', status: 'under_review', reason: 'Examen des informations', expected_status: 'pending',
+      }),
+    });
+    assert.equal(businessReview.response.status, 200, JSON.stringify(businessReview.payload));
+    const detail = await apiFetch(`/api/admin/identity-verifications/manual/${shopId}`);
+    assert.equal(detail.response.status, 200);
+    assert.equal(detail.payload.shop.business_verification_status, 'under_review');
+    assert.equal(detail.payload.shop.identity_verification_status, 'pending');
+    assert.equal(detail.payload.history.length, 1);
+    assert.equal(detail.payload.history[0].details.reason, 'Examen des informations');
+  } finally {
+    const cleanup = new Database(TEST_DB_PATH);
+    cleanup.prepare('DELETE FROM shops WHERE id = ?').run(shopId);
+    cleanup.close();
+    cookieJar = previousCookieJar;
+  }
 });
 
 test('customer registration and login are supported with email, phone, and password', async () => {
@@ -1467,6 +1538,40 @@ test('customer favorites and product likes are private, persistent, and toggleab
   });
   assert.equal(removedProductFavorite.payload.is_favorite, false);
 
+  const restoredProductFavorite = await apiFetch('/api/customer-engagement/favorites', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target_type: 'product', target_id: product.id }),
+  });
+  assert.equal(restoredProductFavorite.payload.is_favorite, true);
+  const restoredProductLike = await apiFetch(`/api/customer-engagement/products/${product.id}/like`, { method: 'POST' });
+  assert.equal(restoredProductLike.payload.is_liked, true);
+  const testDb = new Database(TEST_DB_PATH);
+  testDb.prepare('UPDATE products SET is_available = 0 WHERE id = ?').run(product.id);
+  testDb.close();
+  const unavailableFavorite = await apiFetch('/api/customer-engagement/favorites', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target_type: 'product', target_id: product.id }),
+  });
+  assert.equal(unavailableFavorite.response.status, 404);
+  const unavailableLike = await apiFetch(`/api/customer-engagement/products/${product.id}/like`, { method: 'POST' });
+  assert.equal(unavailableLike.response.status, 404);
+  const unavailableState = await apiFetch('/api/customer-engagement/state');
+  assert.equal(unavailableState.payload.favorite_product_ids.includes(product.id), false);
+  assert.equal(unavailableState.payload.liked_product_ids.includes(product.id), false);
+  const restoreDb = new Database(TEST_DB_PATH);
+  restoreDb.prepare('UPDATE products SET is_available = 1 WHERE id = ?').run(product.id);
+  restoreDb.close();
+  const cleanedUpFavorite = await apiFetch('/api/customer-engagement/favorites', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target_type: 'product', target_id: product.id }),
+  });
+  assert.equal(cleanedUpFavorite.payload.is_favorite, false);
+  const cleanedUpLike = await apiFetch(`/api/customer-engagement/products/${product.id}/like`, { method: 'POST' });
+  assert.equal(cleanedUpLike.payload.is_liked, false);
+
   const logout = await apiFetch('/api/auth/customer-logout', { method: 'POST' });
   assert.equal(logout.response.status, 200);
 });
@@ -1611,7 +1716,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   });
   assert.equal(rejectedManualApproval.response.status, 404);
   const testDb = new Database(TEST_DB_PATH);
-  testDb.prepare("UPDATE shops SET merchant_verification_status = 'verified' WHERE id = ?").run(shopId);
+  testDb.prepare("UPDATE shops SET merchant_verification_status = 'verified', business_verification_status = 'approved' WHERE id = ?").run(shopId);
   testDb.close();
   const adminLogout = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
   assert.equal(adminLogout.response.status, 200, JSON.stringify(adminLogout.payload));
@@ -1631,6 +1736,21 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   const publishedShop = publishedDirectory.payload.find((shop: any) => shop.id === shopId);
   assert.equal(publishedShop.is_verified, true);
   assert.equal('merchant_verification_status' in publishedShop, false);
+
+  const invalidVariantOrder = await apiFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shopId,
+      customer_name: 'Client vérification',
+      customer_phone: uniquePhone(),
+      delivery_location: 'Cocody Angré',
+      items: [{ product_id: productId, quantity: 1, selected_size: { value: 'M' } }],
+    }),
+  });
+  assert.equal(invalidVariantOrder.response.status, 400, JSON.stringify(invalidVariantOrder.payload));
+  const stockAfterInvalidVariant = await apiFetch(`/api/shops/${shopId}/products`);
+  assert.equal(stockAfterInvalidVariant.payload[0].stock, 6);
 
   const invalidOrderEmail = await apiFetch('/api/orders', {
     method: 'POST',
@@ -2039,7 +2159,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   assert.equal(deletedCustomerSession.payload.authenticated, false);
 });
 
-test('Didit alone controls merchant verification; signed webhooks are fresh and idempotent', async () => {
+test('Didit identity decisions stay independent from shop approval; signed webhooks are fresh and idempotent', async () => {
   const registration = await apiFetch('/api/shops', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2171,11 +2291,27 @@ test('Didit alone controls merchant verification; signed webhooks are fresh and 
   assert.ok(identityAuditEntry);
   assert.equal(identityAuditEntry.actor, 'didit_webhook');
   assert.equal(identityAuditEntry.details.previous_status, 'pending');
-  assert.equal(identityAuditEntry.details.status, 'verified');
+  assert.equal(identityAuditEntry.details.status, 'approved');
   assert.equal(identityAuditEntry.details.event_id, eventId);
 
   const adminLogout = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
   assert.equal(adminLogout.response.status, 200, JSON.stringify(adminLogout.payload));
+
+  const blockedPublication = await apiFetch(`/api/shops/${shopId}/publication-status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ publication_status: 'active' }),
+  });
+  assert.equal(blockedPublication.response.status, 409);
+  const testDbAfterIdentityReview = new Database(TEST_DB_PATH);
+  const independentStatuses = testDbAfterIdentityReview.prepare(
+    'SELECT business_verification_status, identity_verification_status FROM shops WHERE id = ?',
+  ).get(shopId) as { business_verification_status: string; identity_verification_status: string };
+  assert.deepEqual(independentStatuses, { business_verification_status: 'pending', identity_verification_status: 'approved' });
+  testDbAfterIdentityReview.prepare(
+    "UPDATE shops SET business_verification_status = 'approved', business_verification_method = 'manual' WHERE id = ?",
+  ).run(shopId);
+  testDbAfterIdentityReview.close();
 
   const publication = await apiFetch(`/api/shops/${shopId}/publication-status`, {
     method: 'PATCH',
@@ -3499,7 +3635,7 @@ test('merchant A cannot access merchant B products, orders, or settings', async 
     apiFetch(`/api/shops/${merchantBShopId}/products`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Intrusion', price: 1, stock: 1 }),
+      body: JSON.stringify({ title: 'Intrusion', description: 'Tentative de création non autorisée.', price: 1, stock: 1 }),
     }),
     apiFetch(`/api/shops/${merchantBShopId}/products/${productId}`, {
       method: 'PUT',

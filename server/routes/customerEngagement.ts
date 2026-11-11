@@ -50,6 +50,7 @@ export function createCustomerEngagementRouter({
          JOIN products ON products.id = customer_favorites.target_id
          JOIN shops ON shops.id = products.shop_id
          WHERE customer_favorites.user_id = ? AND customer_favorites.target_type = 'product'
+           AND products.is_available = 1 AND products.stock > 0
          ORDER BY customer_favorites.created_at DESC`,
         [userId],
       ),
@@ -57,7 +58,8 @@ export function createCustomerEngagementRouter({
         `SELECT customer_product_likes.product_id FROM customer_product_likes
          JOIN products ON products.id = customer_product_likes.product_id
          JOIN shops ON shops.id = products.shop_id
-         WHERE customer_product_likes.user_id = ?`,
+         WHERE customer_product_likes.user_id = ?
+           AND products.is_available = 1 AND products.stock > 0`,
         [userId],
       ),
     ]);
@@ -104,7 +106,7 @@ export function createCustomerEngagementRouter({
     if (!['shop', 'product'].includes(targetType) || !Number.isSafeInteger(targetId) || targetId <= 0) {
       return res.status(400).json({ error: 'Favori invalide.' });
     }
-    const target = await getPublicTarget(targetType, targetId);
+    const target = await getPublicTarget(targetType, targetId, true);
     if (!target) {
       return res.status(404).json({ error: 'Cette boutique ou ce produit est introuvable.' });
     }
@@ -128,7 +130,7 @@ export function createCustomerEngagementRouter({
     if (!userId) return;
     const productId = Number(req.params.id);
     if (!Number.isSafeInteger(productId) || productId <= 0) return res.status(400).json({ error: 'Produit invalide.' });
-    const target = await getPublicTarget('product', productId);
+    const target = await getPublicTarget('product', productId, true);
     if (!target) return res.status(404).json({ error: 'Produit introuvable.' });
 
     const inserted = await dbRun(
@@ -146,18 +148,21 @@ export function createCustomerEngagementRouter({
     return res.json({ success: true, is_liked: isLiked, like_count: Number(count?.count) || 0 });
   });
 
-  const getPublicTarget = async (targetType: unknown, targetIdValue: unknown) => {
+  const getPublicTarget = async (targetType: unknown, targetIdValue: unknown, requireAvailableProduct = false) => {
     const targetId = Number(targetIdValue);
     if (!['shop', 'product'].includes(String(targetType)) || !Number.isSafeInteger(targetId) || targetId <= 0) return null;
     const shopRow = targetType === 'shop'
       ? await dbGet<Record<string, unknown>>('SELECT shops.* FROM shops WHERE shops.id = ?', [targetId])
       : await dbGet<Record<string, unknown>>(
-        `SELECT shops.* FROM products
+        `SELECT shops.*, products.is_available AS product_is_available, products.stock AS product_stock
+         FROM products
          JOIN shops ON shops.id = products.shop_id
          WHERE products.id = ?`,
         [targetId],
       );
     if (!shopRow) return null;
+    if (requireAvailableProduct && targetType === 'product'
+      && (!Boolean(shopRow.product_is_available) || Number(shopRow.product_stock) <= 0)) return null;
     const shop = mapShopRow(shopRow);
     if (!isShopPubliclyVisible(shop)) return null;
     return { targetType: String(targetType), targetId, shop };

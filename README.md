@@ -26,6 +26,8 @@ une adresse ; après déploiement, exécutez une fois sur le VPS :
 `docker exec matable-web node /app/scripts/send-email-mfa-rollout-notices.mjs`.
 Le suivi rend la commande idempotente. Les commerçants sans adresse ne peuvent
 pas recevoir cet avis et nécessitent un contact par un autre canal.
+L’adresse de facturation saisie pour un paiement GeniusPay ne remplace pas
+l’adresse propriétaire servant à la connexion et au MFA.
 
 Avant le démarrage en production, configurez dans l’environnement privé du
 serveur (sur le VPS Hostinger, `/srv/apps/matable/shared/app.env`) :
@@ -154,6 +156,7 @@ APP_URL="http://localhost:3000"
 TRUST_PROXY_HOPS="0"
 ADMIN_ACCESS_KEY="CHANGE_ME_ADMIN_KEY"
 VERIFICATION_ADMIN_ACCESS_KEY="CHANGE_ME_VERIFICATION_ADMIN_KEY"
+AGE_VERIFICATION_SECRET=""
 AD_EVENT_SIGNING_SECRET=""
 ADVERTISING_BETA_ENABLED="false"
 DIDIT_API_KEY=""
@@ -197,6 +200,8 @@ Les photos produits, logos et bannières sont compressés dans le navigateur pui
 - `R2_PUBLIC_BASE_URL` (domaine public du bucket, obligatoire : sans lui le téléversement est refusé en `503`)
 
 Formats acceptés : JPEG, PNG, WebP et GIF (SVG refusé), 8 Mo maximum. Le bucket doit autoriser les requêtes `PUT` présignées depuis l’origine publique de l’application et servir les objets en lecture publique avec `Cache-Control` immutable. Tant que R2 n’est pas configuré, l’interface reste utilisable : le client conserve une image base64 compressée, et les écritures marchandes préservent les images base64 existantes (bornées à 2 Mo) au lieu de les effacer. Ces données historiques restent affichables via `/media/products/...`; une migration vers R2 pourra être planifiée sans bloquer les commerçants. `npm run check:prod` signale une configuration R2 incomplète en avertissement.
+
+Les pièces de vérification manuelle utilisent un bucket **R2 privé distinct** du stockage média public. Configurez `R2_PRIVATE_BUCKET` (nom différent de `R2_BUCKET`), `R2_PRIVATE_ENDPOINT` (peut reprendre `R2_ENDPOINT`) et des identifiants `R2_PRIVATE_ACCESS_KEY_ID` / `R2_PRIVATE_SECRET_ACCESS_KEY` à droits limités au bucket privé. Aucun domaine public ne doit être configuré pour ce bucket. Son CORS doit autoriser uniquement l’origine MaTable à envoyer des `PUT` avec `Content-Type`; les objets doivent rester privés. Le parcours de dépôt renvoie `503` tant que le bucket privé distinct n’est pas configuré. Seuls les JPEG, PNG et WebP jusqu’à 10 Mo sont acceptés; le serveur contrôle taille, type, signature et décodage, limite la résolution et réencode l’image pour supprimer les métadonnées. Les liens d’examen Super Admin expirent après 60 secondes et chaque émission est journalisée. Les fichiers sont purgés 90 jours après une décision finale; les URL de dépôt expirent après 10 minutes et les dépôts incomplets sont retirés lors de la purge horaire suivante.
 
 Le workflow GitHub Actions « PostgreSQL integration » exécute le lint, les tests et un test de migrations/adaptateur sur un PostgreSQL temporaire. Pour valider un environnement Neon séparément, exécutez `DATABASE_URL=<URL-de-la-base-de-test> npm run test:postgres`; n’utilisez jamais l’URL de production pour ce test.
 
@@ -385,7 +390,7 @@ Le service Render décrit dans `render.yaml` exécute `npm ci --include=dev && n
 
 Vercel convient au frontend statique, mais ne doit pas héberger directement ce serveur Express avec une base locale. Une base PostgreSQL externe est nécessaire.
 
-Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `DATABASE_URL`, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` fortes, uniques et distinctes, `ADVERTISING_BETA_ENABLED=false`, les trois variables Didit et `TRUST_PROXY_HOPS` adapté au reverse proxy. Les cinq variables R2 (`R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_PUBLIC_BASE_URL`) sont facultatives au démarrage mais requises pour le téléversement d’images ; sans elles, l’interface bascule sur des images base64 compressées. `AD_EVENT_SIGNING_SECRET` est nécessaire uniquement si `ADVERTISING_BETA_ENABLED=true`; dans ce cas, configurez une clé forte, unique et d’au moins 32 caractères. Ne déverrouillez la bêta publicitaire qu’après les contrôles de préproduction décrits ci-dessus.
+Variables de production minimales : `NODE_ENV=production`, `APP_URL=https://votre-domaine`, `PORT` fourni par l’hébergeur, `DATABASE_URL`, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` fortes, uniques et distinctes, `AGE_VERIFICATION_SECRET` forte, unique et d’au moins 32 caractères, `ADVERTISING_BETA_ENABLED=false`, les trois variables Didit et `TRUST_PROXY_HOPS` adapté au reverse proxy. Le contrôle d’âge demande une date de naissance déclarative, vérifiée côté serveur ; elle n’est pas stockée. Un jeton signé, limité à la boutique et valable 30 minutes, autorise temporairement l’accès au catalogue adulte et à la commande. Cette déclaration n’est pas une vérification d’identité. Les cinq variables R2 (`R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_PUBLIC_BASE_URL`) sont facultatives au démarrage mais requises pour le téléversement d’images ; sans elles, l’interface bascule sur des images base64 compressées. `AD_EVENT_SIGNING_SECRET` est nécessaire uniquement si `ADVERTISING_BETA_ENABLED=true`; dans ce cas, configurez une clé forte, unique et d’au moins 32 caractères. Ne déverrouillez la bêta publicitaire qu’après les contrôles de préproduction décrits ci-dessus.
 
 ## Build production
 

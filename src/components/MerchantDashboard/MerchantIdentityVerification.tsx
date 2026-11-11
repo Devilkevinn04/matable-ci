@@ -4,6 +4,7 @@ import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 
 export interface VerificationStatus {
   status: string;
+  didit_available?: boolean;
   provider_status?: string | null;
   session_id?: string | null;
   session_url?: string | null;
@@ -22,7 +23,7 @@ interface MerchantIdentityVerificationProps {
 }
 
 const statusDetails: Record<string, { label: string; description: string; tone: string }> = {
-  pending: { label: 'À compléter', description: 'Aucune session de vérification active. Démarrez-la pour pouvoir publier votre boutique.', tone: 'border-amber-200 bg-amber-50 text-amber-950' },
+  pending: { label: 'À compléter', description: 'Aucune session Didit active. L’identité est examinée séparément de la boutique; consultez aussi le parcours manuel temporaire.', tone: 'border-amber-200 bg-amber-50 text-amber-950' },
   submitted: { label: 'Vérification démarrée', description: 'Terminez les étapes sur la page Didit déjà ouverte. Cette session reste active ; son résultat sera actualisé ici automatiquement.', tone: 'border-sky-200 bg-sky-50 text-sky-950' },
   under_review: { label: 'En cours de vérification', description: 'Didit examine les informations transmises. Aucune action n’est nécessaire ; le statut sera actualisé automatiquement.', tone: 'border-sky-200 bg-sky-50 text-sky-950' },
   verified: { label: 'Identité vérifiée', description: 'La vérification Didit est terminée.', tone: 'border-emerald-200 bg-emerald-50 text-emerald-950' },
@@ -31,7 +32,7 @@ const statusDetails: Record<string, { label: string; description: string; tone: 
 
 const expiredDetails = {
   label: 'Session expirée',
-  description: 'Votre précédente session de vérification a expiré avant d’être terminée. Relancez la vérification pour republier votre boutique.',
+  description: 'Votre précédente session Didit a expiré avant d’être terminée. Vous pouvez la relancer; son expiration ne bloque pas à elle seule une boutique déjà approuvée.',
   tone: 'border-amber-200 bg-amber-50 text-amber-950',
 };
 
@@ -52,8 +53,8 @@ export function MerchantIdentityVerification({ shopId, shopName, onStatusChange 
     && !['verified', 'rejected'].includes(status?.status || '');
   const details = expired ? expiredDetails : (statusDetails[status?.status || 'pending'] || statusDetails.pending);
   const canResume = Boolean(status?.resume_available && status?.session_url);
-  const canStartVerification = !status
-    || (status.status !== 'verified' && status.restart_available !== false);
+  const canStartVerification = status?.didit_available !== false
+    && (!status || (status.status !== 'verified' && status.restart_available !== false));
   const supportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour la vérification Didit de la boutique ${shopName}.`);
 
   useEffect(() => {
@@ -149,6 +150,11 @@ export function MerchantIdentityVerification({ shopId, shopName, onStatusChange 
         <p className="text-sm font-bold">{details.label}</p>
         <p className="mt-1 text-xs">{details.description}</p>
       </div>
+      {status?.didit_available === false && (
+        <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950">
+          Didit est momentanément indisponible. Utilisez le parcours de vérification manuelle ci-dessus ; les deux dossiers seront examinés indépendamment.
+        </p>
+      )}
 
       {status?.status === 'rejected' && (
         <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-950">

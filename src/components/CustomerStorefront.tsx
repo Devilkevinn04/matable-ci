@@ -95,6 +95,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [saleRefresh, setSaleRefresh] = useState(Date.now());
   const [hasAgeRestrictedProducts, setHasAgeRestrictedProducts] = useState(false);
   const [ageVerified, setAgeVerified] = useState(false);
+  const [ageVerificationToken, setAgeVerificationToken] = useState('');
+  const [birthDate, setBirthDate] = useState('');
   const [ageDenied, setAgeDenied] = useState(false);
   const [ageConfirmationComplete, setAgeConfirmationComplete] = useState(false);
   const [isAgeGateClosing, setIsAgeGateClosing] = useState(false);
@@ -256,16 +258,19 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const deliveryFee = selectedDeliveryOption ? Number(selectedDeliveryOption.amount) : 0;
   const orderTotalDue = totalCartAmount + deliveryFee;
 
-  const fetchShopData = async (signal: AbortSignal, ageConfirmed = false, silent = false): Promise<boolean> => {
+  const fetchShopData = async (signal: AbortSignal, ageToken = '', silent = false): Promise<boolean> => {
     try {
-      if (!ageConfirmed && !silent) {
+      if (!ageToken && !silent) {
         setLoading(true);
         setError(null);
         setShop(null);
         setProducts([]);
       }
-      const ageQuery = ageConfirmed ? '?age_confirmed=1' : '';
-      const res = await fetch(`/api/v1/catalog/storefronts/${encodeURIComponent(shopSlug)}${ageQuery}`, { signal });
+      const res = await fetch(`/api/v1/catalog/storefronts/${encodeURIComponent(shopSlug)}`, {
+        signal,
+        cache: ageToken ? 'no-store' : undefined,
+        headers: ageToken ? { 'X-MaTable-Age-Verification': ageToken } : undefined,
+      });
       if (!res.ok) {
         throw new Error('Boutique introuvable');
       }
@@ -300,21 +305,37 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     } catch (err: any) {
       if (signal.aborted) return false;
       if (silent) return false;
-      if (ageConfirmed) setAgeVerificationError('Impossible de charger les produits. Réessayez.');
+      if (ageToken) setAgeVerificationError('Impossible de charger les produits. Réessayez.');
       else setError(err.message || 'Erreur lors du chargement');
       return false;
     } finally {
-      if (!signal.aborted && !ageConfirmed && !silent) setLoading(false);
+      if (!signal.aborted && !ageToken && !silent) setLoading(false);
     }
   };
 
   const handleAgeVerification = async () => {
     if (isVerifyingAge) return;
     setAgeVerificationError('');
+    if (!birthDate) {
+      setAgeVerificationError('Saisissez votre date de naissance.');
+      return;
+    }
     setIsVerifyingAge(true);
     try {
-      const loaded = await fetchShopData(new AbortController().signal, true);
+      const verificationResponse = await fetch('/api/v1/catalog/storefronts/age-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop_slug: shopSlug, birth_date: birthDate }),
+      });
+      const verification = await verificationResponse.json();
+      if (!verificationResponse.ok || typeof verification.age_verification_token !== 'string') {
+        setAgeVerificationError(verification.error || 'Impossible de vérifier votre âge. Réessayez.');
+        return;
+      }
+      const token = verification.age_verification_token as string;
+      const loaded = await fetchShopData(new AbortController().signal, token);
       if (loaded) {
+        setAgeVerificationToken(token);
         setAgeConfirmationComplete(true);
         ageConfirmationTimerRef.current = setTimeout(
           () => {
@@ -329,6 +350,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       } else {
         setAgeVerificationError('Impossible de charger les produits. Réessayez.');
       }
+    } catch {
+      setAgeVerificationError('Impossible de vérifier votre âge. Réessayez.');
     } finally {
       setIsVerifyingAge(false);
     }
@@ -372,7 +395,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
   const refreshCatalogue = useCallback(async () => {
     const controller = new AbortController();
-    return fetchShopData(controller.signal, false, true);
+    return fetchShopData(controller.signal, '', true);
   }, [shopSlug]);
   const pullToRefresh = usePullToRefresh(refreshCatalogue, !loading && !!shop);
 
@@ -607,6 +630,15 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
   const authenticatedCustomer = customerUser || checkoutAuthUser;
 
+  useEffect(() => {
+    setAgeVerified(false);
+    setAgeVerificationToken('');
+    setBirthDate('');
+    setAgeConfirmationComplete(false);
+    setAgeDenied(false);
+    setIsAgeGateClosing(false);
+  }, [shopSlug]);
+
   // Handle WhatsApp Checkout
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -658,7 +690,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           delivery_slot: shop.category === 'food' ? deliverySlot : undefined,
           payment_method_preference: paymentMethod,
           delivery_zone_id: deliveryZoneId ?? undefined,
-          age_confirmed: ageVerified,
+          age_verification_token: ageVerified ? ageVerificationToken : undefined,
           items: cart.map(item => ({
             product_id: item.product.id,
             quantity: item.quantity,
@@ -1202,8 +1234,21 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         Cette sélection est réservée aux adultes
                       </h2>
                       <p id="age-gate-question" className="mb-[22px] text-base text-[#5d6f69]">
-                        Avez-vous 18 ans ou plus ?
+                        Saisissez votre date de naissance pour confirmer que vous avez 18 ans ou plus.
                       </p>
+
+                      <label className="mb-4 block text-left text-sm font-semibold text-[#47534b]">
+                        Date de naissance
+                        <input
+                          type="date"
+                          required
+                          max={new Date().toISOString().slice(0, 10)}
+                          value={birthDate}
+                          onChange={(event) => setBirthDate(event.target.value)}
+                          className="mt-1.5 min-h-12 w-full rounded-xl border border-[#deded5] bg-white px-4 py-3 text-base font-normal text-[#292d2a] outline-none focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10"
+                        />
+                      </label>
+                      <p className="mb-4 text-xs leading-5 text-[#6b746f]">La date sert uniquement à calculer l’âge et n’est pas enregistrée.</p>
 
                       {ageVerificationError && (
                         <p role="alert" className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">
@@ -1219,7 +1264,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
                         className="relative flex h-14 w-full items-center justify-center overflow-hidden rounded-2xl bg-[var(--mt-green-hover)] px-4 text-[17px] font-semibold text-white shadow-[0_14px_26px_-14px_rgba(23,107,85,0.8)] transition-colors hover:bg-[#145d4a] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[var(--mt-green-hover)] disabled:cursor-wait disabled:opacity-80"
                       >
-                        {isVerifyingAge ? 'Vérification en cours…' : ageConfirmationComplete ? 'Accès autorisé' : 'Oui, j’ai 18 ans ou plus'}
+                        {isVerifyingAge ? 'Vérification en cours…' : ageConfirmationComplete ? 'Accès autorisé' : 'Vérifier mon âge'}
                       </motion.button>
                       <motion.button
                         type="button"

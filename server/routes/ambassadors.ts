@@ -16,6 +16,36 @@ const normalizeIdentityName = (value: string | null | undefined) => String(value
   .trim()
   .replace(/\s+/g, ' ');
 
+type AmbassadorAdminRow = {
+  id: string;
+  name: string;
+  code: string;
+  email: string | null;
+  phone: string | null;
+  active: number | string;
+  created_at: string;
+  has_account: number | string;
+  invite_expires_at: string | null;
+  registrations: number | string;
+  published: number | string;
+  paying: number | string;
+  commissions: number | string;
+  total_clicks: number | string;
+  active_tokens: number | string;
+  total_referrals: number | string;
+  conversion_rate: number | string;
+  last_click_at: string | null;
+  clicks_7d: number | string;
+  clicks_30d: number | string;
+  clicks_90d: number | string;
+  referrals_7d: number | string;
+  referrals_30d: number | string;
+  referrals_90d: number | string;
+  conversion_7d: number | string;
+  conversion_30d: number | string;
+  conversion_90d: number | string;
+};
+
 export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number) => RequestHandler) {
   const publicRouter = Router();
   const adminRouter = Router();
@@ -142,7 +172,7 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
     const sevenDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString();
     const thirtyDaysAgo = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString();
     const ninetyDaysAgo = new Date(Date.now() - 89 * 24 * 60 * 60 * 1000).toISOString();
-    const ambassadors = await dbAll(`SELECT a.id, a.name, a.code, a.email, a.phone, a.active, a.created_at,
+    const ambassadorRows = await dbAll<AmbassadorAdminRow>(`SELECT a.id, a.name, a.code, a.email, a.phone, a.active, a.created_at,
       CASE WHEN a.password_hash IS NULL THEN 0 ELSE 1 END AS has_account,
       (SELECT i.expires_at FROM ambassador_invites i WHERE i.ambassador_id = a.id AND i.used_at IS NULL
         ORDER BY i.created_at DESC LIMIT 1) AS invite_expires_at,
@@ -190,6 +220,28 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
       ninetyDaysAgo,
       ninetyDaysAgo,
     ]);
+    const ambassadors = ambassadorRows.map((ambassador) => ({
+      ...ambassador,
+      active: Number(ambassador.active),
+      has_account: Number(ambassador.has_account),
+      registrations: Number(ambassador.registrations),
+      published: Number(ambassador.published),
+      paying: Number(ambassador.paying),
+      commissions: Number(ambassador.commissions),
+      total_clicks: Number(ambassador.total_clicks),
+      active_tokens: Number(ambassador.active_tokens),
+      total_referrals: Number(ambassador.total_referrals),
+      conversion_rate: Number(ambassador.conversion_rate),
+      clicks_7d: Number(ambassador.clicks_7d),
+      clicks_30d: Number(ambassador.clicks_30d),
+      clicks_90d: Number(ambassador.clicks_90d),
+      referrals_7d: Number(ambassador.referrals_7d),
+      referrals_30d: Number(ambassador.referrals_30d),
+      referrals_90d: Number(ambassador.referrals_90d),
+      conversion_7d: Number(ambassador.conversion_7d),
+      conversion_30d: Number(ambassador.conversion_30d),
+      conversion_90d: Number(ambassador.conversion_90d),
+    }));
     const referrals = await dbAll(`SELECT r.shop_id, r.ambassador_id, r.created_at, s.name AS shop_name,
       s.owner_email, s.whatsapp_number, s.publication_status, a.name AS ambassador_name,
       a.email AS ambassador_email, a.phone AS ambassador_phone,

@@ -111,7 +111,7 @@ async function submitAndApproveShop(shopId: number, merchantCookie: string, tier
   });
   assert.equal(trialStart.status, 200, await trialStart.text());
   const database = new Database(TEST_DB_PATH);
-  database.prepare("UPDATE shops SET merchant_verification_status = 'verified' WHERE id = ?").run(shopId);
+  database.prepare("UPDATE shops SET merchant_verification_status = 'verified', business_verification_status = 'approved' WHERE id = ?").run(shopId);
   database.close();
   const publication = await fetch(`${BASE_URL}/api/shops/${shopId}/publication-status`, {
     method: 'PATCH',
@@ -586,6 +586,10 @@ test('shop and product API defaults are category-aware and product placeholders 
       description: 'Produit réservé aux clients majeurs, vente soumise à vérification.',
       price: 6000,
       stock: 4,
+      modifier_groups: [
+        { name: 'Sauce', required: true, max_selections: 1, options: ['Douce', 'Pimentée'] },
+        { name: 'Supplément', required: false, max_selections: 1, options: [{ label: 'Extra', price_delta: 500 }] },
+      ],
     }),
   });
   assert.equal(restrictedProductResponse.status, 200);
@@ -595,13 +599,35 @@ test('shop and product API defaults are category-aware and product placeholders 
   assert.equal(storefrontResponse.status, 200);
   const storefront = await storefrontResponse.json();
   assert.equal(storefront.has_age_restricted_products, true);
+  assert.match(storefrontResponse.headers.get('cache-control') || '', /private, no-store/);
   assert.equal(storefront.products.some((product: { id: number }) => product.id === restrictedProduct.id), false);
 
   const ageConfirmedStorefrontResponse = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/${createdPayload.shop.slug}?age_confirmed=1`);
   assert.equal(ageConfirmedStorefrontResponse.status, 200);
-  assert.match(ageConfirmedStorefrontResponse.headers.get('cache-control') || '', /private, no-store/);
   const ageConfirmedStorefront = await ageConfirmedStorefrontResponse.json();
-  assert.equal(ageConfirmedStorefront.products.some((product: { id: number }) => product.id === restrictedProduct.id), true);
+  assert.equal(ageConfirmedStorefront.products.some((product: { id: number }) => product.id === restrictedProduct.id), false);
+
+  const underageVerification = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/age-verification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shop_slug: createdPayload.shop.slug, birth_date: '2010-01-01' }),
+  });
+  assert.equal(underageVerification.status, 400);
+  const ageVerification = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/age-verification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shop_slug: createdPayload.shop.slug, birth_date: '2000-01-01' }),
+  });
+  assert.equal(ageVerification.status, 200);
+  const ageVerificationPayload = await ageVerification.json() as { age_verification_token: string };
+  assert.ok(ageVerificationPayload.age_verification_token);
+  const verifiedStorefrontResponse = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/${createdPayload.shop.slug}`, {
+    headers: { 'X-MaTable-Age-Verification': ageVerificationPayload.age_verification_token },
+  });
+  assert.equal(verifiedStorefrontResponse.status, 200);
+  assert.match(verifiedStorefrontResponse.headers.get('cache-control') || '', /private, no-store/);
+  const verifiedStorefront = await verifiedStorefrontResponse.json();
+  assert.equal(verifiedStorefront.products.some((product: { id: number }) => product.id === restrictedProduct.id), true);
 
   const publicDirectory = await fetch(`${BASE_URL}/api/v1/catalog/storefronts`);
   const directoryShops = await publicDirectory.json();
@@ -621,10 +647,47 @@ test('shop and product API defaults are category-aware and product placeholders 
       customer_phone: uniquePhone(),
       delivery_location: 'Cocody',
       payment_method_preference: 'to_confirm',
+      age_confirmed: true,
       items: [{ product_id: restrictedProduct.id, quantity: 1 }],
     }),
   });
   assert.equal(restrictedOrder.status, 403);
+  const ageVerifiedOrder = await fetch(`${BASE_URL}/api/orders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: createdPayload.shop.id,
+      customer_name: 'Client majeur',
+      customer_phone: uniquePhone(),
+      delivery_location: 'Cocody',
+      payment_method_preference: 'to_confirm',
+      age_verification_token: ageVerificationPayload.age_verification_token,
+      items: [{
+        product_id: restrictedProduct.id,
+        quantity: 1,
+        selected_modifiers: ['Pimentée', 'Extra'],
+      }],
+    }),
+  });
+  assert.equal(ageVerifiedOrder.status, 200, await ageVerifiedOrder.clone().text());
+  const ageVerifiedOrderPayload = await ageVerifiedOrder.json();
+  assert.equal(ageVerifiedOrderPayload.order.total_amount, 6500);
+  assert.deepEqual(ageVerifiedOrderPayload.order.items[0].selected_modifiers, ['Pimentée', 'Extra']);
+
+  const invalidModifierOrder = await fetch(`${BASE_URL}/api/orders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: createdPayload.shop.id,
+      customer_name: 'Client options invalides',
+      customer_phone: uniquePhone(),
+      delivery_location: 'Cocody',
+      payment_method_preference: 'to_confirm',
+      age_verification_token: ageVerificationPayload.age_verification_token,
+      items: [{ product_id: restrictedProduct.id, quantity: 1, selected_modifiers: [{ label: 'Extra' }] }],
+    }),
+  });
+  assert.equal(invalidModifierOrder.status, 400);
 
   const persistedDb = new Database(TEST_DB_PATH, { readonly: true });
   try {

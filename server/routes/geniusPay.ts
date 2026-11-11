@@ -59,7 +59,7 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
       WHERE payment_type = 'subscription' AND status = 'pending' AND created_at <= ?${shopFilter}`,
     shopId === undefined ? [cutoff] : [cutoff, shopId]);
   };
-  const resolveBillingEmail = async (shopId: number, currentEmail: string | null | undefined, requestedEmail: unknown) => {
+  const resolveBillingEmail = (currentEmail: string | null | undefined, requestedEmail: unknown) => {
     if (requestedEmail === undefined) {
       return currentEmail
         ? { email: currentEmail }
@@ -71,16 +71,6 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
     const email = requestedEmail.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
       return { error: { status: 400, code: 'invalid_billing_email', message: 'Saisissez une adresse e-mail valide.' } };
-    }
-    const duplicate = await dbGet<{ id: number }>(
-      'SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?) AND id <> ?',
-      [email, shopId],
-    );
-    if (duplicate) {
-      return { error: { status: 409, code: 'billing_email_in_use', message: 'Cette adresse e-mail est déjà associée à une autre boutique.' } };
-    }
-    if (email !== currentEmail) {
-      await dbRun('UPDATE shops SET owner_email = ? WHERE id = ?', [email, shopId]);
     }
     return { email };
   };
@@ -633,7 +623,7 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
     if (clientRequestId && (clientRequestId.length < 1 || clientRequestId.length > 255)) {
       return res.status(400).json({ error: 'Le client_request_id est trop long ou invalide.' });
     }
-    const billingEmail = await resolveBillingEmail(shop.id, shop.owner_email, req.body?.billing_email);
+    const billingEmail = resolveBillingEmail(shop.owner_email, req.body?.billing_email);
     if ('error' in billingEmail) {
       return res.status(billingEmail.error.status).json({ error: billingEmail.error.message, code: billingEmail.error.code });
     }
@@ -722,7 +712,7 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
     if (!BOOST_PLACEMENTS.some((validPlacement) => validPlacement === placement)) {
       return res.status(400).json({ error: 'Choisissez un emplacement de boost valide.' });
     }
-    const billingEmail = await resolveBillingEmail(shop.id, shop.owner_email, req.body?.billing_email);
+    const billingEmail = resolveBillingEmail(shop.owner_email, req.body?.billing_email);
     if ('error' in billingEmail) {
       return res.status(billingEmail.error.status).json({ error: billingEmail.error.message, code: billingEmail.error.code });
     }

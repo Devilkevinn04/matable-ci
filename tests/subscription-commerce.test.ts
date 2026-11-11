@@ -149,7 +149,7 @@ test('Pro subscription exposes consented product stats and activates discounted 
   assert.equal(unverifiedBoost.status, 409);
 
   const verificationDb = new Database(TEST_DB_PATH);
-  verificationDb.prepare("UPDATE shops SET merchant_verification_status = 'verified' WHERE id = ?").run(shopId);
+  verificationDb.prepare("UPDATE shops SET merchant_verification_status = 'verified', business_verification_status = 'approved' WHERE id = ?").run(shopId);
   verificationDb.close();
   const publication = await fetch(`${BASE_URL}/api/shops/${shopId}/publication-status`, {
     method: 'PATCH',
@@ -452,6 +452,14 @@ test('ambassador commissions follow the first confirmed subscription and refund'
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: ambassador.code }),
   });
   assert.equal(linkVisit.status, 201);
+  const ambassadorListResponse = await adminRequest('', 'GET');
+  assert.equal(ambassadorListResponse.status, 200);
+  const ambassadorList = await ambassadorListResponse.json();
+  const trackedAmbassador = ambassadorList.ambassadors.find((entry: { code: string }) => entry.code === ambassador.code);
+  assert.equal(typeof trackedAmbassador.clicks_30d, 'number');
+  assert.equal(trackedAmbassador.clicks_30d, 1);
+  assert.equal(typeof trackedAmbassador.referrals_30d, 'number');
+  assert.equal(typeof trackedAmbassador.active_tokens, 'number');
   assert.equal((await fetch(`${BASE_URL}/api/ambassador-link-visits`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'INCONNU' }),
   })).status, 404);

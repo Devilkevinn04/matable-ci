@@ -48,8 +48,8 @@ export function getShopPublicationBlockReason(
   currentDate = new Date(),
 ): 'inactive' | 'verification' | 'subscription' | null {
   if (!shop.is_active) return 'inactive';
-  const verificationStatus = shop.merchant_verification_status || 'not_required';
-  if (verificationStatus !== 'verified' && verificationStatus !== 'not_required') return 'verification';
+  const businessStatus = shop.business_verification_status || shop.merchant_verification_status || 'not_required';
+  if (businessStatus !== 'approved' && businessStatus !== 'verified' && businessStatus !== 'not_required') return 'verification';
   const subscription = getSubscriptionState(shop, currentDate);
   if (subscription.status === 'past_due' && isShopInSubscriptionGracePeriod(shop, currentDate)) return null;
   if (subscription.status !== 'trialing' && subscription.status !== 'active') return 'subscription';
@@ -77,7 +77,11 @@ export function canPublishShop(shop: ShopRecord, currentDate = new Date()): bool
 export function isShopPubliclyVisible(shop: ShopRecord, currentDate = new Date()): boolean {
   const publicationStatus = shop.publication_status ?? (shop.is_active ? 'active' : 'suspended');
   if (!shop.is_active || publicationStatus === 'suspended') return false;
-  return publicationStatus === 'active' && canPublishShop(shop, currentDate);
+  if (publicationStatus !== 'active') return false;
+  const legacyVerifiedPublication = shop.business_verification_status === 'pending'
+    && shop.merchant_verification_status === 'verified';
+  return canPublishShop(shop, currentDate)
+    || (legacyVerifiedPublication && canPublishShop({ ...shop, business_verification_status: 'approved' }, currentDate));
 }
 
 export function canReceiveShopOrders(shop: ShopRecord, currentDate = new Date()): boolean {
@@ -94,7 +98,9 @@ export function getProductUnitPriceWithModifiers(product: ProductRecord, selecte
   for (const group of product.modifier_groups) {
     for (const option of group.options) {
       const label = typeof option === 'string' ? option : option.label;
-      if (selected.has(label)) modifierTotal += typeof option === 'string' ? 0 : Number(option.price_delta || 0);
+      if (selected.has(label) && typeof option !== 'string') {
+        modifierTotal += Number(option.price_delta || 0);
+      }
     }
   }
   return basePrice + modifierTotal;
@@ -104,10 +110,12 @@ export function getValidSelectedModifiers(product: ProductRecord, selectedModifi
   const selected = new Set(selectedModifiers.map((value) => value.trim()).filter(Boolean));
   const valid: string[] = [];
   for (const group of product.modifier_groups || []) {
-    const labels = group.options.map((option) => option.label).filter((label) => selected.has(label));
+    const labels = group.options
+      .map((option) => typeof option === 'string' ? option : option.label)
+      .filter((label, index, options) => selected.has(label) && options.indexOf(label) === index);
     valid.push(...labels.slice(0, Math.max(1, Number(group.max_selections || 1))));
   }
-  return valid;
+  return [...new Set(valid)];
 }
 
 export function normalizeWhatsAppPhone(phone: unknown): string | null {

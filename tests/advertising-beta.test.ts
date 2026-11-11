@@ -91,6 +91,7 @@ async function createVerifiedShop(label: string) {
   const database = new Database(TEST_DB_PATH);
   database.prepare(
     `UPDATE shops SET is_active = 1, publication_status = 'active', merchant_verification_status = 'verified',
+      business_verification_status = 'approved',
       subscription_status = 'active', subscription_expires_at = ?, selected_subscription_tier = 'standard',
       city = ?, whatsapp_number = ? WHERE id = ?`,
   ).run(new Date(Date.now() + 30 * 86400000).toISOString(), 'Abidjan', `+22507${String(Date.now()).slice(-8)}`, shopId);
@@ -164,6 +165,9 @@ test('advertising beta enforces roles, merchant ownership, moderation, consented
   assert.equal(promotionOverview.payload.summary.scheduled, 1);
   assert.equal(promotionOverview.payload.promotions[0].product_id, firstShop.productId);
   assert.equal(promotionOverview.payload.promotions[0].sale_status, 'scheduled');
+  const allPromotions = await api('/api/admin/product-sales?status=all&page=1', { headers: { Cookie: admin } });
+  assert.equal(allPromotions.response.status, 200, JSON.stringify(allPromotions.payload));
+  assert.equal(allPromotions.payload.total, 1);
   const invalidPromotionFilter = await api('/api/admin/product-sales?status=all%3BDELETE', { headers: { Cookie: admin } });
   assert.equal(invalidPromotionFilter.response.status, 400);
 
@@ -525,9 +529,9 @@ test('advertising beta enforces roles, merchant ownership, moderation, consented
     const shopResult = capacityDatabase.prepare(
       `INSERT INTO shops
         (name, slug, whatsapp_number, pin_code_hash, is_active, publication_status,
-         merchant_verification_status, selected_subscription_tier, subscription_expires_at,
+         merchant_verification_status, business_verification_status, selected_subscription_tier, subscription_expires_at,
          subscription_status, created_at, category, city, subscription_tier)
-        VALUES (?, ?, ?, 'test-pin-hash', 1, 'active', 'verified', 'standard', ?, 'active', ?, 'beauty', 'Abidjan', 'standard')`,
+        VALUES (?, ?, ?, 'test-pin-hash', 1, 'active', 'verified', 'approved', 'standard', ?, 'active', ?, 'beauty', 'Abidjan', 'standard')`,
     ).run(
       `Boutique capacité ${index + 1}`,
       `boutique-capacite-${index + 1}`,

@@ -4,6 +4,7 @@ import type { Shop } from '../../types';
 import { MerchantState } from './useMerchant';
 import { ThemeCustomizer } from '../ThemeCustomizer';
 import { MerchantIdentityVerification } from './lazyMerchantIdentityVerification';
+import { MerchantManualVerification } from './MerchantManualVerification';
 import { cleanPhoneForWhatsApp, formatFCFA } from '../../utils/format';
 import {
   getSubscriptionProductLimit,
@@ -368,15 +369,18 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
             )}
 
             {settingsSubTab === 'verification' && currentShop && (
-              <React.Suspense fallback={<p role="status" className="text-sm text-slate-600">Chargement de la vérification…</p>}>
-                <MerchantIdentityVerification
-                  shopId={currentShop.id}
-                  shopName={currentShop.name}
-                  onStatusChange={(status) => setCurrentShop((shop) => shop
-                    ? { ...shop, merchant_verification_status: status.status as Shop['merchant_verification_status'] }
-                    : null)}
-                />
-              </React.Suspense>
+              <div className="space-y-4">
+                <MerchantManualVerification shopId={currentShop.id} />
+                <React.Suspense fallback={<p role="status" className="text-sm text-slate-600">Chargement du statut Didit…</p>}>
+                  <MerchantIdentityVerification
+                    shopId={currentShop.id}
+                    shopName={currentShop.name}
+                    onStatusChange={(status) => setCurrentShop((shop) => shop
+                      ? { ...shop, merchant_verification_status: status.status as Shop['merchant_verification_status'] }
+                      : null)}
+                  />
+                </React.Suspense>
+              </div>
             )}
 
             {settingsSubTab === 'subscription' && currentShop && (showPlanChooser ? (

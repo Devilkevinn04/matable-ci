@@ -668,7 +668,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     if (requestedStatus === 'active' && !req.adminShopAccess) {
       if (shop.publication_status === 'suspended') return res.status(403).json({ error: 'La publication a été suspendue par l’administration.' });
       const blockReason = getShopPublicationBlockReason(shop);
-      if (blockReason === 'verification') return res.status(409).json({ error: 'Vérifiez votre identité avant de publier la boutique.', blocked_by: blockReason });
+      if (blockReason === 'verification') return res.status(409).json({ error: 'Faites examiner votre boutique avant de la publier.', blocked_by: blockReason });
       if (blockReason === 'subscription') return res.status(409).json({ error: 'Un essai ou abonnement actif est nécessaire pour publier la boutique.', blocked_by: blockReason });
       if (blockReason === 'inactive') return res.status(403).json({ error: 'Cette boutique est inactive.', blocked_by: blockReason });
     }

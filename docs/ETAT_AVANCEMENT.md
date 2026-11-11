@@ -1,11 +1,60 @@
 # État d’avancement de MaTable
 
-État au **8 novembre 2026**, d’après le code du dépôt et les vérifications de
-production effectuées pendant cette session. Ce document décrit l’étendue
-fonctionnelle actuelle ; il ne remplace pas les guides détaillés ni les
-vérifications des fournisseurs.
+État au **11 novembre 2026**, d’après le code, les tests locaux et les contrôles
+de production indiqués ci-dessous. Ce document décrit l’étendue fonctionnelle
+actuelle ; il ne remplace pas les guides détaillés ni les vérifications des
+fournisseurs.
+
+## Corrections récemment déployées
+
+La PR #2 (`fix: address audit findings`) a été fusionnée vers `production` et
+déployée le 11 novembre 2026 sous le commit `fdc2bc8`. Le conteneur était
+`healthy` après bascule ; le smoke test public post-déploiement a réussi ses 47
+contrôles. Le parcours d’âge n’a pas été vérifié en direct faute de boutique de
+production avec un produit réservé aux adultes.
+
+- La politique CSP autorise les origines HTTPS des stockages configurés pour
+  les téléversements directs vers R2.
+- La tâche périodique de nettoyage des sessions journalise ses erreurs au lieu
+  de laisser un rejet non traité.
+- La déduplication analytics est atomique via un index unique ; la migration
+  retire les doublons historiques en conservant le premier événement.
+- L’adresse de facturation GeniusPay est utilisée pour le paiement sans
+  remplacer l’adresse propriétaire vérifiée, utilisée notamment pour le MFA.
+- La vérification MFA de connexion admin reste accessible pendant le mode
+  maintenance.
+- Les tailles et couleurs de commande sont contrôlées par type et par rapport
+  aux options du produit ; les modificateurs acceptés sont normalisés et leur
+  supplément est recalculé côté serveur.
+- Les favoris et mentions J’aime ne s’appliquent pas aux produits indisponibles.
+- Les produits soumis au contrôle d’âge nécessitent un jeton HMAC limité à la
+  boutique, valable 30 minutes, pour le catalogue et la commande. La date de
+  naissance déclarative n’est pas conservée ; ce contrôle n’est pas une preuve
+  d’identité. Le catalogue concerné n’est pas mis en cache.
+- `AGE_VERIFICATION_SECRET` est exigé en production et sa configuration est
+  vérifiée au démarrage.
+
+La validation locale avant déploiement a exécuté `npm run test:ci` :
+303 tests (302 réussis, aucun échec et un ignoré) ; `npm run lint` et
+`npm run build` ont réussi. Le test navigateur local du contrôle d’âge a aussi
+confirmé le refus d’une date mineure, l’accès après une date admissible et
+l’absence de stockage de la date dans le navigateur. Les tests GeniusPay sont
+dans `tests/geniuspay.test.ts`.
+
+Le nom historique `migrations/015_kadevpay_subscription_payments.sql` est
+conservé volontairement : le runner enregistre le nom complet de chaque
+migration dans `schema_migrations`. Le renommer ferait apparaître une nouvelle
+version et pourrait réexécuter une migration déjà appliquée ; son nom ne
+représente pas le fournisseur de paiement actuellement utilisé.
 
 ## Production et déploiement
+
+Vérifications publiques réalisées le **11 novembre 2026** : après le
+déploiement du commit `fdc2bc8`, le conteneur `matable-web` était sain et
+`https://matable-ci.com/health` répondait avec l’état `ok`. Le smoke test public
+en lecture seule a réussi ses 47 contrôles (pages, API, ressources et
+en-têtes). Le secret `AGE_VERIFICATION_SECRET` était présent et suffisamment
+long.
 
 - Le site est hébergé sur un VPS Hostinger, avec l’application dans Docker et
   PostgreSQL dans un conteneur séparé.
@@ -23,19 +72,20 @@ vérifications des fournisseurs.
   existants qui ont déjà une adresse reste une action manuelle, idempotente :
   `docker exec matable-web node /app/scripts/send-email-mfa-rollout-notices.mjs`.
   Les utilisateurs sans adresse e-mail ne peuvent être contactés par ce canal ;
-  il faut les informer par un autre moyen. Ces changements ne sont pas encore
-  confirmés en production tant que ce commit n’y a pas été déployé.
+  il faut les informer par un autre moyen. Leur déploiement en production
+  n’est pas confirmé par les vérifications consignées ici.
 - Une sauvegarde PostgreSQL datée du 8 novembre a été vérifiée par checksum et
   reconnue comme archive lisible par `pg_restore`.
-- Le timer systemd `matable-auto-deploy.timer` est actif sur le VPS. Il vérifie
-  `main` périodiquement ; son premier passage a construit puis déployé le
-  commit `3d3dcc2`, et le service était sain après déploiement.
-- Pour chaque nouveau commit sur `main`, le VPS récupère les sources, exécute
-  le lint, les tests CI et le build dans Docker, puis ne remplace que le service
-  Web MaTable. Le contrôle de santé a jusqu’à trois minutes ; en cas d’échec,
-  la configuration précédente et son image sont remises en service. Les
-  changements sur une autre branche ne sont pas déployés tant qu’ils ne sont
-  pas fusionnés dans `main`.
+- Le timer systemd `matable-auto-deploy.timer` est actif sur le VPS. Lors de
+  l’audit du déploiement, son override exécutait un outil installé hors du
+  dépôt, qui lisait `MATABLE_RELEASE_SHA` dans Portainer et suivait encore la
+  branche `production`. Cette dérive a rendu la dernière publication
+  inutilement complexe.
+- La procédure cible est désormais une seule branche de livraison : PR vers
+  `main`, puis approbation SSH du SHA fusionné. La synchronisation initiale de
+  `main` avec la version déployée et l’installation du script versionné restent
+  à effectuer ; jusqu’à cette migration, continuer à utiliser l’ancienne
+  procédure opérationnelle.
 
 L’automatisation ne rend pas les changements de schéma incompatibles
 automatiquement réversibles. Une migration qui supprime ou transforme des

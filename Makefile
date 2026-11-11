@@ -6,11 +6,12 @@ export VERSION
 help:
 	@printf '%s\n' 'make check                            Vérifier et compiler en local' \
 	  'make production-status                Voir le déploiement depuis le VPS' \
-	  'make production-approve VERSION=SHA   Autoriser une révision depuis le VPS'
+	  'make production-approve VERSION=SHA   Approuver le SHA courant de main par SSH'
 
 check:
 	npm run lint
 	npm run test:ci
+	python3 -m unittest discover -s tests -p 'test_*.py'
 	npm run build
 
 production-status:
@@ -19,4 +20,4 @@ production-status:
 	journalctl -u matable-auto-deploy.service -n 12 --no-pager -o cat
 
 production-approve:
-	/usr/local/sbin/matable-auto-deploy --approve "$$VERSION"
+	/usr/local/sbin/matable-portainer-deploy --approve "$$VERSION"

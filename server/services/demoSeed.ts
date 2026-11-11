@@ -25,8 +25,9 @@ export async function seedDemoDatabaseIfEmpty({
   const insertShop = `
     INSERT INTO shops (
       id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active,
-      publication_status, subscription_expires_at, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      publication_status, subscription_expires_at, last_notification_sent_at, created_at, category, city, subscription_tier, theme_config,
+      business_verification_status, business_verification_method, identity_verification_status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 'demo', 'not_submitted')
   `;
 
   const insertProduct = `

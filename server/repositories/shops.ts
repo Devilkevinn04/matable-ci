@@ -62,6 +62,12 @@ export function mapShopRow(row: Record<string, unknown>): ShopRecord {
       ? null
       : String(row.subscription_features_effective_at),
     merchant_verification_status: String(row.merchant_verification_status || 'not_required') as ShopRecord['merchant_verification_status'],
+    business_verification_status: String(row.business_verification_status || 'pending') as ShopRecord['business_verification_status'],
+    identity_verification_status: String(row.identity_verification_status || 'pending') as ShopRecord['identity_verification_status'],
+    business_verification_method: row.business_verification_method === 'manual' ? 'manual' : null,
+    identity_verification_method: row.identity_verification_method === 'manual' || row.identity_verification_method === 'didit'
+      ? row.identity_verification_method
+      : null,
     theme_config: row.theme_config ? (typeof row.theme_config === 'string' ? JSON.parse(row.theme_config) : row.theme_config) : {},
     opening_hours: row.opening_hours ? (typeof row.opening_hours === 'string' ? JSON.parse(row.opening_hours) : row.opening_hours) : undefined,
     owner_access_token_hash: row.owner_access_token_hash ? String(row.owner_access_token_hash) : null,
@@ -96,12 +102,16 @@ async function persistShopWith(
   run: (sql: string, params?: unknown[]) => Promise<{ changes: number }>,
 ): Promise<void> {
   await run(`
-    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, publication_status, featured_until, merchant_verification_status, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, pending_subscription_tier, pending_subscription_effective_at, subscription_cancel_at, subscription_admin_suspended_at, subscription_admin_suspended_status, subscription_admin_override_status, subscription_admin_override_tier, subscription_admin_override_until, subscription_features_snapshot, subscription_features_effective_at, subscription_status, trial_start, trial_end, last_notification_sent_at, whatsapp_subscription_reminders_enabled, whatsapp_subscription_reminders_consent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash, owner_name, owner_phone, owner_email)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO shops (id, name, slug, whatsapp_number, pin_code_hash, theme_color, welcome_message, is_open, is_active, publication_status, featured_until, merchant_verification_status, business_verification_status, identity_verification_status, business_verification_method, identity_verification_method, payment_status, payment_deadline_at, selected_subscription_tier, subscription_expires_at, pending_subscription_tier, pending_subscription_effective_at, subscription_cancel_at, subscription_admin_suspended_at, subscription_admin_suspended_status, subscription_admin_override_status, subscription_admin_override_tier, subscription_admin_override_until, subscription_features_snapshot, subscription_features_effective_at, subscription_status, trial_start, trial_end, last_notification_sent_at, whatsapp_subscription_reminders_enabled, whatsapp_subscription_reminders_consent_at, created_at, category, city, subscription_tier, theme_config, opening_hours, owner_access_token_hash, owner_name, owner_phone, owner_email)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET name=excluded.name, slug=excluded.slug, whatsapp_number=excluded.whatsapp_number,
       pin_code_hash=excluded.pin_code_hash, theme_color=excluded.theme_color, welcome_message=excluded.welcome_message,
       is_open=excluded.is_open, is_active=excluded.is_active, publication_status=excluded.publication_status, featured_until=excluded.featured_until, payment_status=excluded.payment_status,
       merchant_verification_status=excluded.merchant_verification_status,
+      business_verification_status=excluded.business_verification_status,
+      identity_verification_status=excluded.identity_verification_status,
+      business_verification_method=excluded.business_verification_method,
+      identity_verification_method=excluded.identity_verification_method,
       payment_deadline_at=excluded.payment_deadline_at, selected_subscription_tier=excluded.selected_subscription_tier,
       pending_subscription_tier=excluded.pending_subscription_tier,
       pending_subscription_effective_at=excluded.pending_subscription_effective_at,
@@ -123,7 +133,10 @@ async function persistShopWith(
   `, [
     shop.id, shop.name, shop.slug, shop.whatsapp_number, shop.pin_code_hash, shop.theme_color, shop.welcome_message,
     shop.is_open ? 1 : 0, shop.is_active ? 1 : 0, shop.publication_status || (shop.is_active ? 'active' : 'suspended'), shop.featured_until ?? null,
-    shop.merchant_verification_status || 'not_required', 'approved', null,
+    shop.merchant_verification_status || 'not_required',
+    shop.business_verification_status || 'pending', shop.identity_verification_status || 'pending',
+    shop.business_verification_method ?? null, shop.identity_verification_method ?? null,
+    'approved', null,
     shop.selected_subscription_tier || 'standard', shop.subscription_expires_at ?? null,
     shop.pending_subscription_tier ?? null, shop.pending_subscription_effective_at ?? null,
     shop.subscription_cancel_at ?? null, shop.subscription_admin_suspended_at ?? null,

@@ -126,6 +126,7 @@ test('SQLite and PostgreSQL bootstraps expose the same current tables, columns, 
       .sort();
     const statements = [
       ...database.postgresMigrations,
+      database.ANALYTICS_EVENT_DEDUPLICATION_INDEX_SQL,
       ...(await Promise.all(migrationFiles.map((file) => fs.readFile(path.resolve('migrations', file), 'utf8')))),
     ];
     const postgres = collectPostgresSchema(statements);

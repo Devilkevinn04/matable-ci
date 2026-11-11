@@ -519,6 +519,17 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
   assert.equal(invalidBillingEmail.status, 400);
   assert.equal((await invalidBillingEmail.json()).code, 'invalid_billing_email');
 
+  const originalOwnerEmail = `merchant-owner-${Date.now()}@example.com`;
+  const originalVerifiedAt = new Date().toISOString();
+  const setOwnerEmail = new Database(TEST_DB_PATH);
+  try {
+    setOwnerEmail.prepare(
+      'UPDATE shops SET owner_email = ?, owner_email_verified_at = ? WHERE id = ?',
+    ).run(originalOwnerEmail, originalVerifiedAt, createdPayload.shop.id);
+  } finally {
+    setOwnerEmail.close();
+  }
+
   const intentResponse = await fetch(paymentEndpoint, {
     method: 'POST',
     headers: paymentHeaders,
@@ -533,9 +544,11 @@ test('GeniusPay renewals require a signed webhook and apply exactly once', async
   assert.equal('secret_key' in intent, false);
   const savedBillingEmail = new Database(TEST_DB_PATH);
   try {
-    assert.equal(
-      (savedBillingEmail.prepare('SELECT owner_email FROM shops WHERE id = ?').get(createdPayload.shop.id) as { owner_email: string }).owner_email,
-      'facturation@example.com',
+    assert.deepEqual(
+      savedBillingEmail.prepare(
+        'SELECT owner_email, owner_email_verified_at FROM shops WHERE id = ?',
+      ).get(createdPayload.shop.id),
+      { owner_email: originalOwnerEmail, owner_email_verified_at: originalVerifiedAt },
     );
   } finally {
     savedBillingEmail.close();

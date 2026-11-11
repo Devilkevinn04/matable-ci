@@ -45,39 +45,19 @@ interface AnalyticsEventRecord {
 
 const MAX_EVENTS_PER_BATCH = 25;
 const PRODUCT_EVENT_TYPES = new Set(['product_view', 'product_click']);
-const DEDUPLICATED_EVENT_TYPES = new Set(['page_view', 'product_view', 'login', 'signup']);
 
 function analyticsInsertSql() {
   return `INSERT INTO analytics_events
     (shop_id, event_type, session_id, path, source, campaign, audience, entity_type, entity_id, device, locale, metadata, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-}
-
-async function isDuplicateEvent(
-  event: AnalyticsEventRecord,
-  dbGet: TelemetryRouterOptions['dbGet'],
-): Promise<boolean> {
-  if (!DEDUPLICATED_EVENT_TYPES.has(event.eventType)) return false;
-  const today = new Date().toISOString().slice(0, 10);
-  const shopCondition = event.shopId === null ? 'shop_id IS NULL' : 'shop_id = ?';
-  const params: unknown[] = [];
-  if (event.shopId !== null) params.push(event.shopId);
-  params.push(event.eventType, event.sessionId, event.path, `${today}%`);
-  const existing = await dbGet<{ found: number }>(`
-    SELECT 1 AS found FROM analytics_events
-    WHERE ${shopCondition} AND event_type = ? AND session_id = ? AND path = ? AND created_at LIKE ?
-    LIMIT 1
-  `, params);
-  return Boolean(existing);
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT DO NOTHING`;
 }
 
 async function insertAnalyticsEvent(
   event: AnalyticsEventRecord,
-  { dbGet, dbRun }: Pick<TelemetryRouterOptions, 'dbGet' | 'dbRun'>,
-  options: { deduplicate?: boolean } = {},
+  { dbRun }: Pick<TelemetryRouterOptions, 'dbRun'>,
 ): Promise<boolean> {
-  if (options.deduplicate !== false && await isDuplicateEvent(event, dbGet)) return false;
-  await dbRun(analyticsInsertSql(), [
+  const result = await dbRun(analyticsInsertSql(), [
     event.shopId,
     event.eventType,
     event.sessionId,
@@ -92,14 +72,13 @@ async function insertAnalyticsEvent(
     event.metadata,
     new Date().toISOString(),
   ]);
-  return true;
+  return result.changes === 1;
 }
 
 export function createTelemetryRouter({ rateLimitPublicRequest, dbGet, dbRun }: TelemetryRouterOptions) {
   const router = Router();
 
-  const record = (event: AnalyticsEventRecord, options?: { deduplicate?: boolean }) =>
-    insertAnalyticsEvent(event, { dbGet, dbRun }, options);
+  const record = (event: AnalyticsEventRecord) => insertAnalyticsEvent(event, { dbRun });
 
   router.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString(), integrations: { whatsapp_click_to_chat: 'available' } });
@@ -233,7 +212,7 @@ export function createTelemetryRouter({ rateLimitPublicRequest, dbGet, dbRun }: 
     }
 
     for (const event of records) {
-      await insertAnalyticsEvent(event, { dbGet, dbRun });
+      await insertAnalyticsEvent(event, { dbRun });
     }
 
     res.status(204).end();

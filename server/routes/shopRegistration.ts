@@ -186,6 +186,8 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       owner_email: ownerEmail,
       publication_status: 'draft',
       merchant_verification_status: 'pending',
+      business_verification_status: 'pending',
+      identity_verification_status: 'pending',
       opening_hours: normalizedOpeningHours,
       theme_config: mergedThemeConfig,
     };
