@@ -81,11 +81,14 @@ long.
   dépôt, qui lisait `MATABLE_RELEASE_SHA` dans Portainer et suivait encore la
   branche `production`. Cette dérive a rendu la dernière publication
   inutilement complexe.
-- La procédure cible est désormais une seule branche de livraison : PR vers
-  `main`, puis approbation SSH du SHA fusionné. La synchronisation initiale de
-  `main` avec la version déployée et l’installation du script versionné restent
-  à effectuer ; jusqu’à cette migration, continuer à utiliser l’ancienne
-  procédure opérationnelle.
+- La PR #3 a synchronisé la version déjà déployée avec `main` et installé le
+  flux unique de livraison. Le script versionné suit maintenant `main` ; une
+  publication exige l’approbation SSH du SHA fusionné. Le 11 novembre 2026,
+  le script et le Makefile ont été installés sur le VPS, puis le SHA
+  `3440322a87c385e4a310ca0c34d687f68d4c9e87` a été approuvé par SSH. Le
+  conteneur était `healthy` et `/health` répondait `ok`. Portainer sert aux
+  variables et secrets, pas au choix du commit ni au déclenchement du
+  déploiement.
 
 L’automatisation ne rend pas les changements de schéma incompatibles
 automatiquement réversibles. Une migration qui supprime ou transforme des
