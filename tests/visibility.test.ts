@@ -151,7 +151,7 @@ test('trial limits and annual subscription prices match the published offer', ()
   assert.equal(TRIAL_DURATION_MONTHS, 2);
   assert.equal(addCalendarMonths(new Date('2026-01-31T12:00:00.000Z'), TRIAL_DURATION_MONTHS), '2026-03-31');
   assert.equal(addCalendarMonths(new Date('2026-12-31T12:00:00.000Z'), TRIAL_DURATION_MONTHS), '2027-02-28');
-  assert.equal(TRIAL_CATALOG_LIMIT, 2);
+  assert.equal(TRIAL_CATALOG_LIMIT, 10);
   assert.equal(getSubscriptionProductLimit('standard'), 20);
   assert.equal(getSubscriptionProductLimit('premium'), Number.POSITIVE_INFINITY);
   assert.equal(getSubscriptionProductLimit('pro'), Number.POSITIVE_INFINITY);
