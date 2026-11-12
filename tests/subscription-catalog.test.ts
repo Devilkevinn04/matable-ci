@@ -36,7 +36,7 @@ test('public subscription prices and catalog limits match the active plan config
   assert.ok(faqAnswer.includes('20 articles'));
   assert.ok(faqAnswer.includes('catalogue illimité'));
   assert.ok(faqAnswer.includes('page Formules commerçants'));
-  assert.ok(terms.includes('maximum de 2 produits'));
+  assert.ok(terms.includes(`maximum de ${TRIAL_CATALOG_LIMIT} produits`));
   assert.ok(terms.includes(`essai gratuit de ${TRIAL_DURATION_MONTHS} mois`));
   assert.ok(terms.includes('commander avec ou sans compte'));
   assert.ok(terms.includes('tarif sur la page Formules commerçants'));

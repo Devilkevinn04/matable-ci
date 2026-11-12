@@ -2320,7 +2320,7 @@ test('Didit identity decisions stay independent from shop approval; signed webho
   });
   assert.equal(publication.response.status, 200, JSON.stringify(publication.payload));
   let trialProductId: number | null = null;
-  for (let index = 0; index < 2; index += 1) {
+  for (let index = 0; index < 10; index += 1) {
     const product = await apiFetch(`/api/shops/${shopId}/products`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2329,12 +2329,12 @@ test('Didit identity decisions stay independent from shop approval; signed webho
     assert.equal(product.response.status, 200, JSON.stringify(product.payload));
     if (index === 0) trialProductId = product.payload.product.id;
   }
-  const thirdTrialProduct = await apiFetch(`/api/shops/${shopId}/products`, {
+  const eleventhTrialProduct = await apiFetch(`/api/shops/${shopId}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Troisième article d’essai', description: 'Article de démonstration supplémentaire.', price: 1500, stock: 2 }),
+    body: JSON.stringify({ title: 'Onzième article d’essai', description: 'Article de démonstration supplémentaire.', price: 1500, stock: 2 }),
   });
-  assert.equal(thirdTrialProduct.response.status, 409, JSON.stringify(thirdTrialProduct.payload));
+  assert.equal(eleventhTrialProduct.response.status, 409, JSON.stringify(eleventhTrialProduct.payload));
   const testDbAfterTrial = new Database(TEST_DB_PATH);
   testDbAfterTrial.prepare("UPDATE shops SET subscription_status = 'expired', subscription_expires_at = ? WHERE id = ?")
     .run(new Date(Date.now() - 4 * 86400000).toISOString(), shopId);

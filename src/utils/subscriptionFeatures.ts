@@ -69,7 +69,7 @@ export function getSubscriptionAnalyticsDayLimit(
 }
 
 export const TRIAL_DURATION_MONTHS = 2;
-export const TRIAL_CATALOG_LIMIT = 2;
+export const TRIAL_CATALOG_LIMIT = 10;
 export const SUBSCRIPTION_EXPIRY_GRACE_DAYS = 2;
 export const PRO_BOOST_DISCOUNT_PERCENT = DEFAULT_SUBSCRIPTION_PRO_FEATURES.boostDiscountPercent;
 
