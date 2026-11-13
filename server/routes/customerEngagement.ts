@@ -81,6 +81,7 @@ export function createCustomerEngagementRouter({
         shop_id: Number(row.saved_product_shop_id),
         title: String(row.saved_product_title),
         price: Number(row.saved_product_price),
+        category: shop.category,
         image_url: toPublicProductImageUrl(
           Number(row.saved_product_id),
           row.saved_product_image_url == null ? '' : String(row.saved_product_image_url),

@@ -6,7 +6,7 @@ import { findPublicDiscoveryPage, toDiscoveryCitySlug } from '../../src/utils/di
 import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
 import { isShopExcludedFromPublicIndex } from '../../src/utils/shopIndexing.ts';
 import { FAQ_SECTIONS } from '../../src/utils/faqContent.ts';
-import { SUBSCRIPTION_PLANS, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../../src/utils/subscriptionFeatures.ts';
+import { SUBSCRIPTION_PLANS, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS, TRIAL_PROMOTION_SLOTS_PER_TIER } from '../../src/utils/subscriptionFeatures.ts';
 import type { SubscriptionPrices } from './subscriptionPricing.ts';
 import { toPublicProductImageUrl } from './publicProductImages.ts';
 import type { SeoArticle } from '../../src/utils/seoArticles.ts';
@@ -254,7 +254,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       `<meta name="twitter:image" content="${escapeHtml(`${origin}/brand-kit/social-share.png`)}" />`,
       `<script type="application/ld+json">${jsonLd}</script>`,
     ].join('\n  ');
-    const crawlablePlans = `<noscript><main><h1>Vendre sur MaTable</h1><p>${escapeHtml(description)}</p><p>Essai gratuit de ${TRIAL_DURATION_MONTHS} mois, jusqu’à ${TRIAL_CATALOG_LIMIT} produits. Vous pouvez aussi choisir et payer directement une formule.</p><h2>Formules commerçants</h2><ul>${plans.map((plan) => `<li><h3>${escapeHtml(plan.label)} — ${escapeHtml(new Intl.NumberFormat('fr-FR').format(prices[plan.tier]))} FCFA par mois</h3><p>${escapeHtml(plan.description)}</p><ul>${plan.benefits.map((benefit) => `<li>${escapeHtml(benefit)}</li>`).join('')}</ul></li>`).join('')}</ul><p><a href="${escapeHtml(`${origin}/app/creer-boutique`)}">Créer ma boutique</a></p></main></noscript>`;
+    const crawlablePlans = `<noscript><main><h1>Vendre sur MaTable</h1><p>${escapeHtml(description)}</p><p>Les ${TRIAL_PROMOTION_SLOTS_PER_TIER} premières boutiques Standard et les ${TRIAL_PROMOTION_SLOTS_PER_TIER} premières boutiques Premium bénéficient d’un essai gratuit de ${TRIAL_DURATION_MONTHS} mois, jusqu’à ${TRIAL_CATALOG_LIMIT} produits. Les boutiques suivantes doivent régler un abonnement pour l’activer.</p><h2>Formules commerçants</h2><ul>${plans.map((plan) => `<li><h3>${escapeHtml(plan.label)} — ${escapeHtml(new Intl.NumberFormat('fr-FR').format(prices[plan.tier]))} FCFA par mois</h3><p>${escapeHtml(plan.description)}</p><ul>${plan.benefits.map((benefit) => `<li>${escapeHtml(benefit)}</li>`).join('')}</ul></li>`).join('')}</ul><p><a href="${escapeHtml(`${origin}/app/creer-boutique`)}">Créer ma boutique</a></p></main></noscript>`;
     return html
       .replace(/<title>.*?<\/title>/, '')
       .replace(/<meta name="description" content=".*?" \/>/, '')
@@ -273,12 +273,23 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
     const robots = isShopExcludedFromPublicIndex(targetShop.name)
       ? 'noindex, nofollow'
       : 'index, follow, max-image-preview:large';
-    const defaultImage = `${origin}/brand-kit/social-share.png`;
-    const customImage = targetShop.theme_config?.custom_banner_url;
-    const image = customImage && /^https?:\/\//i.test(String(customImage)) ? String(customImage) : defaultImage;
     const shopProducts = products
       .filter((product) => product.shop_id === targetShop.id && product.is_available && product.stock > 0 && !isAgeRestrictedProduct(product))
       .slice(0, 30);
+    const absoluteHttpUrl = (value: unknown): string | null => {
+      if (typeof value !== 'string' || !value.trim()) return null;
+      try {
+        const url = new URL(value, origin);
+        return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null;
+      } catch {
+        return null;
+      }
+    };
+    const customImage = absoluteHttpUrl(targetShop.theme_config?.custom_banner_url);
+    const productImage = shopProducts
+      .map((product) => absoluteHttpUrl(toPublicProductImageUrl(product.id, product.thumbnail_url || product.image_url, 998, origin)))
+      .find((value): value is string => Boolean(value));
+    const image = customImage || productImage || `${origin}/brand-kit/social-share.png`;
     const structuredData = {
       '@context': 'https://schema.org',
       '@type': 'Store',
@@ -329,6 +340,10 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       `<meta name="twitter:image" content="${escapeHtml(image)}" />`,
       `<script type="application/ld+json">${jsonLd}</script>`,
     ].join('\n  ');
+    const crawlableProducts = shopProducts.length > 0
+      ? `<ul>${shopProducts.map((product) => `<li><strong>${escapeHtml(product.title)}</strong> — ${escapeHtml(new Intl.NumberFormat('fr-FR').format(product.price))} FCFA${product.description ? `<p>${escapeHtml(product.description)}</p>` : ''}</li>`).join('')}</ul>`
+      : '<p>Le catalogue sera bientôt disponible.</p>';
+    const crawlableShop = `<noscript><main><article><h1>${escapeHtml(targetShop.name)}</h1>${targetShop.city ? `<p>${escapeHtml(targetShop.city)}, Côte d’Ivoire</p>` : ''}<p>${escapeHtml(description)}</p><h2>Catalogue</h2>${crawlableProducts}</article></main></noscript>`;
 
     return html
       .replace(/<title>.*?<\/title>/, '')
@@ -336,7 +351,8 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       .replace(/<meta name="robots" content=".*?" \/>/, '')
       .replace(/<link rel="canonical" href=".*?" \/>/, '')
       .replace(/<meta (?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*\/>/g, '')
-      .replace('</head>', `  ${meta}\n  </head>`);
+      .replace('</head>', `  ${meta}\n  </head>`)
+      .replace('</body>', `${crawlableShop}\n  </body>`);
   };
 
   const injectLegalSeo = (html: string, page: string, req: Request) => {

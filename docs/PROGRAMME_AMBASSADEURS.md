@@ -2,7 +2,7 @@
 
 ## Proposition
 
-Lancer un test avec trois à cinq ambassadeurs, sans forfait publicitaire garanti. Chaque partenaire reçoit un code et un lien personnels. La prime est unique : 20 % du tarif d'un mois de la formule correspondant au premier abonnement effectivement payé par le nouveau commerçant.
+Lancer un test avec trois à cinq ambassadeurs, sans forfait publicitaire garanti. Chaque partenaire reçoit un code et un lien personnels. La prime est unique et son taux est défini individuellement dans le Super Admin, de 0 à 50 % (20 % par défaut), sur le tarif d'un mois de la formule correspondant au premier abonnement effectivement payé par le nouveau commerçant.
 
 | Formule | Prix mensuel par défaut | Prime unique | Reste avant charges |
 | --- | ---: | ---: | ---: |
@@ -10,7 +10,7 @@ Lancer un test avec trois à cinq ambassadeurs, sans forfait publicitaire garant
 | Premium | 5 000 FCFA | 1 000 FCFA | 4 000 FCFA |
 | Pro | 8 000 FCFA | 1 600 FCFA | 6 400 FCFA |
 
-Ces prix sont les valeurs par défaut : les tarifs applicables peuvent être modifiés dans le Super Admin. La prime utilise le montant du paiement confirmé, et non le tarif courant après modification. Un abonnement annuel coûte dix mensualités : la prime est calculée sur un dixième du paiement annuel, arrondie au FCFA le plus proche. Les frais de paiement, taxes et autres charges ne sont pas déduits dans le tableau.
+Ces prix sont les valeurs par défaut : les tarifs applicables peuvent être modifiés dans le Super Admin. Le tableau montre les primes indicatives au taux par défaut de 20 %; le taux effectif de chaque partenaire est affiché dans son espace. La prime utilise le montant du paiement confirmé, et non le tarif courant après modification. Un abonnement annuel coûte dix mensualités : la prime est calculée sur un dixième du paiement annuel, arrondie au FCFA le plus proche. Les frais de paiement, taxes et autres charges ne sont pas déduits dans le tableau.
 
 Le commerçant peut profiter de deux mois d'essai Standard ou payer avant la fin de l'essai. Aucun paiement n'est dû pour une inscription seule ou un abonnement gratuit.
 
@@ -56,7 +56,7 @@ Bonjour,
 
 Nous lançons un programme de partenariat à la performance pour MaTable.ci. Vous recevez un lien et un code personnels pour recommander la plateforme aux commerçants.
 
-Pour chaque nouveau commerçant attribué qui crée et publie une boutique, puis règle son premier abonnement, vous recevez une prime unique de 20 % du tarif mensuel de la formule choisie, après confirmation du paiement et vérification. La même base d'un mois s'applique aux abonnements annuels.
+Pour chaque nouveau commerçant attribué qui crée et publie une boutique, puis règle son premier abonnement, vous recevez une prime unique au taux défini pour votre compte, après confirmation du paiement et vérification. Le taux par défaut est de 20 % et peut être réglé entre 0 et 50 %; il est visible dans votre espace. La même base d'un mois s'applique aux abonnements annuels.
 
 Le commerçant peut commencer par deux mois d'essai gratuit ou choisir une formule payante immédiatement. Nous ne proposons pas de cachet fixe ; les primes validées sont réglées mensuellement. Les auto-inscriptions, les inscriptions fictives et les paiements remboursés ne sont pas rémunérés.
 

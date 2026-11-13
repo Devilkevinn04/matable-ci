@@ -48,8 +48,8 @@ export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: numb
       if (response) clearAmbassadorCookie(response);
       return null;
     }
-    const ambassador = await dbGet<{ id: string; name: string; email: string; code: string; active: number }>(
-      'SELECT id, name, email, code, active FROM ambassadors WHERE id = ?', [session.ambassador_id],
+    const ambassador = await dbGet<{ id: string; name: string; email: string; code: string; active: number; commission_rate: number | string }>(
+      'SELECT id, name, email, code, active, commission_rate FROM ambassadors WHERE id = ?', [session.ambassador_id],
     );
     if (!ambassador?.active) {
       await dbRun('DELETE FROM ambassador_sessions WHERE token = ?', [token]);
@@ -324,6 +324,7 @@ export function createAmbassadorAuthRouter(rateLimitPublicRequest: (limit?: numb
     `, [ambassadorId, ambassadorId]);
     return response.json({ ambassador: {
       name: session.ambassador.name, email: session.ambassador.email, code: session.ambassador.code,
+      commission_rate: Number(session.ambassador.commission_rate),
     }, summary, referrals, payouts, withdrawals, link_stats: {
       total_clicks: Number(linkStats?.total_clicks || 0),
       active_tokens: Number(linkStats?.active_tokens || 0),

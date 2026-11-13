@@ -10,6 +10,7 @@ import express from 'express';
 import { setTimeout as delay } from 'node:timers/promises';
 import Database from 'better-sqlite3';
 import { createAdminRouter } from '../server/routes/admin.ts';
+import { TRIAL_CATALOG_LIMIT } from '../src/utils/subscriptionFeatures.ts';
 
 const TEST_PORT = 43123;
 const TEST_DB_PATH = path.join(tmpdir(), `matable-test-${Date.now()}.db`);
@@ -751,6 +752,7 @@ before(async () => {
       VAPID_PRIVATE_KEY: 'B'.repeat(43),
       VAPID_SUBJECT: 'mailto:assistance@matable-ci.com',
       NODE_ENV: 'test',
+      TRUST_PROXY_HOPS: '1',
       PORT: String(TEST_PORT),
       MATABLE_DB_PATH: TEST_DB_PATH,
       APP_URL: BASE_URL,
@@ -1523,6 +1525,7 @@ test('customer favorites and product likes are private, persistent, and toggleab
   assert.deepEqual(engagementState.payload.liked_product_ids, [product.id]);
   assert.equal(engagementState.payload.shops[0].slug, shopListing.slug);
   assert.equal(engagementState.payload.products[0].title, product.title);
+  assert.equal(engagementState.payload.products[0].category, shopListing.category);
 
   const publicFeed = await apiFetch('/api/v1/catalog/storefronts/feed?sort=new&limit=48');
   const publicProduct = publicFeed.payload.products.find((item: any) => item.id === product.id);
@@ -1736,6 +1739,20 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   const publishedShop = publishedDirectory.payload.find((shop: any) => shop.id === shopId);
   assert.equal(publishedShop.is_verified, true);
   assert.equal('merchant_verification_status' in publishedShop, false);
+  const identityDb = new Database(TEST_DB_PATH);
+  const previousBusinessVerification = identityDb.prepare(
+    'SELECT business_verification_status FROM shops WHERE id = ?',
+  ).get(shopId) as { business_verification_status: string | null };
+  try {
+    identityDb.prepare('UPDATE shops SET business_verification_status = ? WHERE id = ?').run('pending', shopId);
+    const identityVerifiedDirectory = await apiFetch('/api/shops');
+    const identityVerifiedShop = identityVerifiedDirectory.payload.find((shop: any) => shop.id === shopId);
+    assert.equal(identityVerifiedShop.is_verified, true, 'The public badge reflects identity verification, not business review status');
+  } finally {
+    identityDb.prepare('UPDATE shops SET business_verification_status = ? WHERE id = ?')
+      .run(previousBusinessVerification.business_verification_status, shopId);
+    identityDb.close();
+  }
 
   const invalidVariantOrder = await apiFetch('/api/orders', {
     method: 'POST',
@@ -1770,13 +1787,14 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   const customerSessionCookies = cookieJar;
   cookieJar = '';
   const guestEmail = `commande-${Date.now()}@example.ci`;
+  const guestPhone = uniquePhone();
   const guestOrder = await apiFetch('/api/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       shop_id: shopId,
       customer_name: 'Client invité',
-      customer_phone: uniquePhone(),
+      customer_phone: guestPhone,
       customer_email: guestEmail,
       delivery_location: 'Cocody Angré',
       total_amount: 1,
@@ -1792,6 +1810,22 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   assert.equal(guestOrder.payload.order.attribution_campaign, 'launch_tiktok_1');
   assert.equal(guestOrder.payload.order.total_amount, 2500);
   assert.equal(guestOrder.payload.order.payment_method_preference, 'to_confirm');
+  const duplicateGuestOrder = await apiFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: shopId,
+      customer_name: 'Client invité',
+      customer_phone: guestPhone.replace('+225', '225'),
+      delivery_location: 'Cocody Angré',
+      items: [{ product_id: productId, quantity: 1 }],
+    }),
+  });
+  assert.equal(duplicateGuestOrder.response.status, 409, JSON.stringify(duplicateGuestOrder.payload));
+  assert.match(duplicateGuestOrder.payload.error, /déjà en attente/i);
+  const duplicateOrderDb = new Database(TEST_DB_PATH);
+  assert.equal((duplicateOrderDb.prepare('SELECT stock FROM products WHERE id = ?').get(productId) as { stock: number }).stock, 5);
+  duplicateOrderDb.close();
   const guestWhatsappClick = await apiFetch(`/api/orders/${guestOrder.payload.order.id}/whatsapp-click`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2320,7 +2354,7 @@ test('Didit identity decisions stay independent from shop approval; signed webho
   });
   assert.equal(publication.response.status, 200, JSON.stringify(publication.payload));
   let trialProductId: number | null = null;
-  for (let index = 0; index < 2; index += 1) {
+  for (let index = 0; index < TRIAL_CATALOG_LIMIT; index += 1) {
     const product = await apiFetch(`/api/shops/${shopId}/products`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2329,12 +2363,12 @@ test('Didit identity decisions stay independent from shop approval; signed webho
     assert.equal(product.response.status, 200, JSON.stringify(product.payload));
     if (index === 0) trialProductId = product.payload.product.id;
   }
-  const thirdTrialProduct = await apiFetch(`/api/shops/${shopId}/products`, {
+  const eleventhTrialProduct = await apiFetch(`/api/shops/${shopId}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Troisième article d’essai', description: 'Article de démonstration supplémentaire.', price: 1500, stock: 2 }),
+    body: JSON.stringify({ title: 'Sixième article d’essai', description: 'Article de démonstration supplémentaire.', price: 1500, stock: 2 }),
   });
-  assert.equal(thirdTrialProduct.response.status, 409, JSON.stringify(thirdTrialProduct.payload));
+  assert.equal(eleventhTrialProduct.response.status, 409, JSON.stringify(eleventhTrialProduct.payload));
   const testDbAfterTrial = new Database(TEST_DB_PATH);
   testDbAfterTrial.prepare("UPDATE shops SET subscription_status = 'expired', subscription_expires_at = ? WHERE id = ?")
     .run(new Date(Date.now() - 4 * 86400000).toISOString(), shopId);
@@ -2463,7 +2497,7 @@ test('concurrent single-item orders cannot oversell the last unit', async () => 
     body: JSON.stringify({
       shop_id: 1,
       customer_name: 'Client doublon',
-      customer_phone: '+2250500000003',
+      customer_phone: uniquePhone(),
       delivery_location: 'Abidjan',
       payment_method_preference: 'wave',
       items: [
@@ -2477,6 +2511,37 @@ test('concurrent single-item orders cannot oversell the last unit', async () => 
   const duplicateProductAfter = await apiFetch(`/api/shops/1/products`);
   const duplicateProductState = duplicateProductAfter.payload.find((item: any) => item.id === duplicateProduct.id);
   assert.equal(duplicateProductState.stock, 1);
+
+  const simultaneousProductCreate = await apiFetch('/api/shops/1/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: 'Produit téléphone concurrent',
+      description: 'Vérifie les réservations concurrentes d’un même numéro.',
+      price: 1200,
+      stock: 3,
+      image_url: 'https://example.com/same-phone.jpg',
+      is_available: true,
+      category: 'fashion',
+    }),
+  });
+  assert.equal(simultaneousProductCreate.response.status, 200);
+  const simultaneousPhone = uniquePhone();
+  const samePhoneAttempts = await Promise.all([1, 2].map(() => apiFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      shop_id: 1,
+      customer_name: 'Client concurrent',
+      customer_phone: simultaneousPhone,
+      delivery_location: 'Abidjan',
+      items: [{ product_id: simultaneousProductCreate.payload.product.id, quantity: 1 }],
+    }),
+  })));
+  assert.deepEqual(samePhoneAttempts.map((attempt) => attempt.response.status).sort(), [200, 409]);
+  const simultaneousProducts = await apiFetch('/api/shops/1/products');
+  const simultaneousProduct = simultaneousProducts.payload.find((item: any) => item.id === simultaneousProductCreate.payload.product.id);
+  assert.equal(simultaneousProduct.stock, 2);
 });
 
 test('existing merchant full flow: login, product management, order lifecycle, billing snapshot, and store status toggle', async () => {
@@ -2770,7 +2835,7 @@ ${createdProduct.id},"Test produit flux marchand","Produit de test pour validati
     body: JSON.stringify({
       shop_id: 1,
       customer_name: 'Client Test',
-      customer_phone: '+2250500000001',
+      customer_phone: '+2250500000099',
       delivery_location: 'Abidjan Plateau',
       delivery_note: 'Livraison urgente',
       delivery_slot: 'Midi',
@@ -2833,7 +2898,7 @@ ${createdProduct.id},"Test produit flux marchand","Produit de test pour validati
     body: JSON.stringify({
       shop_id: 1,
       customer_name: 'Client stock concurrent',
-      customer_phone: '+2250500000004',
+      customer_phone: uniquePhone(),
       delivery_location: 'Abidjan Plateau',
       payment_method_preference: 'wave',
       items: [{ product_id: createdProduct.id, quantity: 5 }],
@@ -3690,5 +3755,43 @@ test('database and order snapshots preserve structural integrity', () => {
     }
   } finally {
     database.close();
+  }
+});
+
+test('merchant PIN attempts are limited per account across source IPs', async () => {
+  const rateLimitDb = new Database(TEST_DB_PATH);
+  rateLimitDb.prepare('DELETE FROM request_rate_limits').run();
+  rateLimitDb.close();
+  try {
+    for (let attempt = 1; attempt <= 6; attempt += 1) {
+      const response = await fetch(`${BASE_URL}/api/auth/merchant-login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Forwarded-For': `198.51.100.${attempt}`,
+        },
+        body: JSON.stringify({ phone: '+2250708091011', pin: '111111' }),
+      });
+      assert.equal(response.status, attempt === 6 ? 429 : 401);
+    }
+    for (let attempt = 1; attempt <= 6; attempt += 1) {
+      const response = await fetch(`${BASE_URL}/api/auth/merchant-email-setup/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Forwarded-For': `203.0.113.${attempt}`,
+        },
+        body: JSON.stringify({
+          phone: '+2250708091011',
+          pin: '111111',
+          email: 'pin-test@example.ci',
+        }),
+      });
+      assert.equal(response.status, attempt === 6 ? 429 : 401);
+    }
+  } finally {
+    const cleanupDb = new Database(TEST_DB_PATH);
+    cleanupDb.prepare('DELETE FROM request_rate_limits').run();
+    cleanupDb.close();
   }
 });

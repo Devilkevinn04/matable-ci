@@ -3,13 +3,11 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowDownRight, ArrowRight, BadgeCheck, Check, Copy, CreditCard, Download, Eye, EyeOff, Handshake, LayoutDashboard, LockKeyhole, LogOut, Mail, MessageCircle, Search, Share2, ShieldCheck, Store, Users, Wallet } from 'lucide-react';
 import { stringifyCsv } from '../utils/csv';
 import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
-import { SUBSCRIPTION_PLANS } from '../utils/subscriptionFeatures';
 import { buildAmbassadorReferralUrl, getAmbassadorMonthlyStats, type AmbassadorMonthlyStats } from '../utils/ambassadors';
-import { useSubscriptionPrices } from '../utils/useSubscriptionPrices';
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 
 interface DashboardData {
-  ambassador: { name: string; email: string; code: string };
+  ambassador: { name: string; email: string; code: string; commission_rate: number };
   summary: {
     registrations: number | string; published: number | string; paying: number | string;
     total_commissions: number | string; pending_commissions: number | string;
@@ -133,7 +131,6 @@ function AmbassadorMonthlyChart({
 export function AmbassadorDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { prices: subscriptionPrices, error: subscriptionPricesError } = useSubscriptionPrices();
   const isActivation = location.pathname === '/ambassadeur/activer';
   const isApplication = location.pathname === '/ambassadeur/inscription';
   const activationToken = new URLSearchParams(location.search).get('token') || '';
@@ -541,26 +538,14 @@ export function AmbassadorDashboard() {
         <section aria-labelledby="ambassador-commission-title" className="ambassador-commission-card mt-6 max-w-[540px] rounded-[24px] border border-[#e7b77d]/20 bg-[#e7b77d]/[0.07] p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.15em] text-[#f1c893]">Rémunération à la performance</p>
-              <h2 id="ambassador-commission-title" className="mt-2 font-display text-2xl font-black tracking-[-.04em] text-white">Une prime unique de 20 %</h2>
+              <p className="text-[10px] font-black uppercase tracking-[0.15em] text-[#f1c893]">Prime ambassadeur</p>
+              <h2 id="ambassador-commission-title" className="mt-2 font-display text-2xl font-black tracking-[-.04em] text-white">Une prime unique personnalisée</h2>
             </div>
-            <span className="font-display text-4xl font-black tracking-[-.06em] text-[#e7b77d]">20%</span>
+            <span className="font-display text-2xl font-black tracking-[-.04em] text-[#e7b77d]">Selon votre compte</span>
           </div>
           <p className="mt-3 text-xs leading-5 text-white/60">
-            Calculée sur le tarif mensuel de la formule, après le premier paiement confirmé. Un paiement annuel est divisé par dix avant calcul.
+            Le taux convenu est indiqué dans votre espace. La prime est calculée sur le tarif mensuel après le premier paiement confirmé ; un paiement annuel est divisé par dix avant calcul.
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {Object.values(SUBSCRIPTION_PLANS).map((plan) => {
-              const monthlyPrice = subscriptionPrices?.[plan.tier];
-              const commission = monthlyPrice === undefined ? null : Math.round(monthlyPrice * 0.2);
-              return <div key={plan.tier} className="rounded-xl border border-white/10 bg-[#102e28]/45 px-3 py-2">
-                <p className="text-[10px] font-bold text-white/55">{plan.label}</p>
-                <p className="mt-0.5 text-xs font-extrabold text-[#f1c893]">
-                  {commission === null ? (subscriptionPricesError ? 'Tarif indisponible' : 'Calcul du tarif…') : `Prime indicative : ${new Intl.NumberFormat('fr-FR').format(commission)} FCFA`}
-                </p>
-              </div>;
-            })}
-          </div>
           <p className="mt-3 text-[10px] leading-5 text-white/40">Montants indicatifs, soumis à vérification. La boutique doit être publiée et la commission validée avant versement. Pas de prime pour une inscription seule ou un renouvellement ; les remboursements annulent les primes non versées. Retraits manuels après validation.</p>
         </section>
       </section>
@@ -661,7 +646,7 @@ export function AmbassadorDashboard() {
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/50">Votre espace</p>
             <ul className="mt-3 space-y-2.5 text-xs font-semibold text-white/80">
               <li className="flex items-center gap-2"><span className="grid h-5 w-5 place-items-center rounded-full bg-[#e7b77d]/15 text-[#f1c893]"><Check className="h-3 w-3" /></span>Recommandations suivies</li>
-              <li className="flex items-center gap-2"><span className="grid h-5 w-5 place-items-center rounded-full bg-[#e7b77d]/15 text-[#f1c893]"><Check className="h-3 w-3" /></span>Commissions détaillées</li>
+              <li className="flex items-center gap-2"><span className="grid h-5 w-5 place-items-center rounded-full bg-[#e7b77d]/15 text-[#f1c893]"><Check className="h-3 w-3" /></span>Primes détaillées</li>
               <li className="flex items-center gap-2"><span className="grid h-5 w-5 place-items-center rounded-full bg-[#e7b77d]/15 text-[#f1c893]"><Check className="h-3 w-3" /></span>Retraits transparents</li>
             </ul>
           </article>
@@ -762,7 +747,7 @@ export function AmbassadorDashboard() {
   return <main data-dashboard-tab={activeTab} className="ambassador-dashboard min-h-screen bg-[radial-gradient(circle_at_top,_rgba(12,109,89,0.12),_transparent_42%),_#f5f3ee]">
     <header className="bg-[linear-gradient(135deg,#0d2f2b_0%,#123b32_42%,#0f4840_100%)] text-white shadow-[0_18px_50px_rgba(10,27,24,0.18)]">
       <div className="mx-auto flex max-w-5xl flex-wrap items-end justify-between gap-5 px-4 py-6 sm:px-6 sm:py-9">
-        <div><a href="/" className="text-sm font-black text-white">MaTable.ci</a><p className="mt-5 text-[11px] font-black uppercase tracking-[0.18em] text-[#f2bd72]">Espace ambassadeur</p><h1 className="mt-2 text-2xl font-black sm:text-3xl">Bonjour, {dashboard.ambassador.name}</h1><p className="mt-1 text-sm text-white/75">{dashboard.ambassador.email}</p></div>
+        <div><a href="/" className="text-sm font-black text-white">MaTable.ci</a><p className="mt-5 text-[11px] font-black uppercase tracking-[0.18em] text-[#f2bd72]">Espace ambassadeur</p><h1 className="mt-2 text-2xl font-black sm:text-3xl">Bonjour, {dashboard.ambassador.name}</h1><p className="mt-1 text-sm text-white/75">{dashboard.ambassador.email}</p><p className="mt-2 text-xs font-semibold text-[#f1c893]">Votre taux de prime : {dashboard.ambassador.commission_rate} %</p></div>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" title={showAmounts ? 'Masquer les montants' : 'Afficher les montants'} aria-label={showAmounts ? 'Masquer les montants' : 'Afficher les montants'} aria-pressed={!showAmounts} onClick={() => setShowAmounts((visible) => !visible)} className="grid h-10 w-10 place-items-center rounded-lg border border-white/15 bg-white/5 text-white transition hover:bg-white/10">{showAmounts ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
           <button type="button" onClick={() => void logout()} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-white px-3 text-sm font-bold text-[#123b32] shadow-[0_8px_20px_rgba(255,255,255,0.18)]"><LogOut className="h-4 w-4" />Déconnexion</button>
@@ -965,7 +950,7 @@ export function AmbassadorDashboard() {
         <div>
           <p className="text-[11px] font-black uppercase tracking-[0.15em] text-emerald-800">Gestion des gains</p>
           <h2 id="withdrawal-request-title" className="mt-2 text-xl font-black text-slate-950">Retraits</h2>
-          <p className="mt-1 text-sm text-slate-600">Demandez le retrait de vos commissions validées. Aucun seuil minimum n’est requis.</p>
+          <p className="mt-1 text-sm text-slate-600">Demandez le retrait de vos primes validées. Aucun seuil minimum n’est requis.</p>
           <p className="mt-2 text-xs leading-5 text-slate-500">Les demandes approuvées sont traitées dans les cinq premiers jours ouvrés (hors week-ends et jours fériés) du mois suivant. Le transfert est manuel et n’est confirmé qu’après vérification.</p>
         </div>
         <div className="mt-4 grid gap-3 rounded-2xl border border-emerald-900/15 bg-[#ebfaf5] p-4 sm:grid-cols-3">

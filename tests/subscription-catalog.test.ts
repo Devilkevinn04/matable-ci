@@ -11,6 +11,7 @@ import {
   SUBSCRIPTION_PRODUCT_LIMITS,
   TRIAL_CATALOG_LIMIT,
   TRIAL_DURATION_MONTHS,
+  TRIAL_PROMOTION_SLOTS_PER_TIER,
 } from '../src/utils/subscriptionFeatures';
 
 function normalizeSpaces(value: string) {
@@ -36,15 +37,15 @@ test('public subscription prices and catalog limits match the active plan config
   assert.ok(faqAnswer.includes('20 articles'));
   assert.ok(faqAnswer.includes('catalogue illimité'));
   assert.ok(faqAnswer.includes('page Formules commerçants'));
-  assert.ok(terms.includes('maximum de 2 produits'));
+  assert.ok(terms.includes(`maximum de ${TRIAL_CATALOG_LIMIT} produits`));
   assert.ok(terms.includes(`essai gratuit de ${TRIAL_DURATION_MONTHS} mois`));
   assert.ok(terms.includes('commander avec ou sans compte'));
   assert.ok(terms.includes('tarif sur la page Formules commerçants'));
-  assert.ok(faqAnswer.includes(`essai Standard gratuit de ${TRIAL_DURATION_MONTHS} mois`));
+  assert.ok(faqAnswer.includes(`${TRIAL_PROMOTION_SLOTS_PER_TIER} essais Standard et ${TRIAL_PROMOTION_SLOTS_PER_TIER} essais Premium de ${TRIAL_DURATION_MONTHS} mois`));
   assert.ok(readme.includes('20 produits et 2 photos par produit'));
   assert.ok(readme.includes('Premium un nombre illimité de produits'));
   assert.ok(readme.includes('Pro un nombre illimité de produits'));
   assert.equal(TRIAL_DURATION_MONTHS, 2);
-  assert.ok(readme.includes('essai Standard de deux mois'));
-  assert.ok(readme.includes(`${TRIAL_CATALOG_LIMIT} produits maximum`));
+  assert.ok(readme.includes('75 premières inscriptions Standard'));
+  assert.ok(readme.includes(`${TRIAL_CATALOG_LIMIT} produits`));
 });

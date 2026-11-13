@@ -4,7 +4,7 @@ import { buildAmbassadorReferralUrl, isCommissionPayableForMonth } from '../util
 import { stringifyCsv } from '../utils/csv';
 
 interface Ambassador {
-  id: string; name: string; code: string; email: string | null; phone: string | null; active: number;
+  id: string; name: string; code: string; email: string | null; phone: string | null; commission_rate: number; active: number;
   has_account: number; invite_expires_at: string | null; registrations: number; published: number; paying: number; commissions: number;
   total_clicks: number; active_tokens: number; total_referrals: number; conversion_rate: number; last_click_at: string | null;
   clicks_7d: number; clicks_30d: number; clicks_90d: number;
@@ -60,6 +60,7 @@ export function AdminAmbassadors() {
   const [phone, setPhone] = useState('');
   const [editingAmbassadorId, setEditingAmbassadorId] = useState<string | null>(null);
   const [profileDraft, setProfileDraft] = useState({ name: '', email: '', phone: '' });
+  const [commissionRateDrafts, setCommissionRateDrafts] = useState<Record<string, string>>({});
   const [references, setReferences] = useState<Record<number, string>>({});
   const [reasons, setReasons] = useState<Record<number, string>>({});
   const [inviteLinks, setInviteLinks] = useState<Record<string, { url: string; expiresAt: string; emailSent: boolean }>>({});
@@ -79,6 +80,7 @@ export function AdminAmbassadors() {
     if (!response.ok) throw new Error(data.error || 'Chargement impossible.');
     setApplications(data.applications || []);
     setAmbassadors(data.ambassadors);
+    setCommissionRateDrafts(Object.fromEntries(data.ambassadors.map((ambassador: Ambassador) => [ambassador.id, String(ambassador.commission_rate)])));
     setReferrals(data.referrals);
     setPayouts(data.payouts);
     setWithdrawals(data.withdrawals);
@@ -107,6 +109,17 @@ export function AdminAmbassadors() {
     if (await perform(`/${ambassador.id}`, 'PATCH', profileDraft)) {
       setEditingAmbassadorId(null);
       setNotice(emailChanged ? 'Profil mis à jour. Créez un nouveau lien pour le nouvel e-mail.' : 'Profil ambassadeur mis à jour.');
+    }
+  };
+  const saveCommissionRate = async (ambassador: Ambassador) => {
+    const rawRate = commissionRateDrafts[ambassador.id];
+    const commissionRate = Number(rawRate);
+    if (!rawRate?.trim() || !Number.isInteger(commissionRate) || commissionRate < 0 || commissionRate > 50) {
+      setError('Le taux de commission doit être un nombre entier de 0 à 50 %.');
+      return;
+    }
+    if (await perform(`/${ambassador.id}`, 'PATCH', { commission_rate: commissionRate })) {
+      setNotice(`Taux de prime mis à jour à ${commissionRate} %. Les primes déjà créées ne changent pas.`);
     }
   };
   const action = async (shopId: number, operation: string) => {
@@ -347,6 +360,11 @@ export function AdminAmbassadors() {
         });
       }} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold">{ambassador.active ? 'Suspendre l’accès' : 'Réactiver le compte'}</button></div></div>
       <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><div><dt className="font-semibold text-slate-500">E-mail de connexion</dt><dd className="mt-0.5 break-all text-slate-800">{ambassador.email || 'Non renseigné'}</dd></div><div><dt className="font-semibold text-slate-500">Téléphone</dt><dd className="mt-0.5 text-slate-800">{ambassador.phone || 'Non renseigné'}</dd></div></dl>
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <label className="text-xs font-semibold text-slate-700">Taux de prime sur abonnement (%)<input type="number" min={0} max={50} step={1} value={commissionRateDrafts[ambassador.id] ?? String(ambassador.commission_rate)} onChange={(event) => setCommissionRateDrafts((drafts) => ({ ...drafts, [ambassador.id]: event.target.value }))} className="mt-1 block min-h-10 w-32 rounded-lg border border-slate-300 px-3 text-sm" /></label>
+        <button type="button" disabled={busy || commissionRateDrafts[ambassador.id] === String(ambassador.commission_rate)} onClick={() => void saveCommissionRate(ambassador)} className="min-h-10 rounded-lg border border-slate-300 px-3 text-xs font-bold disabled:opacity-50">Enregistrer le taux de prime</button>
+        <span className="text-xs text-slate-500">Par défaut : 20 % · de 0 à 50 %.</span>
+      </div>
       {editingAmbassadorId === ambassador.id && <form onSubmit={(event) => void saveProfile(event, ambassador)} className="mt-3 grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-2">
         <label className="text-xs font-semibold text-slate-700">Nom<input required minLength={2} maxLength={100} value={profileDraft.name} onChange={(event) => setProfileDraft((draft) => ({ ...draft, name: event.target.value }))} className="mt-1 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" /></label>
         <label className="text-xs font-semibold text-slate-700">E-mail de connexion<input type="email" maxLength={254} value={profileDraft.email} onChange={(event) => setProfileDraft((draft) => ({ ...draft, email: event.target.value }))} className="mt-1 block min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" /><span className="mt-1 block font-normal text-slate-500">Nécessaire pour envoyer un lien d’accès.</span></label>

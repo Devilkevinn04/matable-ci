@@ -183,18 +183,17 @@ async function prepareImageForUpload(file: File, options: { maxDimension?: numbe
 }
 
 async function prepareImageThumbnail(file: File, maxDimension: number, maxSizeKB: number): Promise<File> {
-  if (file.type === 'image/gif') return file;
   if (typeof document === 'undefined' || typeof File === 'undefined') {
-    if (file.size <= maxSizeKB * 1024) return file;
     throw new Error('La miniature ne peut pas être compressée dans cet environnement.');
   }
 
   const { compressImageClientSide } = await import('./format');
-  const outputType = file.type === 'image/png' || file.type === 'image/webp' ? 'image/webp' : 'image/jpeg';
-  const { dataUrl } = await compressImageClientSide(file, maxDimension, maxSizeKB, outputType);
+  const { dataUrl } = await compressImageClientSide(file, maxDimension, maxSizeKB, 'image/webp');
   const thumbnail = await dataUrlToFile(dataUrl, file.name);
+  if (thumbnail.type !== 'image/webp') {
+    throw new Error('Ce navigateur ne permet pas de générer une miniature WebP.');
+  }
   if (thumbnail.size <= maxSizeKB * 1024) return thumbnail;
-  if (file.size <= maxSizeKB * 1024) return file;
   throw new Error(`La miniature dépasse ${maxSizeKB} Ko. Choisissez une image plus légère.`);
 }
 
@@ -279,7 +278,7 @@ export async function uploadPublicMediaVariants(file: File, shopId: number | str
   const image = await prepareImageForUpload(file, options);
   const thumbnail = await prepareImageThumbnail(
     file,
-    options.thumbnailDimension ?? 480,
+    options.thumbnailDimension ?? 320,
     options.thumbnailSizeKB ?? 35,
   );
   const imageUrl = await uploadPreparedPublicMediaFile(image, shopId, options);

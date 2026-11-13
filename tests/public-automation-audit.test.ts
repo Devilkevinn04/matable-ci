@@ -272,6 +272,15 @@ test('robots and sitemap routes are served by the SEO router', async () => {
   assert.match(sitemapXml, /<loc>http:\/\/127\.0\.0\.1:43124\/guide\/commander-sans-compte<\/loc>/);
   assert.match(sitemapXml, /\/boutiques\/categorie\/fashion/);
   assert.match(sitemapXml, /\/boutiques\/ville\/abidjan/);
+  assert.match(sitemapXml, /<lastmod>\d{4}-\d{2}-\d{2}T/);
+  assert.doesNotMatch(sitemapXml, /<changefreq>|<priority>/);
+
+  const missingSecurityTxt = await fetch(`${BASE_URL}/.well-known/security.txt`);
+  assert.equal(missingSecurityTxt.status, 404);
+  assert.match(missingSecurityTxt.headers.get('content-type') || '', /text\/plain/);
+  const manifestAlias = await fetch(`${BASE_URL}/manifest.webmanifest`, { redirect: 'manual' });
+  assert.equal(manifestAlias.status, 308);
+  assert.equal(manifestAlias.headers.get('location'), '/manifest.json');
 });
 
 test('homepage identifies MaTable as a local business directory', async () => {
@@ -371,7 +380,9 @@ test('merchant plans page exposes current prices and indexable SEO metadata', as
   assert.match(html, /"price":3000/);
   assert.match(html, /"price":5000/);
   assert.match(html, /"price":8000/);
-  assert.match(html, /Essai gratuit de 2 mois/);
+  assert.match(html, /Les 75 premières boutiques Standard/);
+  assert.match(html, /et les 75 premières boutiques Premium/);
+  assert.match(html, /jusqu’à 5 produits/);
   assert.match(html, /href="http:\/\/127\.0\.0\.1:43124\/app\/creer-boutique"/);
   assert.equal((html.match(/property="og:title"/g) || []).length, 1);
 });
@@ -823,7 +834,8 @@ test('registration flow is coherent without external payment or WhatsApp API', a
   });
   assert.equal(created.status, 200);
   const createdPayload = await created.json();
-  assert.match(String(createdPayload.message), /reçu WhatsApp/i);
+  assert.match(String(createdPayload.message), /essai Premium gratuit de 2 mois/i);
+  assert.match(String(createdPayload.message), /jusqu’à 5 produits/i);
 
   const merchantLogin = await fetch(`${BASE_URL}/api/auth/merchant-login`, {
     method: 'POST',
@@ -1215,7 +1227,31 @@ test('shop pages expose canonical SEO metadata for social sharing and indexing',
   });
   assert.equal(created.status, 200);
   const createdPayload = await created.json();
-  await loginAndApproveShop({ id: createdPayload.shop.id, owner_access_token: createdPayload.owner_access_token });
+  const merchantCookie = await loginAndApproveShop({ id: createdPayload.shop.id, owner_access_token: createdPayload.owner_access_token });
+  const productImage = 'https://images.example.com/seo-product.webp';
+  const createdProduct = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({
+      title: 'Robe de partage',
+      description: 'Une robe pour vérifier les aperçus de boutique.',
+      price: 12000,
+      stock: 3,
+      image_url: 'https://images.example.com/seo-product-full.jpg',
+      thumbnail_url: productImage,
+    }),
+  });
+  assert.equal(createdProduct.status, 200, await createdProduct.text());
+
+  const bannerDb = new Database(TEST_DB_PATH);
+  try {
+    const shop = bannerDb.prepare('SELECT theme_config FROM shops WHERE id = ?').get(createdPayload.shop.id) as { theme_config: string };
+    const themeConfig = JSON.parse(shop.theme_config);
+    themeConfig.custom_banner_url = 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=1200&auto=format&fit=crop&q=80';
+    bannerDb.prepare('UPDATE shops SET theme_config = ? WHERE id = ?').run(JSON.stringify(themeConfig), createdPayload.shop.id);
+  } finally {
+    bannerDb.close();
+  }
 
   const publicPage = await fetch(`${BASE_URL}/${encodeURIComponent(createdPayload.shop.slug)}`);
   assert.equal(publicPage.status, 200);
@@ -1224,6 +1260,23 @@ test('shop pages expose canonical SEO metadata for social sharing and indexing',
   assert.match(html, /<meta name="description"/i);
   assert.match(html, /<link rel="canonical" href=".*\/boutique-seo-test"/i);
   assert.match(html, /og:title|og:image|twitter:card/i);
+  assert.match(html, /<noscript><main><article><h1>Boutique SEO Test<\/h1>/);
+  assert.match(html, /images\.unsplash\.com\/photo-1521572267360-ee0c2909d518/);
+
+  const clearBannerDb = new Database(TEST_DB_PATH);
+  try {
+    const shop = clearBannerDb.prepare('SELECT theme_config FROM shops WHERE id = ?').get(createdPayload.shop.id) as { theme_config: string };
+    const themeConfig = JSON.parse(shop.theme_config);
+    delete themeConfig.custom_banner_url;
+    clearBannerDb.prepare('UPDATE shops SET theme_config = ? WHERE id = ?').run(JSON.stringify(themeConfig), createdPayload.shop.id);
+  } finally {
+    clearBannerDb.close();
+  }
+  const productSharePage = await fetch(`${BASE_URL}/${encodeURIComponent(createdPayload.shop.slug)}`);
+  const productShareHtml = await productSharePage.text();
+  assert.match(productShareHtml, /og:image" content="https:\/\/images\.example\.com\/seo-product\.webp"/);
+  assert.match(productShareHtml, /Robe de partage/);
+
   const testDb = new Database(TEST_DB_PATH);
   try {
     testDb.prepare('UPDATE shops SET name = ? WHERE id = ?').run('PUFF SEO Test', createdPayload.shop.id);

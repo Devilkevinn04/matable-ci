@@ -28,9 +28,12 @@ export function validAmbassadorReferral(value: unknown, now = Date.now()): Ambas
   return { code, capturedAt: referral.capturedAt };
 }
 
-export function calculateAmbassadorCommission(amount: number, term: 'monthly' | 'annual'): number {
+export function calculateAmbassadorCommission(amount: number, term: 'monthly' | 'annual', commissionRate = 20): number {
   if (!Number.isSafeInteger(amount) || amount <= 0) throw new RangeError('Montant de paiement invalide.');
-  return Math.round(amount / (term === 'annual' ? 10 : 1) * 0.2);
+  if (!Number.isInteger(commissionRate) || commissionRate < 0 || commissionRate > 50) {
+    throw new RangeError('Taux de commission invalide.');
+  }
+  return Math.round(amount / (term === 'annual' ? 10 : 1) * commissionRate / 100);
 }
 
 export function isCommissionPayableForMonth(

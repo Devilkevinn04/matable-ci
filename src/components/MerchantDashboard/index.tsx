@@ -192,7 +192,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const {
     currentShop,
     confirmModal,
-    trialStarting,
     activeTab,
     settingsSubTab,
     products,
@@ -442,6 +441,16 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   }, [subscriptionReminderDay]);
 
   if (!merchantState.currentShop) return <AuthScreens state={merchantState} onBackToDirectory={onBackToDirectory} onCustomerLogin={onCustomerLogin} />;
+  if (!merchantState.currentShop.admin_mode && merchantState.currentShop.subscription?.status === 'not_started') {
+    return <>
+      <div className="fixed right-4 top-4 z-10 flex gap-2">
+        <button type="button" onClick={onBackToDirectory} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Annuaire</button>
+        <button type="button" onClick={handleLogout} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Déconnexion</button>
+      </div>
+      {paymentReturnBanner}
+      <MerchantTrialOnboarding shop={merchantState.currentShop} isStarting={false} mode="plans" />
+    </>;
+  }
 
   const identityStatus = merchantState.currentShop.identity_verification_status
     || merchantState.currentShop.merchant_verification_status
@@ -451,21 +460,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     || (['not_required', 'verified'].includes(merchantState.currentShop.merchant_verification_status || '') ? 'approved' : 'pending');
   const isBusinessVerified = Boolean(merchantState.currentShop.admin_mode || businessVerificationStatus === 'approved');
   const businessVerificationRequired = !isBusinessVerified;
-  if (!merchantState.currentShop.admin_mode
-    && !identityVerificationRequired
-    && !businessVerificationRequired
-    && merchantState.currentShop.subscription?.status === 'not_started') {
-    return (
-      <>
-        <div className="fixed right-4 top-4 z-10 flex gap-2">
-          <button type="button" onClick={onBackToDirectory} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Annuaire</button>
-          <button type="button" onClick={handleLogout} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">Déconnexion</button>
-        </div>
-        {paymentReturnBanner}
-        <MerchantTrialOnboarding shop={merchantState.currentShop} isStarting={trialStarting} onStart={handleStartTrial} />
-      </>
-    );
-  }
   if (!merchantState.currentShop.admin_mode
     && !identityVerificationRequired
     && !businessVerificationRequired

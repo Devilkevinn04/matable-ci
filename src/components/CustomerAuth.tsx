@@ -4,7 +4,7 @@ import { AuthAudienceSwitcher, AuthExperienceLayout } from './AuthExperienceLayo
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
 import { CustomerMerchantRegistrationForm } from './CustomerMerchantRegistrationForm';
 import { TermsPrivacyConsent } from './TermsPrivacyConsent';
-import { getProductImageAlt } from '../utils/productImageAlt';
+import { CategoryProductImage } from './CategoryProductImage';
 import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
 import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
 import { OrderContactReveal } from './OrderContactReveal';
@@ -481,7 +481,7 @@ interface CustomerLoyaltyCard {
 
 interface CustomerSavedState {
   shops: { id: number; name: string; slug: string; category: string; city?: string }[];
-  products: { id: number; shop_id: number; title: string; price: number; image_url?: string | null; slug: string; shop_name: string }[];
+  products: { id: number; shop_id: number; title: string; price: number; category: string; image_url?: string | null; slug: string; shop_name: string }[];
 }
 
 const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout, onBack, onUserUpdated }) => {
@@ -1000,9 +1000,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {savedState.products.map((product) => <article key={`product-${product.id}`} className="flex min-w-0 items-center gap-3 rounded-2xl border border-[#e8e0d6] bg-white p-3">
                     <a href={`/${encodeURIComponent(product.slug)}`} className="flex min-w-0 flex-1 items-center gap-3">
-                      {product.image_url
-                        ? <img src={product.image_url} alt={getProductImageAlt(product.title, product.shop_name)} loading="lazy" className="h-14 w-14 shrink-0 rounded-xl bg-[#f1eee7] object-cover" />
-                        : <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#d1fae5] text-[var(--mt-green-deep)]"><Store className="h-5 w-5" /></span>}
+                      <CategoryProductImage imageUrl={product.image_url} category={product.category} title={product.title} showFallbackTitle={false} sizes="56px" className="h-14 w-14 shrink-0 rounded-xl" />
                       <span className="min-w-0"><span className="block truncate font-bold text-[#292d2a]">{product.title}</span><span className="mt-1 block truncate text-xs text-[#647067]">{product.shop_name} · {product.price.toLocaleString('fr-FR')} FCFA</span></span>
                     </a>
                     <button type="button" onClick={() => void removeFavorite('product', product.id)} aria-label={`Retirer ${product.title} des favoris`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#c2410c] hover:bg-[#fff2df]"><Heart className="h-5 w-5 fill-current" /></button>

@@ -1,16 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, BadgePercent, CheckCircle2, MapPin, Search, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getProductImageForDisplay } from '../utils/categoryDefaults';
 import { formatFCFA } from '../utils/format';
 import { getActiveProductPrice, getProductSaleStatus } from '../utils/productPricing';
-import { getResponsiveImageProps } from '../utils/responsiveImages';
-import { handlePublicImageError } from '../utils/imageFallback';
 import { isAgeRestrictedProduct } from '../utils/ageRestrictedProducts';
 import { isShopExcludedFromPublicIndex } from '../utils/shopIndexing';
-import { getProductImageAlt } from '../utils/productImageAlt';
 import { getDiscoveryCityLabel } from '../utils/discoverySeo';
 import { MotionReveal } from './MotionSystem';
+import { CategoryProductImage } from './CategoryProductImage';
 
 interface AnimatedHomeShop {
   slug: string;
@@ -79,12 +76,12 @@ const ProductWall: React.FC<ProductWallProps> = ({ products }) => {
                 return (
                   <div key={`${shop.slug}-${product.title}-${index}`} className="shrink-0 rounded-[22px] border border-[var(--mt-gray-200)] bg-white p-2 shadow-[0_18px_38px_rgb(33_38_34_/_18%)] sm:rounded-[22px]">
                     <span className="relative block aspect-[4/5] overflow-hidden rounded-2xl bg-[var(--mt-gray-50)]">
-                      <img {...getResponsiveImageProps(getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category), 420)} alt={getProductImageAlt(product.title, shop.name, shop.city)} className="h-full w-full object-cover" loading="lazy" onError={handlePublicImageError} />
+                      <CategoryProductImage imageUrl={product.thumbnail_url || product.image_url} category={shop.category} title={product.title} sizes="420px" className="h-full w-full" />
                       {isPromotion && <span className="absolute left-2 top-2 rounded-full bg-[#c2410c] px-2 py-1 text-[10px] font-extrabold text-white">Promo</span>}
                       {shop.is_verified && <span className="absolute right-2 top-2 rounded-full bg-white/95 px-2 py-1 text-[10px] font-extrabold text-[var(--mt-green-deep)]">Vérifié</span>}
                     </span>
-                    <span className="block truncate px-1 pt-2 text-[15px] font-bold text-[var(--mt-gray-900)]">{product.title}</span>
-                    <span className="block truncate px-1 text-xs text-[var(--mt-gray-600)]">{shop.name}</span>
+                    <span className="line-clamp-2 px-1 pt-2 text-[15px] font-bold text-[var(--mt-gray-900)]">{product.title}</span>
+                    <span className="mt-1 block truncate px-1 text-xs text-[var(--mt-gray-600)]">{shop.name} · {shop.city || 'Côte d’Ivoire'}</span>
                     <span className="mt-1 inline-flex flex-wrap items-baseline gap-1 rounded-full bg-[#fff7ed] px-2 py-1 text-xs font-extrabold text-[var(--mt-orange-deep)]">
                       {formatFCFA(getActiveProductPrice(product))}
                       {isPromotion && <del className="text-[10px] font-semibold text-[var(--mt-gray-600)]">{formatFCFA(product.price)}</del>}
@@ -291,7 +288,7 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
                   <MotionReveal key={`${shop.slug}-${product.id}`} delay={Math.min(index, 8) * 0.035} className="h-full min-w-0">
                     <Link to={`/${encodeURIComponent(shop.slug)}#product-${product.id}`} className="group block h-full min-w-0 overflow-hidden rounded-2xl border border-[#e7e2d9] bg-white shadow-[0_8px_24px_rgba(16,62,50,.07)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_32px_rgba(16,62,50,.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15513e] focus-visible:ring-offset-2 sm:rounded-[24px]">
                       <span className="relative block aspect-square overflow-hidden bg-[#f2eee8]">
-                        <img {...getResponsiveImageProps(getProductImageForDisplay(product.thumbnail_url || product.image_url, shop.category), 480)} alt={getProductImageAlt(product.title, shop.name, shop.city)} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" onError={handlePublicImageError} />
+                        <CategoryProductImage imageUrl={product.thumbnail_url || product.image_url} category={shop.category} title={product.title} sizes="480px" className="h-full w-full transition-transform duration-300 group-hover:scale-105" />
                         <span className="absolute left-2 top-2 flex max-w-[calc(100%-1rem)] flex-wrap gap-1 sm:left-3 sm:top-3">
                           {isPromotion && <span className="inline-flex items-center gap-1 rounded-full bg-[#c2410c] px-2 py-1 text-[9px] font-extrabold text-white sm:px-2.5 sm:text-[10px]"><BadgePercent className="h-3 w-3" aria-hidden="true" />Promo</span>}
                           {isNew && <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[9px] font-extrabold text-[#15513e] shadow-sm sm:px-2.5 sm:text-[10px]"><Sparkles className="h-3 w-3" aria-hidden="true" />Nouveau</span>}
@@ -299,7 +296,7 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
                         {product.in_stock && <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[9px] font-bold text-[#15513e] sm:bottom-3 sm:left-3 sm:text-[10px]"><CheckCircle2 className="h-3 w-3" aria-hidden="true" />Disponible</span>}
                       </span>
                       <span className="block min-w-0 p-2.5 sm:p-4">
-                        <strong className="block truncate text-sm font-extrabold text-[#173c32] sm:text-base">{product.title}</strong>
+                        <strong className="line-clamp-2 text-sm font-extrabold text-[#173c32] sm:text-base">{product.title}</strong>
                         <span className="mt-1 flex min-w-0 items-center gap-1 text-[11px] text-[#68716b] sm:text-sm">
                           <MapPin className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
                           <span className="truncate">{shop.name}{city ? ` · ${city}` : ''}</span>

@@ -10,7 +10,6 @@ import {
   ShoppingBag, 
   Bookmark,
   Phone, 
-  MapPin, 
   CheckCircle2, 
   AlertTriangle, 
   X, 
@@ -174,6 +173,14 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCheckoutAuth, setShowCheckoutAuth] = useState(false);
   const [trustTarget, setTrustTarget] = useState<{ type: 'shop' | 'product'; id: number; name: string } | null>(null);
+
+  useEffect(() => {
+    const city = shop?.city?.trim();
+    if (!city || deliveryLocation) return;
+    const shopCommune = ABIDJAN_COMMUNES.find((commune) => commune !== 'Autre ville / commune'
+      && city.toLowerCase().includes(commune.toLowerCase()));
+    setDeliveryLocation(shopCommune || city);
+  }, [shop, deliveryLocation]);
   const [checkoutAuthUser, setCheckoutAuthUser] = useState<CustomerUser | null>(null);
   const [orderSuccess, setOrderSuccess] = useState<{
     orderId: number;
@@ -544,7 +551,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     const origin = getCanonicalOrigin(window.location.origin);
     const canonicalUrl = `${origin}/${shop.slug}`;
     const description = getWelcomeMessageForDisplay(shop.welcome_message, shop.category).slice(0, 160);
-    const image = getBannerImageForDisplay(shop.theme_config?.custom_banner_url, shop.category);
+    const image = getBannerImageForDisplay(shop.theme_config?.custom_banner_url, shop.category)
+      || (products[0] ? getProductImageForDisplay(products[0].image_url, shop.category) : '')
+      || `${origin}/brand-kit/social-share.png`;
     const upsertMeta = (selector: string, attribute: 'name' | 'property', key: string, content: string) => {
       let element = document.head.querySelector<HTMLMetaElement>(selector);
       if (!element) {
@@ -608,7 +617,12 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           priceCurrency: 'XOF',
           price: getActiveProductPrice(product),
           availability: 'https://schema.org/InStock',
-          itemOffered: { '@type': 'Product', name: product.title, description: product.description || undefined, image: getProductImageForDisplay(product.image_url, shop.category) },
+          itemOffered: {
+            '@type': 'Product',
+            name: product.title,
+            description: product.description || undefined,
+            image: getProductImageForDisplay(product.image_url, shop.category) || undefined,
+          },
         })),
       },
     });
@@ -812,10 +826,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const shopCommune = ABIDJAN_COMMUNES.find((commune) => commune !== 'Autre ville / commune'
     && (shop.city || '').toLowerCase().includes(commune.toLowerCase()));
   const checkoutLocations = [
-    ...(shopCommune ? [shopCommune] : []),
+    shopCommune || shop.city?.trim(),
     ...ABIDJAN_COMMUNES.filter((commune) => commune !== 'Autre ville / commune' && commune !== shopCommune),
     'Autre',
-  ];
+  ].filter((location, index, locations): location is string => Boolean(location) && locations.indexOf(location) === index);
   const secondaryColor = normalizeHex(shop.theme_config?.secondary_color || '#F8FAFC');
   const fontFamily = shop.theme_config?.font_family || 'Plus Jakarta Sans';
   const categoryDefaults = getCategoryDefaults(shop.category);
@@ -962,42 +976,24 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         )
       )}
 
-      {bannerUrl && (
-        <div className="max-w-6xl mx-auto px-4 pt-3 sm:pt-4">
-          <div className="group relative overflow-hidden rounded-[1.35rem] border border-white/70 bg-slate-900 shadow-[0_18px_45px_rgba(33,23,18,0.12)]">
-            <div aria-hidden="true" className="absolute inset-0 z-0 flex flex-col items-center justify-center gap-2" style={{ backgroundColor: secondaryColor, color: primaryColor }}>
-              <CategoryIcon category={shop.category} className="h-20 w-20" />
-              <span className="text-xs font-black uppercase">{categoryDefaults.label}</span>
+      <div className="max-w-6xl mx-auto px-4 pt-3 sm:pt-4">
+        <div className="group relative min-h-44 overflow-hidden rounded-[1.35rem] border border-white/70 shadow-[0_18px_45px_rgba(33,23,18,0.12)]" style={{ backgroundColor: bannerUrl ? primaryColor : secondaryColor }}>
+          {bannerUrl && <img src={bannerUrl} alt="" className="mt-hero-image absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />}
+          {bannerUrl && <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/25 to-transparent" />}
+          {!bannerUrl && <div aria-hidden="true" className="absolute inset-0 flex items-center justify-center opacity-20" style={{ color: primaryColor }}><CategoryIcon category={shop.category} className="h-24 w-24" /></div>}
+          <div className={`relative z-10 flex min-h-44 flex-col items-start justify-end gap-2 p-4 sm:flex-row sm:items-end sm:justify-between sm:gap-3 sm:p-6 ${bannerUrl ? 'text-white' : ''}`} style={!bannerUrl ? { color: primaryColor } : undefined}>
+            <div className="max-w-2xl">
+              <p className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${bannerUrl ? 'border border-white/25 bg-white/10 text-white/90' : 'border border-current/20 bg-white/70'}`}>
+                {shop.merchant_verification_status === 'verified' && <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />}
+                {shop.merchant_verification_status === 'verified' ? 'Vérifié · ' : ''}{categoryDefaults.label}
+              </p>
+              <h2 className="mt-2 line-clamp-3 font-display text-3xl font-extrabold leading-tight sm:text-4xl">{shop.name}</h2>
+              <p className="mt-1.5 line-clamp-2 max-w-xl text-sm font-medium leading-5 sm:text-base sm:leading-6">{getWelcomeMessageForDisplay(shop.welcome_message, shop.category)}</p>
             </div>
-            <img
-              src={bannerUrl}
-              alt={`Illustration de la boutique ${shop.name}`}
-              className="mt-hero-image relative z-10 h-60 w-full object-cover lg:h-64"
-              onError={(event) => {
-                const element = event.currentTarget;
-                if (element.dataset.placeholderAttempted !== 'true' && element.src !== categoryDefaults.bannerPlaceholderImageUrl) {
-                  element.dataset.placeholderAttempted = 'true';
-                  element.src = categoryDefaults.bannerPlaceholderImageUrl;
-                } else {
-                  element.hidden = true;
-                }
-              }}
-            />
-            <div className="absolute inset-0 z-20 bg-gradient-to-t from-slate-950/80 via-slate-950/25 to-transparent" />
-            <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col items-start gap-2 p-3 sm:flex-row sm:items-end sm:justify-between sm:gap-3 sm:p-6">
-              <div className="max-w-2xl text-white drop-shadow-sm">
-                <p className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-bold text-white/90 backdrop-blur-sm">
-                  {shop.merchant_verification_status === 'verified' && <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />}
-                  {shop.merchant_verification_status === 'verified' ? 'Vérifié · ' : ''}{categoryDefaults.label}
-                </p>
-                <h2 className="mt-2 line-clamp-3 font-display text-3xl font-extrabold leading-tight sm:text-4xl">{shop.name}</h2>
-                <p className="mt-1.5 line-clamp-2 max-w-xl text-sm font-medium leading-5 text-white/90 sm:text-base sm:leading-6">{getWelcomeMessageForDisplay(shop.welcome_message, shop.category)}</p>
-              </div>
-              <a href="#store-catalogue" className="hidden min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/70 bg-[var(--mt-surface)] px-3 py-1.5 text-xs font-extrabold text-[var(--mt-green-deep)] transition hover:-translate-y-0.5 hover:bg-white sm:inline-flex sm:min-h-11 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm">Découvrir la sélection<ArrowRight className="h-4 w-4" /></a>
-            </div>
+            <a href="#store-catalogue" className={`hidden min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-extrabold transition hover:-translate-y-0.5 sm:inline-flex sm:min-h-11 sm:gap-2 sm:px-4 sm:py-2 sm:text-sm ${bannerUrl ? 'border border-white/70 bg-white text-[var(--mt-green-deep)]' : 'border border-current/30 bg-white/80'}`}>Découvrir la sélection<ArrowRight className="h-4 w-4" /></a>
           </div>
         </div>
-      )}
+      </div>
 
       {isEventMode && eventBannerText && (
         <div className="max-w-6xl mx-auto px-4 pt-3">
@@ -1808,31 +1804,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       </div>
                     </div>
 
-                    {authenticatedCustomer ? (
-                      <p className="rounded-lg border border-[#E4EDE8] bg-[#F4F8F5] px-3 py-2 text-sm leading-5 text-[#47534b]">
-                        Le récapitulatif de commande sera envoyé à l’adresse de votre compte : <strong>{authenticatedCustomer.email}</strong>.
-                      </p>
-                    ) : (
-                      <div>
-                        <label htmlFor="checkout-customer-email" className="mb-1 block text-xs font-bold text-slate-700">
-                          Adresse e-mail pour le récapitulatif (facultatif)
-                        </label>
-                        <input
-                          id="checkout-customer-email"
-                          type="email"
-                          autoComplete="email"
-                          maxLength={254}
-                          placeholder="vous@exemple.ci"
-                          value={customerEmail}
-                          onChange={(event) => setCustomerEmail(event.target.value)}
-                          className="w-full rounded-xl border-[2px] border-[#E4D9C8] bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--mt-orange-deep)]"
-                        />
-                        <p className="mt-1 text-sm leading-4 text-slate-500">
-                          Utilisée uniquement pour vous envoyer le récapitulatif de cette commande.
-                        </p>
-                      </div>
-                    )}
-
                     {/* Delivery Location / Commune */}
                     <div>
                       <p id="checkout-delivery-location-label" className="block text-xs font-bold text-slate-700 mb-1">
@@ -1841,24 +1812,17 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       <p className="mb-2 text-sm leading-5 text-slate-500">
                         Indiquez où vous souhaitez récupérer votre commande ou être contacté pour convenir de la livraison.
                       </p>
-                      <div role="group" aria-labelledby="checkout-delivery-location-label" className="grid grid-cols-2 gap-2 text-xs">
-                        {checkoutLocations.map(loc => (
-                          <button
-                            key={loc}
-                            type="button"
-                            onClick={() => setDeliveryLocation(loc)}
-                            aria-pressed={deliveryLocation === loc}
-                            className={`py-2 px-2.5 rounded-lg font-medium border text-left flex items-center gap-1.5 transition-colors ${
-                              deliveryLocation === loc
-                                ? 'bg-[#087F62] text-white border-[#154F41] shadow-[2px_2px_0_rgba(21,79,65,0.2)]'
-                                : 'bg-[#F8F3EC] text-[#292d2a] border-[#E4D9C8] hover:bg-[#F5EADC]'
-                            }`}
-                          >
-                            <MapPin className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{loc}</span>
-                          </button>
-                        ))}
-                      </div>
+                      <select
+                        id="checkout-delivery-location"
+                        aria-labelledby="checkout-delivery-location-label"
+                        required
+                        value={deliveryLocation}
+                        onChange={(event) => setDeliveryLocation(event.target.value)}
+                        className="w-full rounded-xl border-[2px] border-[#E4D9C8] bg-white px-3.5 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[var(--mt-orange-deep)]"
+                      >
+                        {!deliveryLocation && <option value="">Choisir une commune</option>}
+                        {checkoutLocations.map((location) => <option key={location} value={location}>{location === shopCommune ? `${location} · commune de la boutique` : location}</option>)}
+                      </select>
 
                       {deliveryLocation === 'Autre' && (
                         <label htmlFor="checkout-custom-location" className="mt-2 block">
@@ -1935,40 +1899,66 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       )}
                     </div>
 
-                    {/* Food Delivery Slot */}
-                    {shop.category === 'food' && (
-                      <div>
-                        <label htmlFor="checkout-delivery-slot" className="block text-xs font-bold text-slate-700 mb-1">
-                          Créneau souhaité pour vos plats
-                        </label>
-                        <select
-                          id="checkout-delivery-slot"
-                          value={deliverySlot}
-                          onChange={(e) => setDeliverySlot(e.target.value)}
-                          className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#E4D9C8] bg-white font-bold text-[var(--mt-gray-900)]"
-                        >
-                          <option value="Dès que prêt (30-45 min)">Dès que prêt (30-45 min)</option>
-                          <option value="Ce midi (12h - 13h30)">Ce midi (12h - 13h30)</option>
-                          <option value="Ce soir (19h - 21h)">Ce soir (19h - 21h)</option>
-                          <option value="Demain midi">Demain midi</option>
-                        </select>
+                    <details className="rounded-xl border border-[#E4D9C8] bg-white p-3">
+                      <summary className="cursor-pointer text-sm font-bold text-slate-700">Ajouter un détail (facultatif)</summary>
+                      <div className="mt-3 space-y-3">
+                        {authenticatedCustomer ? (
+                          <p className="rounded-lg border border-[#E4EDE8] bg-[#F4F8F5] px-3 py-2 text-sm leading-5 text-[#47534b]">
+                            Le récapitulatif de commande sera envoyé à l’adresse de votre compte : <strong>{authenticatedCustomer.email}</strong>.
+                          </p>
+                        ) : (
+                          <div>
+                            <label htmlFor="checkout-customer-email" className="mb-1 block text-xs font-bold text-slate-700">
+                              Adresse e-mail pour le récapitulatif (facultatif)
+                            </label>
+                            <input
+                              id="checkout-customer-email"
+                              type="email"
+                              autoComplete="email"
+                              maxLength={254}
+                              placeholder="vous@exemple.ci"
+                              value={customerEmail}
+                              onChange={(event) => setCustomerEmail(event.target.value)}
+                              className="w-full rounded-xl border-[2px] border-[#E4D9C8] bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--mt-orange-deep)]"
+                            />
+                            <p className="mt-1 text-sm leading-4 text-slate-500">
+                              Utilisée uniquement pour vous envoyer le récapitulatif de cette commande.
+                            </p>
+                          </div>
+                        )}
+                        {shop.category === 'food' && (
+                          <div>
+                            <label htmlFor="checkout-delivery-slot" className="block text-xs font-bold text-slate-700 mb-1">
+                              Créneau souhaité pour vos plats
+                            </label>
+                            <select
+                              id="checkout-delivery-slot"
+                              value={deliverySlot}
+                              onChange={(e) => setDeliverySlot(e.target.value)}
+                              className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#E4D9C8] bg-white font-bold text-[var(--mt-gray-900)]"
+                            >
+                              <option value="Dès que prêt (30-45 min)">Dès que prêt (30-45 min)</option>
+                              <option value="Ce midi (12h - 13h30)">Ce midi (12h - 13h30)</option>
+                              <option value="Ce soir (19h - 21h)">Ce soir (19h - 21h)</option>
+                              <option value="Demain midi">Demain midi</option>
+                            </select>
+                          </div>
+                        )}
+                        <div>
+                          <label htmlFor="checkout-delivery-note" className="block text-xs font-bold text-slate-700 mb-1">
+                            Repère ou précision pour la boutique
+                          </label>
+                          <input
+                            id="checkout-delivery-note"
+                            type="text"
+                            placeholder="Ex. : retrait sur place ou repère de quartier..."
+                            value={deliveryNote}
+                            onChange={(e) => setDeliveryNote(e.target.value)}
+                            className="w-full text-sm px-3.5 py-2 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[var(--mt-orange-deep)] bg-white"
+                          />
+                        </div>
                       </div>
-                    )}
-
-                    {/* Delivery Note */}
-                    <div>
-                      <label htmlFor="checkout-delivery-note" className="block text-xs font-bold text-slate-700 mb-1">
-                        Repère ou précision pour la boutique (optionnel)
-                      </label>
-                      <input 
-                        id="checkout-delivery-note"
-                        type="text"
-                        placeholder="Ex. : retrait sur place ou repère de quartier..."
-                        value={deliveryNote}
-                        onChange={(e) => setDeliveryNote(e.target.value)}
-                        className="w-full text-sm px-3.5 py-2 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[var(--mt-orange-deep)] bg-white"
-                      />
-                    </div>
+                    </details>
 
                     {/* Payment method */}
                     <div>
@@ -2039,7 +2029,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.97] text-white font-black text-base shadow-lg hover:shadow-emerald-600/30 flex items-center justify-center gap-2.5 transition-[background-color,box-shadow,transform,opacity] disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Phone className="w-5 h-5 fill-white" />
-                        <span>{isSubmitting ? 'Préparation...' : 'Préparer ma commande'}</span>
+                        <span>{isSubmitting ? 'Préparation...' : 'Envoyer sur WhatsApp'}</span>
                       </button>
                       <p className="text-center text-sm text-slate-400 mt-2">
                         Enregistre la demande et réserve le stock. Vous pourrez ensuite ouvrir WhatsApp pour confirmer les détails avec la boutique.
