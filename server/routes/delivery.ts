@@ -44,7 +44,7 @@ interface DeliveryRouterOptions {
   hashAccessToken: (token: string) => string;
   hashPin: (pin: string) => string;
   isWeakPin: (pin: unknown) => boolean;
-  verifyPin: (pin: string, storedHash: string) => boolean;
+  verifyPin: (pin: string, storedHash: string) => boolean | Promise<boolean>;
   getCookie: (req: Request, name: string) => string | null;
   buildSessionFingerprint: (req: Request) => string;
   isRequestFingerprintMatch: (session: { fingerprint?: string } | null | undefined, req: Request) => boolean;
@@ -354,11 +354,17 @@ export function createDeliveryRouter({
       'SELECT id, name, phone, pin_hash, status, identity_status, access_expires_at FROM delivery_drivers WHERE phone = ?',
       [phone],
     );
-    if (!driver || !verifyPin(pin, driver.pin_hash) || driver.status === 'suspended') {
+    const accountAttemptKey = driver ? `delivery-driver:${driver.id}` : null;
+    if (accountAttemptKey && await getCustomerLoginLockSeconds(accountAttemptKey) > 0) {
+      return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
+    }
+    if (!driver || !(await verifyPin(pin, driver.pin_hash)) || driver.status === 'suspended') {
       await recordCustomerLoginFailure(attemptKey);
+      if (accountAttemptKey) await recordCustomerLoginFailure(accountAttemptKey);
       return res.status(401).json({ error: 'Numéro ou code PIN invalide.' });
     }
     await clearLoginAttempts(attemptKey, 'customer-login');
+    if (accountAttemptKey) await clearLoginAttempts(accountAttemptKey, 'customer-login');
     const token = randomUUID();
     const expiresAt = Date.now() + DRIVER_SESSION_DURATION_MS;
     await dbRun(`INSERT INTO delivery_driver_sessions (token_hash, driver_id, expires_at, fingerprint, created_at)

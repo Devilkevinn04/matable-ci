@@ -903,11 +903,11 @@ const toSafeShop = (shop: ShopRecord) => {
     subscription,
   };
 };
-const verifyPin = (inputPin: string, storedHash: string) => {
+const verifyPin = async (inputPin: string, storedHash: string) => {
   const pin = String(inputPin).trim();
   if (!pin || !storedHash) return false;
   try {
-    return bcrypt.compareSync(pin, storedHash);
+    return await bcrypt.compare(pin, storedHash);
   } catch {
     return false;
   }
@@ -1662,7 +1662,15 @@ async function startServer() {
       next();
     });
 
-    app.use(express.static(distPath, { index: false }));
+    app.use(express.static(distPath, {
+      index: false,
+      setHeaders: (response, filePath) => {
+        const assetsDirectory = `${path.join(distPath, 'assets')}${path.sep}`;
+        if (filePath.startsWith(assetsDirectory) && /-[A-Za-z0-9_-]{8,}\.[^.]+$/.test(path.basename(filePath))) {
+          response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    }));
 
     app.get('/{*splat}', async (req: Request, res: Response) => {
       if (req.path === '/app' && typeof req.query.access === 'string') {

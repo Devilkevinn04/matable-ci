@@ -109,12 +109,16 @@ test('ambassador link attribution is retained when audience analytics are refuse
   }
 });
 
-test('commissions represent 20% of one monthly price for either payment term', () => {
+test('ambassador commissions use the assigned rate and monthly-equivalent price', () => {
   for (const [monthly, expected] of [[3000, 600], [5000, 1000], [8000, 1600]]) {
     assert.equal(calculateAmbassadorCommission(monthly, 'monthly'), expected);
     assert.equal(calculateAmbassadorCommission(monthly * 10, 'annual'), expected);
   }
+  assert.equal(calculateAmbassadorCommission(5000, 'monthly', 0), 0);
+  assert.equal(calculateAmbassadorCommission(5000, 'monthly', 25), 1250);
+  assert.equal(calculateAmbassadorCommission(5000, 'monthly', 50), 2500);
   assert.throws(() => calculateAmbassadorCommission(-1, 'monthly'));
+  assert.throws(() => calculateAmbassadorCommission(5000, 'monthly', 51));
 });
 
 test('monthly payout preparation includes unpaid approved commissions through the selected month only', () => {

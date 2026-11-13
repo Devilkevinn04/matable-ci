@@ -46,6 +46,17 @@ d’ajouter et de vérifier une adresse avec leur numéro et leur PIN.
 
 Les valeurs `VITE_*` sont publiques et intégrées au navigateur à la compilation. Le script transmet `VITE_WHATSAPP_ADMIN_PHONE` à Docker. Pour ajouter une autre variable de ce type, déclarer aussi son argument dans le Dockerfile et le transmettre dans le script de déploiement.
 
+## Compression et cache des ressources web
+
+Le domaine de production passe par Caddy. Les ressources de build dont le nom contient une empreinte reçoivent désormais un cache navigateur d’un an (`immutable`); le HTML reste renouvelable. Pour compresser les réponses du serveur, ajouter ces directives dans le bloc du domaine du Caddyfile actif :
+
+```caddyfile
+encode zstd gzip
+header /assets/* Cache-Control "public, max-age=31536000, immutable"
+```
+
+Le dépôt ne contient pas le Caddyfile chargé sur le VPS : ces directives ne prennent effet qu’après leur ajout à cette configuration active et son rechargement. Vérifier ensuite une ressource `/assets/*.js` avec `Accept-Encoding: gzip, br` : la réponse doit inclure `Content-Encoding` et un `Cache-Control` à longue durée. Ne pas modifier le proxy Portainer ou le mode de publication de l’application pour appliquer ce réglage.
+
 Pour une migration de schéma, valider son exécution sur une copie de la base avant l’approbation. Le VPS conserve une sauvegarde PostgreSQL vérifiée avant chaque remplacement du conteneur. Le retour arrière rétablit l’image précédente. Prévoir la compatibilité du schéma avec cette image.
 
 ## Sauvegardes PostgreSQL quotidiennes

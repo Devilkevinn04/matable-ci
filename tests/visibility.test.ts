@@ -121,7 +121,7 @@ test('subscription features follow the selected tier and are disabled after expi
   });
 
   assert.equal(canUseSubscriptionFeature(standard, 'custom_branding', new Date(now)), false);
-  assert.equal(canUseSubscriptionFeature(premiumTrial, 'custom_branding', new Date(now)), false);
+  assert.equal(canUseSubscriptionFeature(premiumTrial, 'custom_branding', new Date(now)), true);
   assert.equal(canUseSubscriptionFeature(premiumTrial, 'advanced_analytics', new Date(now)), false);
   assert.equal(canUseSubscriptionFeature(pro, 'advanced_analytics', new Date(now)), true);
   assert.equal(canUseSubscriptionFeature(expiredPro, 'custom_branding', new Date(now)), false);
@@ -151,7 +151,7 @@ test('trial limits and annual subscription prices match the published offer', ()
   assert.equal(TRIAL_DURATION_MONTHS, 2);
   assert.equal(addCalendarMonths(new Date('2026-01-31T12:00:00.000Z'), TRIAL_DURATION_MONTHS), '2026-03-31');
   assert.equal(addCalendarMonths(new Date('2026-12-31T12:00:00.000Z'), TRIAL_DURATION_MONTHS), '2027-02-28');
-  assert.equal(TRIAL_CATALOG_LIMIT, 2);
+  assert.equal(TRIAL_CATALOG_LIMIT, 5);
   assert.equal(getSubscriptionProductLimit('standard'), 20);
   assert.equal(getSubscriptionProductLimit('premium'), Number.POSITIVE_INFINITY);
   assert.equal(getSubscriptionProductLimit('pro'), Number.POSITIVE_INFINITY);

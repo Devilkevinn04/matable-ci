@@ -32,6 +32,7 @@ import { sendCustomerOrderReceiptEmail } from '../services/email.ts';
 import { CUSTOMER_LOYALTY_REWARD_THRESHOLD } from '../../src/utils/customerLoyalty.ts';
 import {
   expirePendingOrderInTransaction,
+  PENDING_ORDER_TTL_MS,
   restoreReservedOrderStock,
 } from '../services/orderLifecycle.ts';
 
@@ -155,6 +156,26 @@ export function createOrderRouter({
     const stockUpdates: { product: ProductRecord; previousStock: number; stock: number; isAvailable: boolean }[] = [];
     try {
       const created = await dbTransaction(async (transaction) => {
+        const normalizedPhone = validatedCustomer.customer_phone!;
+        if (databaseMode === 'postgresql') {
+          await transaction.get(
+            'SELECT pg_advisory_xact_lock(?, hashtext(?))',
+            [shop.id, normalizedPhone],
+          );
+        }
+        const duplicatePendingOrder = await transaction.get<{ id: number }>(
+          `SELECT id FROM orders
+           WHERE shop_id = ? AND customer_phone = ? AND status = 'pending'
+             AND COALESCE(pending_since, created_at) > ?
+           LIMIT 1`,
+          [shop.id, normalizedPhone, new Date(Date.now() - PENDING_ORDER_TTL_MS).toISOString()],
+        );
+        if (duplicatePendingOrder) {
+          throw Object.assign(
+            new Error('Une commande de ce numéro est déjà en attente dans cette boutique. Attendez sa réponse ou son expiration avant de réessayer.'),
+            { statusCode: 409 },
+          );
+        }
         const orderIdRecord = await transaction.get<{ id: number }>(`
           INSERT INTO id_allocators (name, last_id)
           SELECT ?, COALESCE(MAX(id), 0) + 1 FROM orders WHERE TRUE

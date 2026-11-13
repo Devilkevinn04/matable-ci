@@ -8,6 +8,7 @@ import {
   SUBSCRIPTION_PLANS,
   TRIAL_CATALOG_LIMIT,
   TRIAL_DURATION_MONTHS,
+  TRIAL_PROMOTION_SLOTS_PER_TIER,
   type SubscriptionTerm,
 } from '../utils/subscriptionFeatures';
 import { useState } from 'react';
@@ -88,7 +89,7 @@ export function MerchantPlansPage() {
           </div>
           <p className="mt-5 flex items-start gap-2 text-xs leading-5 text-[#6f6a62] sm:text-sm">
             <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[#087c5b]" aria-hidden="true" />
-            Essai Standard gratuit de {TRIAL_DURATION_MONTHS} mois, jusqu’à {TRIAL_CATALOG_LIMIT} produits. Aucun paiement requis pour commencer ; vous pouvez aussi choisir et payer une formule directement.
+            Les {TRIAL_PROMOTION_SLOTS_PER_TIER} premières boutiques Standard et les {TRIAL_PROMOTION_SLOTS_PER_TIER} premières Premium bénéficient de {TRIAL_DURATION_MONTHS} mois d’essai, avec jusqu’à {TRIAL_CATALOG_LIMIT} produits. Ensuite, le paiement de la formule choisie est requis pour activer la boutique.
           </p>
         </div>
 
@@ -318,7 +319,7 @@ export function MerchantPlansPage() {
             </div>
           {error && <p role="alert" className="mt-4 text-sm font-semibold text-rose-800">Tarifs indisponibles : {error}</p>}
           <p className="mt-4 text-xs leading-5 text-[#706b63]">
-            L’essai gratuit donne accès aux fonctions Standard avec une limite de {TRIAL_CATALOG_LIMIT} produits. Aucun abonnement payant ni paiement n’est activé sans votre choix dans l’espace commerçant.
+            L’essai gratuit de {TRIAL_DURATION_MONTHS} mois est réservé aux {TRIAL_PROMOTION_SLOTS_PER_TIER} premières inscriptions Standard et aux {TRIAL_PROMOTION_SLOTS_PER_TIER} premières inscriptions Premium. Il permet jusqu’à {TRIAL_CATALOG_LIMIT} produits. Une fois les places attribuées, le paiement de la formule choisie est requis pour activer la boutique.
           </p>
         </div>
       </section>

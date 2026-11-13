@@ -1,5 +1,6 @@
 import { Router, type RequestHandler } from 'express';
-import { dbGet, dbRun } from '../../db.ts';
+import { databaseMode, dbGet, dbRun, dbTransaction } from '../../db.ts';
+import { clearLoginAttempts, getCustomerLoginLockSeconds, recordCustomerLoginFailure } from '../services/rateLimits.ts';
 import { addCalendarMonths, getSubscriptionAnalyticsDayLimit } from '../../src/utils/subscriptionFeatures.ts';
 import { type ShopCategory } from '../../src/utils/categoryDefaults.ts';
 import { normalizeStoredMediaUrl } from '../../src/utils/media.ts';
@@ -8,6 +9,7 @@ import { MediaStorageUnavailableError, MediaUploadValidationError, createMediaUp
 import { getVapidConfiguration, isAllowedPushEndpoint } from '../services/pushNotifications.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import { getDefaultSubscriptionPrices, parseSubscriptionPrices } from '../services/subscriptionPricing.ts';
+import { claimTrialPromotionSlot } from '../services/trialPromotion.ts';
 import { startEmailMfaChallenge, verifyEmailMfaChallenge } from '../services/emailMfa.ts';
 import type { ShopRecord } from '../types.ts';
 
@@ -21,7 +23,7 @@ interface ShopManagementOptions {
   dbAll: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
   requireMerchantAccess: RequestHandler;
   requireMerchantOwnShop: RequestHandler;
-  verifyPin: (inputPin: string, storedHash: string) => boolean;
+  verifyPin: (inputPin: string, storedHash: string) => boolean | Promise<boolean>;
   getMerchantSessionToken: (req: import('express').Request) => string | null;
   revokeMerchantSessionsForShop: (shopId: number) => Promise<void>;
   revokeOtherMerchantSessionsForShop: (shopId: number, currentToken: string) => Promise<void>;
@@ -88,9 +90,15 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
       return res.status(400).json({ error: 'Saisissez une adresse e-mail valide.' });
     }
-    if (!verifyPin(pin, shop.pin_code_hash)) {
+    const pinAttemptKey = `merchant-pin:${shop.id}`;
+    if (await getCustomerLoginLockSeconds(pinAttemptKey) > 0) {
+      return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
+    }
+    if (!(await verifyPin(pin, shop.pin_code_hash))) {
+      await recordCustomerLoginFailure(pinAttemptKey);
       return res.status(401).json({ error: 'Saisissez votre code PIN actuel pour vérifier cette adresse.' });
     }
+    await clearLoginAttempts(pinAttemptKey, 'customer-login');
     const duplicateEmail = await dbAll<{ id: number }>(
       'SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?) AND id <> ? LIMIT 1',
       [email, shop.id],
@@ -117,9 +125,15 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     const shop = await getShopFromDatabase(Number(req.params.id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const pin = typeof req.body?.current_pin === 'string' ? req.body.current_pin.trim() : '';
-    if (!verifyPin(pin, shop.pin_code_hash)) {
+    const pinAttemptKey = `merchant-pin:${shop.id}`;
+    if (await getCustomerLoginLockSeconds(pinAttemptKey) > 0) {
+      return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
+    }
+    if (!(await verifyPin(pin, shop.pin_code_hash))) {
+      await recordCustomerLoginFailure(pinAttemptKey);
       return res.status(401).json({ error: 'Saisissez votre code PIN actuel pour vérifier cette adresse.' });
     }
+    await clearLoginAttempts(pinAttemptKey, 'customer-login');
     const result = await verifyEmailMfaChallenge({
       challengeId: typeof req.body?.challenge_id === 'string' ? req.body.challenge_id : '',
       code: typeof req.body?.code === 'string' ? req.body.code : '',
@@ -192,9 +206,15 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     if (credentialsChanging && !req.adminShopAccess) {
       if (!currentSessionToken) return res.status(401).json({ error: 'Session marchand invalide ou expirée.' });
       const currentPin = typeof req.body?.current_pin === 'string' ? req.body.current_pin.trim() : '';
-      if (!verifyPin(currentPin, shop.pin_code_hash)) {
+      const pinAttemptKey = `merchant-pin:${shop.id}`;
+      if (await getCustomerLoginLockSeconds(pinAttemptKey) > 0) {
+        return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
+      }
+      if (!(await verifyPin(currentPin, shop.pin_code_hash))) {
+        await recordCustomerLoginFailure(pinAttemptKey);
         return res.status(401).json({ error: 'Saisissez votre code PIN actuel pour modifier les identifiants de récupération ou le PIN.' });
       }
+      await clearLoginAttempts(pinAttemptKey, 'customer-login');
     }
     const emailRemindersEnabled = shop.email_subscription_reminders_enabled ? 1 : 0;
     const emailRemindersConsentAt = shop.email_subscription_reminders_consent_at ?? null;
@@ -243,14 +263,39 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       });
     }
     if (shop.subscription_status !== 'not_started') return res.status(409).json({ error: 'Cet essai ne peut pas être démarré.' });
-    const tier = 'standard';
+    const tier = req.body?.tier;
+    if (tier !== 'standard' && tier !== 'premium') {
+      return res.status(400).json({ error: 'Choisissez Standard ou Premium pour votre essai.' });
+    }
     const startedAt = new Date();
+    const trialEnd = addCalendarMonths(startedAt, trialDurationMonths);
+    const started = await dbTransaction(async (transaction) => {
+      if (databaseMode === 'postgresql') {
+        await transaction.get('SELECT id FROM shops WHERE id = ? FOR UPDATE', [shop.id]);
+      }
+      const current = await transaction.get<{ subscription_status: string; trial_start: string | null; trial_end: string | null }>(
+        'SELECT subscription_status, trial_start, trial_end FROM shops WHERE id = ?',
+        [shop.id],
+      );
+      if (!current || current.subscription_status !== 'not_started' || current.trial_start || current.trial_end) return 'unavailable';
+      if (!await claimTrialPromotionSlot(transaction, databaseMode, tier, shop.id, startedAt.toISOString())) return 'full';
+      const update = await transaction.run(
+        `UPDATE shops SET selected_subscription_tier = ?, subscription_status = 'trialing',
+          trial_start = ?, trial_end = ?, subscription_expires_at = ?
+         WHERE id = ? AND subscription_status = 'not_started' AND trial_start IS NULL AND trial_end IS NULL`,
+        [tier, startedAt.toISOString(), trialEnd, trialEnd, shop.id],
+      );
+      return update.changes === 1 ? 'started' : 'unavailable';
+    });
+    if (started === 'full') {
+      return res.status(409).json({ error: 'Les places d’essai de cette formule sont attribuées. Choisissez une formule payante pour activer votre boutique.' });
+    }
+    if (started !== 'started') return res.status(409).json({ error: 'Cet essai ne peut pas être démarré.' });
     shop.selected_subscription_tier = tier;
     shop.subscription_status = 'trialing';
     shop.trial_start = startedAt.toISOString();
-    shop.trial_end = addCalendarMonths(startedAt, trialDurationMonths);
-    shop.subscription_expires_at = shop.trial_end;
-    await persistShop(shop);
+    shop.trial_end = trialEnd;
+    shop.subscription_expires_at = trialEnd;
     const settings = await dbGet<{ subscription_plan_prices: string }>(
       'SELECT subscription_plan_prices FROM platform_settings WHERE id = 1',
     );
@@ -262,7 +307,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       shop: toSafeShop(shop),
       trial_days: getCalendarDayCount(startedAt.toISOString(), shop.trial_end),
       trial_months: trialDurationMonths,
-      plan: { ...getSubscriptionPlanConfig(tier), amount: prices.standard },
+      plan: { ...getSubscriptionPlanConfig(tier), amount: prices[tier] },
     });
   });
 

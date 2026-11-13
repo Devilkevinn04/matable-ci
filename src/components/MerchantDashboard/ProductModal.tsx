@@ -501,6 +501,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                         <Upload className="h-3.5 w-3.5" /> {prodImage ? 'Changer la photo' : 'Ajouter une photo'}
                       </label>
                       <p className="mt-2 text-[11px] text-slate-500">Choisissez une photo dans votre téléphone ou votre ordinateur. Elle sera préparée automatiquement.</p>
+                      {!prodImage && <p className="mt-2 text-xs font-bold text-emerald-800">Ajoutez une photo, vous vendrez plus.</p>}
                       {imageCompressing && <span className="mt-2 block text-[11px] font-bold text-amber-700">Optimisation de la photo en cours...</span>}
                       {compressedSizeKB && (
                         <span className="mt-2 flex items-center gap-1 text-[11px] font-bold text-emerald-600">

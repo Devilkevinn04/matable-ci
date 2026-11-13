@@ -111,7 +111,7 @@ export function useMerchantProductEditor(
         purpose: 'product-main',
         maxDimension: 900,
         maxSizeKB: 100,
-        thumbnailDimension: 480,
+        thumbnailDimension: 320,
         thumbnailSizeKB: 35,
       });
       setProdImage(imageUrl);

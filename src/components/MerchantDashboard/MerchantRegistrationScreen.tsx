@@ -3,7 +3,7 @@ import { ArrowRight, CheckCircle2, MessageCircleMore, ShieldCheck, Sparkles, Sto
 import { ShopCategory } from '../../types';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../../utils/categoryDefaults';
 import { ABIDJAN_COMMUNES } from '../../utils/abidjanCommunes';
-import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
+import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS, TRIAL_PROMOTION_SLOTS_PER_TIER } from '../../utils/subscriptionFeatures';
 import { AuthExperienceLayout, MerchantRegistrationProgress, MerchantShopPreview } from '../AuthExperienceLayout';
 import { MerchantState } from './useMerchant';
 import { TermsPrivacyConsent } from '../TermsPrivacyConsent';
@@ -21,6 +21,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
   const [linkedAmbassadorCode, setLinkedAmbassadorCode] = useState(getStoredAmbassadorCode);
   const {
     regName, setRegName, regCategory, setRegCategory, regCity, setRegCity,
+    regSubscriptionTier, setRegSubscriptionTier,
     regCityOther, setRegCityOther, regPhone, setRegPhone, regPin, setRegPin,
     showRegPin, setShowRegPin, regEmail, setRegEmail, regLoading,
     regAcceptedTermsPrivacy, setRegAcceptedTermsPrivacy,
@@ -81,7 +82,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
         </div>
         <MerchantRegistrationProgress step={step} />
         <p className="text-sm leading-6 text-[#68756c]">{step === 1
-          ? `Créez votre vitrine locale en deux étapes. Vous bénéficiez de ${TRIAL_DURATION_MONTHS} mois d’essai Standard gratuit à la création, avec jusqu’à ${TRIAL_CATALOG_LIMIT} produits. Vous pouvez aussi payer directement une formule.`
+          ? `Choisissez Standard ou Premium. Les ${TRIAL_PROMOTION_SLOTS_PER_TIER} premiers commerçants de chaque formule bénéficient de ${TRIAL_DURATION_MONTHS} mois d’essai gratuit et jusqu’à ${TRIAL_CATALOG_LIMIT} produits. Après attribution des places, le paiement est nécessaire pour activer la boutique.`
           : 'Ces informations permettent à vos clients de vous contacter et vous serviront à retrouver votre espace marchand.'}</p>
         {/* One compact row on phones so the form fields stay near the top of the screen. */}
         {step === 1 && <div className="grid grid-cols-3 gap-2">
@@ -94,6 +95,15 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
             </div>
           ))}
         </div>}
+        {step === 1 && <fieldset className="space-y-2">
+          <legend className="text-sm font-bold text-[#47534b]">Formule pour votre boutique</legend>
+          {(['standard', 'premium'] as const).map((tier) => (
+            <label key={tier} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${regSubscriptionTier === tier ? 'border-[var(--mt-green-deep)] bg-[#edf3ec]' : 'border-[#deded5] bg-white'}`}>
+              <input type="radio" name="merchant-subscription-tier" value={tier} checked={regSubscriptionTier === tier} onChange={() => setRegSubscriptionTier(tier)} className="mt-1 accent-[var(--mt-green-deep)]" />
+              <span className="text-sm text-[#47534b]"><strong>{tier === 'standard' ? 'Standard' : 'Premium'}</strong><span className="mt-0.5 block text-xs leading-5 text-[#68756c]">Essai de {TRIAL_DURATION_MONTHS} mois, jusqu’à {TRIAL_CATALOG_LIMIT} produits pour les {TRIAL_PROMOTION_SLOTS_PER_TIER} premières inscriptions à cette formule.</span></span>
+            </label>
+          ))}
+        </fieldset>}
       </div>
 
       <form ref={formRef} onSubmit={submitStep} className="auth-form space-y-4">

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useToast } from '../Toast';
 import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks, SubscriptionTier } from '../../types';
 import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
-import { TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
+import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
 import { useMerchantProductEditor } from './useMerchantProductEditor';
 import { trackLogin, trackLogout, trackSignup } from '../../utils/analyticsTracker';
 import { normalizeAcquisitionSource } from '../../utils/acquisitionSources';
@@ -51,6 +51,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [regAcceptedTermsPrivacy, setRegAcceptedTermsPrivacy] = useState(false);
   const [regAmbassadorCode, setRegAmbassadorCode] = useState('');
   const [regCategory, setRegCategory] = useState<ShopCategory>('fashion');
+  const [regSubscriptionTier, setRegSubscriptionTier] = useState<Extract<SubscriptionTier, 'standard' | 'premium'>>('standard');
   // Campaign from ?src= / utm_source, kept only when the visitor accepted audience analytics.
   const [regTrackedCampaign] = useState(() => (typeof window !== 'undefined' && hasAnalyticsConsent()
     ? getAnalyticsCampaignFromSearch(window.location.search) || getStoredAnalyticsCampaign()
@@ -477,6 +478,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
           pin_code: regPin.trim(),
           city: regCity === 'Autre ville / commune' ? regCityOther.trim() : regCity.trim(),
           category: regCategory,
+          subscription_tier: regSubscriptionTier,
           email: regEmail.trim(),
           accepted_terms_privacy: regAcceptedTermsPrivacy,
           acquisition_source: regAcquisitionSource || null,
@@ -508,7 +510,10 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       trackSignup('merchant', 'registration');
       const publicUrl = `${window.location.origin}/${data.shop.slug}`;
       const privateUrl = `${window.location.origin}/app?access=${encodeURIComponent(data.owner_access_token)}`;
-      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable. Votre essai Standard gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé et votre espace marchand est accessible immédiatement. Vous pouvez choisir une formule payante et la régler dès maintenant ou quand vous le souhaitez. Déposez les justificatifs de votre commerce dans votre espace pour demander son examen et sa publication. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
+      const trialMessage = data.trial_granted === true
+        ? `Votre essai ${regSubscriptionTier === 'premium' ? 'Premium' : 'Standard'} gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé, avec jusqu’à ${TRIAL_CATALOG_LIMIT} produits.`
+        : 'Les 75 places d’essai de cette formule sont attribuées. Votre boutique reste bloquée jusqu’au paiement d’un abonnement dans votre espace marchand.';
+      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable. ${trialMessage} Déposez les justificatifs de votre commerce dans votre espace pour demander son examen et sa publication. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
       setRegistrationLinks({
         publicUrl,
         privateUrl,
@@ -562,7 +567,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       if (!response.ok) throw new Error(data.error || 'Impossible de démarrer l’essai.');
       setCurrentShop(data.shop);
       syncShopSettings(data.shop);
-      toast.success(`Votre essai Standard gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé.`);
+      toast.success(`Votre essai ${tier === 'premium' ? 'Premium' : 'Standard'} gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Impossible de contacter le serveur.');
     } finally {
@@ -993,6 +998,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     regAcquisitionSource,
     setRegAcquisitionSource,
     regCategory,
+    regSubscriptionTier,
+    setRegSubscriptionTier,
     regLoading,
     trialStarting,
     registrationLinks,

@@ -228,7 +228,7 @@ export function getSubscriptionState(
   const plan = manualOverrideActive
       ? normalizeSubscriptionTier(effectiveShop.selected_subscription_tier)
       : status === 'trialing'
-      ? 'standard'
+      ? normalizeSubscriptionTier(effectiveShop.selected_subscription_tier)
       : effectiveShop.pending_subscription_tier
         && effectiveShop.pending_subscription_effective_at
         && currentDate.getTime() >= (subscriptionExpiryCutoff(effectiveShop.pending_subscription_effective_at) ?? Number.POSITIVE_INFINITY)

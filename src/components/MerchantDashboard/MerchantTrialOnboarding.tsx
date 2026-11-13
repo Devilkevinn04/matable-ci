@@ -17,6 +17,7 @@ import {
   SUBSCRIPTION_PLANS,
   TRIAL_CATALOG_LIMIT,
   TRIAL_DURATION_MONTHS,
+  TRIAL_PROMOTION_SLOTS_PER_TIER,
   type SubscriptionTerm,
 } from '../../utils/subscriptionFeatures';
 import { useSubscriptionPrices } from '../../utils/useSubscriptionPrices';
@@ -53,6 +54,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
     : monthlyPrice * (term === 'annual' ? 10 : 1);
   const paymentFlowActive = previewOnly || mode !== 'start' || purchaseNow;
   const isTrialActive = shop.subscription?.status === 'trialing';
+  const paymentRequiredBeforeAccess = shop.subscription?.status === 'not_started';
   const isManualSubscriptionSuspension = Boolean(
     shop.subscription?.manualOverrideActive && shop.subscription.status === 'suspended',
   );
@@ -192,8 +194,8 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
         ) : (
           <header className="border-b border-[#dce4dc] pb-6">
             <p className="text-xs font-extrabold uppercase text-[var(--mt-green-hover)]">MaTable · Espace commerçant</p>
-            <h1 className="mt-2 text-2xl font-black sm:text-3xl">{mode === 'expired' ? expiredTitle : `Bienvenue, ${shop.name}`}</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? expiredDescription : isTrialActive ? `Votre essai gratuit reste actif jusqu’au ${shop.subscription?.trialEnd ? formatSubscriptionDate(shop.subscription.trialEnd) : 'terme prévu'}. Vous pouvez payer maintenant : après confirmation, votre formule payante sera active et la durée restante de l’essai sera conservée.` : `Vous pouvez choisir une formule payante dès maintenant ou commencer par l’essai gratuit de ${TRIAL_DURATION_MONTHS} mois.`}</p>
+            <h1 className="mt-2 text-2xl font-black sm:text-3xl">{mode === 'expired' ? expiredTitle : paymentRequiredBeforeAccess ? `Activez votre boutique, ${shop.name}` : `Bienvenue, ${shop.name}`}</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'expired' ? expiredDescription : paymentRequiredBeforeAccess ? `Les ${TRIAL_PROMOTION_SLOTS_PER_TIER} places d’essai Standard et les ${TRIAL_PROMOTION_SLOTS_PER_TIER} places Premium ont été attribuées. Choisissez une formule et réglez-la pour activer votre espace marchand.` : isTrialActive ? `Votre essai gratuit reste actif jusqu’au ${shop.subscription?.trialEnd ? formatSubscriptionDate(shop.subscription.trialEnd) : 'terme prévu'}. Vous pouvez payer maintenant : après confirmation, votre formule payante sera active et la durée restante de l’essai sera conservée.` : `Vous pouvez choisir une formule payante dès maintenant ou commencer par l’essai gratuit de ${TRIAL_DURATION_MONTHS} mois.`}</p>
             {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-emerald-800 underline underline-offset-2"><MessageCircle className="h-4 w-4" />Contacter l’équipe</a>}
           </header>
         )}
@@ -208,7 +210,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                   <span className="text-sm font-extrabold text-[#183b31]">Essayer gratuitement</span>
                   <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-900">{TRIAL_DURATION_MONTHS} mois offerts</span>
                 </span>
-                <span className="mt-2 block text-xs leading-5 text-slate-600">Standard, jusqu’à {TRIAL_CATALOG_LIMIT} produits. Aucun paiement nécessaire pour commencer.</span>
+                <span className="mt-2 block text-xs leading-5 text-slate-600">Standard ou Premium, jusqu’à {TRIAL_CATALOG_LIMIT} produits pendant l’essai.</span>
               </button>
               <button type="button" aria-pressed={purchaseNow} onClick={() => setPurchaseNow(true)} className={`rounded-2xl border p-4 text-left transition ${purchaseNow ? 'border-[var(--mt-green-hover)] bg-white ring-2 ring-[var(--mt-green-hover)]/15' : 'border-[#d5ddd5] bg-white/70 hover:border-[var(--mt-green-hover)]'}`}>
                 <span className="flex items-center justify-between gap-3">
@@ -347,11 +349,11 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
           </section>
         ) : (
           <section className="mt-7 rounded-xl border border-emerald-200 bg-white p-5">
-            <h2 className="text-lg font-extrabold">Essai gratuit · Standard</h2>
+            <h2 className="text-lg font-extrabold">Essai gratuit · {shop.subscription?.plan === 'premium' ? 'Premium' : 'Standard'}</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               {shop.subscription?.status === 'not_started'
-                ? `L’essai dure ${TRIAL_DURATION_MONTHS} mois à partir de son activation. Il donne accès aux fonctions Standard avec une limite de ${TRIAL_CATALOG_LIMIT} produits.`
-                : `L’essai de ${TRIAL_DURATION_MONTHS} mois commence à la création de votre boutique. Il donne accès aux fonctions Standard avec une limite de ${TRIAL_CATALOG_LIMIT} produits.`}
+                ? `L’essai dure ${TRIAL_DURATION_MONTHS} mois à partir de son activation. Il donne accès à la formule ${shop.subscription?.plan === 'premium' ? 'Premium' : 'Standard'} avec une limite de ${TRIAL_CATALOG_LIMIT} produits.`
+                : `L’essai de ${TRIAL_DURATION_MONTHS} mois commence à la création de votre boutique. Il donne accès à la formule ${shop.subscription?.plan === 'premium' ? 'Premium' : 'Standard'} avec une limite de ${TRIAL_CATALOG_LIMIT} produits.`}
             </p>
             <ul className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
               {[
