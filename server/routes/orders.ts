@@ -137,7 +137,7 @@ export function createOrderRouter({
     const blockReason = getShopPublicationBlockReason(shop);
     if (!isShopPubliclyVisible(shop) || blockReason === 'subscription') {
       const error = blockReason === 'verification'
-        ? 'Cette boutique doit terminer sa vérification avant de recevoir des commandes.'
+        ? 'Le responsable de cette boutique doit terminer la vérification de son identité avant de recevoir des commandes.'
         : blockReason === 'subscription'
           ? 'Cette boutique ne dispose pas d’un essai ou abonnement actif.'
           : 'Cette boutique n’est pas publiée.';

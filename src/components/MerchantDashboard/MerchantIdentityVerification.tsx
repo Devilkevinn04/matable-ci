@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ExternalLink, LoaderCircle, RefreshCw, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, ExternalLink, FileCheck2, LoaderCircle, RefreshCw, ShieldCheck } from 'lucide-react';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 
 export interface VerificationStatus {
@@ -65,6 +65,15 @@ export function MerchantIdentityVerification({ shopId, shopName, onStatusChange 
   const canStartVerification = status?.didit_available !== false
     && (!status || (!['verified', 'not_required'].includes(status.status) && status.restart_available !== false));
   const supportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour la vérification Didit de la boutique ${shopName}.`);
+  const progress = status?.status === 'verified' || status?.status === 'not_required'
+    ? 100
+    : status?.status === 'under_review'
+      ? 75
+      : status?.status === 'submitted'
+        ? 50
+        : status?.status === 'rejected'
+          ? 25
+          : 0;
 
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
@@ -157,12 +166,23 @@ export function MerchantIdentityVerification({ shopId, shopName, onStatusChange 
       </div>
 
       <div className={`mt-4 rounded-xl border p-3 ${details.tone}`}>
-        <p className="text-sm font-bold">{details.label}</p>
+        <div className="flex items-center gap-2">
+          {progress === 100
+            ? <CheckCircle2 className="h-5 w-5 shrink-0" />
+            : <FileCheck2 className="h-5 w-5 shrink-0" />}
+          <p className="text-sm font-bold">{details.label}</p>
+        </div>
         <p className="mt-1 text-xs">{details.description}</p>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/80" role="progressbar" aria-label="Progression de la vérification d’identité" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+          <div className="h-full rounded-full bg-current transition-[width] duration-500" style={{ width: `${progress}%` }} />
+        </div>
+        <div className="mt-2 grid grid-cols-3 text-[10px] font-semibold">
+          <span className="text-left">À démarrer</span><span className="text-center">Envoyée</span><span className="text-right">Terminée</span>
+        </div>
       </div>
       {status?.didit_available === false && (
         <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950">
-          Didit est momentanément indisponible. Utilisez le parcours de vérification manuelle ci-dessus ; les deux dossiers seront examinés indépendamment.
+          Didit est momentanément indisponible. Utilisez le dépôt manuel présenté plus bas pour transmettre votre pièce d’identité.
         </p>
       )}
 
@@ -187,21 +207,19 @@ export function MerchantIdentityVerification({ shopId, shopName, onStatusChange 
 
       {canStartVerification && (
         <>
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-xs font-bold text-slate-800">Avant de commencer</p>
+          <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <summary className="cursor-pointer text-xs font-bold text-slate-800">Préparer votre vérification</summary>
             <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-slate-700">
-              <li>Une pièce d’identité ivoirienne valide et non expirée : CNI, passeport ou permis de conduire.</li>
-              <li>Le document original, pas une photocopie ni une capture d’écran.</li>
-              <li>Une pièce entièrement visible, bien éclairée, sans reflet ni flash.</li>
-              <li>Un visage dégagé : retirez chapeau, masque et lunettes de soleil.</li>
+              <li>Préparez une pièce valide : CNI, passeport ou permis de conduire.</li>
+              <li>Utilisez le document original, bien éclairé et entièrement visible.</li>
+              <li>Gardez votre visage dégagé pour la vérification selfie si elle est demandée.</li>
             </ul>
-          </div>
+          </details>
 
-          <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-3 rounded-xl p-2 text-sm text-slate-700 focus-within:ring-2 focus-within:ring-emerald-700">
+          <label className="mt-3 flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 text-sm text-slate-700 focus-within:ring-2 focus-within:ring-emerald-700">
             <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-1 h-5 w-5 shrink-0 accent-emerald-800" />
-            <span>J’accepte que mes données d’identité et, si le parcours le demande, mes données biométriques soient traitées par Didit afin de vérifier l’identité du responsable de cette boutique. Je comprends que ces données sont transmises directement à Didit et que MaTable reçoit le résultat de la vérification.</span>
+            <span className="text-xs leading-5">J’accepte que Didit traite les informations nécessaires pour vérifier l’identité du responsable. MaTable reçoit le résultat, pas les documents ni les données biométriques. <a href="/confidentialite" target="_blank" rel="noreferrer" className="font-bold underline">Détails et droits</a>.</span>
           </label>
-          <p className="mt-3 text-xs text-slate-500">Consultez la <a href="/confidentialite" target="_blank" rel="noreferrer" className="font-semibold underline">politique de confidentialité</a> pour connaître les détails du traitement et vos droits.</p>
           <button type="button" onClick={() => void startVerification()} disabled={!consent || busy || !hasLoadedStatus} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
             {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
             {busy ? 'Connexion à Didit…' : status?.status === 'rejected' || expired ? 'Relancer la vérification avec Didit' : 'Continuer avec Didit'}

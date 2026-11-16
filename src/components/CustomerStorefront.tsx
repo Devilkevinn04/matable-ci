@@ -909,7 +909,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     <span aria-hidden="true" className={`h-2 w-2 rounded-full ${shop.is_open ? 'bg-[var(--mt-green-hover)]' : 'bg-[#8a5a12]'}`} />
                     {shop.is_open ? 'Ouverte' : 'Fermée'}{shop.city ? <span className="truncate sm:hidden">· {shop.city}</span> : null}
                   </span>
-                  {shop.merchant_verification_status === 'verified' && (
+                  {['approved', 'verified'].includes(shop.identity_verification_status || shop.merchant_verification_status || '') && (
                     <span className="hidden items-center gap-0.5 rounded-full bg-[#e3f4ea] px-1.5 py-0.5 text-xs font-extrabold text-[var(--mt-green-deep)] sm:inline-flex" title="Le commerçant a fait vérifier son identité">
                       <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Vérifié
                     </span>
@@ -987,8 +987,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           <div className={`relative z-10 flex min-h-44 flex-col items-start justify-end gap-2 p-4 sm:flex-row sm:items-end sm:justify-between sm:gap-3 sm:p-6 ${bannerUrl ? 'text-white' : ''}`} style={!bannerUrl ? { color: primaryColor } : undefined}>
             <div className="max-w-2xl">
               <p className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${bannerUrl ? 'border border-white/25 bg-white/10 text-white/90' : 'border border-current/20 bg-white/70'}`}>
-                {shop.merchant_verification_status === 'verified' && <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />}
-                {shop.merchant_verification_status === 'verified' ? 'Vérifié · ' : ''}{categoryDefaults.label}
+                {['approved', 'verified'].includes(shop.identity_verification_status || shop.merchant_verification_status || '') && <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />}
+                {['approved', 'verified'].includes(shop.identity_verification_status || shop.merchant_verification_status || '') ? 'Identité vérifiée · ' : ''}{categoryDefaults.label}
               </p>
               <h2 className="mt-2 line-clamp-3 font-display text-3xl font-extrabold leading-tight sm:text-4xl">{shop.name}</h2>
               <p className="mt-1.5 line-clamp-2 max-w-xl text-sm font-medium leading-5 sm:text-base sm:leading-6">{getWelcomeMessageForDisplay(shop.welcome_message, shop.category)}</p>

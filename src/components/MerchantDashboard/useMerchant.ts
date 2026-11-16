@@ -549,7 +549,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       const trialMessage = data.trial_granted === true
         ? `Votre essai ${regSubscriptionTier === 'premium' ? 'Premium' : 'Standard'} gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé, avec jusqu’à ${TRIAL_CATALOG_LIMIT} produits.`
         : 'Les 75 places d’essai de cette formule sont attribuées. Votre boutique reste bloquée jusqu’au paiement d’un abonnement dans votre espace marchand.';
-      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable. ${trialMessage} Déposez les justificatifs de votre commerce dans votre espace pour demander son examen et sa publication. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
+      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable. ${trialMessage} Vérifiez l’identité de la personne responsable depuis votre espace pour pouvoir publier la boutique. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
       setRegistrationLinks({
         publicUrl,
         privateUrl,

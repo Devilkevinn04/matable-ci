@@ -29,6 +29,8 @@ import {
 const CONSENT_VERSION = 'didit-v1';
 const MANUAL_CONSENT_VERSION = 'manual-verification-v1';
 const DOCUMENT_RETENTION_DAYS = 90;
+const IDENTITY_DOCUMENT_TYPES = ['identity_front', 'identity_back', 'identity_passport'] as const;
+const IDENTITY_DOCUMENT_TYPE_SET = new Set<string>(IDENTITY_DOCUMENT_TYPES);
 
 function mapStoredIdentityStatus(status: string): string {
   if (status === 'approved' || status === 'verified') return 'verified';
@@ -131,8 +133,7 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       session_id: activeSession?.session_id || null,
       session_url: activeSession?.session_url || null,
       resume_available: Boolean(activeSession?.session_url && mappedStatus === 'submitted'),
-      restart_available: shop.identity_verification_status !== 'approved'
-        && shop.merchant_verification_status !== 'verified'
+      restart_available: !['approved', 'verified'].includes(shop.identity_verification_status)
         && (!session || canRestartDiditSession({
           status: session.status,
           lastWebhookAt: session.last_webhook_at,
@@ -148,8 +149,8 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
   router.get('/:id/manual-verification', requireMerchantIdentityOwnShop, async (req, res) => {
       const shopId = Number(req.params.id);
       const [shop, consent, documents, latestDecision] = await Promise.all([
-        dbGet<{ business_verification_status: string; identity_verification_status: string }>(
-          'SELECT business_verification_status, identity_verification_status FROM shops WHERE id = ?', [shopId],
+        dbGet<{ identity_verification_status: string }>(
+          'SELECT identity_verification_status FROM shops WHERE id = ?', [shopId],
         ),
         dbGet<{ consent_at: string }>(
           'SELECT consent_at FROM merchant_verification_consents WHERE shop_id = ? AND consent_version = ?',
@@ -157,13 +158,14 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
         ),
         dbAll<{ id: string; document_type: string; content_type: string; file_size: number; status: string; created_at: string }>(
           `SELECT id, document_type, content_type, file_size, status, created_at
-           FROM merchant_verification_documents WHERE shop_id = ? AND (expires_at IS NULL OR expires_at > ?)
+           FROM merchant_verification_documents WHERE shop_id = ? AND document_type IN (?, ?, ?)
+           AND (expires_at IS NULL OR expires_at > ?)
            ORDER BY created_at DESC`,
-          [shopId, new Date().toISOString()],
+          [shopId, ...IDENTITY_DOCUMENT_TYPES, new Date().toISOString()],
         ),
         dbAll<{ action: string; details: string; created_at: string }>(
           `SELECT action, details, created_at FROM admin_audit_logs WHERE shop_id = ?
-           AND action IN ('merchant_business_verification_reviewed', 'merchant_identity_verification_reviewed')
+           AND action = 'merchant_identity_verification_reviewed'
            ORDER BY created_at DESC LIMIT 10`,
           [shopId],
         ),
@@ -185,7 +187,6 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('X-Content-Type-Options', 'nosniff');
       return res.json({
-        business_status: shop.business_verification_status,
         identity_status: shop.identity_verification_status,
         consent_at: consent?.consent_at || null,
         storage_available: Boolean(getPrivateVerificationStorageConfig()),
@@ -216,7 +217,10 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
 
     router.post('/:id/manual-verification/documents/upload-url', sessionRateLimit, requireMerchantIdentityOwnShop, async (req, res) => {
       const shopId = Number(req.params.id);
-      if (!isVerificationDocumentType(req.body?.document_type)) return res.status(400).json({ error: 'Type de justificatif invalide.' });
+      if (!isVerificationDocumentType(req.body?.document_type)
+        || !IDENTITY_DOCUMENT_TYPE_SET.has(req.body.document_type)) {
+        return res.status(400).json({ error: 'Type de justificatif d’identité invalide.' });
+      }
       let upload: ReturnType<typeof validateVerificationUpload>;
       try {
         upload = validateVerificationUpload({ contentType: req.body?.content_type, size: req.body?.size });
@@ -335,7 +339,7 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       [shopId],
     );
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-    if (shop.identity_verification_status === 'approved' || shop.merchant_verification_status === 'verified') {
+    if (['approved', 'verified'].includes(shop.identity_verification_status || shop.merchant_verification_status)) {
       return res.status(409).json({ error: 'Cette identité a déjà été examinée.' });
     }
     if (req.body?.consent !== true) return res.status(400).json({ error: 'Votre consentement explicite est requis pour continuer.' });
@@ -407,12 +411,14 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       if (process.env.NODE_ENV === 'production') {
         await transaction.get('SELECT id FROM shops WHERE id = ? FOR UPDATE', [shop.id]);
       }
-      const currentShop = await transaction.get<{ merchant_verification_status: string }>(
-        'SELECT merchant_verification_status FROM shops WHERE id = ?',
+      const currentShop = await transaction.get<{ merchant_verification_status: string; identity_verification_status: string }>(
+        'SELECT merchant_verification_status, identity_verification_status FROM shops WHERE id = ?',
         [shop.id],
       );
       if (!currentShop) return 'shop_missing';
-      if (currentShop.merchant_verification_status === 'verified') return 'already_verified';
+      if (['approved', 'verified'].includes(currentShop.identity_verification_status || currentShop.merchant_verification_status)) {
+        return 'already_verified';
+      }
       const latestSession = await transaction.get<{ created_at: string; status: string; last_webhook_at: string | null }>(
         'SELECT created_at, status, last_webhook_at FROM didit_verification_sessions WHERE shop_id = ? ORDER BY created_at DESC LIMIT 1',
         [shop.id],
@@ -472,19 +478,14 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
   adminRouter.get('/manual', requireSuperAdmin, async (_req, res) => {
     const verifications = await dbAll<{
       shop_id: number; shop_name: string; shop_slug: string; category: string; city: string | null;
-      created_at: string; business_status: string; identity_status: string;
-      business_method: string | null; identity_method: string | null;
+      created_at: string; identity_status: string; identity_method: string | null;
     }>(`SELECT id AS shop_id, name AS shop_name, slug AS shop_slug, category, city, created_at,
-      business_verification_status AS business_status, identity_verification_status AS identity_status,
-      business_verification_method AS business_method, identity_verification_method AS identity_method
+      identity_verification_status AS identity_status, identity_verification_method AS identity_method
       FROM shops
-      ORDER BY CASE WHEN business_verification_status IN ('pending', 'under_review', 'action_required') THEN 0 ELSE 1 END,
+      ORDER BY CASE WHEN identity_verification_status IN ('pending', 'under_review', 'action_required') THEN 0 ELSE 1 END,
         created_at DESC, id DESC`);
     const counts = await dbGet<Record<string, number | string>>(`SELECT
       COUNT(*) AS total,
-      COUNT(CASE WHEN business_verification_status IN ('pending', 'under_review') THEN 1 END) AS business_pending,
-      COUNT(CASE WHEN business_verification_status = 'action_required' THEN 1 END) AS business_action_required,
-      COUNT(CASE WHEN business_verification_status = 'approved' THEN 1 END) AS business_approved,
       COUNT(CASE WHEN identity_verification_status IN ('pending', 'under_review') THEN 1 END) AS identity_pending,
       COUNT(CASE WHEN identity_verification_status = 'action_required' THEN 1 END) AS identity_action_required,
       COUNT(CASE WHEN identity_verification_status = 'approved' THEN 1 END) AS identity_approved
@@ -498,13 +499,12 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
     if (!Number.isSafeInteger(shopId) || shopId <= 0) return res.status(400).json({ error: 'Boutique invalide.' });
     const shop = await dbGet<Record<string, unknown>>(`SELECT id, name, slug, category, city, owner_name,
       owner_email, owner_phone, whatsapp_number, created_at, publication_status,
-      business_verification_status, identity_verification_status,
-      business_verification_method, identity_verification_method
+      identity_verification_status, identity_verification_method
       FROM shops WHERE id = ?`, [shopId]);
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
     const history = await dbAll<{ actor: string; action: string; details: string; created_at: string }>(
       `SELECT actor, action, details, created_at FROM admin_audit_logs WHERE shop_id = ?
-       AND action IN ('merchant_business_verification_reviewed', 'merchant_identity_verification_reviewed')
+       AND action = 'merchant_identity_verification_reviewed'
        ORDER BY created_at DESC LIMIT 50`, [shopId],
     );
     const documents = await dbAll<{
@@ -512,12 +512,16 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       created_at: string; expires_at: string | null;
     }>(
       `SELECT id, document_type, content_type, file_size, status, created_at, expires_at
-       FROM merchant_verification_documents WHERE shop_id = ?
+       FROM merchant_verification_documents WHERE shop_id = ? AND document_type IN (?, ?, ?)
        ORDER BY created_at DESC`,
-      [shopId],
+      [shopId, ...IDENTITY_DOCUMENT_TYPES],
     );
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ shop, history: history.map((entry) => ({
+    return res.json({ shop: {
+      ...shop,
+      identity_status: shop.identity_verification_status,
+      identity_method: shop.identity_verification_method,
+    }, history: history.map((entry) => ({
       ...entry,
       details: (() => { try { return JSON.parse(entry.details) as Record<string, unknown>; } catch { return {}; } })(),
     })), documents });
@@ -531,8 +535,8 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
     }
     const document = await dbGet<{ object_key: string; content_type: string; status: string; expires_at: string | null }>(
       `SELECT object_key, content_type, status, expires_at FROM merchant_verification_documents
-       WHERE id = ? AND shop_id = ?`,
-      [documentId, shopId],
+       WHERE id = ? AND shop_id = ? AND document_type IN (?, ?, ?)`,
+      [documentId, shopId, ...IDENTITY_DOCUMENT_TYPES],
     );
     if (!document || document.status !== 'available') return res.status(404).json({ error: 'Justificatif introuvable.' });
     if (document.expires_at && Date.parse(document.expires_at) <= Date.now()) {
@@ -562,58 +566,43 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
     const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
     const expectedStatus = typeof req.body?.expected_status === 'string' ? req.body.expected_status : '';
     if (!Number.isSafeInteger(shopId) || shopId <= 0
-      || !['business', 'identity'].includes(verificationType)
+      || verificationType !== 'identity'
       || !['under_review', 'action_required', 'approved', 'rejected'].includes(status)
       || reason.length < 3) {
-      return res.status(400).json({ error: 'Type de vérification, décision et motif (3 à 500 caractères) requis.' });
+      return res.status(400).json({ error: 'Décision d’identité et motif (3 à 500 caractères) requis.' });
     }
-    const column = verificationType === 'business' ? 'business_verification_status' : 'identity_verification_status';
-    const methodColumn = verificationType === 'business' ? 'business_verification_method' : 'identity_verification_method';
-    const action = verificationType === 'business'
-      ? 'merchant_business_verification_reviewed'
-      : 'merchant_identity_verification_reviewed';
+    const action = 'merchant_identity_verification_reviewed';
+    const merchantStatus = status === 'approved' ? 'verified' : status === 'under_review' ? 'under_review' : 'rejected';
     const updatedAt = new Date().toISOString();
     const result = await dbTransaction(async (transaction) => {
       const current = await transaction.get<{ status: string }>(
-        `SELECT ${column} AS status FROM shops WHERE id = ?${process.env.NODE_ENV === 'production' ? ' FOR UPDATE' : ''}`,
+        `SELECT identity_verification_status AS status FROM shops WHERE id = ?${process.env.NODE_ENV === 'production' ? ' FOR UPDATE' : ''}`,
         [shopId],
       );
       if (!current) return 'not_found';
       if (current.status !== expectedStatus) return 'conflict';
       if (status === 'approved') {
         const documentTypes = await transaction.get<{
-          storefront: number | string; interior: number | string; products: number | string;
           identity_front: number | string; identity_back: number | string; identity_passport: number | string;
         }>(`SELECT
-          COUNT(CASE WHEN document_type = 'storefront' THEN 1 END) AS storefront,
-          COUNT(CASE WHEN document_type = 'interior' THEN 1 END) AS interior,
-          COUNT(CASE WHEN document_type = 'products' THEN 1 END) AS products,
           COUNT(CASE WHEN document_type = 'identity_front' THEN 1 END) AS identity_front,
           COUNT(CASE WHEN document_type = 'identity_back' THEN 1 END) AS identity_back,
           COUNT(CASE WHEN document_type = 'identity_passport' THEN 1 END) AS identity_passport
           FROM merchant_verification_documents
           WHERE shop_id = ? AND status = 'available' AND (expires_at IS NULL OR expires_at > ?)`,
         [shopId, new Date().toISOString()]);
-        const hasDocuments = verificationType === 'business'
-          ? Number(documentTypes?.storefront || 0) > 0
-            && (Number(documentTypes?.interior || 0) > 0 || Number(documentTypes?.products || 0) > 0)
-          : Number(documentTypes?.identity_passport || 0) > 0
-            || (Number(documentTypes?.identity_front || 0) > 0 && Number(documentTypes?.identity_back || 0) > 0);
+        const hasDocuments = Number(documentTypes?.identity_passport || 0) > 0
+          || (Number(documentTypes?.identity_front || 0) > 0 && Number(documentTypes?.identity_back || 0) > 0);
         if (!hasDocuments) return 'documents_missing';
       }
-      await transaction.run(`UPDATE shops SET ${column} = ?, ${methodColumn} = 'manual',
-        publication_status = CASE WHEN ? = 'business' AND ? <> 'approved' AND publication_status <> 'suspended'
-          THEN 'draft' ELSE publication_status END WHERE id = ?`,
-      [status, verificationType, status, shopId]);
+      await transaction.run(`UPDATE shops SET identity_verification_status = ?, merchant_verification_status = ?,
+        identity_verification_method = 'manual' WHERE id = ?`, [status, merchantStatus, shopId]);
       const expiration = new Date(Date.now() + DOCUMENT_RETENTION_DAYS * 86400000).toISOString();
-      const documentTypes = verificationType === 'business'
-        ? ['storefront', 'interior', 'products']
-        : ['identity_front', 'identity_back', 'identity_passport'];
-      const placeholders = documentTypes.map(() => '?').join(', ');
+      const placeholders = IDENTITY_DOCUMENT_TYPES.map(() => '?').join(', ');
       await transaction.run(
         `UPDATE merchant_verification_documents SET expires_at = ?
          WHERE shop_id = ? AND document_type IN (${placeholders}) AND status = 'available'`,
-        [status === 'under_review' ? null : expiration, shopId, ...documentTypes],
+        [status === 'under_review' ? null : expiration, shopId, ...IDENTITY_DOCUMENT_TYPES],
       );
       await transaction.run(
         'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
@@ -630,21 +619,19 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
     if (result === 'conflict') return res.status(409).json({ error: 'Le dossier a été modifié. Actualisez avant de réessayer.' });
     if (result === 'documents_missing') {
       return res.status(400).json({
-        error: verificationType === 'business'
-          ? 'Pour accepter la boutique, examinez une photo de la devanture ainsi qu’une photo de l’intérieur ou des produits.'
-          : 'Pour accepter l’identité, examinez un passeport ou les deux faces de la pièce.',
+        error: 'Pour accepter l’identité, examinez un passeport ou les deux faces de la pièce.',
       });
     }
     await options.refreshRuntimeDataFromDatabase?.();
     void sendMerchantPush(shopId, {
-      eventKey: `manual-verification-${verificationType}-${Date.now()}`,
+      eventKey: `manual-verification-identity-${Date.now()}`,
       category: 'identity',
       title: status === 'approved' ? 'Vérification mise à jour' : 'Action requise pour votre dossier',
       body: status === 'approved'
         ? 'Une décision a été prise sur votre dossier. Consultez votre espace commerçant.'
         : `Le statut de votre vérification est « ${status} ». Consultez votre espace commerçant pour le motif et les suites.`,
       url: '/app',
-      tag: `manual-verification-${verificationType}`,
+      tag: 'manual-verification-identity',
     }).catch((error: unknown) => console.warn('Manual verification notification failed.', error));
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, status, verification_type: verificationType, updated_at: updatedAt });

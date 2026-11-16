@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, RefreshCw, Search, ShieldCheck } from 'lucide-react';
 
-type VerificationType = 'business' | 'identity';
 type ReviewStatus = 'pending' | 'under_review' | 'action_required' | 'approved' | 'rejected';
 
 interface VerificationRow {
@@ -11,9 +10,7 @@ interface VerificationRow {
   category: string;
   city: string | null;
   created_at: string;
-  business_status: ReviewStatus | 'not_submitted';
   identity_status: ReviewStatus | 'not_submitted';
-  business_method: string | null;
   identity_method: string | null;
 }
 
@@ -30,9 +27,6 @@ interface VerificationDetail {
 }
 interface VerificationCounts {
   total: number;
-  business_pending: number;
-  business_action_required: number;
-  business_approved: number;
   identity_pending: number;
   identity_action_required: number;
   identity_approved: number;
@@ -53,8 +47,7 @@ export function AdminManualVerificationPanel() {
   const [detail, setDetail] = useState<VerificationDetail | null>(null);
   const [filter, setFilter] = useState('pending');
   const [search, setSearch] = useState('');
-  const [type, setType] = useState<VerificationType>('business');
-  const [status, setStatus] = useState<ReviewStatus>('under_review');
+  const [status, setStatus] = useState<ReviewStatus | null>(null);
   const [documentPreview, setDocumentPreview] = useState<{ id: string; url: string } | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -87,7 +80,7 @@ export function AdminManualVerificationPanel() {
       if (!response.ok) throw new Error(result.error || 'Ouverture du dossier impossible.');
       setDetail(result);
       setDocumentPreview(null);
-      setType('business');
+      setStatus(null);
       setReason('');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Ouverture du dossier impossible.');
@@ -96,20 +89,20 @@ export function AdminManualVerificationPanel() {
 
   async function saveDecision(event: React.FormEvent) {
     event.preventDefault();
-    if (!detail || reason.trim().length < 3) return;
+    if (!detail || !status || reason.trim().length < 3) return;
     setBusy(true);
     setError('');
     setNotice('');
     try {
-      const expectedStatus = type === 'business' ? detail.shop.business_status : detail.shop.identity_status;
       const response = await fetch(`/api/admin/identity-verifications/manual/${detail.shop.shop_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ verification_type: type, status, reason: reason.trim(), expected_status: expectedStatus }),
+        body: JSON.stringify({ verification_type: 'identity', status, reason: reason.trim(), expected_status: detail.shop.identity_status }),
       });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || 'Décision non enregistrée.');
       setNotice('Mise à jour enregistrée et journalisée.');
+      setStatus(null);
       setReason('');
       await Promise.all([refresh(), openDetail(detail.shop.shop_id)]);
     } catch (caught) {
@@ -124,19 +117,26 @@ export function AdminManualVerificationPanel() {
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('fr');
     return rows.filter((row) => {
-      const matchesStatus = filter === 'all' || row.business_status === filter || row.identity_status === filter;
+      const matchesStatus = filter === 'all' || row.identity_status === filter;
       const matchesQuery = !query || `${row.shop_name} ${row.shop_slug} ${row.city || ''} ${row.shop_id}`.toLocaleLowerCase('fr').includes(query);
       return matchesStatus && matchesQuery;
     });
   }, [filter, rows, search]);
+  const currentStatus = detail?.shop.identity_status || null;
+  const decisionOptions: Array<{ value: ReviewStatus; label: string; tone: string }> = [
+    { value: 'under_review', label: 'En examen', tone: 'border-sky-300 text-sky-900' },
+    { value: 'action_required', label: 'Demander des corrections', tone: 'border-amber-300 text-amber-950' },
+    { value: 'approved', label: 'Autoriser l’identité', tone: 'border-emerald-300 text-emerald-900' },
+    { value: 'rejected', label: 'Refuser', tone: 'border-rose-300 text-rose-900' },
+  ];
 
   return <section className="chart-panel space-y-4 p-4 md:p-5" aria-labelledby="manual-verification-title">
     <header className="flex items-start justify-between gap-3">
       <div className="flex items-start gap-2">
         <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
         <div>
-          <h2 id="manual-verification-title" className="text-sm font-black text-slate-900">Vérification manuelle · boutique et identité</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-600">Les deux contrôles restent indépendants. « Examen accepté » signifie contrôle humain, pas authentification biométrique.</p>
+          <h2 id="manual-verification-title" className="text-sm font-black text-slate-900">Vérification manuelle de l’identité</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-600">Examinez uniquement l’identité de la personne responsable. « Examen accepté » signifie contrôle humain, pas authentification biométrique.</p>
         </div>
       </div>
       <button type="button" onClick={() => void refresh()} disabled={loading} aria-label="Actualiser les dossiers" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
@@ -146,9 +146,9 @@ export function AdminManualVerificationPanel() {
     {counts && <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
       {[
         ['Dossiers', counts.total],
-        ['Boutique à examiner', counts.business_pending],
         ['Identité à examiner', counts.identity_pending],
-        ['Corrections demandées', counts.business_action_required + counts.identity_action_required],
+        ['Corrections demandées', counts.identity_action_required],
+        ['Identités acceptées', counts.identity_approved],
       ].map(([label, value]) => <div key={label} className="rounded-lg border border-slate-200 bg-white p-3"><p className="text-[11px] font-semibold text-slate-500">{label}</p><p className="mt-1 text-xl font-black text-slate-900">{value}</p></div>)}
     </div>}
     <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -164,11 +164,11 @@ export function AdminManualVerificationPanel() {
           {filtered.map((row) => <button key={row.shop_id} type="button" onClick={() => void openDetail(row.shop_id)} className={`block min-h-20 w-full p-3 text-left hover:bg-slate-50 ${detail?.shop.shop_id === row.shop_id ? 'bg-emerald-50' : 'bg-white'}`}>
             <span className="block font-bold text-slate-900">{row.shop_name}</span>
             <span className="mt-1 block text-xs text-slate-500">{row.city || 'Commune non renseignée'} · #{row.shop_id}</span>
-            <span className="mt-2 flex flex-wrap gap-2 text-[11px]"><span>Boutique : <b>{statusLabels[row.business_status] || row.business_status}</b></span><span>Identité : <b>{statusLabels[row.identity_status] || row.identity_status}</b></span></span>
+            <span className="mt-2 block text-[11px]">Identité : <b>{statusLabels[row.identity_status] || row.identity_status}</b></span>
           </button>)}
           {filtered.length === 0 && <p className="p-4 text-sm text-slate-500">Aucun dossier correspondant.</p>}
         </div>
-        {detail && <article className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+        {detail ? <article className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
           <div><h3 className="font-black text-slate-900">{detail.shop.shop_name}</h3><p className="mt-1 text-xs text-slate-500">{detail.shop.city || 'Commune non renseignée'} · {detail.shop.category} · inscription {new Date(detail.shop.created_at).toLocaleDateString('fr-FR')}</p></div>
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             <div><dt className="text-xs text-slate-500">Responsable</dt><dd className="font-semibold">{detail.shop.owner_name || 'Non renseigné'}</dd></div>
@@ -180,7 +180,6 @@ export function AdminManualVerificationPanel() {
             <h4 className="text-xs font-black text-slate-800">Justificatifs privés · accès journalisé</h4>
             {detail.documents.map((document) => <div key={document.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <span>{({
-                storefront: 'Devanture', interior: 'Intérieur', products: 'Produits / prestations',
                 identity_front: 'Pièce · recto', identity_back: 'Pièce · verso', identity_passport: 'Passeport',
               } as Record<string, string>)[document.document_type] || document.document_type} · {Math.ceil(document.file_size / 1024)} Ko</span>
               {document.status === 'available' ? <button type="button" onClick={async () => {
@@ -201,13 +200,23 @@ export function AdminManualVerificationPanel() {
           </div>
           <div className="rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-600">Vérifiez les pièces réellement consultées. Un examen visuel ne prouve pas l’authenticité officielle ni biométrique d’une identité.</div>
           <form onSubmit={(event) => void saveDecision(event)} className="space-y-3 border-t border-slate-200 pt-4">
-            <label className="block text-xs font-bold">Volet à mettre à jour<select value={type} onChange={(event) => setType(event.target.value as VerificationType)} className="mt-1.5 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"><option value="business">Vérification de la boutique</option><option value="identity">Examen manuel d’identité</option></select></label>
-            <label className="block text-xs font-bold">Statut<select value={status} onChange={(event) => setStatus(event.target.value as ReviewStatus)} className="mt-1.5 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"><option value="under_review">En examen</option><option value="action_required">À corriger</option><option value="approved">Examen accepté</option><option value="rejected">Refusé</option></select></label>
-            <label className="block text-xs font-bold">Motif ou note obligatoire<textarea required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1.5 min-h-20 w-full rounded-lg border border-slate-300 p-3 text-sm" /></label>
-            <button type="submit" disabled={busy || reason.trim().length < 3} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-800 px-4 text-sm font-bold text-white disabled:opacity-50">{busy && <LoaderCircle className="h-4 w-4 animate-spin" />}Enregistrer et journaliser</button>
+            <div>
+              <p className="text-xs font-bold text-slate-800">Décision · identité du responsable</p>
+              <p className="mt-1 text-xs text-slate-500">Statut actuel : {statusLabels[currentStatus || ''] || currentStatus}</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {decisionOptions.map((option) => <button key={option.value} type="button" aria-pressed={status === option.value} onClick={() => setStatus(option.value)} className={`min-h-11 rounded-lg border px-3 py-2 text-xs font-bold ${option.tone} ${status === option.value ? 'ring-2 ring-emerald-700 ring-offset-1' : 'bg-white'}`}>
+                  {option.label}
+                </button>)}
+              </div>
+            </div>
+            {status === 'approved' && <p className="rounded-lg bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
+              Pour autoriser l’identité : consultez le passeport ou le recto et le verso de la pièce.
+            </p>}
+            <label className="block text-xs font-bold">Note obligatoire pour le commerçant<textarea required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder={status === 'approved' ? 'Ex. Documents consultés et informations cohérentes.' : 'Indiquez clairement la raison et les éléments à corriger.'} className="mt-1.5 min-h-20 w-full rounded-lg border border-slate-300 p-3 text-sm" /></label>
+            <button type="submit" disabled={busy || !status || reason.trim().length < 3} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-800 px-4 text-sm font-bold text-white disabled:opacity-50">{busy && <LoaderCircle className="h-4 w-4 animate-spin" />}{status === 'approved' ? 'Autoriser l’identité' : status === 'action_required' ? 'Envoyer la demande de correction' : status === 'rejected' ? 'Enregistrer le refus' : 'Enregistrer la mise en examen'}</button>
           </form>
-          <div className="border-t border-slate-200 pt-3"><h4 className="text-xs font-black text-slate-700">Historique des décisions ({detail.history.length})</h4>{detail.history.map((entry, index) => <p key={`${entry.created_at}-${index}`} className="mt-2 text-xs leading-5 text-slate-600">{new Date(entry.created_at).toLocaleString('fr-FR')} · {entry.actor} · {entry.details.verification_type === 'business' ? 'Boutique' : 'Identité'} · {statusLabels[entry.details.status || ''] || entry.details.status} — {entry.details.reason}</p>)}</div>
-        </article>}
+          <div className="border-t border-slate-200 pt-3"><h4 className="text-xs font-black text-slate-700">Historique des décisions ({detail.history.length})</h4>{detail.history.map((entry, index) => <p key={`${entry.created_at}-${index}`} className="mt-2 text-xs leading-5 text-slate-600">{new Date(entry.created_at).toLocaleString('fr-FR')} · {entry.actor} · Identité · {statusLabels[entry.details.status || ''] || entry.details.status} — {entry.details.reason}</p>)}</div>
+        </article> : <p className="rounded-xl border border-dashed border-slate-300 p-5 text-sm leading-6 text-slate-600">Sélectionnez une boutique pour consulter les pièces d’identité de la personne responsable.</p>}
       </div>}
   </section>;
 }

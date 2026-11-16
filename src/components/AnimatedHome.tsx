@@ -84,9 +84,9 @@ interface ProductWallProps {
 const ProductWall: React.FC<ProductWallProps> = ({ products }) => {
   const columns = [products.filter((_, index) => index % 3 === 0), products.filter((_, index) => index % 3 === 1), products.filter((_, index) => index % 3 === 2)];
   return (
-    <div className="mt-wall relative mx-auto h-[470px] w-full max-w-[680px] rotate-[-6deg] scale-[1.02] sm:h-[640px] sm:rotate-[-7deg] sm:scale-105" aria-hidden="true">
-      <div className="absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--mt-orange-bright)] sm:h-[460px] sm:w-[460px]" />
-      <div className="absolute left-1/2 top-1/2 h-[370px] w-[370px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-[var(--mt-orange-deep)]/30 sm:h-[560px] sm:w-[560px]" />
+    <div className="mt-wall relative mx-auto h-[320px] w-full max-w-[680px] rotate-[-6deg] scale-[1.02] sm:h-[640px] sm:rotate-[-7deg] sm:scale-105" aria-hidden="true">
+      <div className="absolute left-1/2 top-1/2 h-[240px] w-[240px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--mt-orange-bright)] sm:h-[460px] sm:w-[460px]" />
+      <div className="absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-[var(--mt-orange-deep)]/30 sm:h-[560px] sm:w-[560px]" />
       <div className="absolute inset-0 grid grid-cols-2 gap-3 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,#000_14%,#000_86%,transparent)] sm:grid-cols-3 sm:gap-[18px]">
         {columns.map((column, columnIndex) => (
           <div key={columnIndex} className={`${columnIndex === 2 ? 'hidden sm:block' : ''} overflow-hidden`}>
@@ -203,9 +203,9 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
   return (
     <main className="overflow-hidden bg-[var(--mt-gray-50)] text-[var(--mt-gray-900)]">
       <section className="relative overflow-hidden border-y border-[var(--mt-gray-200)] bg-[var(--mt-gray-50)]">
-        <div className="relative mx-auto grid max-w-[1440px] gap-8 px-5 pb-12 pt-12 sm:px-10 sm:pb-20 sm:pt-20 lg:min-h-[680px] lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-4 lg:px-16">
+        <div className="relative mx-auto grid max-w-[1440px] gap-6 px-4 pb-8 pt-8 sm:gap-8 sm:px-10 sm:pb-20 sm:pt-20 lg:min-h-[680px] lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-4 lg:px-16">
           <div className="relative z-10 min-w-0 max-w-2xl">
-            <h1 className="font-display text-[clamp(2.9rem,6.2vw,5.25rem)] font-extrabold leading-[.98] tracking-[-.035em] text-[var(--mt-green-deep)]">
+            <h1 className="font-display text-[clamp(2rem,9.2vw,2.75rem)] font-extrabold leading-[.98] tracking-[-.035em] text-[var(--mt-green-deep)] sm:text-[clamp(2.9rem,6.2vw,5.25rem)]">
               <span className="sr-only">Le commerce local, tout près de chez vous.</span>
               <span aria-hidden="true">
                 {['Le', 'commerce'].map((word, index) => <React.Fragment key={word}><span className="inline-block overflow-hidden align-bottom pb-[.1em]"><span className="inline-block animate-[mt-rise_.9s_var(--mt-motion-ease)_both]" style={{ animationDelay: `${0.15 + index * 0.07}s` }}>{word}</span></span>{index === 0 ? ' ' : null}</React.Fragment>)}<br />
@@ -214,7 +214,7 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
                 <span className="inline-block overflow-hidden align-bottom pb-[.1em] text-[var(--mt-orange-deep)]"><span className="inline-block animate-[mt-rise_.9s_var(--mt-motion-ease)_both]" style={{ animationDelay: '0.43s' }}>de chez vous.</span></span>
               </span>
             </h1>
-            <p className="mt-7 max-w-xl text-base leading-7 text-[var(--mt-gray-600)] sm:text-xl sm:leading-8">
+            <p className="mt-4 max-w-xl text-base leading-7 text-[var(--mt-gray-600)] sm:mt-7 sm:text-xl sm:leading-8">
               Les vraies photos et les vrais prix des boutiques de votre quartier. Vous choisissez, le commerçant vous répond sur WhatsApp.
             </p>
             {abidjanShopCount !== null && (
@@ -223,7 +223,7 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
                 <span aria-hidden="true"><CountUp value={abidjanShopCount} /> boutique{abidjanShopCount === 1 ? '' : 's'} à Abidjan</span>
               </p>
             )}
-            <form onSubmit={submitSearch} role="search" className="mt-7 flex w-full max-w-xl min-w-0 items-center gap-1 overflow-hidden rounded-full border-2 border-[var(--mt-green-deep)] bg-white p-2 shadow-[0_12px_30px_rgba(16,62,50,.12)] sm:gap-2">
+            <form onSubmit={submitSearch} role="search" className="mt-5 flex w-full max-w-xl min-w-0 items-center gap-1 overflow-hidden rounded-full border-2 border-[var(--mt-green-deep)] bg-white p-2 shadow-[0_12px_30px_rgba(16,62,50,.12)] sm:mt-7 sm:gap-2">
               <Search className="ml-3 h-5 w-5 shrink-0 text-[var(--mt-gray-600)]" aria-hidden="true" />
               <input
                 aria-label="Rechercher une boutique, un produit ou un quartier"
@@ -238,7 +238,7 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
                 <span className="hidden sm:inline">Chercher</span><ArrowRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </form>
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-4 flex flex-wrap gap-2 sm:mt-5">
               {neighbourhoods.slice(0, 2).map((place) => <Link key={place.path} to={place.path} className="inline-flex min-h-11 items-center rounded-full border border-[var(--mt-green-soft)] bg-white px-4 text-sm font-bold text-[var(--mt-green-deep)] hover:border-[var(--mt-green-primary)]">{place.label}</Link>)}
               {['Restauration', 'Beauté', 'Mode'].map((term) => <button key={term} type="button" onClick={() => onOpenDirectory(term)} className="inline-flex min-h-11 items-center rounded-full border border-[var(--mt-gray-200)] bg-white px-4 text-sm font-bold text-[var(--mt-gray-600)] hover:border-[var(--mt-orange-deep)]">{term}</button>)}
             </div>

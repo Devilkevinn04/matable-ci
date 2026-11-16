@@ -48,8 +48,8 @@ export function getShopPublicationBlockReason(
   currentDate = new Date(),
 ): 'inactive' | 'verification' | 'subscription' | null {
   if (!shop.is_active) return 'inactive';
-  const businessStatus = shop.business_verification_status || shop.merchant_verification_status || 'not_required';
-  if (businessStatus !== 'approved' && businessStatus !== 'verified' && businessStatus !== 'not_required') return 'verification';
+  const identityStatus = shop.identity_verification_status || shop.merchant_verification_status || 'not_required';
+  if (identityStatus !== 'approved' && identityStatus !== 'verified' && identityStatus !== 'not_required') return 'verification';
   const subscription = getSubscriptionState(shop, currentDate);
   if (subscription.status === 'past_due' && isShopInSubscriptionGracePeriod(shop, currentDate)) return null;
   if (subscription.status !== 'trialing' && subscription.status !== 'active') return 'subscription';
@@ -78,10 +78,7 @@ export function isShopPubliclyVisible(shop: ShopRecord, currentDate = new Date()
   const publicationStatus = shop.publication_status ?? (shop.is_active ? 'active' : 'suspended');
   if (!shop.is_active || publicationStatus === 'suspended') return false;
   if (publicationStatus !== 'active') return false;
-  const legacyVerifiedPublication = shop.business_verification_status === 'pending'
-    && shop.merchant_verification_status === 'verified';
-  return canPublishShop(shop, currentDate)
-    || (legacyVerifiedPublication && canPublishShop({ ...shop, business_verification_status: 'approved' }, currentDate));
+  return canPublishShop(shop, currentDate);
 }
 
 export function canReceiveShopOrders(shop: ShopRecord, currentDate = new Date()): boolean {

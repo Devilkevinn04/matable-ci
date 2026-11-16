@@ -797,7 +797,7 @@ test('super-admin can grant, revoke, and clear a temporary subscription override
     .run('Boutique Dérogation', `derogation-${randomUUID()}`, uniquePhone(),
       'test-pin-hash', new Date().toISOString(), 'food');
   const shopId = Number(insertedShop.lastInsertRowid);
-  testDb.prepare("UPDATE shops SET business_verification_status = 'approved' WHERE id = ?").run(shopId);
+  testDb.prepare("UPDATE shops SET identity_verification_status = 'approved', merchant_verification_status = 'verified' WHERE id = ?").run(shopId);
   try {
     const login = await apiFetch('/api/auth/admin-login', {
       method: 'POST',
@@ -1012,7 +1012,7 @@ test('verification admin is limited to identity follow-up and content moderation
   assert.equal(logout.response.status, 200, JSON.stringify(logout.payload));
 });
 
-test('super-admin manual verification keeps business and identity decisions independent and audited', async () => {
+test('super-admin manual verification accepts identity decisions only and audits them', async () => {
   const previousCookieJar = cookieJar;
   cookieJar = '';
   const shopId = 99001;
@@ -1035,7 +1035,6 @@ test('super-admin manual verification keeps business and identity decisions inde
     const queue = await apiFetch('/api/admin/identity-verifications/manual');
     assert.equal(queue.response.status, 200, JSON.stringify(queue.payload));
     const record = queue.payload.verifications.find((item: { shop_id: number }) => item.shop_id === shopId);
-    assert.equal(record.business_status, 'pending');
     assert.equal(record.identity_status, 'pending');
 
     cookieJar = '';
@@ -1066,13 +1065,25 @@ test('super-admin manual verification keeps business and identity decisions inde
         verification_type: 'business', status: 'under_review', reason: 'Examen des informations', expected_status: 'pending',
       }),
     });
-    assert.equal(businessReview.response.status, 200, JSON.stringify(businessReview.payload));
+    assert.equal(businessReview.response.status, 400, JSON.stringify(businessReview.payload));
     const detail = await apiFetch(`/api/admin/identity-verifications/manual/${shopId}`);
     assert.equal(detail.response.status, 200);
-    assert.equal(detail.payload.shop.business_verification_status, 'under_review');
     assert.equal(detail.payload.shop.identity_verification_status, 'pending');
-    assert.equal(detail.payload.history.length, 1);
-    assert.equal(detail.payload.history[0].details.reason, 'Examen des informations');
+    assert.equal(detail.payload.shop.identity_status, 'pending');
+    assert.equal('business_verification_status' in detail.payload.shop, false);
+    assert.equal(detail.payload.history.length, 0);
+    const approveIdentityWithDisplayedStatus = await apiFetch(`/api/admin/identity-verifications/manual/${shopId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        verification_type: 'identity',
+        status: 'approved',
+        reason: 'Identité vérifiée',
+        expected_status: detail.payload.shop.identity_status,
+      }),
+    });
+    assert.equal(approveIdentityWithDisplayedStatus.response.status, 400);
+    assert.match(approveIdentityWithDisplayedStatus.payload.error, /passeport|faces/i);
   } finally {
     const cleanup = new Database(TEST_DB_PATH);
     cleanup.prepare('DELETE FROM shops WHERE id = ?').run(shopId);
@@ -1719,7 +1730,7 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   });
   assert.equal(rejectedManualApproval.response.status, 404);
   const testDb = new Database(TEST_DB_PATH);
-  testDb.prepare("UPDATE shops SET merchant_verification_status = 'verified', business_verification_status = 'approved' WHERE id = ?").run(shopId);
+  testDb.prepare("UPDATE shops SET merchant_verification_status = 'verified', identity_verification_status = 'approved' WHERE id = ?").run(shopId);
   testDb.close();
   const adminLogout = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
   assert.equal(adminLogout.response.status, 200, JSON.stringify(adminLogout.payload));
@@ -2331,20 +2342,11 @@ test('Didit identity decisions stay independent from shop approval; signed webho
   const adminLogout = await apiFetch('/api/auth/admin-logout', { method: 'POST' });
   assert.equal(adminLogout.response.status, 200, JSON.stringify(adminLogout.payload));
 
-  const blockedPublication = await apiFetch(`/api/shops/${shopId}/publication-status`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ publication_status: 'active' }),
-  });
-  assert.equal(blockedPublication.response.status, 409);
   const testDbAfterIdentityReview = new Database(TEST_DB_PATH);
   const independentStatuses = testDbAfterIdentityReview.prepare(
     'SELECT business_verification_status, identity_verification_status FROM shops WHERE id = ?',
   ).get(shopId) as { business_verification_status: string; identity_verification_status: string };
   assert.deepEqual(independentStatuses, { business_verification_status: 'pending', identity_verification_status: 'approved' });
-  testDbAfterIdentityReview.prepare(
-    "UPDATE shops SET business_verification_status = 'approved', business_verification_method = 'manual' WHERE id = ?",
-  ).run(shopId);
   testDbAfterIdentityReview.close();
 
   const publication = await apiFetch(`/api/shops/${shopId}/publication-status`, {
