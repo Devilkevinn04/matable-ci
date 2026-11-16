@@ -497,7 +497,7 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
   adminRouter.get('/manual/:shopId', requireSuperAdmin, async (req, res) => {
     const shopId = Number(req.params.shopId);
     if (!Number.isSafeInteger(shopId) || shopId <= 0) return res.status(400).json({ error: 'Boutique invalide.' });
-    const shop = await dbGet<Record<string, unknown>>(`SELECT id, name, slug, category, city, owner_name,
+    const shop = await dbGet<Record<string, unknown>>(`SELECT id AS shop_id, name AS shop_name, slug AS shop_slug, category, city, owner_name,
       owner_email, owner_phone, whatsapp_number, created_at, publication_status,
       identity_verification_status, identity_verification_method
       FROM shops WHERE id = ?`, [shopId]);

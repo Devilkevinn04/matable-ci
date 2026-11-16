@@ -1080,6 +1080,9 @@ test('super-admin manual verification accepts identity decisions only and audits
     assert.equal(businessReview.response.status, 400, JSON.stringify(businessReview.payload));
     const detail = await apiFetch(`/api/admin/identity-verifications/manual/${shopId}`);
     assert.equal(detail.response.status, 200);
+    assert.equal(detail.payload.shop.shop_id, shopId);
+    assert.equal(detail.payload.shop.shop_name, 'Dossier manuel test');
+    assert.equal(detail.payload.shop.shop_slug, 'dossier-manuel-test');
     assert.equal(detail.payload.shop.identity_verification_status, 'pending');
     assert.equal(detail.payload.shop.identity_status, 'pending');
     assert.equal('business_verification_status' in detail.payload.shop, false);
