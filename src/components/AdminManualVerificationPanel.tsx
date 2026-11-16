@@ -22,7 +22,7 @@ interface VerificationDetail {
     whatsapp_number: string;
     publication_status: string;
   };
-  history: Array<{ actor: string; action: string; details: { verification_type?: string; status?: string; reason?: string }; created_at: string }>;
+  history: Array<{ actor: string; action: string; details: { verification_type?: string; status?: string; reason?: string; documents_overridden?: boolean }; created_at: string }>;
   documents: Array<{ id: string; document_type: string; content_type: string; file_size: number; status: 'pending_upload' | 'available'; created_at: string; expires_at: string | null }>;
 }
 interface VerificationCounts {
@@ -41,6 +41,14 @@ const statusLabels: Record<string, string> = {
   rejected: 'Refusé',
 };
 
+function hasCompleteIdentityDocuments(documents: VerificationDetail['documents']) {
+  const availableTypes = new Set(documents
+    .filter((document) => document.status === 'available' && (!document.expires_at || Date.parse(document.expires_at) > Date.now()))
+    .map((document) => document.document_type));
+  return availableTypes.has('identity_passport')
+    || (availableTypes.has('identity_front') && availableTypes.has('identity_back'));
+}
+
 export function AdminManualVerificationPanel() {
   const [rows, setRows] = useState<VerificationRow[]>([]);
   const [counts, setCounts] = useState<VerificationCounts | null>(null);
@@ -50,6 +58,7 @@ export function AdminManualVerificationPanel() {
   const [status, setStatus] = useState<ReviewStatus | null>(null);
   const [documentPreview, setDocumentPreview] = useState<{ id: string; url: string } | null>(null);
   const [reason, setReason] = useState('');
+  const [overrideMissingDocuments, setOverrideMissingDocuments] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -82,6 +91,7 @@ export function AdminManualVerificationPanel() {
       setDocumentPreview(null);
       setStatus(null);
       setReason('');
+      setOverrideMissingDocuments(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Ouverture du dossier impossible.');
     }
@@ -89,7 +99,7 @@ export function AdminManualVerificationPanel() {
 
   async function saveDecision(event: React.FormEvent) {
     event.preventDefault();
-    if (!detail || !status || reason.trim().length < 3) return;
+    if (!detail || !status || reason.trim().length < 3 || (requiresDocumentOverride && !overrideMissingDocuments)) return;
     setBusy(true);
     setError('');
     setNotice('');
@@ -97,13 +107,22 @@ export function AdminManualVerificationPanel() {
       const response = await fetch(`/api/admin/identity-verifications/manual/${detail.shop.shop_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ verification_type: 'identity', status, reason: reason.trim(), expected_status: detail.shop.identity_status }),
+        body: JSON.stringify({
+          verification_type: 'identity',
+          status,
+          reason: reason.trim(),
+          expected_status: detail.shop.identity_status,
+          override_missing_documents: requiresDocumentOverride && overrideMissingDocuments,
+        }),
       });
-      const result = await response.json() as { error?: string };
+      const result = await response.json() as { error?: string; documents_overridden?: boolean };
       if (!response.ok) throw new Error(result.error || 'Décision non enregistrée.');
-      setNotice('Mise à jour enregistrée et journalisée.');
+      setNotice(result.documents_overridden
+        ? 'Identité acceptée par dérogation super-admin ; décision et motif journalisés.'
+        : 'Mise à jour enregistrée et journalisée.');
       setStatus(null);
       setReason('');
+      setOverrideMissingDocuments(false);
       await Promise.all([refresh(), openDetail(detail.shop.shop_id)]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Décision non enregistrée.');
@@ -123,6 +142,8 @@ export function AdminManualVerificationPanel() {
     });
   }, [filter, rows, search]);
   const currentStatus = detail?.shop.identity_status || null;
+  const hasIdentityDocuments = detail ? hasCompleteIdentityDocuments(detail.documents) : false;
+  const requiresDocumentOverride = status === 'approved' && !hasIdentityDocuments;
   const decisionOptions: Array<{ value: ReviewStatus; label: string; tone: string }> = [
     { value: 'under_review', label: 'En examen', tone: 'border-sky-300 text-sky-900' },
     { value: 'action_required', label: 'Demander des corrections', tone: 'border-amber-300 text-amber-950' },
@@ -204,18 +225,38 @@ export function AdminManualVerificationPanel() {
               <p className="text-xs font-bold text-slate-800">Décision · identité du responsable</p>
               <p className="mt-1 text-xs text-slate-500">Statut actuel : {statusLabels[currentStatus || ''] || currentStatus}</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                {decisionOptions.map((option) => <button key={option.value} type="button" aria-pressed={status === option.value} onClick={() => setStatus(option.value)} className={`min-h-11 rounded-lg border px-3 py-2 text-xs font-bold ${option.tone} ${status === option.value ? 'ring-2 ring-emerald-700 ring-offset-1' : 'bg-white'}`}>
+                {decisionOptions.map((option) => <button key={option.value} type="button" aria-pressed={status === option.value} onClick={() => {
+                  setStatus(option.value);
+                  setError('');
+                  setNotice('');
+                  setOverrideMissingDocuments(false);
+                }} className={`min-h-11 rounded-lg border px-3 py-2 text-xs font-bold ${option.tone} ${status === option.value ? 'ring-2 ring-emerald-700 ring-offset-1' : 'bg-white'}`}>
                   {option.label}
                 </button>)}
               </div>
             </div>
-            {status === 'approved' && <p className="rounded-lg bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
-              Pour autoriser l’identité : consultez le passeport ou le recto et le verso de la pièce.
-            </p>}
-            <label className="block text-xs font-bold">Note obligatoire pour le commerçant<textarea required minLength={3} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder={status === 'approved' ? 'Ex. Documents consultés et informations cohérentes.' : 'Indiquez clairement la raison et les éléments à corriger.'} className="mt-1.5 min-h-20 w-full rounded-lg border border-slate-300 p-3 text-sm" /></label>
-            <button type="submit" disabled={busy || !status || reason.trim().length < 3} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-800 px-4 text-sm font-bold text-white disabled:opacity-50">{busy && <LoaderCircle className="h-4 w-4 animate-spin" />}{status === 'approved' ? 'Autoriser l’identité' : status === 'action_required' ? 'Envoyer la demande de correction' : status === 'rejected' ? 'Enregistrer le refus' : 'Enregistrer la mise en examen'}</button>
+            {status === 'approved' && (requiresDocumentOverride
+              ? <div role="alert" className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-950">
+                <p><b>Dérogation sans justificatif.</b> Aucun passeport ou ensemble recto-verso valide n’est disponible dans ce dossier. N’autorisez l’identité que si vous l’avez vérifiée par un autre moyen.</p>
+                <label className="flex items-start gap-2 font-semibold">
+                  <input type="checkbox" checked={overrideMissingDocuments} onChange={(event) => {
+                    setOverrideMissingDocuments(event.target.checked);
+                    setError('');
+                  }} className="mt-0.5 h-4 w-4 shrink-0 accent-amber-800" />
+                  <span>Je confirme cette dérogation exceptionnelle. Elle sera enregistrée dans le journal d’audit avec mon motif.</span>
+                </label>
+              </div>
+              : <p className="rounded-lg bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
+                Les justificatifs requis sont disponibles. Consultez le passeport ou le recto et le verso de la pièce.
+              </p>)}
+            <label className="block text-xs font-bold">Note obligatoire pour le commerçant<textarea required minLength={3} maxLength={500} value={reason} onChange={(event) => {
+              setReason(event.target.value);
+              setError('');
+              setNotice('');
+            }} placeholder={requiresDocumentOverride ? 'Expliquez le contrôle alternatif effectué.' : status === 'approved' ? 'Ex. Documents consultés et informations cohérentes.' : 'Indiquez clairement la raison et les éléments à corriger.'} className="mt-1.5 min-h-20 w-full rounded-lg border border-slate-300 p-3 text-sm" /></label>
+            <button type="submit" disabled={busy || !status || reason.trim().length < 3 || (requiresDocumentOverride && !overrideMissingDocuments)} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-800 px-4 text-sm font-bold text-white disabled:opacity-50">{busy && <LoaderCircle className="h-4 w-4 animate-spin" />}{status === 'approved' ? requiresDocumentOverride ? 'Confirmer la dérogation et autoriser' : 'Autoriser l’identité' : status === 'action_required' ? 'Envoyer la demande de correction' : status === 'rejected' ? 'Enregistrer le refus' : 'Enregistrer la mise en examen'}</button>
           </form>
-          <div className="border-t border-slate-200 pt-3"><h4 className="text-xs font-black text-slate-700">Historique des décisions ({detail.history.length})</h4>{detail.history.map((entry, index) => <p key={`${entry.created_at}-${index}`} className="mt-2 text-xs leading-5 text-slate-600">{new Date(entry.created_at).toLocaleString('fr-FR')} · {entry.actor} · Identité · {statusLabels[entry.details.status || ''] || entry.details.status} — {entry.details.reason}</p>)}</div>
+          <div className="border-t border-slate-200 pt-3"><h4 className="text-xs font-black text-slate-700">Historique des décisions ({detail.history.length})</h4>{detail.history.map((entry, index) => <p key={`${entry.created_at}-${index}`} className="mt-2 text-xs leading-5 text-slate-600">{new Date(entry.created_at).toLocaleString('fr-FR')} · {entry.actor} · Identité · {entry.details.documents_overridden ? 'Dérogation sans justificatif · ' : ''}{statusLabels[entry.details.status || ''] || entry.details.status} — {entry.details.reason}</p>)}</div>
         </article> : <p className="rounded-xl border border-dashed border-slate-300 p-5 text-sm leading-6 text-slate-600">Sélectionnez une boutique pour consulter les pièces d’identité de la personne responsable.</p>}
       </div>}
   </section>;

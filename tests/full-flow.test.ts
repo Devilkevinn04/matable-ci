@@ -1046,6 +1046,18 @@ test('super-admin manual verification accepts identity decisions only and audits
     assert.equal(verificationLogin.response.status, 200);
     const restrictedQueue = await apiFetch('/api/admin/identity-verifications/manual');
     assert.equal(restrictedQueue.response.status, 403);
+    const restrictedOverride = await apiFetch(`/api/admin/identity-verifications/manual/${shopId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        verification_type: 'identity',
+        status: 'approved',
+        reason: 'Identité vérifiée autrement',
+        expected_status: 'pending',
+        override_missing_documents: true,
+      }),
+    });
+    assert.equal(restrictedOverride.response.status, 403);
 
     cookieJar = superAdminCookies;
     const approveWithoutSecureDocuments = await apiFetch(`/api/admin/identity-verifications/manual/${shopId}`, {
@@ -1084,6 +1096,27 @@ test('super-admin manual verification accepts identity decisions only and audits
     });
     assert.equal(approveIdentityWithDisplayedStatus.response.status, 400);
     assert.match(approveIdentityWithDisplayedStatus.payload.error, /passeport|faces/i);
+
+    const overrideApproval = await apiFetch(`/api/admin/identity-verifications/manual/${shopId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        verification_type: 'identity',
+        status: 'approved',
+        reason: 'Identité contrôlée par une autre voie',
+        expected_status: detail.payload.shop.identity_status,
+        override_missing_documents: true,
+      }),
+    });
+    assert.equal(overrideApproval.response.status, 200, JSON.stringify(overrideApproval.payload));
+    assert.equal(overrideApproval.payload.documents_overridden, true);
+    const auditDatabase = new Database(TEST_DB_PATH);
+    const auditEntry = auditDatabase.prepare(
+      `SELECT details FROM admin_audit_logs WHERE shop_id = ?
+       AND action = 'merchant_identity_verification_reviewed' ORDER BY created_at DESC LIMIT 1`,
+    ).get(shopId) as { details: string };
+    auditDatabase.close();
+    assert.equal(JSON.parse(auditEntry.details).documents_overridden, true);
   } finally {
     const cleanup = new Database(TEST_DB_PATH);
     cleanup.prepare('DELETE FROM shops WHERE id = ?').run(shopId);
