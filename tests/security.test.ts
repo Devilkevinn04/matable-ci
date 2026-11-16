@@ -129,6 +129,8 @@ test('publication eligibility is independent from the shop opening toggle', () =
     is_open: false,
     publication_status: 'active',
     merchant_verification_status: 'verified',
+    identity_verification_status: 'approved',
+    business_verification_status: 'pending',
     subscription_status: 'trialing',
     trial_start: '2026-10-01T00:00:00.000Z',
     trial_end: '2026-10-31T00:00:00.000Z',
@@ -137,6 +139,8 @@ test('publication eligibility is independent from the shop opening toggle', () =
 
   assert.equal(canPublishShop(shop, currentDate), true);
   assert.equal(canPublishShop({ ...shop, publication_status: 'draft' }, currentDate), true);
+  assert.equal(canPublishShop({ ...shop, business_verification_status: 'pending' }, currentDate), true);
+  assert.equal(canPublishShop({ ...shop, identity_verification_status: 'pending' }, currentDate), false);
   assert.equal(isShopPubliclyVisible(shop, currentDate), true);
   assert.equal(canReceiveShopOrders(shop, currentDate), false);
   assert.equal(canReceiveShopOrders({ ...shop, is_open: true }, currentDate), true);
@@ -159,7 +163,8 @@ test('a Didit-verified shop stays visible during payment grace but cannot bypass
   assert.equal(isShopPubliclyVisible({ ...shop, publication_status: 'suspended' }, currentDate), false);
   assert.equal(isShopPubliclyVisible({ ...shop, merchant_verification_status: 'pending' }, currentDate), false);
   assert.equal(isShopPubliclyVisible({ ...shop, business_verification_status: 'pending' }, currentDate), true);
-  assert.equal(isShopPubliclyVisible({ ...shop, business_verification_status: 'pending', merchant_verification_status: 'pending' }, currentDate), false);
+  assert.equal(isShopPubliclyVisible({ ...shop, identity_verification_status: 'pending' }, currentDate), false);
+  assert.equal(isShopPubliclyVisible({ ...shop, business_verification_status: 'pending', identity_verification_status: 'approved' }, currentDate), true);
   assert.equal(isShopPubliclyVisible({ ...shop, publication_status: 'draft', business_verification_status: 'pending' }, currentDate), false);
   const pastDue = { ...shop, subscription_status: 'past_due', trial_end: '2026-09-30T00:00:00.000Z' };
   assert.equal(isShopPubliclyVisible(pastDue, currentDate), true);

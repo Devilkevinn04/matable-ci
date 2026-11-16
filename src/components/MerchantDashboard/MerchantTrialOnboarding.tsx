@@ -81,10 +81,10 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
   const expiredDescription = isManualSubscriptionSuspension
     ? 'Les droits de cette boutique sont suspendus temporairement par l’administration. Aucun paiement GeniusPay ne peut être lancé pendant cette suspension. Contactez l’équipe si vous avez besoin d’aide.'
     : isTrialExpired
-    ? 'Choisissez une formule mensuelle ou annuelle et réglez-la avec GeniusPay. Votre abonnement sera réactivé après confirmation sécurisée ; la visibilité dépend aussi de la publication et de la vérification de la boutique.'
+    ? 'Choisissez une formule mensuelle ou annuelle et réglez-la avec GeniusPay. Votre abonnement sera réactivé après confirmation sécurisée ; la publication nécessite aussi la vérification de l’identité du responsable.'
     : shop.subscription?.status === 'past_due'
-      ? 'Le dernier paiement n’a pas été confirmé. Choisissez une formule mensuelle ou annuelle et réglez-la avec GeniusPay pour réactiver votre abonnement. La visibilité dépend aussi de la publication et de la vérification de la boutique.'
-      : 'Choisissez une formule et sa durée, puis réglez-la avec GeniusPay. Votre abonnement sera réactivé après confirmation sécurisée ; la visibilité dépend aussi de la publication et de la vérification de la boutique.';
+      ? 'Le dernier paiement n’a pas été confirmé. Choisissez une formule mensuelle ou annuelle et réglez-la avec GeniusPay pour réactiver votre abonnement. La publication nécessite aussi la vérification de l’identité du responsable.'
+      : 'Choisissez une formule et sa durée, puis réglez-la avec GeniusPay. Votre abonnement sera réactivé après confirmation sécurisée ; la publication nécessite aussi la vérification de l’identité du responsable.';
 
   const startSubscriptionPayment = async () => {
     if (isManualSubscriptionSuspension) {

@@ -3,8 +3,8 @@ import { Store, Clock, Check, Send, Eye, EyeOff, TrendingUp, AlertTriangle, Copy
 import type { Shop } from '../../types';
 import { MerchantState } from './useMerchant';
 import { ThemeCustomizer } from '../ThemeCustomizer';
-import { MerchantIdentityVerification } from './lazyMerchantIdentityVerification';
-import { MerchantManualVerification } from './MerchantManualVerification';
+import type { ManualVerificationProgress } from './MerchantManualVerification';
+import { MerchantVerificationWizard } from './MerchantVerificationWizard';
 import { cleanPhoneForWhatsApp, formatFCFA } from '../../utils/format';
 import {
   getSubscriptionProductLimit,
@@ -26,6 +26,11 @@ interface SettingsTabProps {
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const [showPlanChooser, setShowPlanChooser] = useState(false);
+  const [verificationStep, setVerificationStep] = useState<1 | 2>(1);
+  const [diditStatus, setDiditStatus] = useState('pending');
+  const [diditAvailable, setDiditAvailable] = useState<boolean | null>(null);
+  const [manualIdentityOpen, setManualIdentityOpen] = useState(false);
+  const [manualVerificationProgress, setManualVerificationProgress] = useState<ManualVerificationProgress | null>(null);
   const [merchantDataExporting, setMerchantDataExporting] = useState(false);
   const [ownerName, setOwnerName] = useState('');
   const [ownerPhone, setOwnerPhone] = useState('');
@@ -75,12 +80,25 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
     general: { eyebrow: 'Ma boutique', title: 'Informations de la boutique', description: 'Gardez vos coordonnées, votre contact et vos informations de livraison à jour.' },
     hours: { eyebrow: 'Ma boutique', title: 'Horaires et disponibilité', description: 'Définissez les jours et heures pendant lesquels vos clients peuvent commander.' },
     bilan: { eyebrow: 'Mon activité', title: 'Suivi de votre activité', description: 'Consultez les chiffres du jour et partagez votre bilan sur WhatsApp.' },
-    verification: { eyebrow: 'Compte', title: 'Identité et boutique', description: 'Suivez séparément la vérification de l’identité du responsable et celle du commerce.' },
+    verification: { eyebrow: 'Compte', title: 'Vérification d’identité', description: 'Vérifiez l’identité de la personne responsable de la boutique.' },
     subscription: { eyebrow: 'Compte', title: 'Abonnement', description: 'Consultez votre formule, son échéance et les options de paiement.' },
     visibility: { eyebrow: 'Visibilité', title: 'Campagnes et boosts', description: 'Gérez la mise à la une, les boosts sponsorisés et les campagnes publicitaires. Les promotions de prix se gèrent dans le catalogue.' },
     notifications: { eyebrow: 'Compte', title: 'Notifications Push', description: 'Choisissez si cet appareil peut recevoir les alertes importantes de votre boutique.' },
   };
   const activeSettingsCopy = settingsCopy[settingsSubTab];
+  const identityStepDone = ['approved', 'verified', 'submitted', 'under_review', 'not_required'].includes(diditStatus)
+    || Boolean(manualVerificationProgress?.identityReady);
+  useEffect(() => {
+    setVerificationStep(1);
+    setDiditStatus(currentShop?.identity_verification_status || currentShop?.merchant_verification_status || 'pending');
+    setDiditAvailable(null);
+    setManualIdentityOpen(false);
+    setManualVerificationProgress(null);
+  }, [currentShop?.id]);
+
+  const receiveManualVerificationProgress = React.useCallback((progress: ManualVerificationProgress) => {
+    setManualVerificationProgress(progress);
+  }, []);
 
   useEffect(() => {
     if (settingsSubTab !== 'profile' || !currentShop) return;
@@ -369,46 +387,49 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
             )}
 
             {settingsSubTab === 'verification' && currentShop && (
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sky-950 sm:p-5">
-                  <p className="text-sm font-extrabold">Deux contrôles distincts</p>
-                  <p className="mt-1 text-sm leading-5">Les photos du commerce servent à vérifier la boutique ; la pièce d’identité sert à vérifier son responsable. Un dossier accepté ne valide pas automatiquement l’autre : suivez le statut affiché dans chaque parcours.</p>
-                </div>
-                <MerchantManualVerification shopId={currentShop.id} />
-                <React.Suspense fallback={<p role="status" className="text-sm text-slate-600">Chargement du statut Didit…</p>}>
-                  <MerchantIdentityVerification
-                    shopId={currentShop.id}
-                    shopName={currentShop.name}
-                    onStatusChange={(status) => setCurrentShop((shop) => {
-                      if (!shop) return null;
-                      if (status.status === 'not_required') return shop;
-                      const identityStatus: NonNullable<Shop['identity_verification_status']> = status.status === 'verified'
-                        ? 'approved'
-                        : status.status === 'rejected'
-                          ? 'action_required'
-                          : status.status === 'under_review'
-                            ? 'under_review'
+              <MerchantVerificationWizard
+                shopId={currentShop.id}
+                shopName={currentShop.name}
+                step={verificationStep}
+                onStepChange={setVerificationStep}
+                diditStatus={diditStatus}
+                diditAvailable={diditAvailable}
+                manualIdentityOpen={manualIdentityOpen}
+                onToggleManualIdentity={() => setManualIdentityOpen((open) => !open)}
+                identityStepDone={identityStepDone}
+                manualProgress={manualVerificationProgress}
+                onDiditStatusChange={(status) => {
+                  setDiditStatus(status.status);
+                  setDiditAvailable(status.didit_available ?? null);
+                  setCurrentShop((shop) => {
+                    if (!shop || status.status === 'not_required') return shop;
+                    const identityStatus: NonNullable<Shop['identity_verification_status']> = status.status === 'verified'
+                      ? 'approved'
+                      : status.status === 'rejected'
+                        ? 'action_required'
+                        : status.status === 'under_review'
+                          ? 'under_review'
+                          : 'pending';
+                    const normalizedDiditStatus = status.status === 'verified'
+                      ? 'verified'
+                      : status.status === 'rejected'
+                        ? 'rejected'
+                        : status.status === 'under_review'
+                          ? 'under_review'
+                          : status.status === 'submitted'
+                            ? 'submitted'
                             : 'pending';
-                      const diditStatus = status.status === 'verified'
-                        ? 'verified'
-                        : status.status === 'rejected'
-                          ? 'rejected'
-                          : status.status === 'under_review'
-                            ? 'under_review'
-                            : status.status === 'submitted'
-                              ? 'submitted'
-                              : 'pending';
-                      return {
-                        ...shop,
-                        identity_verification_status: identityStatus,
-                        ...(status.identity_method === 'didit' || status.session_id
-                          ? { merchant_verification_status: diditStatus }
-                          : {}),
-                      };
-                    })}
-                  />
-                </React.Suspense>
-              </div>
+                    return {
+                      ...shop,
+                      identity_verification_status: identityStatus,
+                      ...(status.identity_method === 'didit' || status.session_id
+                        ? { merchant_verification_status: normalizedDiditStatus }
+                        : {}),
+                    };
+                  });
+                }}
+                onManualProgress={receiveManualVerificationProgress}
+              />
             )}
 
             {settingsSubTab === 'subscription' && currentShop && (showPlanChooser ? (

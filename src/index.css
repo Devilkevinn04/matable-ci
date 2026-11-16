@@ -833,6 +833,8 @@
 html {
   scroll-behavior: smooth;
   overflow-x: clip;
+  scroll-padding-top: 4.5rem;
+  scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom));
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
 }
@@ -844,6 +846,12 @@ button, a, summary, [role="tab"] {
 @media (pointer: coarse) {
   button:active:not(:disabled), a:active, summary:active {
     opacity: 0.88;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: max(1rem, 1em);
   }
 }
 
@@ -871,7 +879,7 @@ button, a, summary, [role="tab"] {
 
 .app-shell > main,
 .app-shell > div {
-  animation: mt-page-enter 420ms var(--mt-motion-ease-entrance) both;
+  animation: mt-page-fade 420ms var(--mt-motion-ease-entrance) both;
 }
 
 .app-shell > main.ambassador-dashboard {
@@ -1092,6 +1100,8 @@ body::before {
 
 
 #root {
+  width: 100%;
+  min-width: 0;
   min-height: 100vh;
 }
 
@@ -1250,7 +1260,13 @@ h1, h2, h3, h4, .display-font {
 
 .app-shell {
   position: relative;
+  width: 100%;
+  min-width: 0;
   background: transparent;
+}
+
+#main-content {
+  min-width: 0;
 }
 
 .dashboard-chip {
@@ -1391,6 +1407,30 @@ h1, h2, h3, h4, .display-font {
   line-height: 1.1;
   font-weight: 800;
   color: var(--ink);
+}
+
+.toast-stack {
+  position: fixed;
+  z-index: 9999;
+  inset-inline: 0;
+  bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  display: flex;
+  width: min(100%, 24rem);
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+  pointer-events: none;
+}
+
+@media (min-width: 640px) {
+  .toast-stack {
+    inset-inline: auto;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
 }
 
 .page-loading-copy p {
