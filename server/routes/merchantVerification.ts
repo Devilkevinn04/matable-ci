@@ -565,6 +565,7 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
     const status = req.body?.status;
     const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
     const expectedStatus = typeof req.body?.expected_status === 'string' ? req.body.expected_status : '';
+    const overrideMissingDocuments = req.body?.override_missing_documents === true;
     if (!Number.isSafeInteger(shopId) || shopId <= 0
       || verificationType !== 'identity'
       || !['under_review', 'action_required', 'approved', 'rejected'].includes(status)
@@ -581,6 +582,7 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       );
       if (!current) return 'not_found';
       if (current.status !== expectedStatus) return 'conflict';
+      let documentsOverridden = false;
       if (status === 'approved') {
         const documentTypes = await transaction.get<{
           identity_front: number | string; identity_back: number | string; identity_passport: number | string;
@@ -593,7 +595,8 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
         [shopId, new Date().toISOString()]);
         const hasDocuments = Number(documentTypes?.identity_passport || 0) > 0
           || (Number(documentTypes?.identity_front || 0) > 0 && Number(documentTypes?.identity_back || 0) > 0);
-        if (!hasDocuments) return 'documents_missing';
+        if (!hasDocuments && !overrideMissingDocuments) return 'documents_missing';
+        documentsOverridden = !hasDocuments;
       }
       await transaction.run(`UPDATE shops SET identity_verification_status = ?, merchant_verification_status = ?,
         identity_verification_method = 'manual' WHERE id = ?`, [status, merchantStatus, shopId]);
@@ -611,15 +614,16 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
           previous_status: current.status,
           status,
           reason,
+          documents_overridden: documentsOverridden,
         }), updatedAt],
       );
-      return 'updated';
+      return { outcome: 'updated', documentsOverridden };
     });
     if (result === 'not_found') return res.status(404).json({ error: 'Boutique introuvable.' });
     if (result === 'conflict') return res.status(409).json({ error: 'Le dossier a été modifié. Actualisez avant de réessayer.' });
     if (result === 'documents_missing') {
       return res.status(400).json({
-        error: 'Pour accepter l’identité, examinez un passeport ou les deux faces de la pièce.',
+        error: 'Pour accepter l’identité, examinez un passeport ou les deux faces de la pièce, ou confirmez la dérogation super-admin.',
       });
     }
     await options.refreshRuntimeDataFromDatabase?.();
@@ -634,7 +638,13 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       tag: 'manual-verification-identity',
     }).catch((error: unknown) => console.warn('Manual verification notification failed.', error));
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ success: true, status, verification_type: verificationType, updated_at: updatedAt });
+    return res.json({
+      success: true,
+      status,
+      verification_type: verificationType,
+      documents_overridden: typeof result === 'object' && result.documentsOverridden,
+      updated_at: updatedAt,
+    });
   });
 
   adminRouter.get('/', async (_req, res) => {
