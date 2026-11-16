@@ -4,6 +4,7 @@ import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 
 export interface VerificationStatus {
   status: string;
+  identity_method?: 'manual' | 'didit' | null;
   didit_available?: boolean;
   provider_status?: string | null;
   session_id?: string | null;
@@ -23,11 +24,12 @@ interface MerchantIdentityVerificationProps {
 }
 
 const statusDetails: Record<string, { label: string; description: string; tone: string }> = {
-  pending: { label: 'À compléter', description: 'Aucune session Didit active. L’identité est examinée séparément de la boutique; consultez aussi le parcours manuel temporaire.', tone: 'border-amber-200 bg-amber-50 text-amber-950' },
+  pending: { label: 'À compléter', description: 'Aucune vérification d’identité n’est en cours. Vous pouvez commencer le parcours sécurisé ou consulter le dépôt manuel temporaire.', tone: 'border-amber-200 bg-amber-50 text-amber-950' },
   submitted: { label: 'Vérification démarrée', description: 'Terminez les étapes sur la page Didit déjà ouverte. Cette session reste active ; son résultat sera actualisé ici automatiquement.', tone: 'border-sky-200 bg-sky-50 text-sky-950' },
   under_review: { label: 'En cours de vérification', description: 'Didit examine les informations transmises. Aucune action n’est nécessaire ; le statut sera actualisé automatiquement.', tone: 'border-sky-200 bg-sky-50 text-sky-950' },
-  verified: { label: 'Identité vérifiée', description: 'La vérification Didit est terminée.', tone: 'border-emerald-200 bg-emerald-50 text-emerald-950' },
-  rejected: { label: 'Vérification non validée', description: 'Didit n’a pas validé cette vérification. Corrigez les points indiqués ci-dessous, puis réessayez.', tone: 'border-rose-200 bg-rose-50 text-rose-950' },
+  verified: { label: 'Identité vérifiée', description: 'Le contrôle de votre identité a été validé.', tone: 'border-emerald-200 bg-emerald-50 text-emerald-950' },
+  rejected: { label: 'Vérification non validée', description: 'Le contrôle n’a pas été validé. Consultez les corrections indiquées, puis choisissez la suite adaptée.', tone: 'border-rose-200 bg-rose-50 text-rose-950' },
+  not_required: { label: 'Vérification non requise', description: 'Aucune vérification d’identité supplémentaire n’est demandée pour cette boutique.', tone: 'border-emerald-200 bg-emerald-50 text-emerald-950' },
 };
 
 const expiredDetails = {
@@ -40,6 +42,13 @@ const DIDIT_RETURN_STORAGE_KEY = 'matable:didit-return-at';
 const FAST_POLL_DURATION_MS = 2 * 60 * 1000;
 const FAST_POLL_INTERVAL_MS = 10 * 1000;
 const POLL_INTERVAL_MS = 60 * 1000;
+
+function normalizeStatus(status: string): string {
+  if (status === 'approved') return 'verified';
+  if (status === 'action_required') return 'rejected';
+  if (status === 'not_submitted') return 'pending';
+  return status;
+}
 
 export function MerchantIdentityVerification({ shopId, shopName, onStatusChange }: MerchantIdentityVerificationProps) {
   const [status, setStatus] = useState<VerificationStatus | null>(null);
@@ -54,7 +63,7 @@ export function MerchantIdentityVerification({ shopId, shopName, onStatusChange 
   const details = expired ? expiredDetails : (statusDetails[status?.status || 'pending'] || statusDetails.pending);
   const canResume = Boolean(status?.resume_available && status?.session_url);
   const canStartVerification = status?.didit_available !== false
-    && (!status || (status.status !== 'verified' && status.restart_available !== false));
+    && (!status || (!['verified', 'not_required'].includes(status.status) && status.restart_available !== false));
   const supportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour la vérification Didit de la boutique ${shopName}.`);
 
   useEffect(() => {
@@ -64,8 +73,9 @@ export function MerchantIdentityVerification({ shopId, shopName, onStatusChange 
   const refreshStatus = useCallback(async () => {
     try {
       const response = await fetch(`/api/shops/${shopId}/identity-verification`, { cache: 'no-store' });
-      const data = await response.json() as VerificationStatus & { error?: string };
-      if (!response.ok) throw new Error(data.error || 'Impossible de charger le statut.');
+      const payload = await response.json() as VerificationStatus & { error?: string };
+      if (!response.ok) throw new Error(payload.error || 'Impossible de charger le statut.');
+      const data = { ...payload, status: normalizeStatus(payload.status) };
       setStatus(data);
       setError('');
       setHasLoadedStatus(true);

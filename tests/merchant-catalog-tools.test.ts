@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { joinModifierOption, splitModifierOption, collectReusableModifierGroups } from '../src/components/MerchantDashboard/productForm';
-import { buildBulkProductPatch } from '../src/components/MerchantDashboard/bulkActions';
+import {
+  buildBulkProductPatch,
+  retainVisibleProductSelection,
+  toggleVisibleProductSelection,
+} from '../src/components/MerchantDashboard/bulkActions';
 import type { Product } from '../src/types';
 
 test('splits and joins option surcharges without exposing the syntax', () => {
@@ -39,4 +43,10 @@ test('plans bulk actions only for products that need a change', () => {
   });
   assert.equal(buildBulkProductPatch(product, { type: 'clear-promo' }), null);
   assert.deepEqual(buildBulkProductPatch({ ...product, sale_price: 800 }, { type: 'clear-promo' }), { sale_price: null, sale_starts_at: null, sale_ends_at: null });
+});
+
+test('keeps bulk selection aligned with the visible filtered products', () => {
+  assert.deepEqual(retainVisibleProductSelection([1, 2], [2, 3]), [2]);
+  assert.deepEqual(toggleVisibleProductSelection([2], [1, 2]).sort(), [1, 2]);
+  assert.deepEqual(toggleVisibleProductSelection([1, 2], [1, 2]), []);
 });

@@ -3,7 +3,11 @@ import { Package, Plus, Edit3, Trash2, Clock, Search, Eye, EyeOff, Minus, Downlo
 import { useToast } from '../Toast';
 import { MerchantState } from './useMerchant';
 import { CatalogCompactList } from './CatalogCompactList';
-import type { BulkProductAction } from './bulkActions';
+import {
+  retainVisibleProductSelection,
+  toggleVisibleProductSelection,
+  type BulkProductAction,
+} from './bulkActions';
 import { formatFCFA } from '../../utils/format';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
 import { getMerchantVocabulary } from '../../utils/merchantVocabulary';
@@ -44,6 +48,12 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
     current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId]
   ));
   const leaveSelection = () => { setSelectionMode(false); setSelectedIds([]); setPendingAction(null); };
+  const allFilteredSelected = filteredProducts.length > 0
+    && filteredProducts.every((product) => selectedIds.includes(product.id));
+  useEffect(() => {
+    const visibleIds = filteredProducts.map((product) => product.id);
+    setSelectedIds((current) => retainVisibleProductSelection(current, visibleIds));
+  }, [filteredProducts]);
   const vocabulary = getMerchantVocabulary(currentShop.category);
   const bulkChoices: { label: string; icon: React.ReactNode; action: BulkProductAction }[] = [
     { label: 'Masquer', icon: <EyeOff className="h-4 w-4" />, action: { type: 'hide' } },
@@ -82,7 +92,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
     const timer = window.setTimeout(() => setSaleNow(Date.now()), Math.max(0, nextBoundary - Date.now() + 25));
     return () => window.clearTimeout(timer);
   }, [products, saleNow]);
-  const lowStockCount = products.filter((product) => product.stock > 0 && product.stock <= 3).length;
+  const lowStockCount = products.filter((product) => product.is_available !== false && product.stock > 0 && product.stock <= 3).length;
   const outOfStockCount = products.filter((product) => product.stock === 0).length;
   const promotionCount = products.filter((product) => product.sale_price !== null && product.sale_price !== undefined).length;
   const trialCatalogLimited = !currentShop.admin_mode && currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0;
@@ -608,8 +618,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                       {selectedIds.length === 0 ? 'Touchez les articles à modifier' : `${selectedIds.length} article${selectedIds.length > 1 ? 's' : ''} choisi${selectedIds.length > 1 ? 's' : ''}`}
                     </p>
                     <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => setSelectedIds(selectedIds.length === filteredProducts.length ? [] : filteredProducts.map((prod) => prod.id))} className="min-h-10 rounded-lg px-2 text-xs font-bold text-[var(--mt-green-deep)]">
-                        {selectedIds.length === filteredProducts.length ? 'Tout décocher' : 'Tout choisir'}
+                      <button type="button" onClick={() => setSelectedIds((current) => toggleVisibleProductSelection(current, filteredProducts.map((prod) => prod.id)))} className="min-h-10 rounded-lg px-2 text-xs font-bold text-[var(--mt-green-deep)]">
+                        {allFilteredSelected ? 'Tout décocher' : 'Tout choisir'}
                       </button>
                       <button type="button" onClick={leaveSelection} className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600" aria-label="Quitter la sélection"><X className="h-4 w-4" /></button>
                     </div>

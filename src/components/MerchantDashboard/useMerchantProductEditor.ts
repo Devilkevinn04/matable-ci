@@ -12,9 +12,11 @@ const MAX_GALLERY_IMAGES = 6;
 export function useMerchantProductEditor(
   currentShop: Shop | null,
   setProducts: Dispatch<SetStateAction<Product[]>>,
+  requestConfirmation: (message: string, onConfirm: () => void) => void,
 ) {
   const toast = useToast();
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isProductSaving, setIsProductSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [prodTitle, setProdTitle] = useState('');
   const [prodCategory, setProdCategory] = useState('');
@@ -107,7 +109,8 @@ export function useMerchantProductEditor(
     try {
       setImageCompressing(true);
       setOriginalImageSizeKB(Math.round(file.size / 1024));
-      const { imageUrl, thumbnailUrl } = await uploadPublicMediaVariants(file, currentShop.id, {
+      setCompressedSizeKB(null);
+      const { imageUrl, thumbnailUrl, imageSizeBytes } = await uploadPublicMediaVariants(file, currentShop.id, {
         purpose: 'product-main',
         maxDimension: 900,
         maxSizeKB: 100,
@@ -116,7 +119,7 @@ export function useMerchantProductEditor(
       });
       setProdImage(imageUrl);
       setProdThumbnail(thumbnailUrl);
-      setCompressedSizeKB(Math.round(file.size / 1024));
+      setCompressedSizeKB(Math.round(imageSizeBytes / 1024));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur lors du téléversement de l'image.");
     } finally {
@@ -201,7 +204,19 @@ export function useMerchantProductEditor(
 
   const handleSaveProduct = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!currentShop || !prodTitle.trim() || prodPrice === '') return;
+    if (!currentShop || isProductSaving) return;
+    if (imageCompressing) {
+      toast.error('Attendez la fin de la préparation de la photo avant d’enregistrer.');
+      return;
+    }
+    if (!prodTitle.trim()) {
+      toast.error('Indiquez le nom de l’article.');
+      return;
+    }
+    if (prodPrice === '' || !Number.isSafeInteger(prodPrice) || prodPrice < 0) {
+      toast.error('Indiquez un prix entier valide en FCFA.');
+      return;
+    }
     if (!prodDescription.trim()) {
       toast.error('Ajoutez une description pour présenter votre article.');
       return;
@@ -228,6 +243,7 @@ export function useMerchantProductEditor(
       is_available: prodIsAvailable,
     }, currentShop.category);
 
+    setIsProductSaving(true);
     try {
       if (editingProduct) {
         const response = await fetch(`/api/shops/${currentShop.id}/products/${editingProduct.id}`, {
@@ -262,29 +278,34 @@ export function useMerchantProductEditor(
       }
     } catch {
       toast.error("Erreur lors de l'enregistrement de l'article");
+    } finally {
+      setIsProductSaving(false);
     }
   };
 
-  const handleDeleteProduct = async (productId: number) => {
+  const handleDeleteProduct = (productId: number) => {
     if (!currentShop) return;
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cet article du catalogue ?')) return;
-
-    try {
-      const response = await fetch(`/api/shops/${currentShop.id}/products/${productId}`, { method: 'DELETE' });
-      if (response.ok) {
-        setProducts((previous) => previous.filter((product) => product.id !== productId));
-        toast.success('Article supprimé du catalogue.');
-      } else {
-        const data = await response.json().catch(() => ({}));
-        toast.error(data.error || "Impossible de supprimer l'article.");
-      }
-    } catch {
-      toast.error("Erreur lors de la suppression de l'article");
-    }
+    requestConfirmation('Supprimer définitivement cet article du catalogue ?', () => {
+      void (async () => {
+        try {
+          const response = await fetch(`/api/shops/${currentShop.id}/products/${productId}`, { method: 'DELETE' });
+          if (response.ok) {
+            setProducts((previous) => previous.filter((product) => product.id !== productId));
+            toast.success('Article supprimé du catalogue.');
+          } else {
+            const data = await response.json().catch(() => ({}));
+            toast.error(data.error || "Impossible de supprimer l'article.");
+          }
+        } catch {
+          toast.error("Erreur lors de la suppression de l'article");
+        }
+      })();
+    });
   };
 
   return {
     isProductModalOpen,
+    isProductSaving,
     editingProduct,
     prodTitle,
     prodCategory,

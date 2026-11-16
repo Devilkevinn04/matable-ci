@@ -124,6 +124,14 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const reviewShopIsPublished = Boolean(reviewShop && isShopPubliclyVisible(reviewShop));
 
   useEffect(() => {
+    if (merchantState.currentShop) return;
+    setIsSettingsDrawerOpen(false);
+    setIsIdentityGuideOpen(false);
+    setIsQrKitOpen(false);
+    setSubscriptionReminderDay(null);
+  }, [merchantState.currentShop?.id]);
+
+  useEffect(() => {
     const updateHeader = () => setIsHeaderCompact(window.innerWidth < 768 && window.scrollY > 56);
     updateHeader();
     window.addEventListener('scroll', updateHeader, { passive: true });
@@ -179,8 +187,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     const shop = merchantState.currentShop;
     const identityStatus = shop?.identity_verification_status || shop?.merchant_verification_status;
     if (!shop || shop.admin_mode || !identityStatus
-      || ['not_required', 'not_submitted', 'approved', 'verified'].includes(identityStatus)) return;
-    if (!['pending', 'rejected', 'action_required'].includes(identityStatus)) return;
+      || !['pending', 'rejected', 'action_required'].includes(identityStatus)) {
+      setIsIdentityGuideOpen(false);
+      return;
+    }
 
     const guideKey = `matable:merchant-identity-guide:${shop.id}`;
     try {
@@ -188,7 +198,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     } catch {
       setIsIdentityGuideOpen(true);
     }
-  }, [merchantState.currentShop?.id, merchantState.currentShop?.admin_mode, merchantState.currentShop?.merchant_verification_status]);
+  }, [
+    merchantState.currentShop?.id,
+    merchantState.currentShop?.admin_mode,
+    merchantState.currentShop?.merchant_verification_status,
+    merchantState.currentShop?.identity_verification_status,
+  ]);
   const {
     currentShop,
     confirmModal,
@@ -458,7 +473,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const identityVerificationRequired = !['not_required', 'not_submitted', 'approved', 'verified'].includes(identityStatus);
   const businessVerificationStatus = merchantState.currentShop.business_verification_status
     || (['not_required', 'verified'].includes(merchantState.currentShop.merchant_verification_status || '') ? 'approved' : 'pending');
-  const isBusinessVerified = Boolean(merchantState.currentShop.admin_mode || businessVerificationStatus === 'approved');
+  const isBusinessVerified = Boolean(merchantState.currentShop.admin_mode
+    || ['approved', 'verified', 'not_required'].includes(businessVerificationStatus)
+    || businessVerificationStatus === 'pending' && merchantState.currentShop.merchant_verification_status === 'verified');
   const businessVerificationRequired = !isBusinessVerified;
   if (!merchantState.currentShop.admin_mode
     && !identityVerificationRequired
@@ -474,7 +491,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const orderValue = valuedOrders.reduce((sum, order) => sum + order.total_amount, 0);
   const dashboardSupportUrl = getSupportWhatsAppUrl(`Bonjour, j’ai besoin d’aide pour la boutique ${currentShop.name}.`);
   const avgBasket = valuedOrders.length > 0 ? Math.round(orderValue / valuedOrders.length) : 0;
-  const lowStockCount = products.filter(p => p.stock > 0 && p.stock <= 3).length;
+  const lowStockCount = products.filter(p => p.is_available !== false && p.stock > 0 && p.stock <= 3).length;
   const outOfStockCount = products.filter(p => p.stock === 0).length;
   const actionableOrderCount = orders.filter((order) =>
     !['delivered', 'cancelled', 'rejected', 'expired'].includes(order.status || 'pending'),
@@ -541,7 +558,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       ],
     },
   ];
-  const priorityNotificationCount = Number(businessVerificationRequired) + Number(subscriptionNeedsAttention);
+  const priorityNotificationCount = Number(businessVerificationRequired)
+    + Number(identityVerificationRequired)
+    + Number(subscriptionNeedsAttention);
   const mobileNotificationCount = priorityNotificationCount
     + Number(actionableOrderCount > 0)
     + Number(outOfStockCount > 0)
@@ -1146,7 +1165,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                               <p className="truncate text-sm font-bold text-[var(--mt-gray-900)]">N° {order.id} · {orderItemName}</p>
                               <p className="mt-0.5 text-xs text-slate-500">{isToday ? 'Aujourd’hui' : orderDateLabel}, {orderTime}</p>
                             </div>
-                            <span className="rounded-full bg-[#e2eee8] px-2.5 py-1 text-xs font-bold text-[var(--mt-green-hover)]">{orderStatusLabels[order.status]}</span>
+                            <span className="rounded-full bg-[#e2eee8] px-2.5 py-1 text-xs font-bold text-[var(--mt-green-hover)]">{orderStatusLabels[order.status || 'pending']}</span>
                             <strong className="min-w-24 text-right text-sm font-black text-[var(--mt-gray-900)]">{formatFCFA(order.total_amount)}</strong>
                           </li>
                         );
@@ -1255,7 +1274,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             <span className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-100 text-amber-900"><ShieldCheck className="h-6 w-6" /></span>
             <p className="mt-4 text-[10px] font-black uppercase tracking-[0.14em] text-amber-800">Première étape</p>
             <h2 id="identity-guide-title" className="mt-1 pr-8 text-2xl font-black text-[var(--mt-gray-900)]">Bienvenue dans votre espace boutique</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Ajoutez les justificatifs du commerce pour que l’équipe puisse examiner votre boutique. L’identité est vérifiée séparément; une boutique approuvée peut être publiée même si l’identité reste en attente.</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Ajoutez les justificatifs du commerce pour que l’équipe puisse examiner votre boutique. La vérification de l’identité du responsable est suivie séparément et n’empêche pas, à elle seule, la publication d’un commerce approuvé.</p>
             <ol className="mt-5 space-y-3">
               {[
                 ['Faire examiner votre boutique', 'Photos du commerce requises avant la publication.'],
@@ -1368,8 +1387,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             <h2 id="merchant-confirm-title" className="text-base font-black text-slate-900">Confirmer l’action</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">{confirmModal.message}</p>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setConfirmModal(null)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Garder la commande</button>
-              <button type="button" onClick={() => { const confirmAction = confirmModal.onConfirm; setConfirmModal(null); confirmAction(); }} className="min-h-10 rounded-lg bg-rose-700 px-4 py-2 text-sm font-bold text-white hover:bg-rose-800">Confirmer l’annulation</button>
+              <button type="button" onClick={() => setConfirmModal(null)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">{confirmModal.cancelLabel || 'Annuler'}</button>
+              <button type="button" onClick={() => { const confirmAction = confirmModal.onConfirm; setConfirmModal(null); confirmAction(); }} className="min-h-10 rounded-lg bg-rose-700 px-4 py-2 text-sm font-bold text-white hover:bg-rose-800">{confirmModal.confirmLabel || 'Confirmer'}</button>
             </div>
           </section>
         </div>

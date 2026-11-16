@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowRight, BadgePercent, CheckCircle2, Clock3, LayoutGrid, MapPin, RotateCcw, Search, ShieldCheck, Store, X } from 'lucide-react';
+import { ABIDJAN_COMMUNES } from '../utils/abidjanCommunes';
 import { MotionReveal } from './MotionSystem';
 import { CategoryIcon } from './CategoryIcon';
 import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDisplay, isShopCategory, SHOP_CATEGORIES } from '../utils/categoryDefaults';
@@ -214,6 +215,19 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
     && !discoveryPage && !isShopDirectoryPage;
   const directoryShops = isLocalAdvertisingDemo ? DEMO_SHOPS : shops;
   const directoryIsLoading = isLoading && !isLocalAdvertisingDemo;
+  const abidjanShopCount = useMemo(() => {
+    if (isLoading || loadError) return null;
+    return shops.filter((shop) => {
+      const citySlug = toDiscoveryCitySlug(shop.city || '');
+      return citySlug === 'abidjan'
+        || citySlug.startsWith('abidjan-')
+        || ABIDJAN_COMMUNES.some((commune) => {
+          if (commune === 'Autre ville / commune') return false;
+          const communeSlug = toDiscoveryCitySlug(commune);
+          return citySlug === communeSlug || citySlug.startsWith(`${communeSlug}-`);
+        });
+    }).length;
+  }, [shops, isLoading, loadError]);
   useEffect(() => {
     if (isShopDirectoryPage) setQuery(new URLSearchParams(location.search).get('q') || '');
   }, [isShopDirectoryPage, location.search]);
@@ -432,6 +446,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         shops={directoryShops}
         categories={categories}
         neighbourhoods={heroNeighbourhoods}
+        abidjanShopCount={abidjanShopCount}
         onOpenDirectory={onOpenDirectory}
       />
     );

@@ -384,6 +384,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
     { id: 'delivered', label: 'Livrées', count: orders.filter(o => o.status === 'delivered').length },
     { id: 'cancelled', label: 'Annulées', count: orders.filter(o => o.status === 'cancelled').length },
     { id: 'rejected', label: 'Refusées', count: orders.filter(o => o.status === 'rejected').length },
+    { id: 'expired', label: 'Expirées', count: orders.filter(o => o.status === 'expired').length },
   ];
 
   return (
@@ -543,7 +544,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                     <div
                       key={order.id}
                       className={`bg-white rounded-2xl border p-4 sm:p-5 shadow-2xs transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
-                        ['cancelled', 'rejected'].includes(order.status)
+                        ['cancelled', 'rejected', 'expired'].includes(order.status)
                           ? 'border-rose-200 bg-rose-50/20 opacity-80'
                           : 'border-slate-200 hover:border-slate-300'
                       }`}
@@ -592,6 +593,11 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                           {order.status === 'rejected' && (
                             <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-700">
                               <X className="h-3 w-3" aria-hidden="true" /> Demande refusée · stock libéré
+                            </span>
+                          )}
+                          {order.status === 'expired' && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-700">
+                              <Clock3 className="h-3 w-3" aria-hidden="true" /> Demande expirée · stock libéré
                             </span>
                           )}
                           {(!order.status || order.status === 'pending') && (

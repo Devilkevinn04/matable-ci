@@ -16,7 +16,7 @@ interface ProductModalProps {
 
 export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
   const {
-    currentShop, isProductModalOpen, setIsProductModalOpen, editingProduct, prodTitle, setProdTitle, prodCategory, setProdCategory,
+    currentShop, isProductModalOpen, isProductSaving, setIsProductModalOpen, editingProduct, prodTitle, setProdTitle, prodCategory, setProdCategory,
     prodDescription, setProdDescription, prodPrice, setProdPrice, prodSalePrice, setProdSalePrice, prodSaleStartsAt, setProdSaleStartsAt, prodSaleEndsAt, setProdSaleEndsAt, prodStock, setProdStock, prodImage, prodLookbookImage, setProdLookbookImage, prodSizes, setProdSizes, prodColors, setProdColors, prodPrepTime, setProdPrepTime,
     prodModifierGroups, setProdModifierGroups, prodAttributes, setProdAttributes, prodIsAvailable, setProdIsAvailable,
     imageCompressing, compressedSizeKB, originalImageSizeKB, handleImageUpload, handleLookbookImageUpload,
@@ -93,14 +93,16 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
               <button
                 type="button"
                 onClick={() => setIsProductModalOpen(false)}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                disabled={isProductSaving || imageCompressing}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
                 aria-label="Fermer le formulaire"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveProduct} className="mt-5 space-y-4 lg:space-y-5">
+            <form onSubmit={handleSaveProduct} className="mt-5 min-w-0">
+              <fieldset disabled={isProductSaving || imageCompressing} className="min-w-0 space-y-4 lg:space-y-5">
               <section className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 lg:p-5">
                 <div>
                   <label htmlFor="merchant-product-title" className="mb-1.5 block text-xs font-bold text-slate-700">
@@ -493,11 +495,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                       <input
                         id="product-photo-upload"
                         type="file"
-                        accept="image/jpeg,image/png,image/webp,image/avif"
+                        accept="image/jpeg,image/png,image/webp"
                         onChange={handleImageUpload}
+                        disabled={imageCompressing || isProductSaving}
                         className="sr-only"
                       />
-                      <label htmlFor="product-photo-upload" className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-emerald-800 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-900">
+                      <label htmlFor="product-photo-upload" className={`inline-flex min-h-10 items-center gap-2 rounded-lg bg-emerald-800 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-900 ${imageCompressing || isProductSaving ? 'cursor-wait opacity-60' : 'cursor-pointer'}`}>
                         <Upload className="h-3.5 w-3.5" /> {prodImage ? 'Changer la photo' : 'Ajouter une photo'}
                       </label>
                       <p className="mt-2 text-[11px] text-slate-500">Choisissez une photo dans votre téléphone ou votre ordinateur. Elle sera préparée automatiquement.</p>
@@ -524,12 +527,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                       <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400"><Upload className="h-6 w-6" /></div>
                     )}
                     <div className="flex flex-wrap items-center gap-2">
-                      <input id="product-lookbook-upload" type="file" accept="image/jpeg,image/png,image/webp,image/avif" onChange={handleLookbookImageUpload} disabled={!canAddLookbookPhoto} className="sr-only" />
+                      <input id="product-lookbook-upload" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleLookbookImageUpload} disabled={!canAddLookbookPhoto} className="sr-only" />
                       <label htmlFor="product-lookbook-upload" className={`inline-flex min-h-10 items-center gap-2 rounded-lg bg-emerald-800 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-900 ${canAddLookbookPhoto ? 'cursor-pointer' : 'cursor-not-allowed opacity-45'}`}>
                         <Upload className="h-3.5 w-3.5" /> {prodLookbookImage ? 'Remplacer la photo' : 'Choisir une photo'}
                       </label>
                       {prodLookbookImage && <button type="button" onClick={() => setProdLookbookImage('')} className="inline-flex items-center gap-1 rounded-lg px-2 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50"><Trash2 className="h-3.5 w-3.5" /> Retirer</button>}
-                      <p className="w-full text-[10px] text-slate-500">JPG, PNG, WebP ou AVIF, 8 Mo maximum. Photo optimisée automatiquement.</p>
+                      <p className="w-full text-[10px] text-slate-500">JPG, PNG ou WebP, 8 Mo maximum. Photo optimisée automatiquement.</p>
                       {!canAddLookbookPhoto && <p className="w-full text-[10px] font-semibold text-amber-700">Limite de {productPhotoLimit} photos atteinte pour votre formule.</p>}
                     </div>
                   </div>
@@ -556,7 +559,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                         <input
                           id="product-gallery-upload"
                           type="file"
-                          accept="image/jpeg,image/png,image/webp,image/avif"
+                          accept="image/jpeg,image/png,image/webp"
                           multiple
                           onChange={handleGalleryImageUpload}
                           className="sr-only"
@@ -592,17 +595,20 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                 <button
                   type="button"
                   onClick={() => setIsProductModalOpen(false)}
-                  className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-auto lg:px-5 lg:py-3 lg:text-sm"
+                  disabled={isProductSaving}
+                  className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 sm:w-auto lg:px-5 lg:py-3 lg:text-sm"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
-                  className="min-h-11 w-full rounded-lg bg-emerald-800 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-900 sm:w-auto lg:px-6 lg:py-3 lg:text-sm"
+                  disabled={isProductSaving || imageCompressing}
+                  className="min-h-11 w-full rounded-lg bg-emerald-800 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-900 disabled:cursor-wait disabled:opacity-60 sm:w-auto lg:px-6 lg:py-3 lg:text-sm"
                 >
-                  {editingProduct ? 'Enregistrer les modifications' : 'Ajouter au catalogue'}
+                  {isProductSaving ? 'Enregistrement…' : editingProduct ? 'Enregistrer les modifications' : 'Ajouter au catalogue'}
                 </button>
               </div>
+              </fieldset>
             </form>
           </div>
         </div>

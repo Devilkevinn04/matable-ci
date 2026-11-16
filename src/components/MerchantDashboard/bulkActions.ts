@@ -7,6 +7,20 @@ export type BulkProductAction =
   | { type: 'promo'; percent: number; days: number }
   | { type: 'clear-promo' };
 
+export function retainVisibleProductSelection(selectedIds: number[], visibleIds: number[]): number[] {
+  const visible = new Set(visibleIds);
+  const retained = selectedIds.filter((id) => visible.has(id));
+  return retained.length === selectedIds.length ? selectedIds : retained;
+}
+
+export function toggleVisibleProductSelection(selectedIds: number[], visibleIds: number[]): number[] {
+  const visible = new Set(visibleIds);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+  return allVisibleSelected
+    ? selectedIds.filter((id) => !visible.has(id))
+    : [...new Set([...selectedIds, ...visibleIds])];
+}
+
 type ProductPatchInput = Pick<Product, 'price' | 'sale_price' | 'is_available' | 'stock'>;
 
 /** Renvoie les champs à modifier pour un article, ou null s'il est déjà dans l'état voulu. */

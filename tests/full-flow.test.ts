@@ -2660,6 +2660,7 @@ ${createdProduct.id},"Test produit flux marchand","Produit de test pour validati
       sale_starts_at: new Date(Date.now() - 60_000).toISOString(),
       sale_ends_at: new Date(Date.now() + 3_600_000).toISOString(),
       stock: 5,
+      gallery_images: [],
     }),
   });
   assert.equal(productEdit.response.status, 200, JSON.stringify(productEdit.payload));

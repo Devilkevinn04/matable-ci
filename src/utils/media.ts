@@ -264,7 +264,7 @@ export async function uploadPublicMediaVariants(file: File, shopId: number | str
   maxSizeKB?: number;
   thumbnailDimension?: number;
   thumbnailSizeKB?: number;
-} = {}): Promise<{ imageUrl: string; thumbnailUrl: string }> {
+} = {}): Promise<{ imageUrl: string; thumbnailUrl: string; imageSizeBytes: number }> {
   if (!file || typeof file.name !== 'string') {
     throw new Error('Aucun fichier valide n’a été fourni.');
   }
@@ -289,7 +289,7 @@ export async function uploadPublicMediaVariants(file: File, shopId: number | str
       purpose: options.purpose ? `${options.purpose}-thumbnail` : 'product-main-thumbnail',
     });
 
-  return { imageUrl, thumbnailUrl };
+  return { imageUrl, thumbnailUrl, imageSizeBytes: image.size };
 }
 
 export function createMediaStorageAdapter() {

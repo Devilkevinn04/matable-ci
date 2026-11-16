@@ -947,13 +947,16 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               <ShoppingBag className="h-4 w-4" />
               <span className="hidden sm:inline">{totalCartCount > 0 ? 'Mon panier' : 'Catalogue'}</span>
               {totalCartCount > 0 && (
-                <span 
+                <motion.span
                   key={totalCartCount}
-                  className="mt-pop absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white px-1 text-xs font-black"
+                  initial={prefersReducedMotion ? false : { scale: 0.6 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: prefersReducedMotion ? 0 : 0.18 }}
+                  className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white px-1 text-xs font-black"
                   style={{ backgroundColor: primaryColor, color: primaryTextColor }}
                 >
                   {totalCartCount}
-                </span>
+                </motion.span>
               )}
             </button>
           </div>
@@ -2022,15 +2025,17 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         </span>
                       </div>
 
-                      <button
+                      <motion.button
                         id="submit-order-whatsapp-btn"
                         type="submit"
                         disabled={isSubmitting || !shop.is_open}
-                        className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.97] text-white font-black text-base shadow-lg hover:shadow-emerald-600/30 flex items-center justify-center gap-2.5 transition-[background-color,box-shadow,transform,opacity] disabled:opacity-50 disabled:cursor-not-allowed"
+                        whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+                        transition={{ duration: 0.15 }}
+                        className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base shadow-lg hover:shadow-emerald-600/30 flex items-center justify-center gap-2.5 transition-[background-color,box-shadow,transform,opacity] disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Phone className="w-5 h-5 fill-white" />
                         <span>{isSubmitting ? 'Préparation...' : 'Envoyer sur WhatsApp'}</span>
-                      </button>
+                      </motion.button>
                       <p className="text-center text-sm text-slate-400 mt-2">
                         Enregistre la demande et réserve le stock. Vous pourrez ensuite ouvrir WhatsApp pour confirmer les détails avec la boutique.
                       </p>

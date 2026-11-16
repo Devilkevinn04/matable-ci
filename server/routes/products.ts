@@ -34,7 +34,7 @@ interface ProductRouterOptions {
   persistProduct: (product: ProductRecord) => Promise<void>;
   sanitizeTextField: (value: string | null | undefined, maxLength?: number) => string;
   normalizeProductImage: (value: unknown) => string;
-  sanitizeGalleryImages: (value: unknown) => string[];
+  sanitizeGalleryImages: (value: unknown) => string[] | undefined;
   sanitizeProductAttributes: (value: unknown, category: ShopCategory) => Record<string, string> | undefined;
   trialProductLimit: number;
 }
@@ -555,7 +555,7 @@ export function createProductRouter({
         ? getSubscriptionProductPhotoLimit(subscription.plan)
         : getSubscriptionProductPhotoLimit(subscription.plan, subscription.planFeatures);
       const nextLookbook = lookbook_image !== undefined ? String(lookbook_image || '') : String(product.lookbook_image || '');
-      const nextGallery = gallery_images !== undefined ? sanitizeGalleryImages(gallery_images) : product.gallery_images || [];
+      const nextGallery = gallery_images !== undefined ? sanitizeGalleryImages(gallery_images) || [] : product.gallery_images || [];
       const nextMainImage = image_url !== undefined ? normalizeProductImage(image_url) : product.image_url;
       const nextPhotoCount = (nextMainImage ? 1 : 0) + (nextLookbook ? 1 : 0) + nextGallery.length;
       const currentPhotoCount = (product.image_url ? 1 : 0)
