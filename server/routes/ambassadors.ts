@@ -22,6 +22,7 @@ type AmbassadorAdminRow = {
   code: string;
   email: string | null;
   phone: string | null;
+  commission_rate: number | string;
   active: number | string;
   created_at: string;
   has_account: number | string;
@@ -172,7 +173,7 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
     const sevenDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString();
     const thirtyDaysAgo = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString();
     const ninetyDaysAgo = new Date(Date.now() - 89 * 24 * 60 * 60 * 1000).toISOString();
-    const ambassadorRows = await dbAll<AmbassadorAdminRow>(`SELECT a.id, a.name, a.code, a.email, a.phone, a.active, a.created_at,
+    const ambassadorRows = await dbAll<AmbassadorAdminRow>(`SELECT a.id, a.name, a.code, a.email, a.phone, a.commission_rate, a.active, a.created_at,
       CASE WHEN a.password_hash IS NULL THEN 0 ELSE 1 END AS has_account,
       (SELECT i.expires_at FROM ambassador_invites i WHERE i.ambassador_id = a.id AND i.used_at IS NULL
         ORDER BY i.created_at DESC LIMIT 1) AS invite_expires_at,
@@ -222,6 +223,7 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
     ]);
     const ambassadors = ambassadorRows.map((ambassador) => ({
       ...ambassador,
+      commission_rate: Number(ambassador.commission_rate),
       active: Number(ambassador.active),
       has_account: Number(ambassador.has_account),
       registrations: Number(ambassador.registrations),
@@ -467,6 +469,28 @@ export function createAmbassadorRouters(rateLimitPublicRequest: (limit?: number)
 
   adminRouter.patch('/:id', async (req, res) => {
     const bodyKeys = Object.keys(req.body || {});
+    if (bodyKeys.length === 1 && bodyKeys[0] === 'commission_rate') {
+      const commissionRate = req.body.commission_rate;
+      if (typeof commissionRate !== 'number' || !Number.isInteger(commissionRate) || commissionRate < 0 || commissionRate > 50) {
+        return res.status(400).json({ error: 'Le taux de commission doit être un nombre entier de 0 à 50 %.' });
+      }
+      const now = new Date().toISOString();
+      const updated = await dbTransaction(async (transaction) => {
+        const ambassador = await transaction.get<{ id: string }>(
+          `SELECT id FROM ambassadors WHERE id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
+          [req.params.id],
+        );
+        if (!ambassador) return false;
+        const result = await transaction.run('UPDATE ambassadors SET commission_rate = ? WHERE id = ?', [commissionRate, req.params.id]);
+        if (result.changes) await transaction.run(
+          'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
+          ['super_admin', 'ambassador_commission_rate_updated', null, JSON.stringify({ ambassador_id: req.params.id, commission_rate: commissionRate }), now],
+        );
+        return result.changes > 0;
+      });
+      return updated ? res.json({ success: true }) : res.status(404).json({ error: 'Ambassadeur introuvable.' });
+    }
+
     if (bodyKeys.length === 1 && bodyKeys[0] === 'active') {
       if (typeof req.body.active !== 'boolean') return res.status(400).json({ error: 'État invalide.' });
       const now = new Date().toISOString();

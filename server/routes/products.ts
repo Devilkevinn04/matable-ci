@@ -34,7 +34,7 @@ interface ProductRouterOptions {
   persistProduct: (product: ProductRecord) => Promise<void>;
   sanitizeTextField: (value: string | null | undefined, maxLength?: number) => string;
   normalizeProductImage: (value: unknown) => string;
-  sanitizeGalleryImages: (value: unknown) => string[];
+  sanitizeGalleryImages: (value: unknown) => string[] | undefined;
   sanitizeProductAttributes: (value: unknown, category: ShopCategory) => Record<string, string> | undefined;
   trialProductLimit: number;
 }
@@ -185,7 +185,7 @@ export function createProductRouter({
           ? trialProductLimit
           : getSubscriptionProductLimit(subscription.plan, subscription.planFeatures);
         const photoLimit = isActiveTrial
-          ? getSubscriptionProductPhotoLimit('standard')
+          ? getSubscriptionProductPhotoLimit(subscription.plan)
           : getSubscriptionProductPhotoLimit(subscription.plan, subscription.planFeatures);
         const currentCount = await transaction.get<{ count: number | string }>(
           'SELECT COUNT(*) AS count FROM products WHERE shop_id = ?',
@@ -442,7 +442,7 @@ export function createProductRouter({
     const isActiveTrial = subscription.status === 'trialing' && !req.adminShopAccess;
     const productLimit = isActiveTrial ? trialProductLimit : getSubscriptionProductLimit(subscription.plan, subscription.planFeatures);
     const photoLimit = isActiveTrial
-      ? getSubscriptionProductPhotoLimit('standard')
+      ? getSubscriptionProductPhotoLimit(subscription.plan)
       : getSubscriptionProductPhotoLimit(subscription.plan, subscription.planFeatures);
 
     const { title, description, price, sale_price, sale_starts_at, sale_ends_at, stock, image_url, thumbnail_url, is_available, category, sizes, colors, lookbook_image, gallery_images, prep_time, modifier_groups, attributes } = req.body;
@@ -552,10 +552,10 @@ export function createProductRouter({
     if (shop && !req.adminShopAccess) {
       const subscription = getSubscriptionState(shop);
       const photoLimit = subscription.status === 'trialing'
-        ? getSubscriptionProductPhotoLimit('standard')
+        ? getSubscriptionProductPhotoLimit(subscription.plan)
         : getSubscriptionProductPhotoLimit(subscription.plan, subscription.planFeatures);
       const nextLookbook = lookbook_image !== undefined ? String(lookbook_image || '') : String(product.lookbook_image || '');
-      const nextGallery = gallery_images !== undefined ? sanitizeGalleryImages(gallery_images) : product.gallery_images || [];
+      const nextGallery = gallery_images !== undefined ? sanitizeGalleryImages(gallery_images) || [] : product.gallery_images || [];
       const nextMainImage = image_url !== undefined ? normalizeProductImage(image_url) : product.image_url;
       const nextPhotoCount = (nextMainImage ? 1 : 0) + (nextLookbook ? 1 : 0) + nextGallery.length;
       const currentPhotoCount = (product.image_url ? 1 : 0)

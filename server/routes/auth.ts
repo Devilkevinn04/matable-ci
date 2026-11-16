@@ -88,7 +88,7 @@ interface AuthRouterOptions {
   adminSessions: Map<string, AdminSession>;
   rateLimitPublicRequest: (limit?: number) => RequestHandler;
   getRateLimitClientAddress: (req: Pick<Request, 'ip' | 'socket'>) => string;
-  verifyPin: (inputPin: string, storedHash: string) => boolean;
+  verifyPin: (inputPin: string, storedHash: string) => boolean | Promise<boolean>;
   hashPin: (pin: string) => string;
   isWeakShopPin: (pin: unknown) => boolean;
   toSafeShop: (shop: ShopRecord) => object;
@@ -347,8 +347,10 @@ export function createAuthRouter(options: AuthRouterOptions) {
     if (!shop) return res.status(404).json({ error: 'Aucune boutique associée à ce numéro de téléphone.' });
     const shopAttemptKey = `merchant:${shop.id}`;
     if (await isLoginRateLimited(shopAttemptKey)) return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
-    if (!verifyPin(pin, shop.pin_code_hash)) return res.status(401).json({ error: 'Code PIN incorrect à 6 chiffres.' });
+    if (!(await verifyPin(pin, shop.pin_code_hash))) return res.status(401).json({ error: 'Code PIN incorrect à 6 chiffres.' });
 
+    await clearLoginAttempts(attemptKey);
+    await clearLoginAttempts(shopAttemptKey);
     if (await respondWithEmailMfa(req, res, {
       subject: 'merchant',
       subjectId: String(shop.id),
@@ -358,8 +360,6 @@ export function createAuthRouter(options: AuthRouterOptions) {
     })) return;
 
     await createMerchantSession(res, shop.id, req);
-    await clearLoginAttempts(attemptKey);
-    await clearLoginAttempts(shopAttemptKey);
     res.json({
       success: true,
       shop: {
@@ -397,11 +397,15 @@ export function createAuthRouter(options: AuthRouterOptions) {
     const normalizedPhone = normalizeWhatsAppPhone(phone);
     const shops = normalizedPhone ? await loadShopsFromDatabase() : [];
     const shop = shops.find((candidate) => normalizeWhatsAppPhone(candidate.whatsapp_number) === normalizedPhone);
-    if (!shop || !verifyPin(pin, shop.pin_code_hash) || !shop.is_active) {
+    if (!shop) {
       return res.status(401).json({ error: 'Identifiants marchands invalides.' });
     }
-    if (await isLoginRateLimited(`merchant:${shop.id}:email-setup`)) {
+    const accountAttemptKey = `merchant:${shop.id}:email-setup`;
+    if (await isLoginRateLimited(accountAttemptKey)) {
       return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' });
+    }
+    if (!(await verifyPin(pin, shop.pin_code_hash)) || !shop.is_active) {
+      return res.status(401).json({ error: 'Identifiants marchands invalides.' });
     }
     const duplicateEmail = await dbGet<{ id: number }>(
       'SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?) AND id <> ? LIMIT 1',
@@ -420,6 +424,8 @@ export function createAuthRouter(options: AuthRouterOptions) {
       console.error(`Unable to send merchant email setup code: ${challenge.error}.`);
       return res.status(503).json({ error: 'Impossible d’envoyer le code de vérification. Réessayez plus tard.' });
     }
+    await clearLoginAttempts(attemptKey);
+    await clearLoginAttempts(accountAttemptKey);
     res.setHeader('Cache-Control', 'no-store');
     return res.status(202).json({ success: true, challenge_id: challenge.challengeId });
   });

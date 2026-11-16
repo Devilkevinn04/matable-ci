@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ArrowRight, BadgePercent, CheckCircle2, Flame, MapPin, RotateCcw, Sparkles } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { formatFCFA } from '../utils/format';
-import { getCategoryDefaults, getProductImageForDisplay } from '../utils/categoryDefaults';
+import { getCategoryDefaults } from '../utils/categoryDefaults';
 import type { ShopCategory } from '../utils/categoryDefaults';
 import { getDiscoveryCityLabel } from '../utils/discoverySeo';
 import { deduplicateProductsById } from '../utils/productFeed';
@@ -12,9 +12,7 @@ import { PublicCampaignCarousel, type PublicCampaign } from './PublicCampaignCar
 import { PublicPartnerRequestForm } from './PublicPartnerRequestForm';
 import { useAutoScrollRail } from '../hooks/useAutoScrollRail';
 import { cachedFetchJson } from '../utils/requestCache';
-import { getResponsiveImageProps } from '../utils/responsiveImages';
-import { handlePublicImageError } from '../utils/imageFallback';
-import { getProductImageAlt } from '../utils/productImageAlt';
+import { CategoryProductImage } from './CategoryProductImage';
 
 interface FeedShop {
   id: number;
@@ -199,7 +197,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
       className="mt-press mt-reveal group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl  border border-[#e7e9e5] bg-white text-left shadow-[0_2px_12px_rgba(20,40,30,.06)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] focus-visible:ring-offset-2"
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-[#d1fae5]">
-        <img {...getResponsiveImageProps(getProductImageForDisplay((product.thumbnail_url || product.image_url), product.shop.category))} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" alt={getProductImageAlt(productTitle, product.shop.name, product.shop.city)} loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" onError={handlePublicImageError} />
+        <CategoryProductImage imageUrl={product.thumbnail_url || product.image_url} category={product.shop.category} title={productTitle} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" className="h-full w-full transition-transform duration-500 group-hover:scale-[1.04]" />
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           {isPromotion
             ? <span aria-label={discountPercent > 0 ? `Réduction de ${discountPercent} %` : 'Prix réduit'} className="inline-flex items-center gap-1 rounded-full bg-[#c2410c] px-2.5 py-1 text-[10px] font-bold text-white"><BadgePercent className="h-3 w-3" aria-hidden="true" />{discountPercent > 0 ? `−${discountPercent}%` : 'Prix réduit'}</span>
@@ -211,6 +209,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
       </div>
       <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4">
         <p className="line-clamp-1 text-xs font-semibold text-[#647067]">{product.shop.name}</p>
+        <p className="line-clamp-1 text-[11px] text-[#647067]">{product.shop.city || 'Côte d’Ivoire'}</p>
         <h3 className="mt-1 line-clamp-2 min-h-10 font-display text-[15px] font-bold leading-5 text-[#292d2a] sm:text-base">{productTitle}</h3>
         <p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-[#647067]">
           {productDescription || 'Contactez la boutique pour en savoir plus sur ce produit.'}

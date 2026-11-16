@@ -60,6 +60,11 @@ const sqliteSchema = `
     privacy_document TEXT NOT NULL,
     accepted_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS trial_promotion_claims (
+    shop_id INTEGER PRIMARY KEY,
+    tier TEXT NOT NULL CHECK (tier IN ('standard', 'premium')),
+    claimed_at TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS merchant_verification_consents (
     shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
     consent_version TEXT NOT NULL,
@@ -454,6 +459,7 @@ const sqliteSchema = `
   CREATE TABLE IF NOT EXISTS ambassadors (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT NOT NULL UNIQUE,
     email TEXT, phone TEXT, password_hash TEXT, active INTEGER NOT NULL DEFAULT 1,
+    commission_rate INTEGER NOT NULL DEFAULT 20 CHECK (commission_rate BETWEEN 0 AND 50),
     created_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS ambassador_applications (
@@ -592,6 +598,12 @@ function migrateSqlite(connection: Database.Database) {
   connection.exec('CREATE INDEX IF NOT EXISTS idx_shops_identity_verification_status ON shops(identity_verification_status, created_at DESC)');
   addColumn('shops', 'selected_subscription_tier', 'TEXT');
   addColumn('shops', 'subscription_status', "TEXT NOT NULL DEFAULT 'active'");
+  connection.exec(`CREATE TABLE IF NOT EXISTS trial_promotion_claims (
+    shop_id INTEGER PRIMARY KEY,
+    tier TEXT NOT NULL CHECK (tier IN ('standard', 'premium')),
+    claimed_at TEXT NOT NULL
+  )`);
+  connection.exec('CREATE INDEX IF NOT EXISTS idx_trial_promotion_claims_tier ON trial_promotion_claims(tier, claimed_at)');
   addColumn('shops', 'trial_start', 'TEXT');
   addColumn('shops', 'trial_end', 'TEXT');
   addColumn('shops', 'subscription_expires_at', 'TEXT');
@@ -804,6 +816,7 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('orders', 'delivery_fee', 'INTEGER NOT NULL DEFAULT 0');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_orders_shop_status ON orders(shop_id, status)');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_orders_pending_expiry ON orders(status, pending_since)');
+  connection.exec('CREATE INDEX IF NOT EXISTS idx_orders_pending_shop_phone ON orders(shop_id, customer_phone, status, pending_since)');
   connection.exec('CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_shop_created ON subscription_payment_intents(shop_id, created_at DESC)');
   connection.exec(`CREATE INDEX IF NOT EXISTS idx_subscription_payment_intents_reconcile
     ON subscription_payment_intents(status, provider_checked_at, created_at)
@@ -823,6 +836,7 @@ function migrateSqlite(connection: Database.Database) {
   addColumn('users', 'last_name', "TEXT NOT NULL DEFAULT ''");
   addColumn('users', 'password_hash', 'TEXT');
   addColumn('ambassadors', 'password_hash', 'TEXT');
+  addColumn('ambassadors', 'commission_rate', 'INTEGER NOT NULL DEFAULT 20 CHECK (commission_rate BETWEEN 0 AND 50)');
   addColumn('ambassador_commissions', 'withdrawal_id', 'TEXT');
   addColumn('users', 'is_active', 'INTEGER DEFAULT 1');
   addColumn('user_sessions', 'fingerprint', 'TEXT');
@@ -888,6 +902,12 @@ export const postgresMigrations = [
     privacy_document TEXT NOT NULL,
     accepted_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS trial_promotion_claims (
+    shop_id BIGINT PRIMARY KEY,
+    tier TEXT NOT NULL CHECK (tier IN ('standard', 'premium')),
+    claimed_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_trial_promotion_claims_tier ON trial_promotion_claims(tier, claimed_at)',
   `CREATE TABLE IF NOT EXISTS subscription_email_reminder_deliveries (
     shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
     expires_at TEXT NOT NULL, days_before INTEGER NOT NULL, attempted_at TEXT NOT NULL,
@@ -1127,6 +1147,7 @@ export const postgresMigrations = [
   'ALTER TABLE orders ADD COLUMN IF NOT EXISTS pending_since TEXT',
   "UPDATE orders SET pending_since = created_at WHERE status = 'pending' AND pending_since IS NULL",
   'CREATE INDEX IF NOT EXISTS idx_orders_pending_expiry ON orders(status, pending_since)',
+  'CREATE INDEX IF NOT EXISTS idx_orders_pending_shop_phone ON orders(shop_id, customer_phone, status, pending_since)',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS sizes JSONB',
   'ALTER TABLE products ADD COLUMN IF NOT EXISTS colors JSONB',
@@ -1339,8 +1360,10 @@ export const postgresMigrations = [
   `CREATE TABLE IF NOT EXISTS ambassadors (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, code TEXT NOT NULL UNIQUE,
     email TEXT, phone TEXT, password_hash TEXT, active INTEGER NOT NULL DEFAULT 1,
+    commission_rate INTEGER NOT NULL DEFAULT 20 CHECK (commission_rate BETWEEN 0 AND 50),
     created_at TEXT NOT NULL
   )`,
+  'ALTER TABLE ambassadors ADD COLUMN IF NOT EXISTS commission_rate INTEGER NOT NULL DEFAULT 20 CHECK (commission_rate BETWEEN 0 AND 50)',
   `CREATE TABLE IF NOT EXISTS ambassador_applications (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),

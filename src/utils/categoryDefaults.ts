@@ -383,11 +383,9 @@ export function normalizeStoredProductImage(imageUrl: unknown): string {
   return isLegacyGenericProductImage(normalized) ? '' : normalized;
 }
 
-export function getProductImageForDisplay(imageUrl: unknown, category: unknown): string {
+export function getProductImageForDisplay(imageUrl: unknown, _category: unknown): string {
   const storedImage = normalizeProductImage(imageUrl);
-  return storedImage && !isLegacyGenericProductImage(storedImage)
-    ? storedImage
-    : getCategoryDefaults(category).productPlaceholderImageUrl;
+  return storedImage && !isLegacyGenericProductImage(storedImage) ? storedImage : '';
 }
 
 const MAX_GALLERY_IMAGES = 6;
@@ -430,18 +428,5 @@ export function normalizeStoredCustomBannerImage(imageUrl: unknown, category: un
 
 export function getBannerImageForDisplay(imageUrl: unknown, category: unknown): string {
   const normalized = typeof imageUrl === 'string' ? imageUrl.trim() : '';
-  const banner = normalizeCustomBannerImage(normalized, category) || getCategoryDefaults(category).bannerPlaceholderImageUrl;
-  try {
-    const url = new URL(banner);
-    if (url.hostname === 'images.unsplash.com') {
-      url.searchParams.set('auto', 'format');
-      url.searchParams.set('fit', 'crop');
-      url.searchParams.set('w', '1000');
-      url.searchParams.set('q', '75');
-      return url.toString();
-    }
-  } catch {
-    return banner;
-  }
-  return banner;
+  return normalizeCustomBannerImage(normalized, category);
 }

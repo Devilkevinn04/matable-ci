@@ -72,13 +72,6 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
-  if (!ctx) {
-    return {
-      showToast: (msg: string) => console.log(msg),
-      success: (msg: string) => console.log(msg),
-      error: (msg: string) => console.error(msg),
-      info: (msg: string) => console.info(msg),
-    };
-  }
+  if (!ctx) throw new Error('useToast must be used within a ToastProvider');
   return ctx;
 }

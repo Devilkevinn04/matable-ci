@@ -303,8 +303,7 @@ export function createPublicShopsRouter({
           boost_placements: boostPlacementsByShop.get(shop.id) || [],
           is_active: shop.is_active,
           publication_status: shop.publication_status,
-          is_verified: shop.business_verification_status === 'approved'
-            && shop.merchant_verification_status === 'verified',
+          is_verified: shop.merchant_verification_status === 'verified',
           category: shop.category,
           city: shop.city,
           theme_config: shop.theme_config,

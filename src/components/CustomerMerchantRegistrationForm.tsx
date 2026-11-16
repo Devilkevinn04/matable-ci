@@ -1,15 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, CheckCircle2, Eye, EyeOff, MessageCircleMore, ShieldCheck, Sparkles, Store } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Eye, EyeOff, Sparkles, Store } from 'lucide-react';
 import { ShopCategory } from '../types';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../utils/categoryDefaults';
 import { ABIDJAN_COMMUNES } from '../utils/abidjanCommunes';
-import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../utils/subscriptionFeatures';
+import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS, TRIAL_PROMOTION_SLOTS_PER_TIER } from '../utils/subscriptionFeatures';
 import { TermsPrivacyConsent } from './TermsPrivacyConsent';
 import { ACQUISITION_SOURCES, normalizeAcquisitionSource } from '../utils/acquisitionSources';
 import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from '../utils/analyticsAttribution';
 import { hasAnalyticsConsent } from '../utils/cookieConsent';
 import { clearAmbassadorReferral, getAmbassadorToken, getStoredAmbassadorCode } from '../utils/ambassadors';
-import { MerchantRegistrationProgress, MerchantShopPreview } from './AuthExperienceLayout';
+import { MerchantShopPreview } from './AuthExperienceLayout';
 
 interface CustomerMerchantRegistrationFormProps {
   onCreated: () => void;
@@ -29,6 +29,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
   const formRef = useRef<HTMLFormElement>(null);
   const [name, setName] = useState('');
   const [category, setCategory] = useState<ShopCategory>('fashion');
+  const [subscriptionTier, setSubscriptionTier] = useState<'standard' | 'premium'>('standard');
   const [city, setCity] = useState('');
   const [otherCity, setOtherCity] = useState('');
   const [phone, setPhone] = useState('+225');
@@ -89,6 +90,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
           pin_code: pin,
           city: city === 'Autre ville / commune' ? otherCity.trim() : city,
           category,
+          subscription_tier: subscriptionTier,
           email: email.trim(),
           accepted_terms_privacy: acceptedTermsPrivacy,
           acquisition_source: acquisitionSource || null,
@@ -138,52 +140,37 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
     );
   }
 
-  const benefits = [
-    { label: 'Vitrine locale', icon: Store },
-    { label: 'Commandes WhatsApp', icon: MessageCircleMore },
-    { label: 'Sécurisé', icon: ShieldCheck },
-  ];
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="inline-flex items-center gap-2 rounded-full border border-[#dfe8dd] bg-[#edf3ec] px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--mt-green-deep)]">
         <Sparkles className="h-3.5 w-3.5" />
         Espace commerçant
       </div>
       <div>
         <p className="text-xs font-black uppercase tracking-[0.12em] text-[#c2410c]">Étape {step} sur 2</p>
-        <h3 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-[#292d2a]">{step === 1 ? 'Présentons votre boutique' : 'Sécurisons votre accès'}</h3>
+        <h3 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-[#292d2a]">{step === 1 ? 'Créer ma boutique' : 'Sécurisons votre accès'}</h3>
         <p className="mt-1 text-sm leading-6 text-[#47534b]">{step === 1
-          ? `Créez votre vitrine et recevez les commandes directement sur WhatsApp. ${TRIAL_DURATION_MONTHS} mois d’essai Standard gratuit, jusqu’à ${TRIAL_CATALOG_LIMIT} produits. Vous pouvez aussi payer directement une formule.`
+          ? `${TRIAL_DURATION_MONTHS} mois gratuits, sans paiement. Commencez avec jusqu’à ${TRIAL_CATALOG_LIMIT} produits; la formule Standard en permet 20. Offre réservée aux ${TRIAL_PROMOTION_SLOTS_PER_TIER} premières inscriptions par formule.`
           : 'Votre numéro WhatsApp sera visible pour le contact client. Le PIN protège l’accès à votre espace marchand.'}</p>
-      </div>
-      <MerchantRegistrationProgress step={step} />
-      <div className="grid gap-2 sm:grid-cols-3">
-        {benefits.map(({ label, icon: Icon }) => (
-          <div key={label} className="flex items-center gap-2 rounded-2xl border border-[#e7e0d6] bg-[#FAF8F2] px-2.5 py-2.5 text-[11px] font-semibold text-[#47534b]">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e9f3ec] text-[var(--mt-green-deep)]">
-              <Icon className="h-3.5 w-3.5" />
-            </span>
-            {label}
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center gap-3 rounded-[18px] border border-[#d8e4d9] bg-gradient-to-br from-[#0c604a] to-[var(--mt-green-deep)] p-3.5 text-white shadow-[0_10px_28px_rgba(7,63,50,.12)] sm:p-4">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f0ba80] text-[var(--mt-green-deep)]"><Store className="h-5 w-5" aria-hidden="true" /></span>
-        <MerchantShopPreview name={name} category={getCategoryDefaults(category).label} city={city === 'Autre ville / commune' ? otherCity : city} />
       </div>
       <form ref={formRef} onSubmit={submit} className="auth-form space-y-3">
         {step === 1 && <>
         <div className="rounded-[18px] border border-[#eef0ea] bg-[#f7f5f2] p-3">
-          <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#47534b]">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#dfeee6] text-[var(--mt-green-deep)]">1</span>
-            Informations boutique
-          </div>
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-[#47534b]">
               Nom de la boutique
               <input value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={100} autoComplete="organization" placeholder="Ex. : Atelier Awa" className={fieldClass} />
             </label>
+
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-bold text-[#47534b]">Formule pour votre boutique</legend>
+              {(['standard', 'premium'] as const).map((tier) => (
+                <label key={tier} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${subscriptionTier === tier ? 'border-[var(--mt-green-primary)] bg-[#edf3ec]' : 'border-[#deded5] bg-white'}`}>
+                  <input type="radio" name="customer-merchant-subscription-tier" value={tier} checked={subscriptionTier === tier} onChange={() => setSubscriptionTier(tier)} className="mt-1 accent-[var(--mt-green-primary)]" />
+                  <span className="text-sm text-[#47534b]"><strong>{tier === 'standard' ? 'Standard' : 'Premium'}</strong><span className="mt-0.5 block text-xs leading-5 text-[#68756c]">Essai de {TRIAL_DURATION_MONTHS} mois et jusqu’à {TRIAL_CATALOG_LIMIT} produits pour les {TRIAL_PROMOTION_SLOTS_PER_TIER} premières inscriptions à cette formule.</span></span>
+                </label>
+              ))}
+            </fieldset>
 
             <div className="grid gap-3 min-[430px]:grid-cols-2">
               <label className="block text-sm font-semibold text-[#47534b]">
@@ -274,6 +261,9 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
       <button type="button" onClick={onLogin} className="mt-2 flex min-h-10 w-full items-center justify-center gap-2 py-2 text-sm font-bold text-[var(--mt-green-deep)] hover:text-[#c2410c]">
         <Store className="h-4 w-4" aria-hidden="true" /> Déjà commerçant ? Se connecter
       </button>
+      <div className="flex items-center gap-3 rounded-[18px] border border-[#d8e4d9] bg-gradient-to-br from-[#0c604a] to-[var(--mt-green-deep)] p-3.5 text-white shadow-[0_10px_28px_rgba(7,63,50,.12)] sm:p-4">
+        <MerchantShopPreview name={name} category={getCategoryDefaults(category).label} city={city === 'Autre ville / commune' ? otherCity : city} />
+      </div>
     </div>
   );
 };

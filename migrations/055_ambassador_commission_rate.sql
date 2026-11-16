@@ -1,0 +1,3 @@
+ALTER TABLE ambassadors
+  ADD COLUMN IF NOT EXISTS commission_rate INTEGER NOT NULL DEFAULT 20
+  CHECK (commission_rate BETWEEN 0 AND 50);

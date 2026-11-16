@@ -192,7 +192,12 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
         SET status = 'paid', provider_reference = ?, paid_at = ?
         WHERE id = ? AND status IN ('pending', 'expired')`, [input.providerReference, paidAt, payment.id]);
       if (paid.changes !== 1) return { status: 'duplicate' as const };
-      const referral = await transaction.get<{ ambassador_id: string }>('SELECT ambassador_id FROM ambassador_referrals WHERE shop_id = ?', [payment.shop_id]);
+      const referral = await transaction.get<{ ambassador_id: string; commission_rate: number }>(
+        `SELECT r.ambassador_id, a.commission_rate
+         FROM ambassador_referrals r JOIN ambassadors a ON a.id = r.ambassador_id
+         WHERE r.shop_id = ?`,
+        [payment.shop_id],
+      );
       if (referral) {
         const earlierPayment = await transaction.get<{ id: string }>(
           `SELECT id FROM subscription_payment_intents WHERE shop_id = ? AND payment_type = 'subscription'
@@ -200,7 +205,8 @@ export function createGeniusPayRouter({ requireMerchantOwnShop, rateLimitPayment
         );
         if (!earlierPayment) await transaction.run(`INSERT INTO ambassador_commissions
           (shop_id, ambassador_id, payment_id, amount, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (shop_id) DO NOTHING`,
-        [payment.shop_id, referral.ambassador_id, payment.id, calculateAmbassadorCommission(Number(payment.amount), payment.subscription_term), paidAt]);
+        [payment.shop_id, referral.ambassador_id, payment.id,
+          calculateAmbassadorCommission(Number(payment.amount), payment.subscription_term, Number(referral.commission_rate)), paidAt]);
       }
       const updatedShop = await transaction.run(`UPDATE shops
         SET subscription_status = CASE WHEN subscription_admin_suspended_at IS NOT NULL THEN 'suspended' ELSE 'active' END,

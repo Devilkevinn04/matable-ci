@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useToast } from '../Toast';
 import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks, SubscriptionTier } from '../../types';
 import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
-import { TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
+import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
 import { useMerchantProductEditor } from './useMerchantProductEditor';
 import { trackLogin, trackLogout, trackSignup } from '../../utils/analyticsTracker';
 import { normalizeAcquisitionSource } from '../../utils/acquisitionSources';
@@ -21,7 +21,12 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   // True while the initial session check is in-flight (prevents flash of login screen)
   const [isSessionLoading, setIsSessionLoading] = useState(true);
   // Confirm modal (replaces native browser confirm())
-  const [confirmModal, setConfirmModal] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    message: string;
+    onConfirm: () => void;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  } | null>(null);
   const [phoneInput, setPhoneInput] = useState('');
   const [pinInput, setPinInput] = useState('');
   const [accessCodeInput, setAccessCodeInput] = useState('');
@@ -51,6 +56,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [regAcceptedTermsPrivacy, setRegAcceptedTermsPrivacy] = useState(false);
   const [regAmbassadorCode, setRegAmbassadorCode] = useState('');
   const [regCategory, setRegCategory] = useState<ShopCategory>('fashion');
+  const [regSubscriptionTier, setRegSubscriptionTier] = useState<Extract<SubscriptionTier, 'standard' | 'premium'>>('standard');
   // Campaign from ?src= / utm_source, kept only when the visitor accepted audience analytics.
   const [regTrackedCampaign] = useState(() => (typeof window !== 'undefined' && hasAnalyticsConsent()
     ? getAnalyticsCampaignFromSearch(window.location.search) || getStoredAnalyticsCampaign()
@@ -79,6 +85,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [flashBilan, setFlashBilan] = useState<FlashBilan | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const shopDataRequestId = useRef(0);
+  const loadedShopDataId = useRef<number | null>(null);
 
   // Catalog search & filter
   const [catalogSearch, setCatalogSearch] = useState('');
@@ -89,14 +96,24 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [orderPaymentFilter, setOrderPaymentFilter] = useState<'all' | 'wave' | 'mobile_money' | 'cash' | 'to_confirm'>('all');
   const [orderStatusFilter, setOrderStatusFilter] = useState<MerchantOrderFilter>('all');
 
-  const productEditor = useMerchantProductEditor(currentShop, setProducts);
+  const productEditor = useMerchantProductEditor(currentShop, setProducts, (message, onConfirm) => {
+    setConfirmModal({
+      message,
+      onConfirm,
+      confirmLabel: 'Supprimer l’article',
+      cancelLabel: 'Garder l’article',
+    });
+  });
   const {
     isProductModalOpen,
+    isProductSaving,
+    imageCompressing,
     setIsProductModalOpen,
   } = productEditor;
 
   useEffect(() => {
     if (!isRegisterModalOpen && !isProductModalOpen) return;
+    if (isProductModalOpen && (isProductSaving || imageCompressing)) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       if (isProductModalOpen) setIsProductModalOpen(false);
@@ -104,7 +121,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isProductModalOpen, isRegisterModalOpen]);
+  }, [imageCompressing, isProductModalOpen, isProductSaving, isRegisterModalOpen]);
 
   // Shop Settings state
   const [settingsName, setSettingsName] = useState('');
@@ -233,71 +250,91 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     }
   };
 
+  const clearMerchantSession = (errorMessage: string | null = null) => {
+    shopDataRequestId.current += 1;
+    loadedShopDataId.current = null;
+    setCurrentShop(null);
+    setProducts([]);
+    setOrders([]);
+    setFlashBilan(null);
+    setDataLoading(false);
+    setConfirmModal(null);
+    setActiveTab('overview');
+    setSettingsSubTab('themes');
+    setCatalogSearch('');
+    setCatalogFilter('all');
+    setOrderSearch('');
+    setOrderPaymentFilter('all');
+    setOrderStatusFilter('all');
+    setIsRegisterModalOpen(false);
+    setRegistrationLinks(null);
+    setIsProductModalOpen(false);
+    setAuthError(errorMessage);
+  };
+
   // Fetch products, orders, and flash bilan
   const loadShopData = async (shopId: number) => {
     const requestId = ++shopDataRequestId.current;
     const isCurrentRequest = () => requestId === shopDataRequestId.current;
-    setDataLoading(true);
-    setProducts([]);
-    setOrders([]);
-    setFlashBilan(null);
+    if (loadedShopDataId.current !== shopId) {
+      setDataLoading(true);
+      setProducts([]);
+      setOrders([]);
+      setFlashBilan(null);
+    }
     try {
       // 1. Load shop details & products
       const shopRes = await fetch(`/api/shops/${shopId}`);
       if (!isCurrentRequest()) return;
       if (shopRes.status === 401) {
-        setCurrentShop(null);
-        setProducts([]);
-        setOrders([]);
-        setFlashBilan(null);
-        setAuthError('Votre session a expiré. Veuillez vous reconnecter.');
+        clearMerchantSession('Votre session a expiré. Veuillez vous reconnecter.');
         return;
       }
-      if (shopRes.ok) {
-        const sData = await shopRes.json();
-        if (!isCurrentRequest()) return;
-        const loadedShop = sData.shop;
-        setCurrentShop(loadedShop);
-        syncShopSettings(loadedShop);
-        setProducts(sData.products || []);
+      if (!shopRes.ok) {
+        const data = await shopRes.json().catch(() => ({}));
+        throw new Error(data.error || 'Impossible de charger votre boutique.');
       }
+      const sData = await shopRes.json();
+      if (!isCurrentRequest()) return;
+      if (!sData.shop) throw new Error('Les informations de la boutique sont indisponibles.');
+      const loadedShop = sData.shop as Shop;
+      setCurrentShop(loadedShop);
+      syncShopSettings(loadedShop);
+      setProducts(Array.isArray(sData.products) ? sData.products : []);
+      loadedShopDataId.current = shopId;
 
       // 2. Load orders
       const ordersRes = await fetch(`/api/shops/${shopId}/orders`);
       if (!isCurrentRequest()) return;
       if (ordersRes.status === 401) {
-        setCurrentShop(null);
-        setProducts([]);
-        setOrders([]);
-        setFlashBilan(null);
-        setAuthError('Votre session a expiré. Veuillez vous reconnecter.');
+        clearMerchantSession('Votre session a expiré. Veuillez vous reconnecter.');
         return;
       }
-      if (ordersRes.ok) {
-        const oData = await ordersRes.json();
-        if (!isCurrentRequest()) return;
-        const shopOrders = Array.isArray(oData) ? oData : (oData.orders || []);
-        setOrders(shopOrders.filter((order: Order) => order.shop_id === shopId));
+      if (!ordersRes.ok) {
+        const data = await ordersRes.json().catch(() => ({}));
+        throw new Error(data.error || 'Impossible de charger vos commandes.');
       }
+      const oData = await ordersRes.json();
+      if (!isCurrentRequest()) return;
+      const shopOrders = Array.isArray(oData) ? oData : (oData.orders || []);
+      setOrders(shopOrders.filter((order: Order) => order.shop_id === shopId));
 
       // 3. Load Flash Bilan
       const bilanRes = await fetch(`/api/shops/${shopId}/flash-bilan`);
       if (!isCurrentRequest()) return;
       if (bilanRes.status === 401) {
-        setCurrentShop(null);
-        setProducts([]);
-        setOrders([]);
-        setFlashBilan(null);
-        setAuthError('Votre session a expiré. Veuillez vous reconnecter.');
+        clearMerchantSession('Votre session a expiré. Veuillez vous reconnecter.');
         return;
       }
-      if (bilanRes.ok) {
-        const bData = await bilanRes.json();
-        if (!isCurrentRequest()) return;
-        setFlashBilan(bData);
+      if (!bilanRes.ok) {
+        const data = await bilanRes.json().catch(() => ({}));
+        throw new Error(data.error || 'Impossible de charger votre flash bilan.');
       }
+      const bData = await bilanRes.json();
+      if (!isCurrentRequest()) return;
+      setFlashBilan(bData);
     } catch (err) {
-      if (isCurrentRequest()) console.error('Error loading merchant data', err);
+      if (isCurrentRequest()) toast.error(err instanceof Error ? err.message : 'Impossible de charger les données de la boutique.');
     } finally {
       if (isCurrentRequest()) setDataLoading(false);
     }
@@ -477,6 +514,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
           pin_code: regPin.trim(),
           city: regCity === 'Autre ville / commune' ? regCityOther.trim() : regCity.trim(),
           category: regCategory,
+          subscription_tier: regSubscriptionTier,
           email: regEmail.trim(),
           accepted_terms_privacy: regAcceptedTermsPrivacy,
           acquisition_source: regAcquisitionSource || null,
@@ -508,7 +546,10 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       trackSignup('merchant', 'registration');
       const publicUrl = `${window.location.origin}/${data.shop.slug}`;
       const privateUrl = `${window.location.origin}/app?access=${encodeURIComponent(data.owner_access_token)}`;
-      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable. Votre essai Standard gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé et votre espace marchand est accessible immédiatement. Vous pouvez choisir une formule payante et la régler dès maintenant ou quand vous le souhaitez. Déposez les justificatifs de votre commerce dans votre espace pour demander son examen et sa publication. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
+      const trialMessage = data.trial_granted === true
+        ? `Votre essai ${regSubscriptionTier === 'premium' ? 'Premium' : 'Standard'} gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé, avec jusqu’à ${TRIAL_CATALOG_LIMIT} produits.`
+        : 'Les 75 places d’essai de cette formule sont attribuées. Votre boutique reste bloquée jusqu’au paiement d’un abonnement dans votre espace marchand.';
+      const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable. ${trialMessage} Déposez les justificatifs de votre commerce dans votre espace pour demander son examen et sa publication. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
       setRegistrationLinks({
         publicUrl,
         privateUrl,
@@ -562,7 +603,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       if (!response.ok) throw new Error(data.error || 'Impossible de démarrer l’essai.');
       setCurrentShop(data.shop);
       syncShopSettings(data.shop);
-      toast.success(`Votre essai Standard gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé.`);
+      toast.success(`Votre essai ${tier === 'premium' ? 'Premium' : 'Standard'} gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Impossible de contacter le serveur.');
     } finally {
@@ -595,10 +636,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     }
     fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
     trackLogout('merchant');
-    setCurrentShop(null);
-    setProducts([]);
-    setOrders([]);
-    setFlashBilan(null);
+    clearMerchantSession();
   };
 
   // Toggle Shop Open/Closed (toggle-status)
@@ -880,6 +918,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
         message: newStatus === 'rejected'
           ? 'Refuser cette demande ? Les articles réservés seront automatiquement remis en stock.'
           : 'Annuler cette commande ? Les articles seront automatiquement remis en stock.',
+        confirmLabel: newStatus === 'rejected' ? 'Refuser la commande' : 'Annuler la commande',
+        cancelLabel: 'Garder la commande',
         onConfirm: () => executeUpdateOrderStatus(orderId, newStatus),
       });
       return;
@@ -993,6 +1033,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     regAcquisitionSource,
     setRegAcquisitionSource,
     regCategory,
+    regSubscriptionTier,
+    setRegSubscriptionTier,
     regLoading,
     trialStarting,
     registrationLinks,

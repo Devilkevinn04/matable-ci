@@ -1,6 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { COOKIE_CONSENT_KEY, COOKIE_PREFERENCES_KEY, saveCookiePreferences } from '../utils/cookieConsent';
 
 export const CookieBanner: React.FC = () => {
@@ -35,15 +33,11 @@ export const CookieBanner: React.FC = () => {
   return (
     <section className="cookie-banner" aria-label="Préférences de cookies">
       <div className="cookie-banner-copy">
-        <ShieldCheck className="h-5 w-5 shrink-0 text-[var(--mt-green-primary)]" aria-hidden="true" />
-        <p>
-          Les liens ambassadeurs mémorisent un identifiant jusqu’à l’inscription ou 90 jours au maximum, puis l’effacent de cet appareil après inscription. Ce suivi est distinct des statistiques d’audience.
-          <Link to="/cookies"> Personnaliser</Link>
-        </p>
+        <p>On compte les visites pour améliorer MaTable.</p>
       </div>
       <div className="cookie-banner-actions">
-        <button type="button" onClick={() => choose(false)} className="cookie-button cookie-button-secondary">Refuser les statistiques</button>
-        <button type="button" onClick={() => choose(true)} className="cookie-button cookie-button-primary">Autoriser les statistiques</button>
+        <button type="button" onClick={() => choose(true)} className="cookie-button cookie-button-primary">D’accord</button>
+        <button type="button" onClick={() => choose(false)} className="cookie-button cookie-button-secondary">Non merci</button>
       </div>
     </section>
   );

@@ -30,6 +30,15 @@ const CONSENT_VERSION = 'didit-v1';
 const MANUAL_CONSENT_VERSION = 'manual-verification-v1';
 const DOCUMENT_RETENTION_DAYS = 90;
 
+function mapStoredIdentityStatus(status: string): string {
+  if (status === 'approved' || status === 'verified') return 'verified';
+  if (status === 'action_required' || status === 'rejected') return 'rejected';
+  if (status === 'under_review') return 'under_review';
+  if (status === 'submitted') return 'submitted';
+  if (status === 'not_required') return 'not_required';
+  return 'pending';
+}
+
 type DbRun = (sql: string, params?: unknown[]) => Promise<{ changes: number }>;
 type DbGet = <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T | undefined>;
 type DbAll = <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
@@ -87,8 +96,12 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
   router.get('/:id/identity-verification', requireMerchantIdentityOwnShop, async (req, res) => {
     const shopId = Number(req.params.id);
     const [shop, session] = await Promise.all([
-      dbGet<{ merchant_verification_status: string; identity_verification_status: string }>(
-        'SELECT merchant_verification_status, identity_verification_status FROM shops WHERE id = ?', [shopId],
+      dbGet<{
+        merchant_verification_status: string;
+        identity_verification_status: string;
+        identity_verification_method: string | null;
+      }>(
+        'SELECT merchant_verification_status, identity_verification_status, identity_verification_method FROM shops WHERE id = ?', [shopId],
       ),
       dbGet<{
         session_id: string;
@@ -104,28 +117,35 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       ),
     ]);
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-    const mappedStatus = session ? mapDiditStatus(session.status) : shop.identity_verification_status || shop.merchant_verification_status;
-    const declineReasons = parseDiditDeclineReasons(session?.decline_reasons);
+    const manualDecision = shop.identity_verification_method === 'manual';
+    const activeSession = manualDecision ? null : session;
+    const storedIdentityStatus = shop.identity_verification_status || shop.merchant_verification_status;
+    const mappedStatus = activeSession ? mapDiditStatus(activeSession.status) : mapStoredIdentityStatus(storedIdentityStatus);
+    const declineReasons = parseDiditDeclineReasons(activeSession?.decline_reasons);
     res.setHeader('Cache-Control', 'no-store');
     res.json({
       status: mappedStatus,
+      identity_method: shop.identity_verification_method,
       didit_available: Boolean(process.env.DIDIT_API_KEY?.trim() && DIDIT_UUID_PATTERN.test(process.env.DIDIT_WORKFLOW_ID?.trim() || '')),
-      provider_status: session?.status || null,
-      session_id: session?.session_id || null,
-      session_url: session?.session_url || null,
-      resume_available: Boolean(session?.session_url && mappedStatus === 'submitted'),
-      restart_available: !session || canRestartDiditSession({
-        status: session.status,
-        lastWebhookAt: session.last_webhook_at,
-        createdAt: session.created_at,
-      }),
-      submitted_at: session?.created_at || null,
+      provider_status: activeSession?.status || null,
+      session_id: activeSession?.session_id || null,
+      session_url: activeSession?.session_url || null,
+      resume_available: Boolean(activeSession?.session_url && mappedStatus === 'submitted'),
+      restart_available: shop.identity_verification_status !== 'approved'
+        && shop.merchant_verification_status !== 'verified'
+        && (!session || canRestartDiditSession({
+          status: session.status,
+          lastWebhookAt: session.last_webhook_at,
+          createdAt: session.created_at,
+        })),
+      submitted_at: activeSession?.created_at || null,
       reviewer_note: null,
       decline_reasons: declineReasons,
       decline_advice: describeDiditDeclineReasons(declineReasons),
     });
+  });
 
-    router.get('/:id/manual-verification', requireMerchantIdentityOwnShop, async (req, res) => {
+  router.get('/:id/manual-verification', requireMerchantIdentityOwnShop, async (req, res) => {
       const shopId = Number(req.params.id);
       const [shop, consent, documents, latestDecision] = await Promise.all([
         dbGet<{ business_verification_status: string; identity_verification_status: string }>(
@@ -308,8 +328,6 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
         return res.status(503).json({ error: 'Impossible de supprimer le justificatif pour le moment.' });
       }
     });
-  });
-
   router.post('/:id/identity-verification/session', sessionRateLimit, requireMerchantIdentityOwnShop, async (req, res) => {
     const shopId = Number(req.params.id);
     const shop = await dbGet<{ id: number; merchant_verification_status: string; identity_verification_status: string }>(

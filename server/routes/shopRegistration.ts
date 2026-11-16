@@ -3,13 +3,14 @@ import { hashAmbassadorToken } from '../services/ambassadorInvites.ts';
 import { normalizeAmbassadorCode } from '../../src/utils/ambassadors.ts';
 import { Router, type RequestHandler } from 'express';
 import { databaseMode, dbTransaction } from '../../db.ts';
-import { addCalendarMonths } from '../../src/utils/subscriptionFeatures.ts';
+import { addCalendarMonths, TRIAL_CATALOG_LIMIT } from '../../src/utils/subscriptionFeatures.ts';
 import { slugifyShopName } from '../../src/utils/shopSlug.ts';
 import { normalizeAcquisitionCampaign, normalizeAcquisitionSource } from '../../src/utils/acquisitionSources.ts';
 import { persistShopInTransaction } from '../repositories/shops.ts';
 import { sendMerchantWelcomeEmail } from '../services/email.ts';
 import { isEmailMfaRequired, startEmailMfaChallenge } from '../services/emailMfa.ts';
 import { requireSameOriginJsonRequest } from '../middleware/authRequestSecurity.ts';
+import { claimTrialPromotionSlot } from '../services/trialPromotion.ts';
 import type { ShopCategory } from '../../src/utils/categoryDefaults.ts';
 import type { ShopRecord } from '../types.ts';
 
@@ -64,6 +65,10 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       return res.status(400).json({ error: 'Veuillez accepter les CGU et la politique de confidentialité pour créer une boutique.' });
     }
     const { name, whatsapp_number, pin_code, pin, category, city, welcome_message, theme_config, opening_hours } = req.body;
+    const requestedTier = req.body.subscription_tier ?? 'standard';
+    if (requestedTier !== 'standard' && requestedTier !== 'premium') {
+      return res.status(400).json({ error: 'Choisissez Standard ou Premium pour votre boutique.' });
+    }
     const ownerEmail = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     if (typeof name !== 'string' || typeof whatsapp_number !== 'string'
       || (city !== undefined && typeof city !== 'string')) {
@@ -159,8 +164,6 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       },
     };
     const now = new Date();
-    const trialStart = now.toISOString();
-    const trialEnd = addCalendarMonths(now, trialDurationMonths);
     const newShop: ShopRecord = {
       id: reservedShopId,
       name: safeName,
@@ -172,11 +175,11 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       welcome_message: normalizeWelcomeMessage(safeWelcomeMessage, shopCategory),
       is_open: true,
       is_active: true,
-      selected_subscription_tier: 'standard',
-      subscription_status: 'trialing',
-      trial_start: trialStart,
-      trial_end: trialEnd,
-      subscription_expires_at: trialEnd,
+      selected_subscription_tier: requestedTier,
+      subscription_status: 'not_started',
+      trial_start: null,
+      trial_end: null,
+      subscription_expires_at: null,
       last_notification_sent_at: null,
       email_subscription_reminders_enabled: false,
       email_subscription_reminders_consent_at: null,
@@ -202,6 +205,15 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       }
       if (await transaction.get('SELECT id FROM shops WHERE whatsapp_number = ?', [normalizedWhatsAppPhone])) return 'duplicate_phone';
       if (await transaction.get('SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?)', [ownerEmail])) return 'duplicate_email';
+
+      const trialGranted = await claimTrialPromotionSlot(transaction, databaseMode, requestedTier, newShop.id, now.toISOString());
+      if (trialGranted) {
+        const trialEnd = addCalendarMonths(now, trialDurationMonths);
+        newShop.subscription_status = 'trialing';
+        newShop.trial_start = now.toISOString();
+        newShop.trial_end = trialEnd;
+        newShop.subscription_expires_at = trialEnd;
+      }
 
       let slugSuffix = 0;
       while (await transaction.get('SELECT id FROM shops WHERE slug = ?', [newShop.slug])) {
@@ -234,7 +246,7 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
           [newShop.id, declaredSource, acquisitionCampaign, now.toISOString()],
         );
       }
-      return 'created';
+      return trialGranted ? 'created_with_trial' : 'created_without_trial';
     });
     if (registrationResult === 'duplicate_phone') {
       return res.status(409).json({ error: 'Ce numéro WhatsApp est déjà associé à une boutique. Utilisez son lien privé de gestion.' });
@@ -245,6 +257,7 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     if (registrationResult === 'invalid_ambassador_code') {
       return res.status(400).json({ error: 'Ce code ambassadeur est invalide ou désactivé.' });
     }
+    const trialGranted = registrationResult === 'created_with_trial';
 
     try {
       const mailResult = await sendMerchantWelcomeEmail({
@@ -277,6 +290,7 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
         challenge_id: challenge.challengeId,
         expires_at: new Date(challenge.expiresAt).toISOString(),
         shop: toSafeShop(newShop),
+        trial_granted: trialGranted,
       });
     }
 
@@ -285,7 +299,10 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       success: true,
       shop: toSafeShop(newShop),
       owner_access_token: ownerAccessToken,
-      message: `Boutique créée. Votre essai Standard gratuit de ${trialDurationMonths} mois commence maintenant. Vous pouvez choisir une formule payante et la régler avec GeniusPay dès maintenant ou quand vous le souhaitez. Les commandes clients vous sont transmises via un reçu WhatsApp à ouvrir manuellement.`,
+      trial_granted: trialGranted,
+      message: trialGranted
+        ? `Boutique créée. Votre essai ${requestedTier === 'premium' ? 'Premium' : 'Standard'} gratuit de ${trialDurationMonths} mois commence maintenant, avec jusqu’à ${TRIAL_CATALOG_LIMIT} produits.`
+        : 'Boutique créée sans essai gratuit : choisissez et réglez une formule avec GeniusPay pour activer votre abonnement. Les commandes clients vous sont transmises via un reçu WhatsApp à ouvrir manuellement.',
     });
   });
 

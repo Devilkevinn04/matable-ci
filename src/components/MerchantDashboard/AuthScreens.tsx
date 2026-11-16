@@ -5,7 +5,7 @@ import { ShopCategory } from '../../types';
 import { MerchantState } from './useMerchant';
 import { CATEGORY_DEFAULTS, SHOP_CATEGORIES } from '../../utils/categoryDefaults';
 import { ABIDJAN_COMMUNES } from '../../utils/abidjanCommunes';
-import { TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
+import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS, TRIAL_PROMOTION_SLOTS_PER_TIER } from '../../utils/subscriptionFeatures';
 import { AuthAudienceSwitcher, AuthExperienceLayout } from '../AuthExperienceLayout';
 import { MerchantRegistrationScreen } from './MerchantRegistrationScreen';
 import { Link } from 'react-router-dom';
@@ -380,7 +380,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                     <p className="mt-1 text-xs leading-5 text-[#6b5548]">Catalogue, horaires, zones de service et commandes WhatsApp sont inclus. Premium et Pro ajoutent personnalisation, réseaux sociaux, événements, visibilité et statistiques.</p>
                   </div>
                   <div className="rounded-xl bg-white p-3 text-xs leading-5 text-[#155c3d]">
-                    Après la création, votre essai Standard gratuit de {TRIAL_DURATION_MONTHS} mois commence immédiatement. À son échéance, choisissez une formule et réglez-la avec GeniusPay pour continuer.
+                    Les {TRIAL_PROMOTION_SLOTS_PER_TIER} premières boutiques Standard et les {TRIAL_PROMOTION_SLOTS_PER_TIER} premières Premium bénéficient d’un essai gratuit de {TRIAL_DURATION_MONTHS} mois, avec jusqu’à {TRIAL_CATALOG_LIMIT} produits. Après attribution des places, le paiement de la formule est requis pour activer la boutique.
                   </div>
                 </section>
 

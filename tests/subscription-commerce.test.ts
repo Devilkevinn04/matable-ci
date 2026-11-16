@@ -10,6 +10,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import Database from 'better-sqlite3';
+import { TRIAL_CATALOG_LIMIT, TRIAL_PROMOTION_SLOTS_PER_TIER } from '../src/utils/subscriptionFeatures.ts';
 
 const TEST_PORT = 43126;
 const TEST_DB_PATH = path.join(tmpdir(), `matable-commerce-${Date.now()}.db`);
@@ -106,6 +107,7 @@ test('Pro subscription exposes consented product stats and activates discounted 
       pin_code: '224466',
       category: 'beauty',
       city: 'Abidjan',
+      subscription_tier: 'premium',
       accepted_terms_privacy: true,
     }),
   });
@@ -129,7 +131,8 @@ test('Pro subscription exposes consented product stats and activates discounted 
   });
   const trialPayload = await trial.json();
   assert.equal(trial.status, 200, JSON.stringify(trialPayload));
-  assert.equal(trialPayload.shop.subscription.plan, 'standard');
+  assert.equal(createdPayload.trial_granted, true);
+  assert.equal(trialPayload.shop.subscription.plan, 'premium');
   assert.ok(trialPayload.shop.subscription.trialDaysRemaining >= 59);
   assert.ok(trialPayload.shop.subscription.trialDaysRemaining <= 62);
   const earlyPaymentResponse = await fetch(`${BASE_URL}/api/shops/${shopId}/subscription-payments`, {
@@ -173,7 +176,7 @@ test('Pro subscription exposes consented product stats and activates discounted 
       price: 1500,
       stock: 5,
       image_url: 'https://example.com/product-main.jpg',
-      gallery_images: ['https://example.com/product-extra-1.jpg', 'https://example.com/product-extra-2.jpg'],
+      gallery_images: Array.from({ length: 5 }, (_, index) => `https://example.com/product-extra-${index + 1}.jpg`),
     }),
   });
   assert.equal(tooManyTrialPhotos.status, 409);
@@ -190,7 +193,7 @@ test('Pro subscription exposes consented product stats and activates discounted 
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
     body: JSON.stringify({
       image_url: 'https://example.com/product-main.jpg',
-      gallery_images: ['https://example.com/product-extra-1.jpg', 'https://example.com/product-extra-2.jpg'],
+      gallery_images: Array.from({ length: 5 }, (_, index) => `https://example.com/product-extra-${index + 1}.jpg`),
     }),
   });
   assert.equal(tooManyPhotosOnUpdate.status, 409);
@@ -437,6 +440,11 @@ test('ambassador commissions follow the first confirmed subscription and refund'
   const createdAmbassador = await adminRequest('', 'POST', { name: 'Partenaire test', email: 'partner@example.com' });
   assert.equal(createdAmbassador.status, 201);
   const ambassador = await createdAmbassador.json();
+  const defaultAmbassador = await adminRequest('', 'GET');
+  const defaultAmbassadorState = await defaultAmbassador.json();
+  assert.equal(Number(defaultAmbassadorState.ambassadors.find((entry: { id: string }) => entry.id === ambassador.id).commission_rate), 20);
+  assert.equal((await adminRequest(`/${ambassador.id}`, 'PATCH', { commission_rate: 51 })).status, 400);
+  assert.equal((await adminRequest(`/${ambassador.id}`, 'PATCH', { commission_rate: 25 })).status, 200);
   const secondAmbassador = await (await adminRequest('', 'POST', { name: 'Autre partenaire' })).json();
   const click = await fetch(`${BASE_URL}/api/ambassador-clicks`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: ambassador.code }),
@@ -508,7 +516,7 @@ test('ambassador commissions follow the first confirmed subscription and refund'
   assert.equal((await signedWebhook(success)).status, 200);
   assert.equal((await signedWebhook(success)).status, 200);
   state = await (await adminRequest('', 'GET')).json();
-  assert.equal(state.referrals[0].amount, 1600);
+  assert.equal(state.referrals[0].amount, 2000);
   assert.equal(state.referrals[0].status, 'pending');
   assert.equal((await adminRequest(`/commissions/${shop.shop.id}/reject`, 'POST', {})).status, 400);
   assert.equal((await adminRequest(`/commissions/${shop.shop.id}/approve`, 'POST', { reason: 'Vérification avant paiement' })).status, 409);
@@ -1088,4 +1096,119 @@ test('ambassador access uses one-time invitations and isolates each dashboard to
   })).status, 400);
   assert.equal((await adminRequest(`/${ambassador.id}`, 'PATCH', { active: true })).status, 200);
   assert.equal((await fetch(`${BASE_URL}/api/ambassador-auth/session`, { headers: { Cookie: profileCookie } }).then((response) => response.json())).authenticated, false);
+});
+
+test('trial promotion caps each formula at 75 and requires payment after its slots are used', async () => {
+  const testDb = new Database(TEST_DB_PATH);
+  const seedClaim = testDb.prepare(
+    'INSERT INTO trial_promotion_claims (shop_id, tier, claimed_at) VALUES (?, ?, ?)',
+  );
+  try {
+    for (const tier of ['standard', 'premium'] as const) {
+      const existingCount = testDb.prepare(
+        'SELECT COUNT(*) AS count FROM trial_promotion_claims WHERE tier = ?',
+      ).get(tier) as { count: number };
+      const existing = Number(existingCount.count || 0);
+      for (let index = 1; index < TRIAL_PROMOTION_SLOTS_PER_TIER - existing; index += 1) {
+        const seedId = (tier === 'standard' ? -1 : -1000) - index;
+        seedClaim.run(seedId, tier, new Date().toISOString());
+      }
+    }
+  } finally {
+    testDb.close();
+  }
+
+  let registrationNumber = 0;
+  const register = async (suffix: string, tier: 'standard' | 'premium' = 'standard') => {
+    registrationNumber += 1;
+    const response = await fetch(`${BASE_URL}/api/shops`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `Boutique essai ${suffix}`,
+        whatsapp_number: `+22507${String(Date.now()).slice(-6)}${String(registrationNumber).padStart(2, '0')}`,
+        email: `essai-${suffix}-${Date.now()}@example.com`,
+        pin_code: '224466',
+        category: 'beauty',
+        city: 'Abidjan',
+        subscription_tier: tier,
+        accepted_terms_privacy: true,
+      }),
+    });
+    return { response, payload: await response.json() };
+  };
+
+  const finalTrial = await register('75');
+  assert.equal(finalTrial.response.status, 200, JSON.stringify(finalTrial.payload));
+  assert.equal(finalTrial.payload.trial_granted, true);
+  assert.equal(finalTrial.payload.shop.subscription.status, 'trialing');
+
+  const premiumTrial = await register('premium-75', 'premium');
+  assert.equal(premiumTrial.response.status, 200, JSON.stringify(premiumTrial.payload));
+  assert.equal(premiumTrial.payload.trial_granted, true);
+  assert.equal(premiumTrial.payload.shop.subscription.plan, 'premium');
+
+  const finalTrialLogin = await fetch(`${BASE_URL}/api/auth/merchant-access-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: finalTrial.payload.owner_access_token }),
+  });
+  assert.equal(finalTrialLogin.status, 200);
+  const finalTrialCookie = finalTrialLogin.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(finalTrialCookie);
+  for (let index = 1; index <= TRIAL_CATALOG_LIMIT; index += 1) {
+    const product = await fetch(`${BASE_URL}/api/shops/${finalTrial.payload.shop.id}/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: finalTrialCookie },
+      body: JSON.stringify({ title: `Produit essai ${index}`, description: 'Produit de vérification de la limite.', price: 1000, stock: 1 }),
+    });
+    assert.equal(product.status, 200, await product.text());
+  }
+  const eleventhProduct = await fetch(`${BASE_URL}/api/shops/${finalTrial.payload.shop.id}/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: finalTrialCookie },
+    body: JSON.stringify({ title: 'Sixième produit', description: 'Produit au-delà de la limite.', price: 1000, stock: 1 }),
+  });
+  assert.equal(eleventhProduct.status, 409);
+
+  const paidOnly = await register('76');
+  assert.equal(paidOnly.response.status, 200, JSON.stringify(paidOnly.payload));
+  assert.equal(paidOnly.payload.trial_granted, false);
+  assert.equal(paidOnly.payload.shop.subscription.status, 'not_started');
+  assert.equal(paidOnly.payload.shop.subscription.trialEnd, null);
+
+  const login = await fetch(`${BASE_URL}/api/auth/merchant-access-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: paidOnly.payload.owner_access_token }),
+  });
+  assert.equal(login.status, 200);
+  const merchantCookie = login.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(merchantCookie);
+
+  const bypassTrial = await fetch(`${BASE_URL}/api/shops/${paidOnly.payload.shop.id}/start-trial`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier: 'standard' }),
+  });
+  assert.equal(bypassTrial.status, 409);
+
+  const productBeforePayment = await fetch(`${BASE_URL}/api/shops/${paidOnly.payload.shop.id}/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ title: 'Produit bloqué', description: 'Activation requise.', price: 1000, stock: 1 }),
+  });
+  assert.notEqual(productBeforePayment.status, 200);
+
+  const payment = await fetch(`${BASE_URL}/api/shops/${paidOnly.payload.shop.id}/subscription-payments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ tier: 'standard', term: 'monthly' }),
+  });
+  assert.equal(payment.status, 201, await payment.text());
+
+  const premiumPaidOnly = await register('premium-76', 'premium');
+  assert.equal(premiumPaidOnly.response.status, 200, JSON.stringify(premiumPaidOnly.payload));
+  assert.equal(premiumPaidOnly.payload.trial_granted, false);
+  assert.equal(premiumPaidOnly.payload.shop.subscription.status, 'not_started');
 });

@@ -90,7 +90,19 @@ test('les raisons stockées en base sont revalidées avant d’être renvoyées'
 });
 
 function buildRouterOptions(overrides: {
-  latestSession?: { status: string; created_at: string; last_webhook_at: string | null };
+  latestSession?: {
+    status: string;
+    created_at: string;
+    last_webhook_at: string | null;
+    session_id?: string;
+    session_url?: string | null;
+    decline_reasons?: string | null;
+  };
+  shop?: {
+    merchant_verification_status?: string;
+    identity_verification_status?: string;
+    identity_verification_method?: string | null;
+  };
   finishedCount?: number;
   onProviderCall?: () => void;
 } = {}): RouterOptions {
@@ -98,7 +110,13 @@ function buildRouterOptions(overrides: {
     dbGet: (async (sql: string) => {
       if (sql.includes('COUNT(*)')) return { count: overrides.finishedCount ?? 0 };
       if (sql.includes('didit_verification_sessions')) return overrides.latestSession;
-      return { id: 41, merchant_verification_status: 'pending' };
+      return {
+        id: 41,
+        merchant_verification_status: 'pending',
+        identity_verification_status: 'pending',
+        identity_verification_method: null,
+        ...overrides.shop,
+      };
     }) as RouterOptions['dbGet'],
     dbAll: async () => [],
     dbRun: async () => ({ changes: 1 }),
@@ -116,6 +134,51 @@ function buildRouterOptions(overrides: {
     requireMerchantIdentityOwnShop: (_req, _res, next) => next(),
   };
 }
+
+test('une décision manuelle reste prioritaire sur une ancienne session Didit', async () => {
+  const sessionId = randomUUID();
+  await withServer(buildRouterOptions({
+    latestSession: {
+      session_id: sessionId,
+      status: 'Not Started',
+      created_at: new Date().toISOString(),
+      last_webhook_at: null,
+      session_url: `https://verify.didit.me/session/${sessionId}`,
+      decline_reasons: null,
+    },
+    shop: {
+      identity_verification_status: 'approved',
+      identity_verification_method: 'manual',
+    },
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/shops/41/identity-verification`);
+    const payload = await response.json() as {
+      status: string;
+      identity_method: string;
+      session_url: string | null;
+      resume_available: boolean;
+      restart_available: boolean;
+    };
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.status, 'verified');
+    assert.equal(payload.identity_method, 'manual');
+    assert.equal(payload.session_url, null);
+    assert.equal(payload.resume_available, false);
+    assert.equal(payload.restart_available, false);
+  });
+});
+
+test('la route de vérification manuelle est enregistrée dès la création du routeur', async () => {
+  await withServer(buildRouterOptions(), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/shops/41/manual-verification`);
+    const payload = await response.json() as { documents: unknown[]; consent_at: string | null };
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.consent_at, null);
+    assert.deepEqual(payload.documents, []);
+  });
+});
 
 async function withServer(options: RouterOptions, run: (baseUrl: string) => Promise<void>) {
   const app = express();
