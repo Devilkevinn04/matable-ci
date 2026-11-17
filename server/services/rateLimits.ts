@@ -16,8 +16,11 @@ function hashKey(scope: string, key: string) {
   return createHash('sha256').update(`${scope}:${key}`).digest('hex');
 }
 
-async function incrementCounter(scope: string, key: string, windowMs: number, now = Date.now()) {
+export async function purgeExpiredRateLimitEntries(now = Date.now()) {
   await dbRun('DELETE FROM request_rate_limits WHERE reset_at <= ?', [now]);
+}
+
+async function incrementCounter(scope: string, key: string, windowMs: number, now = Date.now()) {
   const row = await dbGet<RateLimitRow>(`INSERT INTO request_rate_limits (key_hash, request_count, reset_at)
     VALUES (?, 1, ?)
     ON CONFLICT(key_hash) DO UPDATE SET

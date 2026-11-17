@@ -424,6 +424,13 @@ export function createAuthSessionHelpers({
 
   async function cleanupExpiredSessions() {
     const now = Date.now();
+    for (const [token, session] of customerSessions) {
+      if (session.expiresAt <= now) {
+        customerSessions.delete(token);
+        await deleteCustomerSessionRecord(token);
+      }
+    }
+    await dbRun('DELETE FROM user_sessions WHERE expires_at <= ?', [now]);
     for (const [token, session] of merchantSessions) {
       if (session.expiresAt <= now) {
         merchantSessions.delete(token);

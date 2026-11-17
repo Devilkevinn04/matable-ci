@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import express from 'express';
+import { dbGet, dbRun } from '../db.ts';
 import {
   clearLoginAttempts,
   createPublicRateLimitMiddleware,
   getCustomerLoginLockSeconds,
   isLoginRateLimited,
+  purgeExpiredRateLimitEntries,
   recordCustomerLoginFailure,
 } from '../server/services/rateLimits.ts';
 
@@ -32,6 +34,26 @@ test('customer login failures persist the lock across service calls', async () =
   assert.equal(await recordCustomerLoginFailure(key), 6);
   await clearLoginAttempts(key, 'customer-login');
   assert.equal(await getCustomerLoginLockSeconds(key), 0);
+});
+
+test('expired rate-limit buckets are removed by the periodic purge', async () => {
+  const activeKey = `periodic-rate-limit:${randomUUID()}`;
+  const expiredKey = `expired-rate-limit:${randomUUID()}`;
+  const activeHash = createHash('sha256').update(`public-request:${activeKey}`).digest('hex');
+  const expiredHash = createHash('sha256').update(`public-request:${expiredKey}`).digest('hex');
+  const now = Date.now();
+
+  await dbRun(
+    'INSERT INTO request_rate_limits (key_hash, request_count, reset_at) VALUES (?, ?, ?), (?, ?, ?)',
+    [activeHash, 2, now + 60_000, expiredHash, 3, now - 1],
+  );
+
+  await purgeExpiredRateLimitEntries(now);
+
+  assert.ok(await dbGet('SELECT key_hash FROM request_rate_limits WHERE key_hash = ?', [activeHash]));
+  assert.equal(await dbGet('SELECT key_hash FROM request_rate_limits WHERE key_hash = ?', [expiredHash]), undefined);
+
+  await dbRun('DELETE FROM request_rate_limits WHERE key_hash IN (?, ?)', [activeHash, expiredHash]);
 });
 
 test('public request middleware returns 429 after the shared limit is exceeded', async () => {

@@ -26,7 +26,7 @@ import { createDeliveryRouter } from './server/routes/delivery.ts';
 import { expireStaleRequestedCourses, parseOfferTtlMinutes } from './server/services/deliveryLifecycle.ts';
 import { expireStalePendingOrders, remindPendingOrdersWithoutResponse } from './server/services/orderLifecycle.ts';
 import { createAdvertisingRouters } from './server/routes/advertising.ts';
-import { createPublicRateLimitMiddleware } from './server/services/rateLimits.ts';
+import { createPublicRateLimitMiddleware, purgeExpiredRateLimitEntries } from './server/services/rateLimits.ts';
 import { buildSessionFingerprint, createAuthSessionHelpers, isRequestFingerprintMatch } from './server/services/authSessions.ts';
 import { createSeoHtmlHelpers } from './server/services/seoHtml.ts';
 import { getWhatsAppSubscriptionReminderConfig, sendWhatsAppSubscriptionReminder } from './server/services/whatsappNotifications.ts';
@@ -867,6 +867,12 @@ setInterval(() => {
       await cleanupExpiredSessions();
     } catch (error) {
       console.error('Unable to clean expired sessions.', error);
+    }
+
+    try {
+      await purgeExpiredRateLimitEntries();
+    } catch (error) {
+      console.error('Unable to clean expired rate-limit buckets.', error);
     }
 
     try {
