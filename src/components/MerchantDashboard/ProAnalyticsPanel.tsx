@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BarChart3, Eye, LockKeyhole, Megaphone, MousePointer2, Package, QrCode, RefreshCw, Route, ShoppingBag, Users, Wallet } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Shop } from '../../types';
+import { formatFCFA } from '../../utils/format';
 import { getSubscriptionAnalyticsDayLimit, isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
 import { AnalyticsDailyBars } from '../AnalyticsDailyBars';
 
@@ -93,11 +94,10 @@ function campaignLabel(campaign: string) {
 }
 
 const numberFormat = new Intl.NumberFormat('fr-FR');
-const currencyFormat = new Intl.NumberFormat('fr-FR');
 const shortDateFormat = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
 
 function formatCurrency(value: number) {
-  return `${currencyFormat.format(value)} F`;
+  return formatFCFA(value);
 }
 
 function MetricCard({

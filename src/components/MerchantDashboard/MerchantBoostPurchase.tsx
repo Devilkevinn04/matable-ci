@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { LoaderCircle, Sparkles } from 'lucide-react';
 import type { Shop } from '../../types';
+import { formatFCFA } from '../../utils/format';
 import {
   BOOST_PLACEMENTS,
   BOOST_DURATIONS_DAYS,
@@ -112,7 +113,7 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
               const price = getBoostPrice(days, discountPercent) ?? BOOST_PRICES[days];
               return (
                 <button key={days} type="button" aria-pressed={duration === days} onClick={() => setDuration(days)} className={`min-h-11 rounded-lg border px-3 py-2 text-xs font-bold ${duration === days ? 'border-emerald-800 bg-emerald-50 text-emerald-950' : 'border-slate-300 bg-white text-slate-700'}`}>
-                  {days === 1 ? '24 h' : `${days} jours`} · {new Intl.NumberFormat('fr-FR').format(price)} F
+                  {days === 1 ? '24 h' : `${days} jours`} · {formatFCFA(price)}
                 </button>
               );
             })}
@@ -120,7 +121,7 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <button type="button" onClick={() => void startPayment()} disabled={isPaymentStarting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--mt-green-deep)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--mt-green-hover)] disabled:cursor-wait disabled:opacity-60">
               {isPaymentStarting && <LoaderCircle className="h-4 w-4 animate-spin" />}
-              {isPaymentStarting ? 'Préparation du paiement…' : `Payer ${new Intl.NumberFormat('fr-FR').format(amount)} FCFA avec GeniusPay`}
+              {isPaymentStarting ? 'Préparation du paiement…' : `Payer ${formatFCFA(amount)} avec GeniusPay`}
             </button>
             <span className="text-xs text-slate-500">Activation après confirmation du paiement sécurisé.</span>
           </div>
@@ -168,7 +169,7 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
                 : 'Haut de catégorie';
           return <li key={boost.id} className="flex flex-wrap justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700">
             <span className="font-bold">{active ? 'Boost actif' : endsAt.getTime() <= Date.now() ? 'Boost terminé' : 'Boost réservé'} · {placementLabel} · {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(startsAt)} – {new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(endsAt)}</span>
-            <span className="text-right">{new Intl.NumberFormat('fr-FR').format(boost.amount)} FCFA<br /><span className="text-slate-500">{boost.views} visite(s) consentie(s) · {boost.whatsapp_clicks} clic(s) WhatsApp</span></span>
+            <span className="text-right">{formatFCFA(boost.amount)}<br /><span className="text-slate-500">{boost.views} visite(s) consentie(s) · {boost.whatsapp_clicks} clic(s) WhatsApp</span></span>
           </li>;
         })}
       </ul>}

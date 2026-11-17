@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Store,
@@ -107,6 +107,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   const merchantState = useMerchantDashboard(onOpenStorefront, openRegistration);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
+  const settingsDrawerCloseButtonRef = useRef<HTMLButtonElement>(null);
   const [isHeaderCompact, setIsHeaderCompact] = useState(false);
   const [isSetupChecklistExpanded, setIsSetupChecklistExpanded] = useState(false);
   const [isIdentityGuideOpen, setIsIdentityGuideOpen] = useState(false);
@@ -141,6 +142,48 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       window.removeEventListener('resize', updateHeader);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isSettingsDrawerOpen) return;
+
+    const previousActiveElement = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    settingsDrawerCloseButtonRef.current?.focus();
+
+    const handleDrawerKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsSettingsDrawerOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const drawer = document.getElementById('merchant-menu-drawer');
+      if (!drawer) return;
+      const focusable = Array.from(drawer.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleDrawerKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleDrawerKeyDown);
+      if (previousActiveElement?.isConnected) previousActiveElement.focus();
+    };
+  }, [isSettingsDrawerOpen]);
 
   useEffect(() => {
     if (!reviewShop || !reviewShopIsPublished) {
@@ -1053,7 +1096,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       )}
 
       {/* Main Container */}
-      <div className="mx-auto max-w-7xl px-4 pb-24 pt-6 lg:ml-64 lg:max-w-none lg:pb-6">
+      <div className="mx-auto max-w-7xl px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6 lg:ml-64 lg:max-w-none lg:pb-6">
         <div className="grid gap-6 lg:grid-cols-1 lg:items-start">
           <nav aria-label="Navigation principale commerçant" className="merchant-sidebar hidden min-w-0 flex-col gap-1 overflow-y-auto p-4 lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:flex lg:w-64">
             <div className="mb-5 px-3 pt-3">
@@ -1297,10 +1340,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       {isSettingsDrawerOpen && (
         <div className="fixed inset-0 z-40 bg-[var(--mt-surface)] lg:hidden">
           <button type="button" aria-label="Fermer le menu" onClick={() => setIsSettingsDrawerOpen(false)} className="absolute inset-0 bg-[var(--mt-gray-900)]/55" />
-          <aside id="merchant-menu-drawer" aria-labelledby="merchant-menu-title" className="absolute inset-x-0 top-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] flex h-auto w-full flex-col overflow-y-auto bg-[var(--mt-surface)] p-4 sm:p-5">
+          <aside id="merchant-menu-drawer" role="dialog" aria-modal="true" aria-labelledby="merchant-menu-title" className="absolute inset-x-0 top-0 bottom-[calc(3.8125rem+env(safe-area-inset-bottom))] flex h-auto w-full flex-col overscroll-contain overflow-y-auto bg-[var(--mt-surface)] px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] sm:px-5 sm:pb-5">
             <header className="flex items-start justify-between gap-3 border-b border-[#ded8ce] pb-4">
               <div><p className="text-[10px] font-black uppercase text-[var(--mt-orange-deep)]">MaTable</p><h2 id="merchant-menu-title" className="mt-1 text-xl font-black text-[var(--mt-gray-900)]">Plus</h2></div>
-              <button type="button" onClick={() => setIsSettingsDrawerOpen(false)} aria-label="Fermer le menu" className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-300 bg-white text-slate-700"><X className="h-5 w-5" /></button>
+              <button ref={settingsDrawerCloseButtonRef} type="button" onClick={() => setIsSettingsDrawerOpen(false)} aria-label="Fermer le menu" className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-300 bg-white text-slate-700"><X className="h-5 w-5" /></button>
             </header>
             <nav className="mt-4 space-y-4" aria-label="Navigation et réglages commerçant">
               <section>
