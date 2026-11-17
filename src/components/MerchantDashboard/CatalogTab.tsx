@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Package, Plus, Edit3, Trash2, Clock, Search, Eye, EyeOff, Minus, Download, Upload, Check, CheckSquare, X, Ban, Tag, Tags as TagsIcon } from 'lucide-react';
+import { Package, Plus, Edit3, Trash2, Clock, Search, Eye, EyeOff, Minus, Upload, Check, CheckSquare, X, Ban, Tag, Tags as TagsIcon } from 'lucide-react';
 import { useToast } from '../Toast';
 import { MerchantState } from './useMerchant';
 import { CatalogCompactList } from './CatalogCompactList';
@@ -108,32 +108,6 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
     { id: 'promotions' as const, label: 'Avec promotion', count: promotionCount },
   ];
 
-  const downloadCatalogCsv = async () => {
-    setCsvBusy(true);
-    setCsvError('');
-    setCsvNotice('');
-    try {
-      const response = await fetch(`/api/shops/${currentShop.id}/products/export.csv`, {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      if (!response.ok) {
-        const data = await response.json() as { error?: string };
-        throw new Error(data.error || 'Impossible de télécharger le catalogue.');
-      }
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `catalogue-${currentShop.id}.csv`;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) {
-      setCsvError(error instanceof Error ? error.message : 'Impossible de télécharger le catalogue.');
-    } finally {
-      setCsvBusy(false);
-    }
-  };
-
   const previewCatalogImport = async (file?: File) => {
     if (!file) return;
     setCsvBusy(true);
@@ -230,14 +204,6 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
               </div>
 
               <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex">
-                <button
-                  type="button"
-                  onClick={() => void downloadCatalogCsv()}
-                  disabled={csvBusy}
-                  className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[#d9d5cd] bg-white px-3 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
-                >
-                  <Download className="h-4 w-4" /> Exporter CSV
-                </button>
                 <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[#d9d5cd] bg-white px-3 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50">
                   <Upload className="h-4 w-4" /> Importer CSV
                   <input
@@ -265,7 +231,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
             </div>
 
             {(csvPreview || csvError || csvNotice) && (
-              <section className="rounded-xl border border-[#d9d5cd] bg-white p-3" aria-label="Import et export CSV">
+              <section className="rounded-xl border border-[#d9d5cd] bg-white p-3" aria-label="Import CSV">
                 <p className="text-xs leading-5 text-slate-600">
                   ID MaTable renseigné : mise à jour de l’article. ID vide : création. Une cellule vide conserve la valeur actuelle.
                 </p>

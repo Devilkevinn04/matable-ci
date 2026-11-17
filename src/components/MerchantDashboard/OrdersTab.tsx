@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShoppingBag, Check, ExternalLink, Search, TrendingUp, DollarSign, MapPin, Download, Gift, CheckCircle2, Clock3, CookingPot, Package, Sparkles, X } from 'lucide-react';
+import { ShoppingBag, Check, ExternalLink, Search, TrendingUp, DollarSign, MapPin, Gift, CheckCircle2, Clock3, CookingPot, Package, Sparkles, X } from 'lucide-react';
 import type { MerchantOrderFilter, MerchantState } from './useMerchant';
 import { formatFCFA } from '../../utils/format';
 import { OrderContactReveal } from '../OrderContactReveal';
@@ -347,33 +347,6 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
     orders, orderSearch, setOrderSearch, orderPaymentFilter, setOrderPaymentFilter, orderStatusFilter, setOrderStatusFilter,
     handleUpdateOrderStatus, copyOwnerLink
   } = state;
-  const [csvExportBusy, setCsvExportBusy] = useState(false);
-  const [csvExportError, setCsvExportError] = useState('');
-  const downloadOrdersCsv = async () => {
-    if (!state.currentShop) return;
-    setCsvExportBusy(true);
-    setCsvExportError('');
-    try {
-      const response = await fetch(`/api/shops/${state.currentShop.id}/orders/export.csv`, {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      if (!response.ok) {
-        const data = await response.json() as { error?: string };
-        throw new Error(data.error || 'Impossible de télécharger les commandes.');
-      }
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `commandes-${state.currentShop.id}.csv`;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) {
-      setCsvExportError(error instanceof Error ? error.message : 'Impossible de télécharger les commandes.');
-    } finally {
-      setCsvExportBusy(false);
-    }
-  };
   const orderStatusOptions: { id: MerchantOrderFilter; label: string; count: number }[] = [
     { id: 'all', label: 'Toutes', count: orders.length },
     { id: 'actionable', label: 'À traiter', count: orders.filter(o => !['delivered', 'cancelled', 'rejected', 'expired'].includes(o.status || 'pending')).length },
@@ -397,17 +370,6 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                 <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-800">Espace de vente</p>
                 <h2 className="mt-1 text-xl font-black text-slate-900">Commandes</h2>
                 <p className="mt-1 text-xs leading-5 text-slate-500">Traitez les demandes clients et suivez leur progression.</p>
-              </div>
-              <div className="sm:text-right">
-                <button
-                  type="button"
-                  onClick={() => void downloadOrdersCsv()}
-                  disabled={csvExportBusy || !state.currentShop}
-                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-[#d9d5cd] bg-white px-3 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
-                >
-                  <Download className="h-4 w-4" /> {csvExportBusy ? 'Préparation…' : 'Exporter les commandes CSV'}
-                </button>
-                {csvExportError && <p role="alert" className="mt-1 text-xs font-semibold text-rose-700">{csvExportError}</p>}
               </div>
             </header>
 
