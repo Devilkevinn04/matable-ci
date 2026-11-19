@@ -650,7 +650,7 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
   adminRouter.get('/', async (_req, res) => {
     const now = new Date();
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-    const [rows, merchantUsage, courierUsage] = await Promise.all([
+    const [rows, merchantUsage] = await Promise.all([
       dbAll<Record<string, unknown>>(`SELECT
         s.id AS shop_id, s.name AS shop_name, s.slug AS shop_slug, s.merchant_verification_status AS status,
         v.session_id, v.status AS provider_status, v.created_at AS submitted_at, v.updated_at
@@ -667,15 +667,9 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
          WHERE created_at >= ? AND status IN (${finishedStatusPlaceholders})`,
         [monthStart, ...DIDIT_FINISHED_STATUSES],
       ),
-      dbGet<{ count: number | string }>(
-        `SELECT COUNT(*) AS count FROM delivery_driver_identity_sessions
-         WHERE created_at >= ? AND status IN (${finishedStatusPlaceholders})`,
-        [monthStart, ...DIDIT_FINISHED_STATUSES],
-      ),
     ]);
     const merchantFinished = Number(merchantUsage?.count || 0);
-    const courierFinished = Number(courierUsage?.count || 0);
-    const totalFinished = merchantFinished + courierFinished;
+    const totalFinished = merchantFinished;
     const threshold = 25;
     res.setHeader('Cache-Control', 'no-store');
     res.json({
@@ -683,7 +677,6 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
       usage: {
         month: monthStart.slice(0, 7),
         merchant_finished: merchantFinished,
-        courier_finished: courierFinished,
         total_finished: totalFinished,
         threshold,
         alert: totalFinished >= threshold,
@@ -713,13 +706,6 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
     }
 
     const receivedAt = new Date(timestamp * 1000).toISOString();
-    const possibleDriverSession = await dbGet<{ driver_id: number | string }>(
-      'SELECT driver_id FROM delivery_driver_identity_sessions WHERE session_id = ?',
-      [event.session_id],
-    );
-    const activeDeliveryZones = possibleDriverSession
-      ? await dbAll<{ id: number | string }>('SELECT id FROM delivery_zones WHERE is_active = 1 ORDER BY id')
-      : [];
     const webhookResult = await dbTransaction(async (transaction) => {
       const session = await transaction.get<{
         session_id: string;
@@ -730,71 +716,7 @@ export function createMerchantVerificationRouter(options: MerchantVerificationOp
         `SELECT session_id, shop_id, last_webhook_at, decline_reasons FROM didit_verification_sessions WHERE session_id = ?${process.env.NODE_ENV === 'production' ? ' FOR UPDATE' : ''}`,
         [event.session_id],
       );
-      if (!session) {
-        const driverSession = await transaction.get<{
-          session_id: string;
-          driver_id: number | string;
-          last_webhook_at: string | null;
-        }>(
-          `SELECT session_id, driver_id, last_webhook_at FROM delivery_driver_identity_sessions WHERE session_id = ?${process.env.NODE_ENV === 'production' ? ' FOR UPDATE' : ''}`,
-          [event.session_id],
-        );
-        if (!driverSession) return false;
-        if (process.env.NODE_ENV === 'production') {
-          await transaction.get('SELECT id FROM delivery_drivers WHERE id = ? FOR UPDATE', [driverSession.driver_id]);
-        }
-        const latestDriverSession = await transaction.get<{ session_id: string }>(
-          'SELECT session_id FROM delivery_driver_identity_sessions WHERE driver_id = ? ORDER BY created_at DESC LIMIT 1',
-          [driverSession.driver_id],
-        );
-        if (latestDriverSession?.session_id !== driverSession.session_id) return { kind: 'ignored' as const };
-        const inserted = await transaction.run(
-          'INSERT INTO didit_webhook_events (event_id, received_at) VALUES (?, ?) ON CONFLICT(event_id) DO NOTHING',
-          [event.event_id, new Date().toISOString()],
-        );
-        if (inserted.changes !== 1 || (driverSession.last_webhook_at && Date.parse(driverSession.last_webhook_at) > timestamp * 1000)) {
-          return { kind: 'ignored' as const };
-        }
-
-        const currentDriver = await transaction.get<{ status: string; identity_status: string }>(
-          'SELECT status, identity_status FROM delivery_drivers WHERE id = ?',
-          [driverSession.driver_id],
-        );
-        if (!currentDriver) return false;
-        const mappedStatus = mapDiditStatus(event.status);
-        const identityStatus = currentDriver.identity_status === 'verified' ? 'verified' : mappedStatus;
-        await transaction.run(
-          'UPDATE delivery_driver_identity_sessions SET status = ?, updated_at = ?, last_webhook_at = ? WHERE session_id = ?',
-          [event.status, receivedAt, receivedAt, driverSession.session_id],
-        );
-        await transaction.run(`UPDATE delivery_drivers SET identity_status = ?,
-          status = CASE WHEN status = 'suspended' THEN 'suspended' WHEN ? = 'verified' THEN 'active' ELSE 'pending' END,
-          updated_at = ? WHERE id = ?`, [identityStatus, identityStatus, receivedAt, driverSession.driver_id]);
-        if (identityStatus === 'verified') {
-          for (const zone of activeDeliveryZones) {
-            await transaction.run(`INSERT INTO delivery_driver_zones (driver_id, zone_id, is_active, assigned_at)
-              VALUES (?, ?, 0, ?) ON CONFLICT(driver_id, zone_id) DO NOTHING`,
-            [driverSession.driver_id, zone.id, receivedAt]);
-          }
-        }
-        if (currentDriver.identity_status !== identityStatus) {
-          await transaction.run(
-            'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
-            ['didit_webhook', 'delivery_driver_identity_status_updated', null, JSON.stringify({
-              driver_id: Number(driverSession.driver_id),
-              previous_status: currentDriver.identity_status,
-              status: identityStatus,
-              event_id: event.event_id,
-            }), receivedAt],
-          );
-        }
-        return {
-          kind: 'driver' as const,
-          driverId: Number(driverSession.driver_id),
-          previousStatus: currentDriver.identity_status,
-          nextStatus: identityStatus,
-        };
-      }
+      if (!session) return false;
       if (process.env.NODE_ENV === 'production') {
         await transaction.get('SELECT id FROM shops WHERE id = ? FOR UPDATE', [session.shop_id]);
       }

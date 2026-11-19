@@ -36,7 +36,6 @@ const MerchantPlansPage = React.lazy(() => import('./components/MerchantPlansPag
 const MerchantTrialOnboarding = React.lazy(() => import('./components/MerchantDashboard/MerchantTrialOnboarding').then((module) => ({ default: module.MerchantTrialOnboarding })));
 const MobileDashboardPreview = React.lazy(() => import('./components/MobileDashboardPreview'));
 const AdvertisingPreviewPage = React.lazy(() => import('./components/AdvertisingPreviewPage').then((module) => ({ default: module.AdvertisingPreviewPage })));
-const DeliveryCourierWorkspace = React.lazy(() => import('./components/DeliveryCourierWorkspace').then((module) => ({ default: module.DeliveryCourierWorkspace })));
 
 const legalPageMap: Record<string, LegalPageKey> = {
   'mentions-legales': 'mentions-legales',
@@ -72,7 +71,7 @@ const shopDirectoryMetadata = {
 };
 const howItWorksMetadata = {
   title: 'Comment ça marche ? | MaTable',
-  description: 'Le guide pour découvrir une boutique locale, consulter sa vitrine, commander directement auprès du commerçant et convenir du retrait ou de la livraison.',
+  description: 'Le guide pour découvrir une boutique locale, consulter sa vitrine, commander directement auprès du commerçant et convenir du retrait.',
 };
 const userGuideMetadata = {
   title: 'Guide personnel | MaTable',
@@ -96,7 +95,7 @@ const customerLoginMetadata = {
 };
 const customerRegisterMetadata = {
   title: 'Créer un compte client | MaTable',
-  description: 'Créez votre compte client MaTable pour commander auprès des boutiques locales et suivre vos livraisons.',
+  description: 'Créez votre compte client MaTable pour commander auprès des boutiques locales et suivre vos commandes.',
 };
 const customerAccountMetadata = {
   title: 'Mon compte client | MaTable',
@@ -204,6 +203,9 @@ function ProductModalDevPreview() {
   const [prodCategory, setProdCategory] = useState('Grillades');
   const [prodDescription, setProdDescription] = useState('Poulet mariné aux épices, braisé au feu de bois et servi avec son accompagnement.');
   const [prodPrice, setProdPrice] = useState<number | ''>(4500);
+  const [prodSalePrice, setProdSalePrice] = useState<number | ''>('');
+  const [prodSaleStartsAt, setProdSaleStartsAt] = useState('');
+  const [prodSaleEndsAt, setProdSaleEndsAt] = useState('');
   const [prodStock, setProdStock] = useState<number | ''>(12);
   const [prodPrepTime, setProdPrepTime] = useState<number | ''>(25);
   const [prodModifiers, setProdModifiers] = useState('Accompagnement : Attiéké, Alloco (+500 F), Frites');
@@ -214,6 +216,7 @@ function ProductModalDevPreview() {
 
   const previewState = {
     currentShop: { category: 'food' },
+    products: [],
     isProductModalOpen,
     setIsProductModalOpen,
     editingProduct: null,
@@ -225,6 +228,12 @@ function ProductModalDevPreview() {
     setProdDescription,
     prodPrice,
     setProdPrice,
+    prodSalePrice,
+    setProdSalePrice,
+    prodSaleStartsAt,
+    setProdSaleStartsAt,
+    prodSaleEndsAt,
+    setProdSaleEndsAt,
     prodStock,
     setProdStock,
     prodImage: '',
@@ -321,10 +330,7 @@ export default function App() {
   const isMerchantPlansPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/merchant-plans';
   const isMobileDashboardPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/mobile';
   const isAdvertisingPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/advertising';
-  const isDeliveryCourierPreview = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true && path === '/__preview/delivery-courier';
-  const isDeliveryPausedRoute = path === '/livreur';
-  const isDeliveryCourierWorkspace = isDeliveryCourierPreview;
-  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isAmbassadorRoute || isRecoveryPage || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierWorkspace || isDeliveryPausedRoute;
+  const hasStandaloneAccountFlow = customerView !== 'none' || currentRole === 'merchant' || isAmbassadorRoute || isRecoveryPage || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview || isAdvertisingPreview;
   const isAnimatedPublicRoute = currentRole === 'storefront'
     && !isAmbassadorRoute
     && customerView === 'none'
@@ -333,9 +339,7 @@ export default function App() {
     && !isMerchantPlansPreview
     && !isMobileDashboardPreview
     && !isAdvertisingPreview
-    && !isDeliveryCourierWorkspace
-    && !isDeliveryPausedRoute;
-  const isCustomerStorefront = currentRole === 'storefront' && !isAmbassadorRoute && path !== '/' && !isShopDirectoryRoute && !isPromotionsPage && !isHowItWorksRoute && !isUserGuideRoute && !seoArticle && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && !isDeliveryCourierWorkspace && !isDeliveryPausedRoute && customerView === 'none';
+  const isCustomerStorefront = currentRole === 'storefront' && !isAmbassadorRoute && path !== '/' && !isShopDirectoryRoute && !isPromotionsPage && !isHowItWorksRoute && !isUserGuideRoute && !seoArticle && !isMerchantPlansPage && !isDiscoveryRoute && !legalPage && !isFaqPage && customerView === 'none';
   const isUnknownStorefront = isCustomerStorefront && !isLoadingShops && !availableShops.some((shop) => shop.slug === normalizedPath);
   const isSingleSegmentStorefrontRoute = isCustomerStorefront
     && path.split('/').filter(Boolean).length === 1
@@ -412,15 +416,14 @@ export default function App() {
 
   useEffect(() => {
     const trackCurrentPage = () => {
-      if (isUnknownStorefront || isAmbassadorRoute || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierPreview) return;
+      if (isUnknownStorefront || isAmbassadorRoute || isMobileDashboardPreview || isAdvertisingPreview) return;
       // La vitrine est suivie par CustomerStorefront, qui connaît l'identifiant de la boutique.
       if (isCustomerStorefront && !isUnknownStorefront) return;
       const audience = currentRole === 'admin'
         ? 'admin'
         : currentRole === 'merchant'
           ? 'merchant'
-          : isDeliveryCourierWorkspace
-            ? 'courier'
+
             : path === '/compte' || path === '/connexion' || path === '/inscription' || isRecoveryPage
               ? 'customer'
               : 'public';
@@ -430,7 +433,7 @@ export default function App() {
     trackCurrentPage();
     window.addEventListener('matable-cookie-preferences-updated', trackCurrentPage);
     return () => window.removeEventListener('matable-cookie-preferences-updated', trackCurrentPage);
-  }, [path, currentRole, isRecoveryPage, isAmbassadorRoute, isUnknownStorefront, isCustomerStorefront, isMobileDashboardPreview, isAdvertisingPreview, isDeliveryCourierPreview, isDeliveryCourierWorkspace]);
+  }, [path, currentRole, isRecoveryPage, isAmbassadorRoute, isUnknownStorefront, isCustomerStorefront, isMobileDashboardPreview, isAdvertisingPreview]);
 
   useEffect(() => {
     if (!shouldLoadShopCatalog) {
@@ -478,7 +481,7 @@ export default function App() {
   useEffect(() => {
     const isPrivateRoute = path === '/app' || path.startsWith('/app/') || path === '/admin' || path.startsWith('/admin/') || isAmbassadorRoute
       || path === '/compte' || path === '/connexion' || path === '/inscription' || isRecoveryPage || isCustomerPasswordResetPage || isMerchantPinResetPage;
-    const isInvalidNestedRoute = (!legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && !isMerchantPlansPreview && !isMobileDashboardPreview && !isAdvertisingPreview && !isDeliveryCourierWorkspace && !isShopDirectoryRoute && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !discoveryPage && !seoArticle && path.split('/').filter(Boolean).length > 1)
+    const isInvalidNestedRoute = (!legalPage && !isFaqPage && !isRecoveryPage && !isPrivateRoute && !isProductModalPreview && !isMerchantPlansPreview && !isMobileDashboardPreview && !isAdvertisingPreview && !isShopDirectoryRoute && !isHowItWorksRoute && !isUserGuideRoute && !isMerchantPlansPage && !discoveryPage && !seoArticle && path.split('/').filter(Boolean).length > 1)
       || isUnknownStorefront;
     const metadata = isProductModalPreview
       ? { title: 'Aperçu du formulaire article | MaTable', description: 'Prévisualisation locale du formulaire de création d’article.' }
@@ -486,10 +489,6 @@ export default function App() {
        ? { title: 'Aperçus mobiles | MaTable', description: 'Aperçus de test des espaces commerçant et administration MaTable.' }
       : isAdvertisingPreview
        ? { title: 'Aperçu publicité | MaTable', description: 'Aperçu local des campagnes publicitaires, des formulaires commerçants et de la modération MaTable.' }
-      : isDeliveryCourierPreview
-       ? { title: 'Aperçu espace livreur | MaTable', description: 'Prévisualisation locale du parcours livreur MaTable, avec forfait sandbox et courses de test.' }
-      : isDeliveryPausedRoute
-       ? { title: 'Livraison MaTable en veille', description: 'Les opérations de livraison MaTable sont actuellement en veille.' }
       : isMerchantPlansPreview
        ? { title: 'Aperçu des formules commerçants | MaTable', description: 'Comparaison des formules Standard, Premium et Pro pour les commerçants MaTable.' }
       : legalPage
@@ -539,7 +538,7 @@ export default function App() {
     const canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (canonical) canonical.href = canonicalUrl;
     const robots = document.head.querySelector<HTMLMetaElement>('meta[name="robots"]');
-    if (robots) robots.content = isPrivateRoute || isInvalidNestedRoute || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview || isAdvertisingPreview || isDeliveryCourierWorkspace ? 'noindex, nofollow' : 'index, follow, max-image-preview:large';
+    if (robots) robots.content = isPrivateRoute || isInvalidNestedRoute || isProductModalPreview || isMerchantPlansPreview || isMobileDashboardPreview || isAdvertisingPreview ? 'noindex, nofollow' : 'index, follow, max-image-preview:large';
     const openGraphTitle = document.head.querySelector<HTMLMetaElement>('meta[property="og:title"]');
     if (openGraphTitle) openGraphTitle.content = metadata.title;
     const openGraphDescription = document.head.querySelector<HTMLMetaElement>('meta[property="og:description"]');
@@ -631,24 +630,13 @@ export default function App() {
                   onLogoutCustomer={logoutCustomer}
                 />}
 
-                {!isMobileDashboardPreview && !isAdvertisingPreview && !isDeliveryCourierWorkspace && <CookieBanner />}
+                {!isMobileDashboardPreview && !isAdvertisingPreview && <CookieBanner />}
 
                 {/* min-h keeps the footer below the fold while lazy pages and their data load (it was the main layout shift). */}
                 <div id="main-content" className="flex-1 app-shell min-h-[100svh]" tabIndex={-1}>
                     <React.Suspense key={isAnimatedPublicRoute ? path : 'persistent-app'} fallback={isShopDirectoryRoute || isDiscoveryRoute ? <DirectorySkeleton /> : path === '/' ? <HomeSkeleton /> : path.startsWith('/boutiques/') ? <StorefrontSkeleton /> : <PageSkeleton />}>
                       <Routes>
                       <Route path="/__preview/article-form" element={isProductModalPreview ? <ProductModalDevPreview /> : <NotFoundPage />} />
-                      <Route path="/__preview/delivery-courier" element={isDeliveryCourierPreview ? <DeliveryCourierWorkspace /> : <NotFoundPage />} />
-                      <Route path="/livreur" element={
-                        <main className="mx-auto w-full max-w-3xl px-4 py-12 sm:py-20">
-                          <section role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-950 sm:p-8">
-                            <p className="text-xs font-black uppercase tracking-[0.12em] text-amber-800">Service en veille</p>
-                            <h1 className="mt-2 text-2xl font-black">Livraison MaTable</h1>
-                            <p className="mt-3 text-sm leading-6">Les opérations livreur et le suivi des courses MaTable sont temporairement suspendus. Les données historiques sont conservées. Pour le retrait ou une livraison organisée directement par une boutique, contactez son équipe.</p>
-                            <a href="/" className="mt-5 inline-flex min-h-10 items-center rounded-xl bg-amber-900 px-4 py-2 text-sm font-bold text-white hover:bg-amber-800">Retour à l’accueil</a>
-                          </section>
-                        </main>
-                      } />
                       <Route path="/__preview/merchant-plans" element={isMerchantPlansPreview
                         ? <React.Suspense fallback={<PageSkeleton />}><MerchantTrialOnboarding shop={merchantPlanPreviewShop} isStarting={false} mode="plans" previewOnly onBack={() => navigate('/boutiques')} /></React.Suspense>
                         : <NotFoundPage />

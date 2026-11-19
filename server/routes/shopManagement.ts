@@ -9,6 +9,7 @@ import { MediaStorageUnavailableError, MediaUploadValidationError, createMediaUp
 import { getVapidConfiguration, isAllowedPushEndpoint } from '../services/pushNotifications.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import { getDefaultSubscriptionPrices, parseSubscriptionPrices } from '../services/subscriptionPricing.ts';
+import { sanitizeThemeConfigForResponse } from '../services/shopThemeConfig.ts';
 import { claimTrialPromotionSlot } from '../services/trialPromotion.ts';
 import { startEmailMfaChallenge, verifyEmailMfaChallenge } from '../services/emailMfa.ts';
 import type { ShopRecord } from '../types.ts';
@@ -776,6 +777,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
     const { theme_config } = req.body;
     if (theme_config) {
       const requestedThemeConfig = { ...theme_config };
+      delete requestedThemeConfig.delivery_zones;
       const themeConfig = shop.theme_config as unknown as Record<string, unknown>;
       if (Object.prototype.hasOwnProperty.call(requestedThemeConfig, 'event_type')
         && !isValidEventType(requestedThemeConfig.event_type)) {
@@ -810,7 +812,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
       if (requestedThemeConfig.primary_color) shop.theme_color = requestedThemeConfig.primary_color;
     }
     await persistShop(shop);
-    res.json({ success: true, shop: toSafeShop(shop), theme_config: shop.theme_config });
+    res.json({ success: true, shop: toSafeShop(shop), theme_config: sanitizeThemeConfigForResponse(shop.theme_config) });
   });
 
   router.put('/:id', requireMerchantOwnShop, async (req, res) => {
@@ -869,6 +871,7 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
 
     if (theme_config) {
       const requestedThemeConfig = { ...req.body.theme_config };
+      delete requestedThemeConfig.delivery_zones;
       const requestedBrandDirection = ['luxe', 'moderne', 'authentique'].includes(requestedThemeConfig.brand_direction)
         ? requestedThemeConfig.brand_direction as ShopRecord['theme_config']['brand_direction']
         : shop.theme_config.brand_direction;
@@ -889,14 +892,6 @@ export function createShopManagementRouter(options: ShopManagementOptions) {
           website: typeof requestedThemeConfig.social_links?.website === 'string' ? sanitizeTextField(String(requestedThemeConfig.social_links.website), 300) : (shop.theme_config.social_links?.website || ''),
           whatsapp: typeof requestedThemeConfig.social_links?.whatsapp === 'string' ? sanitizeTextField(String(requestedThemeConfig.social_links.whatsapp), 300) : (shop.theme_config.social_links?.whatsapp || ''),
         },
-        delivery_zones: Array.isArray(requestedThemeConfig.delivery_zones)
-          ? requestedThemeConfig.delivery_zones.slice(0, 8).map((zone: any) => ({
-              label: sanitizeTextField(String(zone?.label || 'Zone locale'), 80),
-              mode: zone?.mode === 'sur_place' || zone?.mode === 'retirer' ? zone.mode : 'livraison',
-              fee: Number(zone?.fee || 0),
-              description: zone?.description ? sanitizeTextField(String(zone.description), 120) : '',
-            }))
-          : (shop.theme_config.delivery_zones || []),
       };
     }
     if (opening_hours?.enabled) {

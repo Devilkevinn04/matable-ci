@@ -93,7 +93,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             </section>
             <section>
               <h2>Responsabilités</h2>
-              <p>Chaque commerçant reste responsable du contenu de sa vitrine, des prix, stocks, disponibilités, délais, produits et conditions commerciales. MaTable facilite la mise en relation et la transmission des demandes, sans se substituer au vendeur pour la vente, la livraison, le service après-vente ou le paiement.</p>
+              <p>Chaque commerçant reste responsable du contenu de sa vitrine, des prix, stocks, disponibilités, délais, produits et conditions commerciales. MaTable facilite la mise en relation et la transmission des demandes, sans se substituer au vendeur pour la vente, la remise des commandes, le service après-vente ou le paiement.</p>
             </section>
             <section>
               <h2>Signalement</h2>
@@ -111,7 +111,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             <section>
               <h2>Données traitées</h2>
               <p>Pour créer un compte client, nous traitons le prénom, le nom, le téléphone, l’adresse e-mail et le mot de passe sous forme hachée. Si vous choisissez Google ou Apple, nous recevons l’identifiant propre à ce fournisseur et les informations de profil qu’il transmet, notamment l’e-mail vérifié et, lorsqu’il est disponible, le nom. Le mot de passe de votre compte Google ou Apple ne nous est jamais transmis. Les informations du compte client sont distinctes de l’abonnement d’une boutique. Lorsque vous êtes connecté, vos favoris de boutiques et de produits ainsi que vos mentions « J’aime » sur les produits sont associés à votre compte. Les favoris restent privés; seul le nombre total de mentions « J’aime » par produit est affiché publiquement.</p>
-              <p>Pour une commande, nous traitons le nom, le téléphone, le lieu et les indications de livraison, le créneau éventuel, les articles, quantités, options, montant recalculé, statut, date et l’identifiant du compte client associé. Le moyen de paiement enregistré est une préférence (espèces, mobile money, Wave ou à convenir), et non une donnée de carte ou une preuve de paiement. Un client connecté peut recevoir le récapitulatif à l’adresse de son compte; un client invité peut saisir une adresse facultative au checkout. Cette adresse invitée est transmise à Resend pour l’envoi du récapitulatif et n’est pas enregistrée dans la commande.</p>
+              <p>Pour une commande actuelle, nous traitons le nom, le téléphone, les articles, quantités, options, montant recalculé, statut, date et l’identifiant du compte client associé. Le moyen de paiement enregistré est une préférence (espèces, mobile money, Wave ou à convenir), et non une donnée de carte ou une preuve de paiement. Un client connecté peut recevoir le récapitulatif à l’adresse de son compte; un client invité peut saisir une adresse facultative au checkout. Cette adresse invitée est transmise à Resend pour l’envoi du récapitulatif et n’est pas enregistrée dans la commande. Certaines commandes historiques peuvent encore contenir les indications de remise fournies avant le retrait de l’ancienne fonctionnalité; elles ne sont pas demandées dans le parcours actuel.</p>
               <p>Pour gérer le programme ambassadeur, MaTable traite le nom, l’adresse e-mail, le code partenaire, le mot de passe sous forme hachée et les sessions de connexion. L’espace personnel affiche les boutiques attribuées, l’état de publication, les paiements d’abonnement et les commissions associées, sans afficher les coordonnées de contact des commerçants. Lors d’une demande de retrait, le portefeuille mobile money choisi et le numéro de réception sont communiqués au Super-admin pour effectuer manuellement le transfert. Les demandes, références et dates de versement sont conservées pour l’historique et le contrôle.</p>
               <p>Lorsqu’un commerçant active le rappel WhatsApp, nous enregistrons son choix et sa date de consentement. Si l’intégration WhatsApp Business est configurée, le numéro WhatsApp de la boutique, son nom et la date d’échéance de l’abonnement sont transmis à Meta pour envoyer le modèle de rappel approuvé. Pour un renouvellement lancé par le commerçant, GeniusPay reçoit les données nécessaires au paiement et achemine la transaction vers ses passerelles; MaTable conserve l’intention, le montant, la formule, le statut, la référence fournisseur et les dates de traitement. MaTable ne stocke pas de numéro de carte bancaire.</p>
             </section>
@@ -122,8 +122,8 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
               <p>MaTable conserve le statut de vérification d’identité, l’identifiant de session Didit, le statut, l’identifiant du workflow, la version et la date du consentement Didit et les dates techniques nécessaires au suivi. Les justificatifs du parcours manuel sont supprimés 90 jours après la décision correspondante; un dépôt incomplet est supprimé après 15 minutes. Les anciens justificatifs relatifs à la boutique sont programmés pour suppression. Les événements techniques de webhook Didit sont conservés au maximum 30 jours. La publication nécessite la validation de l’identité du responsable; le badge « vérifiée » signale cette identité validée.</p>
             </section>
             <section>
-              <h2>Vérification d’identité des livreurs</h2>
-              <p>La création d’un compte livreur ne donne pas accès aux courses. Après consentement explicite, le livreur est redirigé vers le parcours hébergé de Didit pour la vérification d’identité, qui peut traiter des pièces et données biométriques selon les informations et conditions présentées par Didit. MaTable conserve le nom, le téléphone, le code PIN sous forme hachée, le statut du compte, l’identifiant de session Didit, le statut reçu, l’identifiant du workflow ainsi que la version et la date du consentement; les pièces et données biométriques restent traitées par Didit et ne sont pas conservées par MaTable. Le compte est activé uniquement après réception d’un webhook Didit signé indiquant une vérification positive. Le livreur peut ensuite choisir ses zones et lancer le paiement ponctuel de son forfait 24 heures avec GeniusPay; aucun prélèvement automatique n’est effectué.</p>
+              <h2>Anciennes données de livraison MaTable</h2>
+              <p>MaTable ne propose plus sa fonctionnalité de livraison. Des informations créées lorsque celle-ci était disponible peuvent rester dans les historiques techniques; ce retrait ne supprime pas automatiquement les données anciennes. Vous pouvez contacter l’assistance pour exercer vos droits sur ces données.</p>
             </section>
             <section>
               <h2>Finalités et bases d’utilisation</h2>
@@ -160,7 +160,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             </section>
             <section>
               <h2>Commande et paiement</h2>
-              <p>La commande enregistrée est une demande de commande et non un paiement. MaTable peut réserver le stock et afficher le montant calculé à partir du catalogue. Le client et le vendeur confirment directement la disponibilité, la livraison, les frais éventuels et le paiement. Les paiements des abonnements et des boosts marchands utilisent l’intégration GeniusPay et les passerelles proposées dans son checkout; MaTable n’encaisse pas les paiements des commandes clients, ne reçoit pas ces fonds et ne confirme pas qu’un règlement entre client et commerçant a eu lieu.</p>
+              <p>La commande enregistrée est une demande de commande et non un paiement. MaTable peut réserver le stock et afficher le montant calculé à partir du catalogue. Le client et le vendeur confirment directement la disponibilité, les modalités de remise et le paiement. MaTable ne propose pas de service de livraison. Les paiements des abonnements et des boosts marchands utilisent l’intégration GeniusPay et les passerelles proposées dans son checkout; MaTable n’encaisse pas les paiements des commandes clients, ne reçoit pas ces fonds et ne confirme pas qu’un règlement entre client et commerçant a eu lieu.</p>
             </section>
             <section>
               <h2>Comptes et parcours commerçant</h2>
@@ -171,8 +171,8 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
               <p>Après l’essai, le commerçant choisit et règle manuellement son abonnement avec GeniusPay. Le renouvellement est activé uniquement après confirmation sécurisée du paiement par webhook ou vérification authentifiée auprès de GeniusPay. Un remboursement d’abonnement signalé par le prestataire est examiné par MaTable; il ne désactive pas automatiquement l’accès. Les boosts sponsorisés sont des achats ponctuels séparés de l’abonnement; un boost remboursé est annulé. MaTable ne collecte pas les paiements des commandes clients, qui restent réglés directement entre le client et le commerçant.</p>
             </section>
             <section>
-              <h2>Prix, livraison et qualité</h2>
-              <p>Les prix affichés, la disponibilité des produits, les délais, les conditions de livraison, les frais de livraison éventuels et le mode de paiement sont fixés par le commerçant. MaTable agit comme outil de mise en relation et de diffusion technique. La plateforme n’exerce pas le contrôle direct sur l’exécution de la vente, la qualité du produit livré ou le paiement final.</p>
+              <h2>Prix, produits et qualité</h2>
+              <p>Les prix affichés, la disponibilité des produits, les délais, les modalités de remise et le mode de paiement sont fixés par le commerçant. MaTable agit comme outil de mise en relation et de diffusion technique. La plateforme n’exerce pas le contrôle direct sur l’exécution de la vente, la qualité du produit ou le paiement final.</p>
             </section>
             <section>
               <h2>Disponibilité et sécurité</h2>
@@ -180,8 +180,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             </section>
             <section>
               <h2>Contenus et responsabilité commerciale</h2>
-              <p>Le commerçant répond de ses produits, prix, disponibilités, descriptions, livraisons et obligations envers le client. Le client doit vérifier les modalités avec le vendeur avant de finaliser la vente. Les utilisateurs s’engagent à ne pas publier de contenu illicite, trompeur, contrefaisant ou portant atteinte aux droits d’autrui. L’accès peut être suspendu en cas d’abus, de fraude, de risque de sécurité ou de violation des présentes conditions.</p>
-              <p>Le livreur doit fournir des informations exactes, consentir à la vérification Didit et respecter les zones et statuts de course affichés. L’accès aux courses est activé après confirmation de l’identité et du paiement ponctuel du forfait livreur. Chaque forfait couvre 24 heures et n’est pas renouvelé automatiquement.</p>
+              <p>Le commerçant répond de ses produits, prix, disponibilités, descriptions, modalités de remise et obligations envers le client. Le client doit vérifier les modalités avec le vendeur avant de finaliser la vente. Les utilisateurs s’engagent à ne pas publier de contenu illicite, trompeur, contrefaisant ou portant atteinte aux droits d’autrui. L’accès peut être suspendu en cas d’abus, de fraude, de risque de sécurité ou de violation des présentes conditions.</p>
             </section>
           </div>
         )}

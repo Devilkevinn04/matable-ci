@@ -26,7 +26,7 @@ export const SEO_ARTICLES: SeoArticle[] = [
         heading: 'Présentez clairement votre activité',
         paragraphs: [
           'Commencez par préciser ce que vous vendez, où se trouve votre commerce et comment vos clients peuvent vous joindre. Une présentation claire aide les personnes de votre quartier à savoir rapidement si votre offre leur correspond.',
-          'Indiquez votre commune, vos horaires et les modalités de retrait ou de livraison que vous proposez. N’affichez que des informations exactes et que vous pouvez maintenir à jour.',
+          'Indiquez votre commune, vos horaires et les modalités de retrait ou de remise que vous proposez. N’affichez que des informations exactes et que vous pouvez maintenir à jour.',
         ],
       },
       {
@@ -40,7 +40,7 @@ export const SEO_ARTICLES: SeoArticle[] = [
         heading: 'Partagez votre vitrine et répondez directement',
         paragraphs: [
           'Une vitrine en ligne est plus facile à retrouver si vous partagez son lien dans vos profils de réseaux sociaux, vos messages et vos supports habituels. Invitez aussi vos clients réguliers à enregistrer le lien.',
-          'Sur MaTable, les clients consultent le catalogue et peuvent vous contacter directement. Confirmez avec eux la disponibilité, le montant final, le paiement et le retrait ou la livraison avant de conclure la vente.',
+          'Sur MaTable, les clients consultent le catalogue et peuvent vous contacter directement. Confirmez avec eux la disponibilité, le montant final, le paiement et les modalités de remise avant de conclure la vente.',
         ],
       },
       {
@@ -77,7 +77,7 @@ export const SEO_ARTICLES: SeoArticle[] = [
       {
         heading: 'Confirmez les modalités directement avec la boutique',
         paragraphs: [
-          'Après l’envoi, échangez avec le commerçant pour confirmer la disponibilité, le prix final, le moyen de paiement, le retrait ou la livraison. L’enregistrement d’une demande ne signifie pas que le paiement ou la livraison est déjà confirmé.',
+          'Après l’envoi, échangez avec le commerçant pour confirmer la disponibilité, le prix final, le moyen de paiement et les modalités de remise. L’enregistrement d’une demande ne confirme ni le paiement ni la remise de la commande.',
           'MaTable ne collecte pas le paiement de la vente : le client et le commerçant conviennent directement des modalités. N’envoyez jamais de code secret ou de mot de passe dans une conversation.',
         ],
       },

@@ -213,7 +213,7 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
 
           <form onSubmit={submitReport} className="space-y-3">
             <h3 className="flex items-center gap-2 text-sm font-black text-slate-900"><Flag className="h-4 w-4 text-rose-700" />Signaler un problème</h3>
-            <p className="text-xs leading-5 text-slate-600">Un signalement est transmis à l’équipe de modération, pas au livreur ni à la boutique.</p>
+            <p className="text-xs leading-5 text-slate-600">Un signalement est transmis à l’équipe de modération, pas à la boutique concernée.</p>
             <select value={reportReason} onChange={(event) => setReportReason(event.target.value)} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">{reportReasons.map((reason) => <option key={reason.value} value={reason.value}>{reason.label}</option>)}</select>
             <textarea value={reportDetails} onChange={(event) => setReportDetails(event.target.value)} maxLength={1000} rows={3} placeholder="Expliquez brièvement (facultatif)" className="w-full rounded-lg border border-slate-300 bg-white p-3 text-sm" />
             <button type="submit" disabled={saving || !ordersAuthenticated} className="min-h-10 rounded-full border border-rose-300 px-4 text-xs font-bold text-rose-800 disabled:opacity-50">{saving ? 'Envoi…' : 'Envoyer le signalement'}</button>

@@ -13,10 +13,6 @@ import {
   maskContactPhone,
 } from '../services/contactGuard.ts';
 import {
-  dispatchDeliveryCancelledPush,
-  dispatchDeliveryCreatedPush,
-} from '../services/deliveryNotifications.ts';
-import {
   expirePendingOrderInTransaction,
   restoreReservedOrderStock,
 } from '../services/orderLifecycle.ts';
@@ -89,19 +85,15 @@ export function createMerchantOrdersRouter({
     );
     const ordersToExport = rows.map(mapOrderRow);
     const csvRows = [
-      ['id', 'created_at', 'status', 'customer_name', 'customer_phone', 'delivery_location', 'delivery_note', 'delivery_slot', 'payment_method_preference', 'total_amount', 'delivery_fee', 'items'],
+      ['id', 'created_at', 'status', 'customer_name', 'customer_phone', 'payment_method_preference', 'total_amount', 'items'],
       ...ordersToExport.map((order) => [
         order.id,
         order.created_at,
         order.status,
         order.customer_name,
         order.customer_phone,
-        order.delivery_location,
-        order.delivery_note,
-        order.delivery_slot,
         order.payment_method_preference,
         order.total_amount,
-        order.delivery_fee || 0,
         JSON.stringify(order.items || []),
       ]),
     ];
@@ -334,9 +326,6 @@ export function createMerchantOrdersRouter({
       expired: [],
     };
     const stockUpdates: { productId: number; stock: number; isAvailable: boolean }[] = [];
-    let cancelledDelivery: { id: number; previousStatus: string; driverId: number | null } | null = null;
-    let expiredDelivery: { id: number; previousStatus: string; driverId: number | null } | undefined;
-    let deliveryToDispatch: number | null = null;
     try {
       const result = await dbTransaction(async (transaction) => {
         const row = await transaction.get<Record<string, unknown>>(
@@ -352,11 +341,7 @@ export function createMerchantOrdersRouter({
         }
         if (previousStatus === 'pending') {
           const expiration = await expirePendingOrderInTransaction(transaction, order.id);
-          if (expiration?.type === 'blockedByDelivery') {
-            throw Object.assign(new Error('La commande ne peut pas être traitée après récupération du colis par le livreur.'), { statusCode: 409 });
-          }
           if (expiration?.type === 'expired') {
-            expiredDelivery = expiration.order.cancelledDelivery;
             stockUpdates.push(...expiration.order.stockUpdates.map((update) => ({
               productId: update.productId,
               stock: update.stock,
@@ -365,17 +350,6 @@ export function createMerchantOrdersRouter({
             return { order: { ...order, status: 'expired' as const, delivery_fee: 0 }, previousStatus, expired: true as const };
           }
         }
-        const linkedDelivery = await transaction.get<{ id: number | string; status: string; driver_id: number | string | null }>(
-          `SELECT id, status, driver_id FROM delivery_orders WHERE order_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}`,
-          [order.id],
-        );
-        if (status === 'delivered' && linkedDelivery && linkedDelivery.status !== 'delivered') {
-          throw Object.assign(new Error('La course MaTable doit être terminée par le livreur avant de clôturer la commande.'), { statusCode: 409 });
-        }
-        if (['cancelled', 'rejected', 'expired'].includes(status) && linkedDelivery?.status === 'picked_up') {
-          throw Object.assign(new Error('La commande ne peut plus être annulée après récupération du colis par le livreur.'), { statusCode: 409 });
-        }
-
         const stockReservedStatuses = new Set(['pending', 'confirmed', 'preparing', 'ready', 'delivered']);
         const wasStockReserved = stockReservedStatuses.has(previousStatus);
         const willReserveStock = stockReservedStatuses.has(status);
@@ -419,21 +393,6 @@ export function createMerchantOrdersRouter({
         if (['cancelled', 'rejected', 'expired'].includes(status)) {
           await transaction.run('UPDATE orders SET delivery_fee = 0 WHERE id = ?', [order.id]);
         }
-        if (['cancelled', 'rejected', 'expired'].includes(status) && linkedDelivery
-          && ['requested', 'accepted', 'to_pickup'].includes(linkedDelivery.status)) {
-          const cancelledAt = new Date().toISOString();
-          await transaction.run(`UPDATE delivery_orders SET status = 'cancelled', cancelled_at = ?
-            WHERE id = ? AND status = ?`, [cancelledAt, linkedDelivery.id, linkedDelivery.status]);
-          await transaction.run(`INSERT INTO delivery_course_events
-            (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
-            VALUES (?, 'merchant', ?, ?, 'cancelled', ?)`,
-          [linkedDelivery.id, shopId, linkedDelivery.status, cancelledAt]);
-          cancelledDelivery = {
-            id: Number(linkedDelivery.id),
-            previousStatus: linkedDelivery.status,
-            driverId: linkedDelivery.driver_id === null ? null : Number(linkedDelivery.driver_id),
-          };
-        }
         if (req.adminShopAccess) {
           await transaction.run(
             'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
@@ -447,9 +406,6 @@ export function createMerchantOrdersRouter({
         }
         order.status = status as OrderRecord['status'];
         if (['cancelled', 'rejected', 'expired'].includes(status)) order.delivery_fee = 0;
-        if (status === 'confirmed' && previousStatus === 'pending' && linkedDelivery?.status === 'requested') {
-          deliveryToDispatch = Number(linkedDelivery.id);
-        }
         return { order, previousStatus, unchanged: false };
       });
       if (!result) return res.status(404).json({ error: 'Commande introuvable.' });
@@ -476,30 +432,13 @@ export function createMerchantOrdersRouter({
       if (result.unchanged) return res.json({ success: true, order: responseOrder });
       if ('expired' in result && result.expired) {
         if (cachedOrder) cachedOrder.status = 'expired';
-        if (expiredDelivery) {
-          void dispatchDeliveryCancelledPush(
-            expiredDelivery.id,
-            expiredDelivery.previousStatus,
-            expiredDelivery.driverId,
-            'admin',
-          );
-        }
         return res.status(409).json({ error: 'Le délai de 2 heures est dépassé. La demande a expiré et le stock a été libéré.' });
       }
-      if (cancelledDelivery) {
-        void dispatchDeliveryCancelledPush(
-          cancelledDelivery.id,
-          cancelledDelivery.previousStatus,
-          cancelledDelivery.driverId,
-          req.adminShopAccess ? 'admin' : 'merchant',
-        );
-      }
-      if (deliveryToDispatch !== null) void dispatchDeliveryCreatedPush(deliveryToDispatch);
       res.json({
         success: true,
         order: responseOrder,
         message: status === 'confirmed' && result.previousStatus === 'pending'
-          ? 'Commande acceptée. Le stock était déjà réservé et la livraison MaTable peut être lancée.'
+          ? 'Commande acceptée. Le stock était déjà réservé.'
           : status === 'rejected'
             ? 'Demande refusée et stock libéré.'
             : status === 'cancelled'

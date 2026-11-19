@@ -353,15 +353,11 @@ test('normalizes Ivorian numbers consistently and rejects malformed order custom
   const invalidPhone = validateCustomerOrderInput({
     customer_name: 'A',
     customer_phone: '123',
-    delivery_location: 'Lieu',
-    delivery_note: 'x'.repeat(600),
   });
 
   const valid = validateCustomerOrderInput({
     customer_name: 'Alice Dupont',
     customer_phone: '+2250708091011',
-    delivery_location: 'Cocody Riviera 3',
-    delivery_note: 'Bonjour',
   });
 
   assert.equal(invalidPhone.ok, false);

@@ -308,11 +308,8 @@ test('customer order receipt includes server totals and explains the pending res
         selected_size: 'Grand',
         selected_modifiers: ['Piment doux'],
       }],
-      deliveryLocation: '<i>Cocody</i>',
-      deliverySlot: 'Ce soir',
       paymentMethod: 'cash',
       totalAmount: 2500,
-      deliveryFee: 2000,
       appUrl: 'https://matable-ci.com',
     }, async (_input, init) => {
       requestBody = JSON.parse(String(init?.body));
@@ -324,14 +321,12 @@ test('customer order receipt includes server totals and explains the pending res
     assert.match(requestBody.subject, /commande #42/);
     assert.match(requestBody.html, /&lt;script&gt;Client&lt;\/script&gt;/);
     assert.match(requestBody.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
-    assert.match(requestBody.html, /&lt;i&gt;Cocody&lt;\/i&gt;/);
     assert.match(requestBody.html, /https:\/\/wa\.me\/2250708091011/);
     assert.match(requestBody.html, /2\s?500 FCFA/);
-    assert.match(requestBody.html, /2\s?000 FCFA/);
-    assert.match(requestBody.text, /Total à régler : 4\s?500 FCFA/);
+    assert.match(requestBody.text, /Total à régler : 2\s?500 FCFA/);
     assert.match(requestBody.text, /ne confirme pas un paiement/i);
     assert.match(requestBody.text, /sans réponse sous 2 heures/i);
-    assert.doesNotMatch(requestBody.html, /<script>|<img src=x|<i>Cocody/);
+    assert.doesNotMatch(requestBody.html, /<script>|<img src=x|livraison/i);
   } finally {
     if (previousApiKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = previousApiKey;
     if (previousFrom === undefined) delete process.env.RESEND_FROM_EMAIL; else process.env.RESEND_FROM_EMAIL = previousFrom;

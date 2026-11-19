@@ -16,7 +16,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
     questions: [
       {
         question: 'Comment passer une commande ?',
-        answer: 'Ouvrez une boutique, choisissez vos articles et options, puis indiquez les informations demandées. MaTable enregistre automatiquement la commande et réserve le stock disponible. Cela confirme l’enregistrement de votre demande, pas le paiement ni les modalités de livraison : contactez le commerçant sur WhatsApp pour les convenir ensemble. Le commerçant peut annuler la commande depuis son dashboard.',
+        answer: 'Ouvrez une boutique, choisissez vos articles et options, puis indiquez les informations demandées. MaTable enregistre automatiquement la commande et réserve le stock disponible. Cela confirme l’enregistrement de votre demande, pas le paiement ni les modalités de remise : contactez le commerçant sur WhatsApp pour les convenir ensemble. Le commerçant peut annuler la commande depuis son dashboard.',
       },
       {
         question: 'Les options avec un supplément changent-elles le prix ?',
@@ -32,7 +32,7 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         question: 'Comment suivre ou modifier ma commande ?',
-        answer: 'Connectez-vous puis ouvrez « Mon compte » pour consulter les commandes enregistrées et leur statut. Pour confirmer un détail, modifier une demande ou poser une question sur la livraison, contactez directement le commerçant, notamment via WhatsApp.',
+        answer: 'Connectez-vous puis ouvrez « Mon compte » pour consulter les commandes enregistrées et leur statut. Pour confirmer un détail, modifier une demande ou poser une question sur la remise de votre commande, contactez directement le commerçant, notamment via WhatsApp.',
       },
     ],
   },
@@ -49,11 +49,11 @@ export const FAQ_SECTIONS: FaqSection[] = [
       },
       {
         question: 'MaTable encaisse-t-il le paiement ?',
-        answer: 'Non. MaTable ne collecte pas le paiement de la vente. Le client et le commerçant conviennent directement du montant final, de la livraison et du moyen de paiement.',
+        answer: 'Non. MaTable ne collecte pas le paiement de la vente. Le client et le commerçant conviennent directement du montant final, des modalités de remise et du moyen de paiement.',
       },
       {
         question: 'À qui m’adresser en cas de problème avec un article ?',
-        answer: 'La vente est conclue directement avec le commerçant. Contactez la boutique concernée pour vérifier la disponibilité, la qualité, la livraison ou toute demande après commande.',
+        answer: 'La vente est conclue directement avec le commerçant. Contactez la boutique concernée pour vérifier la disponibilité, la qualité, les modalités de remise ou toute demande après commande.',
       },
     ],
   },

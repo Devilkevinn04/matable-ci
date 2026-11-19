@@ -343,7 +343,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
           <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-100 p-1">
             <span className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500">Mode</span>
             <span className="rounded-lg px-3 py-1.5 text-xs font-black shadow-xs bg-emerald-600 text-white">
-              {currentTier === 'pro' ? 'Pro' : 'Premium'}
+              {currentTier === 'pro' ? 'Pro' : currentTier === 'premium' ? 'Premium' : 'Standard'}
             </span>
           </div>
         </div>

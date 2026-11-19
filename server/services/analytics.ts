@@ -3,7 +3,7 @@ import { normalizeAnalyticsCampaign } from '../../src/utils/analyticsAttribution
 export { normalizeAnalyticsCampaign } from '../../src/utils/analyticsAttribution.ts';
 
 export type AnalyticsSource = 'direct' | 'search' | 'social' | 'referral' | 'internal';
-export type AnalyticsAudience = 'public' | 'customer' | 'merchant' | 'courier' | 'admin';
+export type AnalyticsAudience = 'public' | 'customer' | 'merchant' | 'admin';
 export type AnalyticsEntityType = 'page' | 'shop' | 'product' | 'search' | 'order';
 export type AnalyticsDevice = 'mobile' | 'tablet' | 'desktop' | 'unknown';
 
@@ -27,7 +27,6 @@ export const ANALYTICS_AUDIENCES = new Set<AnalyticsAudience>([
   'public',
   'customer',
   'merchant',
-  'courier',
   'admin',
 ]);
 

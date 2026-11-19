@@ -578,7 +578,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
       label: 'Ma boutique',
       items: [
         { id: 'themes', label: 'Apparence', icon: Palette },
-        { id: 'general', label: 'Coordonnées et livraison', icon: Store },
+        { id: 'general', label: 'Coordonnées de la boutique', icon: Store },
         { id: 'hours', label: 'Horaires', icon: Clock },
       ],
     },

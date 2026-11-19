@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { SubscriptionTier } from '../utils/subscriptionFeatures';
 import type { SubscriptionPrices } from '../utils/useSubscriptionPrices';
+import { ContextualHelp } from './ContextualHelp';
 
 const planLabels: Record<SubscriptionTier, string> = {
   standard: 'Standard',
@@ -79,10 +80,13 @@ export function AdminSubscriptionPlanPricing() {
     <section aria-labelledby="admin-plan-prices-title" className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 id="admin-plan-prices-title" className="text-sm font-black text-slate-900">Tarifs des formules</h3>
-          <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600">
-            Montants mensuels en FCFA. Le tarif annuel correspond à 10 mensualités. Les paiements déjà effectués et leurs échéances ne sont pas modifiés; les changements s’appliquent aux prochains paiements.
-          </p>
+          <div className="flex items-center gap-2">
+            <h3 id="admin-plan-prices-title" className="text-sm font-black text-slate-900">Tarifs des formules</h3>
+            <ContextualHelp label="Tarifs des formules" variant="info">
+              Les montants saisis sont mensuels en FCFA. Le tarif annuel équivaut à dix mensualités. Les paiements déjà confirmés et leurs échéances ne changent pas.
+            </ContextualHelp>
+          </div>
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600">Les modifications s’appliquent aux prochains paiements uniquement.</p>
         </div>
         <button type="button" onClick={() => void loadPrices()} disabled={loading || saving} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700 disabled:opacity-50">
           Actualiser

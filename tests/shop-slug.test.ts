@@ -9,7 +9,7 @@ test('slugifies a merchant shop name for its public storefront URL', () => {
 });
 
 test('keeps reserved application routes available to the platform', () => {
-  for (const name of ['App', 'Admin', 'Boutiques', 'Promotions', 'Connexion', 'Livreur', 'Guide']) {
+  for (const name of ['App', 'Admin', 'Boutiques', 'Promotions', 'Connexion', 'Guide']) {
     const slug = slugifyShopName(name);
     assert.notEqual(slug, name.toLowerCase());
     assert.ok(slug.endsWith('-boutique'));

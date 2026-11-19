@@ -10,12 +10,39 @@ import {
 
 const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
-test('data URL photos become short cacheable URLs; other values are untouched', () => {
+test('data URL photos become short cacheable URLs and unsupported external URLs are omitted', () => {
   const url = toPublicProductImageUrl(42, pixel);
   assert.equal(url, `${PUBLIC_PRODUCT_IMAGE_PATH}/42/0-${productImageFingerprint(pixel)}.png`);
-  assert.equal(toPublicProductImageUrl(42, 'https://images.example.com/a.jpg'), 'https://images.example.com/a.jpg');
+  assert.equal(toPublicProductImageUrl(42, 'https://images.example.com/a.jpg'), '');
   assert.equal(toPublicProductImageUrl(42, ''), '');
   assert.equal(toPublicProductImageUrl(42, pixel, 0, 'https://matable-ci.com'), `https://matable-ci.com${url}`);
+  assert.equal(
+    toPublicProductImageUrl(42, pixel, 0, '', 'age.token'),
+    `${url}?age_token=age.token`,
+  );
+});
+
+test('configured product storage URLs are proxied; other bucket paths are not', async () => {
+  const keys = ['R2_ENDPOINT', 'R2_BUCKET', 'R2_PUBLIC_BASE_URL', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'];
+  const saved = new Map(keys.map((key) => [key, process.env[key]]));
+  process.env.R2_ENDPOINT = 'https://r2.example.com';
+  process.env.R2_BUCKET = 'matable-public';
+  process.env.R2_PUBLIC_BASE_URL = 'https://media.example.com';
+  process.env.R2_ACCESS_KEY_ID = 'test-key';
+  process.env.R2_SECRET_ACCESS_KEY = 'test-secret';
+
+  try {
+    const storedUrl = 'https://media.example.com/shops/product-main/42/1700000000000-abcd1234-photo.webp';
+    const url = toPublicProductImageUrl(42, storedUrl);
+    assert.equal(url, `${PUBLIC_PRODUCT_IMAGE_PATH}/42/0-${productImageFingerprint(storedUrl)}.webp`);
+    assert.equal(toPublicProductImageUrl(42, 'https://media.example.com/shops/logo/42/logo.png'), '');
+  } finally {
+    for (const key of keys) {
+      const value = saved.get(key);
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test('gallery photos get their own slot', () => {
@@ -23,9 +50,14 @@ test('gallery photos get their own slot', () => {
   assert.match(String(product.image_url), /\/7\/0-[a-f0-9]{20}\.png$/);
   assert.match(String(product.thumbnail_url), /\/7\/998-[a-f0-9]{20}\.png$/);
   assert.match(String(product.lookbook_image), /\/7\/999-[a-f0-9]{20}\.png$/);
-  assert.deepEqual((product.gallery_images as unknown as string[])[0], 'https://x.test/b.jpg');
+  assert.deepEqual((product.gallery_images as unknown as string[])[0], '');
   assert.match((product.gallery_images as unknown as string[])[1], /\/7\/2-[a-f0-9]{20}\.png$/);
   assert.equal(toPublicProductImageUrl(7, 'data:image/svg+xml;base64,PHN2Zz4='), '');
+});
+
+test('age-verified product image URLs carry the short-lived scoped token', () => {
+  const product = withPublicProductImages({ id: 7, image_url: pixel }, { ageVerificationToken: 'age.token' });
+  assert.equal(new URL(String(product.image_url), 'https://matable-ci.com').searchParams.get('age_token'), 'age.token');
 });
 
 test('only a URL that was handed out resolves to image bytes', () => {

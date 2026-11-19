@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { StorefrontLoadingSkeleton } from './Skeletons';
 import { InstallAppPrompt } from './InstallAppPrompt';
+import { ContextualHelp } from './ContextualHelp';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { Link, useLocation } from 'react-router-dom';
@@ -39,7 +40,6 @@ import { ShopEventIcon } from './ShopEventIcon';
 import { CustomerProductCard } from './CustomerProductCard';
 import { useToast } from './Toast';
 import { hasAnalyticsConsent } from '../utils/cookieConsent';
-import { ABIDJAN_COMMUNES } from '../utils/abidjanCommunes';
 import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
 import {
   trackCartEvent,
@@ -158,37 +158,17 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
-  const [deliveryLocation, setDeliveryLocation] = useState('');
-  const [customLocation, setCustomLocation] = useState('');
-  const [deliveryNote, setDeliveryNote] = useState('');
-  const [deliverySlot, setDeliverySlot] = useState('Dès que prêt (30-45 min)');
-  const [deliveryOptions, setDeliveryOptions] = useState<{
-    available: boolean;
-    originZone: string | null;
-    zones: { id: number; label: string; amount: number }[];
-  } | null>(null);
-  const [deliveryZoneId, setDeliveryZoneId] = useState<number | null>(null);
-  const [deliveryOptionsLoading, setDeliveryOptionsLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<Order['payment_method_preference']>('to_confirm');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCheckoutAuth, setShowCheckoutAuth] = useState(false);
   const [trustTarget, setTrustTarget] = useState<{ type: 'shop' | 'product'; id: number; name: string } | null>(null);
 
-  useEffect(() => {
-    const city = shop?.city?.trim();
-    if (!city || deliveryLocation) return;
-    const shopCommune = ABIDJAN_COMMUNES.find((commune) => commune !== 'Autre ville / commune'
-      && city.toLowerCase().includes(commune.toLowerCase()));
-    setDeliveryLocation(shopCommune || city);
-  }, [shop, deliveryLocation]);
   const [checkoutAuthUser, setCheckoutAuthUser] = useState<CustomerUser | null>(null);
   const [orderSuccess, setOrderSuccess] = useState<{
     orderId: number;
     whatsappUrl: string;
     whatsappText: string;
     whatsappTrackingToken: string;
-    deliveryFee: number;
-    deliveryTicket: string | null;
     emailReceiptStatus: 'sent' | 'failed' | 'not_requested';
     emailReceiptAddress: string;
   } | null>(null);
@@ -225,45 +205,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     }, 100);
     return () => window.clearTimeout(timer);
   }, [location.hash, loading, products, prefersReducedMotion]);
-
-  useEffect(() => {
-    if (!shop?.id || !isCartOpen) return;
-    let cancelled = false;
-    setDeliveryOptionsLoading(true);
-    fetch(`/api/shops/${shop.id}/delivery-options`, { cache: 'no-store' })
-      .then(async (response) => {
-        if (!response.ok) {
-          if (!cancelled) setDeliveryOptions(null);
-          return;
-        }
-        const data = await response.json() as {
-          available?: boolean;
-          origin_zone?: string | null;
-          zones?: { id: number; label: string; amount: number }[];
-        };
-        const zones = Array.isArray(data.zones)
-          ? data.zones.filter((zone) => Number.isSafeInteger(zone.id) && Number.isFinite(zone.amount))
-          : [];
-        if (cancelled) return;
-        setDeliveryOptions({
-          available: Boolean(data.available) && zones.length > 0,
-          originZone: typeof data.origin_zone === 'string' ? data.origin_zone : null,
-          zones,
-        });
-        setDeliveryZoneId((current) => zones.some((zone) => zone.id === current) ? current : null);
-      })
-      .catch(() => {
-        if (!cancelled) setDeliveryOptions(null);
-      })
-      .finally(() => {
-        if (!cancelled) setDeliveryOptionsLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [shop?.id, isCartOpen]);
-
-  const selectedDeliveryOption = deliveryOptions?.zones.find((zone) => zone.id === deliveryZoneId) || null;
-  const deliveryFee = selectedDeliveryOption ? Number(selectedDeliveryOption.amount) : 0;
-  const orderTotalDue = totalCartAmount + deliveryFee;
 
   const fetchShopData = async (signal: AbortSignal, ageToken = '', silent = false): Promise<boolean> => {
     try {
@@ -675,16 +616,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       toast.error('Veuillez renseigner un numéro de téléphone WhatsApp valide.');
       return;
     }
-    const finalLocation = deliveryLocation === 'Autre'
-      ? customLocation.trim()
-      : deliveryLocation;
-
-    if (!finalLocation) {
-      toast.error(deliveryLocation === 'Autre'
-        ? 'Veuillez préciser votre ville ou votre quartier.'
-        : 'Veuillez choisir votre commune ou votre quartier.');
-      return;
-    }
     const emailReceiptAddress = authenticatedCustomer?.email.trim() || customerEmail.trim();
 
     setIsSubmitting(true);
@@ -699,11 +630,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           customer_name: trimmedName,
           customer_phone: normalizedPhone,
           customer_email: authenticatedCustomer ? undefined : customerEmail.trim() || undefined,
-          delivery_location: finalLocation,
-          delivery_note: deliveryNote,
-          delivery_slot: shop.category === 'food' ? deliverySlot : undefined,
           payment_method_preference: paymentMethod,
-          delivery_zone_id: deliveryZoneId ?? undefined,
           age_verification_token: ageVerified ? ageVerificationToken : undefined,
           items: cart.map(item => ({
             product_id: item.product.id,
@@ -740,8 +667,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         whatsappUrl: url,
         whatsappText: text,
         whatsappTrackingToken: String(data.whatsapp_tracking_token || ''),
-        deliveryFee: Number(data.order.delivery_fee || 0),
-        deliveryTicket: data.delivery?.ticket_number ?? null,
         emailReceiptStatus: data.email_receipt_status === 'sent'
           ? 'sent'
           : data.email_receipt_status === 'failed' ? 'failed' : 'not_requested',
@@ -752,12 +677,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         Number(data.order.id),
         totalCartCount,
         Number(data.order.total_amount || totalCartAmount),
-        Number(data.order.delivery_fee || 0),
       );
       setMessageCopied(false);
-      toast.success(data.delivery
-        ? 'Demande envoyée. La boutique doit l’accepter avant la recherche d’un livreur.'
-        : 'Demande envoyée. La boutique doit l’accepter ou la refuser sous 2 heures.');
+      toast.success('Demande envoyée. La boutique doit l’accepter ou la refuser sous 2 heures.');
 
       // Update only local stock so the confirmation screen stays mounted.
       const confirmedQuantities = new Map<number, number>();
@@ -822,14 +744,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
   // Dynamic Theme Variables
   const primaryColor = normalizeHex(shop.theme_config?.primary_color || shop.theme_color || '#0F172A');
-  // Every Abidjan commune, with the shop's own commune first since most buyers order nearby.
-  const shopCommune = ABIDJAN_COMMUNES.find((commune) => commune !== 'Autre ville / commune'
-    && (shop.city || '').toLowerCase().includes(commune.toLowerCase()));
-  const checkoutLocations = [
-    shopCommune || shop.city?.trim(),
-    ...ABIDJAN_COMMUNES.filter((commune) => commune !== 'Autre ville / commune' && commune !== shopCommune),
-    'Autre',
-  ].filter((location, index, locations): location is string => Boolean(location) && locations.indexOf(location) === index);
   const secondaryColor = normalizeHex(shop.theme_config?.secondary_color || '#F8FAFC');
   const fontFamily = shop.theme_config?.font_family || 'Plus Jakarta Sans';
   const categoryDefaults = getCategoryDefaults(shop.category);
@@ -1041,7 +955,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             {[
               { number: '01', title: 'Choisissez vos articles', description: 'Ajoutez vos envies au panier.' },
               { number: '02', title: 'Écrivez à la boutique', description: 'Envoyez votre récapitulatif sur WhatsApp.' },
-              { number: '03', title: 'Convenez avec le commerçant', description: 'Retrait ou livraison : les modalités et frais sont confirmés avec lui.' },
+              { number: '03', title: 'Convenez avec le commerçant', description: 'Confirmez ensemble la disponibilité et la remise.' },
             ].map((step) => (
               <div key={step.number} className="flex min-h-24 items-center gap-3 rounded-xl bg-[#f8f3ec] p-3 sm:min-h-28 sm:items-start sm:p-4">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#d1fae5] text-xs font-black text-[var(--mt-green-deep)]">{step.number}</span>
@@ -1054,7 +968,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           </div>
           <p className="mt-3 flex items-start gap-2 text-sm leading-5 text-[var(--mt-gray-600)]">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-green-hover)]" />
-            MaTable met en relation le client et la boutique et peut organiser la livraison dans les zones couvertes, avec des frais affichés au moment de la commande.
+            Votre commande est une demande : le commerçant confirme la disponibilité et le montant final.
           </p>
           </div>
         </details>
@@ -1281,7 +1195,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                           Pourquoi cette question ?
                         </summary>
                         <p className="mt-2.5 leading-[1.5]">
-                          Certains articles de cette boutique sont interdits aux mineurs. Votre réponse n’est pas enregistrée dans votre compte. Une pièce d’identité peut être demandée à la livraison.
+                          Certains articles de cette boutique sont interdits aux mineurs. Votre réponse n’est pas enregistrée dans votre compte. Une pièce d’identité peut être demandée pour vérifier votre majorité.
                         </p>
                       </details>
                     </motion.div>
@@ -1379,26 +1293,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           </summary>
           {hoursSummary && <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="flex items-center gap-2 text-sm font-bold text-slate-700"><Clock className="h-3.5 w-3.5 text-[var(--mt-green-primary)]" />Horaires</span><span className="text-right text-sm font-black text-slate-800">{hoursSummary}</span></div>}
           {shop.theme_config?.social_links && Object.values(shop.theme_config.social_links).some(Boolean) &&           <div className="mt-3 flex flex-wrap gap-2 border-b border-[#e5d9ca] pb-3">{shop.theme_config.social_links.instagram && <a href={shop.theme_config.social_links.instagram} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-700">Instagram</a>}{shop.theme_config.social_links.facebook && <a href={shop.theme_config.social_links.facebook} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-700">Facebook</a>}{shop.theme_config.social_links.website && <a href={shop.theme_config.social_links.website} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-700">Site web</a>}{shop.theme_config.social_links.whatsapp && <a href={shop.theme_config.social_links.whatsapp} target="_blank" rel="noreferrer" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-700">WhatsApp</a>}</div>}
-          {shop.theme_config?.delivery_zones && shop.theme_config.delivery_zones.length > 0 && (
-            <div className="mt-3">
-              <p className="mb-2 text-sm font-bold text-slate-600">Zones et tarifs communiqués par la boutique :</p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {shop.theme_config.delivery_zones.map((zone, index) => (
-                  <div key={`${zone.label}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-black text-slate-800">{zone.label}</span>
-                      <span className="text-xs font-bold uppercase text-slate-500">{zone.mode}</span>
-                    </div>
-                    <div className="mt-1 flex items-center justify-between gap-2 text-sm text-slate-600">
-                      <span>{zone.description || 'Modalité à confirmer'}</span>
-                      <span className="font-black text-[var(--mt-green-primary)]">{typeof zone.fee === 'number' ? zone.fee === 0 ? 'Offert' : `${zone.fee.toLocaleString('fr-FR')} FCFA` : 'Tarif à confirmer'}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-2 text-sm leading-5 text-slate-500">Ces indications de la boutique sont à confirmer directement avec elle. Si MaTable couvre votre zone, les frais de livraison sont calculés et ajoutés au total au moment de la commande.</p>
-            </div>
-          )}
         </details>
         </div>
 
@@ -1448,22 +1342,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     <span className="text-sm font-bold text-[#47534b]">Total des articles</span>
                     <span className="text-base font-black text-[var(--mt-gray-900)]">{formatFCFA(totalCartAmount)}</span>
                   </div>
-                  {deliveryFee > 0 && (
-                    <div className="mt-1 flex items-center justify-between gap-3">
-                      <span className="text-xs font-bold text-[var(--mt-green-deep)]">Livraison MaTable</span>
-                      <span className="text-sm font-black text-[var(--mt-green-deep)]">{formatFCFA(deliveryFee)}</span>
-                    </div>
-                  )}
-                  {deliveryFee > 0 && (
-                    <div className="mt-1 flex items-center justify-between gap-3 border-t border-[#e5d9ca] pt-1">
-                      <span className="text-sm font-black text-[var(--mt-gray-900)]">Total à régler</span>
-                      <span className="text-base font-black text-[var(--mt-gray-900)]">{formatFCFA(orderTotalDue)}</span>
-                    </div>
-                  )}
                   <p className="mt-1 text-sm leading-5 text-[var(--mt-gray-600)]">
-                    {deliveryFee > 0
-                      ? 'Règlement des articles et de la livraison à convenir avec la boutique ou le livreur.'
-                      : 'Hors livraison et frais éventuels, à convenir directement avec la boutique.'}
+                    Le montant affiché concerne les articles. La boutique confirme la commande et les modalités de règlement.
                   </p>
                   <button type="button" onClick={() => setIsCartOpen(true)} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--mt-green-deep)] px-4 text-sm font-black text-white transition hover:bg-[var(--mt-green-hover)]">
                     Préparer ma commande <ArrowRight className="h-4 w-4" />
@@ -1496,7 +1376,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 {totalCartCount}
               </div>
               <div className="text-left">
-                <span className="text-xs text-white/80 block">Articles · hors livraison</span>
+                <span className="text-xs text-white/80 block">Total des articles</span>
                 <span className="font-black text-base sm:text-lg text-white">
                   {formatFCFA(totalCartAmount)}
                 </span>
@@ -1530,7 +1410,12 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                   <ShoppingBag className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 id="checkout-dialog-title" className="font-black text-slate-900 text-base">Finaliser ma commande</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 id="checkout-dialog-title" className="font-black text-slate-900 text-base">Finaliser ma commande</h3>
+                    <ContextualHelp label="Finaliser ma commande">
+                      Votre demande ne vaut pas paiement. La boutique doit confirmer la commande ; contactez-la pour convenir de la remise et du règlement.
+                    </ContextualHelp>
+                  </div>
                   <p className="text-xs text-slate-500">{totalCartCount} article(s) sélectionné(s)</p>
                 </div>
               </div>
@@ -1577,24 +1462,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         : `La demande est enregistrée, mais l’envoi du récapitulatif à ${orderSuccess.emailReceiptAddress} a échoué. Vous pouvez toujours utiliser WhatsApp.`}
                     </p>
                   )}
-                  {orderSuccess.deliveryFee > 0 ? (
-                    <div className="mx-auto mb-4 max-w-sm rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-left">
-                      <p className="text-xs font-black text-emerald-950">Livraison MaTable demandée</p>
-                      <p className="mt-1 text-sm leading-5 text-emerald-900">
-                        {orderSuccess.deliveryTicket ? `Course ${orderSuccess.deliveryTicket} · ` : ''}
-                        frais de livraison {formatFCFA(orderSuccess.deliveryFee)} ajoutés au récapitulatif. Un livreur sera recherché après acceptation de la demande par la boutique.{authenticatedCustomer ? ' Suivez son statut depuis votre compte client.' : ' Contactez la boutique sur WhatsApp pour le suivi.'}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-600 max-w-sm mx-auto mb-6 leading-relaxed">
-                      La boutique doit confirmer la disponibilité sous 2 heures. Envoyez aussi votre récapitulatif sur WhatsApp pour échanger sur le retrait, la livraison et le règlement.
-                    </p>
-                  )}
-                  {orderSuccess.deliveryFee > 0 && (
-                    <p className="text-sm text-slate-600 max-w-sm mx-auto mb-6 leading-relaxed">
-                      Confirmez le règlement des articles et des frais de livraison avec la boutique ou le livreur.
-                    </p>
-                  )}
+                  <p className="text-sm text-slate-600 max-w-sm mx-auto mb-6 leading-relaxed">
+                    La boutique doit confirmer la disponibilité sous 2 heures. Envoyez aussi votre récapitulatif sur WhatsApp pour convenir directement des détails et du règlement.
+                  </p>
 
                   <a
                     href={orderSuccess.whatsappUrl}
@@ -1807,101 +1677,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       </div>
                     </div>
 
-                    {/* Delivery Location / Commune */}
-                    <div>
-                      <p id="checkout-delivery-location-label" className="block text-xs font-bold text-slate-700 mb-1">
-                        Commune ou quartier souhaité *
-                      </p>
-                      <p className="mb-2 text-sm leading-5 text-slate-500">
-                        Indiquez où vous souhaitez récupérer votre commande ou être contacté pour convenir de la livraison.
-                      </p>
-                      <select
-                        id="checkout-delivery-location"
-                        aria-labelledby="checkout-delivery-location-label"
-                        required
-                        value={deliveryLocation}
-                        onChange={(event) => setDeliveryLocation(event.target.value)}
-                        className="w-full rounded-xl border-[2px] border-[#E4D9C8] bg-white px-3.5 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[var(--mt-orange-deep)]"
-                      >
-                        {!deliveryLocation && <option value="">Choisir une commune</option>}
-                        {checkoutLocations.map((location) => <option key={location} value={location}>{location === shopCommune ? `${location} · commune de la boutique` : location}</option>)}
-                      </select>
-
-                      {deliveryLocation === 'Autre' && (
-                        <label htmlFor="checkout-custom-location" className="mt-2 block">
-                          <span className="sr-only">Précisez la ville ou le quartier</span>
-                          <input
-                            id="checkout-custom-location"
-                            type="text"
-                            required
-                            minLength={2}
-                            placeholder="Précisez la ville / quartier (ex: Bingerville, Bouaké, San Pedro...)"
-                            value={customLocation}
-                            onChange={(e) => setCustomLocation(e.target.value)}
-                            className="w-full text-sm px-3.5 py-2.5 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[var(--mt-orange-deep)] bg-white"
-                          />
-                        </label>
-                      )}
-
-                      {deliveryOptionsLoading && (
-                        <p role="status" className="mt-2.5 text-sm font-semibold text-slate-500">
-                          Vérification des zones de livraison MaTable…
-                        </p>
-                      )}
-
-                      {deliveryOptions?.available && (
-                        <div className="mt-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5">
-                          <p className="text-sm font-black text-emerald-950">Livraison MaTable (optionnel)</p>
-                          <p className="mt-0.5 text-sm leading-5 text-emerald-900">
-                            {deliveryOptions.originZone ? `Départ ${deliveryOptions.originZone}. ` : ''}
-                            Les frais sont ajoutés au total et la course est créée dès la commande.
-                          </p>
-                          <div role="radiogroup" aria-label="Zone de livraison MaTable" className="mt-2 grid gap-1.5">
-                            <button
-                              type="button"
-                              role="radio"
-                              aria-checked={deliveryZoneId === null}
-                              onClick={() => setDeliveryZoneId(null)}
-                              className={`flex min-h-10 items-center justify-between gap-2 rounded-lg border px-2.5 text-left text-sm font-semibold transition-colors ${
-                                deliveryZoneId === null
-                                  ? 'border-emerald-700 bg-white text-emerald-950 ring-1 ring-emerald-700'
-                                  : 'border-emerald-200 bg-white/70 text-emerald-900 hover:bg-white'
-                              }`}
-                            >
-                              <span>Je m’organise / à convenir</span>
-                              <span className="shrink-0 text-xs font-bold uppercase text-emerald-700">Sans frais MaTable</span>
-                            </button>
-                            {deliveryOptions.zones.map((zone) => (
-                              <button
-                                key={zone.id}
-                                type="button"
-                                role="radio"
-                                aria-checked={deliveryZoneId === zone.id}
-                                onClick={() => setDeliveryZoneId(zone.id)}
-                                className={`flex min-h-10 items-center justify-between gap-2 rounded-lg border px-2.5 text-left text-sm font-semibold transition-colors ${
-                                  deliveryZoneId === zone.id
-                                    ? 'border-emerald-700 bg-white text-emerald-950 ring-1 ring-emerald-700'
-                                    : 'border-emerald-200 bg-white/70 text-emerald-900 hover:bg-white'
-                                }`}
-                              >
-                                <span className="truncate">{zone.label}</span>
-                                <span className="shrink-0 font-black text-emerald-800">{formatFCFA(zone.amount)}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {!deliveryOptionsLoading && !deliveryOptions?.available && (
-                        <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200/80 rounded-xl text-sm text-amber-900 flex items-start gap-2">
-                          <Info className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                          <span>
-                            MaTable transmet ces indications au commerçant. La livraison MaTable n’est pas disponible pour cette boutique : convenez du retrait ou de la livraison et des frais éventuels directement avec elle.
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
                     <details className="rounded-xl border border-[#E4D9C8] bg-white p-3">
                       <summary className="cursor-pointer text-sm font-bold text-slate-700">Ajouter un détail (facultatif)</summary>
                       <div className="mt-3 space-y-3">
@@ -1929,37 +1704,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                             </p>
                           </div>
                         )}
-                        {shop.category === 'food' && (
-                          <div>
-                            <label htmlFor="checkout-delivery-slot" className="block text-xs font-bold text-slate-700 mb-1">
-                              Créneau souhaité pour vos plats
-                            </label>
-                            <select
-                              id="checkout-delivery-slot"
-                              value={deliverySlot}
-                              onChange={(e) => setDeliverySlot(e.target.value)}
-                              className="w-full text-xs p-2.5 rounded-xl border-[2px] border-[#E4D9C8] bg-white font-bold text-[var(--mt-gray-900)]"
-                            >
-                              <option value="Dès que prêt (30-45 min)">Dès que prêt (30-45 min)</option>
-                              <option value="Ce midi (12h - 13h30)">Ce midi (12h - 13h30)</option>
-                              <option value="Ce soir (19h - 21h)">Ce soir (19h - 21h)</option>
-                              <option value="Demain midi">Demain midi</option>
-                            </select>
-                          </div>
-                        )}
-                        <div>
-                          <label htmlFor="checkout-delivery-note" className="block text-xs font-bold text-slate-700 mb-1">
-                            Repère ou précision pour la boutique
-                          </label>
-                          <input
-                            id="checkout-delivery-note"
-                            type="text"
-                            placeholder="Ex. : retrait sur place ou repère de quartier..."
-                            value={deliveryNote}
-                            onChange={(e) => setDeliveryNote(e.target.value)}
-                            className="w-full text-sm px-3.5 py-2 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[var(--mt-orange-deep)] bg-white"
-                          />
-                        </div>
                       </div>
                     </details>
 
@@ -2004,24 +1748,14 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                             {formatFCFA(totalCartAmount)}
                           </span>
                         </div>
-                        {deliveryFee > 0 && (
-                          <div className="mt-1 flex items-center justify-between">
-                            <span className="text-sm font-bold text-emerald-800">Livraison MaTable ({selectedDeliveryOption?.label}) :</span>
-                            <span className="text-sm font-black text-emerald-800">
-                              {formatFCFA(deliveryFee)}
-                            </span>
-                          </div>
-                        )}
                         <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2">
-                          <span className="text-sm font-black text-slate-900">Total à régler :</span>
+                          <span className="text-sm font-black text-slate-900">Total des articles :</span>
                           <span className="text-xl font-black text-slate-900">
-                            {formatFCFA(orderTotalDue)}
+                            {formatFCFA(totalCartAmount)}
                           </span>
                         </div>
                         <span className="text-xs text-slate-400 mt-0.5">
-                          {deliveryFee > 0
-                            ? 'Le règlement des articles et des frais de livraison est à convenir avec la boutique ou le livreur. MaTable suit la course sans encaisser le paiement.'
-                            : 'Remise ou livraison et frais éventuels à convenir directement avec la boutique sur WhatsApp.'}
+                          Le règlement est à convenir directement avec la boutique sur WhatsApp.
                         </span>
                       </div>
 

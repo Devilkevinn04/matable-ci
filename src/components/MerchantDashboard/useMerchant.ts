@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useToast } from '../Toast';
-import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopDeliveryZone, ShopSocialLinks, SubscriptionTier } from '../../types';
+import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopSocialLinks, SubscriptionTier } from '../../types';
 import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
-import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
+import { isSubscriptionFeatureIncluded, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
 import { useMerchantProductEditor } from './useMerchantProductEditor';
 import { trackLogin, trackLogout, trackSignup } from '../../utils/analyticsTracker';
 import { normalizeAcquisitionSource } from '../../utils/acquisitionSources';
@@ -137,7 +137,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     website: '',
     whatsapp: '',
   });
-  const [settingsDeliveryZones, setSettingsDeliveryZones] = useState<ShopDeliveryZone[]>([]);
   const [settingsSaved, setSettingsSaved] = useState(false);
 
   // Automated Opening Hours State
@@ -228,13 +227,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       website: shop.theme_config?.social_links?.website || '',
       whatsapp: shop.theme_config?.social_links?.whatsapp || '',
     });
-    setSettingsDeliveryZones(Array.isArray(shop.theme_config?.delivery_zones) ? shop.theme_config.delivery_zones.map((zone) => ({
-      label: String(zone.label || ''),
-      mode: zone.mode === 'sur_place' || zone.mode === 'retirer' ? zone.mode : 'livraison',
-      fee: Number(zone.fee || 0),
-      description: zone.description ? String(zone.description).slice(0, 120) : '',
-    })) : []);
-
     if (shop.opening_hours) {
       setHoursEnabled(Boolean(shop.opening_hours.enabled));
       setOpenTime(shop.opening_hours.open_time || '');
@@ -927,32 +919,13 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     executeUpdateOrderStatus(orderId, newStatus);
   };
 
-  const addDeliveryZone = () => {
-    setSettingsDeliveryZones((prev) => [...prev, { label: '', mode: 'livraison', fee: 0, description: '' }]);
-  };
-
-  const updateDeliveryZone = (index: number, field: keyof ShopDeliveryZone, value: string | number) => {
-    setSettingsDeliveryZones((prev) => prev.map((zone, zoneIndex) => {
-      if (zoneIndex !== index) return zone;
-      if (field === 'mode') {
-        return { ...zone, mode: (value === 'sur_place' || value === 'retirer' ? value : 'livraison') as ShopDeliveryZone['mode'] };
-      }
-      if (field === 'fee') {
-        return { ...zone, fee: Number(value || 0) };
-      }
-      return { ...zone, [field]: value };
-    }));
-  };
-
-  const removeDeliveryZone = (index: number) => {
-    setSettingsDeliveryZones((prev) => prev.filter((_, zoneIndex) => zoneIndex !== index));
-  };
-
   // Save General Shop Settings
   const handleSaveGeneralSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentShop) return;
 
+    const canManageSocialLinks = Boolean(currentShop.admin_mode || currentShop.subscription?.isActive
+      && isSubscriptionFeatureIncluded(currentShop.subscription.plan, 'social_links'));
     const sanitizedSocialLinks = {
       instagram: settingsSocialLinks.instagram?.trim() || '',
       facebook: settingsSocialLinks.facebook?.trim() || '',
@@ -960,15 +933,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       website: settingsSocialLinks.website?.trim() || '',
       whatsapp: settingsSocialLinks.whatsapp?.trim() || '',
     };
-
-    const sanitizedDeliveryZones = settingsDeliveryZones
-      .filter((zone) => zone.label.trim() || (zone.description ?? '').trim() || Number(zone.fee || 0) > 0)
-      .map((zone) => ({
-        label: zone.label.trim() || 'Zone locale',
-        mode: zone.mode === 'sur_place' || zone.mode === 'retirer' ? zone.mode : 'livraison',
-        fee: Number(zone.fee || 0),
-        description: (zone.description ?? '').trim(),
-      }));
 
     try {
       const res = await fetch(`/api/shops/${currentShop.id}`, {
@@ -980,10 +944,9 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
           is_open: settingsOpen,
           whatsapp_number: settingsPhone.trim(),
           city: settingsCity.trim(),
-          theme_config: {
+          ...(canManageSocialLinks ? { theme_config: {
             social_links: sanitizedSocialLinks,
-            delivery_zones: sanitizedDeliveryZones,
-          },
+          } } : {}),
         }),
       });
       if (res.ok) {
@@ -1057,7 +1020,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     settingsCity,
     settingsNewPin,
     settingsSocialLinks,
-    settingsDeliveryZones,
     settingsSaved,
     hoursEnabled,
     openTime,
@@ -1121,7 +1083,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     setSettingsCity,
     setSettingsNewPin,
     setSettingsSocialLinks,
-    setSettingsDeliveryZones,
     setSettingsSaved,
     setHoursEnabled,
     setOpenTime,
@@ -1150,10 +1111,6 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     handleUpdateOrderStatus,
     handleSaveGeneralSettings,
     toast,
-    addDeliveryZone,
-    updateDeliveryZone,
-    removeDeliveryZone,
-
     loadShopData,
     syncShopSettings,
     copyRegistrationLinks,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getCategoryDefaults, normalizeProductImage } from '../utils/categoryDefaults';
+import { getCategoryDefaults, normalizeProductImage, normalizeStoredProductImage } from '../utils/categoryDefaults';
 import { getResponsiveImageProps } from '../utils/responsiveImages';
 import { CategoryIcon } from './CategoryIcon';
 
@@ -11,6 +11,7 @@ interface CategoryProductImageProps {
   imageFit?: 'cover' | 'contain';
   loading?: 'eager' | 'lazy';
   showFallbackTitle?: boolean;
+  allowLegacyInlinePreview?: boolean;
   /** How wide the photo is displayed, for responsive image selection. */
   sizes?: string;
   children?: React.ReactNode;
@@ -24,11 +25,14 @@ export const CategoryProductImage: React.FC<CategoryProductImageProps> = ({
   imageFit = 'cover',
   loading = 'lazy',
   showFallbackTitle = true,
+  allowLegacyInlinePreview = false,
   sizes = '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw',
   children,
 }) => {
   const defaults = getCategoryDefaults(category);
-  const normalizedImage = normalizeProductImage(imageUrl);
+  const normalizedImage = allowLegacyInlinePreview
+    ? normalizeStoredProductImage(imageUrl)
+    : normalizeProductImage(imageUrl);
   const isPlaceholder = !normalizedImage;
   const [imageFailed, setImageFailed] = useState(false);
 

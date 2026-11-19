@@ -21,9 +21,6 @@ import { createShopRegistrationRouter } from './server/routes/shopRegistration.t
 import { createMerchantVerificationRouter } from './server/routes/merchantVerification.ts';
 import { createTelemetryRouter } from './server/routes/telemetry.ts';
 import { createGeniusPayRouter } from './server/routes/geniusPay.ts';
-import { createDeliveryAdminRouter } from './server/routes/deliveryAdmin.ts';
-import { createDeliveryRouter } from './server/routes/delivery.ts';
-import { expireStaleRequestedCourses, parseOfferTtlMinutes } from './server/services/deliveryLifecycle.ts';
 import { expireStalePendingOrders, remindPendingOrdersWithoutResponse } from './server/services/orderLifecycle.ts';
 import { createAdvertisingRouters } from './server/routes/advertising.ts';
 import { createPublicRateLimitMiddleware, purgeExpiredRateLimitEntries } from './server/services/rateLimits.ts';
@@ -44,7 +41,7 @@ import { seedDemoDatabaseIfEmpty } from './server/services/demoSeed.ts';
 import { applySecurityHeaders } from './server/middleware/securityHeaders.ts';
 import { createMaintenanceModeMiddleware } from './server/middleware/maintenanceMode.ts';
 import type { OrderRecord, ProductRecord, ShopRecord, SubscriptionState } from './server/types.ts';
-import { loadProductsFromDatabase, persistProduct } from './server/repositories/products.ts';
+import { loadProductsFromDatabase, mapProductRow, persistProduct } from './server/repositories/products.ts';
 import { getShopFromDatabase, loadShopsFromDatabase, persistShop } from './server/repositories/shops.ts';
 import { loadOrdersFromDatabase } from './server/repositories/orders.ts';
 import { allocateRecordId } from './server/repositories/ids.ts';
@@ -84,8 +81,19 @@ import type { ShopCategory } from './src/utils/categoryDefaults.ts';
 import { findPublicDiscoveryPage } from './src/utils/discoverySeo.ts';
 import { SEO_ARTICLES } from './src/utils/seoArticles.ts';
 import { getPublicDomainRedirect, getSecureRedirectUrl } from './server/services/hostRedirect.ts';
-import { PUBLIC_PRODUCT_IMAGE_PATH, parseRequestedImageWidth, resizeProductImage, resolveProductImageRequest } from './server/services/publicProductImages.ts';
+import {
+  PUBLIC_PRODUCT_IMAGE_PATH,
+  parseRequestedImageWidth,
+  productImageFingerprint,
+  resizeProductImage,
+  resolveProductImageRequest,
+  resolveProductImageValue,
+} from './server/services/publicProductImages.ts';
+import { getProductMediaObjectKey, readProductMediaObject } from './server/services/mediaStorage.ts';
+import { isAgeVerificationTokenValid } from './server/services/ageVerification.ts';
 import { purgeExpiredVerificationDocuments } from './server/services/privateVerificationRetention.ts';
+import { sanitizeThemeConfigForResponse } from './server/services/shopThemeConfig.ts';
+import { isAgeRestrictedProduct } from './src/utils/ageRestrictedProducts.ts';
 
 export { buildSessionFingerprint, isRequestFingerprintMatch };
 
@@ -100,12 +108,6 @@ declare global {
 }
 
 const DEMO_MODE = String(process.env.DEMO_MODE || '').trim().toLowerCase() === 'true';
-const DELIVERY_TEST_MODE = process.env.NODE_ENV !== 'production'
-  && String(process.env.DELIVERY_TEST_MODE || '').trim().toLowerCase() === 'true';
-const DELIVERY_OPERATIONS_ENABLED = DELIVERY_TEST_MODE
-  || String(process.env.DELIVERY_OPERATIONS_ENABLED || '').trim().toLowerCase() === 'true';
-const DELIVERY_OFFER_TTL_MINUTES = parseOfferTtlMinutes(process.env.DELIVERY_OFFER_TTL_MINUTES);
-
 export function shouldSeedDemoData(): boolean {
   if (process.env.NODE_ENV !== 'production') {
     return true;
@@ -264,13 +266,9 @@ export function sanitizeTextField(value: string | null | undefined, maxLength = 
 export function validateCustomerOrderInput(input: {
   customer_name?: string;
   customer_phone?: string;
-  delivery_location?: string;
-  delivery_note?: string;
-}): { ok: boolean; customer_name?: string; customer_phone?: string; delivery_location?: string; delivery_note?: string; error?: string } {
+}): { ok: boolean; customer_name?: string; customer_phone?: string; error?: string } {
   const customerName = sanitizeTextField(input.customer_name, 80);
   const customerPhone = String(input.customer_phone ?? '').trim();
-  const deliveryLocation = sanitizeTextField(input.delivery_location, 200);
-  const deliveryNote = sanitizeTextField(input.delivery_note, 500);
 
   if (!customerName || customerName.length < 2) {
     return { ok: false, error: 'Nom client invalide.' };
@@ -281,16 +279,10 @@ export function validateCustomerOrderInput(input: {
     return { ok: false, error: 'Numéro de téléphone client invalide.' };
   }
 
-  if (!deliveryLocation || deliveryLocation.length < 3) {
-    return { ok: false, error: 'Lieu de livraison invalide.' };
-  }
-
   return {
     ok: true,
     customer_name: customerName,
     customer_phone: normalizedCustomerPhone,
-    delivery_location: deliveryLocation,
-    delivery_note: deliveryNote,
   };
 }
 
@@ -302,7 +294,7 @@ const demoShops: ShopRecord[] = [
     whatsapp_number: '+2250708091011',
     pin_code_hash: '402138',
     theme_color: '#E11D48',
-    welcome_message: 'Lingerie fine & Nuisettes soyeuses à Abidjan. Livraison discrète et soignée dans toute la Côte d\'Ivoire ✨',
+    welcome_message: 'Lingerie fine & Nuisettes soyeuses sélectionnées avec soin à Abidjan ✨',
     is_open: true,
     is_active: true,
     subscription_status: 'trialing',
@@ -368,7 +360,7 @@ const demoShops: ShopRecord[] = [
       theme_preset_id: 'food_braise',
       custom_banner_url: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=1200&auto=format&fit=crop&q=80',
       event_mode_enabled: true,
-      event_banner_text: '🔥 CHAUFFAGE AU CHARBON DE BOIS : COMMANDEZ AVANT 12H30 POUR ÊTRE LIVRÉ CHAUD !',
+      event_banner_text: '🔥 CHAUFFAGE AU CHARBON DE BOIS : COMMANDEZ AVANT 12H30 !',
       advanced_css: {
         borderRadius: 'rounded-2xl',
         shadowIntensity: 'strong',
@@ -383,7 +375,7 @@ const demoShops: ShopRecord[] = [
     whatsapp_number: '+2250102030405',
     pin_code_hash: '402138',
     theme_color: '#0F172A',
-    welcome_message: 'Chemises en pagne tissé et costumes sur mesure à Treichville. Confection rapide et livraison express ✂️👔',
+    welcome_message: 'Chemises en pagne tissé et costumes sur mesure à Treichville. Confection rapide ✂️👔',
     is_open: true,
     is_active: true,
     subscription_status: 'trialing',
@@ -670,8 +662,7 @@ const orders: OrderRecord[] = shouldSeedDemoData()
         shop_id: 1,
         customer_name: 'Affoué Konan',
         customer_phone: '+2250748123456',
-        delivery_location: 'Cocody Riviera 3, près du carrefour Cap Nord',
-        delivery_note: 'Portail blanc en face de la pharmacie',
+        delivery_location: '',
         payment_method_preference: 'wave',
         total_amount: 26500,
         created_at: new Date(Date.now() - 4 * 3600000).toISOString(),
@@ -686,8 +677,7 @@ const orders: OrderRecord[] = shouldSeedDemoData()
         shop_id: 1,
         customer_name: 'Mariam Diabaté',
         customer_phone: '+2250567891011',
-        delivery_location: 'Marcory Biétry, Rue du Canal',
-        delivery_note: 'Appelez dès que le livreur est au carrefour',
+        delivery_location: '',
         payment_method_preference: 'mobile_money',
         total_amount: 18000,
         created_at: new Date(Date.now() - 22 * 3600000).toISOString(),
@@ -701,8 +691,7 @@ const orders: OrderRecord[] = shouldSeedDemoData()
         shop_id: 2,
         customer_name: 'Bamba Souleymane',
         customer_phone: '+2250102039988',
-        delivery_location: 'Koumassi Remblais, Terminus 05',
-        delivery_note: 'Paiement à la livraison',
+        delivery_location: '',
         payment_method_preference: 'mobile_money',
         total_amount: 9500,
         created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
@@ -904,6 +893,7 @@ const toSafeShop = (shop: ShopRecord) => {
   } = shop;
   return {
     ...safeShop,
+    theme_config: sanitizeThemeConfigForResponse(shop.theme_config),
     owner_email_configured: Boolean(shop.owner_email),
     owner_email_verified: Boolean(shop.owner_email_verified_at),
     subscription,
@@ -1049,14 +1039,6 @@ async function startServer() {
     requireVerificationAdminAccess,
     clearMerchantSessionsForShop,
   }));
-  app.use('/api/admin/delivery', requireSuperAdminAccess, createDeliveryAdminRouter({
-    dbAll,
-    dbGet,
-    dbRun,
-    dbTransaction,
-    testMode: DELIVERY_TEST_MODE,
-    offerTtlMinutes: DELIVERY_OFFER_TTL_MINUTES,
-  }));
   const advertisingRouters = createAdvertisingRouters({
     rateLimitPublicRequest,
     requireMerchantOwnShop,
@@ -1159,23 +1141,62 @@ async function startServer() {
     computeIsShopOpen,
     isAdminShopSession: async (req, shopId) =>
       Number(req.params.slug) === shopId && Boolean(await getAdminSession(req)),
-    deliveryOperationsEnabled: DELIVERY_OPERATIONS_ENABLED,
     rateLimitPublicRequest,
   });
   app.get(`${PUBLIC_PRODUCT_IMAGE_PATH}/:productId/:file`, async (req, res) => {
     const productId = Number(req.params.productId);
     if (!Number.isInteger(productId) || productId <= 0) return res.status(404).end();
-    const row = await dbGet<{ image_url: string | null; thumbnail_url: string | null; gallery_images: unknown; lookbook_image: string | null }>(
-      'SELECT image_url, thumbnail_url, gallery_images, lookbook_image FROM products WHERE id = ?',
-      [productId],
-    );
-    const original = resolveProductImageRequest(String(req.params.file), row);
-    if (!original) return res.status(404).end();
+    const productRow = await dbGet<Record<string, unknown>>('SELECT * FROM products WHERE id = ?', [productId]);
+    const product = productRow ? mapProductRow(productRow) : undefined;
+    const shop = product ? await getShopFromDatabase(product.shop_id) : undefined;
+    if (!product || !shop) {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(404).end();
+    }
+
+    const session = await getSessionStateForResponse(req, res);
+    const isShopOwner = session.authenticated && session.userType === 'merchant' && session.shopId === shop.id;
+    const isSuperAdmin = session.authenticated && session.userType === 'admin' && session.role === 'super_admin';
+    const hasPrivateAccess = isShopOwner || isSuperAdmin;
+    const isAgeRestricted = isAgeRestrictedProduct(product);
+    const ageVerificationToken = typeof req.query.age_token === 'string' ? req.query.age_token : '';
+    const ageVerified = isAgeVerificationTokenValid(ageVerificationToken, shop.id);
+    const isPubliclyReadable = isShopPubliclyVisible(shop)
+      && product.is_available
+      && (!isAgeRestricted || ageVerified);
+    if (!hasPrivateAccess && !isPubliclyReadable) {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(404).end();
+    }
+
+    const file = String(req.params.file);
+    const storedValue = resolveProductImageValue(file, product);
+    if (!storedValue) {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(404).end();
+    }
+    let original = resolveProductImageRequest(file, product);
+    if (!original) {
+      const objectKey = getProductMediaObjectKey(storedValue, shop.id);
+      if (!objectKey) {
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(404).end();
+      }
+      const object = await readProductMediaObject(objectKey);
+      if (!object) {
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(404).end();
+      }
+      original = {
+        ...object,
+        etag: `"${productImageFingerprint(storedValue)}"`,
+      };
+    }
     const requestedWidth = parseRequestedImageWidth(req.query.w);
     const image = requestedWidth ? await resizeProductImage(original, requestedWidth) : original;
     res.set({
       'Content-Type': image.contentType,
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': isPubliclyReadable && !isAgeRestricted ? 'public, max-age=31536000, immutable' : 'private, no-store',
       ETag: image.etag,
       'X-Content-Type-Options': 'nosniff',
     });
@@ -1291,43 +1312,6 @@ async function startServer() {
     summarizeOrderMetrics,
   }));
 
-  if (DELIVERY_OPERATIONS_ENABLED) {
-    app.use('/api', createDeliveryRouter({
-      hashAccessToken,
-      hashPin,
-      isWeakPin: isWeakShopPin,
-      verifyPin,
-      getCookie,
-      buildSessionFingerprint,
-      isRequestFingerprintMatch,
-      requireMerchantAccess,
-      rateLimitPublicRequest,
-      sandboxPaymentsEnabled: DELIVERY_TEST_MODE
-        && String(process.env.DELIVERY_SANDBOX_PAYMENTS || '').trim().toLowerCase() === 'true',
-      requireProof: String(process.env.DELIVERY_REQUIRE_PROOF || '').trim().toLowerCase() !== 'false',
-      getCustomerSessionState,
-      databaseMode,
-    }));
-    const runDeliveryExpiry = () => {
-      void expireStaleRequestedCourses(DELIVERY_OFFER_TTL_MINUTES)
-        .then((count) => {
-          if (count > 0) console.info(`Expired ${count} delivery course(s) without a driver.`);
-        })
-        .catch((error: unknown) => {
-          console.error('Scheduled delivery course expiry failed.', error);
-        });
-    };
-    setInterval(runDeliveryExpiry, 10 * 60 * 1000).unref();
-  } else {
-    app.get('/api/delivery/zones', (_req, res) => {
-      res.setHeader('Cache-Control', 'no-store');
-      res.json({ zones: [], available: false });
-    });
-    app.get('/api/shops/:id/deliveries', requireMerchantAccess, (_req, res) => {
-      res.json({ deliveries: [], available: false });
-    });
-  }
-
   const runPendingOrderExpiry = () => {
     void expireStalePendingOrders()
       .then(async (expiredOrders) => {
@@ -1372,7 +1356,6 @@ async function startServer() {
     timingSafeEqual,
     getValidSelectedModifiers,
     getProductUnitPriceWithModifiers,
-    deliveryOperationsEnabled: DELIVERY_OPERATIONS_ENABLED,
   }));
 
   app.use('/api', (_req, res) => {
@@ -1408,7 +1391,7 @@ async function startServer() {
   };
   const isPrivateSeoPath = (pathname: string) => {
     const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
-    return ['/app', '/admin', '/ambassadeur', '/compte', '/connexion', '/inscription', '/recuperation-acces', '/livreur']
+    return ['/app', '/admin', '/ambassadeur', '/compte', '/connexion', '/inscription', '/recuperation-acces']
       .some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`));
   };
   app.use((req, res, next) => {
@@ -1476,19 +1459,6 @@ async function startServer() {
           const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
           const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
           return res.status(200).set({ 'Content-Type': 'text/html' }).end(injectNoIndexSeo(transformed, 'Aperçus mobiles | MaTable'));
-        } catch (error) {
-          return next(error);
-        }
-      }
-
-      if (req.path === '/__preview/delivery-courier' && shouldServePublicHtml(req)) {
-        try {
-          const indexHtmlPath = path.join(process.cwd(), 'index.html');
-          const raw = fs.readFileSync(indexHtmlPath, 'utf-8');
-          const transformed = await vite.transformIndexHtml(req.originalUrl, raw);
-          return res.status(200)
-            .set({ 'Content-Type': 'text/html', 'Cache-Control': 'no-store' })
-            .end(injectNoIndexSeo(transformed, 'Aperçu test livreur | MaTable'));
         } catch (error) {
           return next(error);
         }

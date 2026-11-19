@@ -64,7 +64,7 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     if (req.body.accepted_terms_privacy !== true) {
       return res.status(400).json({ error: 'Veuillez accepter les CGU et la politique de confidentialité pour créer une boutique.' });
     }
-    const { name, whatsapp_number, pin_code, pin, category, city, welcome_message, theme_config, opening_hours } = req.body;
+    const { name, whatsapp_number, pin_code, pin, category, city, welcome_message, opening_hours } = req.body;
     const requestedTier = req.body.subscription_tier ?? 'standard';
     if (requestedTier !== 'standard' && requestedTier !== 'premium') {
       return res.status(400).json({ error: 'Choisissez Standard ou Premium pour votre boutique.' });
@@ -81,7 +81,6 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     const safeName = sanitizeTextField(name, 100);
     const safeCity = sanitizeTextField(city || '', 100);
     const safeWelcomeMessage = sanitizeTextField(welcome_message, 300);
-    const requestedThemeConfig = theme_config && typeof theme_config === 'object' ? theme_config : {};
     const requestedOpenTime = typeof opening_hours?.open_time === 'string' ? opening_hours.open_time.slice(0, 5) : '';
     const requestedCloseTime = typeof opening_hours?.close_time === 'string' ? opening_hours.close_time.slice(0, 5) : '';
     const requestedDays = Array.isArray(opening_hours?.days)
@@ -94,19 +93,6 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       days: requestedDays,
       manual_override: Boolean(opening_hours?.manual_override),
     };
-    const deliveryZones = Array.isArray(requestedThemeConfig.delivery_zones)
-      ? requestedThemeConfig.delivery_zones.slice(0, 8).map((zone: unknown) => {
-          const value = zone && typeof zone === 'object' ? zone as Record<string, unknown> : {};
-          const rawFee = Number(value.fee || 0);
-          return {
-            label: sanitizeTextField(typeof value.label === 'string' ? value.label : 'Zone locale', 80),
-            mode: value.mode === 'sur_place' || value.mode === 'retirer' ? value.mode : 'livraison',
-            fee: Number.isFinite(rawFee) ? Math.min(1_000_000, Math.max(0, rawFee)) : 0,
-            description: typeof value.description === 'string' ? sanitizeTextField(value.description, 120) : undefined,
-          };
-        })
-      : [];
-
     if (typeof req.body.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail) || ownerEmail.length > 254) {
       return res.status(400).json({ error: 'Une adresse e-mail valide est obligatoire pour le responsable.' });
     }
@@ -148,7 +134,7 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       custom_banner_url: '',
       logo_url: '',
       event_mode_enabled: false,
-      event_banner_text: '🎉 Commande rapide • Livraison et retrait disponibles',
+      event_banner_text: '🎉 Commande rapide',
       social_links: {
         instagram: '',
         facebook: '',
@@ -156,7 +142,6 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
         website: '',
         whatsapp: '',
       },
-      delivery_zones: deliveryZones,
       advanced_css: {
         borderRadius: 'rounded-xl' as const,
         shadowIntensity: 'subtle' as const,

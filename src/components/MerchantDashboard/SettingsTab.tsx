@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Store, Clock, Check, Send, Eye, EyeOff, TrendingUp, AlertTriangle, Copy, RotateCcw, Calendar } from 'lucide-react';
 import type { Shop } from '../../types';
 import { MerchantState } from './useMerchant';
+import { ContextualHelp } from '../ContextualHelp';
 import { ThemeCustomizer } from '../ThemeCustomizer';
 import type { ManualVerificationProgress } from './MerchantManualVerification';
 import { MerchantVerificationWizard } from './MerchantVerificationWizard';
@@ -46,11 +47,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const [ownerProfileError, setOwnerProfileError] = useState('');
   const {
     currentShop, products, showSettingsPin, setShowSettingsPin, setCurrentShop, settingsSubTab, settingsName, setSettingsName, settingsWelcome, setSettingsWelcome, settingsPhone, setSettingsPhone, settingsCity, setSettingsCity, settingsNewPin, setSettingsNewPin,
-    settingsSocialLinks, setSettingsSocialLinks, settingsDeliveryZones, settingsSaved,
+    settingsSocialLinks, setSettingsSocialLinks, settingsSaved,
     hoursEnabled, setHoursEnabled, openTime, setOpenTime, closeTime, setCloseTime, activeDays, setActiveDays,
     manualOverride, hoursSaved, cronResult, copiedBilan, setCopiedBilan,
     flashBilan,
-    handleSaveOpeningHours, handleResetManualOverride, handleSaveGeneralSettings, addDeliveryZone, updateDeliveryZone, removeDeliveryZone, toast
+    handleSaveOpeningHours, handleResetManualOverride, handleSaveGeneralSettings, toast
   } = state;
   const lowStockCount = products.filter((product) => product.stock > 0 && product.stock <= 3).length;
   const outOfStockCount = products.filter((product) => product.stock === 0).length;
@@ -77,7 +78,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const settingsCopy: Record<typeof settingsSubTab, { eyebrow: string; title: string; description: string }> = {
     profile: { eyebrow: 'Compte', title: 'Profil personnel', description: 'Gérez vos coordonnées personnelles, votre e-mail de facturation et la sécurité de votre accès.' },
     themes: { eyebrow: 'Ma boutique', title: 'Apparence de la vitrine', description: 'Personnalisez les couleurs, les images et la présentation de votre boutique.' },
-    general: { eyebrow: 'Ma boutique', title: 'Informations de la boutique', description: 'Gardez vos coordonnées, votre contact et vos informations de livraison à jour.' },
+    general: { eyebrow: 'Ma boutique', title: 'Informations de la boutique', description: 'Gardez vos coordonnées et les informations publiques à jour.' },
     hours: { eyebrow: 'Ma boutique', title: 'Horaires et disponibilité', description: 'Définissez les jours et heures pendant lesquels vos clients peuvent commander.' },
     bilan: { eyebrow: 'Mon activité', title: 'Suivi de votre activité', description: 'Consultez les chiffres du jour et partagez votre bilan sur WhatsApp.' },
     verification: { eyebrow: 'Compte', title: 'Vérification d’identité', description: 'Vérifiez l’identité de la personne responsable de la boutique.' },
@@ -117,7 +118,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
           setOwnerPhone(data.phone || '');
           setOwnerEmail(data.email || '');
           setSavedOwnerEmail(data.email || '');
-          setOwnerEmailVerified(Boolean(data.email_verified));
+          const emailVerified = Boolean(data.email_verified);
+          setOwnerEmailVerified(emailVerified);
+          setCurrentShop((shop) => shop ? {
+            ...shop,
+            owner_email_configured: Boolean(data.email),
+            owner_email_verified: emailVerified,
+          } : shop);
           setOwnerCurrentPin('');
           setOwnerEmailChallenge('');
           setOwnerEmailCode('');
@@ -553,7 +560,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                     maxLength={500}
                     value={settingsWelcome}
                     onChange={(e) => setSettingsWelcome(e.target.value)}
-                    placeholder="Ex: Nuisettes soyeuses & lingerie fine. Livraison discrète à Abidjan..."
+                    placeholder="Ex. : Nuisettes soyeuses et lingerie fine à Abidjan..."
                     className="min-h-24 w-full rounded-xl border border-[#ded7cd] bg-[var(--mt-surface)] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-primary)]/25 focus:border-[var(--mt-green-primary)]"
                   />
                   <p className="mt-1 text-right text-[11px] text-slate-500">{settingsWelcome.length}/500</p>
@@ -561,9 +568,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
 
                 {/* WhatsApp Contact Number */}
                 <div>
-                  <label htmlFor="merchant-store-whatsapp" className="block text-xs font-bold text-slate-700 mb-1">
-                    Numéro WhatsApp de réception des commandes *
-                  </label>
+                  <div className="mb-1 flex items-center gap-2">
+                    <label htmlFor="merchant-store-whatsapp" className="block text-xs font-bold text-slate-700">
+                      Numéro WhatsApp de réception des commandes *
+                    </label>
+                    <ContextualHelp label="Numéro WhatsApp de réception des commandes">
+                      Les clients pourront vous contacter sur ce numéro pour confirmer les détails de leur commande.
+                    </ContextualHelp>
+                  </div>
                   <input
                     id="merchant-store-whatsapp"
                     type="tel"
@@ -574,9 +586,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                     onChange={(e) => setSettingsPhone(e.target.value)}
                     className="min-h-11 w-full rounded-xl border border-[#ded7cd] bg-[var(--mt-surface)] px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-primary)]/25 focus:border-[var(--mt-green-primary)]"
                   />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Les clients seront automatiquement redirigés vers ce numéro WhatsApp avec leur panier validé.
-                  </p>
                 </div>
 
                 {/* Social links */}
@@ -596,86 +605,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                     <p className="mt-1 text-xs leading-5 text-amber-900">Ajoutez les liens de vos réseaux sociaux avec une formule Premium ou Pro.</p>
                   </div>
                 )}
-
-                {/* Delivery zones */}
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="block text-xs font-bold text-slate-700">
-                      Zones de service & livraison
-                    </label>
-                    <button
-                      type="button"
-                      onClick={addDeliveryZone}
-                      disabled={settingsDeliveryZones.length >= 8}
-                      className="min-h-11 rounded-lg bg-slate-900 px-3 text-xs font-black text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {settingsDeliveryZones.length >= 8 ? 'Limite de 8 zones' : '+ Ajouter une zone'}
-                    </button>
-                  </div>
-
-                  {settingsDeliveryZones.length === 0 ? (
-                    <p className="text-[11px] text-slate-500">Aucune zone renseignée. Ajoutez une zone conforme à votre service.</p>
-                  ) : (
-                    settingsDeliveryZones.map((zone, index) => (
-                      <div key={`${zone.label || 'zone'}-${index}`} className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <label className="sr-only" htmlFor={`delivery-zone-name-${index}`}>Nom de la zone {index + 1}</label>
-                          <input
-                            id={`delivery-zone-name-${index}`}
-                            value={zone.label}
-                            onChange={(e) => updateDeliveryZone(index, 'label', e.target.value)}
-                            placeholder="Nom de la zone"
-                            maxLength={80}
-                            className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15"
-                          />
-                          <label className="sr-only" htmlFor={`delivery-zone-mode-${index}`}>Mode de service pour la zone {index + 1}</label>
-                          <select
-                            id={`delivery-zone-mode-${index}`}
-                            value={zone.mode}
-                            onChange={(e) => updateDeliveryZone(index, 'mode', e.target.value)}
-                            className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15"
-                          >
-                            <option value="livraison">Livraison</option>
-                            <option value="sur_place">Sur place</option>
-                            <option value="retirer">Retrait</option>
-                          </select>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <label className="sr-only" htmlFor={`delivery-zone-fee-${index}`}>Frais de service en FCFA pour la zone {index + 1}</label>
-                          <input
-                            id={`delivery-zone-fee-${index}`}
-                            type="number"
-                            min={0}
-                            inputMode="numeric"
-                            value={zone.fee}
-                            onChange={(e) => updateDeliveryZone(index, 'fee', Number(e.target.value || 0))}
-                            placeholder="Frais de service (FCFA)"
-                            className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15"
-                          />
-                          <label className="sr-only" htmlFor={`delivery-zone-description-${index}`}>Description ou délai pour la zone {index + 1}</label>
-                          <input
-                            id={`delivery-zone-description-${index}`}
-                            value={zone.description || ''}
-                            onChange={(e) => updateDeliveryZone(index, 'description', e.target.value)}
-                            placeholder="Description / délai"
-                            maxLength={120}
-                            className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15"
-                          />
-                        </div>
-                        <div className="flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => removeDeliveryZone(index)}
-                            aria-label={`Supprimer la zone ${zone.label || index + 1}`}
-                            className="min-h-11 rounded-lg px-3 text-xs font-bold text-rose-700 hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
-                          >
-                            Supprimer
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
 
                 <div className="pt-2">
                   <button

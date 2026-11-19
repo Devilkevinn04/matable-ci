@@ -165,7 +165,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-[#47534b]">
               Numéro WhatsApp
-              <input type="tel" inputMode="tel" maxLength={16} value={regPhone} onChange={(event) => setRegPhone(event.target.value.slice(0, 16))} required autoComplete="tel" placeholder="+225 07 00 00 00 00" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" />
+              <input type="tel" inputMode="tel" maxLength={19} pattern="(?:\+225\s?)?(?:01|05|07)(?:\s?[0-9]{2}){4}" title="Saisissez 10 chiffres ivoiriens, avec ou sans l’indicatif +225." value={regPhone} onChange={(event) => setRegPhone(event.target.value.slice(0, 19))} required autoComplete="tel" placeholder="+225 07 00 00 00 00" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" />
               <span className="mt-1 block text-xs font-normal text-[#68756c]">Ce numéro servira au contact avec vos clients et à retrouver votre espace.</span>
             </label>
 

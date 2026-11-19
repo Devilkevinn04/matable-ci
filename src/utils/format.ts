@@ -66,10 +66,9 @@ function sanitizeWhatsAppText(value: string | null | undefined): string {
 
 export function generateWhatsAppOrderReceipt(
   shop: Shop,
-  order: Pick<Order, 'id' | 'customer_name' | 'customer_phone' | 'delivery_location' | 'delivery_note' | 'payment_method_preference' | 'items' | 'total_amount' | 'delivery_slot' | 'delivery_fee'>
+  order: Pick<Order, 'id' | 'customer_name' | 'customer_phone' | 'payment_method_preference' | 'items' | 'total_amount'>
 ): { text: string; url: string } {
   const articlesTotal = Number(order.total_amount) || 0;
-  const deliveryFee = Number(order.delivery_fee || 0);
   const items = order.items || [];
   const blocks: string[] = [];
 
@@ -81,12 +80,7 @@ export function generateWhatsAppOrderReceipt(
 
   const customerLines = ['*CLIENT*', sanitizeWhatsAppText(order.customer_name)];
   const customerPhone = sanitizeWhatsAppText(order.customer_phone);
-  const deliveryLocation = sanitizeWhatsAppText(order.delivery_location);
   if (customerPhone) customerLines.push(customerPhone);
-  if (deliveryLocation) customerLines.push(deliveryLocation);
-  if (order.delivery_slot) customerLines.push(`Créneau : ${sanitizeWhatsAppText(order.delivery_slot)}`);
-  const deliveryNote = sanitizeWhatsAppText(order.delivery_note);
-  if (deliveryNote) customerLines.push(`Repère : ${deliveryNote}`);
   blocks.push(customerLines.filter((line, index) => line.length > 0 || index === 0).join('\n'));
 
   const itemLines = ['*ARTICLES*'];
@@ -113,22 +107,8 @@ export function generateWhatsAppOrderReceipt(
   }
   blocks.push(paymentLines.join('\n'));
 
-  if (deliveryFee > 0) {
-    blocks.push([
-      '🛵 *LIVRAISON MATABLE*',
-      `Frais de livraison MaTable : ${formatFCFA(deliveryFee)}`,
-      'La recherche d’un livreur commencera après acceptation de la demande par la boutique.',
-      'Le règlement des articles et des frais de livraison reste à convenir avec la boutique ou le livreur.',
-    ].join('\n'));
-    blocks.push(`💰 *TOTAL À RÉGLER : ${formatFCFA(articlesTotal + deliveryFee)}*`);
-  } else {
-    blocks.push([
-      '📦 *RETRAIT / LIVRAISON*',
-      'Disponibilité, retrait ou livraison et frais éventuels à confirmer directement avec la boutique.',
-      'La livraison de cette commande n’est pas organisée par MaTable.',
-    ].join('\n'));
-    blocks.push(`💰 *TOTAL INDICATIF : ${formatFCFA(articlesTotal)}*`);
-  }
+  blocks.push(`💰 *TOTAL DES ARTICLES : ${formatFCFA(articlesTotal)}*`);
+  blocks.push('Cette demande ne confirme pas le paiement. Contactez la boutique pour confirmer la disponibilité, les modalités de remise et le règlement.');
 
   blocks.push('Merci de me confirmer la disponibilité, le montant final et le mode de paiement.');
 

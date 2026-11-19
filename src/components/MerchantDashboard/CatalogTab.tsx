@@ -356,6 +356,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                       imageUrl={prod.image_url}
                       category={currentShop.category}
                       title={prod.title}
+                      allowLegacyInlinePreview
                       className="aspect-4/3 bg-[#f3efe8]"
                     >
                       {prod.prep_time && (

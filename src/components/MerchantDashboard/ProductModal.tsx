@@ -8,6 +8,7 @@ import { getCategoryDefaults } from '../../utils/categoryDefaults';
 import { getMerchantVocabulary } from '../../utils/merchantVocabulary';
 import { CategoryProductImage } from '../CategoryProductImage';
 import { getSubscriptionProductPhotoLimit } from '../../utils/subscriptionFeatures';
+import { ContextualHelp } from '../ContextualHelp';
 
 interface ProductModalProps {
   state: MerchantState;
@@ -34,6 +35,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
       ? getSubscriptionProductPhotoLimit('standard')
       : getSubscriptionProductPhotoLimit(currentShop.subscription?.plan, currentShop.subscription?.planFeatures);
   const productPhotoCount = (prodImage ? 1 : 0) + (prodLookbookImage ? 1 : 0) + prodGalleryImages.length;
+  const formatPhotoSize = (sizeKB: number | null) => sizeKB === null ? '—' : sizeKB === 0 ? '<1 Ko' : `${sizeKB} Ko`;
   const canAddLookbookPhoto = Boolean(prodLookbookImage) || productPhotoCount < productPhotoLimit;
   const modifierGroups = prodModifierGroups;
   const sizeChoices = ['Taille unique', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '36', '38', '40', '42', '44', '46'];
@@ -122,7 +124,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
               </section>
 
               <div className="max-w-md">
-                <label htmlFor="merchant-product-price" className="mb-1.5 block text-xs font-bold text-slate-700">Prix habituel (en FCFA) *</label>
+                <div className="mb-1.5 flex items-center gap-2">
+                  <label htmlFor="merchant-product-price" className="block text-xs font-bold text-slate-700">Prix habituel (en FCFA) *</label>
+                  <ContextualHelp label="Prix habituel" variant="info">
+                    Saisissez le prix normal de l’article. Un prix promotionnel éventuel doit lui être inférieur et ne s’applique que pendant les dates choisies.
+                  </ContextualHelp>
+                </div>
                 <input
                   id="merchant-product-price"
                   type="number"
@@ -136,11 +143,15 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                 />
               </div>
 
-              <details open={prodSalePrice !== ''} className="rounded-xl border border-orange-200 bg-orange-50/60 p-3 sm:p-4">
-                <summary className="cursor-pointer text-sm font-extrabold text-orange-950">Ajouter une promotion (facultatif)</summary>
+              <details open={prodSalePrice !== ''} className="relative rounded-xl border border-orange-200 bg-orange-50/60 p-3 sm:p-4">
+                <summary className="cursor-pointer pr-8 text-sm font-extrabold text-orange-950">Ajouter une promotion (facultatif)</summary>
+                <span className="absolute right-3 top-2.5">
+                  <ContextualHelp label="Prix promotionnel" variant="tip">
+                    Renseignez un prix réduit inférieur au prix habituel et ses dates de début et de fin. Laissez le prix vide si l’article n’est pas en promotion.
+                  </ContextualHelp>
+                </span>
                 <div className="mt-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
-                    <p className="text-xs leading-5 text-slate-600">Indiquez un prix réduit et les dates de la promotion. Sinon, laissez ces champs vides.</p>
                     {prodSalePrice !== '' && <button type="button" onClick={() => { setProdSalePrice(''); setProdSaleStartsAt(''); setProdSaleEndsAt(''); }} className="min-h-8 rounded-lg px-2 text-xs font-bold text-orange-900 hover:bg-orange-100">Retirer la promotion</button>}
                   </div>
                   <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -488,6 +499,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                       imageUrl={prodImage}
                       category={currentShop.category}
                       title={prodTitle || 'Aperçu du produit'}
+                      allowLegacyInlinePreview
                       className="h-20 w-20 shrink-0 rounded-xl border border-slate-200 bg-white"
                       loading="eager"
                     />
@@ -506,9 +518,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                       <p className="mt-2 text-[11px] text-slate-500">Choisissez une photo dans votre téléphone ou votre ordinateur. Elle sera préparée automatiquement.</p>
                       {!prodImage && <p className="mt-2 text-xs font-bold text-emerald-800">Ajoutez une photo, vous vendrez plus.</p>}
                       {imageCompressing && <span className="mt-2 block text-[11px] font-bold text-amber-700">Optimisation de la photo en cours...</span>}
-                      {compressedSizeKB && (
+                      {compressedSizeKB !== null && (
                         <span className="mt-2 flex items-center gap-1 text-[11px] font-bold text-emerald-600">
-                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Photo prête : {originalImageSizeKB || '?'} KB → {compressedSizeKB} KB
+                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Photo prête : {formatPhotoSize(originalImageSizeKB)} → {formatPhotoSize(compressedSizeKB)}
                         </span>
                       )}
                     </div>

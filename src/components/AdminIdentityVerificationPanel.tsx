@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, LoaderCircle, RefreshCw, Search, Send, ShieldCheck } from 'lucide-react';
+import { ContextualHelp } from './ContextualHelp';
 
 interface VerificationItem {
   shop_id: number;
@@ -15,7 +16,6 @@ interface VerificationItem {
 interface VerificationUsage {
   month: string;
   merchant_finished: number;
-  courier_finished: number;
   total_finished: number;
   threshold: number;
   alert: boolean;
@@ -112,7 +112,12 @@ export function AdminIdentityVerificationPanel({
       <div className="flex min-w-0 items-start gap-2">
         <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-black text-slate-900">File de vérification Didit</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-black text-slate-900">File de vérification Didit</h2>
+            <ContextualHelp label="File de vérification d’identité" variant="info">
+              Les statuts sont synchronisés depuis Didit et consultables ici, mais ne peuvent pas être modifiés dans cette file. Le compteur indique l’usage du budget sur le mois en cours.
+            </ContextualHelp>
+          </div>
           <p className="text-[11px] leading-4 text-slate-500">
             <span className="sm:hidden">Statuts Didit · consultation seule.</span>
             <span className="hidden sm:inline">Consultez les statuts transmis par Didit. Les décisions sont synchronisées par webhook et ne sont pas modifiables ici.</span>
@@ -123,7 +128,7 @@ export function AdminIdentityVerificationPanel({
       {usage && (
         <div className={`mt-3 rounded-lg px-3 py-2 text-xs font-semibold ${usage.alert ? 'bg-rose-50 text-rose-900' : 'bg-slate-50 text-slate-700'}`}>
           Budget Didit · {usage.total_finished} session{usage.total_finished > 1 ? 's' : ''} terminée{usage.total_finished > 1 ? 's' : ''} en {usageMonthLabel}
-          {' '}({usage.merchant_finished} marchand{usage.merchant_finished > 1 ? 's' : ''}, {usage.courier_finished} livreur{usage.courier_finished > 1 ? 's' : ''}) · alerte à {usage.threshold}.
+          {' '}({usage.merchant_finished} marchand{usage.merchant_finished > 1 ? 's' : ''}) · alerte à {usage.threshold}.
           {usage.alert && ' Vérifiez le solde Didit ou contactez le support avant de relancer.'}
         </div>
       )}

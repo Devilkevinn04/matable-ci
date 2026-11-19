@@ -133,6 +133,7 @@ export const CatalogCompactList: React.FC<CatalogCompactListProps> = ({
                 imageUrl={product.image_url}
                 category={category}
                 title={product.title}
+                allowLegacyInlinePreview
                 className="h-14 w-14 shrink-0 rounded-xl bg-[#f3efe8]"
               />
               <span className="min-w-0">

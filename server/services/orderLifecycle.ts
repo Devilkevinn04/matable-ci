@@ -1,6 +1,5 @@
 import { databaseMode, dbAll, dbTransaction, type DatabaseTransaction } from '../../db.ts';
 import type { OrderRecord } from '../types.ts';
-import { dispatchDeliveryCancelledPush } from './deliveryNotifications.ts';
 import { getVapidConfiguration, sendMerchantPush } from './pushNotifications.ts';
 
 export const PENDING_ORDER_TTL_MS = 2 * 60 * 60 * 1000;
@@ -22,11 +21,6 @@ export interface ExpiredPendingOrder {
   orderId: number;
   shopId: number;
   stockUpdates: OrderStockUpdate[];
-  cancelledDelivery?: {
-    id: number;
-    previousStatus: string;
-    driverId: number | null;
-  };
 }
 
 export async function restoreReservedOrderStock(
@@ -64,7 +58,7 @@ async function expirePendingOrder(
   transaction: DatabaseTransaction,
   orderId: number,
   now: string,
-): Promise<{ type: 'expired'; order: ExpiredPendingOrder } | { type: 'blockedByDelivery' } | null> {
+): Promise<{ type: 'expired'; order: ExpiredPendingOrder } | null> {
   const cutoff = new Date(Date.parse(now) - PENDING_ORDER_TTL_MS).toISOString();
   const row = await transaction.get<{
     id: number | string;
@@ -79,16 +73,6 @@ async function expirePendingOrder(
   `, [orderId]);
   if (!row || row.status !== 'pending' || (row.pending_since || row.created_at) > cutoff) return null;
 
-  const delivery = await transaction.get<{
-    id: number | string;
-    status: string;
-    driver_id: number | string | null;
-  }>(`
-    SELECT id, status, driver_id FROM delivery_orders
-    WHERE order_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}
-  `, [orderId]);
-  if (delivery?.status === 'picked_up') return { type: 'blockedByDelivery' };
-
   const items = typeof row.items === 'string' ? JSON.parse(row.items) as OrderRecord['items'] : row.items;
   if (!Array.isArray(items)) throw new Error(`Invalid order items for order ${orderId}.`);
   const shopId = Number(row.shop_id);
@@ -102,24 +86,7 @@ async function expirePendingOrder(
   [now, shopId, pendingOrderReminderEventKey(orderId, row.pending_since || row.created_at)]);
   const stockUpdates = await restoreReservedOrderStock(transaction, { items }, shopId);
 
-  let cancelledDelivery: ExpiredPendingOrder['cancelledDelivery'];
-  if (delivery && ['requested', 'accepted', 'to_pickup'].includes(delivery.status)) {
-    await transaction.run(
-      "UPDATE delivery_orders SET status = 'cancelled', cancelled_at = ? WHERE id = ? AND status = ?",
-      [now, delivery.id, delivery.status],
-    );
-    await transaction.run(`INSERT INTO delivery_course_events
-      (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
-      VALUES (?, 'admin', NULL, ?, 'cancelled', ?)`,
-    [delivery.id, delivery.status, now]);
-    cancelledDelivery = {
-      id: Number(delivery.id),
-      previousStatus: delivery.status,
-      driverId: delivery.driver_id === null ? null : Number(delivery.driver_id),
-    };
-  }
-
-  return { type: 'expired', order: { orderId, shopId, stockUpdates, cancelledDelivery } };
+  return { type: 'expired', order: { orderId, shopId, stockUpdates } };
 }
 
 export async function expireStalePendingOrders(nowMs = Date.now(), limit = 200): Promise<ExpiredPendingOrder[]> {
@@ -136,19 +103,7 @@ export async function expireStalePendingOrders(nowMs = Date.now(), limit = 200):
   for (const candidate of candidates) {
     const result = await dbTransaction((transaction) => expirePendingOrder(transaction, Number(candidate.id), now));
     if (!result) continue;
-    if (result.type === 'blockedByDelivery') {
-      console.error(`Pending order ${Number(candidate.id)} could not expire because its delivery is already picked up.`);
-      continue;
-    }
     expired.push(result.order);
-    if (result.order.cancelledDelivery) {
-      void dispatchDeliveryCancelledPush(
-        result.order.cancelledDelivery.id,
-        result.order.cancelledDelivery.previousStatus,
-        result.order.cancelledDelivery.driverId,
-        'admin',
-      );
-    }
   }
   return expired;
 }

@@ -238,6 +238,137 @@ test('V1 public catalog reads preserve the legacy directory and storefront respo
   assert.deepEqual(await catalogStorefront.json(), await legacyStorefront.json());
 });
 
+test('merchant storefronts serve cacheable URLs for inline product photos', async () => {
+  const login = await fetch(`${BASE_URL}/api/auth/merchant-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '+2250708091011', pin: '402138' }),
+  });
+  assert.equal(login.status, 200, await login.text());
+  const merchantCookie = login.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(merchantCookie);
+
+  const database = new Database(TEST_DB_PATH);
+  const product = database.prepare(`
+    SELECT p.id, p.image_url, p.thumbnail_url, s.slug, s.publication_status
+    FROM products p JOIN shops s ON s.id = p.shop_id
+    WHERE s.slug = 'aya-chic'
+    ORDER BY p.id LIMIT 1
+  `).get() as { id: number; image_url: string | null; thumbnail_url: string | null; slug: string; publication_status: string } | undefined;
+  assert.ok(product);
+  const previous = {
+    image_url: product.image_url,
+    thumbnail_url: product.thumbnail_url,
+    publication_status: product.publication_status,
+  };
+  const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  database.prepare('UPDATE products SET image_url = ?, thumbnail_url = NULL WHERE id = ?').run(pixel, product.id);
+  database.close();
+
+  try {
+    const storefront = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/${encodeURIComponent(product.slug)}`, {
+      headers: { Cookie: merchantCookie },
+    });
+    assert.equal(storefront.status, 200);
+    const payload = await storefront.json() as { products: Array<{ id: number; image_url: string }> };
+    const storefrontProduct = payload.products.find((item) => item.id === product.id);
+    assert.ok(storefrontProduct);
+    assert.match(storefrontProduct.image_url, new RegExp(`^/media/products/${product.id}/0-[a-f0-9]{20}\\.png$`));
+
+    const image = await fetch(new URL(storefrontProduct.image_url, BASE_URL));
+    assert.equal(image.status, 200);
+    assert.match(image.headers.get('content-type') || '', /image\/png/);
+
+    const hideShop = new Database(TEST_DB_PATH);
+    hideShop.prepare('UPDATE shops SET publication_status = ? WHERE slug = ?').run('draft', product.slug);
+    hideShop.close();
+
+    const privateStorefront = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/${encodeURIComponent(product.slug)}`, {
+      headers: { Cookie: merchantCookie },
+    });
+    assert.equal(privateStorefront.status, 200);
+    const privatePayload = await privateStorefront.json() as { products: Array<{ id: number; image_url: string }> };
+    const privateProduct = privatePayload.products.find((item) => item.id === product.id);
+    assert.ok(privateProduct);
+
+    const anonymousPrivateImage = await fetch(new URL(privateProduct.image_url, BASE_URL));
+    assert.equal(anonymousPrivateImage.status, 404);
+    assert.equal(anonymousPrivateImage.headers.get('cache-control'), 'no-store');
+
+    const merchantPrivateImage = await fetch(new URL(privateProduct.image_url, BASE_URL), {
+      headers: { Cookie: merchantCookie },
+    });
+    assert.equal(merchantPrivateImage.status, 200);
+    assert.equal(merchantPrivateImage.headers.get('cache-control'), 'private, no-store');
+  } finally {
+    const restore = new Database(TEST_DB_PATH);
+    restore.prepare('UPDATE products SET image_url = ?, thumbnail_url = ? WHERE id = ?').run(previous.image_url, previous.thumbnail_url, product.id);
+    restore.prepare('UPDATE shops SET publication_status = ? WHERE slug = ?').run(previous.publication_status, product.slug);
+    restore.close();
+  }
+});
+
+test('age-restricted product photos require the shop-scoped age token', async () => {
+  const database = new Database(TEST_DB_PATH);
+  const product = database.prepare(`
+    SELECT p.id, p.title, p.description, p.image_url, p.thumbnail_url, p.is_available, s.slug
+    FROM products p JOIN shops s ON s.id = p.shop_id
+    WHERE s.slug = 'aya-chic'
+    ORDER BY p.id LIMIT 1
+  `).get() as {
+    id: number;
+    title: string;
+    description: string | null;
+    image_url: string | null;
+    thumbnail_url: string | null;
+    is_available: number;
+    slug: string;
+  } | undefined;
+  assert.ok(product);
+  const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  database.prepare('UPDATE products SET title = ?, description = ?, image_url = ?, thumbnail_url = NULL, is_available = 1 WHERE id = ?')
+    .run('Cigarette électronique de test', 'Produit de vérification', pixel, product.id);
+  database.close();
+
+  try {
+    const ageVerification = await fetch(`${BASE_URL}/api/shops/age-verification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shop_slug: product.slug, birth_date: '1990-01-01' }),
+    });
+    const ageVerificationPayload = await ageVerification.json() as { age_verification_token?: string; error?: string };
+    assert.equal(ageVerification.status, 200, JSON.stringify(ageVerificationPayload));
+    const token = ageVerificationPayload.age_verification_token;
+    assert.equal(typeof token, 'string');
+
+    const unverifiedCatalog = await fetch(`${BASE_URL}/api/shops/${encodeURIComponent(product.slug)}`);
+    assert.equal(unverifiedCatalog.status, 200);
+    assert.equal((await unverifiedCatalog.json() as { products: Array<{ id: number }> }).products.some((item) => item.id === product.id), false);
+
+    const verifiedCatalog = await fetch(`${BASE_URL}/api/shops/${encodeURIComponent(product.slug)}`, {
+      headers: { 'X-MaTable-Age-Verification': token },
+    });
+    assert.equal(verifiedCatalog.status, 200);
+    assert.match(verifiedCatalog.headers.get('cache-control') || '', /private,\s*no-store/i);
+    const verifiedProduct = (await verifiedCatalog.json() as { products: Array<{ id: number; image_url: string }> })
+      .products.find((item) => item.id === product.id);
+    assert.ok(verifiedProduct);
+    const imageUrl = new URL(verifiedProduct.image_url, BASE_URL);
+    assert.equal(imageUrl.searchParams.get('age_token'), token);
+
+    const unverifiedImage = await fetch(`${imageUrl.origin}${imageUrl.pathname}`);
+    assert.equal(unverifiedImage.status, 404);
+    const verifiedImage = await fetch(imageUrl);
+    assert.equal(verifiedImage.status, 200);
+    assert.equal(verifiedImage.headers.get('cache-control'), 'private, no-store');
+  } finally {
+    const restore = new Database(TEST_DB_PATH);
+    restore.prepare('UPDATE products SET title = ?, description = ?, image_url = ?, thumbnail_url = ?, is_available = ? WHERE id = ?')
+      .run(product.title, product.description, product.image_url, product.thumbnail_url, product.is_available, product.id);
+    restore.close();
+  }
+});
+
 test('global security headers are present and non-public API responses are not cached', async () => {
   const response = await fetch(`${BASE_URL}/api/health`);
   assert.equal(response.status, 200);
@@ -860,7 +991,7 @@ test('registration flow is coherent without external payment or WhatsApp API', a
   assert.equal(identityStatus.status, 200, await identityStatus.text());
 });
 
-test('standard registration keeps delivery zones but does not grant premium social links', async () => {
+test('standard registration ignores legacy delivery zones and does not grant premium social links', async () => {
   const newPhone = uniquePhone();
   const created = await fetch(`${BASE_URL}/api/shops`, {
     method: 'POST',
@@ -890,8 +1021,35 @@ test('standard registration keeps delivery zones but does not grant premium soci
   assert.equal(created.status, 200, 'Shop creation should succeed');
   const createdPayload = await created.json();
   assert.equal(createdPayload.shop.theme_config?.social_links?.instagram, '');
-  assert.deepEqual(createdPayload.shop.theme_config?.delivery_zones?.[0]?.label, 'Cocody');
+  assert.equal(createdPayload.shop.theme_config?.delivery_zones, undefined);
   const merchantCookie = await loginAndApproveShop({ id: createdPayload.shop.id, owner_access_token: createdPayload.owner_access_token });
+
+  const legacyDeliveryZones = [{ label: 'Ancienne zone', mode: 'livraison', fee: 1500 }];
+  const legacyConfigDb = new Database(TEST_DB_PATH);
+  try {
+    const shopRow = legacyConfigDb.prepare('SELECT theme_config FROM shops WHERE id = ?').get(createdPayload.shop.id) as { theme_config: string };
+    const storedThemeConfig = JSON.parse(shopRow.theme_config);
+    storedThemeConfig.delivery_zones = legacyDeliveryZones;
+    legacyConfigDb.prepare('UPDATE shops SET theme_config = ? WHERE id = ?')
+      .run(JSON.stringify(storedThemeConfig), createdPayload.shop.id);
+  } finally {
+    legacyConfigDb.close();
+  }
+
+  const ignoredLegacyDeliveryUpdate = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
+    body: JSON.stringify({ theme_config: { delivery_zones: [{ label: 'Nouvelle zone', mode: 'livraison', fee: 2500 }] } }),
+  });
+  assert.equal(ignoredLegacyDeliveryUpdate.status, 200);
+  assert.equal((await ignoredLegacyDeliveryUpdate.json()).shop.theme_config?.delivery_zones, undefined);
+  const retainedLegacyConfigDb = new Database(TEST_DB_PATH);
+  try {
+    const shopRow = retainedLegacyConfigDb.prepare('SELECT theme_config FROM shops WHERE id = ?').get(createdPayload.shop.id) as { theme_config: string };
+    assert.deepEqual(JSON.parse(shopRow.theme_config).delivery_zones, legacyDeliveryZones);
+  } finally {
+    retainedLegacyConfigDb.close();
+  }
 
   const deniedUpdate = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}`, {
     method: 'PUT',
@@ -931,7 +1089,7 @@ test('standard registration keeps delivery zones but does not grant premium soci
   assert.equal(publicBySlug.status, 200);
   const publicData = await publicBySlug.json();
   assert.equal(publicData.shop.theme_config?.social_links?.instagram, '');
-  assert.equal(publicData.shop.theme_config?.delivery_zones?.[0]?.mode, 'livraison');
+  assert.equal(publicData.shop.theme_config?.delivery_zones, undefined);
 
   const createdProduct = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/products`, {
     method: 'POST',
@@ -995,7 +1153,7 @@ test('standard registration keeps delivery zones but does not grant premium soci
   }
 });
 
-test('merchant can update storefront social links and service zones', async () => {
+test('merchant can update storefront social links while legacy delivery zones stay ignored', async () => {
   const newPhone = uniquePhone();
   const created = await fetch(`${BASE_URL}/api/shops`, {
     method: 'POST',
@@ -1058,7 +1216,7 @@ test('merchant can update storefront social links and service zones', async () =
   const updated = await updateRes.json();
   assert.equal(updated.shop.theme_config?.social_links?.instagram, 'https://instagram.com/merchant-meta');
   assert.equal(updated.shop.theme_config?.brand_direction, 'moderne');
-  assert.equal(updated.shop.theme_config?.delivery_zones?.[0]?.label, 'Cocody');
+  assert.equal(updated.shop.theme_config?.delivery_zones, undefined);
 
   const themeSave = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/theme`, {
     method: 'PUT',
@@ -1086,7 +1244,7 @@ test('merchant can update storefront social links and service zones', async () =
   assert.equal(publicData.shop.theme_config?.social_links?.instagram, 'https://instagram.com/premium-theme-route');
   assert.equal(publicData.shop.theme_config?.brand_direction, 'authentique');
   assert.equal(publicData.shop.theme_config?.primary_color, '#176B55');
-  assert.equal(publicData.shop.theme_config?.delivery_zones?.[0]?.mode, 'livraison');
+  assert.equal(publicData.shop.theme_config?.delivery_zones, undefined);
 });
 
 test('onboarding preserves explicit opening-hours and keeps the storefront open inside the configured schedule', async () => {
@@ -1228,7 +1386,7 @@ test('shop pages expose canonical SEO metadata for social sharing and indexing',
   assert.equal(created.status, 200);
   const createdPayload = await created.json();
   const merchantCookie = await loginAndApproveShop({ id: createdPayload.shop.id, owner_access_token: createdPayload.owner_access_token });
-  const productImage = 'https://images.example.com/seo-product.webp';
+  const productImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   const createdProduct = await fetch(`${BASE_URL}/api/shops/${createdPayload.shop.id}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: merchantCookie },
@@ -1237,11 +1395,12 @@ test('shop pages expose canonical SEO metadata for social sharing and indexing',
       description: 'Une robe pour vérifier les aperçus de boutique.',
       price: 12000,
       stock: 3,
-      image_url: 'https://images.example.com/seo-product-full.jpg',
+      image_url: productImage,
       thumbnail_url: productImage,
     }),
   });
-  assert.equal(createdProduct.status, 200, await createdProduct.text());
+  const createdProductPayload = await createdProduct.json();
+  assert.equal(createdProduct.status, 200, JSON.stringify(createdProductPayload));
 
   const bannerDb = new Database(TEST_DB_PATH);
   try {
@@ -1274,7 +1433,10 @@ test('shop pages expose canonical SEO metadata for social sharing and indexing',
   }
   const productSharePage = await fetch(`${BASE_URL}/${encodeURIComponent(createdPayload.shop.slug)}`);
   const productShareHtml = await productSharePage.text();
-  assert.match(productShareHtml, /og:image" content="https:\/\/images\.example\.com\/seo-product\.webp"/);
+  assert.match(
+    productShareHtml,
+    new RegExp(`og:image" content="${new URL(BASE_URL).origin}/media/products/${createdProductPayload.product.id}/998-[a-f0-9]{20}\\.png"`),
+  );
   assert.match(productShareHtml, /Robe de partage/);
 
   const testDb = new Database(TEST_DB_PATH);

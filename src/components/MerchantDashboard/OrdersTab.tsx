@@ -1,38 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { ShoppingBag, Check, ExternalLink, Search, TrendingUp, DollarSign, MapPin, Gift, CheckCircle2, Clock3, CookingPot, Package, Sparkles, X } from 'lucide-react';
+import React from 'react';
+import { ShoppingBag, Check, ExternalLink, Search, TrendingUp, DollarSign, CheckCircle2, Clock3, CookingPot, Package, Sparkles, X } from 'lucide-react';
 import type { MerchantOrderFilter, MerchantState } from './useMerchant';
 import { formatFCFA } from '../../utils/format';
 import { OrderContactReveal } from '../OrderContactReveal';
-import { DeliveryTimeline, type DeliveryTimelineEvent } from '../DeliveryTimeline';
-import { DeliveryProgress, DeliveryStatusBadge } from '../deliveryStatus';
-import { PushOptIn } from '../PushOptIn';
-import { useVisibilityPolling } from '../../hooks/useVisibilityPolling';
 
 interface OrdersTabProps {
   state: MerchantState;
   filteredOrders: any[]; orderValue: number; averageOrderValue: number;
-}
-
-interface DeliveryZoneOption {
-  id: number;
-  label: string;
-}
-
-interface DeliveryQuote {
-  amount: number;
-  origin_zone: string;
-  destination_zone: string;
-}
-
-interface MerchantDelivery {
-  id: number;
-  order_id: number;
-  quoted_amount: number;
-  status: string;
-  ticket_number?: string;
-  proof_available?: boolean;
-  pickup_zone?: string;
-  destination_zone?: string;
 }
 
 function MerchantLoyaltyReward({ shopId, orderId, deliveredOrders, availableRewards, onRedeemed }: {
@@ -42,9 +16,9 @@ function MerchantLoyaltyReward({ shopId, orderId, deliveredOrders, availableRewa
   availableRewards: number;
   onRedeemed: () => Promise<void>;
 }) {
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [notice, setNotice] = React.useState('');
 
   const redeemReward = async () => {
     setSaving(true);
@@ -69,8 +43,7 @@ function MerchantLoyaltyReward({ shopId, orderId, deliveredOrders, availableRewa
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2.5">
       <div className="flex min-w-0 items-center gap-2 text-xs text-emerald-900">
-        <Gift className="h-4 w-4 shrink-0" />
-        <span>{deliveredOrders} commandes livrées · {availableRewards} récompense{availableRewards === 1 ? '' : 's'} disponible{availableRewards === 1 ? '' : 's'}</span>
+        <span>{deliveredOrders} commandes terminées · {availableRewards} récompense{availableRewards === 1 ? '' : 's'} disponible{availableRewards === 1 ? '' : 's'}</span>
       </div>
       <button
         type="button"
@@ -83,262 +56,6 @@ function MerchantLoyaltyReward({ shopId, orderId, deliveredOrders, availableRewa
       {error && <p role="alert" className="w-full text-xs font-semibold text-rose-700">{error}</p>}
       {notice && <p role="status" className="w-full text-xs font-semibold text-emerald-800">{notice}</p>}
     </div>
-  );
-}
-
-function MerchantDeliveryRequest({ shopId, orderId, orderStatus }: {
-  shopId: number;
-  orderId: number;
-  orderStatus: string;
-}) {
-  const [zones, setZones] = useState<DeliveryZoneOption[]>([]);
-  const [destinationZoneId, setDestinationZoneId] = useState('');
-  const [quote, setQuote] = useState<DeliveryQuote | null>(null);
-  const [delivery, setDelivery] = useState<MerchantDelivery | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [serviceAvailable, setServiceAvailable] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const [proofUrl, setProofUrl] = useState<string | null>(null);
-  const [proofLoading, setProofLoading] = useState(false);
-  const [timelineEvents, setTimelineEvents] = useState<DeliveryTimelineEvent[]>([]);
-  const [timelineLoading, setTimelineLoading] = useState(false);
-  const [timelineError, setTimelineError] = useState<string | null>(null);
-
-  const refresh = async () => {
-    setError('');
-    try {
-      const [zonesResponse, deliveriesResponse] = await Promise.all([
-        fetch('/api/delivery/zones', { credentials: 'include', cache: 'no-store' }),
-        fetch(`/api/shops/${shopId}/deliveries`, { credentials: 'include', cache: 'no-store' }),
-      ]);
-      const [zoneData, deliveryData] = await Promise.all([
-        zonesResponse.json() as Promise<{ zones?: DeliveryZoneOption[]; available?: boolean; error?: string }>,
-        deliveriesResponse.json() as Promise<{ deliveries?: MerchantDelivery[]; available?: boolean; error?: string }>,
-      ]);
-      if (zonesResponse.status === 404 || deliveriesResponse.status === 404
-        || zoneData.available === false || deliveryData.available === false) {
-        setServiceAvailable(false);
-        return;
-      }
-      if (!zonesResponse.ok) throw new Error(zoneData.error || 'Service de livraison indisponible.');
-      if (!deliveriesResponse.ok) throw new Error(deliveryData.error || 'Impossible de charger les demandes de livraison.');
-      setServiceAvailable(true);
-      setZones(zoneData.zones || []);
-      setDelivery((deliveryData.deliveries || []).find((item) => item.order_id === orderId) || null);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Impossible de charger les demandes de livraison.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void refresh();
-  }, [shopId, orderId]);
-
-  const refreshDelivery = async () => {
-    try {
-      const response = await fetch(`/api/shops/${shopId}/deliveries`, { credentials: 'include', cache: 'no-store' });
-      const data = await response.json() as { deliveries?: MerchantDelivery[]; error?: string };
-      if (!response.ok) return;
-      setDelivery((data.deliveries || []).find((item) => item.order_id === orderId) || null);
-    } catch {
-      // Polling keeps the last known delivery state if the network is momentarily unavailable.
-    }
-  };
-
-  useEffect(() => {
-    if (!delivery) {
-      setTimelineEvents([]);
-      setTimelineError(null);
-      setTimelineLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setTimelineLoading(true);
-    setTimelineError(null);
-    fetch(`/api/shops/${shopId}/deliveries/${delivery.id}/events`, { credentials: 'include', cache: 'no-store' })
-      .then(async (response) => {
-        const data = await response.json() as { events?: DeliveryTimelineEvent[]; error?: string };
-        if (!response.ok) throw new Error(data.error || 'Impossible de charger l’historique de la course.');
-        if (!cancelled) setTimelineEvents(Array.isArray(data.events) ? data.events : []);
-      })
-      .catch((loadError: unknown) => {
-        if (!cancelled) setTimelineError(loadError instanceof Error ? loadError.message : 'Impossible de charger l’historique de la course.');
-      })
-      .finally(() => { if (!cancelled) setTimelineLoading(false); });
-    return () => { cancelled = true; };
-  }, [shopId, delivery?.id, delivery?.status]);
-
-  useVisibilityPolling(
-    refreshDelivery,
-    15_000,
-    Boolean(delivery && ['requested', 'accepted', 'to_pickup', 'picked_up'].includes(delivery.status)),
-  );
-
-  const loadQuote = async () => {
-    if (!destinationZoneId) return;
-    setSaving(true);
-    setError('');
-    setNotice('');
-    setQuote(null);
-    try {
-      const response = await fetch(`/api/shops/${shopId}/orders/${orderId}/delivery-quote?destination_zone_id=${encodeURIComponent(destinationZoneId)}`, {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      const data = await response.json() as { quote?: DeliveryQuote; error?: string };
-      if (!response.ok) throw new Error(data.error || 'Aucun tarif disponible pour ce trajet.');
-      setQuote(data.quote || null);
-    } catch (quoteError) {
-      setError(quoteError instanceof Error ? quoteError.message : 'Impossible de calculer le devis.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const requestDelivery = async () => {
-    if (!destinationZoneId) return;
-    setSaving(true);
-    setError('');
-    setNotice('');
-    try {
-      const response = await fetch(`/api/shops/${shopId}/orders/${orderId}/delivery`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ destination_zone_id: Number(destinationZoneId) }),
-      });
-      const data = await response.json() as { delivery?: MerchantDelivery; error?: string };
-      if (!response.ok) throw new Error(data.error || 'Impossible de demander cette livraison.');
-      setDelivery(data.delivery || null);
-      setNotice('Demande envoyée aux livreurs disponibles.');
-      setQuote(null);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Impossible de demander cette livraison.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const cancelDelivery = async () => {
-    if (!delivery) return;
-    setSaving(true);
-    setError('');
-    setNotice('');
-    try {
-      const response = await fetch(`/api/shops/${shopId}/deliveries/${delivery.id}/cancel`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error || 'Impossible d’annuler cette demande.');
-      setDelivery({ ...delivery, status: 'cancelled' });
-      setNotice('La demande de livraison est annulée.');
-    } catch (cancelError) {
-      setError(cancelError instanceof Error ? cancelError.message : 'Impossible d’annuler cette demande.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const loadProof = async () => {
-    if (!delivery) return;
-    setProofLoading(true);
-    setError('');
-    try {
-      const response = await fetch(`/api/shops/${shopId}/deliveries/${delivery.id}/proof`, {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      const data = await response.json() as { proof?: { data_url: string }; error?: string };
-      if (!response.ok || !data.proof) throw new Error(data.error || 'Impossible de charger la preuve photo.');
-      setProofUrl(data.proof.data_url);
-    } catch (proofError) {
-      setError(proofError instanceof Error ? proofError.message : 'Impossible de charger la preuve photo.');
-    } finally {
-      setProofLoading(false);
-    }
-  };
-
-  const isActiveOrder = ['confirmed', 'preparing', 'ready'].includes(orderStatus);
-  if (!serviceAvailable) return null;
-  if (!isActiveOrder && !delivery) return null;
-
-  return (
-    <section aria-label={`Livraison MaTable pour la commande ${orderId}`} className="overflow-hidden rounded-xl border border-[#CBE6DA] bg-white">
-      <div className="flex items-center justify-between gap-2 bg-[#F0FAF5] px-3 py-2.5">
-        <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#0F6B54]"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />Livraison MaTable</p>
-        {delivery && <DeliveryStatusBadge status={delivery.status} />}
-      </div>
-
-      {loading ? (
-        <p role="status" className="px-3 py-3 text-xs text-[#8A948E]">Chargement des zones…</p>
-      ) : delivery ? (
-        <div className="space-y-2.5 px-3 py-3">
-          <div>
-            <p className="font-mono text-sm font-black tracking-wide text-[var(--mt-green-deep)]">{delivery.ticket_number || `COURSE-${delivery.id}`}</p>
-            <p className="mt-0.5 text-[11px] leading-5 text-[#587067]">
-              {delivery.pickup_zone || 'Retrait'} → {delivery.destination_zone || 'Destination'} · <strong className="tabular-nums text-[var(--mt-green-deep)]">{formatFCFA(Number(delivery.quoted_amount) || 0)}</strong>
-            </p>
-          </div>
-          {orderStatus === 'pending' && <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-900">La demande attend votre décision. La recherche d’un livreur commencera après acceptation.</p>}
-          <DeliveryProgress status={delivery.status} />
-          <div className="flex flex-wrap gap-2">
-            {delivery.proof_available && !proofUrl && (
-              <button type="button" onClick={() => void loadProof()} disabled={proofLoading} className="min-h-11 rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#0F6B54] transition-colors hover:bg-[#F0FAF5] disabled:opacity-50">
-                {proofLoading ? 'Chargement…' : 'Voir la preuve'}
-              </button>
-            )}
-            {isActiveOrder && ['requested', 'accepted', 'to_pickup'].includes(delivery.status) && (
-              <button type="button" onClick={() => void cancelDelivery()} disabled={saving} className="min-h-11 rounded-lg border border-rose-300 bg-white px-3 text-xs font-bold text-rose-800 disabled:opacity-50">Annuler la demande</button>
-            )}
-          </div>
-          {proofUrl && (
-            <figure className="rounded-lg border border-[#E4EDE8] bg-white p-2">
-              <img src={proofUrl} alt={`Preuve de livraison de la course ${delivery.id}`} className="max-h-60 w-full rounded-md object-cover" />
-              <figcaption className="mt-1 text-[10px] text-[#8A948E]">Preuve photo enregistrée · course #{delivery.id}</figcaption>
-            </figure>
-          )}
-          <DeliveryTimeline
-            events={timelineEvents}
-            loading={timelineLoading}
-            error={timelineError}
-            title="Historique de la course"
-          />
-        </div>
-      ) : (
-        <div className="space-y-2 px-3 py-3">
-          <p className="text-[11px] leading-5 text-[#587067]">Choisissez la zone correspondant à l’adresse de livraison. Un devis n’est proposé que pour un tarif actif de 1 500 à 2 500 FCFA.</p>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <label className="sr-only" htmlFor={`delivery-destination-${orderId}`}>Zone de destination pour la commande {orderId}</label>
-            <select
-              id={`delivery-destination-${orderId}`}
-              value={destinationZoneId}
-              onChange={(event) => { setDestinationZoneId(event.target.value); setQuote(null); }}
-              className="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 focus:border-[var(--mt-green-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-primary)]/20"
-            >
-              <option value="">Zone de destination</option>
-              {zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.label}</option>)}
-            </select>
-            {!quote ? (
-              <button type="button" onClick={() => void loadQuote()} disabled={saving || !destinationZoneId} className="min-h-10 rounded-lg bg-[var(--mt-green-primary)] px-3 text-xs font-bold text-white transition-colors hover:bg-[var(--mt-green-hover)] disabled:opacity-50">
-                {saving ? 'Recherche…' : 'Afficher le devis'}
-              </button>
-            ) : (
-              <button type="button" onClick={() => void requestDelivery()} disabled={saving} className="min-h-10 rounded-lg bg-[var(--mt-green-primary)] px-3 text-xs font-bold text-white transition-colors hover:bg-[var(--mt-green-hover)] disabled:opacity-50">
-                Demander · {formatFCFA(quote.amount)}
-              </button>
-            )}
-          </div>
-          {quote && <p role="status" className="text-xs font-semibold text-[#0F6B54]">{quote.origin_zone} → {quote.destination_zone} : {formatFCFA(quote.amount)}</p>}
-        </div>
-      )}
-      {error && <p role="alert" className="mx-3 mb-3 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2 text-xs font-semibold text-rose-800">{error}</p>}
-      {notice && <p role="status" className="mx-3 mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs font-semibold text-emerald-900">{notice}</p>}
-    </section>
   );
 }
 
@@ -372,15 +89,6 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                 <p className="mt-1 text-xs leading-5 text-slate-500">Traitez les demandes clients et suivez leur progression.</p>
               </div>
             </header>
-
-            {state.currentShop && !state.currentShop.admin_mode && (
-              <PushOptIn
-                configUrl={`/api/shops/${state.currentShop.id}/push/config`}
-                subscriptionUrl={`/api/shops/${state.currentShop.id}/push/subscription`}
-                title="Alertes de livraison"
-                description="Soyez prévenu lorsqu’un livreur accepte une course, récupère le colis ou termine la livraison."
-              />
-            )}
 
             {/* Orders Statistics Cards */}
             <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:grid-cols-3">
@@ -476,7 +184,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
             </div>
 
             <p className="-mt-2 rounded-xl border border-slate-200 bg-[#fffdf8] px-3 py-2 text-[11px] leading-5 text-slate-600">
-              Les montants ci-dessus sont calculés à partir des commandes hors annulation et expiration, y compris les commandes livrées. Ils regroupent les articles et excluent les frais de livraison MaTable, qui ne sont pas du chiffre d’affaires boutique. MaTable ne suit pas les encaissements : vérifiez directement le règlement auprès de vos clients. Le mode choisi ou un clic WhatsApp ne confirme pas le paiement.
+              Les montants ci-dessus regroupent les articles des commandes hors annulation et expiration. MaTable ne suit pas les encaissements : vérifiez directement le règlement auprès de vos clients. Le mode choisi ou un clic WhatsApp ne confirme pas le paiement.
             </p>
 
             {/* Orders List */}
@@ -581,13 +289,6 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                           </span>
                         </div>
 
-                        <p className="text-xs text-slate-600 flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span><strong>{order.delivery_location}</strong></span>
-                          {order.delivery_note && <span className="text-slate-500 italic">({order.delivery_note})</span>}
-                          {order.delivery_slot && <span className="ml-1.5 inline-flex items-center gap-1 font-bold text-amber-700"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" />{order.delivery_slot}</span>}
-                        </p>
-
                         <div className="bg-slate-50 p-2.5 rounded-xl text-xs text-slate-600 flex flex-wrap gap-2">
                           {(order.items ?? []).map((it, i) => (
                             <div key={i} className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-[11px] font-medium">
@@ -599,13 +300,6 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                             </div>
                           ))}
                         </div>
-                        {state.currentShop && order.customer_phone && (
-                          <MerchantDeliveryRequest
-                            shopId={state.currentShop.id}
-                            orderId={order.id}
-                            orderStatus={order.status || 'pending'}
-                          />
-                        )}
                         {state.currentShop && !state.currentShop.admin_mode && order.status === 'delivered'
                           && order.customer_user_id && order.loyalty?.available_rewards > 0 && (
                             <MerchantLoyaltyReward
@@ -622,12 +316,6 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                         <span className="font-black text-lg text-slate-900 md:text-right">
                           {formatFCFA(order.total_amount)}
                         </span>
-                        {Number(order.delivery_fee) > 0 && (
-                          <span className="text-[10px] font-semibold leading-4 text-emerald-800 md:text-right">
-                            + {formatFCFA(Number(order.delivery_fee))} de livraison<br />
-                            Total client {formatFCFA(Number(order.total_amount) + Number(order.delivery_fee))}
-                          </span>
-                        )}
 
                         {/* Order status action buttons */}
                         <div className="flex flex-wrap items-center gap-2 md:justify-end">

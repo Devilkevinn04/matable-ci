@@ -206,12 +206,3 @@ export const SIZE_GUIDE_DATA = [
   { size: 'L (44-46)', chest: '97 - 106 cm', waist: '79 - 88 cm', hips: '103 - 112 cm', notes: 'Coupe galbante confortable' },
   { size: 'XL (48-50)', chest: '107 - 118 cm', waist: '89 - 100 cm', hips: '113 - 124 cm', notes: 'Formes généreuses / wax ample' },
 ];
-
-// Delivery time slots for food
-export const FOOD_DELIVERY_SLOTS = [
-  'Dès que possible (Préparation minute ⚡)',
-  'Midi : 12h00 - 13h00',
-  'Après-midi : 13h30 - 15h00',
-  'Soir / Dîner : 19h00 - 20h30',
-  'Fin de soirée : 21h00 - 22h30',
-];

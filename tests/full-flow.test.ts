@@ -2686,7 +2686,8 @@ ${createdProduct.id},"Test produit flux marchand","Produit de test pour validati
   assert.equal(deleteImportedProduct.response.status, 200, JSON.stringify(deleteImportedProduct.payload));
   const ordersCsv = await apiFetch('/api/shops/1/orders/export.csv');
   assert.equal(ordersCsv.response.status, 200);
-  assert.match(String(ordersCsv.payload), /"customer_phone","delivery_location"/);
+  assert.match(String(ordersCsv.payload), /"customer_name","customer_phone","payment_method_preference"/);
+  assert.doesNotMatch(String(ordersCsv.payload), /delivery_location|delivery_fee/);
 
   const productEdit = await apiFetch(`/api/shops/1/products/${createdProduct.id}`, {
     method: 'PUT',
@@ -3047,6 +3048,33 @@ test('new merchant registration flow is local and immediately usable', async () 
   const newShopId = registration.payload.shop.id;
   assert.equal(registration.payload.shop.owner_email_configured, true);
   assert.equal(registration.payload.shop.email_subscription_reminders_enabled, false);
+
+  const merchantCookies = cookieJar;
+  cookieJar = '';
+  const superAdminLogin = await apiFetch('/api/auth/admin-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'super-admin-demo-key', role: 'super_admin' }),
+  });
+  assert.equal(superAdminLogin.response.status, 200, JSON.stringify(superAdminLogin.payload));
+
+  const adminPinChange = await apiFetch(`/api/shops/${newShopId}/owner-profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin_code: '735194' }),
+  });
+  assert.equal(adminPinChange.response.status, 200, JSON.stringify(adminPinChange.payload));
+  assert.equal(adminPinChange.payload.pin_updated, true);
+
+  cookieJar = '';
+  const loginAfterAdminPinChange = await apiFetch('/api/auth/merchant-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, pin: '735194' }),
+  });
+  assert.equal(loginAfterAdminPinChange.response.status, 200, JSON.stringify(loginAfterAdminPinChange.payload));
+  assert.equal(loginAfterAdminPinChange.payload.shop.id, newShopId);
+  assert.notEqual(cookieJar, merchantCookies);
 
   const unknownMerchantReset = await apiFetch('/api/auth/merchant-pin-reset-request', {
     method: 'POST',

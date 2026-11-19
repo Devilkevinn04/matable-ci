@@ -16,6 +16,7 @@ import { handlePublicImageError } from '../utils/imageFallback';
 import { useAutoScrollRail } from '../hooks/useAutoScrollRail';
 import { AnimatedHome } from './AnimatedHome';
 import { CategoryProductImage } from './CategoryProductImage';
+import { ContextualHelp } from './ContextualHelp';
 
 interface DirectoryShop {
   id?: number;
@@ -433,6 +434,9 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
       placeholder={isShopDirectoryPage ? 'Boutique ou quartier…' : 'Boutique, produit, quartier…'}
       className="min-h-10 min-w-0 flex-1 border-0 bg-transparent px-1.5 text-sm outline-none placeholder:text-[#898178] sm:min-h-11 sm:px-2 sm:text-base"
     />
+    <ContextualHelp label="Recherche de boutiques et de produits" variant="info">
+      Recherchez un nom de boutique, un produit, une ville ou un quartier. Dans l’annuaire, les filtres affinent les résultats par catégorie, ouverture ou ordre d’affichage.
+    </ContextualHelp>
     {query && <button type="button" onClick={() => setQuery('')} aria-label="Effacer la recherche" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X className="h-4 w-4" /></button>}
     <button type="submit" className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl px-2.5 text-xs font-bold text-white transition sm:px-5 sm:text-sm ${isShopDirectoryPage ? 'bg-[var(--mt-orange-deep)] hover:bg-[#a53a1d]' : 'bg-[var(--mt-green-deep)] hover:bg-[var(--mt-green-hover)]'}`}>
       <span className="sm:hidden">Chercher</span>
@@ -475,7 +479,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <ul className="mt-4 space-y-3 text-sm leading-5 text-white/90">
                 <li className="flex gap-2.5"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-orange-soft)]" aria-hidden="true" /><span>Le prix réduit et le prix habituel sont affichés ensemble.</span></li>
                 <li className="flex gap-2.5"><Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-orange-soft)]" aria-hidden="true" /><span>La période de validité est indiquée sur chaque offre.</span></li>
-                <li className="flex gap-2.5"><Store className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-orange-soft)]" aria-hidden="true" /><span>Disponibilité, retrait et livraison se confirment avec la boutique.</span></li>
+                <li className="flex gap-2.5"><Store className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-orange-soft)]" aria-hidden="true" /><span>Disponibilité et modalités de remise à confirmer avec la boutique.</span></li>
               </ul>
               <Link to="/comment-ca-marche#promotions" className="mt-5 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-[var(--mt-orange-soft)] hover:text-white">Comprendre les promotions <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
             </aside>
@@ -562,7 +566,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-[#315548]">
               <span className="inline-flex items-center gap-1.5"><Store className="h-4 w-4 text-[var(--mt-green-primary)]" aria-hidden="true" /> Boutiques locales</span>
               <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-[var(--mt-green-primary)]" aria-hidden="true" /> Échange direct</span>
-              <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[var(--mt-green-primary)]" aria-hidden="true" /> Retrait ou livraison à convenir</span>
+              <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[var(--mt-green-primary)]" aria-hidden="true" /> Modalités de remise à convenir</span>
             </div>
             {heroNeighbourhoods.length > 0 && <nav aria-label="Boutiques par quartier" className="mt-4 flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold text-[#47534b]">Près de chez vous :</span>
@@ -703,7 +707,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                         ))}
                       </span>}
                       <span className="mt-auto flex items-center justify-between gap-2 pt-3 text-xs font-semibold text-[var(--mt-gray-600)] sm:text-xs">
-                        <span className="truncate">Retrait ou livraison à convenir</span>
+                        <span className="truncate">Remise à convenir avec la boutique</span>
                         <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--mt-green-primary)] transition-transform group-hover:translate-x-1" aria-hidden="true" />
                       </span>
                     </span>
@@ -757,7 +761,8 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         </div>
 
         {isShopDirectoryPage && (
-          <details className="relative z-10 mb-3 rounded-[20px] border border-white/90 bg-white/75 p-3 shadow-[0_8px_28px_rgba(40,52,43,.07)] backdrop-blur-sm sm:rounded-[24px] sm:p-4">
+          <div className="relative z-10 mb-3 flex items-start gap-2">
+          <details className="min-w-0 flex-1 rounded-[20px] border border-white/90 bg-white/75 p-3 shadow-[0_8px_28px_rgba(40,52,43,.07)] backdrop-blur-sm sm:rounded-[24px] sm:p-4">
           <summary className="cursor-pointer text-sm font-bold text-[#183f32]">Catégories et filtres</summary>
           <MotionReveal className="mt-3 overflow-hidden">
             <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full bg-[#f3d9bb]/35 blur-2xl" />
@@ -833,6 +838,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             )}
           </MotionReveal>
           </details>
+          <ContextualHelp label="Filtres de l’annuaire" variant="info">
+            Choisissez une catégorie, puis affinez l’ordre des boutiques ou affichez les commerces actuellement ouverts. Ces filtres ne modifient pas le catalogue des boutiques.
+          </ContextualHelp>
+          </div>
         )}
 
         {directoryIsLoading ? (

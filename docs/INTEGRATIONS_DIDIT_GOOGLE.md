@@ -2,8 +2,6 @@
 
 État constaté le 31/10/2026 sur `https://matable-ci.onrender.com`.
 
-> Le parcours de vérification des livreurs est actuellement en veille. Le callback et les étapes techniques ci-dessous sont conservés comme références historiques ; ne les utilisez pas pour réactiver les opérations de livraison.
-
 ## Ce qui est déjà en place
 
 | Élément | Statut | Preuve |
@@ -26,9 +24,8 @@ L’adresse principale est **`https://matable-ci.com`**. Le domaine racine et `w
 |---|---|
 | `APP_URL` en production | `https://matable-ci.com` |
 | Callback Didit marchand | `https://matable-ci.com/app?verification=complete` — construit avec `new URL('/app?verification=complete', APP_URL)` |
-| Callback Didit livreur (référence conservée, parcours en veille) | `https://matable-ci.com/livreur?verification=complete` — construit avec `new URL('/livreur?verification=complete', APP_URL)` |
 | Destination webhook Didit | `https://matable-ci.onrender.com/api/webhooks/didit` (v3, `status.updated`, toujours active sur l’alias Render) |
-| Domaines de retour Didit | `allowed_return_hosts: []` → les deux callbacks ci-dessus sont acceptés |
+| Domaines de retour Didit | `allowed_return_hosts: []` → le callback marchand est accepté |
 
 L’origine JavaScript et l’URI de callback Google de `https://matable-ci.com` ont été ajoutées en conservant celles de Render. La destination webhook Didit reste sur l’alias Render pour préserver le chemin de secours ; elle pourra être déplacée après validation indépendante. `matable-ci.com` (sans tiret) est un autre domaine et n’est pas l’adresse achetée ici.
 
@@ -121,13 +118,6 @@ curl -s -o /dev/null -w '%{http_code}\n' \
    - `SELECT actor, action, details FROM admin_audit_logs WHERE actor = 'didit_webhook' ORDER BY created_at DESC LIMIT 1;`
 7. Résultat attendu : statut `verified` après webhook `Approved`, boutique republiable.
 
-## Référence historique — Didit livreur (ne pas exécuter pendant la veille)
-
-1. Ouvrir `/livreur`, créer un compte de test, donner le consentement.
-2. Vérifier `didit_available: true` dans la réponse de session (clé API + workflow résolus).
-3. Terminer le parcours Didit ; le webhook signé doit passer le livreur en `active` et attribuer les zones actives.
-4. Vérifier ensuite le choix des zones puis le forfait GeniusPay (hors périmètre Didit).
-
 ## Tests négatifs webhook
 
 ```bash
@@ -153,7 +143,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST \
 | 2 | Limitation | `POST /identity-verification/session` est limité à 5 tentatives par fenêtre, et à 3 sessions terminées par boutique sur 30 jours (au-delà : message « contactez l’assistance »). |
 | 3 | Retour Didit | `/app?verification=complete` ouvre l’onglet vérification, rafraîchit immédiatement, puis toutes les 10 s pendant 2 minutes avant de revenir à 60 s. |
 | 4 | Raison du refus | Sur un webhook `Declined`, le serveur appelle `GET /v3/session/{id}/decision/` et ne conserve que les statuts de contrôle et codes de risque (`decline_reasons`), traduits en conseils français. Aucune image ni donnée personnelle n’est stockée ou renvoyée. |
-| 6 | Budget | Le panneau admin affiche le nombre de sessions terminées dans le mois (marchand + livreur) et alerte à 25. |
+| 6 | Budget | Le panneau admin affiche le nombre de sessions marchand terminées dans le mois et alerte à 25. |
 | 7 | Préparation | Checklist affichée avant la redirection (pièce valide, originale, lisible, visage dégagé). Le diagnostic vérifie que CNI, passeport et permis ivoiriens sont acceptés par le workflow. |
 | 8 | `Kyc Expired` | La boutique reste dépubliée, mais le marchand reçoit une notification explicite « session expirée, relancez la vérification » et l’écran affiche un message dédié. |
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   MAX_PUBLIC_MEDIA_BYTES,
@@ -15,6 +15,7 @@ import {
 
 const ALLOWED_MEDIA_PURPOSES = new Set(['media', 'logo', 'banner', 'product-main', 'product-main-thumbnail', 'lookbook', 'gallery']);
 const ALLOWED_MEDIA_FOLDERS = new Set(['shops']);
+const PRODUCT_MEDIA_PURPOSES = new Set(['product-main', 'product-main-thumbnail', 'lookbook', 'gallery']);
 
 /** Invalid upload request (400), as opposed to an unavailable storage backend (503). */
 export class MediaUploadValidationError extends Error {
@@ -58,6 +59,83 @@ export function getMediaStorageConfig() {
 
 export function isMediaStorageConfigured(): boolean {
   return Boolean(getMediaStorageConfig());
+}
+
+export function getProductMediaObjectKey(value: unknown, shopId?: number): string | null {
+  const config = getMediaStorageConfig();
+  if (!config || typeof value !== 'string') return null;
+
+  let mediaUrl: URL;
+  let publicBaseUrl: URL;
+  try {
+    mediaUrl = new URL(value);
+    publicBaseUrl = new URL(config.publicBaseUrl);
+  } catch {
+    return null;
+  }
+  if (
+    mediaUrl.protocol !== 'https:'
+    || mediaUrl.origin !== publicBaseUrl.origin
+    || mediaUrl.username
+    || mediaUrl.password
+    || mediaUrl.search
+    || mediaUrl.hash
+  ) {
+    return null;
+  }
+
+  const basePath = publicBaseUrl.pathname.replace(/\/+$/, '');
+  if (!mediaUrl.pathname.startsWith(`${basePath}/`)) return null;
+  let objectKey: string;
+  try {
+    objectKey = decodeURIComponent(mediaUrl.pathname.slice(basePath.length + 1));
+  } catch {
+    return null;
+  }
+  const segments = objectKey.split('/');
+  if (
+    segments.length !== 4
+    || segments[0] !== 'shops'
+    || !PRODUCT_MEDIA_PURPOSES.has(segments[1])
+    || !/^\d+$/.test(segments[2])
+    || (shopId !== undefined && Number(segments[2]) !== shopId)
+    || !/^[a-zA-Z0-9._-]+$/.test(segments[3])
+  ) {
+    return null;
+  }
+  return objectKey;
+}
+
+export async function readProductMediaObject(objectKey: string): Promise<{ contentType: string; body: Buffer } | null> {
+  const config = getMediaStorageConfig();
+  if (!config) return null;
+
+  const client = new S3Client({
+    region: config.region,
+    endpoint: config.endpoint,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+  });
+  try {
+    const object = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: objectKey }));
+    const contentType = object.ContentType?.split(';', 1)[0].trim().toLowerCase();
+    if (
+      !object.Body
+      || !isSupportedMediaMimeType(contentType)
+      || !Number.isSafeInteger(object.ContentLength)
+      || object.ContentLength <= 0
+      || object.ContentLength > MAX_PUBLIC_MEDIA_BYTES
+    ) {
+      return null;
+    }
+    const bytes = await object.Body.transformToByteArray();
+    if (bytes.byteLength !== object.ContentLength) return null;
+    return { contentType, body: Buffer.from(bytes) };
+  } finally {
+    client.destroy();
+  }
 }
 
 export function validateMediaUploadRequest(body: unknown): {

@@ -45,6 +45,7 @@ import { AdminProductPromotions } from './AdminProductPromotions';
 import { AdminAmbassadors } from './AdminAmbassadors';
 import { AnalyticsDailyBars } from './AnalyticsDailyBars';
 import { Link } from 'react-router-dom';
+import { ContextualHelp } from './ContextualHelp';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 const GuideChecklist = React.lazy(() => import('./UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
@@ -1768,6 +1769,11 @@ export const AdminDashboard: React.FC = () => {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="min-w-0 break-words text-lg font-black tracking-tight text-[var(--mt-gray-900)] sm:text-xl">{adminRole === 'super_admin' ? 'Super-Admin MaTable' : 'Administration MaTable'}</h1>
+                  <ContextualHelp label="À propos de cet espace">
+                    {adminRole === 'super_admin'
+                      ? 'Gérez la plateforme, ses boutiques et ses paramètres.'
+                      : 'Traitez les vérifications d’identité et les signalements qui vous sont attribués.'}
+                  </ContextualHelp>
                   <span className="dashboard-chip dashboard-chip-soft">{adminRole === 'super_admin' ? 'Tour de contrôle' : 'Espace vérification'}</span>
                 </div>
                 <p className="text-[11px] text-[#47534b] mt-0.5 leading-4 max-w-xl">
@@ -1851,9 +1857,9 @@ export const AdminDashboard: React.FC = () => {
                 <GuideChecklist role="verification" accountId={adminRole} collapsible />
               </React.Suspense>
               <div className="flex shrink-0 flex-wrap gap-2">
-                <button type="button" onClick={() => setAdminView('identity')} className="min-h-9 rounded-lg border border-sky-300 bg-white px-3 text-xs font-bold text-sky-950 hover:bg-sky-100">File Identité</button>
-                <button type="button" onClick={() => setAdminView('verification-shops')} className="min-h-9 rounded-lg border border-sky-300 bg-white px-3 text-xs font-bold text-sky-950 hover:bg-sky-100">Boutiques</button>
-                <button type="button" onClick={() => setAdminView('moderation')} className="min-h-9 rounded-lg bg-sky-900 px-3 text-xs font-bold text-white hover:bg-sky-800">Avis & signalements</button>
+                <button type="button" aria-current={adminView === 'identity' ? 'page' : undefined} onClick={() => setAdminView('identity')} className={`min-h-9 rounded-lg px-3 text-xs font-bold ${adminView === 'identity' ? 'bg-sky-900 text-white hover:bg-sky-800' : 'border border-sky-300 bg-white text-sky-950 hover:bg-sky-100'}`}>File Identité</button>
+                <button type="button" aria-current={adminView === 'verification-shops' ? 'page' : undefined} onClick={() => setAdminView('verification-shops')} className={`min-h-9 rounded-lg px-3 text-xs font-bold ${adminView === 'verification-shops' ? 'bg-sky-900 text-white hover:bg-sky-800' : 'border border-sky-300 bg-white text-sky-950 hover:bg-sky-100'}`}>Boutiques</button>
+                <button type="button" aria-current={adminView === 'moderation' ? 'page' : undefined} onClick={() => setAdminView('moderation')} className={`min-h-9 rounded-lg px-3 text-xs font-bold ${adminView === 'moderation' ? 'bg-sky-900 text-white hover:bg-sky-800' : 'border border-sky-300 bg-white text-sky-950 hover:bg-sky-100'}`}>Avis & signalements</button>
               </div>
             </div>
           </section>
@@ -2438,7 +2444,7 @@ export const AdminDashboard: React.FC = () => {
         {adminView === 'finance' && adminRole === 'super_admin' && (
           <section aria-labelledby="admin-finance-title" className="space-y-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div><p className="text-xs font-bold uppercase text-emerald-800">Recettes MaTable</p><h2 id="admin-finance-title" className="mt-1 text-xl font-black text-slate-900">Argent</h2><p className="mt-1 text-xs text-slate-500">MRR estimé des abonnements au statut actif : paiement annuel réparti sur 12 mois, tarif catalogue utilisé si aucun paiement n’est enregistré. Les encaissements ne comptent que les confirmations GeniusPay.</p></div>
+              <div><p className="text-xs font-bold uppercase text-emerald-800">Recettes MaTable</p><div className="flex items-center gap-2"><h2 id="admin-finance-title" className="mt-1 text-xl font-black text-slate-900">Argent</h2><ContextualHelp label="Indicateurs financiers" variant="info">Le MRR est une estimation : les abonnements annuels sont répartis sur douze mois et le tarif catalogue sert en l’absence de paiement enregistré. Les encaissements présentés sont les paiements GeniusPay confirmés; les commandes des clients ne sont pas des recettes MaTable.</ContextualHelp></div><p className="mt-1 text-xs text-slate-500">MRR estimé et paiements GeniusPay confirmés sur la période.</p></div>
               <select aria-label="Période du journal financier" value={financeDays} onChange={(event) => { setFinanceDays(Number(event.target.value)); setFinancePaymentsPage(0); }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">
                 <option value={30}>30 derniers jours</option>
                 <option value={90}>90 derniers jours</option>
@@ -3056,7 +3062,7 @@ make -f /srv/apps/matable/Makefile production-status`}</pre>
 
         {adminView === 'moderation' && (
           <section aria-labelledby="admin-moderation-title" className="space-y-5">
-            <div><h2 id="admin-moderation-title" className="text-xl font-black text-slate-900">Avis & signalements</h2><p className="mt-1 text-sm text-slate-600">Les avis restent invisibles au public jusqu’à leur validation.</p></div>
+            <div><div className="flex items-center gap-2"><h2 id="admin-moderation-title" className="text-xl font-black text-slate-900">Avis & signalements</h2><ContextualHelp label="Modération des avis et signalements" variant="info">Publier rend un avis visible; masquer le retire de l’espace public. Les signalements peuvent être pris en charge, traités ou classés sans suite selon la vérification effectuée.</ContextualHelp></div><p className="mt-1 text-sm text-slate-600">Les avis restent invisibles au public jusqu’à leur validation.</p></div>
             {contentModerationError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{contentModerationError}</p>}
             <section className="chart-panel p-4 md:p-5">
               <h3 className="text-sm font-black text-slate-900">Avis à modérer ({contentModeration.reviews.length})</h3>

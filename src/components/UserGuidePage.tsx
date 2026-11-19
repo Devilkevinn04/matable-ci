@@ -29,7 +29,7 @@ const roleGuides: Record<GuideRole, RoleGuide> = {
     intro: 'Repérez une boutique, préparez votre demande et convenez directement des modalités avec le commerçant.',
     steps: [
       { id: 'find-shop', title: 'Trouver une boutique ou un produit', description: 'Parcourez l’annuaire ou recherchez par nom, catégorie et ville.', href: '/boutiques', linkLabel: 'Explorer les boutiques' },
-      { id: 'check-store', title: 'Vérifier les informations de la vitrine', description: 'Consultez le catalogue, les prix, les horaires et les options de retrait ou livraison indiquées par le commerçant.' },
+      { id: 'check-store', title: 'Vérifier les informations de la vitrine', description: 'Consultez le catalogue, les prix, les horaires et les informations indiquées par le commerçant.' },
       { id: 'prepare-order', title: 'Préparer votre demande', description: 'Choisissez les articles et quantités, puis précisez vos coordonnées et le lieu souhaité avant de continuer.' },
       { id: 'contact-merchant', title: 'Confirmer avec le commerçant', description: 'La demande se poursuit sur WhatsApp. Confirmez directement la disponibilité, le prix final et les modalités; le paiement de la commande n’est pas encaissé par MaTable.' },
       { id: 'manage-account', title: 'Retrouver votre espace client', description: 'La création d’un compte client est facultative. Si vous en avez un, utilisez votre espace pour retrouver vos informations et commandes disponibles.', href: '/connexion', linkLabel: 'Ouvrir mon compte' },
@@ -45,7 +45,7 @@ const roleGuides: Record<GuideRole, RoleGuide> = {
       { id: 'merchant-catalog', title: 'Mettre le catalogue à jour', description: 'Ajoutez des photos récentes, des prix exacts et le stock disponible. Désactivez les articles indisponibles.' },
       { id: 'merchant-identity', title: 'Suivre la vérification d’identité', description: 'Le responsable soumet la vérification demandée et suit le statut fourni par Didit depuis le tableau de bord.' },
       { id: 'merchant-plan', title: 'Consulter la formule et les limites', description: 'Vérifiez les limites de votre formule. Une modification planifiée prend effet à la prochaine échéance selon les conditions affichées.', href: '/commercants', linkLabel: 'Voir les formules' },
-      { id: 'merchant-orders', title: 'Traiter les demandes clients', description: 'Consultez les commandes reçues, confirmez les détails et convenez du paiement, du retrait ou de la livraison avec le client.' },
+      { id: 'merchant-orders', title: 'Traiter les demandes clients', description: 'Consultez les commandes reçues, confirmez les détails et convenez avec le client de la remise et du paiement.' },
     ],
     note: 'Gardez votre PIN privé. L’équipe MaTable ne vous demandera jamais de mot de passe ni de code à usage unique.',
   },

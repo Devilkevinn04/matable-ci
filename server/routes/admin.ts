@@ -1870,7 +1870,7 @@ export function createAdminRouter(options: AdminRouterOptions) {
     const [filteredOrders, totalRow] = await Promise.all([
       dbAll<Record<string, unknown>>(`
         SELECT orders.id, orders.shop_id, shops.name AS shop_name, orders.customer_name, orders.customer_phone,
-          orders.delivery_location, orders.total_amount, orders.status, orders.created_at, orders.items
+          orders.total_amount, orders.status, orders.created_at, orders.items
         FROM orders LEFT JOIN shops ON shops.id = orders.shop_id
         ${where}
         ORDER BY orders.created_at DESC, orders.id DESC LIMIT ? OFFSET ?
@@ -1889,7 +1889,6 @@ export function createAdminRouter(options: AdminRouterOptions) {
           id: Number(order.id), shop_id: Number(order.shop_id),
           shop_name: order.shop_name == null ? 'Boutique inconnue' : String(order.shop_name),
           customer_name: String(order.customer_name), customer_phone: String(order.customer_phone),
-          delivery_location: String(order.delivery_location),
           total_amount: isVerificationAdmin(req) ? 0 : Number(order.total_amount),
           status: String(order.status || 'pending'), created_at: String(order.created_at),
           items_count: (items || []).reduce((sum, item) => sum + item.quantity, 0),

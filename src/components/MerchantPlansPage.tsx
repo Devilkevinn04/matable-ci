@@ -1,4 +1,4 @@
-import { ArrowRight, BadgeCheck, BarChart3, Check, Clock3, MapPin, MessageCircle, Package, Sparkles, Store, Truck } from 'lucide-react';
+import { ArrowRight, BadgeCheck, BarChart3, Check, Clock3, MapPin, MessageCircle, Package, Sparkles, Store } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { CategoryIcon } from './CategoryIcon';
@@ -32,7 +32,7 @@ const onboardingSteps = [
   {
     number: '03',
     title: 'Échangez directement',
-    description: 'Partagez votre lien, répondez aux clients et convenez avec eux du retrait ou de la livraison.',
+    description: 'Partagez votre lien, répondez aux clients et convenez avec eux des modalités de remise.',
     icon: MessageCircle,
   },
 ];
@@ -77,7 +77,7 @@ export function MerchantPlansPage() {
             Votre boutique mérite sa place <span className="text-[#087c5b]">en ligne.</span>
           </h1>
           <p className="mt-6 max-w-xl text-base leading-7 text-[#625f58] sm:text-lg sm:leading-8">
-            Créez une vitrine claire, montrez vos produits et échangez directement avec les clients. Vous gardez la main sur vos ventes et vos livraisons.
+            Créez une vitrine claire, montrez vos produits et échangez directement avec les clients. Vous gardez la main sur vos ventes.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <Link to="/app/creer-boutique" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[var(--mt-green-hover)] px-6 text-sm font-extrabold text-white shadow-[0_8px_20px_rgba(7,95,72,.18)] transition hover:-translate-y-0.5 hover:bg-[var(--mt-green-primary)]">
@@ -190,7 +190,7 @@ export function MerchantPlansPage() {
         <div>
           <p className="text-xs font-black uppercase tracking-[.16em] text-[#c2410c]">À votre rythme</p>
           <h2 className="mt-3 max-w-xl font-display text-4xl font-black leading-tight tracking-[-.04em] sm:text-5xl">Vous gardez la main sur chaque vente.</h2>
-          <p className="mt-4 max-w-xl text-sm leading-6 text-[#625f58] sm:text-base sm:leading-7">MaTable présente votre vitrine et facilite la prise de contact. Le client et le commerçant conviennent directement du paiement, du retrait ou de la livraison.</p>
+          <p className="mt-4 max-w-xl text-sm leading-6 text-[#625f58] sm:text-base sm:leading-7">MaTable présente votre vitrine et facilite la prise de contact. Le client et le commerçant conviennent directement du paiement et des modalités de remise.</p>
           <div className="mt-6 space-y-3">
             {[
               'Aucun paiement de commande encaissé par MaTable.',
@@ -211,7 +211,7 @@ export function MerchantPlansPage() {
             </div>
             <div className="mt-5 rounded-xl bg-[#f7f5ef] p-4 text-sm leading-6 text-[#59564f]">« Bonjour, est-ce que la chemise est disponible ? Je suis à Cocody. »</div>
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-[#706b63]"><Truck className="h-4 w-4 text-[#087c5b]" aria-hidden="true" /> Retrait ou livraison à convenir</p>
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-[#706b63]"><Store className="h-4 w-4 text-[#087c5b]" aria-hidden="true" /> Remise à convenir</p>
               <span className="inline-flex min-h-9 items-center gap-2 rounded-full bg-[var(--mt-green-hover)] px-4 text-xs font-bold text-white"><MessageCircle className="h-3.5 w-3.5" aria-hidden="true" /> Répondre sur WhatsApp</span>
             </div>
             <p className="mt-4 text-center text-[10px] text-[#888278]">Exemple d’interface · demande fictive</p>

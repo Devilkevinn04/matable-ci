@@ -70,7 +70,6 @@ actives y sont identifiées et affichées avant les produits.
 - Sur mobile, le catalogue est une liste compacte (photo, titre, une ligne de description, prix, bouton « + »). Toucher un produit ouvre une feuille d'options : choix obligatoires ou facultatifs avec suppléments, taille et couleur pour la mode, détails, total en direct et ajout au panier. Sur grand écran, les cartes restent inchangées.
 - Sur mobile, la vitrine respecte les zones sûres des iPhone, affiche un squelette de chargement aux dimensions réelles de la page (avec un bouton « Réessayer » après 8 s de connexion lente), permet de tirer pour actualiser le catalogue sans perdre le panier, et propose d'installer l'application à partir de la 2e visite (bouton natif sur Android, instructions Safari sur iPhone, rappel repoussé de 14 jours après un refus).
 - La vitrine publique indique la date de dernière actualisation du catalogue. Cette date suit les changements de produits et de stock ainsi que les mises à jour des horaires.
-- Le service de livraison MaTable (livreurs, courses et frais de livraison) est en veille. Les données historiques et les migrations sont conservées ; les commandes restent sans paiement intégré.
 - Le prix d’une commande est recalculé côté serveur à partir du catalogue et des options sélectionnées.
 - La publication (`publication_status`) est distincte de l’ouverture (`is_open`). Une boutique n’est publique que si elle est publiée, éligible KYC et couverte par un essai ou un abonnement actif, ou encore dans ses deux jours de grâce après échéance. Elle est masquée ensuite sans suppression de ses données ni blocage de l’accès marchand ; `is_open` contrôle uniquement la prise de commandes.
 - Le stockage local et les tests utilisent SQLite (`better-sqlite3`). En production (`NODE_ENV=production`), le serveur utilise PostgreSQL via `DATABASE_URL` (Neon recommandé). Les écritures de commandes et de stock sont transactionnelles.
@@ -101,27 +100,9 @@ Le tableau de bord `/admin` propose deux rôles distincts, sélectionnés au mom
 
 Les autorisations sont vérifiées côté serveur ; masquer une rubrique dans l’interface n’est pas le mécanisme de contrôle d’accès. Les deux rôles utilisent des clés indépendantes configurées uniquement sur le serveur. En production, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` sont obligatoires et doivent chacune être fortes, uniques, distinctes et comporter au moins 32 caractères. Configurez-les dans l’environnement de déploiement (par exemple les variables du service Render) ; ne les ajoutez pas au dépôt, au frontend, aux journaux ou aux captures d’écran.
 
-### Livraison MaTable — en veille
+### Fonctionnalités retirées
 
-Les écrans de configuration et d’exploitation (livreurs, zones, courses et suivi) ont été retirés de l’expérience courante. Garder `DELIVERY_OPERATIONS_ENABLED=false` dans les environnements ; ne pas appliquer de migration de livraison ni activer les routes pendant cette mise en veille. Les données et migrations historiques restent dans le dépôt et la base. Les modalités de retrait ou d’une livraison organisée directement avec une boutique restent à convenir avec celle-ci.
-
-Les paragraphes techniques ci-dessous documentent l’implémentation conservée pour référence, pas un service actuellement disponible. Pour le développement et les tests :
-
-```sh
-DELIVERY_TEST_MODE=true DELIVERY_SANDBOX_PAYMENTS=true MATABLE_DB_PATH=:memory: npm run dev
-```
-
-L’aperçu local reste accessible sur `/__preview/delivery-courier` en développement uniquement. La route publique `/livreur` affiche un avis de mise en veille et ne permet plus de créer un compte ou de gérer des courses. Le mode simulé reste réservé aux tests avec `DELIVERY_SANDBOX_PAYMENTS=true`; les références aux fournisseurs et aux workflows Didit ci-dessous ne doivent pas être utilisées pour réactiver le service.
-
-En production, ne passez pas `DELIVERY_OPERATIONS_ENABLED` à `true`. Les migrations et les lignes historiques doivent être conservées.
-
-Avant de clôturer une course en `delivered`, le livreur doit enregistrer une preuve photo (JPEG, PNG ou WebP, 300 Ko maximum), stockée en base avec son empreinte SHA-256. L’exigence est active par défaut et peut être levée avec `DELIVERY_REQUIRE_PROOF=false`. La preuve reste remplaçable tant que la course n’est pas livrée, puis consultable par le commerçant et le client concernés.
-
-Chaque course expose un historique horodaté (`delivery_course_events`) commun au livreur, au commerçant et au client. L’interface livreur s’actualise toutes les 12 secondes, celle du commerçant toutes les 15 secondes et le suivi client toutes les 20 secondes, uniquement lorsque l’onglet est visible. Les trois espaces proposent une activation Push appareil par appareil : nouvelle course correspondant aux zones actives du livreur, acceptation et changements de statut pour le marchand, suivi et preuve photo pour le client. Sans configuration VAPID, les routes d’abonnement répondent `503` et l’interface l’indique sans bloquer le parcours.
-
-Un livreur peut libérer une course acceptée avant la récupération du colis (trois fois par 24 h au maximum) : elle redevient disponible et le marchand, le client et les autres livreurs éligibles sont notifiés. Une course restée `requested` au-delà de `DELIVERY_OFFER_TTL_MINUTES` (120 minutes par défaut) est annulée automatiquement avec notification des parties. Le Super-admin dispose d’une supervision des courses dans **Livraison** : filtrage par statut, retrait d’un livreur avec motif et annulation motivée. En environnement de test uniquement, il peut aussi déclencher manuellement l’expiration des offres. Toutes ces actions sont inscrites dans le journal d’audit admin. Une annulation de commande par le marchand annule aussi la course liée et notifie le livreur et le client.
-
-Le code conserve les anciens flux de paiement livreur et de gestion des zones à titre de référence, mais ils ne sont pas disponibles dans les interfaces courantes. Les routes correspondantes ne sont montées qu’avec `DELIVERY_OPERATIONS_ENABLED=true` ; garder ce paramètre à `false` pendant la mise en veille. Les contacts des commandes classiques sont masqués dans les listes client et marchand; une révélation explicite est limitée à cinq par compte et dix par IP sur dix minutes, consignée dans `order_contact_audits` et verrouillée après livraison, annulation, expiration ou remboursement. Les changements de schéma PostgreSQL sont versionnés dans `migrations/036_delivery_mvp.sql`, `migrations/037_order_contact_audits.sql`, `migrations/038_delivery_tickets_proofs_payments.sql`, `migrations/039_delivery_notifications.sql` et `migrations/040_delivery_order_fees.sql`; ils n’ont pas été appliqués à une base de production.
+La fonctionnalité de livraison MaTable (interface livreur, tarification, suivi, API et automatisations) a été retirée. Les migrations et colonnes historiques sont conservées pour préserver les données existantes ; aucune donnée de livraison n’est supprimée par cette refonte.
 
 Dans **Abonnements**, le Super-admin peut modifier les tarifs mensuels des formules. Les changements sont validés et journalisés; les pages commerçantes et les nouveaux paiements utilisent le tarif enregistré. Un paiement déjà confirmé et l’échéance qu’il a financée ne sont pas modifiés. Le tarif annuel correspond à 10 mensualités. Les paiements GeniusPay sont initiés manuellement par le commerçant, sans prélèvement automatique : programmer l’arrêt des droits à l’échéance ne bloque donc pas un renouvellement payé avant cette date. Il peut aussi accorder temporairement une formule ou suspendre les droits d’une boutique précise, jusqu’à une date choisie, avec un motif obligatoire. À cette date, l’état de facturation et les changements programmés reprennent automatiquement ; ces dérogations ne créent aucun paiement et ne désactivent pas la boutique. La dérogation peut aussi être retirée immédiatement pour rétablir l’automatisation.
 
@@ -161,7 +142,6 @@ AD_EVENT_SIGNING_SECRET=""
 ADVERTISING_BETA_ENABLED="false"
 DIDIT_API_KEY=""
 DIDIT_WORKFLOW_ID=""
-DIDIT_DRIVER_WORKFLOW_ID="" # facultatif : workflow distinct, sinon DIDIT_WORKFLOW_ID
 DIDIT_WEBHOOK_SECRET=""
 VAPID_PUBLIC_KEY=""
 VAPID_PRIVATE_KEY=""
@@ -294,7 +274,7 @@ Générez une paire VAPID dédiée au serveur, par exemple avec `npx web-push ge
 
 Chaque commerçant choisit explicitement ses appareils et peut les désabonner dans ses paramètres. Les abonnements sont liés à la boutique authentifiée ; les endpoints expirés (HTTP 404/410) sont supprimés. Les envois sont dédupliqués et les échecs sont journalisés sans annuler la commande, la modification du stock ou la vérification d’identité à l’origine de l’alerte. Les Push exigent HTTPS (Render le fournit) et l’autorisation du navigateur. Le centre opérationnel admin affiche le nombre d’appareils associés, l’état VAPID, le suivi des annonces automatiques sur 30 jours. Il n’y a plus d’envoi manuel.
 
-Les tables Push des livreurs (`delivery_driver_push_subscriptions`) sont conservées avec l’historique de livraison ; les notifications liées aux courses ne font pas partie du service actuellement disponible. Les clients peuvent toujours gérer leurs notifications liées aux commandes sans activer de paiement en ligne.
+Les clients peuvent gérer leurs notifications liées aux commandes sans activer de paiement en ligne.
 
 ### Publicité et partenariats
 
@@ -359,11 +339,11 @@ npm run check:prod
 npm run smoke:prod -- --url https://votre-domaine.com
 ```
 
-`check:prod` bloque si `NODE_ENV` n’est pas `production`, si une variable obligatoire manque, si une clé est trop courte ou identique à l’autre, si `APP_URL` n’est pas une URL HTTPS publique, si `DATABASE_URL` n’utilise pas PostgreSQL, si une table ou une colonne récente manque, ou si une migration versionnée n’est pas enregistrée. Il signale en avertissement les intégrations facultatives incomplètes (Didit, GeniusPay, Resend, R2, Push, WhatsApp, OAuth) et un `DELIVERY_OPERATIONS_ENABLED=true` prématuré. Utilisez `--json` pour un rapport machine et `--skip-database` pour un contrôle hors ligne.
+`check:prod` bloque si `NODE_ENV` n’est pas `production`, si une variable obligatoire manque, si une clé est trop courte ou identique à l’autre, si `APP_URL` n’est pas une URL HTTPS publique, si `DATABASE_URL` n’utilise pas PostgreSQL, si une table ou une colonne récente manque, ou si une migration versionnée n’est pas enregistrée. Il signale en avertissement les intégrations facultatives incomplètes (Didit, GeniusPay, Resend, R2, Push, WhatsApp, OAuth). Utilisez `--json` pour un rapport machine et `--skip-database` pour un contrôle hors ligne.
 
 `smoke:prod` vérifie les pages publiques, `/health`, le refus `401` de `/api/admin/health`, les assets `/brand-kit/`, le manifeste PWA, `robots.txt`, `sitemap.xml` et les en-têtes de sécurité (`CSP`, `HSTS`, `nosniff`, `DENY`). En local derrière le serveur de production, ajoutez `SMOKE_FORWARDED_PROTO=https` pour satisfaire la redirection HTTPS.
 
-État validé sur PostgreSQL 16 vierge : `npm run test:postgres`, `npm run migrate:neon` (47/47 migrations), `npm run db:backup`, `npm run db:restore:validate`, `npm run check:prod` et `npm run smoke:prod` (47 contrôles) réussissent. Le déploiement Render et l’activation de la livraison restent subordonnés à la fourniture des secrets réels et à l’application des migrations sur la base cible.
+État validé sur PostgreSQL 16 vierge : `npm run test:postgres`, `npm run migrate:neon` (47/47 migrations), `npm run db:backup`, `npm run db:restore:validate`, `npm run check:prod` et `npm run smoke:prod` (47 contrôles) réussissent. Le déploiement Render reste subordonné à la fourniture des secrets réels et à l’application des migrations sur la base cible.
 
 ## Déploiement rapide
 

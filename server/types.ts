@@ -103,12 +103,6 @@ export interface ShopRecord {
       website?: string;
       whatsapp?: string;
     };
-    delivery_zones?: Array<{
-      label: string;
-      mode: 'livraison' | 'sur_place' | 'retirer';
-      fee: number;
-      description?: string;
-    }>;
     advanced_css?: {
       borderRadius?: 'rounded-none' | 'rounded-xl' | 'rounded-2xl' | 'rounded-3xl';
       shadowIntensity?: 'none' | 'subtle' | 'soft' | 'strong';

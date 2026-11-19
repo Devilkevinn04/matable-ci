@@ -117,9 +117,6 @@ if (value('DEMO_MODE').toLowerCase() === 'true') {
   fail('DEMO_MODE doit être false en production.');
 }
 
-const deliveryEnabled = value('DELIVERY_OPERATIONS_ENABLED') === 'true';
-if (deliveryEnabled) warn('DELIVERY_OPERATIONS_ENABLED=true : les migrations livraison doivent être appliquées.');
-
 // --- Intégrations facultatives --------------------------------------------
 
 checkOptionalGroup('Vérification Didit (facultative, contrôle manuel disponible)', [
@@ -127,10 +124,6 @@ checkOptionalGroup('Vérification Didit (facultative, contrôle manuel disponibl
   'DIDIT_WORKFLOW_ID',
   'DIDIT_WEBHOOK_SECRET',
 ], { allowPartial: true });
-if (isSet('DIDIT_DRIVER_WORKFLOW_ID') && !isSet('DIDIT_WORKFLOW_ID')) {
-  warn('DIDIT_DRIVER_WORKFLOW_ID est défini sans DIDIT_WORKFLOW_ID de secours.');
-}
-
 checkOptionalGroup('Paiements GeniusPay', ['GENIUSPAY_API_KEY', 'GENIUSPAY_API_SECRET', 'GENIUSPAY_WEBHOOK_SECRET']);
 
 const resendFrom = value('RESEND_FROM_EMAIL') || value('EMAIL_FROM');

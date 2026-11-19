@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, CalendarDays, Check, ChevronRight, Clock3, Eye, EyeOff, Gift, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MapPin, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, Truck, UserRound } from 'lucide-react';
+import { ArrowRight, CalendarDays, Check, ChevronRight, Clock3, Eye, EyeOff, Gift, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, UserRound } from 'lucide-react';
 import { AuthAudienceSwitcher, AuthExperienceLayout } from './AuthExperienceLayout';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
 import { CustomerMerchantRegistrationForm } from './CustomerMerchantRegistrationForm';
@@ -8,13 +8,11 @@ import { CategoryProductImage } from './CategoryProductImage';
 import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
 import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
 import { OrderContactReveal } from './OrderContactReveal';
-import { DeliveryTimeline, type DeliveryTimelineEvent } from './DeliveryTimeline';
-import { DeliveryProgress, DeliveryStatusBadge } from './deliveryStatus';
 import { formatFCFA } from '../utils/format';
-import { PushOptIn } from './PushOptIn';
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import { Link } from 'react-router-dom';
 import { trackLogin, trackSignup } from '../utils/analyticsTracker';
+import { ContextualHelp } from './ContextualHelp';
 
 const GuideChecklist = React.lazy(() => import('./UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
 
@@ -350,121 +348,14 @@ export const CustomerAccount: React.FC<CustomerAccountProps> = ({ user, onLogout
   <CustomerAccountContent user={user} onLogout={onLogout} onBack={onBack} onUserUpdated={onUserUpdated} />
 );
 
-interface CustomerOrderDelivery {
-  id: number;
-  status: string;
-  ticket_number: string | null;
-  quoted_amount: number;
-  proof_available: boolean;
-  proof_captured_at: string | null;
-  proof_byte_size: number | null;
-}
-
 interface CustomerOrder {
   id: number;
   total_amount: number;
-  delivery_fee?: number;
   status: string;
   created_at: string;
   shop_id: number;
   shop_name?: string;
-  delivery_location?: string;
-  delivery?: CustomerOrderDelivery | null;
   items?: { id: number; product_title?: string; quantity: number; unit_price: number; selected_size?: string; selected_color?: string; selected_modifiers?: string[] }[];
-}
-
-function CustomerDeliverySummary({ order }: { order: CustomerOrder }) {
-  const delivery = order.delivery;
-  const [proofUrl, setProofUrl] = useState<string | null>(null);
-  const [proofError, setProofError] = useState<string | null>(null);
-  const [proofLoading, setProofLoading] = useState(false);
-  const [timelineEvents, setTimelineEvents] = useState<DeliveryTimelineEvent[]>([]);
-  const [timelineLoading, setTimelineLoading] = useState(false);
-  const [timelineError, setTimelineError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!delivery) return;
-    let cancelled = false;
-    setTimelineLoading(true);
-    setTimelineError(null);
-    fetch(`/api/customers/orders/${order.id}/delivery/events`, { credentials: 'include', cache: 'no-store' })
-      .then(async (response) => {
-        const data = await response.json() as { events?: DeliveryTimelineEvent[]; error?: string };
-        if (!response.ok) throw new Error(data.error || 'Impossible de charger le suivi de la livraison.');
-        if (!cancelled) setTimelineEvents(Array.isArray(data.events) ? data.events : []);
-      })
-      .catch((loadError: unknown) => {
-        if (!cancelled) setTimelineError(loadError instanceof Error ? loadError.message : 'Impossible de charger le suivi de la livraison.');
-      })
-      .finally(() => { if (!cancelled) setTimelineLoading(false); });
-    return () => { cancelled = true; };
-  }, [order.id, delivery?.id, delivery?.status]);
-
-  if (!delivery) return null;
-
-  const loadProof = async () => {
-    setProofLoading(true);
-    setProofError(null);
-    try {
-      const response = await fetch(`/api/customers/orders/${order.id}/delivery/proof`, {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      const data = await response.json() as { proof?: { data_url: string }; error?: string };
-      if (!response.ok || !data.proof) throw new Error(data.error || 'Preuve photo indisponible.');
-      setProofUrl(data.proof.data_url);
-    } catch (error) {
-      setProofError(error instanceof Error ? error.message : 'Preuve photo indisponible.');
-    } finally {
-      setProofLoading(false);
-    }
-  };
-
-  return (
-    <section aria-label={`Livraison MaTable de la commande ${order.id}`} className="mt-3 overflow-hidden rounded-xl border border-[#CBE6DA] bg-white">
-      <div className="bg-[#F0FAF5] px-3 py-2.5">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#0F6B54]">
-              <Truck className="h-3.5 w-3.5" aria-hidden="true" />Livraison MaTable
-            </p>
-            <p className="mt-1 font-mono text-sm font-black tracking-wide text-[#103E32]">{delivery.ticket_number || `COURSE-${delivery.id}`}</p>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            {order.status === 'pending'
-              ? <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-900">En attente de la boutique</span>
-              : <DeliveryStatusBadge status={delivery.status} />}
-            <p className="text-xs font-black tabular-nums text-[#103E32]">{formatFCFA(Number(delivery.quoted_amount) || 0)}</p>
-          </div>
-        </div>
-        {order.status === 'pending' && <p className="mt-2 text-[11px] leading-5 text-amber-900">La recherche d’un livreur commencera après acceptation de la commande.</p>}
-        <div className="mt-2.5">
-          <DeliveryProgress status={delivery.status} />
-        </div>
-      </div>
-
-      <div className="space-y-2 px-3 py-3">
-        {delivery.proof_available && (
-          <button type="button" onClick={() => void loadProof()} disabled={proofLoading} className="min-h-9 w-full rounded-lg border border-[#B9DCCF] bg-white px-3 text-xs font-bold text-[#0F6B54] transition-colors hover:bg-[#F0FAF5] disabled:opacity-50">
-            {proofLoading ? 'Chargement…' : proofUrl ? 'Preuve affichée' : 'Voir la preuve photo'}
-          </button>
-        )}
-        {proofUrl && (
-          <figure className="rounded-lg border border-[#E4EDE8] bg-white p-2">
-            <img src={proofUrl} alt={`Preuve de livraison de la commande ${order.id}`} className="max-h-60 w-full rounded-md object-cover" />
-            <figcaption className="mt-1 text-[10px] text-[#8A948E]">Photo enregistrée par le livreur.</figcaption>
-          </figure>
-        )}
-        {proofError && <p role="alert" className="text-xs font-semibold text-rose-800">{proofError}</p>}
-        <DeliveryTimeline
-          events={timelineEvents}
-          loading={timelineLoading}
-          error={timelineError}
-          title="Suivi de la livraison"
-        />
-      </div>
-    </section>
-  );
 }
 
 type CustomerAccountSection = 'overview' | 'orders' | 'favorites' | 'loyalty' | 'profile' | 'security';
@@ -561,13 +452,11 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
     return () => { isActive = false; };
   }, [ordersRefresh]);
 
-  const hasActiveDelivery = orders.some((order) => order.delivery
-    && !['delivered', 'cancelled'].includes(order.delivery.status));
   const hasTrackableOrder = orders.some((order) => ['pending', 'confirmed', 'preparing', 'ready'].includes(order.status));
   useVisibilityPolling(
     () => setOrdersRefresh((value) => value + 1),
     20_000,
-    hasActiveDelivery || hasTrackableOrder,
+    hasTrackableOrder,
   );
 
   const cancelPendingOrder = async (orderId: number) => {
@@ -926,7 +815,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="rounded-full bg-[#f1eee7] px-3 py-1.5 text-xs font-bold text-[#47534b]">{customerOrderStatusLabel(order.status)}</span>
-                      <strong className="whitespace-nowrap text-sm font-extrabold text-[var(--mt-green-deep)]">{(order.total_amount + Number(order.delivery_fee || 0)).toLocaleString('fr-FR')} F</strong>
+                      <strong className="whitespace-nowrap text-sm font-extrabold text-[var(--mt-green-deep)]">{formatFCFA(order.total_amount)}</strong>
                     </div>
                   </article>)}
                 </div>}
@@ -1019,13 +908,6 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
               </div>
               {!ordersLoading && <span className="rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[var(--mt-green-deep)]">{orders.length} au total</span>}
             </div>
-            <PushOptIn
-              configUrl="/api/auth/customer-push/config"
-              subscriptionUrl="/api/auth/customer-push/subscription"
-              title="Suivi de livraison sur cet appareil"
-              description="Recevez une alerte quand un livreur accepte votre course, récupère le colis, arrive ou dépose la photo de preuve."
-              className="mt-4"
-            />
             {orderActionError && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">{orderActionError}</p>}
             {ordersLoading && <div role="status" className="mt-6 space-y-3"><span className="sr-only">Chargement de vos commandes…</span>{[0, 1].map((item) => <div key={item} className="h-28 animate-pulse rounded-2xl bg-[#f1eee7]" />)}</div>}
             {ordersError && <div role="alert" className="mt-6 rounded-2xl border border-[#e8c69a] bg-[#fff8ec] p-4 text-sm text-[#704d16]"><p>{ordersError}</p><button type="button" onClick={() => setOrdersRefresh((value) => value + 1)} className="mt-2 font-bold underline underline-offset-2">Réessayer</button></div>}
@@ -1045,12 +927,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                   </div>
                   <div className="flex flex-col items-start gap-2 sm:items-end">
                     <span className="rounded-full bg-[#f1eee7] px-3 py-1.5 text-xs font-bold text-[#47534b]">{customerOrderStatusLabel(order.status)}</span>
-                    <strong className="text-sm font-extrabold text-[var(--mt-green-deep)]">{(order.total_amount + Number(order.delivery_fee || 0)).toLocaleString('fr-FR')} FCFA</strong>
-                    {Number(order.delivery_fee || 0) > 0 && (
-                      <span className="text-[10px] font-semibold text-[#647067] sm:text-right">
-                        {order.total_amount.toLocaleString('fr-FR')} FCFA d’articles<br />+ {Number(order.delivery_fee).toLocaleString('fr-FR')} FCFA de livraison
-                      </span>
-                    )}
+                    <strong className="text-sm font-extrabold text-[var(--mt-green-deep)]">{formatFCFA(order.total_amount)}</strong>
                   </div>
                 </div>
                 {order.items?.length ? <ul className="mt-4 space-y-2 border-t border-[#eee6dd] pt-3">
@@ -1059,14 +936,12 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                     <span className="font-semibold text-[#647067]">{(item.unit_price * item.quantity).toLocaleString('fr-FR')} FCFA</span>
                   </li>)}
                 </ul> : null}
-                {order.delivery_location && <p className="mt-3 flex items-center gap-2 border-t border-[#eee6dd] pt-3 text-xs text-[#647067]"><MapPin className="h-3.5 w-3.5 shrink-0 text-[var(--mt-green-primary)]" />{order.delivery_location}</p>}
                 {order.status === 'pending' && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-[#eee6dd] pt-3">
                   <p className="text-xs leading-5 text-[#647067]">En attente de la boutique. Sans réponse sous 2 heures, la demande expire et le stock est libéré.</p>
                   <button type="button" onClick={() => void cancelPendingOrder(order.id)} disabled={cancellingOrderId === order.id} className="min-h-10 rounded-full border border-rose-200 bg-rose-50 px-4 text-xs font-bold text-rose-800 transition hover:bg-rose-100 disabled:opacity-50">
                     {cancellingOrderId === order.id ? 'Annulation…' : 'Annuler la demande'}
                   </button>
                 </div>}
-                <CustomerDeliverySummary order={order} />
                 <div className="mt-3 border-t border-[#eee6dd] pt-3">
                   <OrderContactReveal
                     endpoint={`/api/customers/orders/${order.id}/contacts/merchant`}
@@ -1082,8 +957,13 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#c2410c]">Vos avantages</p>
-                <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Ma fidélité</h2>
-                <p className="mt-2 text-sm leading-6 text-[#647067]">Chaque boutique suit séparément vos commandes livrées. Une récompense est disponible tous les cinq achats livrés.</p>
+                <div className="flex items-center gap-2">
+                  <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Ma fidélité</h2>
+                  <ContextualHelp label="Carte de fidélité" variant="info">
+                    Les commandes sont comptabilisées quand la boutique les marque « Livrée ». Chaque boutique gère sa carte et remet les récompenses directement; MaTable ne modifie pas automatiquement le prix.
+                  </ContextualHelp>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-[#647067]">Chaque boutique suit séparément les commandes qu’elle a marquées « Livrée ». Une récompense est disponible tous les cinq achats comptabilisés.</p>
               </div>
               <span className="rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[var(--mt-green-deep)]">{availableRewardsCount} récompense{availableRewardsCount === 1 ? '' : 's'} disponible{availableRewardsCount === 1 ? '' : 's'}</span>
             </div>

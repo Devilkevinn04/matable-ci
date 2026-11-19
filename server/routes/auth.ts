@@ -12,6 +12,7 @@ import { sendCustomerPasswordResetEmail, sendCustomerWelcomeEmail, sendMerchantP
 import { normalizeWhatsAppPhone } from '../services/businessRules.ts';
 import { isEmailMfaRequired, sendEmailMfaRolloutNoticeOnce, startEmailMfaChallenge, verifyEmailMfaChallenge } from '../services/emailMfa.ts';
 import { requireSameOriginJsonRequest } from '../middleware/authRequestSecurity.ts';
+import { sanitizeThemeConfigForResponse } from '../services/shopThemeConfig.ts';
 
 interface MerchantSession {
   shopId: number;
@@ -376,7 +377,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
         owner_email_configured: Boolean(shop.owner_email),
         owner_email_verified: Boolean(shop.owner_email_verified_at),
         category: shop.category,
-        theme_config: shop.theme_config,
+        theme_config: sanitizeThemeConfigForResponse(shop.theme_config),
       },
     });
 

@@ -1,7 +1,7 @@
 import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign, storeAnalyticsCampaign } from './analyticsAttribution';
 import { hasAnalyticsConsent } from './cookieConsent';
 
-export type AnalyticsAudience = 'public' | 'customer' | 'merchant' | 'courier' | 'admin';
+export type AnalyticsAudience = 'public' | 'customer' | 'merchant' | 'admin';
 export type AnalyticsEventType =
   | 'page_view'
   | 'login'
@@ -203,14 +203,14 @@ export function trackCheckoutStart(shopId: number, cartSize: number, cartValue: 
   });
 }
 
-export function trackOrderCreated(shopId: number, orderId: number, cartSize: number, cartValue: number, deliveryFee: number): void {
+export function trackOrderCreated(shopId: number, orderId: number, cartSize: number, cartValue: number): void {
   trackAnalyticsEvent({
     eventType: 'order_created',
     audience: 'customer',
     shopId,
     entityType: 'order',
     entityId: orderId,
-    metadata: { cart_size: cartSize, cart_value: cartValue, step: deliveryFee > 0 ? 'delivery' : 'pickup' },
+    metadata: { cart_size: cartSize, cart_value: cartValue },
   });
 }
 

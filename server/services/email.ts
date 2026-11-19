@@ -546,11 +546,8 @@ export async function sendCustomerOrderReceiptEmail(
       selected_color?: string;
       selected_modifiers?: string[];
     }[];
-    deliveryLocation: string;
-    deliverySlot?: string;
     paymentMethod: 'wave' | 'mobile_money' | 'cash' | 'to_confirm';
     totalAmount: number;
-    deliveryFee: number;
     appUrl?: string;
   },
   fetchImplementation: typeof fetch = fetch,
@@ -558,7 +555,7 @@ export async function sendCustomerOrderReceiptEmail(
   const appUrl = resolveAppUrl(params.appUrl);
   const orderNumber = `#${params.orderId}`;
   const createdDate = RECEIPT_DATE_FORMATTER.format(new Date(params.createdAt));
-  const amount = RECEIPT_AMOUNT_FORMATTER.format(params.totalAmount + params.deliveryFee);
+  const amount = RECEIPT_AMOUNT_FORMATTER.format(params.totalAmount);
   const itemRows = params.items.map((item) => {
     const options = [
       item.selected_size,
@@ -598,10 +595,8 @@ export async function sendCustomerOrderReceiptEmail(
     '',
     'Articles :',
     ...textItems,
-    ...(params.deliveryFee > 0 ? [`Frais de livraison MaTable : ${RECEIPT_AMOUNT_FORMATTER.format(params.deliveryFee)} FCFA`] : []),
     `Total à régler : ${amount} FCFA`,
-    `Retrait / livraison : ${params.deliveryLocation}`,
-    ...(params.deliverySlot ? [`Créneau souhaité : ${params.deliverySlot}`] : []),
+    'Contactez la boutique pour convenir de la remise de votre commande.',
     `Mode de règlement souhaité : ${paymentLabels[params.paymentMethod]}`,
     '',
     'Votre demande attend la réponse de la boutique. Sans réponse sous 2 heures, elle expirera et les articles réservés seront remis en stock. Ce récapitulatif ne confirme pas un paiement.',
@@ -625,16 +620,12 @@ export async function sendCustomerOrderReceiptEmail(
           <td style="padding:11px 0;border-top:1px solid #EFEAE0;font-family:${EMAIL_FONT};font-size:12px;color:${BRAND.muted};">Articles</td>
           <td align="right" style="padding:11px 0;border-top:1px solid #EFEAE0;font-family:${EMAIL_FONT};font-size:12px;font-weight:700;color:${BRAND.body};">${escapeHtml(RECEIPT_AMOUNT_FORMATTER.format(params.totalAmount))} FCFA</td>
         </tr>
-        ${params.deliveryFee > 0 ? `<tr>
-          <td style="padding:8px 0;font-family:${EMAIL_FONT};font-size:12px;color:${BRAND.muted};">Frais de livraison MaTable</td>
-          <td align="right" style="padding:8px 0;font-family:${EMAIL_FONT};font-size:12px;font-weight:700;color:${BRAND.body};">${escapeHtml(RECEIPT_AMOUNT_FORMATTER.format(params.deliveryFee))} FCFA</td>
-        </tr>` : ''}
         <tr>
           <td style="padding:12px 0;border-top:1px solid ${BRAND.line};font-family:${EMAIL_FONT};font-size:13px;font-weight:800;color:${BRAND.deep};">Total à régler</td>
           <td align="right" style="padding:12px 0;border-top:1px solid ${BRAND.line};font-family:${EMAIL_FONT};font-size:14px;font-weight:800;color:${BRAND.deep};">${escapeHtml(amount)} FCFA</td>
         </tr>
       </table>
-      <p style="margin:16px 0 0;font-family:${EMAIL_FONT};font-size:12px;line-height:1.6;color:${BRAND.muted};">Retrait ou livraison : <strong>${escapeHtml(params.deliveryLocation)}</strong>${params.deliverySlot ? `<br />Créneau souhaité : <strong>${escapeHtml(params.deliverySlot)}</strong>` : ''}<br />Mode de règlement souhaité : <strong>${escapeHtml(paymentLabels[params.paymentMethod])}</strong></p>
+      <p style="margin:16px 0 0;font-family:${EMAIL_FONT};font-size:12px;line-height:1.6;color:${BRAND.muted};">Contactez la boutique pour convenir de la remise de votre commande.<br />Mode de règlement souhaité : <strong>${escapeHtml(paymentLabels[params.paymentMethod])}</strong></p>
       <p style="margin:16px 0 0;padding:12px;border:1px solid #F3D7A5;border-radius:12px;background:#FFF8E9;font-family:${EMAIL_FONT};font-size:12px;line-height:1.6;color:#74551B;">Votre demande attend la réponse de la boutique. Sans réponse sous 2 heures, elle expirera et les articles réservés seront remis en stock. Ce récapitulatif ne confirme pas un paiement.</p>
       ${whatsappUrl ? renderEmailButton('Contacter la boutique sur WhatsApp', whatsappUrl) : ''}
     `,

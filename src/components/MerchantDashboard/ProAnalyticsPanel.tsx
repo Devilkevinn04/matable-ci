@@ -5,6 +5,7 @@ import type { Shop } from '../../types';
 import { formatFCFA } from '../../utils/format';
 import { getSubscriptionAnalyticsDayLimit, isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
 import { AnalyticsDailyBars } from '../AnalyticsDailyBars';
+import { ContextualHelp } from '../ContextualHelp';
 
 type DailyAnalytics = {
   date: string;
@@ -243,7 +244,12 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
             <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-100">
               <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" /> Aperçu de votre boutique
             </p>
-            <h2 id="merchant-pro-analytics-title" className="mt-3 text-2xl font-black tracking-tight sm:text-3xl">Vos statistiques</h2>
+            <div className="mt-3 flex items-center gap-2">
+              <h2 id="merchant-pro-analytics-title" className="text-2xl font-black tracking-tight sm:text-3xl">Vos statistiques</h2>
+              <ContextualHelp label="Comprendre les statistiques" variant="info">
+                Les visites sont comptées après consentement; les sessions ne représentent pas nécessairement des personnes distinctes. Les montants des commandes ne signifient pas que le paiement a été encaissé sur MaTable.
+              </ContextualHelp>
+            </div>
             <p className="mt-2 max-w-xl text-xs leading-5 text-emerald-50/80 sm:text-sm">Comprenez les visites, les commandes et les articles qui attirent l’attention.</p>
           </div>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Période des statistiques">

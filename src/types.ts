@@ -23,13 +23,6 @@ export interface ShopSocialLinks {
   whatsapp?: string;
 }
 
-export interface ShopDeliveryZone {
-  label: string;
-  mode: 'livraison' | 'sur_place' | 'retirer';
-  fee: number;
-  description?: string;
-}
-
 export interface ThemeConfig {
   primary_color: string;
   secondary_color: string;
@@ -43,7 +36,6 @@ export interface ThemeConfig {
   event_type?: ShopEventType;
   event_banner_text?: string;
   social_links?: ShopSocialLinks;
-  delivery_zones?: ShopDeliveryZone[];
   advanced_css?: ThemeAdvancedCSS;
 }
 
@@ -166,12 +158,8 @@ export interface Order {
   customer_user_id?: number;
   customer_name: string;
   customer_phone: string;
-  delivery_location: string;
-  delivery_note?: string;
-  delivery_slot?: string; // For food: "Midi 12h-13h", etc.
   payment_method_preference: 'wave' | 'mobile_money' | 'cash' | 'to_confirm';
   total_amount: number;
-  delivery_fee?: number;
   created_at: string;
   status: OrderStatus;
   whatsapp_tracking_available?: boolean;

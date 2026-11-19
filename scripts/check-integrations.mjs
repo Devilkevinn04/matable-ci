@@ -52,20 +52,11 @@ function checkPresence(keys, label, { required = false } = {}) {
 // --- Didit -----------------------------------------------------------------
 
 const merchantWorkflow = value('DIDIT_WORKFLOW_ID');
-const driverWorkflow = value('DIDIT_DRIVER_WORKFLOW_ID');
 
 const diditApiKeySet = checkPresence(['DIDIT_API_KEY'], 'Didit clé API');
 checkPresence(['DIDIT_WORKFLOW_ID'], 'Didit workflow marchand');
 checkPresence(['DIDIT_WEBHOOK_SECRET'], 'Didit secret webhook');
 
-if (isSet('DIDIT_DRIVER_WORKFLOW_ID')) {
-  if (!isSet('DIDIT_WORKFLOW_ID')) {
-    warn('DIDIT_DRIVER_WORKFLOW_ID est défini sans DIDIT_WORKFLOW_ID de secours.');
-  }
-  if (!UUID_PATTERN.test(driverWorkflow)) {
-    fail('DIDIT_DRIVER_WORKFLOW_ID n’est pas un UUID de workflow valide.');
-  }
-}
 if (isSet('DIDIT_WORKFLOW_ID') && !UUID_PATTERN.test(merchantWorkflow)) {
   fail('DIDIT_WORKFLOW_ID n’est pas un UUID de workflow valide.');
 }

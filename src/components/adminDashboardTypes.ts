@@ -145,7 +145,6 @@ export interface AdminOrder {
   shop_name: string;
   customer_name: string;
   customer_phone: string;
-  delivery_location: string;
   total_amount: number;
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'rejected' | 'expired';
   created_at: string;

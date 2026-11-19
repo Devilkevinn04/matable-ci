@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Megaphone, RefreshCw } from 'lucide-react';
+import { ContextualHelp } from './ContextualHelp';
 
 interface BetaState {
   started: boolean;
@@ -177,7 +178,12 @@ export const AdminHomepageMarketing: React.FC = () => {
         <div className="flex items-start gap-3">
           <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[var(--mt-green-primary)]"><Megaphone className="h-5 w-5" aria-hidden="true" /></span>
           <div>
-            <h2 id="admin-advertising-title" className="text-xl font-black text-slate-900">Publicité et visibilité</h2>
+            <div className="flex items-center gap-2">
+              <h2 id="admin-advertising-title" className="text-xl font-black text-slate-900">Publicité et visibilité</h2>
+              <ContextualHelp label="Publicité et visibilité" variant="info">
+                La bêta contrôle l’éligibilité à la diffusion. Les campagnes envoyées par les boutiques doivent être examinées; les partenaires permanents ne sont pas des annonces payées.
+              </ContextualHelp>
+            </div>
             <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-600">La diffusion et la rotation des campagnes éligibles sont automatiques. La validation des contenus et le contrôle de diffusion restent réservés à l’administration.</p>
           </div>
         </div>

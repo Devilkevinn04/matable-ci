@@ -9,8 +9,8 @@ import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts
 import { issueAgeVerificationToken, isAgeVerificationTokenValid } from '../services/ageVerification.ts';
 import { mapProductRow } from '../repositories/products.ts';
 import { mapShopRow } from '../repositories/shops.ts';
-import { listShopDeliveryOptionRows } from '../services/deliveryQuoting.ts';
 import { toPublicProductImageUrl, withPublicProductImages } from '../services/publicProductImages.ts';
+import { sanitizeThemeConfigForResponse } from '../services/shopThemeConfig.ts';
 
 const publicShopColumns = `id, name, slug, theme_color, welcome_message, is_open, is_active,
   publication_status, featured_until, merchant_verification_status, business_verification_status,
@@ -32,7 +32,6 @@ interface PublicShopsRouterOptions {
   isRequestFingerprintMatch: (session: { fingerprint?: string } | null | undefined, req: Request) => boolean;
   computeIsShopOpen: (shop: ShopRecord) => boolean;
   isAdminShopSession: (req: Request, shopId: number) => Promise<boolean>;
-  deliveryOperationsEnabled: boolean;
   rateLimitPublicRequest: (limit?: number) => import('express').RequestHandler;
 }
 
@@ -42,7 +41,6 @@ export function createPublicShopsRouter({
   isRequestFingerprintMatch,
   computeIsShopOpen,
   isAdminShopSession,
-  deliveryOperationsEnabled,
   rateLimitPublicRequest,
 }: PublicShopsRouterOptions) {
   const router = Router();
@@ -307,37 +305,10 @@ export function createPublicShopsRouter({
           is_verified: ['approved', 'verified'].includes(shop.identity_verification_status || shop.merchant_verification_status || ''),
           category: shop.category,
           city: shop.city,
-          theme_config: shop.theme_config,
+          theme_config: sanitizeThemeConfigForResponse(shop.theme_config),
           opening_hours: shop.opening_hours,
         };
       }));
-  });
-
-  router.get('/:id/delivery-options', async (req, res) => {
-    const shopId = Number(req.params.id);
-    if (!Number.isSafeInteger(shopId) || shopId <= 0) {
-      return res.status(400).json({ error: 'Identifiant de boutique invalide.' });
-    }
-    const shop = await dbGet<{ id: number | string }>(
-      'SELECT id FROM shops WHERE id = ? AND is_active = 1',
-      [shopId],
-    );
-    if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
-    if (!deliveryOperationsEnabled) {
-      res.setHeader('Cache-Control', 'no-store');
-      return res.json({ available: false, origin_zone: null, zones: [] });
-    }
-    const rows = await listShopDeliveryOptionRows(shopId);
-    res.setHeader('Cache-Control', 'no-store');
-    return res.json({
-      available: rows.length > 0,
-      origin_zone: rows[0]?.origin_zone ?? null,
-      zones: rows.map((row) => ({
-        id: Number(row.destination_zone_id),
-        label: row.destination_zone,
-        amount: Number(row.amount),
-      })),
-    });
   });
 
   router.get('/:slug', async (req, res) => {
@@ -374,7 +345,7 @@ export function createPublicShopsRouter({
           slug: shop.slug,
           is_active: false,
           category: shop.category,
-          theme_config: shop.theme_config,
+          theme_config: sanitizeThemeConfigForResponse(shop.theme_config),
           welcome_message: 'Boutique temporairement indisponible.',
           ...(isAdminForShop ? { admin_mode: true } : {}),
         },
@@ -388,7 +359,8 @@ export function createPublicShopsRouter({
     );
     const shopProducts = productRows.map(mapProductRow);
     const hasAgeRestrictedProducts = shopProducts.some(isAgeRestrictedProduct);
-    const ageVerified = isAgeVerificationTokenValid(req.get('X-MaTable-Age-Verification'), shop.id);
+    const ageVerificationToken = req.get('X-MaTable-Age-Verification') || '';
+    const ageVerified = isAgeVerificationTokenValid(ageVerificationToken, shop.id);
     const publicShopProducts = !isMerchantForShop && !isAdminForShop && !ageVerified
       ? shopProducts.filter((product) => !isAgeRestrictedProduct(product))
       : shopProducts;
@@ -423,14 +395,18 @@ export function createPublicShopsRouter({
         category: shop.category,
         city: shop.city,
         catalog_updated_at: shop.catalog_updated_at,
-        theme_config: shop.theme_config,
+        theme_config: sanitizeThemeConfigForResponse(shop.theme_config),
         opening_hours: shop.opening_hours,
         ...(isAdminForShop ? { admin_mode: true } : {}),
       },
       has_age_restricted_products: hasAgeRestrictedProducts,
-      // Merchants and admins keep the stored photos (the editor re-saves them); visitors get cacheable URLs.
+      // The image endpoint applies storefront visibility and age-verification checks.
       products: publicShopProducts.map((product) => ({
-        ...(isMerchantForShop ? product : withPublicProductImages(product)),
+        ...withPublicProductImages(product, {
+          ageVerificationToken: !isMerchantForShop && isAgeRestrictedProduct(product)
+            ? ageVerificationToken
+            : undefined,
+        }),
         like_count: productLikeCounts.get(product.id) || 0,
       })),
     });

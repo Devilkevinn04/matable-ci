@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import {
   MAX_LEGACY_INLINE_MEDIA_BYTES,
   MAX_PUBLIC_MEDIA_BYTES,
@@ -71,6 +72,68 @@ test('media storage adapter exposes both public and stored normalizers', () => {
   assert.equal(adapter.normalizeUrl(legacy), '');
   assert.equal(adapter.normalizeStoredUrl(legacy), legacy);
   assert.deepEqual(adapter.normalizeStoredCollection([legacy]), [legacy]);
+});
+
+test('product object keys are restricted to the configured public host and owning shop', async () => {
+  const keys = ['R2_ENDPOINT', 'R2_BUCKET', 'R2_PUBLIC_BASE_URL', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'];
+  const saved = new Map(keys.map((key) => [key, process.env[key]]));
+  process.env.R2_ENDPOINT = 'https://r2.example.com';
+  process.env.R2_BUCKET = 'matable-public';
+  process.env.R2_PUBLIC_BASE_URL = 'https://media.example.com/assets';
+  process.env.R2_ACCESS_KEY_ID = 'test-key';
+  process.env.R2_SECRET_ACCESS_KEY = 'test-secret';
+
+  try {
+    const { getProductMediaObjectKey } = await import('../server/services/mediaStorage.ts');
+    const url = 'https://media.example.com/assets/shops/product-main/42/1700000000000-abcd1234-photo.webp';
+    assert.equal(getProductMediaObjectKey(url, 42), 'shops/product-main/42/1700000000000-abcd1234-photo.webp');
+    assert.equal(getProductMediaObjectKey(url, 43), null);
+    assert.equal(getProductMediaObjectKey('https://elsewhere.example.com/shops/product-main/42/photo.jpg', 42), null);
+    assert.equal(getProductMediaObjectKey('https://media.example.com/assets/shops/logo/42/logo.png', 42), null);
+    assert.equal(getProductMediaObjectKey('https://media.example.com/assets/shops/product-main/42/%2e%2e%2Fsecret.jpg', 42), null);
+    assert.equal(getProductMediaObjectKey(`${url}?download=1`, 42), null);
+  } finally {
+    for (const key of keys) {
+      const value = saved.get(key);
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test('product media objects are read through the configured storage endpoint', async () => {
+  const keys = ['R2_ENDPOINT', 'R2_BUCKET', 'R2_PUBLIC_BASE_URL', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'];
+  const saved = new Map(keys.map((key) => [key, process.env[key]]));
+  const image = Buffer.from('fake-png-content');
+  const storage = createServer((_request, response) => {
+    response.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': image.length });
+    response.end(image);
+  });
+  await new Promise<void>((resolve, reject) => {
+    storage.once('error', reject);
+    storage.listen(0, '127.0.0.1', resolve);
+  });
+
+  try {
+    const address = storage.address();
+    assert.ok(address && typeof address === 'object');
+    process.env.R2_ENDPOINT = `http://127.0.0.1:${address.port}`;
+    process.env.R2_BUCKET = 'matable-public';
+    process.env.R2_PUBLIC_BASE_URL = 'https://media.example.com';
+    process.env.R2_ACCESS_KEY_ID = 'test-key';
+    process.env.R2_SECRET_ACCESS_KEY = 'test-secret';
+
+    const { readProductMediaObject } = await import('../server/services/mediaStorage.ts');
+    const object = await readProductMediaObject('shops/product-main/42/1700000000000-abcd1234-photo.png');
+    assert.deepEqual(object, { contentType: 'image/png', body: image });
+  } finally {
+    for (const key of keys) {
+      const value = saved.get(key);
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await new Promise<void>((resolve, reject) => storage.close((error) => error ? reject(error) : resolve()));
+  }
 });
 
 test('upload validation enforces purpose, folder, format and size', async () => {

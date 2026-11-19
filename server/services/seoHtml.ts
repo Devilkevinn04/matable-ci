@@ -159,12 +159,12 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
     const origin = getPublicOrigin(req);
     const canonical = `${origin}/comment-ca-marche`;
     const title = 'Comment ça marche ? | MaTable';
-    const description = 'Le guide pour découvrir une boutique locale, consulter sa vitrine, commander directement auprès du commerçant et convenir du retrait ou de la livraison.';
+    const description = 'Le guide pour découvrir une boutique locale, consulter sa vitrine, commander directement auprès du commerçant et convenir de la remise.';
     const steps = [
       { name: 'Trouvez une boutique ou un produit', text: 'Parcourez les boutiques, explorez les catégories ou recherchez un produit, un quartier ou une ville.' },
       { name: 'Découvrez la vitrine', text: 'Consultez les produits, les prix, les horaires et les informations partagées par le commerçant.' },
       { name: 'Échangez directement avec le commerçant', text: 'Envoyez votre demande au vendeur sur WhatsApp et posez vos questions avant de confirmer.' },
-      { name: 'Convenez du retrait ou de la livraison', text: 'Mettez-vous d’accord avec le commerçant sur la disponibilité, le paiement et la remise de votre commande.' },
+      { name: 'Convenez des modalités de remise', text: 'Mettez-vous d’accord avec le commerçant sur la disponibilité, le paiement et la remise de votre commande.' },
     ];
     const structuredData = {
       '@context': 'https://schema.org',

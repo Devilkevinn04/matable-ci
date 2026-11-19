@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { RefreshCw, Tag } from 'lucide-react';
 import { formatFCFA } from '../utils/format';
+import { ContextualHelp } from './ContextualHelp';
 
 type PromotionStatus = 'active' | 'scheduled' | 'expired' | 'invalid';
 type PromotionFilter = 'all' | PromotionStatus;
@@ -95,8 +96,13 @@ export const AdminProductPromotions: React.FC = () => {
         <div className="flex items-start gap-3">
           <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[var(--mt-green-primary)]"><Tag className="h-5 w-5" aria-hidden="true" /></span>
           <div>
-            <h2 id="admin-product-promotions-title" className="text-xl font-black text-slate-900">Promotions du catalogue</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-600">Suivi des prix réduits publiés par les boutiques. Le prix normal est conservé; le prix promotionnel s’applique uniquement pendant la période déclarée. Cette vue ne modifie pas les tarifs marchands.</p>
+            <div className="flex items-center gap-2">
+              <h2 id="admin-product-promotions-title" className="text-xl font-black text-slate-900">Promotions du catalogue</h2>
+              <ContextualHelp label="Promotions du catalogue" variant="info">
+                Vue de suivi en lecture seule. Le prix normal reste enregistré; le prix réduit ne s’applique que pendant les dates déclarées par la boutique.
+              </ContextualHelp>
+            </div>
+            <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-600">Suivi en lecture seule des prix réduits publiés par les boutiques.</p>
           </div>
         </div>
         <button type="button" disabled={loading} onClick={() => setRefresh((value) => value + 1)} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-50">

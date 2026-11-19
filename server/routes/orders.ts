@@ -20,14 +20,6 @@ import {
   isOrderContactAvailable,
   maskContactPhone,
 } from '../services/contactGuard.ts';
-import {
-  buildDeliveryTicket,
-  deliveryQuoteSql,
-  MAX_DELIVERY_QUOTE,
-  MIN_DELIVERY_QUOTE,
-  type DeliveryQuote,
-} from '../services/deliveryQuoting.ts';
-import { dispatchDeliveryCancelledPush } from '../services/deliveryNotifications.ts';
 import { sendCustomerOrderReceiptEmail } from '../services/email.ts';
 import { CUSTOMER_LOYALTY_REWARD_THRESHOLD } from '../../src/utils/customerLoyalty.ts';
 import {
@@ -49,16 +41,13 @@ interface OrderRouterOptions {
   validateCustomerOrderInput: (input: {
     customer_name?: string;
     customer_phone?: string;
-    delivery_location?: string;
-    delivery_note?: string;
-  }) => { ok: boolean; customer_name?: string; customer_phone?: string; delivery_location?: string; delivery_note?: string; error?: string };
+  }) => { ok: boolean; customer_name?: string; customer_phone?: string; error?: string };
   computeIsShopOpen: (shop: ShopRecord) => boolean;
   getCustomerSessionState: (req: import('express').Request, res?: import('express').Response) => Promise<CustomerSession>;
   hashAccessToken: (token: string) => string;
   timingSafeEqual: (left: string, right: string) => boolean;
   getValidSelectedModifiers: (product: ProductRecord, selectedModifiers: string[]) => string[];
   getProductUnitPriceWithModifiers: (product: ProductRecord, selectedModifiers: string[]) => number;
-  deliveryOperationsEnabled: boolean;
 }
 
 export function createOrderRouter({
@@ -73,12 +62,11 @@ export function createOrderRouter({
   timingSafeEqual,
   getValidSelectedModifiers,
   getProductUnitPriceWithModifiers,
-  deliveryOperationsEnabled,
 }: OrderRouterOptions) {
   const router = Router();
 
   router.post('/orders', rateLimitPublicRequest(30), async (req, res) => {
-    const { shop_id, customer_name, customer_phone, delivery_location, delivery_note, delivery_slot, payment_method_preference, items, website, form_started_at, delivery_zone_id } = req.body;
+    const { shop_id, customer_name, customer_phone, payment_method_preference, items, website, form_started_at } = req.body;
     const rawCustomerEmail = req.body?.customer_email;
     if (rawCustomerEmail !== undefined && rawCustomerEmail !== null && typeof rawCustomerEmail !== 'string') {
       return res.status(400).json({ error: 'Adresse e-mail invalide.' });
@@ -98,21 +86,11 @@ export function createOrderRouter({
         return res.status(400).json({ error: 'Veuillez remplir le formulaire avant de commander.' });
       }
     }
-    if (!shop_id || !customer_name || !customer_phone || !delivery_location || !Array.isArray(items) || items.length === 0 || items.length > 50) {
+    if (!shop_id || !customer_name || !customer_phone || !Array.isArray(items) || items.length === 0 || items.length > 50) {
       return res.status(400).json({ error: 'Champs requis manquants pour la commande.' });
     }
-    const requestedDeliveryZoneId = delivery_zone_id === undefined || delivery_zone_id === null || delivery_zone_id === ''
-      ? null
-      : Number(delivery_zone_id);
-    if (requestedDeliveryZoneId !== null
-      && (!Number.isSafeInteger(requestedDeliveryZoneId) || requestedDeliveryZoneId <= 0)) {
-      return res.status(400).json({ error: 'Zone de livraison invalide.' });
-    }
-    if (requestedDeliveryZoneId !== null && !deliveryOperationsEnabled) {
-      return res.status(409).json({ error: 'La livraison MaTable n’est pas encore ouverte dans cette version. Convenez du retrait ou de la livraison directement avec la boutique.' });
-    }
 
-    const validatedCustomer = validateCustomerOrderInput({ customer_name, customer_phone, delivery_location, delivery_note });
+    const validatedCustomer = validateCustomerOrderInput({ customer_name, customer_phone });
     if (!validatedCustomer.ok) return res.status(400).json({ error: validatedCustomer.error || 'Données client invalides.' });
     const shop = await getShopFromDatabase(Number(shop_id));
     if (!shop) return res.status(404).json({ error: 'Boutique introuvable.' });
@@ -271,16 +249,6 @@ export function createOrderRouter({
           });
         }
 
-        const deliveryQuote = requestedDeliveryZoneId === null
-          ? null
-          : await transaction.get<DeliveryQuote>(
-            deliveryQuoteSql,
-            [requestedDeliveryZoneId, shop.id, MIN_DELIVERY_QUOTE, MAX_DELIVERY_QUOTE],
-          );
-        if (requestedDeliveryZoneId !== null && !deliveryQuote) {
-          throw Object.assign(new Error('Aucun tarif MaTable actif pour cette zone. Choisissez une autre zone ou convenez de la livraison avec la boutique.'), { statusCode: 409 });
-        }
-        const deliveryFee = deliveryQuote ? Number(deliveryQuote.amount) : 0;
         const createdAt = new Date().toISOString();
 
         const newOrder: OrderRecord = {
@@ -290,12 +258,12 @@ export function createOrderRouter({
           attribution_campaign: attributionCampaign,
           customer_name: validatedCustomer.customer_name || customer_name,
           customer_phone: validatedCustomer.customer_phone || customer_phone,
-          delivery_location: validatedCustomer.delivery_location || delivery_location,
-          delivery_note: validatedCustomer.delivery_note || delivery_note,
-          delivery_slot,
+          delivery_location: '',
+          delivery_note: undefined,
+          delivery_slot: undefined,
           payment_method_preference: payment_method_preference || 'to_confirm',
           total_amount: calculatedTotal,
-          delivery_fee: deliveryFee,
+          delivery_fee: 0,
           created_at: createdAt,
           status: 'pending',
           whatsapp_tracking_available: true,
@@ -308,8 +276,8 @@ export function createOrderRouter({
             delivery_slot, payment_method_preference, total_amount, delivery_fee, created_at, status, items, customer_user_id,
             attribution_campaign, pending_since
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [newOrder.id, newOrder.shop_id, newOrder.customer_name, newOrder.customer_phone, newOrder.delivery_location,
-          newOrder.delivery_note ?? null, newOrder.delivery_slot ?? null, newOrder.payment_method_preference,
+        `, [newOrder.id, newOrder.shop_id, newOrder.customer_name, newOrder.customer_phone, '',
+          null, null, newOrder.payment_method_preference,
           newOrder.total_amount, newOrder.delivery_fee, newOrder.created_at, newOrder.status, JSON.stringify(newOrder.items ?? []), newOrder.customer_user_id ?? null,
           newOrder.attribution_campaign ?? null, newOrder.created_at]);
         await transaction.run(
@@ -317,50 +285,9 @@ export function createOrderRouter({
           [orderId, hashAccessToken(whatsappTrackingToken)],
         );
 
-        let createdDelivery: {
-          id: number;
-          order_id: number;
-          shop_id: number;
-          pickup_zone_id: number;
-          destination_zone_id: number;
-          quoted_amount: number;
-          status: string;
-          created_at: string;
-          ticket_number: string;
-        } | null = null;
-        if (deliveryQuote) {
-          const insertedDelivery = await transaction.get<{ id: number | string }>(`INSERT INTO delivery_orders
-            (order_id, shop_id, pickup_zone_id, destination_zone_id, quoted_amount, status, created_at)
-            VALUES (?, ?, ?, ?, ?, 'requested', ?)
-            RETURNING id`,
-          [orderId, shop.id, deliveryQuote.pickup_zone_id, deliveryQuote.destination_zone_id, deliveryQuote.amount, createdAt]);
-          if (!insertedDelivery) throw new Error('Impossible de créer la course de livraison.');
-          const deliveryId = Number(insertedDelivery.id);
-          if (!Number.isSafeInteger(deliveryId) || deliveryId <= 0) {
-            throw new Error('Invalid delivery identifier returned by the database.');
-          }
-          const ticketNumber = buildDeliveryTicket(deliveryId, createdAt);
-          await transaction.run('UPDATE delivery_orders SET ticket_number = ? WHERE id = ?', [ticketNumber, deliveryId]);
-          await transaction.run(`INSERT INTO delivery_course_events
-            (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
-            VALUES (?, 'admin', NULL, NULL, 'requested', ?)`,
-          [deliveryId, createdAt]);
-          createdDelivery = {
-            id: deliveryId,
-            order_id: orderId,
-            shop_id: shop.id,
-            pickup_zone_id: Number(deliveryQuote.pickup_zone_id),
-            destination_zone_id: Number(deliveryQuote.destination_zone_id),
-            quoted_amount: Number(deliveryQuote.amount),
-            status: 'requested',
-            created_at: createdAt,
-            ticket_number: ticketNumber,
-          };
-        }
-
-        return { order: newOrder, delivery: createdDelivery };
+        return { order: newOrder };
       });
-      const { order: createdOrder, delivery: createdDelivery } = created;
+      const { order: createdOrder } = created;
       for (const update of stockUpdates) {
         update.product.stock = update.stock;
         update.product.is_available = update.isAvailable;
@@ -370,7 +297,7 @@ export function createOrderRouter({
         eventKey: `order-${createdOrder.id}`,
         category: 'orders',
         title: 'Nouvelle commande',
-        body: `Une commande de ${(createdOrder.total_amount + Number(createdOrder.delivery_fee || 0)).toLocaleString('fr-FR')} FCFA vient d’arriver.`,
+        body: `Une commande de ${createdOrder.total_amount.toLocaleString('fr-FR')} FCFA vient d’arriver.`,
         url: '/app',
         tag: `order-${createdOrder.id}`,
       }).catch((error: unknown) => console.error(`Unable to queue order notification for shop ${shop.id}.`, error));
@@ -388,11 +315,8 @@ export function createOrderRouter({
             shopWhatsAppNumber: shop.whatsapp_number,
             createdAt: createdOrder.created_at,
             items: createdOrder.items || [],
-            deliveryLocation: createdOrder.delivery_location,
-            deliverySlot: createdOrder.delivery_slot,
             paymentMethod: createdOrder.payment_method_preference,
             totalAmount: createdOrder.total_amount,
-            deliveryFee: Number(createdOrder.delivery_fee || 0),
           });
           emailReceiptStatus = emailResult.sent ? 'sent' : 'failed';
           if (!emailResult.sent && emailResult.error !== 'email_disabled_in_test') {
@@ -406,12 +330,9 @@ export function createOrderRouter({
       res.json({
         success: true,
         order: createdOrder,
-        delivery: createdDelivery,
         whatsapp_tracking_token: whatsappTrackingToken,
         email_receipt_status: emailReceiptStatus,
-        message: createdDelivery
-          ? 'Demande envoyée au commerçant. Les articles sont réservés pendant 2 heures ; la recherche d’un livreur commencera après son acceptation.'
-          : 'Demande envoyée au commerçant. Les articles sont réservés pendant 2 heures, le temps qu’il accepte ou refuse. Contactez-le sur WhatsApp pour échanger sur la livraison et le paiement.',
+        message: 'Demande envoyée au commerçant. Les articles sont réservés pendant 2 heures, le temps qu’il accepte ou refuse. Contactez-le sur WhatsApp pour convenir de la remise et du paiement.',
       });
     } catch (error: unknown) {
       const err = error as { message?: string; statusCode?: number; product_id?: number; stock?: number };
@@ -448,7 +369,6 @@ export function createOrderRouter({
       if (order.status !== 'pending') return { type: 'not_pending' as const, status: order.status };
 
       const expiration = await expirePendingOrderInTransaction(transaction, orderId, now);
-      if (expiration?.type === 'blockedByDelivery') return { type: 'blocked' as const };
       if (expiration?.type === 'expired') return { type: 'expired' as const, expiration: expiration.order };
 
       const items = typeof order.items === 'string' ? JSON.parse(order.items) as OrderRecord['items'] : order.items;
@@ -461,36 +381,11 @@ export function createOrderRouter({
       );
       if (update.changes !== 1) throw new Error(`Pending order ${orderId} changed while cancelling.`);
 
-      const delivery = await transaction.get<{
-        id: number | string;
-        status: string;
-        driver_id: number | string | null;
-      }>(`
-        SELECT id, status, driver_id FROM delivery_orders
-        WHERE order_id = ?${databaseMode === 'postgresql' ? ' FOR UPDATE' : ''}
-      `, [orderId]);
-      let cancelledDelivery: { id: number; previousStatus: string; driverId: number | null } | undefined;
-      if (delivery && ['requested', 'accepted', 'to_pickup'].includes(delivery.status)) {
-        await transaction.run(
-          "UPDATE delivery_orders SET status = 'cancelled', cancelled_at = ? WHERE id = ? AND status = ?",
-          [now, delivery.id, delivery.status],
-        );
-        await transaction.run(`INSERT INTO delivery_course_events
-          (delivery_id, actor_type, actor_id, previous_status, next_status, created_at)
-          VALUES (?, 'admin', NULL, ?, 'cancelled', ?)`,
-        [delivery.id, delivery.status, now]);
-        cancelledDelivery = {
-          id: Number(delivery.id),
-          previousStatus: delivery.status,
-          driverId: delivery.driver_id === null ? null : Number(delivery.driver_id),
-        };
-      }
-      return { type: 'cancelled' as const, shopId, stockUpdates, cancelledDelivery };
+      return { type: 'cancelled' as const, shopId, stockUpdates };
     });
 
     if (result.type === 'missing') return res.status(404).json({ error: 'Commande introuvable.' });
     if (result.type === 'not_pending') return res.status(409).json({ error: `Cette commande ne peut plus être annulée (statut : ${result.status}).` });
-    if (result.type === 'blocked') return res.status(409).json({ error: 'La commande ne peut plus être annulée après récupération du colis par le livreur.' });
     if (result.type === 'expired') {
       for (const update of result.expiration.stockUpdates) {
         const product = products.find((candidate) => candidate.id === update.productId && candidate.shop_id === update.shopId);
@@ -503,14 +398,6 @@ export function createOrderRouter({
       if (cachedOrder) {
         cachedOrder.status = 'expired';
         cachedOrder.delivery_fee = 0;
-      }
-      if (result.expiration.cancelledDelivery) {
-        void dispatchDeliveryCancelledPush(
-          result.expiration.cancelledDelivery.id,
-          result.expiration.cancelledDelivery.previousStatus,
-          result.expiration.cancelledDelivery.driverId,
-          'admin',
-        );
       }
       return res.status(409).json({ error: 'Le délai de 2 heures est dépassé. La demande a expiré et le stock a été libéré.' });
     }
@@ -526,14 +413,6 @@ export function createOrderRouter({
     if (cachedOrder) {
       cachedOrder.status = 'cancelled';
       cachedOrder.delivery_fee = 0;
-    }
-    if (result.cancelledDelivery) {
-      void dispatchDeliveryCancelledPush(
-        result.cancelledDelivery.id,
-        result.cancelledDelivery.previousStatus,
-        result.cancelledDelivery.driverId,
-        'admin',
-      );
     }
     return res.json({ success: true, message: 'Commande annulée et stock libéré.' });
   });
@@ -682,19 +561,10 @@ export function createOrderRouter({
     if (!customerSession.authenticated || !customerSession.user) return res.status(401).json({ error: 'Authentification client requise.' });
     const rows = await dbAll<Record<string, unknown>>(`SELECT orders.*, shops.name AS shop_name,
       order_whatsapp_tracking.order_id IS NOT NULL AS whatsapp_tracking_available,
-      order_whatsapp_tracking.clicked_at AS whatsapp_clicked_at,
-      delivery_orders.id AS delivery_id,
-      delivery_orders.status AS delivery_status,
-      delivery_orders.ticket_number AS delivery_ticket_number,
-      delivery_orders.quoted_amount AS delivery_quoted_amount,
-      delivery_proofs.id IS NOT NULL AS delivery_proof_available,
-      delivery_proofs.captured_at AS delivery_proof_captured_at,
-      delivery_proofs.byte_size AS delivery_proof_byte_size
+      order_whatsapp_tracking.clicked_at AS whatsapp_clicked_at
       FROM orders
       LEFT JOIN shops ON shops.id = orders.shop_id
       LEFT JOIN order_whatsapp_tracking ON order_whatsapp_tracking.order_id = orders.id
-      LEFT JOIN delivery_orders ON delivery_orders.order_id = orders.id
-      LEFT JOIN delivery_proofs ON delivery_proofs.delivery_id = delivery_orders.id
       WHERE orders.customer_user_id = ?
       ORDER BY orders.created_at DESC, orders.id DESC`, [customerSession.user.id]);
     const reviewRows = await dbAll<{ order_id: number; target_type: string; target_id: number }>(
@@ -754,12 +624,8 @@ export function createOrderRouter({
         shop_id: Number(row.shop_id),
         customer_user_id: Number(row.customer_user_id),
         customer_name: String(row.customer_name),
-        delivery_location: String(row.delivery_location),
-        delivery_note: row.delivery_note == null ? undefined : String(row.delivery_note),
-        delivery_slot: row.delivery_slot == null ? undefined : String(row.delivery_slot),
         payment_method_preference: String(row.payment_method_preference || 'to_confirm'),
         total_amount: Number(row.total_amount),
-        delivery_fee: Number(row.delivery_fee || 0),
         created_at: String(row.created_at),
         status: String(row.status || 'pending'),
         whatsapp_tracking_available: Boolean(row.whatsapp_tracking_available),
@@ -767,15 +633,6 @@ export function createOrderRouter({
         items: Array.isArray(items) ? items : [],
         shop_name: String(row.shop_name || 'Boutique locale'),
         reviewed_targets: reviewsByOrder.get(Number(row.id)) || [],
-        delivery: row.delivery_id == null ? null : {
-          id: Number(row.delivery_id),
-          status: String(row.delivery_status),
-          ticket_number: row.delivery_ticket_number == null ? null : String(row.delivery_ticket_number),
-          quoted_amount: Number(row.delivery_quoted_amount),
-          proof_available: Boolean(row.delivery_proof_available),
-          proof_captured_at: row.delivery_proof_captured_at == null ? null : String(row.delivery_proof_captured_at),
-          proof_byte_size: row.delivery_proof_byte_size == null ? null : Number(row.delivery_proof_byte_size),
-        },
       };
     });
     res.setHeader('Cache-Control', 'no-store');

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Megaphone, RotateCcw } from 'lucide-react';
 import type { Product, Shop } from '../../types';
 import { normalizeCustomBannerImage } from '../../utils/categoryDefaults';
+import { ContextualHelp } from '../ContextualHelp';
 
 interface Campaign {
   id: string;
@@ -128,7 +129,12 @@ export const ProductOffersManager: React.FC<ProductOffersManagerProps> = ({ shop
       <header className="flex items-start gap-3">
         <span className="rounded-2xl bg-[#e3f1e8] p-3 text-[var(--mt-green-hover)]"><Megaphone className="h-5 w-5" aria-hidden="true" /></span>
         <div>
-          <h3 id="merchant-advertising-title" className="text-base font-extrabold text-[var(--mt-gray-900)]">Campagnes sponsorisées · bêta</h3>
+          <div className="flex items-center gap-2">
+            <h3 id="merchant-advertising-title" className="text-base font-extrabold text-[var(--mt-gray-900)]">Campagnes sponsorisées · bêta</h3>
+            <ContextualHelp label="Campagnes sponsorisées" variant="info">
+              Choisissez un produit disponible ou la bannière de votre boutique. Chaque demande est contrôlée par MaTable et ne sera diffusée qu’après validation.
+            </ContextualHelp>
+          </div>
           <p className="mt-1 text-sm leading-5 text-slate-600">Les campagnes produit et bannière sont gratuites pendant la bêta de 30 jours et restent soumises à validation.</p>
         </div>
       </header>
