@@ -17,37 +17,23 @@ class HostingerDeployTests(unittest.TestCase):
     def test_release_branch_is_main(self):
         self.assertEqual(deploy.BRANCH, "refs/heads/main")
 
-    def test_approval_requires_current_main_head(self):
+    def test_reconcile_uses_latest_main_without_manual_approval(self):
         sha = "a" * 40
-        response = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout=f"{sha}\t{deploy.BRANCH}\n".encode()
-        )
-        with patch.object(deploy, "run", return_value=response):
-            with tempfile.TemporaryDirectory() as directory:
-                approval = Path(directory) / "approved-release.sha"
-                failed = Path(directory) / ".failed"
-                failed.write_text("stale failure")
-                with patch.object(deploy, "APPROVED_RELEASE", approval), patch.object(
-                    deploy, "FAILED", failed
-                ):
-                    deploy.approve_release(sha)
-                    self.assertEqual(approval.read_text(), f"{sha}\n")
-                    self.assertFalse(failed.exists())
-                    self.assertEqual(approval.stat().st_mode & 0o777, 0o600)
+        active = f"matable:{sha[:7]}-hostinger"
+        inspected = subprocess.CompletedProcess(args=[], returncode=0, stdout=f"{active}\n".encode())
+        with patch.object(deploy, "restore_pending"), patch.object(
+            deploy, "remote_main_sha", return_value=sha
+        ) as remote_main_sha, patch.object(
+            deploy, "read_env", side_effect=[{}, {"MATABLE_IMAGE": active}]
+        ), patch.object(
+            deploy, "run", return_value=inspected
+        ), patch.object(
+            deploy, "desired_settings", return_value={}
+        ), patch.object(deploy, "report") as report:
+            deploy.reconcile()
 
-    def test_approval_rejects_non_head_sha(self):
-        sha = "a" * 40
-        other_sha = "b" * 40
-        response = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout=f"{other_sha}\t{deploy.BRANCH}\n".encode()
-        )
-        with patch.object(deploy, "run", return_value=response):
-            with tempfile.TemporaryDirectory() as directory:
-                approval = Path(directory) / "approved-release.sha"
-                with patch.object(deploy, "APPROVED_RELEASE", approval):
-                    with self.assertRaisesRegex(deploy.DeploymentError, "tête actuelle de main"):
-                        deploy.approve_release(sha)
-                    self.assertFalse(approval.exists())
+        remote_main_sha.assert_called_once_with()
+        report.assert_called_once_with(f"{sha[:7]} : version et variables à jour.")
 
     def test_portainer_release_controls_are_ignored(self):
         with patch.object(

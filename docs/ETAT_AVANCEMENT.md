@@ -82,13 +82,13 @@ long.
   branche `production`. Cette dérive a rendu la dernière publication
   inutilement complexe.
 - La PR #3 a synchronisé la version déjà déployée avec `main` et installé le
-  flux unique de livraison. Le script versionné suit maintenant `main` ; une
-  publication exige l’approbation SSH du SHA fusionné. Le 11 novembre 2026,
-  le script et le Makefile ont été installés sur le VPS, puis le SHA
-  `3440322a87c385e4a310ca0c34d687f68d4c9e87` a été approuvé par SSH. Le
-  conteneur était `healthy` et `/health` répondait `ok`. Portainer sert aux
-  variables et secrets, pas au choix du commit ni au déclenchement du
-  déploiement.
+  flux unique de livraison. Le 11 novembre 2026, le timer suivait `main` avec
+  une approbation SSH par SHA; le SHA
+  `3440322a87c385e4a310ca0c34d687f68d4c9e87` avait été approuvé, le conteneur
+  était `healthy` et `/health` répondait `ok`. Cette approbation manuelle est
+  supprimée du script versionné : après installation de sa nouvelle copie sur
+  le VPS, le timer déploiera automatiquement les nouvelles révisions de `main`.
+  Portainer reste réservé aux variables et secrets, pas au choix du commit.
 
 L’automatisation ne rend pas les changements de schéma incompatibles
 automatiquement réversibles. Une migration qui supprime ou transforme des

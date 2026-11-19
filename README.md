@@ -42,9 +42,9 @@ la compromission simultanée du mot de passe et de la boîte e-mail.
 
 ## Déploiement VPS
 
-Le déploiement automatique du VPS Hostinger est actif : son timer vérifie
-`main` périodiquement et ne remplace que le service MaTable après la réussite
-des vérifications de construction et du contrôle de santé. Voir le
+Le déploiement automatique du VPS Hostinger suit `main` : son timer vérifie la
+branche toutes les deux minutes et ne remplace que le service MaTable après la
+réussite des vérifications de construction et du contrôle de santé. Voir le
 [guide de déploiement](./infra/hostinger/README.md) et
 [l’état d’avancement du projet](./docs/ETAT_AVANCEMENT.md).
 
@@ -98,7 +98,7 @@ Le tableau de bord `/admin` propose deux rôles distincts, sélectionnés au mom
 - **Super-admin** : accès complet aux outils d’administration, notamment aux paiements et abonnements, aux liens d’accès des boutiques, au mode maintenance, au suivi des annonces automatiques, à la suspension/réactivation des boutiques et comptes clients, à la suppression de boutiques et au journal d’audit global consultable et filtrable. Toute suspension ou réactivation exige un motif; suspendre un compte client révoque ses sessions actives. Toute prolongation d’essai gratuit exige également un motif explicite inscrit au journal d’audit.
 - **Admin de vérification** : espace centré sur la file Didit et la modération de contenu, avec la possibilité de préparer un rappel WhatsApp de vérification. Il dispose d’une liste de boutiques strictement en lecture seule, limitée au nom, à la ville, à la catégorie et aux statuts de publication et d’identité ; elle n’expose pas les coordonnées privées ni les données financières. Il ne peut pas modifier les statuts des commandes, gérer les paiements ou abonnements, supprimer des boutiques, créer des liens d’accès privés, modifier le mode maintenance ou consulter le suivi des annonces automatiques. Un accès en lecture seule aux commandes d’une boutique reste disponible sur l’API marchand pour les besoins limités.
 
-Les autorisations sont vérifiées côté serveur ; masquer une rubrique dans l’interface n’est pas le mécanisme de contrôle d’accès. Les deux rôles utilisent des clés indépendantes configurées uniquement sur le serveur. En production, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` sont obligatoires et doivent chacune être fortes, uniques, distinctes et comporter au moins 32 caractères. Configurez-les dans l’environnement de déploiement (par exemple les variables du service Render) ; ne les ajoutez pas au dépôt, au frontend, aux journaux ou aux captures d’écran.
+Les autorisations sont vérifiées côté serveur ; masquer une rubrique dans l’interface n’est pas le mécanisme de contrôle d’accès. Les deux rôles utilisent des clés indépendantes configurées uniquement sur le serveur. En production, `ADMIN_ACCESS_KEY` et `VERIFICATION_ADMIN_ACCESS_KEY` sont obligatoires et doivent chacune être fortes, uniques, distinctes et comporter au moins 32 caractères. Configurez-les dans `/srv/apps/matable/shared/app.env` sur le VPS ; ne les ajoutez pas au dépôt, au frontend, aux journaux ou aux captures d’écran.
 
 ### Fonctionnalités retirées
 
@@ -171,7 +171,7 @@ Le fil public interroge le catalogue par lots paginés côté base, au lieu de c
 
 ### Médias publics (Cloudflare R2)
 
-Les photos produits, logos et bannières sont compressés dans le navigateur puis téléversés directement vers Cloudflare R2 via une URL présignée (5 minutes). L’API ne reçoit que les métadonnées et signe aussi la taille du fichier. Variables à définir dans Render :
+Les photos produits, logos et bannières sont compressés dans le navigateur puis téléversés directement vers Cloudflare R2 via une URL présignée (5 minutes). L’API ne reçoit que les métadonnées et signe aussi la taille du fichier. Variables à définir dans `/srv/apps/matable/shared/app.env` :
 
 - `R2_ENDPOINT` (par exemple `https://<account-id>.r2.cloudflarestorage.com`)
 - `R2_BUCKET`
@@ -187,7 +187,7 @@ Le workflow GitHub Actions « PostgreSQL integration » exécute le lint, les te
 
 ### Sauvegarde PostgreSQL et validation de restauration
 
-`npm run db:backup` utilise `DATABASE_URL` (en production, celle configurée dans Render) et `pg_dump` au format custom. Il refuse d’écraser un fichier existant, vérifie l’archive avec `pg_restore --list` et produit un fichier SHA-256 adjacent (`.dump.sha256`). Exemple avec un chemin choisi :
+`npm run db:backup` utilise `DATABASE_URL` (en production, celle configurée dans l’environnement privé du VPS) et `pg_dump` au format custom. Il refuse d’écraser un fichier existant, vérifie l’archive avec `pg_restore --list` et produit un fichier SHA-256 adjacent (`.dump.sha256`). Exemple avec un chemin choisi :
 
 ```sh
 npm run db:backup -- --output backups/matable-prod-2026-10-10.dump
@@ -214,7 +214,7 @@ Les commandes de sauvegarde et de validation chargent `.env` automatiquement. Po
 3. Conserver l’URL Supabase dans `DATABASE_URL` (ou `SOURCE_DATABASE_URL`) et configurer temporairement l’URL de la base Neon vide dans `RESTORE_TARGET_DATABASE_URL` (ou `TARGET_DATABASE_URL`). Ne coller aucune URL dans le dépôt, un ticket ou le chat.
 4. Créer l’archive source avec `npm run db:backup -- --output backups/matable-supabase-<date>.dump`, puis lancer d’abord le préflight non destructif avec `--preflight-only`. Après vérification qu’il s’agit bien de la base Neon vide, lancer la restauration avec `--confirm-disposable`.
 5. Vérifier les nombres de lignes des tables principales et appliquer les migrations manquantes si nécessaire avec `DATABASE_URL=<URL-directe-Neon> npm run migrate:neon`. Tester l’application et les parcours de boutiques, produits, commandes et paiements avant la bascule.
-6. Au créneau de bascule, refaire une sauvegarde finale de Supabase, restaurer cette archive sur la cible validée, remplacer le secret `DATABASE_URL` du service Render par l’URI directe Neon, redéployer et contrôler le bilan de santé et les opérations métier.
+6. Au créneau de bascule, refaire une sauvegarde finale de Supabase, restaurer cette archive sur la cible validée, remplacer `DATABASE_URL` dans `/srv/apps/matable/shared/app.env` par l’URI directe Neon, puis vérifier le bilan de santé et les opérations métier après le déploiement Hostinger.
 7. Garder Supabase intact en lecture seule comme solution de retour arrière jusqu’à validation complète des commandes et paiements après bascule. Ne pas supprimer la source avant une période d’observation et une sauvegarde restaurable conservée hors fournisseur.
 
 Une URL de connexion PostgreSQL est un secret d’accès complet. Protéger les archives et leurs checksums comme des données sensibles, ne pas les commiter, et planifier des sauvegardes chiffrées vers un stockage indépendant avec des restaurations périodiques sur une base jetable.
@@ -234,9 +234,9 @@ DIDIT_WORKFLOW_ID="<uuid-du-workflow-didit>"
 DIDIT_WEBHOOK_SECRET="<secret-webhook-didit>"
 ```
 
-Dans la console Didit, configurez le webhook `https://<domaine-public>/api/webhooks/didit` pour les événements de changement de statut (`status.updated`). L’API key, l’identifiant du workflow et le secret du webhook restent dans les variables serveur Render et ne doivent jamais être exposés au navigateur. Le serveur refuse de démarrer une vérification tant que l’API key et l’identifiant de workflow ne sont pas configurés.
+Dans la console Didit, configurez le webhook `https://<domaine-public>/api/webhooks/didit` pour les événements de changement de statut (`status.updated`). L’API key, l’identifiant du workflow et le secret du webhook restent dans `/srv/apps/matable/shared/app.env` et ne doivent jamais être exposés au navigateur. Le serveur refuse de démarrer une vérification tant que l’API key et l’identifiant de workflow ne sont pas configurés.
 
-L’URL publique principale est `https://matable-ci.com` (avec `www.matable-ci.com` redirigé vers le domaine racine). Conservez `https://matable-ci.onrender.com` comme adresse de secours. Configurez `APP_URL` et les URL canoniques, Open Graph et JSON-LD sur le domaine principal. Les URI de retour des fournisseurs doivent correspondre à `APP_URL`; les webhooks peuvent conserver temporairement l’alias Render tant que celui-ci reste actif.
+L’URL publique principale est `https://matable-ci.com` (avec `www.matable-ci.com` redirigé vers le domaine racine). Configurez `APP_URL` et les URL canoniques, Open Graph et JSON-LD sur le domaine principal. Les URI de retour des fournisseurs et les webhooks doivent correspondre à `APP_URL`.
 
 #### Audience et actions super-admin
 
@@ -245,9 +245,9 @@ Les statistiques d’audience sont collectées uniquement après consentement an
 Les actions super-admin de suspension/réactivation exigent un motif, une confirmation et sont consignées. La correction manuelle d’une échéance d’abonnement actif demande une date et un motif de vérification ; elle ne confirme pas un paiement et ne doit être utilisée qu’après contrôle d’un justificatif. Les corrections d’essai synchronisent uniquement l’expiration technique avec la fin d’essai enregistrée. Une dérogation manuelle active bloque les autres commandes de cycle de vie et de facturation jusqu’à son retrait ou son expiration.
 
 
-### Base Neon gratuite sur Render
+### Base PostgreSQL
 
-Créer le projet Neon puis configurer `DATABASE_URL` dans Render. Le service Render Free n’a pas besoin d’un disque local persistant pour les données métier lorsque Neon est utilisé.
+La production utilise PostgreSQL sur le VPS Hostinger. Toute migration de fournisseur doit suivre la procédure de sauvegarde, restauration et validation décrite ci-dessus.
 
 ### Paiements GeniusPay
 
@@ -264,15 +264,15 @@ Un paiement confirmé active les droits d’abonnement, mais ne réactive pas un
 Le checkout exige une adresse e-mail de facturation. MaTable ne collecte ni ne stocke de données de carte et ne déclenche aucun prélèvement automatique : le commerçant initie et confirme chaque paiement. Voir la [documentation API GeniusPay](https://geniuspay.ci/docs/api) pour les détails officiels du contrat marchand et des webhooks.
 
 
-Les échéances restent actives jusqu’à la fin de leur date civile en Côte d’Ivoire; l’écran de renouvellement apparaît le lendemain. Le statut effectif passe à `past_due` pendant le délai de grâce, puis `suspended` et la boutique est masquée publiquement. Les données et l’accès marchand sont conservés afin de permettre le renouvellement. Si les secrets WhatsApp Business sont configurés, le serveur envoie les rappels à J−14, J−7, J−3 et J−1 uniquement aux commerçants ayant activé l’opt-in dans « Mon forfait ». Chaque échéance et chaque palier sont enregistrés pour éviter les doublons; un échec fournisseur est journalisé et peut être retenté. Changer le numéro WhatsApp révoque l’accord. Configurer dans Render `WHATSAPP_CLOUD_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_SUBSCRIPTION_REMINDER_TEMPLATE` et `WHATSAPP_GRAPH_API_VERSION`. Le modèle Meta doit être approuvé comme modèle utilitaire et contenir deux paramètres de corps : le nom de la boutique et sa date d’échéance. L’envoi automatique dépend de ces identifiants secrets Meta et de l’approbation du modèle; aucune valeur secrète ne doit être placée dans le dépôt. Le code ne déclenche aucun prélèvement automatique : le commerçant doit toujours ouvrir le checkout GeniusPay et confirmer le paiement.
+Les échéances restent actives jusqu’à la fin de leur date civile en Côte d’Ivoire; l’écran de renouvellement apparaît le lendemain. Le statut effectif passe à `past_due` pendant le délai de grâce, puis `suspended` et la boutique est masquée publiquement. Les données et l’accès marchand sont conservés afin de permettre le renouvellement. Si les secrets WhatsApp Business sont configurés, le serveur envoie les rappels à J−14, J−7, J−3 et J−1 uniquement aux commerçants ayant activé l’opt-in dans « Mon forfait ». Chaque échéance et chaque palier sont enregistrés pour éviter les doublons; un échec fournisseur est journalisé et peut être retenté. Changer le numéro WhatsApp révoque l’accord. Configurer dans `/srv/apps/matable/shared/app.env` `WHATSAPP_CLOUD_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_SUBSCRIPTION_REMINDER_TEMPLATE` et `WHATSAPP_GRAPH_API_VERSION`. Le modèle Meta doit être approuvé comme modèle utilitaire et contenir deux paramètres de corps : le nom de la boutique et sa date d’échéance. L’envoi automatique dépend de ces identifiants secrets Meta et de l’approbation du modèle; aucune valeur secrète ne doit être placée dans le dépôt. Le code ne déclenche aucun prélèvement automatique : le commerçant doit toujours ouvrir le checkout GeniusPay et confirmer le paiement.
 
 ### Notifications Push navigateur
 
 **Annonces automatiques** (`server/services/automatedAnnouncements.ts`, cycle de 15 minutes et au démarrage) : bienvenue à l’activation du Push, rappels d’échéance J−14/J−7/J−3/J−1 (essai gratuit ou abonnement), relance 48 h après la création d’une boutique sans produit, relance d’identité à compléter (24 h après la création, et après un refus), résumé du lundi (visiteurs et commandes de la semaine, si activité) et relance au plus mensuelle après 14 jours sans visite ni commande pour une boutique publiée. Aucune annonce automatique ne part entre 20 h et 8 h (heure d’Abidjan). Le commerçant peut désactiver deux catégories dans « Paramètres > Notifications » (table `merchant_push_preferences`) : « Résumé du lundi » et « Conseils et relances » (produit, identité, inactivité). La bienvenue, les commandes, le stock et les échéances restent toujours actifs. Chaque annonce est idempotente par boutique (`merchant_push_deliveries`) et n’est envoyée qu’aux appareils abonnés ; sans clés VAPID, rien n’est envoyé. Le Super-admin ne les rédige pas : l’onglet « Annonces automatiques » n’affiche que leur suivi.
 
-Générez une paire VAPID dédiée au serveur, par exemple avec `npx web-push generate-vapid-keys`, puis configurez `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` et `VAPID_SUBJECT` dans les variables d’environnement de Render et en local. Le sujet doit être une URL HTTPS du service ou une adresse `mailto:` de support. La clé privée reste exclusivement côté serveur : ne la placez ni dans une variable `VITE_*`, ni dans le dépôt, ni dans un ticket ou une capture. Sans les trois variables, l’interface indique que le service n’est pas configuré et aucun abonnement Push ne peut être créé.
+Générez une paire VAPID dédiée au serveur, par exemple avec `npx web-push generate-vapid-keys`, puis configurez `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` et `VAPID_SUBJECT` dans `/srv/apps/matable/shared/app.env` et en local. Le sujet doit être une URL HTTPS du service ou une adresse `mailto:` de support. La clé privée reste exclusivement côté serveur : ne la placez ni dans une variable `VITE_*`, ni dans le dépôt, ni dans un ticket ou une capture. Sans les trois variables, l’interface indique que le service n’est pas configuré et aucun abonnement Push ne peut être créé.
 
-Chaque commerçant choisit explicitement ses appareils et peut les désabonner dans ses paramètres. Les abonnements sont liés à la boutique authentifiée ; les endpoints expirés (HTTP 404/410) sont supprimés. Les envois sont dédupliqués et les échecs sont journalisés sans annuler la commande, la modification du stock ou la vérification d’identité à l’origine de l’alerte. Les Push exigent HTTPS (Render le fournit) et l’autorisation du navigateur. Le centre opérationnel admin affiche le nombre d’appareils associés, l’état VAPID, le suivi des annonces automatiques sur 30 jours. Il n’y a plus d’envoi manuel.
+Chaque commerçant choisit explicitement ses appareils et peut les désabonner dans ses paramètres. Les abonnements sont liés à la boutique authentifiée ; les endpoints expirés (HTTP 404/410) sont supprimés. Les envois sont dédupliqués et les échecs sont journalisés sans annuler la commande, la modification du stock ou la vérification d’identité à l’origine de l’alerte. Les Push exigent HTTPS (fourni par le proxy Caddy du VPS) et l’autorisation du navigateur. Le centre opérationnel admin affiche le nombre d’appareils associés, l’état VAPID, le suivi des annonces automatiques sur 30 jours. Il n’y a plus d’envoi manuel.
 
 Les clients peuvent gérer leurs notifications liées aux commandes sans activer de paiement en ligne.
 
@@ -284,7 +284,7 @@ La bêta dure 30 jours et n’est pas lancée par défaut. Hors tests automatis�
 
 Après confirmation d’un abonnement par un webhook GeniusPay signé et vérifié, un reçu est généré et envoyé à l’adresse e-mail du propriétaire via Resend. Configurer `RESEND_API_KEY` et une adresse d’expédition vérifiée dans `RESEND_FROM_EMAIL` (ou `EMAIL_FROM`). Aucun reçu d’abonnement n’est émis à partir d’une simple déclaration de paiement côté navigateur. La validation locale ne prouve pas le fonctionnement d’un compte GeniusPay ou Resend en production : un paiement réel exige les identifiants et domaines vérifiés des fournisseurs.
 
-Resend sert également aux messages de bienvenue client et commerçant, aux récapitulatifs de commande client, à la récupération de mot de passe client et à la réinitialisation du PIN marchand. Le récapitulatif est envoyé à l’adresse du compte connecté ou, pour une commande invitée, à l’adresse facultative saisie au checkout; il précise que le paiement reste à convenir avec la boutique. Les liens de récupération expirent après 30 minutes, sont stockés sous forme hachée et ne peuvent être utilisés qu’une fois; leur utilisation révoque les sessions client existantes. La réinitialisation du PIN marchand (`/reinitialiser-pin-commercant`) envoie un lien à l’adresse e-mail du propriétaire, expire après 30 minutes, est à usage unique et déconnecte toutes les sessions commerçant de la boutique. Après confirmation d’un abonnement, un reçu de paiement distinct est envoyé au propriétaire. Les rappels d’abonnement par e-mail sont distincts des rappels WhatsApp et restent désactivés tant que le commerçant n’a pas donné son accord dans les paramètres. Appliquer les migrations `045_transactional_email_preferences` et `046_merchant_pin_reset_tokens` avant le déploiement. L’envoi réel reste inactif tant que la clé Resend et un expéditeur vérifié ne sont pas configurés dans Render.
+Resend sert également aux messages de bienvenue client et commerçant, aux récapitulatifs de commande client, à la récupération de mot de passe client et à la réinitialisation du PIN marchand. Le récapitulatif est envoyé à l’adresse du compte connecté ou, pour une commande invitée, à l’adresse facultative saisie au checkout; il précise que le paiement reste à convenir avec la boutique. Les liens de récupération expirent après 30 minutes, sont stockés sous forme hachée et ne peuvent être utilisés qu’une fois; leur utilisation révoque les sessions client existantes. La réinitialisation du PIN marchand (`/reinitialiser-pin-commercant`) envoie un lien à l’adresse e-mail du propriétaire, expire après 30 minutes, est à usage unique et déconnecte toutes les sessions commerçant de la boutique. Après confirmation d’un abonnement, un reçu de paiement distinct est envoyé au propriétaire. Les rappels d’abonnement par e-mail sont distincts des rappels WhatsApp et restent désactivés tant que le commerçant n’a pas donné son accord dans les paramètres. Appliquer les migrations `045_transactional_email_preferences` et `046_merchant_pin_reset_tokens` avant le déploiement. L’envoi réel reste inactif tant que la clé Resend et un expéditeur vérifié ne sont pas configurés dans `/srv/apps/matable/shared/app.env`.
 
 ## Règles métier
 
@@ -298,7 +298,7 @@ Le projet utilise uniquement le click-to-chat `wa.me`. Le navigateur prépare le
 
 ## Connexion Google et Apple
 
-La connexion sociale client est facultative et reste masquée tant qu’un fournisseur n’est pas entièrement configuré. Les secrets restent uniquement dans l’environnement serveur. Déclarez dans les consoles OAuth les URL de retour exactes `https://votre-domaine/api/auth/customer-oauth/google/callback` et `https://votre-domaine/api/auth/customer-oauth/apple/callback`, puis renseignez les identifiants correspondants ci-dessus (ou dans Render). En local, utilisez l’URL et le port configurés dans `APP_URL`.
+La connexion sociale client est facultative et reste masquée tant qu’un fournisseur n’est pas entièrement configuré. Les secrets restent uniquement dans l’environnement serveur. Déclarez dans les consoles OAuth les URL de retour exactes `https://votre-domaine/api/auth/customer-oauth/google/callback` et `https://votre-domaine/api/auth/customer-oauth/apple/callback`, puis renseignez les identifiants correspondants dans `/srv/apps/matable/shared/app.env`. En local, utilisez l’URL et le port configurés dans `APP_URL`.
 
 Les jetons OIDC sont vérifiés côté serveur avec issuer, audience, nonce, PKCE et e-mail vérifié. Une identité sociale dont l’e-mail vérifié correspond à un compte client existant est liée à ce compte; un nouveau compte doit fournir un téléphone ivoirien avant sa création. Les commandes et sessions restent associées au même profil client. Google/Apple ne peuvent pas être activés en production avant la configuration des identifiants et URL autorisées dans leurs consoles.
 
@@ -325,7 +325,7 @@ Avant un déploiement réel, vérifiez bien les points suivants :
 8. Tester le flux complet : création boutique → commande → ouverture du reçu WhatsApp du vendeur.
 9. Vérifier le comportement de stock avec un test de surcharge sur le dernier article disponible.
 10. Vérifier `npm audit` et corriger les vulnérabilités avant mise en production.
-11. Configurer `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID` et `DIDIT_WEBHOOK_SECRET` dans Render, puis déclarer l’URL webhook Didit et tester le parcours hébergé ainsi que les événements signés.
+11. Configurer `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID` et `DIDIT_WEBHOOK_SECRET` dans `/srv/apps/matable/shared/app.env`, puis déclarer l’URL webhook Didit et tester le parcours hébergé ainsi que les événements signés.
 
 ### Contrôle de production
 
@@ -343,7 +343,7 @@ npm run smoke:prod -- --url https://votre-domaine.com
 
 `smoke:prod` vérifie les pages publiques, `/health`, le refus `401` de `/api/admin/health`, les assets `/brand-kit/`, le manifeste PWA, `robots.txt`, `sitemap.xml` et les en-têtes de sécurité (`CSP`, `HSTS`, `nosniff`, `DENY`). En local derrière le serveur de production, ajoutez `SMOKE_FORWARDED_PROTO=https` pour satisfaire la redirection HTTPS.
 
-État validé sur PostgreSQL 16 vierge : `npm run test:postgres`, `npm run migrate:neon` (47/47 migrations), `npm run db:backup`, `npm run db:restore:validate`, `npm run check:prod` et `npm run smoke:prod` (47 contrôles) réussissent. Le déploiement Render reste subordonné à la fourniture des secrets réels et à l’application des migrations sur la base cible.
+État validé sur PostgreSQL 16 vierge : `npm run test:postgres`, `npm run migrate:neon` (47/47 migrations), `npm run db:backup`, `npm run db:restore:validate`, `npm run check:prod` et `npm run smoke:prod` (47 contrôles) réussissent. Le déploiement sur le VPS reste subordonné à la configuration des secrets réels et à l’application des migrations sur la base cible.
 
 ## Déploiement rapide
 
@@ -364,9 +364,9 @@ npm start
 
 ## Déploiement recommandé
 
-Cette version finale est un serveur Node/Express avec Neon PostgreSQL. Déployez-la sur Render, Railway, Fly.io ou un VPS et configurez `DATABASE_URL` avec une base PostgreSQL persistante.
+Cette version est un serveur Node/Express avec PostgreSQL, déployé sur le VPS Hostinger. Les déploiements sont déclenchés automatiquement par les commits fusionnés dans `main`.
 
-Le service Render décrit dans `render.yaml` exécute `npm ci --include=dev && npm run lint && npm run test:ci && npm run build` avant chaque déploiement : un test ou un contrôle TypeScript en échec bloque la mise en production. `test:ci` force `NODE_ENV=test` et neutralise `DATABASE_URL` afin que la suite n’ouvre jamais la base de production depuis le build. `autoDeploy` reste actif sur `main`, donc chaque push doit être vert localement au préalable. Il n’existe pas encore d’environnement de préproduction distinct.
+Le VPS Hostinger exécute `make check` dans Docker avant de remplacer l’application : lint, tests et build doivent réussir. La suite neutralise `DATABASE_URL` pendant les tests pour ne jamais ouvrir la base de production. Les révisions fusionnées dans `main` sont vérifiées par le timer de déploiement; il n’existe pas d’environnement de préproduction distinct.
 
 Vercel convient au frontend statique, mais ne doit pas héberger directement ce serveur Express avec une base locale. Une base PostgreSQL externe est nécessaire.
 

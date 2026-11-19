@@ -1,22 +1,20 @@
 # Publier MaTable sur Hostinger
 
-Le dépôt utilise un seul flux de livraison : une branche de travail courte,
-une pull request vers `main`, puis une approbation SSH du SHA fusionné. Il n’y a
-pas de branche de release à fusionner ensuite vers `production`. Le VPS suit
-`main`, mais ne déploie que le SHA explicitement approuvé.
+Le dépôt utilise un seul flux de livraison : les changements fusionnés dans
+`main` sont déployés automatiquement par le timer du VPS. Il n’y a pas de
+branche `production` distincte ni d’approbation manuelle par SHA. Le timer
+vérifie `main` environ toutes les deux minutes.
 
-Après la fusion de la pull request, récupérer le SHA complet de `main`, vérifier
-les changements de schéma et les variables nécessaires, puis lancer depuis le
-VPS :
+Après la fusion d’une pull request, le VPS construit le dernier commit de
+`main`, exécute les contrôles de production et ne remplace le service qu’après
+validation de sa santé. Vérifier le résultat avec :
 
 ```sh
-make -f /srv/apps/matable/Makefile production-approve VERSION=<sha-complet-de-main>
 make -f /srv/apps/matable/Makefile production-status
 ```
 
-Le timer lance alors le build et le déploiement ; aucune mise à jour de
-`MATABLE_RELEASE_SHA` dans Portainer n’est nécessaire. Portainer reste réservé
-à la configuration et aux secrets du stack, pas à la sélection du commit.
+Portainer reste réservé à la configuration et aux secrets du stack, pas à la
+sélection du commit ou au déclenchement du déploiement.
 
 Lors de la migration initiale, `main` doit d’abord être synchronisée avec la
 version déjà en production. La pull request de synchronisation peut donc
@@ -27,7 +25,7 @@ cette opération unique, les nouvelles pull requests ciblent `main`.
 
 Dans la pull request, ajouter les noms et exemples dans `.env.production.example`, et préciser le rôle de chaque variable, si elle est obligatoire, et si elle s’applique au serveur ou à la compilation.
 
-L’exploitant renseigne les variables serveur dans `/srv/apps/matable/shared/app.env` avant d’approuver le SHA. Ce fichier privé contient les valeurs de production. Transmettre les secrets par un canal prévu à cet effet et garder uniquement les noms et exemples dans Git.
+L’exploitant renseigne les variables serveur dans `/srv/apps/matable/shared/app.env` avant le déploiement. Ce fichier privé contient les valeurs de production. Transmettre les secrets par un canal prévu à cet effet et garder uniquement les noms et exemples dans Git.
 
 Pour la vérification manuelle des commerçants, ajouter dans ce fichier `R2_PRIVATE_BUCKET`, `R2_PRIVATE_ENDPOINT`, `R2_PRIVATE_ACCESS_KEY_ID` et `R2_PRIVATE_SECRET_ACCESS_KEY`. Utiliser un bucket privé distinct du bucket média public, sans domaine public, et un jeton limité à la lecture/écriture des objets de ce seul bucket. Les variables ajoutées à un autre stack Portainer ne configurent pas `matable-web` si ce service n’est pas défini dans ce stack.
 
@@ -57,13 +55,13 @@ header /assets/* Cache-Control "public, max-age=31536000, immutable"
 
 Le dépôt ne contient pas le Caddyfile chargé sur le VPS : ces directives ne prennent effet qu’après leur ajout à cette configuration active et son rechargement. Vérifier ensuite une ressource `/assets/*.js` avec `Accept-Encoding: gzip, br` : la réponse doit inclure `Content-Encoding` et un `Cache-Control` à longue durée. Ne pas modifier le proxy Portainer ou le mode de publication de l’application pour appliquer ce réglage.
 
-Pour une migration de schéma, valider son exécution sur une copie de la base avant l’approbation. Le VPS conserve une sauvegarde PostgreSQL vérifiée avant chaque remplacement du conteneur. Le retour arrière rétablit l’image précédente. Prévoir la compatibilité du schéma avec cette image.
+Pour une migration de schéma, valider son exécution sur une copie de la base avant de pousser le changement sur `main`. Le VPS conserve une sauvegarde PostgreSQL vérifiée avant chaque remplacement du conteneur. Le retour arrière rétablit l’image précédente. Prévoir la compatibilité du schéma avec cette image.
 
 ## Sauvegardes PostgreSQL quotidiennes
 
 Le service `matable-postgres-backup.timer` lance chaque nuit une sauvegarde PostgreSQL dans `/srv/apps/matable/backups`. Le script valide l’archive avec `pg_restore --list`, écrit son empreinte SHA-256 et conserve 14 jours de sauvegardes programmées. Les sauvegardes pré-déploiement ne sont pas concernées par cette purge.
 
-Après avoir revu le script et les unités du commit approuvé, l’exploitant les installe une fois sur le VPS :
+Après avoir revu le script et les unités du commit fusionné, l’exploitant les installe une fois sur le VPS :
 
 ```sh
 install -o root -g root -m 0750 /srv/apps/matable/current/infra/hostinger/backup-postgres.sh /usr/local/sbin/matable-postgres-backup
@@ -82,15 +80,17 @@ Consulter les exécutions avec `journalctl -u matable-postgres-backup.service`. 
 
 Le service systemd exécute
 `/usr/local/sbin/matable-portainer-deploy`; ce script doit rester identique à
-`infra/hostinger/portainer-deploy.py` dans le dépôt. Le timer regarde `main`
-environ toutes les deux minutes et vérifie que le SHA approuvé par SSH est
-toujours sa tête. Le build exécute `make check` dans Docker, sauvegarde et
-valide PostgreSQL avant de remplacer le service Web. En cas d’échec, la
-configuration et l’image précédentes sont restaurées ; une nouvelle
-approbation SSH est nécessaire pour réessayer.
+`infra/hostinger/portainer-deploy.py` dans le dépôt. À chaque passage, le timer
+lit la tête de `main` et déploie toute nouvelle révision sans approbation SSH.
+Le build exécute `make check` dans Docker, sauvegarde et valide PostgreSQL
+avant de remplacer le service Web. En cas d’échec, la configuration et l’image
+précédentes sont restaurées. Une révision ayant échoué n’est pas relancée en
+boucle : pousser une nouvelle révision après correction réarme le déploiement.
 
-Après fusion de la pull request qui modifie les outils de livraison, récupérer
-`main` sur le poste de travail et transférer les deux fichiers approuvés :
+Après fusion de la pull request qui modifie les outils de livraison, installer
+la nouvelle copie du script sur le VPS. Cette opération est nécessaire une
+seule fois pour appliquer le nouveau mécanisme; les publications suivantes
+seront automatiques :
 
 ```sh
 git switch main
@@ -99,23 +99,21 @@ scp infra/hostinger/portainer-deploy.py root@72.61.102.243:/tmp/matable-portaine
 scp Makefile root@72.61.102.243:/tmp/matable-Makefile.new
 ```
 
-Puis, sur le VPS, installer ces fichiers, approuver la tête actuelle de `main`
-et vérifier le statut :
+Puis, sur le VPS, installer ces fichiers et vérifier le statut :
 
 ```sh
 python3 -m py_compile /tmp/matable-portainer-deploy.new
 install -o root -g root -m 0750 /tmp/matable-portainer-deploy.new /usr/local/sbin/matable-portainer-deploy
 install -o root -g root -m 0644 /tmp/matable-Makefile.new /srv/apps/matable/Makefile
 rm -- /tmp/matable-portainer-deploy.new /tmp/matable-Makefile.new
-make -f /srv/apps/matable/Makefile production-approve VERSION=<sha-complet-de-main>
 make -f /srv/apps/matable/Makefile production-status
 ```
 
 Les chemins Compose et de déploiement restent sous
 `/srv/apps/matable/current/infra/hostinger/`; les versions construites se
 trouvent dans `/srv/apps/matable/releases/`. Ne modifie pas l’override systemd
-Portainer : il pointe déjà vers le script actif. La prochaine publication se
-fait uniquement par PR vers `main`, puis `production-approve` en SSH.
+Portainer : il pointe déjà vers le script actif. Les nouvelles publications se
+font par fusion dans `main`; le timer s’occupe ensuite du déploiement.
 
 ## Portainer
 

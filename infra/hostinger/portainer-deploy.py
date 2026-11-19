@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Reconcile MaTable production from Portainer settings and SSH-approved main."""
+"""Reconcile MaTable production from Portainer settings and the latest main commit."""
 
 import fcntl
 import hashlib
@@ -19,7 +19,6 @@ ROOT = Path("/srv/apps/matable")
 SHARED = ROOT / "shared"
 APP_ENV = SHARED / "app.env"
 RELEASE_ENV = SHARED / "release.env"
-APPROVED_RELEASE = SHARED / "approved-release.sha"
 PENDING = SHARED / ".portainer-pending"
 FAILED = SHARED / ".portainer-failed"
 STATUS = Path("/var/lib/matable-deploy-status/deployment.log")
@@ -130,26 +129,6 @@ def remote_main_sha():
     return result[0]
 
 
-def approve_release(sha):
-    if not SHA.fullmatch(sha):
-        raise DeploymentError("Fournir le SHA complet (40 caractères hexadécimaux).")
-    if remote_main_sha() != sha:
-        raise DeploymentError("Le SHA demandé ne correspond pas à la tête actuelle de main.")
-    atomic_write(APPROVED_RELEASE, f"{sha}\n".encode())
-    FAILED.unlink(missing_ok=True)
-    print(f"Révision {sha[:7]} approuvée ; le timer la déploiera.", flush=True)
-
-
-def approved_release():
-    try:
-        sha = APPROVED_RELEASE.read_text().strip()
-    except FileNotFoundError:
-        return None
-    if not SHA.fullmatch(sha):
-        raise DeploymentError("Le fichier d’approbation du déploiement est invalide.")
-    return sha
-
-
 def get_portainer_stack():
     password = (PRIVATE / "admin-password").read_text().strip()
     stack_id = int((PRIVATE / "stack-id").read_text())
@@ -240,7 +219,7 @@ def build_image(sha, variables):
         "git", "-C", str(checkout), "rev-parse", "HEAD", capture=True
     ).stdout.decode().strip()
     if checked_out != sha:
-        raise DeploymentError("Le dossier de version local ne correspond pas au SHA approuvé.")
+        raise DeploymentError("Le dossier de version local ne correspond pas à la révision demandée.")
     build_hash = hashlib.sha256(encode_env(variables)).hexdigest()[:12]
     image = f"matable:{sha}-hostinger-{build_hash}"
     args = [
@@ -367,10 +346,7 @@ def apply_release(sha, image, config):
 
 def reconcile():
     restore_pending()
-    requested = approved_release()
-    if requested is None:
-        report("Publication en attente d’approbation SSH du SHA de main.")
-        return
+    requested = remote_main_sha()
     current = read_env(APP_ENV)
     configured = read_env(RELEASE_ENV).get("MATABLE_IMAGE", "")
     active = run(
@@ -388,14 +364,14 @@ def reconcile():
         return
     if remote_main_sha() != requested:
         raise DeploymentError(
-            f"{requested[:7]} : approuver par SSH le SHA complet actuel de main."
+            f"{requested[:7]} : main a changé pendant le déploiement; nouvelle vérification au prochain passage."
         )
     signature = hashlib.sha256(
         requested.encode() + b"\x00" + encode_env(dict(sorted(settings.items())))
     ).hexdigest().encode()
     if FAILED.exists() and FAILED.read_bytes() == signature:
         report(
-            f"{requested[:7]} : demande en échec. Corriger la cause puis réapprouver le SHA par SSH."
+            f"{requested[:7]} : déploiement en échec. Corriger la cause et pousser une nouvelle révision pour réessayer."
         )
         return
     try:
@@ -418,11 +394,8 @@ def reconcile():
 
 
 def main(argv):
-    if len(argv) == 2 and argv[0] == "--approve":
-        approve_release(argv[1])
-        return
     if argv:
-        raise DeploymentError("Usage : matable-portainer-deploy [--approve SHA_COMPLET]")
+        raise DeploymentError("Usage : matable-portainer-deploy")
     reconcile()
 
 

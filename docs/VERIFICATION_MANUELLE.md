@@ -27,7 +27,7 @@ Les images de boutique ordinaires relèvent du stockage média public existant; 
 
 Les pièces sont supprimées 90 jours après la décision correspondante. Les URL de dépôt expirent après 10 minutes; les dépôts incomplets et les copies temporaires sont supprimés par la purge horaire suivante. Un échec est inscrit dans les journaux du serveur et les documents ne sont pas supprimés de la base si leur suppression dans R2 échoue.
 
-Avant d’activer le dépôt, configurez sur Render :
+Avant d’activer le dépôt, configurez dans `/srv/apps/matable/shared/app.env` sur le VPS :
 
 - `R2_PRIVATE_BUCKET`, nom distinct de `R2_BUCKET`;
 - `R2_PRIVATE_ENDPOINT` (ou `R2_ENDPOINT`);
