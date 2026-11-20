@@ -603,20 +603,44 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     }
   };
 
-  const copyOwnerLink = async (kind: 'public' | 'private') => {
-    if (!currentShop) return;
-    try {
-      let link = `${window.location.origin}/${currentShop.slug}`;
-      if (kind === 'private') {
-        const res = await fetch(`/api/shops/${currentShop.id}/access-link`, { method: 'POST' });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Impossible de générer le lien privé.');
-        link = data.access_url;
+  const copyOwnerLink = async (kind: 'public' | 'private'): Promise<string | null> => {
+    if (!currentShop) return null;
+
+    let link = `${window.location.origin}/${currentShop.slug}`;
+    if (kind === 'private') {
+      let response: Response;
+      try {
+        response = await fetch(`/api/shops/${currentShop.id}/access-link`, { method: 'POST' });
+      } catch {
+        toast.error('Impossible de joindre le serveur. Le lien privé n’a pas été généré.');
+        return null;
       }
+
+      let data: { access_url?: string; error?: string };
+      try {
+        data = await response.json();
+      } catch {
+        toast.error('Réponse invalide du serveur. Le lien privé n’a pas été généré.');
+        return null;
+      }
+      if (!response.ok || !data.access_url) {
+        toast.error(data.error || 'Impossible de générer le lien privé.');
+        return null;
+      }
+      link = data.access_url;
+    }
+
+    try {
       await navigator.clipboard.writeText(link);
       toast.success(kind === 'public' ? 'Lien vitrine copié.' : 'Lien privé copié.');
+      return null;
     } catch {
+      if (kind === 'private') {
+        toast.error('Le lien privé a été généré, mais sa copie a échoué. Vous pouvez le copier manuellement.');
+        return link;
+      }
       toast.error('La copie a échoué. Vérifiez les permissions du navigateur.');
+      return null;
     }
   };
 

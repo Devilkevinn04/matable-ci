@@ -48,11 +48,18 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
 
   useEffect(() => {
     let cancelled = false;
+    setBoosts([]);
+    setMessage('');
+    setNeedsBillingEmail(false);
+    setBillingEmail('');
     void fetch(`/api/shops/${shop.id}/boosts`, { credentials: 'include' })
       .then(async (response) => {
         if (!response.ok) throw new Error('Impossible de charger les boosts de cette boutique.');
         const data = await response.json();
-        if (!cancelled) setBoosts(data.boosts);
+        if (!cancelled) {
+          setBoosts(data.boosts);
+          setMessage('');
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled) setMessage(error instanceof Error ? error.message : 'Impossible de charger les boosts de cette boutique.');
@@ -125,7 +132,6 @@ export function MerchantBoostPurchase({ shop, productCount }: MerchantBoostPurch
             </button>
             <span className="text-xs text-slate-500">Activation après confirmation du paiement sécurisé.</span>
           </div>
-          {message && <p role="status" className="mt-2 text-sm text-slate-700">{message}</p>}
           {needsBillingEmail && (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <label htmlFor="merchant-boost-billing-email" className="block text-sm font-bold text-amber-950">E-mail de facturation</label>

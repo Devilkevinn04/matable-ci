@@ -300,7 +300,11 @@ export function MerchantPlansPage() {
                     <Link to="/app/creer-boutique" className={`group relative mt-3 inline-flex min-h-12 items-center justify-between gap-2 rounded-2xl px-5 py-3 text-sm font-extrabold transition hover:shadow-lg focus-visible:outline-offset-4 ${planPresentation[plan.tier].action}`}>
                       <span>Créer ma boutique</span><ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-1" aria-hidden="true" />
                     </Link>
-                    <p className={`mt-2 text-center text-[10px] font-semibold ${planPresentation[plan.tier].subtle}`}>Essai gratuit · aucun paiement aujourd’hui</p>
+                    <p className={`mt-2 min-h-12 text-center text-[10px] leading-4 font-semibold ${planPresentation[plan.tier].subtle}`}>
+                      {plan.tier === 'pro'
+                        ? 'Formule payante · aucun essai gratuit'
+                        : `Essai de ${TRIAL_DURATION_MONTHS} mois réservé aux ${TRIAL_PROMOTION_SLOTS_PER_TIER} premières inscriptions ${plan.tier === 'standard' ? 'Standard' : 'Premium'} · aucun paiement aujourd’hui si vous êtes éligible`}
+                    </p>
                     <h4 className={`mt-7 border-t pt-5 text-xs font-black ${featured ? 'border-white/20 text-white' : 'border-[#e8e3da] text-[#292d2a]'}`}>
                       Ce qui est inclus
                     </h4>

@@ -172,7 +172,10 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
       })
       .then((payload) => { if (isCurrentRequest) setAnalytics(payload); })
       .catch((caught: unknown) => {
-        if (isCurrentRequest) setError(caught instanceof Error ? caught.message : 'Impossible de charger les statistiques.');
+        if (!isCurrentRequest) return;
+        setError(caught instanceof TypeError
+          ? 'Impossible de charger les statistiques. Vérifiez votre connexion puis réessayez.'
+          : caught instanceof Error ? caught.message : 'Impossible de charger les statistiques.');
       })
       .finally(() => { if (isCurrentRequest) setLoading(false); });
     return () => { isCurrentRequest = false; };
@@ -213,8 +216,8 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
         </div>
         {error && <div role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">{error}</div>}
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <div className="rounded-xl bg-[#f4f7f3] p-3"><p className="text-[10px] font-bold text-slate-500">Visiteurs</p><p className="mt-1 text-xl font-black text-[#183b31]">{numberFormat.format(analytics?.summary.unique_visitors ?? 0)}</p></div>
-          <div className="rounded-xl bg-[#fff5eb] p-3"><p className="text-[10px] font-bold text-slate-500">Commandes</p><p className="mt-1 text-xl font-black text-[#a64a1f]">{numberFormat.format(analytics?.summary.orders ?? 0)}</p></div>
+          <div className="rounded-xl bg-[#f4f7f3] p-3"><p className="text-[10px] font-bold text-slate-500">Visiteurs</p><p className="mt-1 text-xl font-black text-[#183b31]">{analytics ? numberFormat.format(analytics.summary.unique_visitors) : '—'}</p></div>
+          <div className="rounded-xl bg-[#fff5eb] p-3"><p className="text-[10px] font-bold text-slate-500">Commandes</p><p className="mt-1 text-xl font-black text-[#a64a1f]">{analytics ? numberFormat.format(analytics.summary.orders) : '—'}</p></div>
         </div>
         {loading && !analytics && <p role="status" className="mt-3 text-xs text-slate-500">Chargement…</p>}
         {!loading && !error && !daily.length && <p className="mt-4 rounded-xl bg-[#faf9f5] p-4 text-xs leading-5 text-slate-500">Les visites apparaîtront ici dès que votre vitrine recevra de l’activité.</p>}
@@ -267,7 +270,7 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
           </div>
         </div>
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/15 pt-4 text-[11px] text-emerald-50/80">
-          <p>Formule {shop.subscription?.plan || 'Standard'} · données sur {analytics?.days || days} jours · visites comptées après consentement</p>
+          <p>{shop.admin_mode ? 'Mode super-admin' : `Formule ${shop.subscription?.plan || 'Standard'}`} · données sur {analytics?.days || days} jours · visites comptées après consentement</p>
           <button type="button" onClick={() => setRefreshKey((key) => key + 1)} disabled={loading} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/25 px-3 font-bold text-white transition hover:bg-white/10 disabled:opacity-60">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
             Actualiser

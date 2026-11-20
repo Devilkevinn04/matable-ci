@@ -819,9 +819,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               <div className="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-2">
                 <h1 className="line-clamp-1 max-w-full text-base font-black leading-tight text-[var(--mt-gray-900)] sm:text-lg">{shop.name}</h1>
                 <span className="flex min-w-0 max-w-full items-center gap-2">
-                  <span className={`inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap text-xs font-bold ${shop.is_open ? 'text-[var(--mt-green-hover)]' : 'text-[#8a5a12]'}`}>
+                  <span className={`inline-flex min-w-0 items-center gap-1.5 whitespace-normal leading-tight text-xs font-bold ${shop.is_open ? 'text-[var(--mt-green-hover)]' : 'text-[#8a5a12]'}`}>
                     <span aria-hidden="true" className={`h-2 w-2 rounded-full ${shop.is_open ? 'bg-[var(--mt-green-hover)]' : 'bg-[#8a5a12]'}`} />
-                    {shop.is_open ? 'Ouverte' : 'Fermée'}{shop.city ? <span className="truncate sm:hidden">· {shop.city}</span> : null}
+                    {shop.is_open ? 'Ouverte aux commandes' : 'Fermée aux commandes'}{shop.city ? <span className="truncate sm:hidden">· {shop.city}</span> : null}
                   </span>
                   {['approved', 'verified'].includes(shop.identity_verification_status || shop.merchant_verification_status || '') && (
                     <span className="hidden items-center gap-0.5 rounded-full bg-[#e3f4ea] px-1.5 py-0.5 text-xs font-extrabold text-[var(--mt-green-deep)] sm:inline-flex" title="Le commerçant a fait vérifier son identité">

@@ -816,7 +816,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 className="min-h-10 min-w-[185px] flex-1 rounded-xl border border-[#e0d5c6] bg-[#fffdf8] px-3 text-sm font-semibold text-[var(--mt-gray-900)] outline-none transition focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/15 sm:flex-none"
               >
                 <option value="recommended">Ordre recommandé</option>
-                <option value="open">Ouvertes en premier</option>
+                <option value="open">Commandes ouvertes en premier</option>
                 <option value="name">Nom : A à Z</option>
               </select>
               <button
@@ -826,7 +826,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition sm:text-sm ${openOnly ? 'border-[var(--mt-green-deep)] bg-[#e2eee6] text-[var(--mt-green-deep)]' : 'border-[#e0d5c6] bg-white text-[#47534b] hover:border-[var(--mt-green-hover)]'}`}
               >
                 <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                Ouvertes uniquement
+                Commandes ouvertes uniquement
               </button>
               {hasActiveDirectoryFilters && <button type="button" onClick={() => { setQuery(''); setCategory('all'); setOpenOnly(false); handleOpenDirectory(); }} className="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-xs font-bold text-[var(--mt-green-deep)] transition hover:bg-[#e9f5ee] sm:text-sm">Effacer les filtres <X className="h-4 w-4" aria-hidden="true" /></button>}
             </div>
@@ -845,7 +845,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         )}
 
         {directoryIsLoading ? (
-          <div role="status" aria-label="Chargement des boutiques" className="relative z-10 grid grid-cols-2 gap-3 sm:gap-4 max-[360px]:grid-cols-1">
+          <div role="status" aria-label="Chargement des boutiques" className="relative z-10 grid grid-cols-2 gap-3 sm:gap-4 max-[360px]:grid-cols-1 lg:grid-cols-3">
             {[0, 1, 2, 3].map((item) => <div key={item} className="overflow-hidden rounded-[20px] border border-[#e7ddd0] bg-white sm:rounded-[24px]" aria-hidden="true">
               <div className="aspect-[1.35] animate-pulse bg-[#e5ded3]" />
               <div className="space-y-3 p-3 sm:p-5">
@@ -864,12 +864,12 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         ) : filteredShops.length === 0 ? (
           <div className="relative z-10 rounded-2xl border border-dashed border-[#cfc8bc] bg-[var(--mt-surface)] p-8 text-center">
             <Store className="mx-auto h-10 w-10 text-[var(--mt-green-hover)]" aria-hidden="true" />
-            <h3 className="mt-3 font-display text-lg font-bold">{openOnly && !query.trim() && category === 'all' ? 'Aucune boutique ouverte en ce moment' : hasActiveDirectoryFilters ? 'Aucune boutique trouvée' : 'Aucune boutique disponible pour le moment'}</h3>
+            <h3 className="mt-3 font-display text-lg font-bold">{openOnly && !query.trim() && category === 'all' ? 'Aucune boutique actuellement ouverte aux commandes' : hasActiveDirectoryFilters ? 'Aucune boutique trouvée' : 'Aucune boutique disponible pour le moment'}</h3>
             <p className="mt-2 text-sm text-[var(--mt-gray-600)]">{openOnly && !query.trim() && category === 'all' ? 'Consultez les horaires affichés sur les boutiques ou retirez ce filtre.' : hasActiveDirectoryFilters ? 'Essayez un autre mot-clé ou effacez vos filtres.' : 'La vitrine s’actualisera dès qu’une boutique sera publiée.'}</p>
             {hasActiveDirectoryFilters && <button type="button" onClick={() => { setQuery(''); setCategory('all'); setOpenOnly(false); }} className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-4 py-2 text-sm font-bold text-white">Effacer les filtres <X className="h-4 w-4" /></button>}
           </div>
         ) : (
-          <div className={`relative z-10 grid items-stretch gap-3 sm:gap-4 lg:grid-cols-3 lg:gap-5 max-[360px]:grid-cols-1 ${filteredShops.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+          <div className={`relative z-10 grid items-stretch gap-3 sm:gap-4 lg:gap-5 ${filteredShops.length === 1 ? 'grid-cols-1' : 'grid-cols-2 max-[360px]:grid-cols-1 lg:grid-cols-3'}`}>
             {filteredShops.map((shop, index) => (
               <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045} className={`${filteredShops.length === 1 ? 'mx-auto w-full max-w-[760px]' : ''}`}>
               <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className={`directory-vitrine-card mt-press group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[#FFFFFF] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] focus-visible:ring-offset-2 sm:rounded-[24px] ${index % 2 === 1 ? 'directory-vitrine-card-alt' : ''}`}>
@@ -881,10 +881,10 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-5 lg:p-6">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-[10px] font-bold uppercase tracking-[0.1em] text-[#c2410c] sm:text-xs sm:tracking-[0.13em]"><span className="sm:hidden">Adresse</span><span className="hidden sm:inline">Une adresse à découvrir</span></span>
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
                     {shop.boost_placements?.some((placement) => placement === (discoveryPage?.citySlug ? 'city' : discoveryPage?.category || category !== 'all' ? 'category' : !isShopDirectoryPage ? 'home' : 'directory') || placement === 'directory') && <span className="rounded-full bg-amber-100 px-2 py-1 text-[9px] font-bold text-amber-950 sm:text-[10px]">Sponsorisé</span>}
-                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold sm:px-3 sm:py-1.5 sm:text-xs ${shop.is_open ? 'bg-[#e2eee6] text-[var(--mt-green-deep)]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>
-                      {shop.is_open ? <><CheckCircle2 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />Ouverte</> : <><Clock3 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />Fermée</>}
+                    <span className={`inline-flex max-w-full items-center rounded-full px-1.5 py-1 text-[9px] font-bold leading-tight sm:px-3 sm:py-1.5 sm:text-xs ${shop.is_open ? 'bg-[#e2eee6] text-[var(--mt-green-deep)]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>
+                      {shop.is_open ? <><CheckCircle2 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" /><span className="sm:hidden">Ouverte</span><span className="hidden sm:inline">Ouverte aux commandes</span></> : <><Clock3 className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" /><span className="sm:hidden">Fermée</span><span className="hidden sm:inline">Fermée aux commandes</span></>}
                     </span>
                     </div>
                   </div>
@@ -899,7 +899,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                     {shop.is_verified && <VerifiedBadge />}
                   </p>
                   {!isShopDirectoryPage && <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#647067] sm:mt-3 sm:text-sm sm:leading-6">{shop.welcome_message || 'Une vitrine locale à découvrir et un commerçant à rencontrer.'}</p>}
-                  {shop.products_preview && shop.products_preview.length > 0 && <span className="mt-3 flex min-w-0 items-center gap-2 border-t border-[#eee6dd] pt-2.5">
+                  {shop.products_preview && shop.products_preview.length > 0 && <span className="mt-3 hidden min-w-0 items-center gap-2 border-t border-[#eee6dd] pt-2.5 sm:flex">
                     {shop.products_preview.slice(0, 2).map((product) => (
                       <span key={product.id} className="flex min-w-0 flex-1 items-center gap-1.5">
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#e9f5ee]">
@@ -963,7 +963,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <p className="text-xs font-black text-[var(--mt-orange-deep)]">Vitrine de démonstration</p>
                 <p className="mt-1 text-sm text-[var(--mt-gray-600)]">Ajoutez des articles pour essayer le panier local.</p>
               </div>
-              <span className="rounded-full bg-[#e2eee6] px-3 py-1.5 text-xs font-bold text-[var(--mt-green-deep)]">{activeDemoShop.is_open ? 'Ouverte' : 'Fermée'}</span>
+              <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${activeDemoShop.is_open ? 'bg-[#e2eee6] text-[var(--mt-green-deep)]' : 'bg-[#f3eee7] text-[#7a3e00]'}`}>{activeDemoShop.is_open ? 'Ouverte aux commandes' : 'Fermée aux commandes'}</span>
             </div>
             <ul className="space-y-3">
               {(activeDemoShop.products_preview || []).map((product) => {

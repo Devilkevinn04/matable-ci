@@ -142,11 +142,14 @@ export const ProductOptionsSheet: React.FC<ProductOptionsSheetProps> = ({
             const max = Math.max(1, group.max_selections || 1);
             const labels = group.options.map(optionLabel);
             const selectedCount = labels.filter((label) => activeModifiers.includes(label)).length;
+            const hint = max === 1
+              ? group.required ? 'Choisissez 1 option' : 'Jusqu’à 1 option'
+              : `Jusqu’à ${max} choix · ${selectedCount}/${max} sélectionné${selectedCount > 1 ? 's' : ''}`;
             return (
               <section key={group.name}>
                 <SectionTitle
                   title={group.name}
-                  hint={max === 1 ? 'Choisissez 1 option' : `Jusqu’à ${max} choix · ${selectedCount}/${max} sélectionné${selectedCount > 1 ? 's' : ''}`}
+                  hint={hint}
                   badge={group.required ? 'Obligatoire' : 'Facultatif'}
                 />
                 <div className="space-y-2" role={max === 1 ? 'radiogroup' : 'group'} aria-label={group.name}>

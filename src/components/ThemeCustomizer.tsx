@@ -338,7 +338,11 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
             <p className="text-xs text-slate-500 mt-1">
               <CategoryIcon category={shop.category} className="mr-1 inline h-3.5 w-3.5 align-text-bottom" /> {categoryDefaults.label} · Choisissez un style, regardez l’aperçu, puis enregistrez.
             </p>
-            <p className="mt-2 text-[11px] text-slate-500">Personnalisez votre vitrine Premium/Pro. Rien ne change sur votre boutique avant l’enregistrement.</p>
+            <p className="mt-2 text-[11px] text-slate-500">
+              {shop.admin_mode
+                ? 'Le mode super-admin permet de modifier ce thème quel que soit le forfait. Rien ne change sur la boutique avant l’enregistrement.'
+                : 'Personnalisez votre vitrine Premium/Pro. Rien ne change sur votre boutique avant l’enregistrement.'}
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-100 p-1">
@@ -734,7 +738,9 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
               <Sparkles className="w-4 h-4 text-purple-600" />
               <span>Studio CSS Avancé & Ambiance Visuelle</span>
             </h4>
-            <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">Premium · Pro</span>
+            <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+              {shop.admin_mode ? 'Accès super-admin' : 'Premium · Pro'}
+            </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

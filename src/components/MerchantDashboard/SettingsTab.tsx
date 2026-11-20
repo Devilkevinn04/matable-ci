@@ -76,12 +76,15 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
     expired: 'Expiré',
     suspended: 'Suspendu',
   }[subscriptionStatus];
-  const currentProductLimit = !currentShop.admin_mode
-    && subscriptionStatus === 'trialing'
-    && (currentShop.subscription?.trialDaysRemaining ?? 0) > 0
-    ? TRIAL_CATALOG_LIMIT
-    : getSubscriptionProductLimit(currentShop.subscription?.plan, currentShop.subscription?.planFeatures);
-  const currentPhotoLimit = getSubscriptionProductPhotoLimit(currentShop.subscription?.plan, currentShop.subscription?.planFeatures);
+  const currentShopProductCount = products.filter((product) => product.shop_id === currentShop.id).length;
+  const currentProductLimit = currentShop.admin_mode
+    ? Number.POSITIVE_INFINITY
+    : subscriptionStatus === 'trialing' && (currentShop.subscription?.trialDaysRemaining ?? 0) > 0
+      ? TRIAL_CATALOG_LIMIT
+      : getSubscriptionProductLimit(currentShop.subscription?.plan, currentShop.subscription?.planFeatures);
+  const currentPhotoLimit = currentShop.admin_mode
+    ? 6
+    : getSubscriptionProductPhotoLimit(currentShop.subscription?.plan, currentShop.subscription?.planFeatures);
   const settingsCopy: Record<typeof settingsSubTab, { eyebrow: string; title: string; description: string }> = {
     profile: { eyebrow: 'Compte', title: 'Profil personnel', description: 'Gérez vos coordonnées personnelles, votre e-mail de facturation et la sécurité de votre accès.' },
     themes: { eyebrow: 'Ma boutique', title: 'Apparence de la vitrine', description: 'Personnalisez les couleurs, les images et la présentation de votre boutique.' },
@@ -287,9 +290,18 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
 
             {currentShop && !currentShop.owner_email_verified && (
               <section role="status" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950 sm:p-5">
-                <h3 className="text-sm font-extrabold">Sécurisez l’accès à votre boutique</h3>
-                <p className="mt-1 text-sm leading-6">Vérifiez une adresse e-mail que vous pouvez consulter. La MFA e-mail sera requise après la période de transition ; sans adresse vérifiée, vous ne pourrez pas terminer la connexion.</p>
-                {settingsSubTab !== 'profile' && <button type="button" onClick={() => state.setSettingsSubTab('profile')} className="mt-2 text-sm font-bold underline underline-offset-2">Ajouter ou vérifier mon adresse</button>}
+                {currentShop.admin_mode ? (
+                  <>
+                    <h3 className="text-sm font-extrabold">Adresse e-mail du commerçant non vérifiée</h3>
+                    <p className="mt-1 text-sm leading-6">Le commerçant doit vérifier son adresse depuis sa propre session. Cette action n’est pas disponible en mode super-admin.</p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-sm font-extrabold">Sécurisez l’accès à votre boutique</h3>
+                    <p className="mt-1 text-sm leading-6">Vérifiez une adresse e-mail que vous pouvez consulter. La MFA e-mail sera requise après la période de transition ; sans adresse vérifiée, vous ne pourrez pas terminer la connexion.</p>
+                    {settingsSubTab !== 'profile' && <button type="button" onClick={() => state.setSettingsSubTab('profile')} className="mt-2 text-sm font-bold underline underline-offset-2">Ajouter ou vérifier mon adresse</button>}
+                  </>
+                )}
               </section>
             )}
 
@@ -482,8 +494,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                   <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">{subscriptionStatus === 'active' ? 'Échéance' : subscriptionStatus === 'trialing' ? 'Fin de l’essai' : 'Prochaine échéance'}</span><strong className="mt-1 block text-slate-900">{(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd) ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd || '')) : 'Non démarré'}</strong></div>
                 </div>
                 <div className="grid gap-3 rounded-xl border border-[#e7dfd3] bg-[#fffdf8] p-4 sm:grid-cols-2">
-                  <div><span className="text-xs text-slate-500">Capacité du catalogue</span><strong className="mt-1 block text-slate-900">{Number.isFinite(currentProductLimit) ? `${products.filter((product) => product.shop_id === currentShop.id).length} / ${currentProductLimit} produits` : `${products.filter((product) => product.shop_id === currentShop.id).length} produits · illimité`}</strong></div>
-                  <div><span className="text-xs text-slate-500">Photos par produit</span><strong className="mt-1 block text-slate-900">Jusqu’à {currentPhotoLimit}</strong></div>
+                  <div><span className="text-xs text-slate-500">Capacité du catalogue</span><strong className="mt-1 block text-slate-900">{currentShop.admin_mode ? `${currentShopProductCount} produits · limites ignorées en mode super-admin` : Number.isFinite(currentProductLimit) ? `${currentShopProductCount} / ${currentProductLimit} produits` : `${currentShopProductCount} produits · illimité`}</strong></div>
+                  <div><span className="text-xs text-slate-500">Photos par produit</span><strong className="mt-1 block text-slate-900">{currentShop.admin_mode ? `Jusqu’à ${currentPhotoLimit} · mode super-admin` : `Jusqu’à ${currentPhotoLimit}`}</strong></div>
                 </div>
                 <p className="text-xs leading-5 text-slate-600">Le paiement est ponctuel, sans prélèvement automatique. GeniusPay confirme le règlement au serveur avant toute activation. Le paiement des commandes clients reste directement convenu avec la boutique.</p>
                 <WhatsAppSubscriptionReminderConsent shop={currentShop} />
@@ -685,7 +697,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       <div>
                         <p className="font-black text-amber-950">Forçage manuel actuellement actif</p>
                         <p className="text-amber-800 text-[11px]">
-                          La prise de commandes a été basculée manuellement en mode <strong>{currentShop.is_open ? 'Ouvert' : 'Fermé'}</strong>. Ce choix reste prioritaire jusqu'à sa réinitialisation.
+                          La prise de commandes est actuellement <strong>{currentShop.is_open ? 'ouverte' : 'fermée'}</strong>. Ce choix manuel reste prioritaire jusqu'à sa réinitialisation.
                         </p>
                       </div>
                     </div>
@@ -707,7 +719,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       Activer le planning automatique
                     </label>
                     <p className="text-xs text-slate-500">
-                      Lorsque ce mode est activé, la vitrine bascule automatiquement entre Ouvert et Fermé. <strong>Lorsque la boutique est fermée, les clients ne peuvent plus valider de commandes.</strong>
+                      Lorsque ce mode est activé, la prise de commandes s’ouvre et se ferme selon le planning. <strong>Quand elle est fermée, les clients ne peuvent plus valider de commandes.</strong>
                     </p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer shrink-0">

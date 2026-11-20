@@ -7,6 +7,7 @@ import { OrderContactReveal } from '../OrderContactReveal';
 interface OrdersTabProps {
   state: MerchantState;
   filteredOrders: any[]; orderValue: number; averageOrderValue: number;
+  isShopPublished: boolean;
 }
 
 function MerchantLoyaltyReward({ shopId, orderId, deliveredOrders, availableRewards, onRedeemed }: {
@@ -59,7 +60,7 @@ function MerchantLoyaltyReward({ shopId, orderId, deliveredOrders, availableRewa
   );
 }
 
-export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, orderValue, averageOrderValue }) => {
+export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, orderValue, averageOrderValue, isShopPublished }) => {
   const {
     orders, orderSearch, setOrderSearch, orderPaymentFilter, setOrderPaymentFilter, orderStatusFilter, setOrderStatusFilter,
     handleUpdateOrderStatus, copyOwnerLink
@@ -91,8 +92,8 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
             </header>
 
             {/* Orders Statistics Cards */}
-            <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:grid-cols-3">
-              <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4 min-[380px]:col-span-2 sm:col-span-1">
+            <div className="grid grid-cols-1 gap-3 min-[460px]:grid-cols-2 sm:grid-cols-3">
+              <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4 min-[460px]:col-span-2 sm:col-span-1">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d1fae5] font-bold text-[var(--mt-green-primary)]">
                   <DollarSign className="w-5 h-5" />
                 </div>
@@ -191,13 +192,17 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
             {filteredOrders.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 p-6">
                 <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <h3 className="font-bold text-slate-900 text-base">{orders.length === 0 ? 'Aucune commande enregistrée' : 'Aucune commande ne correspond'}</h3>
+                <h3 className="font-bold text-slate-900 text-base">{orders.length === 0
+                  ? isShopPublished ? 'Aucune commande enregistrée' : 'Votre vitrine n’est pas encore publiée'
+                  : 'Aucune commande ne correspond'}</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
                   {orders.length === 0
-                    ? 'Les demandes envoyées depuis votre vitrine apparaîtront ici. Partagez votre boutique pour recevoir vos premières commandes.'
+                    ? isShopPublished
+                      ? 'Les demandes envoyées depuis votre vitrine apparaîtront ici.'
+                      : 'Les clients ne peuvent pas encore accéder à votre vitrine. Terminez les étapes d’activation avant de partager son lien. Les demandes apparaîtront ici après publication.'
                     : 'Modifiez votre recherche ou vos filtres pour afficher les commandes correspondantes.'}
                 </p>
-                {orders.length === 0 && (
+                {orders.length === 0 && isShopPublished && (
                   <button type="button" onClick={() => copyOwnerLink('public')} className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--mt-green-deep)] px-4 text-xs font-bold text-white transition hover:bg-[var(--mt-green-hover)]">
                     <ExternalLink className="h-4 w-4" /> Copier le lien de ma vitrine
                   </button>

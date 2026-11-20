@@ -96,7 +96,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
   const outOfStockCount = products.filter((product) => product.stock === 0).length;
   const promotionCount = products.filter((product) => product.sale_price !== null && product.sale_price !== undefined).length;
   const trialCatalogLimited = !currentShop.admin_mode && currentShop.subscription?.status === 'trialing' && currentShop.subscription.trialDaysRemaining > 0;
-  const productLimit = trialCatalogLimited ? TRIAL_CATALOG_LIMIT : getSubscriptionProductLimit(currentShop.subscription?.plan, currentShop.subscription?.planFeatures);
+  const productLimit = currentShop.admin_mode ? Number.POSITIVE_INFINITY
+    : trialCatalogLimited ? TRIAL_CATALOG_LIMIT : getSubscriptionProductLimit(currentShop.subscription?.plan, currentShop.subscription?.planFeatures);
   const catalogFull = !currentShop.admin_mode && Number.isFinite(productLimit) && products.length >= productLimit;
   const productLimitLabel = Number.isFinite(productLimit) ? productLimit : 'illimité';
   const catalogFilterOptions = [
@@ -182,7 +183,9 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
               <div>
                 <h2 className="text-lg font-black text-slate-900">{vocabulary.catalogTitle}</h2>
                 <p className="text-xs text-slate-500">
-                  {trialCatalogLimited
+                  {currentShop.admin_mode
+                    ? `${products.length} article${products.length === 1 ? '' : 's'} · limites ignorées en mode super-admin`
+                    : trialCatalogLimited
                     ? `Essai gratuit · ${products.length}/${productLimitLabel} articles · ${currentShop.subscription?.trialDaysRemaining} jours restants`
                     : `${products.length} / ${productLimitLabel} articles · ${getCategoryDefaults(currentShop.category).catalogDescription}`}
                 </p>
