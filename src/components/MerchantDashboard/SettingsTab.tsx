@@ -19,6 +19,7 @@ import { MerchantBoostPurchase } from './MerchantBoostPurchase';
 import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
 import { PushNotificationSettings } from './PushNotificationSettings';
 import { ProductOffersManager } from './ProductOffersManager';
+import { isShopPubliclyVisible } from '../../utils/shopPublication';
 
 interface SettingsTabProps {
   state: MerchantState;
@@ -57,6 +58,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const outOfStockCount = products.filter((product) => product.stock === 0).length;
   const featuredUntil = currentShop?.featured_until || null;
   const isFeatured = Boolean(featuredUntil && Date.parse(featuredUntil) > Date.now());
+  const isPubliclyVisible = isShopPubliclyVisible(currentShop);
+  const publicationLabel = currentShop.publication_status === 'draft'
+    ? 'Vitrine en brouillon'
+    : isPubliclyVisible
+      ? 'Vitrine publiée'
+      : 'Vitrine non visible';
   const canUseSocialLinks = Boolean(currentShop?.admin_mode || currentShop?.subscription?.isActive
     && isSubscriptionFeatureIncluded(currentShop.subscription.plan, 'social_links'));
   const subscriptionStatus = currentShop.subscription?.status || 'not_started';
@@ -246,11 +253,27 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 <h2 className="mt-1 text-2xl font-black tracking-tight text-[var(--mt-gray-900)]">{activeSettingsCopy.title}</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{activeSettingsCopy.description}</p>
               </div>
-              <span className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full border border-[#d8e9df] bg-[#eff7f1] px-3 py-1.5 text-xs font-bold text-[var(--mt-green-hover)]">
-                <span className={`h-2 w-2 rounded-full ${currentShop.is_open ? 'bg-[var(--mt-green-primary)]' : 'bg-[var(--mt-orange-bright)]'}`} />
-                {currentShop.is_open ? 'Boutique ouverte' : 'Boutique fermée'}
-              </span>
+              <div className="flex w-fit shrink-0 flex-wrap gap-2">
+                <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${
+                  currentShop.is_open
+                    ? 'border-[#d8e9df] bg-[#eff7f1] text-[var(--mt-green-hover)]'
+                    : 'border-amber-200 bg-amber-50 text-amber-900'
+                }`}>
+                  <span className={`h-2 w-2 rounded-full ${currentShop.is_open ? 'bg-[var(--mt-green-primary)]' : 'bg-[var(--mt-orange-bright)]'}`} />
+                  {currentShop.is_open ? 'Commandes ouvertes' : 'Commandes fermées'}
+                </span>
+                <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-bold ${
+                  isPubliclyVisible
+                    ? 'border-[#d8e9df] bg-[#eff7f1] text-[var(--mt-green-hover)]'
+                    : 'border-amber-200 bg-amber-50 text-amber-900'
+                }`}>
+                  {publicationLabel}
+                </span>
+              </div>
             </header>
+            <p className="-mt-3 px-1 text-xs leading-5 text-slate-500">
+              L’état des commandes est indépendant de la publication : une vitrine en brouillon ou non visible n’est pas accessible au public, même si les commandes sont ouvertes.
+            </p>
 
             {settingsSubTab === 'profile' && <section className="flex flex-col gap-4 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
               <div className="max-w-2xl">
@@ -630,7 +653,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                         Automatisation des Horaires d'Ouverture
                       </h3>
                       <p className="text-xs text-slate-500">
-                        Gestion automatique des prises de commande selon vos plages horaires (Fuseau GMT / UTC+0 Abidjan).
+                        Gestion automatique de la prise de commandes selon vos plages horaires (fuseau GMT / UTC+0 Abidjan). Ce statut ne publie pas la vitrine.
                       </p>
                     </div>
                   </div>
@@ -642,7 +665,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                         : 'bg-amber-50 text-amber-700 border border-amber-200'
                     }`}>
                       <span className={`w-2 h-2 rounded-full ${currentShop.is_open ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                      <span>{currentShop.is_open ? 'Actuellement Ouvert' : 'Actuellement Fermé'}</span>
+                      <span>{currentShop.is_open ? 'Prise de commandes ouverte' : 'Prise de commandes fermée'}</span>
                     </span>
                   </div>
                 </div>
@@ -662,7 +685,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                       <div>
                         <p className="font-black text-amber-950">Forçage manuel actuellement actif</p>
                         <p className="text-amber-800 text-[11px]">
-                          La boutique a été basculée manuellement en mode <strong>{currentShop.is_open ? 'Ouverte' : 'Fermée'}</strong>. Ce choix reste prioritaire jusqu'à sa réinitialisation.
+                          La prise de commandes a été basculée manuellement en mode <strong>{currentShop.is_open ? 'Ouvert' : 'Fermé'}</strong>. Ce choix reste prioritaire jusqu'à sa réinitialisation.
                         </p>
                       </div>
                     </div>

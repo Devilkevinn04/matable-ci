@@ -26,6 +26,7 @@ interface ThemeCustomizerProps {
 
 export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdateShop }) => {
   const currentTier = shop.subscription?.plan || 'standard';
+  const currentTierLabel = currentTier === 'pro' ? 'Pro' : currentTier === 'premium' ? 'Premium' : 'Standard';
   const canCustomize = shop.admin_mode || shop.subscription?.isActive === true
     && isSubscriptionFeatureIncluded(currentTier, 'custom_branding');
   const categoryDefaults = getCategoryDefaults(shop.category);
@@ -331,7 +332,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
                 Fonctionnalités de la Boutique
               </h3>
               <span className="text-xs font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                {currentTier}
+                {currentTierLabel}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
@@ -343,7 +344,7 @@ export const ThemeCustomizer: React.FC<ThemeCustomizerProps> = ({ shop, onUpdate
           <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-100 p-1">
             <span className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500">Mode</span>
             <span className="rounded-lg px-3 py-1.5 text-xs font-black shadow-xs bg-emerald-600 text-white">
-              {currentTier === 'pro' ? 'Pro' : currentTier === 'premium' ? 'Premium' : 'Standard'}
+              {currentTierLabel}
             </span>
           </div>
         </div>

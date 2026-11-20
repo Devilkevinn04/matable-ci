@@ -842,7 +842,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               }`}
             >
               <span className={`h-2 w-2 shrink-0 rounded-full ${currentShop.is_open ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-              <span className="truncate">{currentShop.is_open ? 'Boutique ouverte' : 'Boutique fermée'}</span>
+              <span className="truncate">{currentShop.is_open ? 'Commandes ouvertes' : 'Commandes fermées'}</span>
             </button>
 
             {isAdminSuspended ? (
