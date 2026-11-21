@@ -20,7 +20,8 @@ const isSupported = () => typeof window !== 'undefined'
 
 // Invite le commerçant à activer les alertes dès son arrivée après l'inscription.
 // Le navigateur exige un geste explicite pour l'autorisation : un clic suffit.
-export const MerchantPushPrompt: React.FC<{ shop: Shop }> = ({ shop }) => {
+// `deferred` : une autre fenêtre d’accueil est ouverte ; on ne superpose pas deux sollicitations.
+export const MerchantPushPrompt: React.FC<{ shop: Shop; deferred?: boolean }> = ({ shop, deferred = false }) => {
   const dismissKey = `matable-push-prompt-later-${shop.id}`;
   const [configuration, setConfiguration] = useState<PushConfiguration | null>(null);
   const [visible, setVisible] = useState(false);
@@ -92,7 +93,7 @@ export const MerchantPushPrompt: React.FC<{ shop: Shop }> = ({ shop }) => {
     }
   };
 
-  if (!visible) return null;
+  if (deferred || !visible) return null;
 
   const blocked = Notification.permission === 'denied';
 

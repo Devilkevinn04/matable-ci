@@ -1,4 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { ConfirmHost } from './components/ui/ConfirmSheet';
+import { LazyMotion } from 'motion/react';
+
+// Le moteur d’animation est téléchargé après le premier affichage : la page s’ouvre sans l’attendre.
+const loadMotionFeatures = () => import('./utils/motionFeatures').then((module) => module.default);
 import { Link, Route, Routes, useLocation, useNavigate, useNavigationType, useParams } from 'react-router-dom';
 import { Navigation } from './components/Navigation';
 import { ToastProvider } from './components/Toast';
@@ -19,6 +24,7 @@ import { DirectorySkeleton, HomeSkeleton, PageSkeleton, StorefrontSkeleton } fro
 const LegalPages = React.lazy(() => import('./components/LegalPages').then((module) => ({ default: module.LegalPages })));
 const CustomerAuth = React.lazy(() => import('./components/CustomerAuth').then((module) => ({ default: module.CustomerAuth })));
 const CustomerAccount = React.lazy(() => import('./components/CustomerAuth').then((module) => ({ default: module.CustomerAccount })));
+const OrderTrackingPage = React.lazy(() => import('./components/OrderTrackingPage').then((module) => ({ default: module.OrderTrackingPage })));
 const FaqPage = React.lazy(() => import('./components/FaqPage').then((module) => ({ default: module.FaqPage })));
 const AccountRecoveryPage = React.lazy(() => import('./components/AccountRecoveryPage').then((module) => ({ default: module.AccountRecoveryPage })));
 const CustomerPasswordResetPage = React.lazy(() => import('./components/CustomerPasswordResetPage').then((module) => ({ default: module.CustomerPasswordResetPage })));
@@ -611,6 +617,7 @@ export default function App() {
 
   return (
     <ToastProvider>
+      <LazyMotion features={loadMotionFeatures}>
       <a href="#main-content" className="skip-link">Aller au contenu</a>
       <div
         aria-hidden="true"
@@ -631,6 +638,7 @@ export default function App() {
                 />}
 
                 {!isMobileDashboardPreview && !isAdvertisingPreview && <CookieBanner />}
+                <ConfirmHost />
 
                 {/* min-h keeps the footer below the fold while lazy pages and their data load (it was the main layout shift). */}
                 <div id="main-content" className="flex-1 app-shell min-h-[100svh]" tabIndex={-1}>
@@ -651,6 +659,7 @@ export default function App() {
                       <Route path="/guide/:slug" element={seoArticle ? <SeoArticlePage article={seoArticle} /> : <NotFoundPage />} />
                       <Route path="/commercants" element={<MerchantPlansPage />} />
                       <Route path="/faq" element={<FaqPage />} />
+                      <Route path="/suivi/:orderId" element={<OrderTrackingPage />} />
                       <Route path="/recuperation-acces" element={<AccountRecoveryPage initialAccountType={new URLSearchParams(location.search).get('type') === 'merchant' ? 'merchant' : 'customer'} onBack={() => navigate(new URLSearchParams(location.search).get('type') === 'merchant' ? '/app' : '/connexion')} />} />
                       <Route path="/reinitialiser-mot-de-passe" element={<CustomerPasswordResetPage token={new URLSearchParams(location.search).get('token') || ''} onBack={() => navigate('/connexion')} />} />
                       <Route path="/reinitialiser-pin-commercant" element={<MerchantPinResetPage token={new URLSearchParams(location.search).get('token') || ''} onBack={() => navigate('/app')} />} />
@@ -680,10 +689,11 @@ export default function App() {
                       </Routes>
                     </React.Suspense>
                 </div>
-                {!hasStandaloneAccountFlow && currentRole !== 'admin' && <Footer compact={Boolean(legalPage)} />}
+                {!hasStandaloneAccountFlow && currentRole !== 'admin' && <Footer compact={Boolean(legalPage)} hideMerchantCta={path === '/' || isMerchantPlansPage} storefront={isSingleSegmentStorefrontRoute && !isUnknownStorefront} />}
               </div>
             </div>
       </div>
+          </LazyMotion>
     </ToastProvider>
   );
 }

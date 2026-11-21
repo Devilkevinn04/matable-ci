@@ -1,6 +1,6 @@
 import { ArrowRight, BadgeCheck, BarChart3, Check, Clock3, MapPin, MessageCircle, Package, Sparkles, Store } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import { CategoryIcon } from './CategoryIcon';
 import {
   DEFAULT_SUBSCRIPTION_PRO_FEATURES,
@@ -67,13 +67,13 @@ export function MerchantPlansPage() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-[var(--mt-gray-50)] text-[var(--mt-gray-900)]">
-      <section className="mx-auto grid max-w-[1440px] items-center gap-10 px-5 pb-12 pt-10 sm:px-8 sm:pb-16 sm:pt-16 lg:min-h-[690px] lg:grid-cols-[.9fr_1.1fr] lg:gap-12 lg:px-12">
+      <section className="mx-auto grid max-w-[1440px] items-center gap-10 px-5 pb-10 pt-8 sm:px-8 sm:pb-16 sm:pt-16 lg:min-h-[690px] lg:grid-cols-[.9fr_1.1fr] lg:gap-12 lg:px-12">
         <div className="relative z-10 max-w-2xl">
           <p className="inline-flex items-center gap-2 rounded-full border border-[#e3ded3] bg-white px-4 py-2 text-xs font-extrabold text-[#145b47] shadow-sm sm:text-sm">
             <span className="h-2.5 w-2.5 rounded-full bg-[#f0ba80]" />
             Votre commerce, visible partout en Côte d’Ivoire
           </p>
-          <h1 className="mt-7 max-w-[720px] font-display text-[clamp(3rem,5vw,5.5rem)] font-black leading-[.96] tracking-[-.065em] text-[var(--mt-gray-900)]">
+          <h1 className="mt-5 max-w-[720px] font-display text-[2.5rem] font-black sm:mt-7 sm:text-[clamp(3rem,5vw,5.5rem)] leading-[.96] tracking-[-.065em] text-[var(--mt-gray-900)]">
             Votre boutique mérite sa place <span className="text-[#087c5b]">en ligne.</span>
           </h1>
           <p className="mt-6 max-w-xl text-base leading-7 text-[#625f58] sm:text-lg sm:leading-8">
@@ -93,7 +93,7 @@ export function MerchantPlansPage() {
           </p>
         </div>
 
-        <div className="relative mx-auto w-full max-w-[650px]">
+        <div className="relative mx-auto hidden w-full max-w-[650px] sm:block">
           <div aria-hidden="true" className="absolute -right-12 -top-14 h-44 w-44 rounded-full border-[24px] border-[#f0ba80]/35 sm:h-64 sm:w-64" />
           <div className="relative overflow-hidden rounded-[28px] border border-[#e3ded3] bg-white shadow-[0_24px_80px_rgba(31,40,33,.12)] sm:rounded-[34px]">
             <div className="flex items-center justify-between border-b border-[#eeeae1] px-4 py-3 sm:px-6 sm:py-4">
@@ -105,7 +105,7 @@ export function MerchantPlansPage() {
             </div>
             <div className="grid gap-4 p-4 sm:grid-cols-[150px_1fr] sm:gap-5 sm:p-6">
               <aside className="hidden rounded-2xl bg-[#f4f2ec] p-3 sm:block">
-                <p className="mb-3 px-2 text-[9px] font-black uppercase tracking-[.14em] text-[#8c877d]">Ma boutique</p>
+                <p className="mb-3 px-2 text-xs font-bold text-[#8c877d]">Ma boutique</p>
                 {['Vue générale', 'Produits', 'Commandes', 'Statistiques'].map((item, index) => (
                   <p key={item} className={`mb-1 rounded-lg px-2 py-2 text-[10px] font-bold ${index === 0 ? 'bg-white text-[var(--mt-green-hover)] shadow-sm' : 'text-[#706b63]'}`}>{item}</p>
                 ))}
@@ -113,7 +113,7 @@ export function MerchantPlansPage() {
               <div className="min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div><p className="text-[10px] font-semibold text-[#78736a]">Bonjour Awa</p><h2 className="mt-1 text-lg font-black sm:text-xl">Votre activité, en un coup d’œil</h2></div>
-                  <span className="rounded-full bg-[#f7e7bd] px-2.5 py-1 text-[9px] font-black uppercase text-[#6c511f]">Démo</span>
+                  <span className="rounded-full bg-[#f7e7bd] px-2.5 py-1 text-[9px] font-bold text-[#6c511f]">Démo</span>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {[['Visites', '1 284'], ['Produits', '24'], ['Messages', '18']].map(([label, value]) => (
@@ -165,10 +165,10 @@ export function MerchantPlansPage() {
       </section>
 
       <section className="bg-[#17191a] text-white">
-        <div className="mx-auto grid max-w-[1280px] gap-9 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-[.85fr_1.15fr] lg:gap-16 lg:py-28">
+        <div className="mx-auto grid max-w-[1280px] gap-7 px-5 py-12 sm:gap-9 sm:px-8 sm:py-20 lg:grid-cols-[.85fr_1.15fr] lg:gap-16 lg:py-28">
           <div className="lg:sticky lg:top-28 lg:self-start">
-            <p className="text-xs font-black uppercase tracking-[.18em] text-[#f0ba80]">Pour démarrer</p>
-            <h2 className="mt-4 max-w-xl font-display text-4xl font-black leading-[1.02] tracking-[-.045em] sm:text-5xl lg:text-6xl">De votre commerce à vos premiers contacts.</h2>
+            <p className="text-xs font-bold text-[#f0ba80]">Pour démarrer</p>
+            <h2 className="mt-3 max-w-xl font-display text-3xl font-black leading-[1.05] tracking-[-.04em] sm:mt-4 sm:text-5xl lg:text-6xl">De votre commerce à vos premiers contacts.</h2>
             <p className="mt-5 max-w-lg text-sm leading-6 text-white/65 sm:text-base sm:leading-7">Tout se prépare depuis votre espace. MaTable vous aide à présenter votre activité ; vous restez au centre des échanges avec vos clients.</p>
             <Link to="/app/creer-boutique" className="mt-7 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f0ba80] px-5 text-sm font-extrabold text-[#282117] transition hover:bg-[#ffd09a]">
               Commencer gratuitement <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -186,10 +186,10 @@ export function MerchantPlansPage() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-[1280px] items-center gap-8 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-2 lg:gap-14 lg:py-24">
+      <section className="mx-auto grid max-w-[1280px] items-center gap-8 px-5 py-12 sm:px-8 sm:py-20 lg:grid-cols-2 lg:gap-14 lg:py-24">
         <div>
-          <p className="text-xs font-black uppercase tracking-[.16em] text-[#c2410c]">À votre rythme</p>
-          <h2 className="mt-3 max-w-xl font-display text-4xl font-black leading-tight tracking-[-.04em] sm:text-5xl">Vous gardez la main sur chaque vente.</h2>
+          <p className="text-xs font-bold text-[#c2410c]">À votre rythme</p>
+          <h2 className="mt-3 max-w-xl font-display text-3xl font-black leading-tight tracking-[-.04em] sm:text-5xl">Vous gardez la main sur chaque vente.</h2>
           <p className="mt-4 max-w-xl text-sm leading-6 text-[#625f58] sm:text-base sm:leading-7">MaTable présente votre vitrine et facilite la prise de contact. Le client et le commerçant conviennent directement du paiement et des modalités de remise.</p>
           <div className="mt-6 space-y-3">
             {[
@@ -199,10 +199,10 @@ export function MerchantPlansPage() {
             ].map((line) => <p key={line} className="flex items-start gap-2.5 text-sm font-semibold text-[#3e4a42]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#087c5b]" aria-hidden="true" />{line}</p>)}
           </div>
         </div>
-        <div className="rounded-[28px] bg-[#e8f1e9] p-4 sm:p-6">
+        <div className="hidden rounded-[28px] bg-[#e8f1e9] p-4 sm:block sm:p-6">
           <div className="rounded-[22px] bg-white p-5 shadow-sm sm:p-7">
             <div className="flex items-center justify-between border-b border-[#eeeae1] pb-4">
-              <div><p className="text-[10px] font-bold uppercase tracking-wide text-[#9a6a3a]">Une demande reçue</p><p className="mt-1 text-lg font-black">Chemise en lin naturel</p></div>
+              <div><p className="text-xs font-bold text-[#9a6a3a]">Une demande reçue</p><p className="mt-1 text-lg font-black">Chemise en lin naturel</p></div>
               <span className="rounded-full bg-[#e8f4e9] px-3 py-1 text-[10px] font-black text-[var(--mt-green-hover)]">À confirmer</span>
             </div>
             <div className="mt-5 flex items-center gap-3">
@@ -223,7 +223,7 @@ export function MerchantPlansPage() {
         <div className="mx-auto max-w-[1280px]">
           <div className="flex flex-col items-center gap-6 text-center">
             <div className="max-w-3xl">
-              <p className="text-xs font-black uppercase tracking-[.16em] text-[#a2642e]">Votre prochaine étape commence ici</p>
+              <p className="text-xs font-bold text-[#a2642e]">Votre prochaine étape commence ici</p>
               <h2 id="merchant-plans-heading" className="mt-2 font-display text-3xl font-black leading-tight tracking-[-.035em] sm:text-4xl lg:text-5xl">Choisissez comment faire grandir votre boutique.</h2>
               <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-[#625f58] sm:text-base">Les mêmes bases pour vendre. Plus d’outils et de visibilité à mesure que votre activité avance.</p>
             </div>
@@ -237,14 +237,14 @@ export function MerchantPlansPage() {
             </div>
             </div>
           {term === 'annual' && (
-            <motion.p
+            <m.p
               initial={prefersReducedMotion ? false : { opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full bg-[#fff1df] px-4 py-2 text-xs font-bold text-[#73431e]"
             >
               <BadgeCheck className="h-4 w-4 text-[#a2642e]" aria-hidden="true" />
               Deux mois offerts sur chaque formule annuelle
-            </motion.p>
+            </m.p>
           )}
 
           <div className="mt-10 grid items-stretch gap-5 md:grid-cols-3 md:gap-4 lg:gap-6">
@@ -252,12 +252,8 @@ export function MerchantPlansPage() {
               const featured = plan.tier === 'premium';
               const PlanIcon = planIcons[plan.tier];
               return (
-                <motion.article
+                <m.article
                     key={plan.tier}
-                    initial={prefersReducedMotion ? false : { opacity: 0, y: 22 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, amount: 0.18 }}
-                    transition={{ duration: prefersReducedMotion ? 0 : 0.45, delay: prefersReducedMotion ? 0 : index * 0.1, ease: [0.22, 1, 0.36, 1] }}
                     whileHover={prefersReducedMotion ? undefined : { y: -6, transition: { duration: 0.2 } }}
                     className={`relative flex flex-col overflow-hidden rounded-[28px] ${featured ? 'z-10 bg-[var(--mt-green-hover)] text-white shadow-[0_28px_70px_rgba(7,95,72,.27)] md:-my-3 md:scale-[1.035]' : 'border border-[#e4ddd1] bg-white text-[#292d2a] shadow-[0_14px_38px_rgba(38,35,28,.07)]'}`}
                   >
@@ -266,11 +262,11 @@ export function MerchantPlansPage() {
                       <div className="flex min-w-0 items-center gap-3">
                         <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${featured ? 'bg-[#f0ba80] text-[#292d2a]' : 'bg-[#e8f3ed] text-[var(--mt-green-hover)]'}`}><PlanIcon className="h-5 w-5" aria-hidden="true" /></span>
                         <div className="min-w-0">
-                          <p className={`text-[9px] font-black uppercase tracking-[.15em] ${featured ? 'text-[#f0ba80]' : 'text-[#a2642e]'}`}>{planPositioning[plan.tier]}</p>
+                          <p className={`text-xs font-bold ${featured ? 'text-[#f0ba80]' : 'text-[#a2642e]'}`}>{planPositioning[plan.tier]}</p>
                           <h3 className="mt-0.5 text-xl font-black sm:text-2xl">{plan.label}</h3>
                         </div>
                       </div>
-                      {featured && <span className="shrink-0 rounded-full bg-[#f0ba80] px-3 py-1.5 text-[9px] font-black uppercase tracking-wide text-[#292d2a]">Recommandée</span>}
+                      {featured && <span className="shrink-0 rounded-full bg-[#f0ba80] px-3 py-1.5 text-xs font-bold text-[#292d2a]">Recommandée</span>}
                     </div>
                     <div className="relative flex flex-1 flex-col p-5 sm:p-7 lg:p-8">
                     <h4 className="text-lg font-extrabold leading-snug">{plan.headline}</h4>
@@ -279,7 +275,7 @@ export function MerchantPlansPage() {
                       <p className="flex flex-wrap items-baseline gap-x-2">
                         <strong className={`text-4xl font-black tracking-tight sm:text-5xl ${planPresentation[plan.tier].price}`}>
                           <AnimatePresence mode="wait" initial={false}>
-                            <motion.span
+                            <m.span
                               key={`${plan.tier}-${term}`}
                               initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
                               animate={{ opacity: 1, y: 0 }}
@@ -288,7 +284,7 @@ export function MerchantPlansPage() {
                               className="inline-block"
                             >
                               {formatTermPrice(plan.tier)}
-                            </motion.span>
+                            </m.span>
                           </AnimatePresence>
                         </strong>
                         <span className={`text-sm font-bold ${planPresentation[plan.tier].subtle}`}>FCFA / {term === 'annual' ? 'an' : 'mois'}</span>
@@ -317,7 +313,7 @@ export function MerchantPlansPage() {
                       ))}
                     </ul>
                     </div>
-                  </motion.article>
+                  </m.article>
                 );
               })}
             </div>
@@ -330,7 +326,7 @@ export function MerchantPlansPage() {
 
       <section className="mx-auto flex max-w-[1280px] flex-col items-start justify-between gap-6 px-5 py-14 sm:px-8 sm:py-20 md:flex-row md:items-center">
         <div>
-          <p className="text-xs font-black uppercase tracking-[.16em] text-[#c2410c]">Prêt·e à commencer ?</p>
+          <p className="text-xs font-bold text-[#c2410c]">Prêt·e à commencer ?</p>
           <h2 className="mt-2 max-w-2xl font-display text-3xl font-black leading-tight tracking-[-.035em] sm:text-4xl">Faites découvrir votre commerce.</h2>
           <p className="mt-3 text-sm text-[#625f58]">Créez votre vitrine aujourd’hui, puis partagez-la à vos clients.</p>
         </div>

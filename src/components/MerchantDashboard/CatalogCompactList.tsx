@@ -161,7 +161,7 @@ export const CatalogCompactList: React.FC<CatalogCompactListProps> = ({
                   <Minus className="h-4 w-4" />
                 </button>
                 <span className={`min-w-14 px-1 text-center text-xs font-black ${product.stock <= 0 ? 'text-[#b93712]' : product.stock <= 3 ? 'text-[#a66a00]' : 'text-[var(--mt-gray-900)]'}`}>
-                  {product.stock <= 0 ? vocabulary.soldOutBadge : `${product.stock} ${stockUnit}`}
+                  {product.stock <= 0 ? vocabulary.soldOutBadge : `${product.stock} ${product.stock > 1 && !stockUnit.includes(' ') ? `${stockUnit}s` : stockUnit}`}
                 </span>
                 <button
                   type="button"

@@ -6,7 +6,7 @@ import { ContextualHelp } from './ContextualHelp';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { Link, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import { 
   ShoppingBag, 
   Bookmark,
@@ -36,6 +36,8 @@ import { getDefaultSelectedModifiers } from '../utils/cart';
 import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDisplay, getWelcomeMessageForDisplay } from '../utils/categoryDefaults';
 import { CategoryProductImage } from './CategoryProductImage';
 import { CategoryIcon } from './CategoryIcon';
+import { PhoneField, TextField } from './ui/fields';
+import { readTrackedOrders, rememberTrackedOrder, trackingPath } from './OrderProgress';
 import { ShopEventIcon } from './ShopEventIcon';
 import { CustomerProductCard } from './CustomerProductCard';
 import { useToast } from './Toast';
@@ -59,6 +61,7 @@ import { getActiveProductPrice } from '../utils/productPricing';
 import { normalizeShopEventType, SHOP_EVENT_VISUALS } from '../utils/shopEventVisuals';
 import { useCustomerCart } from './useCustomerCart';
 import { isAgeRestrictedProduct } from '../utils/ageRestrictedProducts';
+import { lockBodyScroll } from '../utils/scrollLock';
 
 interface CustomerStorefrontProps {
   shopSlug: string;
@@ -312,13 +315,12 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   useEffect(() => {
     if (!hasAgeRestrictedProducts || ageVerified) return;
 
-    const previousOverflow = document.body.style.overflow;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    document.body.style.overflow = 'hidden';
+    const unlockScroll = lockBodyScroll();
     ageDialogRef.current?.focus();
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      unlockScroll();
       previousFocus?.focus();
     };
   }, [hasAgeRestrictedProducts, ageVerified]);
@@ -672,6 +674,15 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           : data.email_receipt_status === 'failed' ? 'failed' : 'not_requested',
         emailReceiptAddress,
       });
+      if (data.whatsapp_tracking_token) {
+        rememberTrackedOrder({
+          id: Number(data.order.id),
+          token: String(data.whatsapp_tracking_token),
+          shopSlug: shop.slug,
+          shopName: shop.name,
+          createdAt: String(data.order.created_at || new Date().toISOString()),
+        });
+      }
       trackOrderCreated(
         shop.id,
         Number(data.order.id),
@@ -679,7 +690,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         Number(data.order.total_amount || totalCartAmount),
       );
       setMessageCopied(false);
-      toast.success('Demande envoyée. La boutique doit l’accepter ou la refuser sous 2 heures.');
 
       // Update only local stock so the confirmation screen stays mounted.
       const confirmedQuantities = new Map<number, number>();
@@ -714,7 +724,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     return (
       <div className="not-found-page" role="main">
         <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-        <p className="text-sm font-black uppercase tracking-[0.18em] text-[var(--mt-green-hover)]">Erreur 404</p>
+        <p className="text-sm font-bold text-[var(--mt-green-hover)]">Erreur 404</p>
         <h1 className="text-2xl font-black text-slate-900">Cette page n’existe pas</h1>
         <p className="text-sm text-slate-600 mt-2 mb-6">
           La boutique ou l’adresse demandée n’existe pas ou a été déplacée.
@@ -761,6 +771,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     shop.theme_config?.advanced_css?.shadowIntensity === 'none' ? 'shadow-none' :
     shop.theme_config?.advanced_css?.shadowIntensity === 'strong' ? 'shadow-lg' :
     shop.theme_config?.advanced_css?.shadowIntensity === 'soft' ? 'shadow-md' : 'shadow-2xs';
+  // Dernière commande de moins de 24 h passée ici depuis cet appareil.
+  const recentTrackedOrder = readTrackedOrders().find((tracked) =>
+    tracked.shopSlug === shop.slug && Date.now() - Date.parse(tracked.createdAt) < 24 * 60 * 60 * 1000) ?? null;
   const glowStyle = shop.theme_config?.advanced_css?.accentGlow ? { boxShadow: `0 0 20px ${primaryColor}40` } : {};
 
   const openingHours = shop.opening_hours;
@@ -861,7 +874,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               <ShoppingBag className="h-4 w-4" />
               <span className="hidden sm:inline">{totalCartCount > 0 ? 'Mon panier' : 'Catalogue'}</span>
               {totalCartCount > 0 && (
-                <motion.span
+                <m.span
                   key={totalCartCount}
                   initial={prefersReducedMotion ? false : { scale: 0.6 }}
                   animate={{ scale: 1 }}
@@ -870,7 +883,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                   style={{ backgroundColor: primaryColor, color: primaryTextColor }}
                 >
                   {totalCartCount}
-                </motion.span>
+                </m.span>
               )}
             </button>
           </div>
@@ -897,7 +910,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         <div className="group relative min-h-44 overflow-hidden rounded-[1.35rem] border border-white/70 shadow-[0_18px_45px_rgba(33,23,18,0.12)]" style={{ backgroundColor: bannerUrl ? primaryColor : secondaryColor }}>
           {bannerUrl && <img src={bannerUrl} alt="" className="mt-hero-image absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />}
           {bannerUrl && <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/25 to-transparent" />}
-          {!bannerUrl && <div aria-hidden="true" className="absolute inset-0 flex items-center justify-center opacity-20" style={{ color: primaryColor }}><CategoryIcon category={shop.category} className="h-24 w-24" /></div>}
+          {!bannerUrl && <div aria-hidden="true" className="mt-photo-fallback absolute inset-0" style={{ color: primaryColor }}><CategoryIcon category={shop.category} className="absolute -right-5 -top-4 h-32 w-32 rotate-[-12deg] opacity-[0.13]" /></div>}
           <div className={`relative z-10 flex min-h-44 flex-col items-start justify-end gap-2 p-4 sm:flex-row sm:items-end sm:justify-between sm:gap-3 sm:p-6 ${bannerUrl ? 'text-white' : ''}`} style={!bannerUrl ? { color: primaryColor } : undefined}>
             <div className="max-w-2xl">
               <p className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${bannerUrl ? 'border border-white/25 bg-white/10 text-white/90' : 'border border-current/20 bg-white/70'}`}>
@@ -917,7 +930,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           <div className="flex justify-center sm:justify-start">
             <div className={`inline-flex max-w-full items-center gap-2 rounded-2xl border px-3 py-2 text-left text-xs font-extrabold shadow-[0_4px_14px_rgba(33,23,18,0.05)] sm:px-4 sm:py-2.5 sm:text-sm ${eventVisual.bannerClass}`}>
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${eventVisual.badgeClass}`}><ShopEventIcon type={normalizeShopEventType(shop.theme_config?.event_type)} className="h-4 w-4" /></span>
-              <span className="min-w-0"><span className="block text-xs uppercase tracking-[0.1em] opacity-70">{eventVisual.label}</span><span className="line-clamp-2">{eventBannerText}</span></span>
+              <span className="min-w-0"><span className="block text-xs opacity-70">{eventVisual.label}</span><span className="line-clamp-2">{eventBannerText}</span></span>
             </div>
           </div>
         </div>
@@ -925,6 +938,17 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
       {/* Main storefront content */}
       <main className="max-w-6xl mx-auto px-4 pt-3">
+        {/* Commande récente passée depuis cet appareil : accès direct au suivi, même sans compte. */}
+        {recentTrackedOrder && (
+          <Link
+            to={trackingPath(recentTrackedOrder)}
+            className="mb-3 flex min-h-14 items-center gap-3 rounded-2xl border border-[#cfe3d8] bg-[#f0f8f4] px-4 text-sm text-[var(--mt-green-deep)]"
+          >
+            <Clock className="h-5 w-5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1"><span className="font-extrabold">Commande n° {recentTrackedOrder.id}</span> · voir où elle en est</span>
+            <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+          </Link>
+        )}
 
         {/* Closed warning */}
         {!shop.is_open && (
@@ -977,7 +1001,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         <div className="mb-3 hidden flex-col items-start justify-between gap-2 border-b border-[#ded8ce] pb-3 sm:flex sm:flex-row sm:items-end sm:mb-4 sm:pb-4">
           <div className="relative min-w-0 pl-4">
             <span aria-hidden="true" className="absolute bottom-1 left-0 top-1 w-[3px] rounded-full bg-[var(--mt-orange-deep)]" />
-            <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-[#8c5a36]">{categoryDefaults.label} <span className="px-1 text-[#c5b6a3]">/</span> La sélection</p>
+            <p className="text-xs font-extrabold text-[#8c5a36]">{categoryDefaults.label} <span className="px-1 text-[#c5b6a3]">/</span> La sélection</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <h2 className="font-display text-2xl font-extrabold tracking-tight text-[var(--mt-gray-900)] sm:text-3xl">À découvrir</h2>
               <span className="rounded-full bg-[#eee9df] px-3 py-1 text-xs font-bold text-[var(--mt-gray-600)]">{products.length} {shop.category === 'food' || /rest/i.test(shop.category || '') ? 'plat' : 'article'}{products.length === 1 ? '' : 's'}</span>
@@ -1041,14 +1065,14 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         */}
         {hasAgeRestrictedProducts && !ageVerified && typeof document !== 'undefined' && createPortal(
           <AnimatePresence>
-            <motion.div
+            <m.div
               key="age-gate"
               initial={prefersReducedMotion ? false : { opacity: 0 }}
               animate={{ opacity: isAgeGateClosing ? 0 : 1 }}
               transition={{ duration: prefersReducedMotion ? 0 : 0.42, ease: 'easeOut' }}
               className="fixed inset-0 z-[120] grid place-items-center overflow-y-auto bg-[rgba(10,28,22,0.42)] p-4 backdrop-blur-[8px]"
             >
-              <motion.section
+              <m.section
                 initial={prefersReducedMotion ? false : { opacity: 0, y: 28, scale: 0.94 }}
                 animate={isAgeGateClosing ? { opacity: 0, y: -18, scale: 0.96 } : { opacity: 1, y: 0, scale: 1 }}
                 transition={{ duration: prefersReducedMotion ? 0 : 0.55, ease: [0.22, 1, 0.36, 1] }}
@@ -1081,7 +1105,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 className="age-verification-dialog relative w-full max-w-[420px] rounded-[28px] bg-white px-6 pb-6 pt-8 text-center text-[#12362d] shadow-[0_40px_80px_-24px_rgba(0,0,0,0.55)] focus:outline-none sm:px-7"
               >
                 <div className="relative mx-auto mb-[18px] grid h-[68px] w-[68px] place-items-center rounded-full bg-[#0f2e26] text-[22px] font-extrabold text-white">
-                  <motion.span
+                  <m.span
                     animate={prefersReducedMotion ? undefined : { opacity: [0.7, 0], scale: [0.92, 1.35] }}
                     transition={{ duration: 2.6, repeat: Infinity, ease: 'easeOut', delay: 0.8 }}
                     aria-hidden="true"
@@ -1089,7 +1113,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                   />
                   <AnimatePresence mode="wait" initial={false}>
                     {ageConfirmationComplete ? (
-                      <motion.span
+                      <m.span
                         key="age-confirmed"
                         initial={prefersReducedMotion ? false : { opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -1098,18 +1122,18 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         aria-label="Accès autorisé"
                       >
                         <CheckCircle2 className="h-[30px] w-[30px]" aria-hidden="true" />
-                      </motion.span>
+                      </m.span>
                     ) : (
-                      <motion.span key="age-label" exit={{ opacity: 0 }}>
+                      <m.span key="age-label" exit={{ opacity: 0 }}>
                         18+
-                      </motion.span>
+                      </m.span>
                     )}
                   </AnimatePresence>
                 </div>
 
                 <AnimatePresence mode="wait" initial={false}>
                   {ageDenied ? (
-                    <motion.div
+                    <m.div
                       key="age-denied"
                       initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -1122,7 +1146,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       <p id="age-gate-question" className="mb-[22px] text-base leading-6 text-[#5d6f69]">
                         Cette sélection n’est pas accessible aux moins de 18 ans. Vous pouvez continuer à explorer les autres boutiques.
                       </p>
-                      <motion.a
+                      <m.a
                         ref={ageExitButtonRef}
                         href="/"
                         whileHover={prefersReducedMotion ? undefined : { y: -2 }}
@@ -1130,13 +1154,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         className="flex h-14 w-full items-center justify-center rounded-2xl bg-[var(--mt-green-hover)] px-4 text-base font-semibold text-white shadow-[0_14px_26px_-14px_rgba(23,107,85,0.8)] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[var(--mt-green-hover)]"
                       >
                         Voir les autres boutiques
-                      </motion.a>
+                      </m.a>
                       <p className="mt-4 text-[13px] text-[#5d6f69]">
                         L’accès à cette sélection reste fermé pendant cette visite.
                       </p>
-                    </motion.div>
+                    </m.div>
                   ) : (
-                    <motion.div
+                    <m.div
                       key="age-question"
                       initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -1169,7 +1193,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         </p>
                       )}
 
-                      <motion.button
+                      <m.button
                         type="button"
                         onClick={() => void handleAgeVerification()}
                         disabled={isVerifyingAge || ageConfirmationComplete}
@@ -1178,8 +1202,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         className="relative flex h-14 w-full items-center justify-center overflow-hidden rounded-2xl bg-[var(--mt-green-hover)] px-4 text-[17px] font-semibold text-white shadow-[0_14px_26px_-14px_rgba(23,107,85,0.8)] transition-colors hover:bg-[#145d4a] focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[var(--mt-green-hover)] disabled:cursor-wait disabled:opacity-80"
                       >
                         {isVerifyingAge ? 'Vérification en cours…' : ageConfirmationComplete ? 'Accès autorisé' : 'Vérifier mon âge'}
-                      </motion.button>
-                      <motion.button
+                      </m.button>
+                      <m.button
                         type="button"
                         onClick={() => setAgeDenied(true)}
                         disabled={isVerifyingAge || ageConfirmationComplete}
@@ -1188,7 +1212,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         className="mt-2.5 flex h-14 w-full items-center justify-center rounded-2xl border-[1.5px] border-[#e2e6e3] bg-transparent px-4 text-[17px] font-semibold text-[#12362d] transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[var(--mt-green-hover)] disabled:cursor-wait disabled:opacity-60"
                       >
                         Non, j’ai moins de 18 ans
-                      </motion.button>
+                      </m.button>
 
                       <details className="mt-4 text-left text-sm text-[#5d6f69]">
                         <summary className="cursor-pointer list-none text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mt-green-hover)]">
@@ -1198,11 +1222,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                           Certains articles de cette boutique sont interdits aux mineurs. Votre réponse n’est pas enregistrée dans votre compte. Une pièce d’identité peut être demandée pour vérifier votre majorité.
                         </p>
                       </details>
-                    </motion.div>
+                    </m.div>
                   )}
                 </AnimatePresence>
-              </motion.section>
-            </motion.div>
+              </m.section>
+            </m.div>
           </AnimatePresence>,
           document.body,
         )}
@@ -1288,7 +1312,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
         <details className="mt-6 rounded-2xl border border-[#ded8ce] bg-[var(--mt-surface)] px-4 py-3 shadow-sm">
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
-            <div className="min-w-0"><p className="text-[11px] font-black uppercase tracking-wide text-slate-500">Informations pratiques</p><h3 className="mt-0.5 text-sm font-black text-slate-900">Horaires, remise & contact</h3></div>
+            <div className="min-w-0"><p className="text-xs font-bold text-slate-500">Informations pratiques</p><h3 className="mt-0.5 text-sm font-black text-slate-900">Horaires, remise & contact</h3></div>
             <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
           </summary>
           {hoursSummary && <div className="mt-4 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="flex items-center gap-2 text-sm font-bold text-slate-700"><Clock className="h-3.5 w-3.5 text-[var(--mt-green-primary)]" />Horaires</span><span className="text-right text-sm font-black text-slate-800">{hoursSummary}</span></div>}
@@ -1300,7 +1324,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
           <div className="sticky top-24 rounded-2xl border border-[#ded8ce] bg-[var(--mt-surface)] p-4 shadow-[0_12px_32px_rgba(33,23,18,0.08)]">
             <div className="flex items-center justify-between gap-3 border-b border-[#e5d9ca] pb-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.15em] text-[#8c5a36]">Votre sélection</p>
+                <p className="text-xs font-bold text-[#8c5a36]">Votre sélection</p>
                 <h2 className="mt-1 text-base font-black text-[var(--mt-gray-900)]">Ma commande</h2>
               </div>
               <span className="rounded-full bg-[#d1fae5] px-2.5 py-1 text-xs font-black text-[var(--mt-green-deep)]">{totalCartCount}</span>
@@ -1364,29 +1388,25 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
         createPortal(<div className="fixed inset-x-0 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 mx-auto w-full max-w-lg px-4 xl:hidden">
           <button
             id="floating-cart-btn"
+            type="button"
             onClick={() => setIsCartOpen(true)}
-            className="w-full text-white p-4 rounded-2xl shadow-[0_10px_25px_rgba(32,23,18,0.2)] flex items-center justify-between gap-3 active:scale-[0.97] transition-transform border-[2px] border-[var(--mt-gray-900)]"
-            style={{ background: 'linear-gradient(135deg, #087F62 0%, #F97316 100%)', ...glowStyle }}
+            aria-label={`Voir le panier : ${totalCartCount} article${totalCartCount > 1 ? 's' : ''}, ${formatFCFA(totalCartAmount)}`}
+            className="mt-sheet-enter flex min-h-16 w-full items-center justify-between gap-3 rounded-2xl bg-[var(--mt-green-deep)] py-2.5 pl-2.5 pr-2.5 text-white shadow-[0_14px_30px_-10px_rgba(16,62,50,0.7)] transition-transform active:scale-[0.98]"
+            style={glowStyle}
           >
-            <div className="flex items-center gap-3">
-              <div 
-                className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm text-white shadow-sm"
-                style={{ backgroundColor: primaryColor }}
-              >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-base font-black text-white" style={{ backgroundColor: primaryColor }}>
                 {totalCartCount}
-              </div>
-              <div className="text-left">
-                <span className="text-xs text-white/80 block">Total des articles</span>
-                <span className="font-black text-base sm:text-lg text-white">
-                  {formatFCFA(totalCartAmount)}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold bg-white/15 hover:bg-white/25 px-3.5 py-2 rounded-xl transition-colors">
-              <span>Commander</span>
-              <ArrowRight className="w-4 h-4" />
-            </div>
+              </span>
+              <span className="min-w-0 text-left">
+                <span className="block text-xs font-semibold text-white/70">{totalCartCount > 1 ? `${totalCartCount} articles` : '1 article'}</span>
+                <span className="block truncate text-lg font-black tabular-nums">{formatFCFA(totalCartAmount)}</span>
+              </span>
+            </span>
+            <span className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl bg-white px-4 text-sm font-extrabold text-[var(--mt-green-deep)]">
+              Voir le panier
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </span>
           </button>
         </div>, document.body)
       )}
@@ -1398,10 +1418,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             role="dialog"
             aria-modal="true"
             aria-labelledby="checkout-dialog-title"
-            className="bg-[#FFFDF9] w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-[0_18px_40px_rgba(34,32,27,0.18)] overflow-hidden animate-in slide-in-from-bottom-6 duration-200 border-[3px] border-[var(--mt-gray-900)] sm:border"
+            className="bg-[#FFFDF9] w-full sm:max-w-lg rounded-t-[1.75rem] sm:rounded-3xl max-h-[92dvh] flex flex-col shadow-[0_-12px_40px_rgba(34,32,27,0.22)] overflow-hidden animate-in slide-in-from-bottom-6 duration-200"
           >
             {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b-[2px] border-[#E4D9C8] bg-[#FFF5EE] flex items-center justify-between">
+            <div className="relative px-4 pb-3 pt-4 sm:p-5 border-b border-[#EDE4D6] bg-[#FFFDF9] flex items-center justify-between">
+              <div aria-hidden="true" className="absolute left-1/2 top-1.5 h-1.5 w-10 -translate-x-1/2 rounded-full bg-slate-300 sm:hidden" />
               <div className="flex items-center gap-2.5">
                 <div 
                   className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold"
@@ -1411,21 +1432,21 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 id="checkout-dialog-title" className="font-black text-slate-900 text-base">Finaliser ma commande</h3>
+                    <h3 id="checkout-dialog-title" className="font-black text-slate-900 text-base">{orderSuccess ? 'Demande envoyée' : 'Finaliser ma commande'}</h3>
                     <ContextualHelp label="Finaliser ma commande">
                       Votre demande ne vaut pas paiement. La boutique doit confirmer la commande ; contactez-la pour convenir de la remise et du règlement.
                     </ContextualHelp>
                   </div>
-                  <p className="text-xs text-slate-500">{totalCartCount} article(s) sélectionné(s)</p>
+                  <p className="text-xs text-slate-500">{totalCartCount > 1 ? `${totalCartCount} articles` : '1 article'} · {formatFCFA(totalCartAmount)}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsCartOpen(false)}
                 aria-label="Fermer le récapitulatif de commande"
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors"
+                className="w-11 h-11 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1437,16 +1458,11 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                   <div className="success-mark w-16 h-16 bg-[#E3F1EA] text-[var(--mt-green-primary)] rounded-full flex items-center justify-center mx-auto mb-4 ring-8 ring-[#F4F8F5]">
                     <CheckCircle2 className="w-9 h-9" strokeWidth={2.4} />
                   </div>
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-[#8A948E]">Récapitulatif de commande</p>
-                  <h4 className="mt-1 text-xl font-extrabold text-[var(--mt-green-deep)]">
-                    Demande enregistrée
+                  <h4 className="text-xl font-extrabold text-[var(--mt-green-deep)]">
+                    Demande n° {orderSuccess.orderId} enregistrée
                   </h4>
-                  <div className="mt-2 inline-flex items-baseline gap-1.5 rounded-xl border border-[#E4D9C8] bg-[var(--mt-gray-50)] px-3 py-1.5">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#8A948E]">N°</span>
-                    <span className="font-mono text-sm font-black text-[var(--mt-green-deep)]">{orderSuccess.orderId}</span>
-                  </div>
-                  <p className="mb-4 mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#E3F1EA] px-3 py-1.5 text-xs font-semibold text-[#0F6B54]">
-                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Demande en attente · articles réservés pendant 2 heures
+                  <p className="mx-auto mb-5 mt-2 max-w-sm text-sm leading-6 text-slate-600">
+                    Vos articles sont réservés 2 h, le temps que la boutique accepte votre demande. Envoyez-lui votre récapitulatif sur WhatsApp pour convenir de la remise et du règlement.
                   </p>
                   {orderSuccess.emailReceiptStatus !== 'not_requested' && (
                     <p
@@ -1462,10 +1478,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         : `La demande est enregistrée, mais l’envoi du récapitulatif à ${orderSuccess.emailReceiptAddress} a échoué. Vous pouvez toujours utiliser WhatsApp.`}
                     </p>
                   )}
-                  <p className="text-sm text-slate-600 max-w-sm mx-auto mb-6 leading-relaxed">
-                    La boutique doit confirmer la disponibilité sous 2 heures. Envoyez aussi votre récapitulatif sur WhatsApp pour convenir directement des détails et du règlement.
-                  </p>
-
                   <a
                     href={orderSuccess.whatsappUrl}
                     target="_blank"
@@ -1481,14 +1493,22 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         }).catch(() => undefined);
                       }
                     }}
-                    className="w-full py-4 px-6 rounded-2xl bg-[var(--mt-green-primary)] hover:bg-[var(--mt-green-hover)] text-white font-black text-base shadow-lg hover:shadow-[var(--mt-green-primary)]/25 flex items-center justify-center gap-3 transition-[background-color,box-shadow,transform]"
+                    className="w-full min-h-14 py-3.5 px-6 rounded-2xl bg-[#128C4B] hover:bg-[#0f7a41] text-white font-black text-base shadow-[0_10px_24px_-10px_rgba(18,140,75,0.8)] flex items-center justify-center gap-3 transition-[background-color,box-shadow,transform] active:scale-[0.98]"
                   >
                     <Phone className="w-5 h-5 fill-white" />
-                    <span>Contacter le commerçant sur WhatsApp</span>
+                    <span>Envoyer le récapitulatif sur WhatsApp</span>
                   </a>
-                  <p className="mt-2 text-sm leading-5 text-slate-500">
-                    La boutique verra si vous cliquez sur ce bouton. MaTable ne peut pas confirmer l’ouverture de WhatsApp ni l’envoi du message.
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    La boutique voit que vous avez ouvert WhatsApp, pas si le message est parti.
                   </p>
+                  {orderSuccess.whatsappTrackingToken && (
+                    <Link
+                      to={trackingPath({ id: orderSuccess.orderId, token: orderSuccess.whatsappTrackingToken })}
+                      className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-[#cfe3d8] bg-white px-4 text-sm font-extrabold text-[var(--mt-green-deep)]"
+                    >
+                      Suivre ma commande
+                    </Link>
+                  )}
 
                   <button
                     type="button"
@@ -1500,7 +1520,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         toast.error('Impossible de copier le message.');
                       }
                     }}
-                    className="mt-3 text-xs text-slate-600 hover:text-slate-900 font-semibold"
+                    className="mt-3 min-h-11 px-3 text-sm text-slate-700 hover:text-slate-900 font-semibold underline underline-offset-4"
                   >
                     {messageCopied ? 'Message copié' : 'Copier le message si WhatsApp ne s’ouvre pas'}
                   </button>
@@ -1511,18 +1531,17 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       setOrderSuccess(null);
                       setIsCartOpen(false);
                     }}
-                    className="mt-4 text-xs text-slate-500 hover:text-slate-800 font-semibold"
+                    type="button"
+                    className="mt-1 block w-full min-h-11 text-sm text-slate-500 hover:text-slate-800 font-semibold"
                   >
-                    Fermer et retourner au catalogue
+                    Retour au catalogue
                   </button>
                 </div>
               ) : (
                 <>
                   {/* Selected items list */}
                   <div className="space-y-2.5">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
-                      Détails de vos articles
-                    </span>
+                    <h4 className="text-sm font-extrabold text-slate-900">Votre panier</h4>
                     {cart.map((item, idx) => (
                       <div 
                         key={idx}
@@ -1536,24 +1555,24 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                           className="h-12 w-12 shrink-0 rounded-lg"
                         />
                         <div className="min-w-0 flex-1">
-                          <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
+                          <p className="line-clamp-2 font-bold text-sm leading-5 text-slate-900">
                             {item.product.title}
-                          </h4>
+                          </p>
                           <div className="flex flex-wrap gap-1 text-sm text-slate-500">
                             {item.selected_size && (
-                              <span className="font-bold text-slate-700 bg-white px-1.5 py-0.2 rounded border border-slate-200">
-                                T: {item.selected_size}
-                              </span>
+                              <span className="text-slate-600">Taille {item.selected_size}</span>
                             )}
+                            {item.selected_size && item.selected_color && <span aria-hidden="true" className="text-slate-400">·</span>}
                             {item.selected_color && (
-                              <span className="text-slate-600">({item.selected_color})</span>
+                              <span className="text-slate-600">{item.selected_color}</span>
                             )}
                             {item.selected_modifiers && item.selected_modifiers.length > 0 && (
                               <span className="text-amber-700">+{item.selected_modifiers.join(', ')}</span>
                             )}
                           </div>
-                          <span className="text-xs font-semibold text-slate-600 block mt-0.5">
-                            {formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers))} x {item.quantity} = {formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers) * item.quantity)}
+                          <span className="mt-0.5 block text-sm font-black tabular-nums text-slate-900">
+                            {formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers) * item.quantity)}
+                            {item.quantity > 1 && <span className="ml-1 text-xs font-semibold text-slate-500">({formatFCFA(getProductUnitPrice(item.product, item.selected_modifiers))} l’unité)</span>}
                           </span>
                         </div>
 
@@ -1562,19 +1581,19 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                             type="button"
                             onClick={() => updateQuantity(idx, -1)}
                             aria-label={`Diminuer la quantité de ${item.product.title}`}
-                            className="w-7 h-7 rounded-md bg-white border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-100"
+                            className="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95"
                           >
-                            <Minus className="w-3 h-3" />
+                            <Minus className="w-3.5 h-3.5" />
                           </button>
-                          <span className="font-extrabold text-xs px-2 text-slate-900">{item.quantity}</span>
+                          <span className="min-w-6 text-center font-extrabold text-sm tabular-nums text-slate-900" aria-live="polite">{item.quantity}</span>
                           <button
                             type="button"
                             onClick={() => updateQuantity(idx, 1)}
                             disabled={item.quantity >= item.product.stock}
                             aria-label={`Augmenter la quantité de ${item.product.title}`}
-                            className="w-7 h-7 rounded-md bg-white border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30"
+                            className="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 disabled:opacity-30"
                           >
-                            <Plus className="w-3 h-3" />
+                            <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
@@ -1585,7 +1604,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-700">Compte vérifié</p>
+                          <p className="text-xs font-semibold text-emerald-800">Connecté en tant que</p>
                           <p className="mt-1 text-sm font-black text-slate-900">{authenticatedCustomer.name}</p>
                           <p className="text-sm text-slate-600">{authenticatedCustomer.email}</p>
                         </div>
@@ -1636,80 +1655,53 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       <label htmlFor="website">Site web</label>
                       <input id="website" name="website" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
                     </div>
-                    <span className="text-xs font-black uppercase tracking-[0.16em] text-[#6B6355] block">
-                      Vos coordonnées pour la commande
-                    </span>
+                    <h4 className="text-sm font-extrabold text-slate-900">Vos coordonnées</h4>
 
-                    {/* Customer Name */}
-                    <div>
-                      <label htmlFor="checkout-customer-name" className="block text-xs font-bold text-slate-700 mb-1">
-                        Votre Nom complet *
-                      </label>
-                      <input 
-                        id="checkout-customer-name"
-                        type="text"
-                        required
-                        placeholder="Ex: Kouassi Ange, Fatou Traoré..."
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                        className="w-full text-sm px-3.5 py-2.5 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[var(--mt-orange-deep)] bg-white"
-                      />
-                    </div>
+                    <TextField
+                      id="checkout-customer-name"
+                      label="Nom complet"
+                      required
+                      autoComplete="name"
+                      placeholder="Ex. : Fatou Traoré"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                    />
 
-                    {/* Customer Phone */}
-                    <div>
-                      <label htmlFor="checkout-customer-phone" className="block text-xs font-bold text-slate-700 mb-1">
-                        Numéro de Téléphone (WhatsApp) *
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3.5 top-2.5 text-sm font-semibold text-slate-400">
-                          CI +225
-                        </span>
-                        <input 
-                          id="checkout-customer-phone"
-                          type="tel"
-                          required
-                          placeholder="07 00 11 22 33"
-                          value={customerPhone}
-                          onChange={(e) => setCustomerPhone(e.target.value)}
-                          className="w-full text-sm pl-20 pr-3.5 py-2.5 rounded-xl border-[2px] border-[#E4D9C8] focus:outline-none focus:ring-2 focus:ring-[var(--mt-orange-deep)] bg-white font-mono"
-                        />
-                      </div>
-                    </div>
+                    <PhoneField
+                      id="checkout-customer-phone"
+                      label="Numéro WhatsApp"
+                      required
+                      hint="La boutique vous répondra sur ce numéro."
+                      value={customerPhone}
+                      onValueChange={setCustomerPhone}
+                    />
 
                     <details className="rounded-xl border border-[#E4D9C8] bg-white p-3">
-                      <summary className="cursor-pointer text-sm font-bold text-slate-700">Ajouter un détail (facultatif)</summary>
+                      <summary className="cursor-pointer text-sm font-bold text-slate-700">Recevoir le récapitulatif par e-mail (facultatif)</summary>
                       <div className="mt-3 space-y-3">
                         {authenticatedCustomer ? (
                           <p className="rounded-lg border border-[#E4EDE8] bg-[#F4F8F5] px-3 py-2 text-sm leading-5 text-[#47534b]">
                             Le récapitulatif de commande sera envoyé à l’adresse de votre compte : <strong>{authenticatedCustomer.email}</strong>.
                           </p>
                         ) : (
-                          <div>
-                            <label htmlFor="checkout-customer-email" className="mb-1 block text-xs font-bold text-slate-700">
-                              Adresse e-mail pour le récapitulatif (facultatif)
-                            </label>
-                            <input
-                              id="checkout-customer-email"
-                              type="email"
-                              autoComplete="email"
-                              maxLength={254}
-                              placeholder="vous@exemple.ci"
-                              value={customerEmail}
-                              onChange={(event) => setCustomerEmail(event.target.value)}
-                              className="w-full rounded-xl border-[2px] border-[#E4D9C8] bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--mt-orange-deep)]"
-                            />
-                            <p className="mt-1 text-sm leading-4 text-slate-500">
-                              Utilisée uniquement pour vous envoyer le récapitulatif de cette commande.
-                            </p>
-                          </div>
+                          <TextField
+                            id="checkout-customer-email"
+                            label="Adresse e-mail"
+                            type="email"
+                            autoComplete="email"
+                            maxLength={254}
+                            placeholder="vous@exemple.ci"
+                            value={customerEmail}
+                            onChange={(event) => setCustomerEmail(event.target.value)}
+                            hint="Utilisée uniquement pour vous envoyer le récapitulatif de cette commande."
+                          />
                         )}
                       </div>
                     </details>
 
                     {/* Payment method */}
                     <div>
-                    <p className="mb-1 block text-xs font-bold text-slate-700">Mode de règlement souhaité</p>
+                    <h4 className="mb-2 text-sm font-extrabold text-slate-900">Comment souhaitez-vous régler ?</h4>
                     <div role="radiogroup" aria-label="Mode de règlement souhaité" className="grid grid-cols-2 gap-2">
                       {paymentPreferenceOptions.map((option) => {
                         const PaymentIcon = paymentMethodIcons[option.id];
@@ -1722,8 +1714,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                           onClick={() => setPaymentMethod(option.id)}
                           className={`min-h-14 rounded-xl border p-2 text-center font-bold text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 ${
                             paymentMethod === option.id
-                              ? 'bg-slate-900 border-slate-900 text-white'
-                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                              ? 'bg-[var(--mt-green-deep)] border-[var(--mt-green-deep)] text-white shadow-sm'
+                              : 'bg-white border-[#E4D9C8] text-slate-700 hover:bg-slate-50'
                           }`}
                         >
                           <PaymentIcon className="mx-auto mb-0.5 h-4 w-4" aria-hidden />
@@ -1732,46 +1724,35 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         );
                       })}
                     </div>
-                    <p className="mt-2 text-sm font-semibold text-slate-700">{paymentPreferenceOptions.find((option) => option.id === paymentMethod)?.explanation}</p>
-                    <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 p-2 text-sm leading-4 text-amber-950">
-                      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      Ce choix est une préférence uniquement : aucun paiement en ligne n’est effectué ni confirmé par MaTable.
+                    <p className="mt-2 flex items-start gap-1.5 text-sm leading-5 text-slate-600">
+                      <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+                      <span>{paymentPreferenceOptions.find((option) => option.id === paymentMethod)?.explanation} Aucun paiement n’est effectué sur MaTable.</span>
                     </p>
                     </div>
 
                     {/* Total & Submit Button */}
-                    <div className="pt-4 border-t border-slate-200">
-                      <div className="flex flex-col mb-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-bold text-slate-700">Articles :</span>
-                          <span className="text-sm font-black text-slate-900">
-                            {formatFCFA(totalCartAmount)}
-                          </span>
-                        </div>
-                        <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2">
-                          <span className="text-sm font-black text-slate-900">Total des articles :</span>
-                          <span className="text-xl font-black text-slate-900">
-                            {formatFCFA(totalCartAmount)}
-                          </span>
-                        </div>
-                        <span className="text-xs text-slate-400 mt-0.5">
-                          Le règlement est à convenir directement avec la boutique sur WhatsApp.
+                    {/* Le total et l’envoi restent visibles en bas du tiroir pendant la saisie. */}
+                    <div className="sticky bottom-[-1rem] z-10 -mx-4 border-t border-[#EDE4D6] bg-[#FFFDF9]/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:bottom-[-1.25rem] sm:-mx-5 sm:px-5">
+                      <div className="mb-3 flex items-baseline justify-between">
+                        <span className="text-sm font-bold text-slate-700">Total</span>
+                        <span className="text-xl font-black tabular-nums text-slate-900">
+                          {formatFCFA(totalCartAmount)}
                         </span>
                       </div>
 
-                      <motion.button
+                      <m.button
                         id="submit-order-whatsapp-btn"
                         type="submit"
                         disabled={isSubmitting || !shop.is_open}
                         whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
                         transition={{ duration: 0.15 }}
-                        className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base shadow-lg hover:shadow-emerald-600/30 flex items-center justify-center gap-2.5 transition-[background-color,box-shadow,transform,opacity] disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full min-h-14 py-3.5 px-6 rounded-2xl bg-[#128C4B] hover:bg-[#0f7a41] text-white font-black text-base shadow-[0_10px_24px_-10px_rgba(18,140,75,0.8)] flex items-center justify-center gap-2.5 transition-[background-color,box-shadow,transform,opacity] disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Phone className="w-5 h-5 fill-white" />
                         <span>{isSubmitting ? 'Préparation...' : 'Envoyer sur WhatsApp'}</span>
-                      </motion.button>
-                      <p className="text-center text-sm text-slate-400 mt-2">
-                        Enregistre la demande et réserve le stock. Vous pourrez ensuite ouvrir WhatsApp pour confirmer les détails avec la boutique.
+                      </m.button>
+                      <p className="mt-2 text-center text-xs leading-5 text-slate-500">
+                        Vos articles sont réservés 2 h. La boutique confirme ensuite avec vous sur WhatsApp.
                       </p>
                     </div>
                   </form>

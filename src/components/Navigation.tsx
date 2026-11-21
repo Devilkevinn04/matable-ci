@@ -105,7 +105,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             <img src="/brand-kit/monogram.svg" alt="" className="h-10 w-10 shrink-0" />
             <span className="min-w-0">
               <span className="block whitespace-nowrap text-xl font-black leading-5 tracking-tight text-[var(--mt-green-deep)]">MaTable</span>
-              <span className="mt-1 block whitespace-nowrap text-xs font-extrabold tracking-[0.09em] text-[#587067]">VOS COMMERCES, ICI.</span>
+              <span className="mt-0.5 block whitespace-nowrap text-xs font-semibold text-[#587067]">Vos commerces, ici.</span>
             </span>
           </Link>
         </div>
@@ -191,7 +191,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 <div className="relative isolate overflow-hidden rounded-[1.15rem] bg-gradient-to-br from-[var(--mt-green-deep)] via-[var(--mt-green-hover)] to-[#36806a] p-4 text-white">
                   <span aria-hidden="true" className="absolute -right-6 -top-10 -z-10 h-32 w-32 rounded-full border-[18px] border-white/10" />
                   <span aria-hidden="true" className="absolute right-9 top-7 -z-10 h-12 w-12 rounded-full bg-[#efc781]/25 blur-xl" />
-                  <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.18em] text-[#f3dcae]">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#f3dcae]">
                     <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> {isMerchantPlansPage ? 'Espace commerçant' : 'MaTable'}
                   </div>
                   <p className="mt-2 max-w-[18rem] text-lg font-black leading-tight">{isMerchantPlansPage ? 'Développez votre commerce, étape par étape.' : 'Votre prochain coup de cœur est tout près.'}</p>

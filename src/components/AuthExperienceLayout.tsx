@@ -32,7 +32,7 @@ export const AuthAudienceSwitcher: React.FC<{
       className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'customer' ? 'bg-white text-[var(--mt-green-deep)] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
     >
       <UserRound className="h-4 w-4" aria-hidden="true" />
-      Connexion client
+      <span><span className="sr-only">Connexion </span>Client</span>
     </button>
     <button
       type="button"
@@ -41,7 +41,7 @@ export const AuthAudienceSwitcher: React.FC<{
       className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'merchant' ? 'bg-white text-[var(--mt-green-deep)] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
     >
       <Store className="h-4 w-4" aria-hidden="true" />
-      Connexion marchand
+      <span><span className="sr-only">Connexion </span>Commerçant</span>
     </button>
   </nav>
 );
@@ -67,8 +67,8 @@ export const BrandMark: React.FC<{ className?: string }> = ({ className = '' }) 
 export const MerchantShopPreview: React.FC<{ name: string; category: string; city: string }> = ({ name, category, city }) => (
   <div className="min-w-0 flex-1">
     <div className="flex items-center justify-between gap-2">
-      <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#f0ba80]">Votre aperçu MaTable</p>
-      <span className="inline-flex items-center gap-1 rounded-full bg-[#c1f1d4]/15 px-2 py-1 text-[8px] font-bold text-[#c1f1d4]"><span className="h-1.5 w-1.5 rounded-full bg-[#86efac]" /> EN DIRECT</span>
+      <p className="text-xs font-bold text-[#f0ba80]">Votre aperçu MaTable</p>
+      <span className="inline-flex items-center gap-1 rounded-full bg-[#c1f1d4]/15 px-2 py-1 text-[8px] font-bold text-[#c1f1d4]"><span className="h-1.5 w-1.5 rounded-full bg-[#86efac]" /> En direct</span>
     </div>
     <p className="mt-2 truncate font-display text-lg font-extrabold leading-tight text-white sm:text-xl">{name.trim() || 'Nom de votre boutique'}</p>
     <div className="mt-2 flex flex-wrap gap-1.5">
@@ -120,7 +120,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
         </div>
 
         <div className="auth-experience-copy relative z-10 mt-4 max-w-[460px] sm:mt-6 lg:mt-14">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#f0ba80] sm:text-xs">{eyebrow}</p>
+          <p className="hidden text-xs font-bold text-[#f0ba80] sm:block sm:text-xs">{eyebrow}</p>
           <h1 className="mt-2 text-[27px] font-extrabold leading-[1.07] tracking-[-0.035em] sm:mt-3 sm:text-3xl lg:text-[48px]">{title}</h1>
           <p className="mt-3 max-w-[410px] text-sm leading-5 text-white/80 sm:mt-4 sm:text-base sm:leading-6">{description}</p>
         </div>
@@ -137,7 +137,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
                 <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#16483a] bg-white text-[var(--mt-green-primary)] sm:h-7 sm:w-7"><BadgeCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden="true" /></span>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[9px] font-black uppercase tracking-[0.13em] text-[#f0ba80] sm:text-[10px]">Une vitrine à votre image</p>
+                <p className="text-xs font-bold text-[#f0ba80] sm:text-[10px]">Une vitrine à votre image</p>
                 <p className="mt-1 font-display text-base font-extrabold leading-tight sm:text-lg">Votre quartier, vos clients.</p>
                 <div className="mt-2 flex flex-wrap gap-1.5 sm:mt-3 sm:gap-2">
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-1 text-[9px] font-semibold text-white/85 sm:px-2.5 sm:text-[10px]"><MapPin className="h-3 w-3 text-[#f0ba80]" aria-hidden="true" /> Près de vous</span>

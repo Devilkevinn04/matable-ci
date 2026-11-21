@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Copy, CreditCard, Download, RefreshCw, Store, Users, Wallet } from 'lucide-react';
 import { buildAmbassadorReferralUrl, isCommissionPayableForMonth } from '../utils/ambassadors';
 import { stringifyCsv } from '../utils/csv';
+import { askReason, confirmAction } from './ui/ConfirmSheet';
 
 interface Ambassador {
   id: string; name: string; code: string; email: string | null; phone: string | null; commission_rate: number; active: number;
@@ -105,7 +106,12 @@ export function AdminAmbassadors() {
   const saveProfile = async (event: React.FormEvent, ambassador: Ambassador) => {
     event.preventDefault();
     const emailChanged = profileDraft.email.trim().toLowerCase() !== (ambassador.email || '').toLowerCase();
-    if (emailChanged && !window.confirm('Changer l’e-mail de connexion révoquera les sessions et liens en attente. L’ambassadeur devra recevoir un nouveau lien d’activation. Continuer ?')) return;
+    if (emailChanged && !(await confirmAction({
+      title: 'Changer l’e-mail de connexion ?',
+      message: 'Les sessions et liens en attente sont révoqués. L’ambassadeur devra recevoir un nouveau lien d’activation.',
+      confirmLabel: 'Changer l’e-mail',
+      tone: 'danger',
+    }))) return;
     if (await perform(`/${ambassador.id}`, 'PATCH', profileDraft)) {
       setEditingAmbassadorId(null);
       setNotice(emailChanged ? 'Profil mis à jour. Créez un nouveau lien pour le nouvel e-mail.' : 'Profil ambassadeur mis à jour.');
@@ -127,7 +133,11 @@ export function AdminAmbassadors() {
     const reason = reasons[shopId]?.trim() || '';
     if (operation === 'paid' && !reference.trim()) { setError('Renseignez la référence du versement.'); return; }
     if (['approve', 'reject'].includes(operation) && reason.length < 3) { setError('Documentez le contrôle en 3 à 500 caractères avant de valider ou refuser la commission.'); return; }
-    if (!window.confirm(operation === 'paid' ? 'Confirmer que le versement a déjà été effectué ?' : operation === 'approve' ? 'Confirmer que le paiement, la publication et les coordonnées du commerçant ont été vérifiés ?' : 'Annuler définitivement cette commission ?')) return;
+    if (!(await confirmAction(operation === 'paid'
+      ? { title: 'Le versement a-t-il été effectué ?', message: 'La commission sera marquée comme payée avec la référence saisie.', confirmLabel: 'Marquer comme payée' }
+      : operation === 'approve'
+        ? { title: 'Valider cette commission ?', message: 'Confirmez avoir vérifié le paiement, la publication et les coordonnées du commerçant.', confirmLabel: 'Valider la commission' }
+        : { title: 'Annuler cette commission ?', message: 'Cette annulation est définitive.', confirmLabel: 'Annuler la commission', tone: 'danger' }))) return;
     if (await perform(`/commissions/${shopId}/${operation}`, 'POST', { reference, reason })) {
       setReferences((current) => ({ ...current, [shopId]: '' }));
       setReasons((current) => ({ ...current, [shopId]: '' }));
@@ -152,14 +162,22 @@ export function AdminAmbassadors() {
     finally { setBusy(false); }
   };
   const processApplication = async (application: AmbassadorApplication, action: 'approve' | 'reject') => {
-    const reason = action === 'reject'
-      ? window.prompt('Motif du refus (obligatoire, 3 à 500 caractères) :')?.trim() || ''
-      : '';
-    if (action === 'reject' && reason.length < 3) {
-      if (reason) setError('Le motif de refus doit contenir au moins 3 caractères.');
-      return;
-    }
-    if (action === 'approve' && !window.confirm(`Approuver ${application.name} ? Un compte et un code ambassadeur seront créés, puis un lien d’activation sera envoyé à ${application.email}.`)) return;
+    let reason = '';
+    if (action === 'reject') {
+      const answer = await askReason({
+        title: `Refuser la candidature de ${application.name} ?`,
+        message: 'Le motif est conservé avec la candidature.',
+        confirmLabel: 'Refuser la candidature',
+        tone: 'danger',
+        suggestions: ['Profil incomplet', 'Zone déjà couverte', 'Informations non vérifiables'],
+      });
+      if (answer === null) return;
+      reason = answer;
+    } else if (!(await confirmAction({
+      title: `Approuver ${application.name} ?`,
+      message: `Un compte et un code ambassadeur sont créés, puis un lien d’activation est envoyé à ${application.email}.`,
+      confirmLabel: 'Approuver',
+    }))) return;
 
     setBusy(true); setError(''); setNotice('');
     try {
@@ -194,12 +212,11 @@ export function AdminAmbassadors() {
     const reason = withdrawalReasons[withdrawal.id]?.trim() || '';
     if (action === 'paid' && !reference) { setError('Saisissez la référence du transfert effectué.'); return; }
     if (action === 'reject' && reason.length < 3) { setError('Indiquez le motif du refus.'); return; }
-    const confirmation = action === 'paid'
-      ? 'Confirmer que le transfert a bien été effectué ?'
+    if (!(await confirmAction(action === 'paid'
+      ? { title: 'Le transfert a-t-il été effectué ?', message: 'Le retrait sera marqué comme payé avec la référence saisie.', confirmLabel: 'Marquer comme payé' }
       : action === 'approve'
-        ? 'Valider cette demande de retrait ?'
-        : 'Refuser le retrait et rendre le solde disponible à nouveau ?';
-    if (!window.confirm(confirmation)) return;
+        ? { title: 'Valider ce retrait ?', confirmLabel: 'Valider le retrait' }
+        : { title: 'Refuser ce retrait ?', message: 'Le montant redevient disponible sur le solde de l’ambassadeur.', confirmLabel: 'Refuser le retrait', tone: 'danger' }))) return;
     if (await perform(`/withdrawals/${withdrawal.id}/${action}`, 'POST', { reference, reason })) {
       setWithdrawalReferences((current) => ({ ...current, [withdrawal.id]: '' }));
       setWithdrawalReasons((current) => ({ ...current, [withdrawal.id]: '' }));
@@ -352,9 +369,9 @@ export function AdminAmbassadors() {
       <div className="flex flex-wrap items-center justify-between gap-3"><div className="min-w-0"><strong className="text-sm text-slate-900">{ambassador.name}</strong><span className="ml-2 text-xs text-slate-500">{ambassador.code}</span><p className="mt-1 text-xs font-semibold text-emerald-900">{accessLabel}</p></div><div className="flex flex-wrap gap-2"><button disabled={busy} type="button" onClick={() => {
         setEditingAmbassadorId(ambassador.id);
         setProfileDraft({ name: ambassador.name, email: ambassador.email || '', phone: ambassador.phone || '' });
-      }} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold">Modifier le profil</button><button disabled={busy} type="button" onClick={() => {
+      }} className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-bold">Modifier le profil</button><button disabled={busy} type="button" onClick={async () => {
         const active = !ambassador.active;
-        if (!active && !window.confirm('Suspendre ce compte ? Toutes ses sessions seront révoquées et les liens d’activation en attente seront annulés.')) return;
+        if (!active && !(await confirmAction({ title: 'Suspendre ce compte ?', message: 'Toutes ses sessions sont révoquées et les liens d’activation en attente annulés.', confirmLabel: 'Suspendre le compte', tone: 'danger' }))) return;
         void perform(`/${ambassador.id}`, 'PATCH', { active }).then((success) => {
           if (success) setNotice(active ? 'Compte ambassadeur réactivé.' : 'Compte suspendu ; ses accès ont été révoqués.');
         });

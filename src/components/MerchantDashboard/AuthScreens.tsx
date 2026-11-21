@@ -1,5 +1,5 @@
 import React from 'react';
-import { Store, Phone, Lock, ChevronRight, UserPlus, Eye, EyeOff, AlertTriangle, X, Mail } from 'lucide-react';
+import { Store,   ChevronRight, UserPlus, Eye, EyeOff, AlertTriangle, X, Mail } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { ShopCategory } from '../../types';
 import { MerchantState } from './useMerchant';
@@ -7,6 +7,7 @@ import { CATEGORY_DEFAULTS, SHOP_CATEGORIES } from '../../utils/categoryDefaults
 import { ABIDJAN_COMMUNES } from '../../utils/abidjanCommunes';
 import { TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS, TRIAL_PROMOTION_SLOTS_PER_TIER } from '../../utils/subscriptionFeatures';
 import { AuthAudienceSwitcher, AuthExperienceLayout } from '../AuthExperienceLayout';
+import { CodeField, PhoneField, TextField } from '../ui/fields';
 import { MerchantRegistrationScreen } from './MerchantRegistrationScreen';
 import { Link } from 'react-router-dom';
 
@@ -26,8 +27,8 @@ const shopCategoryOptions: { value: ShopCategory; label: string; icon: string }[
 export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirectory, onCustomerLogin }) => {
   const {
     isSessionLoading, currentShop, phoneInput, setPhoneInput, pinInput, setPinInput,
-    showPinInput,
-    setShowPinInput, authError, authLoading,
+
+    authError, authLoading,
     pendingMfaChallenge, mfaCode, setMfaCode, setPendingMfaChallenge,
     emailSetupRequired, emailSetupAddress, setEmailSetupAddress,
     emailSetupCode, setEmailSetupCode, emailSetupChallenge,
@@ -95,19 +96,10 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
             <section className="mb-5 space-y-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
               <div>
                 <h3 className="text-sm font-extrabold">Vérifiez votre adresse e-mail</h3>
-                <p className="mt-1 text-xs leading-5">La MFA protège votre espace commerçant. Saisissez une adresse que vous pouvez consulter ; votre numéro et votre PIN seront vérifiés avant l’envoi du code.</p>
+                <p className="mt-1 text-xs leading-5">Un code envoyé par e-mail protège désormais votre espace. Indiquez une adresse que vous consultez : nous vérifions d’abord votre numéro et votre PIN, puis nous vous envoyons le code.</p>
               </div>
-              <label className="block text-xs font-bold">
-                Adresse e-mail
-                <span className="relative mt-1.5 block">
-                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-800" />
-                  <input type="email" required maxLength={254} autoComplete="email" value={emailSetupAddress} onChange={(event) => setEmailSetupAddress(event.target.value)} className="min-h-11 w-full rounded-xl border border-amber-200 bg-white py-2 pl-10 pr-3 text-sm font-normal text-slate-900 outline-none focus:border-amber-600" placeholder="vous@exemple.ci" />
-                </span>
-              </label>
-              {emailSetupChallenge && <label className="block text-xs font-bold">
-                Code reçu par e-mail
-                <input type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{8}" maxLength={8} required value={emailSetupCode} onChange={(event) => setEmailSetupCode(event.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-1.5 min-h-11 w-full rounded-xl border border-amber-200 bg-white px-3 text-center font-mono text-lg tracking-[0.3em] text-slate-900 outline-none focus:border-amber-600" />
-              </label>}
+              <TextField label="Adresse e-mail" type="email" inputMode="email" required maxLength={254} autoComplete="email" value={emailSetupAddress} onChange={(event) => setEmailSetupAddress(event.target.value)} leadingIcon={<Mail />} placeholder="vous@exemple.ci" />
+              {emailSetupChallenge && <CodeField label="Code reçu par e-mail" length={8} required autoFocus value={emailSetupCode} onValueChange={setEmailSetupCode} />}
               <button type="button" disabled={authLoading || !emailSetupAddress.trim()} onClick={() => void (emailSetupChallenge ? handleVerifyEmailSetup() : handleStartEmailSetup())} className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-[var(--mt-green-deep)] px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">
                 {authLoading ? 'Vérification…' : emailSetupChallenge ? 'Vérifier l’adresse' : 'Envoyer le code'}
               </button>
@@ -117,73 +109,10 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
 
           <form onSubmit={handleLogin} aria-busy={authLoading} className="auth-form relative space-y-4">
               {pendingMfaChallenge ? (
-                <label className="block text-xs font-bold text-[#47534b]">
-                  Code de vérification par e-mail
-                  <span className="mt-1 block font-normal">Code à 8 chiffres, à usage unique, valide 10 minutes.</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    pattern="[0-9]{8}"
-                    maxLength={8}
-                    value={mfaCode}
-                    onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 8))}
-                    required
-                    className="mt-2 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 text-center font-mono text-lg tracking-[0.3em] outline-none focus:border-[var(--mt-green-hover)]"
-                  />
-                </label>
+                <CodeField label="Code reçu par e-mail" hint="Code à 8 chiffres, à usage unique, valide 10 minutes." length={8} required autoFocus value={mfaCode} onValueChange={setMfaCode} />
               ) : <>
-              <div>
-                <label htmlFor="merchant-login-phone" className="block text-xs font-bold text-[#47534b] mb-1">
-                  Numéro WhatsApp de la boutique
-                </label>
-                <div className="relative">
-                  <Phone className="w-4 h-4 text-[#47534b] absolute left-3 top-3.5" />
-                  <input
-                    id="merchant-login-phone"
-                    type="tel"
-                    required
-                    inputMode="tel"
-                    autoComplete="tel"
-                    aria-invalid={Boolean(phoneFieldError)}
-                    aria-describedby={phoneFieldError ? 'merchant-phone-error' : undefined}
-                    placeholder="+225 07 00 11 22 33"
-                    value={phoneInput}
-                    onChange={(e) => setPhoneInput(e.target.value)}
-                    className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-10 pr-3 text-sm text-[var(--mt-gray-900)] outline-none transition focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10"
-                  />
-                </div>
-                {phoneFieldError && <p id="merchant-phone-error" role="alert" className="mt-1.5 text-xs font-semibold text-[#b93712]">{phoneFieldError}</p>}
-              </div>
-
-              <div>
-                <label htmlFor="merchant-login-pin" className="block text-xs font-bold text-[#47534b] mb-1">
-                  Code PIN (6 chiffres)
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-[#47534b] absolute left-3 top-3.5" />
-                  <input
-                    id="merchant-login-pin"
-                    type={showPinInput ? 'text' : 'password'}
-                    required
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    minLength={6}
-                    maxLength={6}
-                    autoComplete="current-password"
-                    aria-invalid={Boolean(pinFieldError)}
-                    aria-describedby={pinFieldError ? 'merchant-pin-error' : undefined}
-                    placeholder="••••••"
-                    value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-10 pr-12 text-sm text-[var(--mt-gray-900)] outline-none transition focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10"
-                  />
-                  <button type="button" onClick={() => setShowPinInput((visible) => !visible)} aria-label={showPinInput ? 'Masquer le PIN' : 'Afficher le PIN'} className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-[#47534b] hover:bg-[#f7f1e6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)]">
-                    {showPinInput ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-                {pinFieldError && <p id="merchant-pin-error" role="alert" className="mt-1.5 text-xs font-semibold text-[#b93712]">{pinFieldError}</p>}
-              </div>
+              <PhoneField id="merchant-login-phone" label="Numéro WhatsApp de la boutique" required autoComplete="tel-national" value={phoneInput} onValueChange={setPhoneInput} error={phoneFieldError || undefined} />
+              <CodeField id="merchant-login-pin" label="Code PIN" length={6} secret required autoComplete="current-password" value={pinInput} onValueChange={setPinInput} error={pinFieldError || undefined} />
               </>}
 
               <button
@@ -241,7 +170,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
                 </button>
               </div>
 
-              <div className="mx-5 mt-5 grid grid-cols-3 gap-2 text-center text-[10px] font-black uppercase tracking-[0.08em] text-[#6b5548] sm:mx-7">
+              <div className="mx-5 mt-5 grid grid-cols-3 gap-2 text-center text-xs font-bold text-[#6b5548] sm:mx-7">
                 <div className="rounded-xl border border-[#ded8ce] bg-[#edf7f2] px-2 py-2 text-[var(--mt-green-hover)]">
                   <span className="block text-sm">1</span>
                   Infos
@@ -259,7 +188,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
               <form onSubmit={handleRegisterShop} aria-busy={regLoading} className="space-y-6 p-5 sm:p-7">
                 <section className="space-y-3">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-green-hover)]">Identité de la boutique</p>
+                    <p className="text-xs font-bold text-[var(--mt-green-hover)]">Identité de la boutique</p>
                     <p className="mt-1 text-xs text-[#6b5548]">Ces informations seront visibles par vos clients.</p>
                   </div>
 
@@ -317,7 +246,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
 
                 <section className="space-y-3 border-t border-[#ded8ce] pt-6">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-green-hover)]">Accès et contact</p>
+                    <p className="text-xs font-bold text-[var(--mt-green-hover)]">Accès et contact</p>
                     <p className="mt-1 text-xs leading-5 text-[#6b5548]">Votre numéro sert de contact public pour les commandes. Conservez votre lien privé de gestion.</p>
                   </div>
 
@@ -376,7 +305,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
 
                 <section className="space-y-3 rounded-2xl bg-[#edf7f2] p-4 sm:p-5">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-green-hover)]">Votre vitrine Standard</p>
+                    <p className="text-xs font-bold text-[var(--mt-green-hover)]">Votre vitrine Standard</p>
                     <p className="mt-1 text-xs leading-5 text-[#6b5548]">Catalogue, horaires, zones de service et commandes WhatsApp sont inclus. Premium et Pro ajoutent personnalisation, réseaux sociaux, événements, visibilité et statistiques.</p>
                   </div>
                   <div className="rounded-xl bg-white p-3 text-xs leading-5 text-[#155c3d]">

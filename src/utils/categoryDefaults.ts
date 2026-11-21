@@ -29,8 +29,6 @@ export interface CategoryDefaults {
   productAttributes: { key: string; label: string; placeholder: string }[];
   defaultProductSizes: string;
   defaultProductColors: string;
-  defaultProductPrepTime?: number;
-  defaultProductModifiers: string;
   productPlaceholderImageUrl: string;
   bannerPlaceholderImageUrl: string;
   primaryColor: string;
@@ -61,7 +59,6 @@ export const CATEGORY_DEFAULTS: Record<ShopCategory, CategoryDefaults> = {
     ],
     defaultProductSizes: 'S, M, L, XL',
     defaultProductColors: 'Noir, Rouge',
-    defaultProductModifiers: '',
     productPlaceholderImageUrl: image('photo-1490481651871-ab68de25d43d', 600),
     bannerPlaceholderImageUrl: image('photo-1509631179647-0177331693ae', 900),
     primaryColor: '#0F172A',
@@ -87,8 +84,6 @@ export const CATEGORY_DEFAULTS: Record<ShopCategory, CategoryDefaults> = {
     ],
     defaultProductSizes: '',
     defaultProductColors: '',
-    defaultProductPrepTime: 20,
-    defaultProductModifiers: 'Sauce : Doux, Pimenté | Accompagnement : Alloco, Attiéké',
     productPlaceholderImageUrl: image('photo-1555939594-58d7cb561ad1', 600),
     bannerPlaceholderImageUrl: image('photo-1555939594-58d7cb561ad1', 900),
     primaryColor: '#C2410C',
@@ -114,7 +109,6 @@ export const CATEGORY_DEFAULTS: Record<ShopCategory, CategoryDefaults> = {
     ],
     defaultProductSizes: '',
     defaultProductColors: '',
-    defaultProductModifiers: '',
     productPlaceholderImageUrl: image('photo-1522335789203-aabd1fc54bc9', 600),
     bannerPlaceholderImageUrl: image('photo-1522335789203-aabd1fc54bc9', 900),
     primaryColor: '#9D174D',
@@ -140,7 +134,6 @@ export const CATEGORY_DEFAULTS: Record<ShopCategory, CategoryDefaults> = {
     ],
     defaultProductSizes: '',
     defaultProductColors: '',
-    defaultProductModifiers: '',
     productPlaceholderImageUrl: image('photo-1496181133206-80ce9b88a853', 600),
     bannerPlaceholderImageUrl: image('photo-1496181133206-80ce9b88a853', 900),
     primaryColor: '#1D4ED8',
@@ -165,7 +158,6 @@ export const CATEGORY_DEFAULTS: Record<ShopCategory, CategoryDefaults> = {
     ],
     defaultProductSizes: '',
     defaultProductColors: '',
-    defaultProductModifiers: '',
     productPlaceholderImageUrl: image('photo-1600210492486-724fe5c67fb0', 600),
     bannerPlaceholderImageUrl: image('photo-1600210492486-724fe5c67fb0', 900),
     primaryColor: '#166534',
@@ -190,7 +182,6 @@ export const CATEGORY_DEFAULTS: Record<ShopCategory, CategoryDefaults> = {
     ],
     defaultProductSizes: '',
     defaultProductColors: '',
-    defaultProductModifiers: '',
     productPlaceholderImageUrl: image('photo-1454165804606-c3d57bc86b40', 600),
     bannerPlaceholderImageUrl: image('photo-1454165804606-c3d57bc86b40', 900),
     primaryColor: '#0F766E',
@@ -215,7 +206,6 @@ export const CATEGORY_DEFAULTS: Record<ShopCategory, CategoryDefaults> = {
     ],
     defaultProductSizes: '',
     defaultProductColors: '',
-    defaultProductModifiers: '',
     productPlaceholderImageUrl: image('photo-1576091160399-112ba8d25d1d', 600),
     bannerPlaceholderImageUrl: image('photo-1576091160399-112ba8d25d1d', 900),
     primaryColor: '#087F62',
@@ -240,7 +230,6 @@ export const CATEGORY_DEFAULTS: Record<ShopCategory, CategoryDefaults> = {
     ],
     defaultProductSizes: '',
     defaultProductColors: '',
-    defaultProductModifiers: '',
     productPlaceholderImageUrl: image('photo-1452860606245-08befc0ff44b', 600),
     bannerPlaceholderImageUrl: image('photo-1452860606245-08befc0ff44b', 900),
     primaryColor: '#A16207',
@@ -266,7 +255,6 @@ export const CATEGORY_DEFAULTS: Record<ShopCategory, CategoryDefaults> = {
     ],
     defaultProductSizes: '',
     defaultProductColors: '',
-    defaultProductModifiers: '',
     productPlaceholderImageUrl: image('photo-1503676260728-1c00da094a0b', 600),
     bannerPlaceholderImageUrl: image('photo-1503676260728-1c00da094a0b', 900),
     primaryColor: '#6D28D9',
@@ -292,7 +280,6 @@ export const CATEGORY_DEFAULTS: Record<ShopCategory, CategoryDefaults> = {
     ],
     defaultProductSizes: '',
     defaultProductColors: '',
-    defaultProductModifiers: '',
     productPlaceholderImageUrl: image('photo-1492144534655-ae79c964c9d7', 600),
     bannerPlaceholderImageUrl: image('photo-1492144534655-ae79c964c9d7', 900),
     primaryColor: '#B91C1C',
@@ -317,7 +304,6 @@ export const CATEGORY_DEFAULTS: Record<ShopCategory, CategoryDefaults> = {
     ],
     defaultProductSizes: '',
     defaultProductColors: '',
-    defaultProductModifiers: '',
     productPlaceholderImageUrl: image('photo-1497366754035-f200968a6e72', 600),
     bannerPlaceholderImageUrl: image('photo-1497366754035-f200968a6e72', 900),
     primaryColor: '#334155',

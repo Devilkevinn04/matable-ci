@@ -1879,6 +1879,26 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
     body: JSON.stringify({ token: guestOrder.payload.whatsapp_tracking_token }),
   });
   assert.equal(guestWhatsappClick.response.status, 200);
+
+  // Suivi sans compte : le jeton de la commande donne l’état, sans aucune coordonnée personnelle.
+  const guestTracking = await apiFetch(`/api/orders/${guestOrder.payload.order.id}/track`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: guestOrder.payload.whatsapp_tracking_token }),
+  });
+  assert.equal(guestTracking.response.status, 200, JSON.stringify(guestTracking.payload));
+  assert.equal(guestTracking.payload.id, guestOrder.payload.order.id);
+  assert.equal(guestTracking.payload.status, 'pending');
+  assert.ok(Array.isArray(guestTracking.payload.items) && guestTracking.payload.items.length > 0);
+  assert.ok(guestTracking.payload.shop?.slug);
+  const trackingJson = JSON.stringify(guestTracking.payload);
+  assert.ok(!trackingJson.includes('customer_phone') && !trackingJson.includes('customer_name'), 'le suivi public ne doit exposer aucune coordonnée');
+  const wrongTracking = await apiFetch(`/api/orders/${guestOrder.payload.order.id}/track`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: 'jeton-invalide-de-plus-de-vingt-caracteres' }),
+  });
+  assert.equal(wrongTracking.response.status, 404);
   cookieJar = customerSessionCookies;
 
   const accountOrder = await apiFetch('/api/orders', {

@@ -2344,3 +2344,285 @@ button:hover {
 .admin-ambassadors[data-admin-view="payouts"] [data-admin-panel]:not([data-admin-panel="payouts"]) {
   display: none;
 }
+
+/* ------------------------------------------------------------------
+   Visuel de catégorie sans photo : trame discrète dans la couleur
+   de la catégorie, pour un rendu intentionnel plutôt qu’un vide.
+   ------------------------------------------------------------------ */
+.mt-photo-fallback::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(currentColor 1px, transparent 1.2px);
+  background-size: 14px 14px;
+  opacity: 0.09;
+  pointer-events: none;
+}
+.mt-photo-fallback > * {
+  position: relative;
+}
+
+/* Rails horizontaux de puces : défilement tactile sans barre visible,
+   avec un fondu en bord droit qui indique qu’il reste des choix. */
+.mt-chip-rail {
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.mt-chip-rail::-webkit-scrollbar { display: none; }
+.mt-chip-rail > * { scroll-snap-align: start; }
+@media (max-width: 639px) {
+  .mt-chip-rail {
+    mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+    padding-right: 28px;
+  }
+}
+
+/* Champ de filtre compact : petit intitulé au-dessus, valeur lisible en 16 px
+   (évite le zoom automatique d’iOS au focus). */
+.mt-filter-field {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0%;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  min-height: 3.25rem;
+  border: 1px solid #e7e2d9;
+  border-radius: 0.875rem;
+  background: #fff;
+  padding: 0.4rem 2rem 0.4rem 0.75rem;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.mt-filter-field:focus-within {
+  border-color: var(--mt-green-primary);
+  box-shadow: 0 0 0 3px rgb(8 127 98 / 14%);
+}
+.mt-filter-field::after {
+  content: '';
+  position: absolute;
+  right: 0.85rem;
+  top: 50%;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid #68716b;
+  border-bottom: 2px solid #68716b;
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+.mt-filter-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: #68716b;
+}
+.mt-filter-field-select {
+  width: 100%;
+  min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  outline: none;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #173c32;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Entrée des feuilles et invitations venant du bas : courte, et désactivée
+   si l’utilisateur limite les animations. */
+@keyframes mt-sheet-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+.mt-sheet-enter { animation: mt-sheet-in 260ms cubic-bezier(.22, 1, .36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .mt-sheet-enter { animation: none; }
+}
+
+/* Champs du tiroir de commande : 16 px pour éviter le zoom iOS, cible tactile de 48 px. */
+.mt-checkout-input {
+  min-height: 3rem;
+  border: 1.5px solid #e4d9c8;
+  border-radius: 0.875rem;
+  background: #fff;
+  padding: 0.625rem 0.875rem;
+  font-size: 1rem;
+  color: #1e293b;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.mt-checkout-input::placeholder { color: #94a3b8; }
+.mt-checkout-input:focus {
+  outline: none;
+  border-color: var(--mt-green-primary);
+  box-shadow: 0 0 0 3px rgb(8 127 98 / 15%);
+}
+.mt-checkout-input:user-invalid { border-color: #dc2626; }
+
+/* Connexion et inscription sur mobile : on va droit au formulaire.
+   La carte du formulaire porte déjà le titre ; le bandeau garde seulement la marque. */
+@media (max-width: 639px) {
+  .auth-experience-copy { display: none; }
+  .auth-experience-story { padding: 0.875rem 1rem; border-radius: 1.25rem; }
+}
+
+/* ==================================================================
+   Kit de champs (src/components/ui/fields.tsx)
+   Un seul aspect pour tous les formulaires : 48 px de haut, texte 16 px
+   (pas de zoom iOS), contour vert au focus, erreur rouge sous le champ.
+   ================================================================== */
+.mt-field { display: flex; min-width: 0; flex-direction: column; gap: 0.375rem; }
+.mt-field-label {
+  display: flex; align-items: baseline; gap: 0.25rem;
+  font-size: 0.875rem; font-weight: 700; line-height: 1.25rem; color: #2f3a33;
+}
+.mt-field-required { color: var(--mt-orange-deep); font-weight: 800; }
+.mt-field-optional { margin-left: 0.25rem; font-size: 0.75rem; font-weight: 500; color: #7a837d; }
+.mt-field-count { margin-left: auto; font-size: 0.75rem; font-weight: 500; color: #7a837d; font-variant-numeric: tabular-nums; }
+.mt-field-hint { font-size: 0.8125rem; line-height: 1.25rem; color: #68716b; }
+.mt-field-error {
+  display: flex; align-items: flex-start; gap: 0.375rem;
+  font-size: 0.8125rem; font-weight: 600; line-height: 1.25rem; color: #b42318;
+}
+.mt-field-error svg { margin-top: 0.125rem; }
+
+.mt-input-wrap { position: relative; display: flex; align-items: center; }
+.mt-input {
+  width: 100%; min-width: 0; min-height: 3rem;
+  border: 1.5px solid #ddd6ca; border-radius: 0.875rem; background: #fff;
+  padding: 0.625rem 0.875rem;
+  font-size: 1rem; line-height: 1.5rem; color: #1f2a24;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+  -webkit-appearance: none; appearance: none;
+}
+.mt-input::placeholder { color: #9aa29c; font-weight: 400; }
+.mt-input:hover:not(:disabled):not(:focus) { border-color: #c9c1b3; }
+.mt-input:focus { outline: none; border-color: var(--mt-green-primary); box-shadow: 0 0 0 3px rgb(8 127 98 / 15%); }
+.mt-input[aria-invalid="true"] { border-color: #d92d20; background: #fffbfa; }
+.mt-input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px rgb(217 45 32 / 14%); }
+.mt-input:disabled { background: #f4f2ee; color: #7a837d; cursor: not-allowed; }
+.mt-textarea { min-height: 6.5rem; resize: vertical; }
+
+.mt-input-icon { pointer-events: none; position: absolute; left: 0.875rem; display: flex; color: #7a837d; }
+.mt-input-icon svg { width: 1.125rem; height: 1.125rem; }
+.mt-input-with-icon { padding-left: 2.75rem; }
+.mt-input-with-action { padding-right: 3rem; }
+.mt-input-action {
+  position: absolute; right: 0.25rem; display: grid; place-items: center;
+  width: 2.75rem; height: 2.75rem; border-radius: 0.75rem; color: #68716b;
+}
+.mt-input-action:hover { background: #f4f2ee; color: #1f2a24; }
+.mt-input-prefix {
+  pointer-events: none; position: absolute; left: 0.875rem;
+  padding-right: 0.625rem; border-right: 1.5px solid #e8e2d8;
+  font-size: 1rem; font-weight: 600; color: #47534b; font-variant-numeric: tabular-nums;
+}
+.mt-input-with-prefix { padding-left: 4.5rem; letter-spacing: 0.02em; }
+.mt-input-suffix { pointer-events: none; position: absolute; right: 0.875rem; font-size: 0.875rem; font-weight: 700; color: #68716b; }
+.mt-input-with-suffix { padding-right: 3.75rem; }
+
+.mt-select-wrap::after {
+  content: ''; pointer-events: none; position: absolute; right: 1rem; top: 50%;
+  width: 0.5rem; height: 0.5rem; border-right: 2px solid #68716b; border-bottom: 2px solid #68716b;
+  transform: translateY(-70%) rotate(45deg);
+}
+.mt-select { padding-right: 2.5rem; text-overflow: ellipsis; }
+
+/* Code à chiffres : cases visibles, un seul vrai champ invisible par-dessus. */
+.mt-code { position: relative; display: flex; align-items: center; gap: 0.5rem; }
+.mt-code-boxes { display: grid; flex: 1; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0.375rem; max-width: 22rem; }
+.mt-code-box {
+  display: grid; place-items: center; height: 3.25rem;
+  border: 1.5px solid #ddd6ca; border-radius: 0.75rem; background: #fff;
+  font-size: 1.375rem; font-weight: 800; color: #1f2a24; font-variant-numeric: tabular-nums;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.mt-code-box.is-filled { border-color: #b9cfc3; }
+.mt-code-box.is-active { border-color: var(--mt-green-primary); box-shadow: 0 0 0 3px rgb(8 127 98 / 15%); }
+.mt-code-box.is-error { border-color: #d92d20; }
+.mt-code-input {
+  position: absolute; inset: 0; right: 3rem; width: auto; max-width: 22rem;
+  opacity: 0; font-size: 16px; caret-color: transparent; color: transparent; background: transparent; border: 0;
+}
+.mt-code-reveal { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; flex-shrink: 0; border-radius: 0.75rem; color: #68716b; }
+.mt-code-reveal:hover { background: #f4f2ee; }
+
+/* Cartes de choix (boutons radio habillés). */
+.mt-choice {
+  position: relative; display: flex; min-height: 3.25rem; cursor: pointer; align-items: flex-start; gap: 0.75rem;
+  border: 1.5px solid #ddd6ca; border-radius: 0.875rem; background: #fff; padding: 0.75rem 0.875rem;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+.mt-choice:hover { border-color: #c9c1b3; }
+.mt-choice.is-checked { border-color: var(--mt-green-primary); background: #f0f8f4; box-shadow: inset 0 0 0 1px var(--mt-green-primary); }
+.mt-choice-input {
+  margin-top: 0.125rem; width: 1.25rem; height: 1.25rem; flex-shrink: 0;
+  accent-color: var(--mt-green-primary);
+}
+.mt-choice-input:focus-visible { outline: 2px solid var(--mt-green-primary); outline-offset: 2px; }
+.mt-choice-icon { display: flex; color: var(--mt-green-deep); }
+.mt-choice-label { font-size: 0.9375rem; font-weight: 700; color: #1f2a24; }
+.mt-choice-aside { flex-shrink: 0; font-size: 0.8125rem; font-weight: 600; color: #68716b; font-variant-numeric: tabular-nums; }
+.mt-choice-description { margin-top: 0.125rem; display: block; font-size: 0.8125rem; line-height: 1.25rem; color: #68716b; }
+
+/* Alias de compatibilité : ancien nom utilisé dans le tiroir de commande. */
+.mt-checkout-input { min-height: 3rem; }
+
+/* Feuille de confirmation (src/components/ui/ConfirmSheet.tsx) :
+   monte du bas sur mobile, centrée sur grand écran. */
+.mt-confirm-backdrop {
+  position: fixed; inset: 0; z-index: 120;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: rgb(15 23 42 / 55%);
+  animation: mt-fade-in 160ms ease both;
+}
+.mt-confirm-sheet {
+  width: 100%; max-height: 92dvh; overflow-y: auto;
+  border-radius: 1.75rem 1.75rem 0 0; background: #fffdf9;
+  padding: 0.75rem 1.25rem max(1.25rem, env(safe-area-inset-bottom));
+  box-shadow: 0 -12px 40px rgb(15 23 42 / 22%);
+  animation: mt-sheet-in 240ms cubic-bezier(.22, 1, .36, 1) both;
+}
+@media (min-width: 640px) {
+  .mt-confirm-backdrop { align-items: center; padding: 1rem; }
+  .mt-confirm-sheet { max-width: 28rem; border-radius: 1.5rem; padding: 1.5rem; }
+}
+@keyframes mt-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .mt-confirm-backdrop, .mt-confirm-sheet { animation: none; }
+}
+
+/* Barre d’action des formulaires (src/components/ui/FormActions.tsx). */
+.mt-action-bar {
+  position: sticky; bottom: 0; z-index: 20;
+  display: flex; gap: 0.5rem;
+  margin: 0 -1.25rem -1.25rem; padding: 0.75rem 1.25rem max(0.75rem, env(safe-area-inset-bottom));
+  border-top: 1px solid #eee8df; background: rgb(255 255 255 / 94%);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.mt-action-bar > * { flex: 1 1 auto; }
+/* Dans l’espace commerçant, la barre de navigation fixe (~3.75 rem) est sous la barre. */
+.mt-action-bar-above-nav { bottom: calc(3.75rem + env(safe-area-inset-bottom)); padding-bottom: 0.75rem; }
+@media (min-width: 640px) {
+  .mt-action-bar { margin: 0 -1.75rem -1.75rem; padding-left: 1.75rem; padding-right: 1.75rem; }
+  .mt-action-bar > * { flex: 0 0 auto; }
+}
+@media (min-width: 1024px) {
+  .mt-action-bar-above-nav { bottom: 0; padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+}
+
+/* Intitulés secondaires en casse normale, lisibles sur mobile (remplace les capitales espacées). */
+.ui-kicker, .pill, .dashboard-chip, .eyebrow, .legal-kicker {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.75rem;
+}

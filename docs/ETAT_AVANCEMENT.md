@@ -5,6 +5,34 @@ de production indiqués ci-dessous. Ce document décrit l’étendue fonctionnel
 actuelle ; il ne remplace pas les guides détaillés ni les vérifications des
 fournisseurs.
 
+## Évolutions incluses dans cette publication (21 novembre 2026)
+
+Ces changements sont vérifiés localement par `npm run lint`, les tests ciblés
+et `npm run build`, puis fusionnés dans `main` pour déclencher le déploiement
+automatique.
+
+- Découpage sans changement de comportement de `server/routes/admin.ts` et
+  `src/components/AdminDashboard.tsx` en modules.
+- Parcours mobiles client et commerçant revus : kit de champs commun, feuille de
+  confirmation à la place des boîtes du navigateur, barre d’enregistrement
+  collante, brouillon local du formulaire produit, nouvel article sans valeurs
+  pré-remplies.
+- Accueil commerçant : file « À traiter » et « Premiers pas » en une liste.
+- Suivi de commande : frise dans le compte client et page publique
+  `/suivi/<n°>` sans compte (nouvel endpoint `POST /api/orders/:id/track`,
+  couvert par un test d’intégration).
+- Pages publiques : accueil centré sur les vraies boutiques et photos,
+  couvertures en mosaïque pour les boutiques sans bannière, catégories,
+  invitation au partage dans l’annuaire, pied de page réduit sur les vitrines,
+  casse normale des intitulés.
+- Correction : l’annuaire n’affichait que les premières boutiques tant que la
+  page n’était pas défilée (animation au défilement) ; le contenu sous le
+  premier écran s’affiche désormais directement.
+- Correction : un blocage de défilement pouvait rester actif après la
+  fermeture d’un menu ou d’une feuille (`src/utils/scrollLock.ts`).
+- Chargement : le moteur d’animation est chargé après le premier affichage
+  (environ 20 % de JavaScript en moins avant l’affichage d’une vitrine).
+
 ## Corrections récemment déployées
 
 La PR #2 (`fix: address audit findings`) a été fusionnée vers `production` et

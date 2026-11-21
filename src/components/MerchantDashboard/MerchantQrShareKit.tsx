@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { Download, LoaderCircle, QrCode, X } from 'lucide-react';
 import type { Shop } from '../../types';
 import { getCategoryDefaults } from '../../utils/categoryDefaults';
+import { lockBodyScroll } from '../../utils/scrollLock';
 
 interface MerchantQrShareKitProps {
   shop: Shop;
@@ -115,14 +116,13 @@ export const MerchantQrShareKit: React.FC<MerchantQrShareKitProps> = ({ shop, on
   }, [publicUrl]);
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlockScroll = lockBodyScroll();
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', closeOnEscape);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      unlockScroll();
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [onClose]);
@@ -203,7 +203,7 @@ export const MerchantQrShareKit: React.FC<MerchantQrShareKitProps> = ({ shop, on
 
         <div className="mt-6 grid gap-6 sm:grid-cols-[minmax(0,1fr)_220px] sm:items-center">
           <div className="rounded-2xl border border-slate-200 bg-[#F7F5EF] p-5 text-center">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-500">{categoryLabel}</p>
+            <p className="text-xs font-bold text-slate-500">{categoryLabel}</p>
             <h3 className="mt-2 break-words text-xl font-black text-slate-950">{shop.name}</h3>
             <div className="mx-auto mt-4 w-fit rounded-2xl bg-white p-3 shadow-sm">
               {qrDataUrl

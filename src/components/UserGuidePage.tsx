@@ -126,7 +126,7 @@ export function GuideChecklist({ role, accountId, collapsible = false }: GuideCh
         <section className="rounded-2xl border border-[#e3d9cc] bg-white p-4 sm:p-6" aria-labelledby={`guide-heading-${role}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--mt-orange-deep)]">Guide · {guide.label}</p>
+              <p className="text-xs font-bold text-[var(--mt-orange-deep)]">Guide · {guide.label}</p>
               <h2 id={`guide-heading-${role}`} className="mt-1 text-xl font-black sm:text-2xl">Les étapes essentielles</h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--mt-gray-600)]">{guide.intro}</p>
             </div>
@@ -168,7 +168,7 @@ export function GuideChecklist({ role, accountId, collapsible = false }: GuideCh
                       <Check className="h-4 w-4" aria-hidden="true" />
                     </button>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-black uppercase tracking-[0.12em] text-[#a2642e]">Étape {index + 1}</p>
+                      <p className="text-xs font-bold text-[#a2642e]">Étape {index + 1}</p>
                       <h3 className={`mt-1 text-sm font-extrabold sm:text-base ${isComplete ? 'text-[var(--mt-green-hover)]' : 'text-[var(--mt-gray-900)]'}`}>{step.title}</h3>
                       <p className="mt-1 text-sm leading-6 text-[var(--mt-gray-600)]">{step.description}</p>
                       {step.href && step.linkLabel && (
@@ -229,7 +229,7 @@ export function UserGuidePage() {
         <header className="mt-6 rounded-3xl bg-[var(--mt-green-deep)] p-5 text-white sm:mt-8 sm:p-8">
           <div className="flex items-center gap-2 text-[var(--mt-orange-soft)]">
             <BookOpen className="h-5 w-5" aria-hidden="true" />
-            <p className="text-xs font-bold uppercase tracking-[0.14em]">Guide personnel MaTable</p>
+            <p className="text-xs font-bold">Guide personnel MaTable</p>
           </div>
           <h1 className="mt-3 text-3xl font-black sm:text-4xl">Votre parcours · {roleGuides[role].label}</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-white/80 sm:text-base">

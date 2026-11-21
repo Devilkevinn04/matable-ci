@@ -85,80 +85,67 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
           <div className="space-y-4">
             <header className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-800">Espace de vente</p>
+                <p className="text-xs font-bold text-emerald-800">Espace de vente</p>
                 <h2 className="mt-1 text-xl font-black text-slate-900">Commandes</h2>
                 <p className="mt-1 text-xs leading-5 text-slate-500">Traitez les demandes clients et suivez leur progression.</p>
               </div>
             </header>
 
             {/* Orders Statistics Cards */}
-            <div className="grid grid-cols-1 gap-3 min-[460px]:grid-cols-2 sm:grid-cols-3">
-              <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4 min-[460px]:col-span-2 sm:col-span-1">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d1fae5] font-bold text-[var(--mt-green-primary)]">
-                  <DollarSign className="w-5 h-5" />
+            {/* Indicateurs compacts : la liste des commandes reste visible sans défiler. */}
+            <dl className="grid grid-cols-3 divide-x divide-[#eee8dc] rounded-2xl border border-[#e7dfd3] bg-white py-3 sm:py-4">
+              {[
+                { label: 'Montant', fullLabel: 'Montant des commandes', value: formatFCFA(orderValue), icon: DollarSign, tone: 'text-[var(--mt-green-primary)]' },
+                { label: 'Reçues', fullLabel: 'Commandes reçues', value: String(orders.length), icon: ShoppingBag, tone: 'text-[var(--mt-green-primary)]' },
+                { label: 'Panier moyen', fullLabel: 'Montant moyen par commande', value: formatFCFA(averageOrderValue), icon: TrendingUp, tone: 'text-[var(--mt-orange-deep)]' },
+              ].map((metric) => (
+                <div key={metric.fullLabel} className="min-w-0 px-3 sm:px-5">
+                  <dt className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                    <metric.icon className={`hidden h-4 w-4 shrink-0 sm:block ${metric.tone}`} aria-hidden="true" />
+                    <span className="truncate sm:hidden">{metric.label}</span>
+                    <span className="hidden truncate sm:inline">{metric.fullLabel}</span>
+                  </dt>
+                  <dd className="mt-1 break-words text-[13px] font-black leading-tight tabular-nums text-slate-900 sm:text-lg">{metric.value}</dd>
                 </div>
-                <div>
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Montant des commandes
-                  </span>
-                  <span className="font-black text-slate-900 text-lg">
-                    {formatFCFA(orderValue)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f7f4ee] font-bold text-[var(--mt-green-primary)]">
-                  <ShoppingBag className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Commandes reçues
-                  </span>
-                  <span className="font-black text-slate-900 text-lg">
-                    {orders.length}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#fff6ea] font-bold text-[var(--mt-orange-deep)]">
-                  <TrendingUp className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Montant moyen par commande
-                  </span>
-                  <span className="font-black text-slate-900 text-lg">
-                    {formatFCFA(averageOrderValue)}
-                  </span>
-                </div>
-              </div>
-            </div>
+              ))}
+            </dl>
 
             {/* Filter and Search Bar for Orders */}
-            <div className="space-y-3 rounded-2xl border border-[#e7dfd3] bg-white p-3 sm:p-4">
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <div className="relative w-full sm:flex-1">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
                 <input
-                  type="text"
+                  type="search"
                   aria-label="Rechercher une commande par client, téléphone ou numéro"
-                  placeholder="Rechercher par client, tél ou #..."
+                  placeholder="Client, téléphone ou n° de commande"
                   value={orderSearch}
                   onChange={(e) => setOrderSearch(e.target.value)}
-                  className="min-h-11 w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-primary)]/20"
+                  className="min-h-12 w-full rounded-xl border border-[#e7dfd3] bg-white py-2 pl-9 pr-3 text-base focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-primary)]/20"
                 />
               </div>
-                <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-600 sm:w-56">
-                  <span className="shrink-0">Paiement</span>
+              <div className="grid grid-cols-2 gap-2 sm:max-w-xl">
+                <label className="mt-filter-field">
+                  <span className="mt-filter-field-label">Statut</span>
                   <select
-                    aria-label="Filtrer les commandes par mode de paiement"
+                    aria-label="Filtrer les commandes par statut"
+                    value={orderStatusFilter}
+                    onChange={(event) => setOrderStatusFilter(event.target.value as MerchantOrderFilter)}
+                    className="mt-filter-field-select"
+                  >
+                    {orderStatusOptions.map((status) => (
+                      <option key={status.id} value={status.id}>{status.label} ({status.count})</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="mt-filter-field">
+                  <span className="mt-filter-field-label">Règlement</span>
+                  <select
+                    aria-label="Filtrer les commandes par mode de règlement"
                     value={orderPaymentFilter}
                     onChange={(event) => setOrderPaymentFilter(event.target.value as typeof orderPaymentFilter)}
-                    className="min-h-11 min-w-0 flex-1 border-0 bg-transparent py-2 text-sm font-bold text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--mt-green-hover)]"
+                    className="mt-filter-field-select"
                   >
-                    <option value="all">Tous les modes</option>
+                    <option value="all">Tous</option>
                     <option value="wave">Wave ({orders.filter(o => o.payment_method_preference === 'wave').length})</option>
                     <option value="mobile_money">Mobile Money ({orders.filter(o => o.payment_method_preference === 'mobile_money').length})</option>
                     <option value="cash">Espèces ({orders.filter(o => o.payment_method_preference === 'cash').length})</option>
@@ -166,27 +153,12 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                   </select>
                 </label>
               </div>
-
-              <div className="border-t border-[#f0ebe2] pt-3">
-                <label className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-slate-200 bg-[#fffdf8] px-3 text-sm font-bold text-slate-600 sm:w-auto">
-                  <span className="shrink-0">Statut</span>
-                  <select
-                    aria-label="Filtrer les commandes par statut"
-                    value={orderStatusFilter}
-                    onChange={(event) => setOrderStatusFilter(event.target.value as MerchantOrderFilter)}
-                    className="min-h-11 min-w-0 flex-1 bg-transparent py-2 text-sm text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--mt-green-hover)] sm:w-56 sm:flex-none"
-                  >
-                    {orderStatusOptions.map((status) => (
-                      <option key={status.id} value={status.id}>{status.label} ({status.count})</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
             </div>
 
-            <p className="-mt-2 rounded-xl border border-slate-200 bg-[#fffdf8] px-3 py-2 text-[11px] leading-5 text-slate-600">
-              Les montants ci-dessus regroupent les articles des commandes hors annulation et expiration. MaTable ne suit pas les encaissements : vérifiez directement le règlement auprès de vos clients. Le mode choisi ou un clic WhatsApp ne confirme pas le paiement.
-            </p>
+            <details className="-mt-2 px-1 text-xs leading-5 text-slate-600">
+              <summary className="cursor-pointer font-semibold text-slate-600">Comment sont calculés ces montants ?</summary>
+              <p className="mt-1">Ils regroupent les articles des commandes hors annulation et expiration. MaTable ne suit pas les encaissements : vérifiez le règlement directement avec vos clients. Le mode choisi ou un clic WhatsApp ne confirme pas le paiement.</p>
+            </details>
 
             {/* Orders List */}
             {filteredOrders.length === 0 ? (
@@ -226,22 +198,22 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                     >
                       <div className="space-y-2 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                          <span className="text-xs font-bold tabular-nums px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
                             #{order.id}
                           </span>
                           <span className="font-black text-slate-900 text-sm sm:text-base">
                             {order.customer_name}
                           </span>
-                          <span className="text-xs font-mono text-slate-500">
+                          <span className="text-xs tabular-nums text-slate-500">
                             {order.customer_phone}
                           </span>
-                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
-                            {{ wave: 'WAVE', mobile_money: 'MOBILE MONEY', cash: 'ESPÈCES', to_confirm: 'À CONVENIR' }[order.payment_method_preference] || 'À CONVENIR'}
+                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                            Règlement : {{ wave: 'Wave', mobile_money: 'Mobile Money', cash: 'espèces', to_confirm: 'à convenir' }[order.payment_method_preference] || 'à convenir'}
                           </span>
 
                           {/* Status Badge */}
                           {order.status === 'confirmed' && (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-800">
                               <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Acceptée · stock réservé
                             </span>
                           )}
@@ -301,7 +273,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                               {it.selected_size && <span className="text-slate-500 ml-1">(T:{it.selected_size})</span>}
                               {it.selected_color && <span className="text-slate-500 ml-1">({it.selected_color})</span>}
                               {it.selected_modifiers?.length > 0 && <span className="text-slate-500 ml-1">+ {it.selected_modifiers.join(', ')}</span>}
-                              <span className="text-slate-400 font-mono ml-1.5">({formatFCFA(it.unit_price * it.quantity)})</span>
+                              <span className="text-slate-500 tabular-nums ml-1.5">({formatFCFA(it.unit_price * it.quantity)})</span>
                             </div>
                           ))}
                         </div>
@@ -336,7 +308,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                               <button
                                 type="button"
                                 onClick={() => handleUpdateOrderStatus(order.id, 'confirmed')}
-                                className="min-h-11 flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-700 sm:flex-none"
+                                className="min-h-11 flex-1 rounded-xl bg-[var(--mt-green-primary)] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[var(--mt-green-hover)] active:scale-[0.98] sm:flex-none"
                               >
                                 Accepter
                               </button>

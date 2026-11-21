@@ -8,6 +8,7 @@ import { CategoryProductImage } from './CategoryProductImage';
 import { ProductOptionsSheet } from './ProductOptionsSheet';
 import { getActiveProductPrice } from '../utils/productPricing';
 import { useProductSaleClock } from '../utils/useProductSaleClock';
+import { lockBodyScroll } from '../utils/scrollLock';
 
 interface CustomerProductCardProps {
   product: Product;
@@ -101,9 +102,8 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   useEffect(() => {
     if (!isImageViewerOpen) return;
 
-    const previousOverflow = document.body.style.overflow;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    document.body.style.overflow = 'hidden';
+    const unlockScroll = lockBodyScroll();
     imageViewerCloseRef.current?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -133,7 +133,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      unlockScroll();
       document.removeEventListener('keydown', handleKeyDown);
       (imageViewerTriggerRef.current || previousFocus)?.focus();
     };

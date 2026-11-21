@@ -24,7 +24,7 @@ export const CategoryProductImage: React.FC<CategoryProductImageProps> = ({
   className = '',
   imageFit = 'cover',
   loading = 'lazy',
-  showFallbackTitle = true,
+  showFallbackTitle = false,
   allowLegacyInlinePreview = false,
   sizes = '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw',
   children,
@@ -42,10 +42,12 @@ export const CategoryProductImage: React.FC<CategoryProductImageProps> = ({
 
   return (
     <div className={`relative overflow-hidden bg-slate-100 ${className}`}>
-      <div aria-hidden="true" className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center" style={{ backgroundColor: defaults.secondaryColor, color: defaults.primaryColor }}>
-        <span className="grid h-16 w-16 place-items-center rounded-2xl border border-current/15 bg-white/75"><CategoryIcon category={typeof category === 'string' ? category : undefined} className="h-9 w-9" /></span>
+      {/* Visuel de catégorie affiché tant qu’aucune photo n’est disponible. Le titre et
+          l’état figurent déjà sous l’image dans les cartes : on ne les répète pas ici. */}
+      <div aria-hidden="true" className="mt-photo-fallback absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 pb-[12%] text-center" style={{ backgroundColor: defaults.secondaryColor, color: defaults.primaryColor }}>
+        <span className="mt-photo-fallback-icon grid aspect-square w-[34%] min-w-9 max-w-16 place-items-center rounded-[28%] bg-white/80 shadow-[0_1px_0_rgba(255,255,255,.9)_inset,0_6px_16px_-8px_currentColor]"><CategoryIcon category={typeof category === 'string' ? category : undefined} className="h-[55%] w-[55%]" /></span>
         {showFallbackTitle && <span className="line-clamp-2 max-w-full text-sm font-black">{title}</span>}
-        {(isPlaceholder || imageFailed) && <span className="text-[10px] font-bold uppercase">{isPlaceholder ? 'Photo à venir' : 'Photo indisponible'} · {defaults.label}</span>}
+        {imageFailed && !isPlaceholder && <span className="text-[11px] font-semibold opacity-80">Photo indisponible</span>}
       </div>
       {normalizedImage && <img {...getResponsiveImageProps(normalizedImage)} sizes={sizes} alt={title} loading={loading} referrerPolicy="no-referrer" className={`relative z-10 h-full w-full ${imageFit === 'contain' ? 'object-contain' : 'object-cover'}`} onError={(event) => { setImageFailed(true); event.currentTarget.hidden = true; }} />}
       {children}

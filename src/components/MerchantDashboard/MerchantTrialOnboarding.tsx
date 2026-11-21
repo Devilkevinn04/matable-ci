@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, BarChart3, Check, CircleCheck, LoaderCircle, LockKeyhole, MessageCircle, Palette, ShieldCheck, Sparkles, Store } from 'lucide-react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import type { Shop, SubscriptionTier } from '../../types';
 import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 import { MerchantBoostPurchase } from './MerchantBoostPurchase';
@@ -138,12 +138,13 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                 </button>
               </div>
             )}
-            <header className="relative isolate overflow-hidden rounded-[2rem] bg-[#103f34] px-6 py-8 text-white shadow-[0_24px_60px_-28px_rgba(15,77,61,0.65)] sm:px-10 sm:py-11 lg:px-14 lg:py-14">
+            {/* Depuis l’espace commerçant, sur mobile, on va droit aux formules : le bandeau de présentation sert surtout aux visiteurs. */}
+            <header className={`${onBack && !previewOnly ? 'max-sm:hidden' : ''} relative isolate overflow-hidden rounded-[2rem] bg-[#103f34] px-6 py-8 text-white shadow-[0_24px_60px_-28px_rgba(15,77,61,0.65)] sm:px-10 sm:py-11 lg:px-14 lg:py-14`}>
               <div aria-hidden="true" className="absolute -right-16 -top-28 -z-10 h-80 w-80 rounded-full border-[42px] border-white/[0.06]" />
               <div aria-hidden="true" className="absolute -bottom-32 right-[23%] -z-10 h-64 w-64 rounded-full bg-[#dba956]/10 blur-3xl" />
               <div className="grid items-center gap-9 lg:grid-cols-[1.2fr_0.8fr] lg:gap-14">
                 <div>
-                  <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.08] px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-[#f1d59f]">
+                  <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.08] px-3 py-1.5 text-xs font-bold text-[#f1d59f]">
                     <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Grandir, à votre façon
                   </p>
                   <h1 className="mt-5 max-w-2xl text-3xl font-black leading-[1.08] tracking-tight sm:text-4xl lg:text-[3.4rem]">
@@ -160,7 +161,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                 <div className="relative mx-auto hidden w-full max-w-[390px] rounded-[1.6rem] border border-white/15 bg-white/[0.08] p-4 shadow-2xl backdrop-blur-sm sm:p-5 lg:block">
                   <div className="flex items-center justify-between border-b border-white/10 pb-4">
                     <span className="text-xs font-bold text-white/65">Votre espace commerçant</span>
-                    <span className="rounded-full bg-[#d9efdf]/15 px-2.5 py-1 text-[10px] font-extrabold text-[#c8efcf]">MATABLE · ESPACE PRO</span>
+                    <span className="rounded-full bg-[#d9efdf]/15 px-2.5 py-1 text-[10px] font-extrabold text-[#c8efcf]">MaTable · Espace pro</span>
                   </div>
                   <div className="mt-4 flex items-center gap-3 rounded-2xl bg-[var(--mt-surface)] p-4 text-[#163d32]">
                     <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#e5f0e8]"><Store className="h-6 w-6" aria-hidden="true" /></span>
@@ -227,7 +228,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
           <section className="mt-7" aria-labelledby="plan-heading">
             <div className={`flex flex-wrap items-end justify-between gap-4 ${mode === 'plans' ? 'mb-5 mt-9 sm:mt-12' : ''}`}>
               <div>
-                {mode === 'plans' && <p className="mb-1 text-xs font-black uppercase tracking-[0.16em] text-[#b16f35]">Trouvez votre élan</p>}
+                {mode === 'plans' && <p className="mb-1 text-xs font-bold text-[#b16f35]">Trouvez votre élan</p>}
                 <h2 id="plan-heading" className={`${mode === 'plans' ? 'text-2xl font-black tracking-tight text-[#183b31] sm:text-3xl' : 'text-lg font-extrabold'}`}>{mode === 'expired' ? 'Choisissez votre formule de renouvellement' : mode === 'plans' ? 'Trois formules. Une boutique qui avance.' : 'Choisissez votre formule'}</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{mode === 'plans' ? `Choisissez votre formule pour ${shop.name}. Vous pouvez renouveler avant l’échéance : la période restante est conservée et la nouvelle durée s’ajoute à la date d’expiration actuelle.` : 'Le paiement est lancé uniquement après votre validation. Si un essai ou un abonnement est en cours, le temps restant est conservé.'}</p>
               </div>
@@ -259,7 +260,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                   : { card: selected ? 'border-[var(--mt-green-primary)] bg-white ring-4 ring-[var(--mt-green-primary)]/10 shadow-[0_18px_42px_-24px_rgba(15,77,61,0.45)]' : 'border-[#e0e4db] bg-white hover:border-[#9fb7a8]', subdued: 'text-slate-600', check: 'text-[var(--mt-green-primary)]' };
                 const PlanIcon = planIcon;
                 return (
-                  <motion.button
+                  <m.button
                     key={plan.tier}
                     type="button"
                     role="radio"
@@ -271,18 +272,18 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     transition={{ duration: prefersReducedMotion ? 0 : 0.2 }}
                     className={`relative flex min-h-[360px] flex-col items-start rounded-[26px] border p-5 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 sm:p-6 ${mode === 'plans' ? `${planColors.card} ${plan.tier === 'premium' ? 'shadow-[0_22px_55px_rgba(7,95,72,.2)] md:scale-[1.035]' : selected ? 'shadow-[0_18px_42px_-24px_rgba(15,77,61,0.35)]' : 'shadow-[0_12px_34px_rgba(38,35,28,.07)]'}` : `min-h-56 rounded-xl ${selected ? 'border-[var(--mt-green-hover)] bg-white ring-2 ring-[var(--mt-green-hover)]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[var(--mt-green-hover)]'}`} hover:-translate-y-0.5`}
                   >
-                  {featured && <span className="mb-4 rounded-full bg-[var(--mt-orange-soft)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--mt-gray-900)] shadow-sm">Recommandée</span>}
+                  {featured && <span className="mb-4 rounded-full bg-[var(--mt-orange-soft)] px-3 py-1 text-xs font-bold text-[var(--mt-gray-900)] shadow-sm">Recommandée</span>}
                     <span className="flex w-full items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-3">
                         <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'bg-white/10 text-[var(--mt-orange-soft)]' : 'bg-[#e9f5ee] text-[#087c5b]'}`}><PlanIcon className="h-5 w-5" aria-hidden="true" /></span>
-                        <span className="min-w-0"><span className={`block text-[9px] font-black uppercase tracking-[0.12em] ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-[var(--mt-orange-soft)]' : 'text-[#8b7358]'}`}>{planEyebrow}</span><span className={`mt-0.5 block text-sm font-black uppercase tracking-[0.11em] ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-white' : mode === 'plans' ? 'text-[var(--mt-green-hover)]' : ''}`}>{plan.label}</span></span>
+                        <span className="min-w-0"><span className={`block text-xs font-bold ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-[var(--mt-orange-soft)]' : 'text-[#8b7358]'}`}>{planEyebrow}</span><span className={`mt-0.5 block text-sm font-bold ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-white' : mode === 'plans' ? 'text-[var(--mt-green-hover)]' : ''}`}>{plan.label}</span></span>
                       </span>
                       {selected && <Check className={`h-5 w-5 shrink-0 ${mode === 'plans' ? planColors.check : 'text-emerald-700'}`} />}
                     </span>
                     <h3 className={`mt-4 text-xl font-black leading-tight ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-white' : 'text-[#202d28]'}`}>{plan.headline}</h3>
                     <p className={`mt-2 min-h-10 text-xs leading-5 ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{plan.description}</p>
                     <div className={`mt-5 border-b pb-5 ${mode === 'plans' ? selected && plan.tier === 'pro' ? 'border-white/15' : 'border-[#e8ebe5]' : 'border-[#e8ebe5]'}`}>
-                      <strong className="text-3xl font-black tracking-tight"><AnimatePresence mode="wait" initial={false}><motion.span key={`${plan.tier}-${term}`} initial={prefersReducedMotion ? false : { opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} exit={prefersReducedMotion ? undefined : { opacity: 0, y: -7 }} transition={{ duration: prefersReducedMotion ? 0 : 0.16 }} className="inline-block">{subscriptionPrices ? new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier] * (term === 'annual' ? 10 : 1)) : '—'}</motion.span></AnimatePresence><span className="ml-1 text-sm font-bold">FCFA</span></strong>
+                      <strong className="text-3xl font-black tracking-tight"><AnimatePresence mode="wait" initial={false}><m.span key={`${plan.tier}-${term}`} initial={prefersReducedMotion ? false : { opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} exit={prefersReducedMotion ? undefined : { opacity: 0, y: -7 }} transition={{ duration: prefersReducedMotion ? 0 : 0.16 }} className="inline-block">{subscriptionPrices ? new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier] * (term === 'annual' ? 10 : 1)) : '—'}</m.span></AnimatePresence><span className="ml-1 text-sm font-bold">FCFA</span></strong>
                       <span className={`ml-1 text-xs font-semibold ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>/{term === 'annual' ? 'an' : 'mois'}</span>
                       <span className={`mt-1.5 block text-xs ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{subscriptionPrices ? term === 'annual' ? `Soit ${new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier])} FCFA/mois · 2 mois offerts` : `${new Intl.NumberFormat('fr-FR').format(Math.ceil(subscriptionPrices[plan.tier] / 30))} FCFA par jour` : 'Tarif indisponible'}</span>
                     </div>
@@ -295,7 +296,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     <ul className={`mt-4 flex-1 space-y-3 text-left text-xs leading-5 ${mode === 'plans' ? planColors.subdued : 'text-slate-700'}`}>
                       {getSubscriptionPlanBenefits(plan.tier, proFeatures || DEFAULT_SUBSCRIPTION_PRO_FEATURES).map((benefit) => <li key={benefit} className="flex items-start gap-2.5"><Check className={`mt-0.5 h-4 w-4 shrink-0 ${mode === 'plans' ? planColors.check : 'text-emerald-700'}`} /><span>{benefit}</span></li>)}
                     </ul>
-                    </motion.button>
+                    </m.button>
                 );
               })}
             </div>
@@ -317,7 +318,7 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                 <div className="flex items-start gap-3">
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800"><Sparkles className="h-5 w-5" /></span>
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.14em] text-[#a2642e]">En complément de votre abonnement</p>
+                    <p className="text-xs font-bold text-[#a2642e]">En complément de votre abonnement</p>
                     <h3 id="boost-plan-heading" className="mt-1 text-lg font-black text-[#183b31]">Boost sponsorisé · tarifs par durée</h3>
                     <p className="mt-1 text-sm leading-6 text-slate-600">Le Boost est une mise en avant ponctuelle dans l’annuaire, achetée séparément de votre forfait. Il est identifié comme sponsorisé et ne remplace pas les critères de pertinence du classement.</p>
                   </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform } from 'motion/react';
-import { ArrowRight, BadgePercent, CheckCircle2, MapPin, Search, Sparkles } from 'lucide-react';
+import { AnimatePresence, animate, m, useMotionValue, useReducedMotion, useTransform } from 'motion/react';
+import { ArrowRight, BadgePercent, CheckCircle2, MapPin, Search, Sparkles, Store } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatFCFA } from '../utils/format';
 import { getActiveProductPrice, getProductSaleStatus } from '../utils/productPricing';
@@ -9,6 +9,9 @@ import { isShopExcludedFromPublicIndex } from '../utils/shopIndexing';
 import { getDiscoveryCityLabel } from '../utils/discoverySeo';
 import { MotionReveal } from './MotionSystem';
 import { CategoryProductImage } from './CategoryProductImage';
+import { getCategoryDefaults, normalizeProductImage } from '../utils/categoryDefaults';
+import { ShopCover, hasShopVisual } from './ShopCover';
+import { CategoryIcon } from './CategoryIcon';
 
 interface AnimatedHomeShop {
   slug: string;
@@ -16,6 +19,9 @@ interface AnimatedHomeShop {
   category?: string;
   city?: string;
   is_verified?: boolean;
+  is_open?: boolean;
+  theme_color?: string;
+  theme_config?: { custom_banner_url?: string; primary_color?: string };
   products_preview?: {
     id: number;
     title: string;
@@ -54,7 +60,7 @@ const CountUp: React.FC<{ value: number }> = ({ value }) => {
     return () => controls.stop();
   }, [count, prefersReducedMotion, value]);
 
-  return <motion.span aria-hidden="true">{roundedCount}</motion.span>;
+  return <m.span aria-hidden="true">{roundedCount}</m.span>;
 };
 
 const categoryLabels: Record<string, string> = {
@@ -72,11 +78,6 @@ const categoryLabels: Record<string, string> = {
 };
 
 const categoryLabel = (category?: string) => categoryLabels[category || 'other'] || 'Boutiques';
-const repeatToFill = <T,>(items: T[], minItems = 12) => {
-  if (items.length === 0) return [];
-  return Array.from({ length: Math.max(minItems, items.length) }, (_, index) => items[index % items.length]);
-};
-
 interface ProductWallProps {
   products: { shop: AnimatedHomeShop; product: NonNullable<AnimatedHomeShop['products_preview']>[number] }[];
 }
@@ -97,14 +98,14 @@ const ProductWall: React.FC<ProductWallProps> = ({ products }) => {
                   <div key={`${shop.slug}-${product.title}-${index}`} className="shrink-0 rounded-[22px] border border-[var(--mt-gray-200)] bg-white p-2 shadow-[0_18px_38px_rgb(33_38_34_/_18%)] sm:rounded-[22px]">
                     <span className="relative block aspect-[4/5] overflow-hidden rounded-2xl bg-[var(--mt-gray-50)]">
                       <CategoryProductImage imageUrl={product.thumbnail_url || product.image_url} category={shop.category} title={product.title} sizes="420px" className="h-full w-full" />
-                      {isPromotion && <span className="absolute left-2 top-2 rounded-full bg-[#c2410c] px-2 py-1 text-[10px] font-extrabold text-white">Promo</span>}
-                      {shop.is_verified && <span className="absolute right-2 top-2 rounded-full bg-white/95 px-2 py-1 text-[10px] font-extrabold text-[var(--mt-green-deep)]">Vérifié</span>}
+                      {isPromotion && <span className="absolute left-2 top-2 rounded-full bg-[#c2410c] px-2 py-1 text-[11px] font-extrabold text-white">Promo</span>}
+                      {shop.is_verified && <span className="absolute right-2 top-2 rounded-full bg-white/95 px-2 py-1 text-[11px] font-extrabold text-[var(--mt-green-deep)]">Vérifié</span>}
                     </span>
                     <span className="line-clamp-2 px-1 pt-2 text-[15px] font-bold text-[var(--mt-gray-900)]">{product.title}</span>
                     <span className="mt-1 block truncate px-1 text-xs text-[var(--mt-gray-600)]">{shop.name} · {shop.city || 'Côte d’Ivoire'}</span>
                     <span className="mt-1 inline-flex flex-wrap items-baseline gap-1 rounded-full bg-[#fff7ed] px-2 py-1 text-xs font-extrabold text-[var(--mt-orange-deep)]">
                       {formatFCFA(getActiveProductPrice(product))}
-                      {isPromotion && <del className="text-[10px] font-semibold text-[var(--mt-gray-600)]">{formatFCFA(product.price)}</del>}
+                      {isPromotion && <del className="text-[11px] font-semibold text-[var(--mt-gray-600)]">{formatFCFA(product.price)}</del>}
                     </span>
                   </div>
                 );
@@ -134,7 +135,7 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedNeighborhood, setSelectedNeighborhood] = useState('all');
   const [productSort, setProductSort] = useState<'recommended' | 'newest' | 'price'>('recommended');
-  const [visibleProductCount, setVisibleProductCount] = useState(12);
+  const [visibleProductCount, setVisibleProductCount] = useState(8);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -143,6 +144,11 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
   const products = useMemo(
     () => safeShops.flatMap((shop) => (shop.products_preview || []).map((product) => ({ shop, product }))),
     [safeShops],
+  );
+  // Le mur du hero n’affiche que de vraies photos : sans elles, il ressemblerait à un catalogue vide.
+  const wallProducts = useMemo(
+    () => products.filter(({ product }) => Boolean(normalizeProductImage(product.thumbnail_url || product.image_url))),
+    [products],
   );
   const visibleNeighborhoods = useMemo(
     () => [...new Map(neighbourhoods.map((place) => [place.label.trim().toLocaleLowerCase(), place.label.trim()])).values()],
@@ -156,7 +162,11 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
       return matchesCategory && matchesNeighborhood;
     });
 
-    if (productSort === 'newest') {
+    // Par défaut, les articles avec photo passent devant (tri stable : l’ordre d’origine est conservé).
+    const hasPhoto = (entry: (typeof filtered)[number]) => (normalizeProductImage(entry.product.thumbnail_url || entry.product.image_url) ? 1 : 0);
+    if (productSort === 'recommended') {
+      filtered.sort((left, right) => hasPhoto(right) - hasPhoto(left));
+    } else if (productSort === 'newest') {
       filtered.sort((left, right) => (Date.parse(right.product.created_at || '') || 0) - (Date.parse(left.product.created_at || '') || 0));
     } else if (productSort === 'price') {
       filtered.sort((left, right) => getActiveProductPrice(left.product, now) - getActiveProductPrice(right.product, now));
@@ -165,8 +175,22 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
     return filtered;
   }, [now, products, productSort, selectedCategory, selectedNeighborhood]);
   const visibleProducts = filteredProducts.slice(0, visibleProductCount);
-  const marqueeCities = repeatToFill(neighbourhoods.length > 0 ? neighbourhoods : [{ label: 'Abidjan', path: '/boutiques?q=Abidjan' }]);
-  const marqueeCategories = repeatToFill((categories.length > 0 ? categories.map(categoryLabel) : ['Restauration', 'Mode', 'Beauté', 'Maison']).filter((label) => label !== 'Autres'));
+  // Les boutiques avec un visuel (bannière ou photo produit) passent devant ; 8 au plus.
+  const featuredShops = useMemo(
+    () => [...safeShops].sort((left, right) => Number(hasShopVisual(right)) - Number(hasShopVisual(left))).slice(0, 8),
+    [safeShops],
+  );
+  const categoryTiles = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const shop of safeShops) counts.set(shop.category || 'other', (counts.get(shop.category || 'other') || 0) + 1);
+    return [...counts.entries()]
+      .filter(([category]) => category !== 'other')
+      .sort((left, right) => right[1] - left[1])
+      .map(([category, count]) => {
+        const defaults = getCategoryDefaults(category);
+        return { category, count, color: defaults.primaryColor, background: defaults.secondaryColor };
+      });
+  }, [safeShops]);
 
   useEffect(() => {
     if (query || searchFocused || products.length === 0 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -244,16 +268,63 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
             </div>
           </div>
 
-          <ProductWall products={products} />
+          {wallProducts.length >= 4 && <ProductWall products={wallProducts} />}
         </div>
       </section>
 
-      <div className="overflow-hidden border-b border-[var(--mt-gray-200)] bg-[var(--mt-orange-bright)] py-3 text-2xl font-extrabold text-[var(--mt-green-deep)] sm:text-4xl">
-        <div className="home-marquee mt-loop flex w-max gap-10 whitespace-nowrap">{[...marqueeCities, ...marqueeCities].map((place, index) => <React.Fragment key={`${place.path}-${index}`}><span>{place.label}</span><svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 shrink-0"><path d="m12 2 1.8 6.2L20 6.5l-4.1 4.7L22 14l-6.2 1.8 1.7 6.2-4.7-4.1L8 22l-1.8-6.2L0 17.5l4.1-4.7L2 8l6.2-1.8L6.5 0l4.7 4.1L12 2Z" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg></React.Fragment>)}</div>
-      </div>
-      <div className="overflow-hidden bg-[var(--mt-green-deep)] py-3 text-xl font-extrabold text-[var(--mt-orange-soft)] sm:text-3xl">
-        <div className="home-marquee-reverse mt-loop flex w-max gap-8 whitespace-nowrap">{[...marqueeCategories, ...marqueeCategories].map((label, index) => <React.Fragment key={`${label}-${index}`}><span>{label}</span><span aria-hidden="true">·</span></React.Fragment>)}</div>
-      </div>
+      {/* Les boutiques d’abord : chacune avec sa bannière ou, à défaut, ses propres photos. */}
+      {featuredShops.length > 0 && (
+        <section aria-labelledby="home-shops-title" className="mx-auto max-w-[1280px] px-4 pt-8 sm:px-10 sm:pt-16">
+          <div className="flex items-end justify-between gap-3">
+            <h2 id="home-shops-title" className="font-display text-2xl font-extrabold tracking-[-.04em] sm:text-4xl">Boutiques à découvrir</h2>
+            <Link to="/boutiques" className="inline-flex min-h-11 shrink-0 items-center gap-1 text-sm font-extrabold text-[#15513e]">Tout voir <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+          </div>
+          <div className="mt-4 -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 mt-chip-rail sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 lg:grid-cols-4">
+            {featuredShops.map((shop) => (
+              <Link key={shop.slug} to={`/${encodeURIComponent(shop.slug)}`} className="group w-[72%] shrink-0 snap-start overflow-hidden rounded-3xl border border-[#e7e2d9] bg-white shadow-[0_8px_24px_rgba(16,62,50,.07)] sm:w-auto">
+                <span className="relative block aspect-[4/3]">
+                  <ShopCover shop={shop} className="absolute inset-0 h-full w-full transition-transform duration-300 group-hover:scale-[1.03]" sizes="(max-width: 640px) 72vw, 33vw" />
+                  {shop.is_verified && <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-extrabold text-[var(--mt-green-deep)] shadow-sm"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />Vérifié</span>}
+                </span>
+                <span className="block p-3.5">
+                  <strong className="line-clamp-1 font-display text-base font-extrabold text-[#173c32]">{shop.name}</strong>
+                  <span className="mt-1 flex min-w-0 items-center gap-1 text-xs text-[#68716b]">
+                    <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{categoryLabel(shop.category)} · {shop.city || 'Côte d’Ivoire'}</span>
+                  </span>
+                  {shop.is_open !== undefined && <span className={`mt-2 inline-flex items-center gap-1.5 text-xs font-bold ${shop.is_open ? 'text-[var(--mt-green-primary)]' : 'text-[#9a6a3a]'}`}><span className={`h-1.5 w-1.5 rounded-full ${shop.is_open ? 'bg-[var(--mt-green-primary)]' : 'bg-[#d6a76c]'}`} />{shop.is_open ? 'Ouverte aux commandes' : 'Fermée pour le moment'}</span>}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Les univers disponibles, et une invitation pour ceux qui manquent encore. */}
+      {categoryTiles.length > 0 && (
+        <section aria-labelledby="home-categories-title" className="mx-auto max-w-[1280px] px-4 pt-8 sm:px-10 sm:pt-14">
+          <h2 id="home-categories-title" className="font-display text-2xl font-extrabold tracking-[-.04em] sm:text-4xl">Par catégorie</h2>
+          <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
+            {categoryTiles.map(({ category, count, color, background }) => (
+              <button key={category} type="button" onClick={() => onOpenDirectory(categoryLabel(category))} className="flex min-h-[84px] items-center gap-3 rounded-2xl border border-[#e7e2d9] bg-white p-3 text-left transition hover:border-[#b9d5ca]">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ backgroundColor: background, color }}><CategoryIcon category={category} className="h-5 w-5" /></span>
+                <span className="min-w-0">
+                  <span className="block break-words text-sm font-extrabold leading-tight text-[#173c32]">{categoryLabel(category)}</span>
+                  <span className="block text-xs text-[#68716b]">{count} boutique{count > 1 ? 's' : ''}</span>
+                </span>
+              </button>
+            ))}
+            <Link to="/commercants" className="col-span-2 flex min-h-[84px] items-center gap-3 rounded-2xl border border-dashed border-[#cbd9d0] bg-[#f4f8f5] p-3 sm:col-span-2">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white text-[var(--mt-green-deep)]"><Store className="h-5 w-5" aria-hidden="true" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-extrabold text-[#173c32]">Votre activité n’y est pas encore ?</span>
+                <span className="block text-xs text-[#68716b]">Ouvrez votre boutique sur MaTable, c’est gratuit pour commencer.</span>
+              </span>
+              <ArrowRight className="h-4 w-4 shrink-0 text-[var(--mt-green-deep)]" aria-hidden="true" />
+            </Link>
+          </div>
+        </section>
+      )}
 
       <section className="mx-auto max-w-[1280px] px-4 py-10 sm:px-10 sm:py-24">
         <div className="flex flex-wrap items-end justify-between gap-5">
@@ -264,29 +335,27 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
           <Link to="/boutiques" className="inline-flex min-h-11 items-center gap-2 text-sm font-extrabold text-[#15513e] sm:text-lg">Explorer les boutiques <ArrowRight className="h-5 w-5" /></Link>
         </div>
         <div className="mt-5 space-y-3 sm:mt-8 sm:space-y-4">
-          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0" aria-label="Filtrer les produits par catégorie">
-            <button type="button" aria-pressed={selectedCategory === 'all'} onClick={() => { setSelectedCategory('all'); setVisibleProductCount(12); }} className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-bold transition ${selectedCategory === 'all' ? 'bg-[#103e32] text-white' : 'border border-[#e7e2d9] bg-white text-[#47534b] hover:border-[#b9d5ca]'}`}>Tout</button>
+          <div className="mt-chip-rail -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0" aria-label="Filtrer les produits par catégorie">
+            <button type="button" aria-pressed={selectedCategory === 'all'} onClick={() => { setSelectedCategory('all'); setVisibleProductCount(8); }} className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-bold transition ${selectedCategory === 'all' ? 'bg-[#103e32] text-white' : 'border border-[#e7e2d9] bg-white text-[#47534b] hover:border-[#b9d5ca]'}`}>Tout</button>
             {categories.map((category) => (
-              <button key={category} type="button" aria-pressed={selectedCategory === category} onClick={() => { setSelectedCategory(category); setVisibleProductCount(12); }} className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-bold transition ${selectedCategory === category ? 'bg-[#103e32] text-white' : 'border border-[#e7e2d9] bg-white text-[#47534b] hover:border-[#b9d5ca]'}`}>{categoryLabel(category)}</button>
+              <button key={category} type="button" aria-pressed={selectedCategory === category} onClick={() => { setSelectedCategory(category); setVisibleProductCount(8); }} className={`min-h-10 shrink-0 rounded-full px-4 text-sm font-bold transition ${selectedCategory === category ? 'bg-[#103e32] text-white' : 'border border-[#e7e2d9] bg-white text-[#47534b] hover:border-[#b9d5ca]'}`}>{categoryLabel(category)}</button>
             ))}
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:justify-between">
-            <label className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#e7e2d9] bg-white px-3 text-xs font-semibold text-[#47534b] sm:max-w-[260px] sm:text-sm">
-              <MapPin className="h-4 w-4 shrink-0 text-[#15513e]" aria-hidden="true" />
-              <span className="shrink-0">Ville / quartier</span>
-              <select value={selectedNeighborhood} onChange={(event) => { setSelectedNeighborhood(event.target.value); setVisibleProductCount(12); }} aria-label="Filtrer les produits par quartier" className="min-w-0 flex-1 truncate bg-transparent py-2 outline-none">
-                <option value="all">Tous</option>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-between">
+            <label className="mt-filter-field sm:max-w-[260px]">
+              <span className="mt-filter-field-label"><MapPin className="h-3.5 w-3.5 shrink-0 text-[#15513e]" aria-hidden="true" />Quartier</span>
+              <select value={selectedNeighborhood} onChange={(event) => { setSelectedNeighborhood(event.target.value); setVisibleProductCount(8); }} aria-label="Filtrer les produits par quartier" className="mt-filter-field-select">
+                <option value="all">Partout</option>
                 {visibleNeighborhoods.map((neighborhood) => <option key={neighborhood} value={neighborhood}>{neighborhood}</option>)}
               </select>
             </label>
-            <label className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#e7e2d9] bg-white px-3 text-xs font-semibold text-[#47534b] sm:max-w-[250px] sm:text-sm">
-              <Sparkles className="h-4 w-4 shrink-0 text-[#c2410c]" aria-hidden="true" />
-              <span className="shrink-0">Trier</span>
+            <label className="mt-filter-field sm:max-w-[250px]">
+              <span className="mt-filter-field-label"><Sparkles className="h-3.5 w-3.5 shrink-0 text-[#c2410c]" aria-hidden="true" />Trier par</span>
               <select value={productSort} onChange={(event) => {
                 const value = event.currentTarget.value;
                 if (value === 'recommended' || value === 'newest' || value === 'price') setProductSort(value);
-                setVisibleProductCount(12);
-              }} aria-label="Trier les produits" className="min-w-0 flex-1 bg-transparent py-2 outline-none">
+                setVisibleProductCount(8);
+              }} aria-label="Trier les produits" className="mt-filter-field-select">
                 <option value="recommended">Recommandés</option>
                 <option value="newest">Nouveautés</option>
                 <option value="price">Prix croissant</option>
@@ -313,7 +382,7 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
                     : false;
                   const city = shop.city ? getDiscoveryCityLabel(shop.city) : '';
                   return (
-                    <motion.div
+                    <m.div
                       key={`${shop.slug}-${product.id}`}
                       layout={!prefersReducedMotion}
                       exit={prefersReducedMotion ? undefined : { opacity: 0, y: -4 }}
@@ -323,13 +392,13 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
                     >
                       <MotionReveal delay={Math.min(index, 8) * 0.035} className="h-full min-w-0">
                         <Link to={`/${encodeURIComponent(shop.slug)}#product-${product.id}`} className="group block h-full min-w-0 overflow-hidden rounded-2xl border border-[#e7e2d9] bg-white shadow-[0_8px_24px_rgba(16,62,50,.07)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_32px_rgba(16,62,50,.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15513e] focus-visible:ring-offset-2 sm:rounded-[24px]">
-                          <span className="relative block aspect-square overflow-hidden bg-[#f2eee8]">
+                          <span className={`relative block overflow-hidden bg-[#f2eee8] ${normalizeProductImage(product.thumbnail_url || product.image_url) ? 'aspect-square' : 'aspect-[5/3]'}`}>
                             <CategoryProductImage imageUrl={product.thumbnail_url || product.image_url} category={shop.category} title={product.title} sizes="480px" className="h-full w-full transition-transform duration-300 group-hover:scale-105" />
                             <span className="absolute left-2 top-2 flex max-w-[calc(100%-1rem)] flex-wrap gap-1 sm:left-3 sm:top-3">
-                              {isPromotion && <span className="inline-flex items-center gap-1 rounded-full bg-[#c2410c] px-2 py-1 text-[9px] font-extrabold text-white sm:px-2.5 sm:text-[10px]"><BadgePercent className="h-3 w-3" aria-hidden="true" />Promo</span>}
-                              {isNew && <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[9px] font-extrabold text-[#15513e] shadow-sm sm:px-2.5 sm:text-[10px]"><Sparkles className="h-3 w-3" aria-hidden="true" />Nouveau</span>}
+                              {isPromotion && <span className="inline-flex items-center gap-1 rounded-full bg-[#c2410c] px-2 py-1 text-[11px] font-extrabold text-white sm:px-2.5 sm:text-[11px]"><BadgePercent className="h-3 w-3" aria-hidden="true" />Promo</span>}
+                              {isNew && <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[11px] font-extrabold text-[#15513e] shadow-sm sm:px-2.5 sm:text-[11px]"><Sparkles className="h-3 w-3" aria-hidden="true" />Nouveau</span>}
                             </span>
-                            {product.in_stock && <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[9px] font-bold text-[#15513e] sm:bottom-3 sm:left-3 sm:text-[10px]"><CheckCircle2 className="h-3 w-3" aria-hidden="true" />Disponible</span>}
+                            {product.in_stock && <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[11px] font-bold text-[#15513e] sm:bottom-3 sm:left-3 sm:text-[11px]"><CheckCircle2 className="h-3 w-3" aria-hidden="true" />Disponible</span>}
                           </span>
                           <span className="block min-w-0 p-2.5 sm:p-4">
                             <strong className="line-clamp-2 text-sm font-extrabold text-[#173c32] sm:text-base">{product.title}</strong>
@@ -339,18 +408,18 @@ export const AnimatedHome: React.FC<AnimatedHomeProps> = ({ shops, categories, n
                             </span>
                             <span className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-2">
                               <span className={`truncate text-sm font-black sm:text-base ${isPromotion ? 'text-[#c2410c]' : 'text-[#173c32]'}`}>{formatFCFA(activePrice)}</span>
-                              {isPromotion && <del className="truncate text-[10px] font-semibold text-[#68716b] sm:text-xs">{formatFCFA(product.price)}</del>}
+                              {isPromotion && <del className="truncate text-[11px] font-semibold text-[#68716b] sm:text-xs">{formatFCFA(product.price)}</del>}
                             </span>
                           </span>
                         </Link>
                       </MotionReveal>
-                    </motion.div>
+                    </m.div>
                   );
                 })}
               </AnimatePresence>
             </div>
             {visibleProductCount < filteredProducts.length && (
-              <button type="button" onClick={() => setVisibleProductCount((count) => count + 12)} className="mx-auto mt-5 flex min-h-11 items-center gap-2 rounded-full border border-[#cbd9d0] bg-white px-5 text-sm font-extrabold text-[#15513e] transition hover:bg-[#eff6f1]">
+              <button type="button" onClick={() => setVisibleProductCount((count) => count + 8)} className="mx-auto mt-5 flex min-h-11 items-center gap-2 rounded-full border border-[#cbd9d0] bg-white px-5 text-sm font-extrabold text-[#15513e] transition hover:bg-[#eff6f1]">
                 Voir plus de produits <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </button>
             )}

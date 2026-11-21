@@ -186,7 +186,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   {currentShop.admin_mode
                     ? `${products.length} article${products.length === 1 ? '' : 's'} · limites ignorées en mode super-admin`
                     : trialCatalogLimited
-                    ? `Essai gratuit · ${products.length}/${productLimitLabel} articles · ${currentShop.subscription?.trialDaysRemaining} jours restants`
+                    ? `Essai gratuit · ${currentShop.subscription?.trialDaysRemaining} jours restants`
                     : `${products.length} / ${productLimitLabel} articles · ${getCategoryDefaults(currentShop.category).catalogDescription}`}
                 </p>
                 {Number.isFinite(productLimit) && (
@@ -206,8 +206,9 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                 )}
               </div>
 
-              <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex">
-                <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[#d9d5cd] bg-white px-3 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50">
+              <div className="flex w-full flex-col gap-1 sm:w-auto sm:flex-row sm:gap-2">
+                {/* Sur mobile, l’import CSV (rare au téléphone) passe en lien discret sous l’action principale. */}
+                <label className="order-last inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-bold text-[var(--mt-green-hover)] transition-colors sm:order-none sm:min-h-11 sm:border sm:border-[#d9d5cd] sm:bg-white sm:text-slate-700 sm:hover:bg-slate-50">
                   <Upload className="h-4 w-4" /> Importer CSV
                   <input
                     type="file"
@@ -225,7 +226,7 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
                   onClick={handleOpenAddModal}
                   disabled={catalogFull}
                   title={catalogFull ? `La limite de votre formule est de ${productLimit} articles.` : undefined}
-                  className="col-span-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[var(--mt-green-primary)] px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[var(--mt-green-hover)] disabled:cursor-not-allowed disabled:opacity-45 sm:col-span-1"
+                  className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-xl bg-[var(--mt-green-primary)] px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[var(--mt-green-hover)] disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-11"
                 >
                   <Plus className="w-4 h-4" />
                   <span>{catalogFull ? 'Limite du forfait atteinte' : vocabulary.addItem}</span>
@@ -259,7 +260,8 @@ export const CatalogTab: React.FC<CatalogTabProps> = ({ state, filteredProducts 
             )}
 
             {/* Filter pills & search bar */}
-            <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-3 shadow-sm sm:flex-row">
+            {/* Recherche et filtres inutiles tant que le catalogue est court. */}
+            <div className={`${products.length < 6 ? 'hidden' : 'flex'} flex-col items-center gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-3 shadow-sm sm:flex-row`}>
               <div className="relative w-full sm:w-64">
                 <Search className="w-4 h-4 text-[#47534b] absolute left-3 top-2.5" />
                 <input

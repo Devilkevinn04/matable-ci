@@ -5,6 +5,7 @@ import { stringifyCsv } from '../utils/csv';
 import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
 import { buildAmbassadorReferralUrl, getAmbassadorMonthlyStats, type AmbassadorMonthlyStats } from '../utils/ambassadors';
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
+import { confirmAction } from './ui/ConfirmSheet';
 
 interface DashboardData {
   ambassador: { name: string; email: string; code: string; commission_rate: number };
@@ -395,7 +396,13 @@ export function AmbassadorDashboard() {
     setNotice('Lien ouvert dans WhatsApp. Vous pouvez ajouter votre propre message avant de l’envoyer.');
   };
   const cancelWithdrawal = async (withdrawalId: string) => {
-    if (!window.confirm('Annuler cette demande avant sa validation ? Le solde redeviendra disponible.')) return;
+    if (!(await confirmAction({
+      title: 'Annuler ce retrait ?',
+      message: 'La demande n’a pas encore été validée : le montant redevient disponible sur votre solde.',
+      confirmLabel: 'Annuler le retrait',
+      cancelLabel: 'Garder la demande',
+      tone: 'danger',
+    }))) return;
     setRequestingWithdrawal(true); setError(''); setNotice('');
     try {
       const response = await fetch(`/api/ambassador-auth/withdrawals/${withdrawalId}/cancel`, { method: 'POST', credentials: 'include' });

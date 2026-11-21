@@ -8,6 +8,10 @@ import { AuthExperienceLayout, MerchantRegistrationProgress, MerchantShopPreview
 import { MerchantState } from './useMerchant';
 import { TermsPrivacyConsent } from '../TermsPrivacyConsent';
 import { ACQUISITION_SOURCES } from '../../utils/acquisitionSources';
+import { ChoiceCards, CodeField, PhoneField, SelectField, TextField } from '../ui/fields';
+import { SUBSCRIPTION_PLANS } from '../../utils/subscriptionFeatures';
+import { useSubscriptionPrices } from '../../utils/useSubscriptionPrices';
+import { formatFCFA } from '../../utils/format';
 import { getAmbassadorToken, getStoredAmbassadorCode } from '../../utils/ambassadors';
 
 interface MerchantRegistrationScreenProps {
@@ -15,15 +19,19 @@ interface MerchantRegistrationScreenProps {
   onBackToDirectory: () => void;
 }
 
+// Mêmes PIN refusés que côté serveur (isWeakShopPin), signalés avant l’envoi.
+const WEAK_PINS = new Set(['000000', '000001', '111222', '123123', '123456', '222222', '999999']);
+
 export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProps> = ({ state, onBackToDirectory }) => {
   const [step, setStep] = useState<1 | 2>(1);
   const formRef = useRef<HTMLFormElement>(null);
+  const { prices } = useSubscriptionPrices();
   const [linkedAmbassadorCode, setLinkedAmbassadorCode] = useState(getStoredAmbassadorCode);
   const {
     regName, setRegName, regCategory, setRegCategory, regCity, setRegCity,
     regSubscriptionTier, setRegSubscriptionTier,
     regCityOther, setRegCityOther, regPhone, setRegPhone, regPin, setRegPin,
-    showRegPin, setShowRegPin, regEmail, setRegEmail, regLoading,
+    regEmail, setRegEmail, regLoading,
     regAcceptedTermsPrivacy, setRegAcceptedTermsPrivacy,
     regAcquisitionSource, setRegAcquisitionSource,
     regAmbassadorCode, setRegAmbassadorCode,
@@ -38,6 +46,10 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
   }, []);
   const submitStep = (event: React.FormEvent<HTMLFormElement>) => {
     if (step === 2) {
+      if (WEAK_PINS.has(regPin)) {
+        event.preventDefault();
+        return;
+      }
       handleRegisterShop(event);
       return;
     }
@@ -72,7 +84,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
       }}
     >
       <div className="mb-5 space-y-4">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[#dfe8dd] bg-[#edf3ec] px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--mt-green-deep)]">
+        <div className="inline-flex items-center gap-2 rounded-full border border-[#dfe8dd] bg-[#edf3ec] px-2.5 py-1.5 text-xs font-bold text-[var(--mt-green-deep)]">
           <Sparkles className="h-3.5 w-3.5" />
           Espace commerçant
         </div>
@@ -95,95 +107,67 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
             </div>
           ))}
         </div>}
-        {step === 1 && <fieldset className="space-y-2">
-          <legend className="text-sm font-bold text-[#47534b]">Formule pour votre boutique</legend>
-          {(['standard', 'premium'] as const).map((tier) => (
-            <label key={tier} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${regSubscriptionTier === tier ? 'border-[var(--mt-green-deep)] bg-[#edf3ec]' : 'border-[#deded5] bg-white'}`}>
-              <input type="radio" name="merchant-subscription-tier" value={tier} checked={regSubscriptionTier === tier} onChange={() => setRegSubscriptionTier(tier)} className="mt-1 accent-[var(--mt-green-deep)]" />
-              <span className="text-sm text-[#47534b]"><strong>{tier === 'standard' ? 'Standard' : 'Premium'}</strong><span className="mt-0.5 block text-xs leading-5 text-[#68756c]">Essai de {TRIAL_DURATION_MONTHS} mois, jusqu’à {TRIAL_CATALOG_LIMIT} produits pour les {TRIAL_PROMOTION_SLOTS_PER_TIER} premières inscriptions à cette formule.</span></span>
-            </label>
-          ))}
-        </fieldset>}
+        {step === 1 && <ChoiceCards<'standard' | 'premium'>
+          legend="Formule"
+          name="merchant-subscription-tier"
+          value={regSubscriptionTier}
+          onChange={setRegSubscriptionTier}
+          options={(['standard', 'premium'] as const).map((tier) => ({
+            value: tier,
+            label: SUBSCRIPTION_PLANS[tier].label,
+            aside: `puis ${formatFCFA(prices?.[tier] ?? SUBSCRIPTION_PLANS[tier].price)}/mois`,
+            description: tier === 'standard' ? 'Jusqu’à 20 articles, commandes WhatsApp, QR code' : 'Catalogue illimité, vitrine à vos couleurs, logo et bannière',
+          }))}
+        />}
       </div>
 
       <form ref={formRef} onSubmit={submitStep} className="auth-form space-y-4">
         {step === 1 && (
-        <div className="rounded-[18px] border border-[#eef0ea] bg-[#f7f5f2] p-3 sm:p-4">
-          <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#47534b]">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#dfeee6] text-[var(--mt-green-deep)]">1</span>
-            Informations boutique
+        <div className="space-y-5">
+          <TextField label="Nom de la boutique" value={regName} onChange={(event) => setRegName(event.target.value.slice(0, 100))} required maxLength={100} autoComplete="organization" placeholder="Ex. : Atelier Awa" />
+          <div className="grid gap-5 sm:grid-cols-2 sm:gap-4">
+            <SelectField label="Activité" value={regCategory} onChange={(event) => setRegCategory(event.target.value as ShopCategory)}>
+              {SHOP_CATEGORIES.map((category) => <option key={category} value={category}>{getCategoryDefaults(category).label}</option>)}
+            </SelectField>
+            <SelectField label="Ville ou commune" value={regCity} onChange={(event) => setRegCity(event.target.value)} required>
+              <option value="">Choisir…</option>
+              <option value="Abidjan">Abidjan</option>
+              {ABIDJAN_COMMUNES.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
+            </SelectField>
           </div>
-          <div className="space-y-3">
-            <label className="block text-sm font-semibold text-[#47534b]">
-              Nom de la boutique
-              <input type="text" value={regName} onChange={(event) => setRegName(event.target.value.slice(0, 100))} required maxLength={100} autoComplete="organization" placeholder="Ex. : Atelier Awa" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none transition focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" />
-            </label>
-
-            <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
-              <label className="block text-sm font-semibold text-[#47534b]">
-                Activité
-                <select value={regCategory} onChange={(event) => setRegCategory(event.target.value as ShopCategory)} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10">
-                  {SHOP_CATEGORIES.map((category) => <option key={category} value={category}>{getCategoryDefaults(category).label}</option>)}
-                </select>
-              </label>
-              <label className="block text-sm font-semibold text-[#47534b]">
-                Ville / commune
-                <select value={regCity} onChange={(event) => setRegCity(event.target.value)} required className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10">
-                  <option value="">Choisir une commune</option>
-                  <option value="Abidjan">Abidjan</option>
-                  {ABIDJAN_COMMUNES.map((commune) => <option key={commune} value={commune}>{commune}</option>)}
-                </select>
-              </label>
-            </div>
-            {regCity === 'Autre ville / commune' && <label className="block text-sm font-semibold text-[#47534b]">Votre ville<input value={regCityOther} onChange={(event) => setRegCityOther(event.target.value)} required maxLength={100} placeholder="Saisissez votre ville" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" /></label>}
-            <label className="block text-sm font-semibold text-[#47534b]">
-              Comment avez-vous connu MaTable ? <span className="font-normal text-[#77736a]">(facultatif)</span>
-              <select value={regAcquisitionSource} onChange={(event) => setRegAcquisitionSource(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-3 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10">
-                <option value="">Choisir une réponse</option>
-                {ACQUISITION_SOURCES.map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}
-              </select>
-            </label>
-            <label className="block text-sm font-semibold text-[#47534b]">Code ambassadeur (facultatif)
-              <input value={regAmbassadorCode} onChange={(event) => setRegAmbassadorCode(event.target.value)} maxLength={24} autoComplete="off" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)]" />
-            </label>
-            <p className="text-xs leading-5 text-[#647067]">
-              {linkedAmbassadorCode
-                ? <>Lien ambassadeur détecté : <strong>{linkedAmbassadorCode}</strong>. Ce premier lien prévaut sur tout autre code saisi et sera effacé de cet appareil après l’inscription réussie.</>
-                : 'Un code saisi manuellement attribuera l’inscription au partenaire correspondant.'}
-              {' '}L’identifiant du lien expire au plus tard après 90 jours; ce suivi est indépendant des statistiques d’audience.
+          {regCity === 'Autre ville / commune' && <TextField label="Votre ville" value={regCityOther} onChange={(event) => setRegCityOther(event.target.value)} required maxLength={100} placeholder="Ex. : Korhogo" />}
+          <SelectField label="Comment avez-vous connu MaTable ?" optional value={regAcquisitionSource} onChange={(event) => setRegAcquisitionSource(event.target.value)}>
+            <option value="">Choisir une réponse</option>
+            {ACQUISITION_SOURCES.map((source) => <option key={source.value} value={source.value}>{source.label}</option>)}
+          </SelectField>
+          {linkedAmbassadorCode ? (
+            <p className="rounded-xl bg-[#f7f5f2] px-3 py-2 text-xs leading-5 text-[#647067]">
+              Recommandé par l’ambassadeur <strong className="text-[#292d2a]">{linkedAmbassadorCode}</strong>. Ce lien reste prioritaire sur tout code saisi.
             </p>
-          </div>
+          ) : (
+            <details>
+              <summary className="inline-flex min-h-11 cursor-pointer list-none items-center text-sm font-semibold text-[var(--mt-green-deep)] underline underline-offset-4 [&::-webkit-details-marker]:hidden">J’ai un code ambassadeur</summary>
+              <TextField className="mt-2" label="Code ambassadeur" value={regAmbassadorCode} onChange={(event) => setRegAmbassadorCode(event.target.value)} maxLength={24} autoComplete="off" autoCapitalize="characters" hint="Le code attribue votre inscription à l’ambassadeur qui vous l’a donné. Le suivi d’un lien expire au plus tard après 90 jours." />
+            </details>
+          )}
         </div>
         )}
 
         {step === 2 && (
-        <div className="rounded-[18px] border border-[#eef0ea] bg-[#f7f5f2] p-3 sm:p-4">
-          <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[#47534b]">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#dfeee6] text-[var(--mt-green-deep)]">2</span>
-            Accès et sécurité
-          </div>
-          <div className="space-y-3">
-            <label className="block text-sm font-semibold text-[#47534b]">
-              Numéro WhatsApp
-              <input type="tel" inputMode="tel" maxLength={19} pattern="(?:\+225\s?)?(?:01|05|07)(?:\s?[0-9]{2}){4}" title="Saisissez 10 chiffres ivoiriens, avec ou sans l’indicatif +225." value={regPhone} onChange={(event) => setRegPhone(event.target.value.slice(0, 19))} required autoComplete="tel" placeholder="+225 07 00 00 00 00" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" />
-              <span className="mt-1 block text-xs font-normal text-[#68756c]">Ce numéro servira au contact avec vos clients et à retrouver votre espace.</span>
-            </label>
-
-            <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
-              <label className="block text-sm font-semibold text-[#47534b]">
-                Code PIN (6 chiffres)
-                <div className="relative">
-                  <input type={showRegPin ? 'text' : 'password'} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={regPin} onChange={(event) => setRegPin(event.target.value.replace(/\D/g, '').slice(0, 6))} required autoComplete="new-password" placeholder="6 chiffres" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 pr-14 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" />
-                  <button type="button" onClick={() => setShowRegPin((visible) => !visible)} className="absolute right-1 top-[calc(50%+3px)] flex h-11 -translate-y-1/2 items-center rounded-full px-3 text-xs font-bold text-[var(--mt-green-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)]">{showRegPin ? 'Masquer' : 'Afficher'}</button>
-                </div>
-                <span className="mt-1 block text-xs font-normal text-[#68756c]">Choisissez un code que vous pourrez mémoriser.</span>
-              </label>
-              <label className="block text-sm font-semibold text-[#47534b]">
-                E-mail
-                <input type="email" maxLength={254} value={regEmail} onChange={(event) => setRegEmail(event.target.value.slice(0, 254))} required autoComplete="email" placeholder="vous@exemple.ci" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[var(--mt-gray-900)] outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/10" />
-              </label>
-            </div>
-          </div>
+        <div className="space-y-5">
+          <PhoneField label="Numéro WhatsApp de la boutique" required value={regPhone} onValueChange={setRegPhone} hint="Vos clients vous écriront sur ce numéro ; il sert aussi à vous connecter." />
+          <CodeField
+            label="Code PIN"
+            hint="6 chiffres, à retenir : il protège votre espace commerçant. Évitez 123456 ou 000000."
+            length={6}
+            secret
+            required
+            autoComplete="new-password"
+            value={regPin}
+            onValueChange={setRegPin}
+            error={regPin.length === 6 && WEAK_PINS.has(regPin) ? 'Ce code est trop facile à deviner. Choisissez-en un autre.' : undefined}
+          />
+          <TextField label="Adresse e-mail" type="email" inputMode="email" maxLength={254} value={regEmail} onChange={(event) => setRegEmail(event.target.value.slice(0, 254))} required autoComplete="email" placeholder="vous@exemple.ci" hint="Pour recevoir vos codes de connexion et le suivi de votre abonnement." />
         </div>
         )}
 
@@ -199,7 +183,7 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
         </>
         )}
         <div className="flex flex-col-reverse gap-2 sm:flex-row">
-          {step === 2 && <button type="button" onClick={() => setStep(1)} className="min-h-12 flex-1 rounded-full border border-[#d5ddd5] bg-white px-5 py-3 text-sm font-bold text-[#47534b] transition hover:bg-[#f7f5f2]">Retour</button>}
+          {step === 2 && <button type="button" onClick={() => setStep(1)} className="min-h-12 shrink-0 rounded-full border border-[#d5ddd5] bg-white px-5 py-3 text-sm font-bold text-[#47534b] transition hover:bg-[#f7f5f2]">Retour</button>}
           {step === 1 ? (
             <button type="submit" className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_25px_rgba(15,77,61,0.18)] transition hover:bg-[var(--mt-green-hover)]">
               Continuer <ArrowRight className="h-4 w-4" />

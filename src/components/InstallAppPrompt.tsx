@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Download, PlusSquare, Share, X } from 'lucide-react';
+import { COOKIE_CONSENT_KEY, COOKIE_PREFERENCES_KEY } from '../utils/cookieConsent';
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -10,6 +11,16 @@ const DISMISSED_KEY = 'matable-install-dismissed-at';
 const VISITS_KEY = 'matable-storefront-visits';
 const SNOOZE_MS = 14 * 24 * 60 * 60 * 1000;
 const MIN_VISITS = 2;
+// Laisse le client découvrir la boutique avant de proposer l'installation.
+const SHOW_DELAY_MS = 12_000;
+
+const hasCookieChoice = () => {
+  try {
+    return Boolean(localStorage.getItem(COOKIE_PREFERENCES_KEY) || localStorage.getItem(COOKIE_CONSENT_KEY));
+  } catch {
+    return true;
+  }
+};
 
 const isStandalone = () =>
   window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
@@ -33,6 +44,19 @@ export const InstallAppPrompt: React.FC<{ shopName?: string }> = ({ shopName }) 
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
   const [ios] = useState(() => typeof window !== 'undefined' && isIosSafari());
+  // Une seule sollicitation à la fois : on attend la réponse au bandeau cookies et quelques secondes de navigation.
+  const [delayElapsed, setDelayElapsed] = useState(false);
+  const [cookieChoiceMade, setCookieChoiceMade] = useState(() => typeof window === 'undefined' || hasCookieChoice());
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDelayElapsed(true), SHOW_DELAY_MS);
+    const syncChoice = () => setCookieChoiceMade(hasCookieChoice());
+    window.addEventListener('matable-cookie-preferences-updated', syncChoice);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('matable-cookie-preferences-updated', syncChoice);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || isStandalone()) return undefined;
@@ -77,7 +101,7 @@ export const InstallAppPrompt: React.FC<{ shopName?: string }> = ({ shopName }) 
     else setVisible(false);
   };
 
-  if (!visible || (!installEvent && !ios)) return null;
+  if (!visible || !delayElapsed || !cookieChoiceMade || (!installEvent && !ios)) return null;
 
   return (
     <div
@@ -85,7 +109,7 @@ export const InstallAppPrompt: React.FC<{ shopName?: string }> = ({ shopName }) 
       aria-label="Installer MaTable sur votre écran d’accueil"
       className="fixed inset-x-0 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[45] mx-auto w-full max-w-lg px-4"
     >
-      <div className="rounded-2xl border border-[#ded8ce] bg-white p-4 shadow-[0_12px_32px_rgba(32,23,18,0.18)]">
+      <div className="mt-sheet-enter rounded-2xl border border-[#ded8ce] bg-white p-4 shadow-[0_12px_32px_rgba(32,23,18,0.18)]">
         <div className="flex items-start gap-3">
           <img src="/brand-kit/icon-192.png" alt="" className="h-12 w-12 shrink-0 rounded-xl" />
           <div className="min-w-0 flex-1">

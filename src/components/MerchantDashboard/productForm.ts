@@ -137,8 +137,8 @@ export function serializeProductModifierGroups(groups: ProductModifierGroupDraft
   }).join(' | ');
 }
 
-export function createProductDraft(category: unknown): ProductDraft {
-  const defaults = getCategoryDefaults(category);
+// La catégorie reste en paramètre pour les appelants, mais n’impose plus de valeurs au brouillon.
+export function createProductDraft(_category?: unknown): ProductDraft {
   return {
     title: '',
     category: '',
@@ -154,8 +154,10 @@ export function createProductDraft(category: unknown): ProductDraft {
     gallery_images: [],
     sizes: '',
     colors: '',
-    prep_time: defaults.defaultProductPrepTime ?? '',
-    modifier_groups: parseProductModifierGroups(defaults.defaultProductModifiers),
+    // Rien n’est pré-rempli : le commerçant ajoute lui-même temps de préparation et options
+    // (les modèles « + Boisson », « + Portion »… restent proposés en un geste dans le formulaire).
+    prep_time: '',
+    modifier_groups: [],
     attributes: {},
     is_available: true,
   };
@@ -266,4 +268,54 @@ export function buildProductSavePayload(draft: ProductDraft, category: ShopCateg
     attributes,
     is_available: draft.is_available,
   };
+}
+
+/* -------- Brouillon local d’un nouvel article -------- */
+
+const draftKey = (shopId: number) => `matable-new-product-draft-${shopId}`;
+const DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+const hasDraftContent = (draft: ProductDraft) => Boolean(
+  draft.title.trim() || draft.description.trim() || draft.price !== '' || draft.image_url,
+);
+
+export function writeNewProductDraft(shopId: number, draft: ProductDraft): void {
+  try {
+    if (!hasDraftContent(draft)) {
+      localStorage.removeItem(draftKey(shopId));
+      return;
+    }
+    // Une photo encore en données brutes peut dépasser le quota : on l’écarte du brouillon.
+    const safeDraft = draft.image_url.startsWith('data:') ? { ...draft, image_url: '', thumbnail_url: '' } : draft;
+    localStorage.setItem(draftKey(shopId), JSON.stringify({ savedAt: Date.now(), draft: safeDraft }));
+  } catch {
+    // Stockage indisponible ou plein : le formulaire fonctionne sans brouillon.
+  }
+}
+
+export function readNewProductDraft(shopId: number | undefined): ProductDraft | null {
+  if (!shopId) return null;
+  try {
+    const raw = localStorage.getItem(draftKey(shopId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { savedAt?: number; draft?: ProductDraft };
+    if (!parsed.draft || !parsed.savedAt || Date.now() - parsed.savedAt > DRAFT_MAX_AGE_MS) {
+      localStorage.removeItem(draftKey(shopId));
+      return null;
+    }
+    // Complète avec les valeurs par défaut au cas où le format du brouillon aurait évolué.
+    const draft = { ...createProductDraft(), ...parsed.draft };
+    return hasDraftContent(draft) ? draft : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearNewProductDraft(shopId: number | undefined): void {
+  if (!shopId) return;
+  try {
+    localStorage.removeItem(draftKey(shopId));
+  } catch {
+    // Rien à faire : le brouillon disparaîtra avec le stockage du navigateur.
+  }
 }

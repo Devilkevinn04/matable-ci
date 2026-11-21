@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { CartItem, Product } from '../types';
 import { getProductUnitPrice } from '../utils/format';
 import { requiresShopSwitchConfirmation } from '../utils/cart';
+import { lockBodyScroll } from '../utils/scrollLock';
 
 const ACTIVE_CART_STORAGE_KEY = 'matable_active_cart';
 
@@ -56,15 +57,14 @@ export function useCustomerCart(
 
   useEffect(() => {
     if (!isCartOpen) return;
-    const previousBodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlockScroll = lockBodyScroll();
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setIsCartOpen(false);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = previousBodyOverflow;
+      unlockScroll();
     };
   }, [isCartOpen]);
 

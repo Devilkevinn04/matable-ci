@@ -19,7 +19,7 @@ export function SeoArticlePage({ article }: SeoArticlePageProps) {
         </nav>
 
         <header className="rounded-3xl bg-[var(--mt-green-deep)] p-6 text-white shadow-[0_18px_48px_rgba(16,62,50,.16)] sm:p-10">
-          <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[var(--mt-orange-soft)]">
+          <p className="inline-flex items-center gap-2 text-xs font-bold text-[var(--mt-orange-soft)]">
             <BookOpen className="h-4 w-4" aria-hidden="true" /> Guide MaTable
           </p>
           <h1 className="mt-4 font-display text-3xl font-extrabold leading-tight tracking-[-0.035em] sm:text-5xl">{article.heading}</h1>

@@ -22,6 +22,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [isSessionLoading, setIsSessionLoading] = useState(true);
   // Confirm modal (replaces native browser confirm())
   const [confirmModal, setConfirmModal] = useState<{
+    title: string;
     message: string;
     onConfirm: () => void;
     confirmLabel?: string;
@@ -98,6 +99,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
   const productEditor = useMerchantProductEditor(currentShop, setProducts, (message, onConfirm) => {
     setConfirmModal({
+      title: 'Supprimer cet article ?',
       message,
       onConfirm,
       confirmLabel: 'Supprimer l’article',
@@ -697,9 +699,9 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   };
 
   // Save Opening Hours Configuration
-  const handleSaveOpeningHours = async (e?: React.FormEvent) => {
+  const handleSaveOpeningHours = async (e?: React.FormEvent): Promise<boolean> => {
     if (e) e.preventDefault();
-    if (!currentShop) return;
+    if (!currentShop) return false;
     const isValidTime = (value: string) => {
       if (!/^\d{2}:\d{2}$/.test(value)) return false;
       const [hours, minutes] = value.split(':').map(Number);
@@ -707,7 +709,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     };
     if (hoursEnabled && (!isValidTime(openTime) || !isValidTime(closeTime) || activeDays.length === 0)) {
       toast.error('Renseignez les heures d’ouverture et de fermeture, puis choisissez au moins un jour.');
-      return;
+      return false;
     }
 
     try {
@@ -732,6 +734,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
         setCurrentShop(data.shop);
         setHoursSaved(true);
         setTimeout(() => setHoursSaved(false), 3000);
+        return true;
       } else {
         const data = await res.json().catch(() => ({}));
         toast.error(data.error || 'Impossible de sauvegarder les horaires.');
@@ -739,6 +742,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     } catch {
       toast.error('Erreur lors de la mise à jour des horaires.');
     }
+    return false;
   };
 
   // Reset manual override to follow automated schedule
@@ -931,9 +935,10 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
 
     if (newStatus === 'cancelled' || newStatus === 'rejected') {
       setConfirmModal({
+        title: newStatus === 'rejected' ? 'Refuser cette demande ?' : 'Annuler cette commande ?',
         message: newStatus === 'rejected'
-          ? 'Refuser cette demande ? Les articles réservés seront automatiquement remis en stock.'
-          : 'Annuler cette commande ? Les articles seront automatiquement remis en stock.',
+          ? 'Les articles réservés seront remis en stock. Pensez à prévenir le client sur WhatsApp.'
+          : 'Les articles seront remis en stock. Pensez à prévenir le client sur WhatsApp.',
         confirmLabel: newStatus === 'rejected' ? 'Refuser la commande' : 'Annuler la commande',
         cancelLabel: 'Garder la commande',
         onConfirm: () => executeUpdateOrderStatus(orderId, newStatus),
@@ -944,9 +949,9 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   };
 
   // Save General Shop Settings
-  const handleSaveGeneralSettings = async (e: React.FormEvent) => {
+  const handleSaveGeneralSettings = async (e: React.FormEvent): Promise<boolean> => {
     e.preventDefault();
-    if (!currentShop) return;
+    if (!currentShop) return false;
 
     const canManageSocialLinks = Boolean(currentShop.admin_mode || currentShop.subscription?.isActive
       && isSubscriptionFeatureIncluded(currentShop.subscription.plan, 'social_links'));
@@ -980,8 +985,9 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
         syncShopSettings(updatedShop);
         setSettingsSaved(true);
         setSettingsNewPin('');
-        toast.success('Paramètres enregistrés avec succès !');
+        toast.success('Coordonnées enregistrées.');
         setTimeout(() => setSettingsSaved(false), 3000);
+        return true;
       } else {
         const data = await res.json().catch(() => ({}));
         toast.error(data.error || 'Impossible de sauvegarder les paramètres.');
@@ -989,6 +995,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
     } catch {
       toast.error('Erreur lors de la mise à jour des paramètres');
     }
+    return false;
   };
 
 

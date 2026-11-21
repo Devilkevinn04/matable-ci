@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Megaphone, RefreshCw } from 'lucide-react';
 import { ContextualHelp } from './ContextualHelp';
+import { confirmAction } from './ui/ConfirmSheet';
 
 interface BetaState {
   started: boolean;
@@ -146,7 +147,7 @@ export const AdminHomepageMarketing: React.FC = () => {
   };
 
   const deletePermanentPartner = async (partnerId: string, partnerName: string) => {
-    if (!window.confirm(`Retirer définitivement ${partnerName} des partenaires permanents ?`)) return;
+    if (!(await confirmAction({ title: `Retirer ${partnerName} ?`, message: 'Le partenaire disparaît de la page d’accueil. Ce retrait est définitif.', confirmLabel: 'Retirer le partenaire', tone: 'danger' }))) return;
     setBusy(true);
     setError('');
     setNotice('');

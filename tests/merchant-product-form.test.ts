@@ -11,9 +11,9 @@ test('starts product drafts without preselecting variants and leaves images unpe
 
   assert.equal(fashionDraft.sizes, '');
   assert.equal(fashionDraft.colors, '');
-  assert.equal(foodDraft.prep_time, 20);
-  assert.deepEqual(foodDraft.modifier_groups.map((group) => group.name), ['Sauce', 'Accompagnement']);
-  assert.ok(foodDraft.modifier_groups.every((group) => !group.required && group.max_selections === 2));
+  // Un nouveau plat ne reçoit ni temps de préparation ni options que le commerçant n’a pas choisis.
+  assert.equal(foodDraft.prep_time, '');
+  assert.deepEqual(foodDraft.modifier_groups, []);
   assert.equal(foodDraft.image_url, '');
   assert.equal(otherDraft.prep_time, '');
   assert.deepEqual(otherDraft.modifier_groups, []);

@@ -200,10 +200,10 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
         <CategoryProductImage imageUrl={product.thumbnail_url || product.image_url} category={product.shop.category} title={productTitle} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" className="h-full w-full transition-transform duration-500 group-hover:scale-[1.04]" />
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           {isPromotion
-            ? <span aria-label={discountPercent > 0 ? `Réduction de ${discountPercent} %` : 'Prix réduit'} className="inline-flex items-center gap-1 rounded-full bg-[#c2410c] px-2.5 py-1 text-[10px] font-bold text-white"><BadgePercent className="h-3 w-3" aria-hidden="true" />{discountPercent > 0 ? `−${discountPercent}%` : 'Prix réduit'}</span>
-            : label && <span className="rounded-full bg-[#FFFFFF]/95 px-2.5 py-1 text-[10px] font-bold text-[var(--mt-green-deep)]">{label}</span>}
+            ? <span aria-label={discountPercent > 0 ? `Réduction de ${discountPercent} %` : 'Prix réduit'} className="inline-flex items-center gap-1 rounded-full bg-[#c2410c] px-2.5 py-1 text-[11px] font-bold text-white"><BadgePercent className="h-3 w-3" aria-hidden="true" />{discountPercent > 0 ? `−${discountPercent}%` : 'Prix réduit'}</span>
+            : label && <span className="rounded-full bg-[#FFFFFF]/95 px-2.5 py-1 text-[11px] font-bold text-[var(--mt-green-deep)]">{label}</span>}
         </div>
-        {product.stock > 0 && <span className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold text-[var(--mt-green-deep)]">
+        {product.stock > 0 && <span className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-bold text-[var(--mt-green-deep)]">
           <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> {product.stock <= 3 ? `Plus que ${product.stock} disponible${product.stock > 1 ? 's' : ''}` : `${product.stock} en stock`}
         </span>}
       </div>
@@ -218,7 +218,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <p className={`text-base font-extrabold ${isPromotion ? 'text-[#c2410c]' : 'text-[var(--mt-green-deep)]'}`}>{formatFCFA(activePrice)}</p>
             {isPromotion && <p className="text-xs font-semibold text-[#81786d]"><del>{formatFCFA(product.price)}</del></p>}
-            {isPromotion && product.sale_ends_at && <p className="basis-full text-[10px] font-semibold text-[#a53a1d]">Jusqu’au {new Date(product.sale_ends_at).toLocaleDateString('fr-FR')}</p>}
+            {isPromotion && product.sale_ends_at && <p className="basis-full text-[11px] font-semibold text-[#a53a1d]">Jusqu’au {new Date(product.sale_ends_at).toLocaleDateString('fr-FR')}</p>}
           </div>
           {product.shop.city && <p className="flex items-center gap-1 text-[11px] text-[#647067]"><MapPin className="h-3 w-3 text-[var(--mt-green-primary)]" aria-hidden="true" />{getDiscoveryCityLabel(product.shop.city)}</p>}
         </div>
@@ -236,7 +236,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
       <div className="mx-auto max-w-[1184px] px-5 sm:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <MotionReveal>
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#c2410c]">{promotionsOnly ? 'Offres à durée limitée' : 'À parcourir aujourd’hui'}</p>
+            <p className="text-xs font-bold text-[#c2410c]">{promotionsOnly ? 'Offres à durée limitée' : 'À parcourir aujourd’hui'}</p>
             <h2 id="product-feed-title" className="mt-1 font-display text-2xl font-extrabold tracking-tight sm:text-3xl">{promotionsOnly ? 'Les offres actives' : 'À découvrir près de chez vous'}</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#647067]">
               {promotionsOnly

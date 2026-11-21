@@ -6,6 +6,7 @@ import type { CategoryDefaults } from '../utils/categoryDefaults';
 import { formatFCFA } from '../utils/format';
 import { splitModifierOption } from './MerchantDashboard/productForm';
 import { CategoryProductImage } from './CategoryProductImage';
+import { lockBodyScroll } from '../utils/scrollLock';
 
 interface ProductOptionsSheetProps {
   product: Product;
@@ -58,9 +59,8 @@ export const ProductOptionsSheet: React.FC<ProductOptionsSheetProps> = ({
   const canOrder = isShopOpen && !outOfStock;
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    document.body.style.overflow = 'hidden';
+    const unlockScroll = lockBodyScroll();
     closeRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -74,7 +74,7 @@ export const ProductOptionsSheet: React.FC<ProductOptionsSheetProps> = ({
     };
     document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      unlockScroll();
       document.removeEventListener('keydown', onKeyDown);
       previousFocus?.focus();
     };
@@ -103,7 +103,8 @@ export const ProductOptionsSheet: React.FC<ProductOptionsSheetProps> = ({
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={`Options de ${title}`} className="mt-sheet-up relative flex max-h-[88dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[1.75rem] bg-[#faf8f3] shadow-2xl sm:rounded-3xl">
         <button ref={closeRef} type="button" onClick={onClose} aria-label="Fermer" className="absolute right-4 top-4 z-30 flex h-11 w-11 items-center justify-center rounded-full bg-white/95 text-slate-700 shadow-md"><X className="h-5 w-5" /></button>
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 pb-4 pt-3">
-          <div className="-mx-1 aspect-[2/1] overflow-hidden rounded-2xl bg-[#f4f1ea]">
+          <div aria-hidden="true" className="mx-auto -mb-2 h-1.5 w-10 rounded-full bg-slate-300 sm:hidden" />
+          <div className={`-mx-1 overflow-hidden rounded-2xl bg-[#f4f1ea] ${imageSrc ? 'aspect-[2/1]' : 'aspect-[3/1]'}`}>
             <CategoryProductImage imageUrl={imageSrc} category={category} title={title} showFallbackTitle={false} sizes="(max-width: 640px) 100vw, 32rem" className="h-full w-full" />
           </div>
           <div>
@@ -184,9 +185,9 @@ export const ProductOptionsSheet: React.FC<ProductOptionsSheetProps> = ({
               <SectionTitle title="Détails" />
               <dl className="grid grid-cols-2 gap-2">
                 {attributes.map(({ field, value }) => (
-                  <div key={field!.key} className="rounded-xl border border-[#ded8ce] bg-white px-3 py-2">
-                    <dt className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{field!.label}</dt>
-                    <dd className="truncate text-sm font-bold text-slate-800">{value}</dd>
+                  <div key={field!.key} className={`rounded-xl border border-[#ded8ce] bg-white px-3 py-2 ${String(value).length > 22 ? 'col-span-2' : ''}`}>
+                    <dt className="text-xs font-semibold text-slate-500">{field!.label}</dt>
+                    <dd className="break-words text-sm font-bold leading-5 text-slate-800">{value}</dd>
                   </div>
                 ))}
               </dl>

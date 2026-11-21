@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, CalendarDays, Check, ChevronRight, Clock3, Eye, EyeOff, Gift, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, UserRound } from 'lucide-react';
+import { ArrowRight, CalendarDays, Check, ChevronRight, Clock3,   Gift, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, UserRound } from 'lucide-react';
 import { AuthAudienceSwitcher, AuthExperienceLayout } from './AuthExperienceLayout';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
 import { CustomerMerchantRegistrationForm } from './CustomerMerchantRegistrationForm';
+import { CodeField, PhoneField, TextField } from './ui/fields';
+import { OrderProgress } from './OrderProgress';
 import { TermsPrivacyConsent } from './TermsPrivacyConsent';
 import { CategoryProductImage } from './CategoryProductImage';
 import { normalizeCustomerPhone } from '../utils/normalizeCustomerPhone';
@@ -13,6 +15,7 @@ import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import { Link } from 'react-router-dom';
 import { trackLogin, trackSignup } from '../utils/analyticsTracker';
 import { ContextualHelp } from './ContextualHelp';
+import { confirmAction } from './ui/ConfirmSheet';
 
 const GuideChecklist = React.lazy(() => import('./UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
 
@@ -55,7 +58,6 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
   const [phone, setPhone] = useState('+225');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingOAuthProfile, setPendingOAuthProfile] = useState<PendingOAuthProfile | null>(null);
@@ -300,32 +302,30 @@ export const CustomerAuth: React.FC<CustomerAuthProps> = ({ initialMode = 'login
         <form onSubmit={submit} className="auth-form space-y-4">
           {!pendingMfaChallenge && !pendingOAuthProfile && !pendingOAuthLink && <CustomerOAuthButtons returnTo={customerReturnTo} />}
           {pendingMfaChallenge ? (
-            <label className="block text-sm font-semibold text-[#47534b]">
-              Code de vérification par e-mail
-              <span className="mt-1 block text-xs font-normal text-[#667168]">Code à 8 chiffres, à usage unique, valide 10 minutes.</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                pattern="[0-9]{8}"
-                maxLength={8}
-                value={mfaCode}
-                onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 8))}
-                required
-                className="mt-2 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-center font-mono text-lg tracking-[0.3em] outline-none focus:border-[var(--mt-green-primary)]"
-              />
-            </label>
+            <CodeField
+              label="Code reçu par e-mail"
+              hint="Code à 8 chiffres, à usage unique, valide 10 minutes."
+              length={8}
+              required
+              autoFocus
+              value={mfaCode}
+              onValueChange={setMfaCode}
+            />
           ) : <>
-          {mode === 'register' && <div className="grid gap-3 min-[390px]:grid-cols-2 sm:gap-4"><label className="block text-sm font-semibold text-[#47534b]">Prénom<input value={firstName} onChange={(event) => setFirstName(event.target.value.slice(0, 60))} required maxLength={60} autoComplete="given-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="Votre prénom" /></label><label className="block text-sm font-semibold text-[#47534b]">Nom<input value={lastName} onChange={(event) => setLastName(event.target.value.slice(0, 60))} required maxLength={60} autoComplete="family-name" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="Votre nom" /></label></div>}
-          {mode === 'register' && <label className="block text-sm font-semibold text-[#47534b]">Numéro de téléphone<input type="tel" inputMode="tel" maxLength={16} value={phone} onChange={(event) => setPhone(event.target.value.slice(0, 16))} required autoComplete="tel" aria-invalid={Boolean(phoneFieldError)} aria-describedby={phoneFieldError ? 'customer-phone-error' : undefined} className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="+225 07 00 00 00 00" />{phoneFieldError && <span id="customer-phone-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{phoneFieldError}</span>}</label>}
-          {pendingOAuthLink && <label className="block text-sm font-semibold text-[#47534b]">Adresse e-mail<input type="email" value={pendingOAuthLink.email} readOnly autoComplete="email" className="mt-1.5 min-h-12 w-full rounded-[14px] border border-[#deded5] bg-[#f7f6f1] px-4 py-3 text-sm font-normal text-[#292d2a] outline-none" /></label>}
-          {!pendingOAuthProfile && !pendingOAuthLink && <label className="block text-sm font-semibold text-[#47534b]">Adresse e-mail<div className="relative mt-1.5"><Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#869188]" /><input type="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} required autoComplete="email" aria-invalid={Boolean(emailFieldError)} aria-describedby={emailFieldError ? 'customer-email-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white py-3 pl-11 pr-4 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="vous@exemple.ci" /></div>{emailFieldError && <span id="customer-email-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{emailFieldError}</span>}</label>}
-          {!pendingOAuthProfile && <label className="block text-sm font-semibold text-[#47534b]">Mot de passe<div className="relative mt-1.5"><input type={showPassword ? 'text' : 'password'} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value.slice(0, 128))} required minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} aria-invalid={Boolean(passwordFieldError)} aria-describedby={passwordFieldError ? 'customer-password-error' : undefined} className="min-h-12 w-full rounded-[14px] border border-[#deded5] bg-white px-4 py-3 pr-12 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[var(--mt-green-primary)] focus:ring-2 focus:ring-[var(--mt-green-primary)]/10" placeholder="8 caractères minimum" /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} aria-pressed={showPassword} className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-[#647067] transition hover:bg-[#f3f1eb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]">{showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}</button></div>{passwordFieldError && <span id="customer-password-error" className="mt-1.5 block text-xs font-semibold text-[#a33e24]">{passwordFieldError}</span>}</label>}
+          {mode === 'register' && <div className="grid gap-4 min-[390px]:grid-cols-2">
+            <TextField label="Prénom" value={firstName} onChange={(event) => setFirstName(event.target.value.slice(0, 60))} required maxLength={60} autoComplete="given-name" />
+            <TextField label="Nom" value={lastName} onChange={(event) => setLastName(event.target.value.slice(0, 60))} required maxLength={60} autoComplete="family-name" />
+          </div>}
+          {mode === 'register' && <PhoneField label="Numéro de téléphone" required value={phone} onValueChange={setPhone} error={phoneFieldError || undefined} hint="Utilisé pour vos commandes sur WhatsApp." />}
+          {pendingOAuthLink && <TextField label="Adresse e-mail" type="email" value={pendingOAuthLink.email} readOnly autoComplete="email" leadingIcon={<Mail />} />}
+          {!pendingOAuthProfile && !pendingOAuthLink && <TextField label="Adresse e-mail" type="email" inputMode="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} required autoComplete="email" leadingIcon={<Mail />} placeholder="vous@exemple.ci" error={emailFieldError || undefined} />}
+          {!pendingOAuthProfile && <TextField label="Mot de passe" type="password" maxLength={128} value={password} onChange={(event) => setPassword(event.target.value.slice(0, 128))} required minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder={mode === 'register' ? '8 caractères minimum' : undefined} invalidMessage="Le mot de passe contient au moins 8 caractères." error={passwordFieldError || undefined} />}
           {(pendingOAuthProfile || mode === 'register') && (
             <TermsPrivacyConsent id="customer-account-terms-privacy" checked={acceptedTermsPrivacy} onChange={setAcceptedTermsPrivacy} />
           )}
           </>}
-          {error && <p role="alert" className="rounded-xl border border-[#F97316]/30 bg-[#fff0e8] px-3 py-2.5 text-sm font-semibold text-[#a33e24]">{error}</p>}
+          {/* Le message global n’apparaît que s’il ne concerne aucun champ précis (déjà affiché sous le champ). */}
+          {error && !phoneFieldError && !emailFieldError && !passwordFieldError && <p role="alert" className="rounded-xl border border-[#F97316]/30 bg-[#fff0e8] px-3 py-2.5 text-sm font-semibold text-[#a33e24]">{error}</p>}
           <button type="submit" disabled={isSubmitting} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--mt-green-primary)] disabled:cursor-wait disabled:opacity-60">{isSubmitting ? 'Vérification...' : pendingMfaChallenge ? 'Vérifier le code' : pendingOAuthLink ? 'Associer mon compte' : pendingOAuthProfile ? 'Terminer mon inscription' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'} <ArrowRight className="h-4 w-4" /></button>
           {pendingMfaChallenge
             ? <button type="button" onClick={() => { setPendingMfaChallenge(''); setMfaCode(''); setPendingOAuthMfa(false); setMfaReturnTo(''); setError(''); }} className="block w-full text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[var(--mt-green-deep)]">Recommencer la connexion</button>
@@ -355,8 +355,16 @@ interface CustomerOrder {
   created_at: string;
   shop_id: number;
   shop_name?: string;
+  shop_category?: string;
   items?: { id: number; product_title?: string; quantity: number; unit_price: number; selected_size?: string; selected_color?: string; selected_modifiers?: string[] }[];
 }
+
+// « +2250711223344 » → « +225 07 11 22 33 44 » ; tout autre format est affiché tel quel.
+const formatPhoneForDisplay = (phone: string) => {
+  const digits = phone.replace(/\D/g, '');
+  const local = digits.startsWith('225') && digits.length === 13 ? digits.slice(3) : digits.length === 10 ? digits : null;
+  return local ? `+225 ${local.match(/.{2}/g)!.join(' ')}` : phone;
+};
 
 type CustomerAccountSection = 'overview' | 'orders' | 'favorites' | 'loyalty' | 'profile' | 'security';
 
@@ -460,7 +468,13 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
   );
 
   const cancelPendingOrder = async (orderId: number) => {
-    if (!window.confirm('Annuler cette demande de commande ? Le stock réservé sera libéré.')) return;
+    if (!(await confirmAction({
+      title: 'Annuler cette demande ?',
+      message: 'La boutique ne pourra plus l’accepter et les articles réservés seront remis en vente.',
+      confirmLabel: 'Annuler la demande',
+      cancelLabel: 'Garder ma demande',
+      tone: 'danger',
+    }))) return;
     setCancellingOrderId(orderId);
     setOrderActionError('');
     try {
@@ -701,14 +715,15 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
         </div>
       </header>
 
-      <section className="relative isolate overflow-hidden bg-[var(--mt-green-deep)] text-white">
+      {/* Sur mobile, l’accueil du compte n’apparaît que sur la vue d’ensemble pour laisser la place au contenu des autres onglets. */}
+      <section className={`relative isolate overflow-hidden bg-[var(--mt-green-deep)] text-white ${activeSection === 'overview' ? '' : 'max-lg:hidden'}`}>
         <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-36 -z-10 h-96 w-96 rounded-full border border-white/10 sm:right-8 sm:top-[-17rem] sm:h-[34rem] sm:w-[34rem]" />
         <div className="mx-auto flex max-w-[1184px] items-center gap-3 px-5 py-5 sm:gap-4 sm:px-8 sm:py-8">
           <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 font-display text-lg font-extrabold text-[#f0ba80] sm:h-16 sm:w-16 sm:text-2xl">
               {(user.first_name || user.name).trim().charAt(0).toLocaleUpperCase()}
           </span>
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#f0ba80] sm:text-xs">Votre espace client</p>
+            <p className="text-xs font-bold text-[#f0ba80] sm:text-xs">Votre espace client</p>
             <h1 className="mt-0.5 truncate font-display text-2xl font-extrabold leading-tight tracking-[-0.04em] sm:mt-1 sm:text-4xl">Bonjour {user.first_name || user.name}.</h1>
             <p className="mt-1 text-xs leading-5 text-white/75 sm:mt-2 sm:text-sm">Commandes, favoris et informations au même endroit.</p>
             {user.created_at && <p className="mt-1 flex items-center gap-1.5 text-[10px] text-white/60 sm:text-xs"><CalendarDays className="h-3 w-3 text-[#f0ba80]" />Membre depuis {new Date(user.created_at).toLocaleDateString('fr-CI', { month: 'long', year: 'numeric' })}</p>}
@@ -716,8 +731,8 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
         </div>
       </section>
 
-      {!user.email_verified && (
-        <div role="status" className="mx-auto mt-4 max-w-[1184px] rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 sm:mt-6 sm:px-6">
+      {!user.email_verified && (activeSection === 'overview' || activeSection === 'profile') && (
+        <div role="status" className="mx-4 mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 sm:mx-8 sm:mt-6 sm:px-6 xl:mx-auto xl:max-w-[1184px]">
           <p className="font-extrabold">Vérifiez votre adresse e-mail pour protéger votre compte.</p>
           <p className="mt-1 leading-6">La connexion par code e-mail sera requise après la période de transition. Confirmez dès maintenant que vous pouvez recevoir les codes sur {user.email}.</p>
           <button type="button" onClick={() => setActiveSection('profile')} className="mt-2 font-bold underline underline-offset-2">Vérifier mon adresse</button>
@@ -735,7 +750,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
             </button>
           ))}
           <div className="mt-2 hidden rounded-2xl border border-[#e3d9cc] bg-[#FFFFFF] p-4 lg:block">
-            <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#c2410c]">Une question ?</p>
+            <p className="text-xs font-bold text-[#c2410c]">Une question ?</p>
             <p className="mt-2 text-sm leading-5 text-[#647067]">Notre équipe peut vous aider pour l’accès ou l’utilisation de votre compte.</p>
             {supportUrl
               ? <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-[var(--mt-green-deep)]"><MessageCircle className="h-4 w-4" />Contacter l’assistance</a>
@@ -748,7 +763,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
           {activeSection === 'overview' && <>
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[#c2410c] sm:text-xs">Votre espace MaTable</p>
+                <p className="text-xs font-bold text-[#c2410c] sm:text-xs">Votre espace MaTable</p>
                 <h2 className="mt-1 font-display text-xl font-extrabold sm:text-3xl">Votre activité</h2>
                 <p className="mt-1 text-xs leading-5 text-[#647067] sm:mt-2 sm:text-sm sm:leading-6">Suivez vos commandes et retrouvez vos sélections.</p>
               </div>
@@ -790,7 +805,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
               <div className="min-w-0">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#81796f]">À retrouver</p>
+                    <p className="text-xs font-bold text-[#81796f]">À retrouver</p>
                     <h3 className="mt-1 font-display text-xl font-extrabold">Activité récente</h3>
                   </div>
                   <button type="button" onClick={() => setActiveSection('orders')} className="inline-flex min-h-10 items-center gap-1 rounded-full px-3 text-sm font-bold text-[var(--mt-green-deep)] hover:bg-[#d1fae5]">
@@ -822,7 +837,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
               </div>
 
               <aside className="min-w-0 rounded-2xl bg-[#f5f2eb] p-5">
-                <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#81796f]">Vos informations</p>
+                <p className="text-xs font-bold text-[#81796f]">Vos informations</p>
                 <div className="mt-4 flex items-center gap-3">
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--mt-green-deep)] font-display font-extrabold text-[#f0ba80]">
                     {(user.first_name || user.name).trim().charAt(0).toLocaleUpperCase()}
@@ -839,7 +854,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                   </div>
                   <div className="flex min-w-0 items-start gap-2.5">
                     <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-green-primary)]" />
-                    <div className="min-w-0"><dt className="text-xs text-[#81796f]">Téléphone</dt><dd className="font-semibold text-[#3d3933]">{user.phone || 'Non renseigné'}</dd></div>
+                    <div className="min-w-0"><dt className="text-xs text-[#81796f]">Téléphone</dt><dd className="font-semibold tabular-nums text-[#3d3933]">{user.phone ? formatPhoneForDisplay(user.phone) : 'Non renseigné'}</dd></div>
                   </div>
                 </dl>
                 <button type="button" onClick={() => setActiveSection('profile')} className="mt-5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[var(--mt-green-deep)] transition hover:bg-[#d1fae5]">
@@ -849,7 +864,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[var(--mt-green-primary)]" />
                   Vos coordonnées servent à faciliter le suivi de vos commandes.
                 </div>
-                {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[var(--mt-green-deep)] transition hover:bg-[#d1fae5]"><MessageCircle className="h-4 w-4" />Besoin d’aide ? Écrire au service client</a>}
+                {supportUrl && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-full border border-[#c8dbd0] bg-white px-4 text-sm font-bold text-[var(--mt-green-deep)] transition hover:bg-[#d1fae5]"><MessageCircle className="h-4 w-4" />Contacter le service client</a>}
               </aside>
             </div>
           </>}
@@ -857,7 +872,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
           {activeSection === 'favorites' && <>
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#c2410c]">À garder près de vous</p>
+                <p className="text-xs font-bold text-[#c2410c]">À garder près de vous</p>
                 <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Mes favoris</h2>
                 <p className="mt-2 text-sm leading-6 text-[#647067]">Les boutiques et produits que vous avez enregistrés pour les retrouver facilement.</p>
               </div>
@@ -902,7 +917,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
           {activeSection === 'orders' && <>
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#c2410c]">Votre activité</p>
+                <p className="text-xs font-bold text-[#c2410c]">Votre activité</p>
                 <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Mes commandes</h2>
                 <p className="mt-2 text-sm leading-6 text-[#647067]">Les demandes envoyées depuis ce compte. Les commandes invitées n’apparaissent pas ici.</p>
               </div>
@@ -921,14 +936,13 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
               {orders.map((order) => <article key={order.id} className="rounded-2xl border border-[#e8e0d6] bg-white p-4 sm:p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#c2410c]">Commande #{order.id}</p>
-                    <h3 className="mt-1 font-display text-lg font-bold">{order.shop_name || `Boutique locale`}</h3>
-                    <time className="mt-1 block text-xs text-[#81796f]" dateTime={order.created_at}>{new Date(order.created_at).toLocaleDateString('fr-CI', { day: 'numeric', month: 'long', year: 'numeric' })}</time>
+                    <h3 className="font-display text-lg font-bold">{order.shop_name || `Boutique locale`}</h3>
+                    <p className="mt-0.5 text-xs text-[#81796f]">Commande n° {order.id} · <time dateTime={order.created_at}>{new Date(order.created_at).toLocaleDateString('fr-CI', { day: 'numeric', month: 'long' })}</time></p>
                   </div>
-                  <div className="flex flex-col items-start gap-2 sm:items-end">
-                    <span className="rounded-full bg-[#f1eee7] px-3 py-1.5 text-xs font-bold text-[#47534b]">{customerOrderStatusLabel(order.status)}</span>
-                    <strong className="text-sm font-extrabold text-[var(--mt-green-deep)]">{formatFCFA(order.total_amount)}</strong>
-                  </div>
+                  <strong className="text-base font-extrabold tabular-nums text-[var(--mt-green-deep)]">{formatFCFA(order.total_amount)}</strong>
+                </div>
+                <div className="mt-4">
+                  <OrderProgress status={order.status} category={order.shop_category} />
                 </div>
                 {order.items?.length ? <ul className="mt-4 space-y-2 border-t border-[#eee6dd] pt-3">
                   {order.items.map((item) => <li key={item.id} className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
@@ -936,8 +950,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                     <span className="font-semibold text-[#647067]">{(item.unit_price * item.quantity).toLocaleString('fr-FR')} FCFA</span>
                   </li>)}
                 </ul> : null}
-                {order.status === 'pending' && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-[#eee6dd] pt-3">
-                  <p className="text-xs leading-5 text-[#647067]">En attente de la boutique. Sans réponse sous 2 heures, la demande expire et le stock est libéré.</p>
+                {order.status === 'pending' && <div className="mt-3 flex justify-end border-t border-[#eee6dd] pt-3">
                   <button type="button" onClick={() => void cancelPendingOrder(order.id)} disabled={cancellingOrderId === order.id} className="min-h-10 rounded-full border border-rose-200 bg-rose-50 px-4 text-xs font-bold text-rose-800 transition hover:bg-rose-100 disabled:opacity-50">
                     {cancellingOrderId === order.id ? 'Annulation…' : 'Annuler la demande'}
                   </button>
@@ -956,7 +969,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
           {activeSection === 'loyalty' && <>
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#c2410c]">Vos avantages</p>
+                <p className="text-xs font-bold text-[#c2410c]">Vos avantages</p>
                 <div className="flex items-center gap-2">
                   <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Ma fidélité</h2>
                   <ContextualHelp label="Carte de fidélité" variant="info">
@@ -978,7 +991,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                 return <article key={card.shop_id} className="rounded-2xl border border-[#e8e0d6] bg-white p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#c2410c]">Carte de fidélité</p>
+                      <p className="text-xs font-bold text-[#c2410c]">Carte de fidélité</p>
                       <h3 className="mt-1 truncate font-display text-lg font-extrabold">{card.shop_name}</h3>
                     </div>
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#d1fae5] text-[var(--mt-green-deep)]"><Gift className="h-5 w-5" /></span>
@@ -998,29 +1011,18 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
           </>}
 
           {activeSection === 'profile' && <div className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#c2410c]">Votre profil</p>
+            <p className="text-xs font-bold text-[#c2410c]">Votre profil</p>
             <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Mes informations</h2>
             <p className="mt-2 text-sm leading-6 text-[#647067]">Mettez à jour les coordonnées associées à vos commandes.</p>
             <form onSubmit={saveProfile} className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm font-bold text-[#47534b]">Prénom
-                  <input required maxLength={60} value={firstName} onChange={(event) => setFirstName(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]" />
-                </label>
-                <label className="block text-sm font-bold text-[#47534b]">Nom
-                  <input required maxLength={60} value={lastName} onChange={(event) => setLastName(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]" />
-                </label>
+                <TextField label="Prénom" required maxLength={60} autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} />
+                <TextField label="Nom" required maxLength={60} autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} />
               </div>
-              <label className="block text-sm font-bold text-[#47534b]">Téléphone
-                <input required type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]" />
-              </label>
-              <label className="block text-sm font-bold text-[#47534b]">Adresse e-mail
-                <input type="email" value={user.email} readOnly className="mt-1.5 min-h-12 w-full rounded-xl border border-[#e8e0d6] bg-[#FAF8F2] px-3 text-sm font-medium text-[#647067]" />
-                <span className="mt-1 block text-xs font-normal text-[#81796f]">{user.email_verified ? 'Adresse vérifiée.' : 'Un code sera envoyé à cette adresse pour confirmer que vous pouvez la consulter.'}</span>
-              </label>
+              <PhoneField label="Téléphone" required value={phone} onValueChange={setPhone} />
+              <TextField label="Adresse e-mail" type="email" value={user.email} readOnly leadingIcon={<Mail />} hint={user.email_verified ? 'Adresse vérifiée.' : 'Un code sera envoyé à cette adresse pour confirmer que vous pouvez la consulter.'} />
               {!user.email_verified && <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                {emailVerificationChallenge && <label className="block text-sm font-bold text-[#47534b]">Code reçu par e-mail
-                  <input type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{8}" maxLength={8} value={emailVerificationCode} onChange={(event) => setEmailVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-1.5 min-h-12 w-full rounded-xl border border-amber-200 bg-white px-3 text-center font-mono text-lg tracking-[0.3em]" />
-                </label>}
+                {emailVerificationChallenge && <CodeField label="Code reçu par e-mail" length={8} autoFocus value={emailVerificationCode} onValueChange={setEmailVerificationCode} />}
                 <button type="button" disabled={emailVerificationBusy} onClick={() => void verifyCustomerEmail(Boolean(emailVerificationChallenge))} className="inline-flex min-h-11 items-center justify-center rounded-full bg-[var(--mt-green-deep)] px-5 text-sm font-bold text-white disabled:opacity-50">
                   {emailVerificationBusy ? 'Vérification…' : emailVerificationChallenge ? 'Confirmer mon adresse' : 'Envoyer un code'}
                 </button>
@@ -1030,23 +1032,22 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
               {profileMessage && <p role="status" className="flex items-center gap-2 rounded-xl border border-[#c8dbd0] bg-[#d1fae5] px-3 py-2.5 text-sm font-semibold text-[var(--mt-green-deep)]"><Check className="h-4 w-4" />{profileMessage}</p>}
               <button type="submit" disabled={profileSaving} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 text-sm font-bold text-white transition hover:bg-[var(--mt-green-primary)] disabled:cursor-wait disabled:opacity-60">{profileSaving ? 'Enregistrement…' : <><PencilLine className="h-4 w-4" />Enregistrer les modifications</>}</button>
             </form>
+            {/* Sur mobile, la sécurité n’a pas d’onglet propre : on y accède depuis le profil. */}
+            <button type="button" onClick={() => setActiveSection('security')} className="mt-5 flex min-h-14 w-full items-center gap-3 rounded-2xl border border-[#e3d9cc] bg-white px-4 text-left lg:hidden">
+              <KeyRound className="h-5 w-5 shrink-0 text-[var(--mt-green-deep)]" aria-hidden="true" />
+              <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-[#292d2a]">Mot de passe et sécurité</span><span className="block text-xs text-[#81796f]">Modifier votre mot de passe, gérer vos accès</span></span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-[#81796f]" aria-hidden="true" />
+            </button>
           </div>}
 
           {activeSection === 'security' && <div className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.13em] text-[#c2410c]">Protection du compte</p>
+            <p className="text-xs font-bold text-[#c2410c]">Protection du compte</p>
             <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Sécurité</h2>
             <p className="mt-2 text-sm leading-6 text-[#647067]">Choisissez un mot de passe unique d’au moins 8 caractères. Les autres sessions seront déconnectées après la modification.</p>
             <form onSubmit={changePassword} className="mt-6 space-y-4">
-              <label className="block text-sm font-bold text-[#47534b]">Mot de passe actuel
-                <input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]" />
-                <span className="mt-1 block text-xs font-normal text-[#81796f]">Laissez ce champ vide si vous vous connectez avec Google ou Apple et que vous définissez un mot de passe pour la première fois.</span>
-              </label>
-              <label className="block text-sm font-bold text-[#47534b]">Nouveau mot de passe
-                <input required minLength={8} maxLength={128} type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]" />
-              </label>
-              <label className="block text-sm font-bold text-[#47534b]">Confirmer le nouveau mot de passe
-                <input required minLength={8} maxLength={128} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-[#d9cfc2] bg-white px-3 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)]" />
-              </label>
+              <TextField label="Mot de passe actuel" type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} hint="Laissez vide si vous vous connectez avec Google ou Apple et définissez un mot de passe pour la première fois." />
+              <TextField label="Nouveau mot de passe" type="password" required minLength={8} maxLength={128} autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} invalidMessage="Au moins 8 caractères." />
+              <TextField label="Confirmer le nouveau mot de passe" type="password" required minLength={8} maxLength={128} autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} error={confirmPassword && newPassword && confirmPassword.length >= newPassword.length && confirmPassword !== newPassword ? 'Les deux mots de passe ne correspondent pas.' : undefined} />
               {passwordError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">{passwordError}</p>}
               {passwordMessage && <p role="status" className="flex items-center gap-2 rounded-xl border border-[#c8dbd0] bg-[#d1fae5] px-3 py-2.5 text-sm font-semibold text-[var(--mt-green-deep)]"><Check className="h-4 w-4" />{passwordMessage}</p>}
               <button type="submit" disabled={passwordSaving} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 text-sm font-bold text-white transition hover:bg-[var(--mt-green-primary)] disabled:cursor-wait disabled:opacity-60">{passwordSaving ? 'Mise à jour…' : <><KeyRound className="h-4 w-4" />Mettre à jour le mot de passe</>}</button>
@@ -1091,7 +1092,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
 
       <nav aria-label="Navigation du compte client" className="fixed inset-x-0 bottom-0 z-40 border-t border-[#e3d9cc] bg-white/95 px-1 pt-2 shadow-[0_-8px_24px_rgba(36,28,22,.08)] backdrop-blur lg:hidden" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)' }}>
         <div className="mx-auto flex max-w-lg items-stretch">
-          {accountSections.map(({ id, mobileLabel, icon: Icon }) => (
+          {accountSections.filter(({ id }) => id !== 'security').map(({ id, mobileLabel, icon: Icon }) => (
             <button
               key={id}
               type="button"

@@ -10,7 +10,6 @@ import {
   Send,
   ExternalLink,
   ChevronRight,
-  ChevronDown,
   UserPlus,
   X,
   Search,
@@ -43,7 +42,6 @@ import { getSupportWhatsAppUrl } from '../../utils/supportWhatsApp';
 import { Link } from 'react-router-dom';
 import { CategoryIcon } from '../CategoryIcon';
 
-const GuideChecklist = React.lazy(() => import('../UserGuidePage').then((module) => ({ default: module.GuideChecklist })));
 
 interface MerchantDashboardProps {
   currentShopSlug?: string;
@@ -102,6 +100,21 @@ import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
 import { ProAnalyticsPanel } from './ProAnalyticsPanel';
 import { MerchantQrShareKit } from './MerchantQrShareKit';
 import { MerchantPushPrompt } from './MerchantPushPrompt';
+import { PendingOrdersQueue } from './PendingOrdersQueue';
+import { ConfirmSheetView } from '../ui/ConfirmSheet';
+import { lockBodyScroll } from '../../utils/scrollLock';
+
+// Une seule palette d’états : orange = à traiter, vert = en cours ou réussie, gris = terminée sans suite.
+const ORDER_STATUS_TONE: Record<OrderStatus, string> = {
+  pending: 'bg-orange-50 text-orange-900',
+  confirmed: 'bg-[#e2eee8] text-[var(--mt-green-hover)]',
+  preparing: 'bg-[#e2eee8] text-[var(--mt-green-hover)]',
+  ready: 'bg-[#e2eee8] text-[var(--mt-green-hover)]',
+  delivered: 'bg-[var(--mt-green-deep)] text-white',
+  cancelled: 'bg-slate-100 text-slate-600',
+  rejected: 'bg-slate-100 text-slate-600',
+  expired: 'bg-slate-100 text-slate-600',
+};
 
 export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStorefront, onBackToDirectory, onCustomerLogin, openRegistration = false }) => {
 
@@ -109,7 +122,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
   const settingsDrawerCloseButtonRef = useRef<HTMLButtonElement>(null);
   const [isHeaderCompact, setIsHeaderCompact] = useState(false);
-  const [isSetupChecklistExpanded, setIsSetupChecklistExpanded] = useState(false);
   const [isIdentityGuideOpen, setIsIdentityGuideOpen] = useState(false);
   const [isQrKitOpen, setIsQrKitOpen] = useState(false);
   const [privateAccessLinkForCopy, setPrivateAccessLinkForCopy] = useState<string | null>(null);
@@ -150,8 +162,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     const previousActiveElement = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlockScroll = lockBodyScroll();
     settingsDrawerCloseButtonRef.current?.focus();
 
     const handleDrawerKeyDown = (event: KeyboardEvent) => {
@@ -180,7 +191,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
     window.addEventListener('keydown', handleDrawerKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      unlockScroll();
       window.removeEventListener('keydown', handleDrawerKeyDown);
       if (previousActiveElement?.isConnected) previousActiveElement.focus();
     };
@@ -251,6 +262,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const {
     currentShop,
     confirmModal,
+    handleUpdateOrderStatus,
     activeTab,
     settingsSubTab,
     products,
@@ -286,7 +298,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   const requestPrivateAccessLink = () => {
     setConfirmModal({
-      message: 'Générer un nouveau lien privé invalidera le lien actuel. Ce lien permet d’accéder à la gestion de la boutique. Continuer ?',
+      title: 'Générer un nouveau lien privé ?',
+      message: 'Le lien actuel cessera de fonctionner. Toute personne qui l’utilise perdra l’accès à la gestion de votre boutique.',
       confirmLabel: 'Générer un nouveau lien',
       cancelLabel: 'Garder le lien actuel',
       onConfirm: () => {
@@ -452,24 +465,22 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   useEffect(() => {
     if (!isSettingsDrawerOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlockScroll = lockBodyScroll();
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setIsSettingsDrawerOpen(false); };
     window.addEventListener('keydown', closeOnEscape);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      unlockScroll();
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [isSettingsDrawerOpen]);
 
   useEffect(() => {
     if (!isIdentityGuideOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlockScroll = lockBodyScroll();
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') dismissIdentityGuide(); };
     window.addEventListener('keydown', closeOnEscape);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      unlockScroll();
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [isIdentityGuideOpen]);
@@ -518,12 +529,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   useEffect(() => {
     if (subscriptionReminderDay === null) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlockScroll = lockBodyScroll();
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') dismissSubscriptionReminder(); };
     window.addEventListener('keydown', closeOnEscape);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      unlockScroll();
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [subscriptionReminderDay]);
@@ -565,6 +575,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   const hasPublicationSubscriptionAccess = hasShopPublicationSubscriptionAccess(currentShop.subscription);
   const isAdminSuspended = !currentShop.is_active || currentShop.publication_status === 'suspended';
   const isShopPublished = isShopPubliclyVisible(currentShop);
+  // Tant que la vitrine n’est pas publiée, la vérification d’identité figure dans « Premiers pas » :
+  // l’alerte séparée ne reste que lorsqu’il y a des corrections à apporter.
+  const showIdentityAlert = identityVerificationRequired
+    && (isShopPublished || ['rejected', 'action_required'].includes(identityStatus));
   const trialCatalogLimited = !currentShop.admin_mode
     && currentShop.subscription?.status === 'trialing'
     && currentShop.subscription.trialDaysRemaining > 0;
@@ -802,7 +816,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           <button type="button" onClick={() => window.location.assign('/admin')} className="rounded-md bg-white/15 px-3 py-1.5 hover:bg-white/25">Retour à l’administration</button>
         </div>
       )}
-      <MerchantPushPrompt shop={currentShop} />
+      <MerchantPushPrompt shop={currentShop} deferred={isIdentityGuideOpen} />
       {/* Top Shop Control Bar */}
       <div className={`sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur-sm transition-[box-shadow] ${isHeaderCompact ? 'shadow-md' : ''}`}>
         <div className={`mx-auto flex max-w-7xl transition-[padding,gap] lg:ml-64 lg:max-w-none ${isHeaderCompact ? 'items-center gap-2 px-3 py-2' : 'flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between'}`}>
@@ -827,7 +841,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 <span className="hidden items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700 sm:inline-flex">
                   <CategoryIcon category={currentShop.category} className="h-3 w-3" /> {getCategoryDefaults(currentShop.category).label}
                 </span>
-                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black ${subscriptionStatus === 'active' || subscriptionStatus === 'trialing' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : subscriptionStatus === 'past_due' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-rose-200 bg-rose-50 text-rose-800'}`}>
+                <span className={`${isHeaderCompact ? 'hidden md:inline' : ''} shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black ${subscriptionStatus === 'active' || subscriptionStatus === 'trialing' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : subscriptionStatus === 'past_due' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-rose-200 bg-rose-50 text-rose-800'}`}>
                   {subscriptionStatusLabel}
                 </span>
               </div>
@@ -846,7 +860,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 className={`flex h-9 items-center gap-1.5 rounded-full border px-2 text-[10px] font-bold ${currentShop.is_open ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
               >
                 <span className={`h-2 w-2 rounded-full ${currentShop.is_open ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                {currentShop.is_open ? 'Commandes ouvertes' : 'Commandes fermées'}
+                {currentShop.is_open ? 'Ouvert' : 'Fermé'}
               </button>
               {isAdminSuspended ? (
                 <span className="max-w-16 truncate text-[9px] font-bold text-rose-700" title="Suspendue par l’administration">Suspendue</span>
@@ -857,7 +871,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               ) : !isShopPublished ? (
                 <button type="button" onClick={() => void handlePublicationStatusChange('active')} className="max-w-16 truncate text-[9px] font-bold text-emerald-800">Publier</button>
               ) : (
-                <span className="text-[9px] font-bold text-emerald-800">Publiée</span>
+                null
               )}
             </div>
           )}
@@ -940,19 +954,30 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <input
                 id="merchant-dashboard-search"
                 type="search"
+                enterKeyHint="search"
                 value={dashboardSearch}
                 onChange={(event) => setDashboardSearch(event.target.value)}
-                placeholder="Rechercher une commande, un produit, un client"
-                className="min-h-12 min-w-0 w-full rounded-full border border-[#e7dfd3] bg-white py-3 pl-11 pr-4 text-sm shadow-sm focus:border-[var(--mt-green-hover)] focus:outline-none"
+                placeholder="Commande, produit ou client"
+                className="min-h-12 min-w-0 w-full rounded-full border border-[#e7dfd3] bg-white py-3 pl-11 pr-4 text-base shadow-sm sm:text-sm focus:border-[var(--mt-green-hover)] focus:outline-none"
               />
-              <button type="submit" className="min-h-10 shrink-0 rounded-full bg-[var(--mt-green-deep)] px-3 text-xs font-bold text-white hover:bg-[var(--mt-green-hover)] sm:px-4">Rechercher</button>
+              {/* Sur mobile, la touche « Rechercher » du clavier suffit. */}
+              <button type="submit" className="hidden min-h-10 shrink-0 rounded-full bg-[var(--mt-green-deep)] px-4 text-xs font-bold text-white hover:bg-[var(--mt-green-hover)] sm:block">Rechercher</button>
             </div>
           </form>
+          {/* Ce que le commerçant vient chercher : les demandes qui attendent sa réponse. */}
+          <div className="mb-4">
+            <PendingOrdersQueue
+              orders={orders}
+              inProgressCount={orders.filter((order) => ['confirmed', 'preparing', 'ready'].includes(order.status || 'pending')).length}
+              onUpdateStatus={handleUpdateOrderStatus}
+              onOpenOrders={(filter) => { setOrderSearch(''); setOrderPaymentFilter('all'); setOrderStatusFilter(filter); setActiveTab('orders'); }}
+              isShopPublished={isShopPublished}
+            />
+          </div>
           <div className="flex flex-col gap-4 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--mt-green-primary)]">Vue d’ensemble</p>
-              <h2 className="mt-1 text-2xl font-black tracking-tight text-[var(--mt-green-hover)]">Bonjour, {currentShop.name}</h2>
-              <p className="mt-1 text-sm text-slate-600">Voici l’activité de votre boutique aujourd’hui.</p>
+              <h2 className="text-xl font-black tracking-tight text-[var(--mt-gray-900)] sm:text-2xl">Bonjour, {currentShop.name}</h2>
+              <p className="mt-1 text-sm text-slate-600">{isShopPublished ? 'Votre vitrine est en ligne.' : 'Votre vitrine n’est pas encore visible.'}</p>
             </div>
             <button type="button" onClick={() => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); }} disabled={dashboardCatalogFull} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--mt-green-primary)] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--mt-green-hover)] disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-4 w-4" />{dashboardCatalogFull ? 'Limite du forfait atteinte' : getMerchantVocabulary(currentShop.category).addItem}</button>
           </div>
@@ -965,10 +990,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         </section>
       )}
 
-      {activeTab === 'overview' && (identityVerificationRequired || subscriptionNeedsAttention || isAdminSuspended || actionableOrderCount > 0 || outOfStockCount > 0 || lowStockCount > 0) && (
+      {activeTab === 'overview' && (showIdentityAlert || subscriptionNeedsAttention || isAdminSuspended || outOfStockCount > 0 || lowStockCount > 0) && (
         <section aria-labelledby="merchant-priority-notifications" aria-live="polite" className="mx-auto w-full max-w-7xl space-y-2 px-4 pt-3 lg:ml-64 lg:w-auto lg:max-w-none">
-          <h2 id="merchant-priority-notifications" className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">À faire en priorité</h2>
-          {identityVerificationRequired && (
+          <h2 id="merchant-priority-notifications" className="sr-only">À faire en priorité</h2>
+          {showIdentityAlert && (
             <article className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-amber-950 sm:flex-row sm:items-center sm:justify-between sm:p-4">
               <div className="flex min-w-0 items-start gap-3">
                 <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
@@ -989,9 +1014,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               <button type="button" onClick={() => { setSettingsSubTab('subscription'); setActiveTab('settings'); }} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl bg-[var(--mt-gray-900)] px-4 text-xs font-bold text-white hover:bg-slate-800">Voir mon forfait</button>
             </article>
           )}
-          {(actionableOrderCount > 0 || outOfStockCount > 0 || lowStockCount > 0) && (
+          {(outOfStockCount > 0 || lowStockCount > 0) && (
             <div className="flex flex-wrap gap-2">
-              {actionableOrderCount > 0 && <button type="button" onClick={() => { setOrderSearch(''); setOrderPaymentFilter('all'); setOrderStatusFilter('actionable'); setActiveTab('orders'); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 text-xs font-bold text-orange-900 hover:bg-orange-50"><ShoppingBag className="h-4 w-4" />{actionableOrderCount} commande{actionableOrderCount > 1 ? 's' : ''} à traiter</button>}
               {outOfStockCount > 0 && <button type="button" onClick={() => { setCatalogSearch(''); setCatalogFilter('out_of_stock'); setActiveTab('catalog'); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-xs font-bold text-rose-900 hover:bg-rose-50"><Package className="h-4 w-4" />{getMerchantVocabulary(currentShop.category).soldOutChip(outOfStockCount)}</button>}
               {lowStockCount > 0 && <button type="button" onClick={() => { setCatalogSearch(''); setCatalogFilter('low_stock'); setActiveTab('catalog'); }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-xs font-bold text-amber-900 hover:bg-amber-50"><AlertTriangle className="h-4 w-4" />{getMerchantVocabulary(currentShop.category).lowStockChip(lowStockCount)}</button>}
             </div>
@@ -999,132 +1023,96 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         </section>
       )}
 
-      {activeTab === 'overview' && (
-      <div className="mx-auto max-w-7xl px-4 pt-4 lg:ml-64 lg:max-w-none">
-        <section className="overflow-hidden rounded-[26px] border border-[#e7dfd3] bg-gradient-to-br from-[#fffdf8] via-[#fefaf4] to-[#edf7f0] p-4 shadow-[0_16px_36px_rgba(37,35,31,0.05)] sm:p-5" aria-labelledby="setup-checklist-title">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Lancement boutique</p>
-              <h2 id="setup-checklist-title" className="mt-1 text-xl font-black text-[var(--mt-gray-900)] sm:text-2xl">{isShopPublished ? 'Votre vitrine est prête' : 'Votre vitrine est presque prête'}</h2>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-              <Link to="/guide?role=merchant" state={{ guideAccountId: currentShop.id }} className="inline-flex min-h-11 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[var(--mt-green-hover)] hover:bg-[#f3faf6]">
-                <BookOpen className="h-4 w-4" aria-hidden="true" /> Tutoriel
-              </Link>
-              <div className="flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 shadow-sm ring-1 ring-[#e8e0d6]">
-                <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500" title="Le logo est facultatif et n’est pas compté dans ces cinq repères.">Progression</span>
-                <span className="rounded-full bg-[#d1fae5] px-2.5 py-1 text-xs font-black text-[var(--mt-green-hover)]">
-                  {[Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), products.length > 0, !identityVerificationRequired, hasPublicationSubscriptionAccess, isShopPublished].filter(Boolean).length}/5
-                </span>
-              </div>
-              <button
-                type="button"
-                aria-expanded={isSetupChecklistExpanded}
-                aria-controls="merchant-setup-steps"
-                onClick={() => setIsSetupChecklistExpanded((expanded) => !expanded)}
-                className="inline-flex min-h-11 items-center gap-1 rounded-full border border-[#dfe8dd] bg-white px-3 text-xs font-bold text-[var(--mt-green-hover)] lg:hidden"
-              >
-                {isSetupChecklistExpanded ? 'Masquer les étapes' : 'Voir les étapes'}
-                <ChevronDown className={`h-4 w-4 transition-transform ${isSetupChecklistExpanded ? 'rotate-180' : ''}`} />
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-3 lg:grid-cols-[1.25fr_0.75fr]">
-            <div id="merchant-setup-steps" className={`grid gap-2 sm:grid-cols-2 ${isSetupChecklistExpanded ? 'max-lg:grid' : 'max-lg:hidden'}`}>
-              {[
-                { number: 1, label: 'Nom et coordonnées', detail: 'Nom, WhatsApp et localisation', done: Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), action: () => { setActiveTab('settings'); setSettingsSubTab('general'); } },
-                { number: null, label: 'Ajouter un logo (facultatif)', detail: 'Aidez vos clients à vous reconnaître', done: Boolean(currentShop.theme_config?.logo_url), action: () => { setActiveTab('settings'); setSettingsSubTab('themes'); } },
-                { number: 2, label: 'Ajouter vos premiers produits', detail: currentShop.admin_mode ? 'Limites ignorées en mode super-admin' : `${products.length} article${products.length === 1 ? '' : 's'} · limite du forfait : ${Number.isFinite(dashboardProductLimit) ? dashboardProductLimit : 'illimitée'}`, done: products.length > 0, action: () => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); } },
-                { number: 3, label: 'Faire vérifier mon identité', detail: identityVerificationRequired ? 'Requis avant la publication' : 'Identité vérifiée', done: !identityVerificationRequired, action: openIdentityVerification },
-                { number: 4, label: 'Essai ou abonnement actif', detail: hasPublicationSubscriptionAccess ? 'Votre accès est actif' : 'Choisissez une formule pour publier', done: hasPublicationSubscriptionAccess, action: () => { setActiveTab('settings'); setSettingsSubTab('subscription'); } },
-                { number: 5, label: 'Publier votre boutique', detail: isShopPublished ? 'Votre vitrine est visible' : 'Activez la publication après les étapes requises', done: isShopPublished, action: () => {
-                  if (isShopPublished) onOpenStorefront(currentShop.slug);
-                  else if (identityVerificationRequired) openIdentityVerification();
-                  else if (!hasPublicationSubscriptionAccess) { setActiveTab('settings'); setSettingsSubTab('subscription'); }
-                  else void handlePublicationStatusChange('active');
-                } },
-              ].map((step) => (
-                <button key={step.label} type="button" onClick={step.action} aria-label={`${step.done ? 'Modifier' : 'Compléter'} : ${step.label}`} className="flex min-h-[82px] items-start gap-3 rounded-2xl border border-[#e8e0d6] bg-white/90 px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-[#f8fdf9]">
-                  <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${step.done ? 'bg-[var(--mt-green-deep)] text-white' : 'border-2 border-slate-300 bg-slate-50 text-slate-500'}`}>
-                    {step.done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : step.number ?? '–'}
-                  </span>
-                  <span>
-                    <span className="block text-sm font-bold text-[var(--mt-gray-900)]">{step.label}</span>
-                    <span className="mt-1 block text-xs leading-5 text-slate-500">{step.detail}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <div className="rounded-[22px] border border-[#dfe8dd] bg-[#f3faf6] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Action clé</p>
-                  <h3 className="mt-1 text-lg font-black text-[var(--mt-gray-900)]">
-                    {identityVerificationRequired
-                      ? 'Faire vérifier mon identité'
-                      : isAdminSuspended
-                        ? 'Suspension administrative'
-                        : isShopPublished
-                          ? 'Boutique publiée'
-                          : !hasPublicationSubscriptionAccess
-                            ? 'Abonnement requis'
-                            : 'Publier ma boutique'}
-                  </h3>
+      {activeTab === 'overview' && (() => {
+        // Une seule liste d’étapes, dans l’ordre, avec un seul bouton pour la suivante.
+        const setupSteps = [
+          { key: 'details', label: 'Compléter vos coordonnées', detail: 'Nom, WhatsApp et ville', done: Boolean(currentShop.name && currentShop.whatsapp_number && currentShop.city), action: () => { setActiveTab('settings'); setSettingsSubTab('general'); } },
+          { key: 'products', label: getMerchantVocabulary(currentShop.category).addItem, detail: 'Avec une photo, si possible', done: products.length > 0, action: () => { setActiveTab('catalog'); if (!dashboardCatalogFull) handleOpenAddModal(); } },
+          { key: 'identity', label: 'Faire vérifier votre identité', detail: 'Pièce d’identité du responsable', done: !identityVerificationRequired, action: openIdentityVerification },
+          { key: 'plan', label: 'Activer votre formule', detail: 'Essai gratuit ou abonnement', done: hasPublicationSubscriptionAccess, action: () => { setActiveTab('settings'); setSettingsSubTab('subscription'); } },
+          { key: 'publish', label: 'Publier votre vitrine', detail: 'Elle devient visible sur MaTable', done: isShopPublished, action: () => void handlePublicationStatusChange('active') },
+        ];
+        const doneCount = setupSteps.filter((step) => step.done).length;
+        const nextStep = setupSteps.find((step) => !step.done);
+        return (
+          <div className="mx-auto max-w-7xl space-y-4 px-4 pt-4 lg:ml-64 lg:max-w-none">
+            {nextStep && !isAdminSuspended ? (
+              <section aria-labelledby="setup-checklist-title" className="rounded-3xl border border-[#e7dfd3] bg-white p-4 shadow-sm sm:p-5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h2 id="setup-checklist-title" className="text-lg font-black text-[var(--mt-gray-900)]">Premiers pas</h2>
+                  <span className="text-sm font-bold tabular-nums text-slate-500">{doneCount} sur {setupSteps.length}</span>
                 </div>
-                <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isShopPublished ? 'bg-[var(--mt-green-deep)] text-white' : 'bg-white text-amber-700 ring-1 ring-[#dfe8dd]'}`}>
-                  {isShopPublished ? <Check className="h-4 w-4" aria-hidden="true" /> : <AlertTriangle className="h-4 w-4" aria-hidden="true" />}
-                </span>
-              </div>
-
-              <p className="mt-3 text-sm leading-6 text-[#4b5a52]">
-                {identityVerificationRequired
-                  ? 'La vérification de votre identité est nécessaire avant la publication de la boutique.'
-                  : isAdminSuspended
-                    ? 'Votre boutique a une restriction administrative. Contactez l’assistance pour la réactiver.'
-                    : isShopPublished
-                      ? 'Votre boutique est prête à recevoir des commandes et à être partagée.'
-                      : !hasPublicationSubscriptionAccess
-                        ? 'Un abonnement est nécessaire pour activer la publication et les commandes commerciales.'
-                        : 'Publiez votre boutique pour la rendre visible et permettre aux clients de commander.'}
-              </p>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={identityVerificationRequired
-                    ? openIdentityVerification
-                    : isAdminSuspended
-                      ? () => toast.error('Contactez l’administration pour faire réexaminer la suspension.')
-                    : isShopPublished
-                      ? () => onOpenStorefront(currentShop.slug)
-                      : !hasPublicationSubscriptionAccess
-                        ? () => { setSettingsSubTab('subscription'); setActiveTab('settings'); }
-                        : () => void handlePublicationStatusChange('active')}
-                  className="inline-flex min-h-10 items-center justify-center rounded-full bg-[var(--mt-green-deep)] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[var(--mt-green-hover)]"
-                >
-                  {isShopPublished ? 'Voir la boutique' : 'Continuer'}
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#ebe6dc]" role="progressbar" aria-label="Avancement des premiers pas" aria-valuemin={0} aria-valuemax={setupSteps.length} aria-valuenow={doneCount}>
+                  <div className="h-full rounded-full bg-[var(--mt-green-primary)] transition-[width] duration-500" style={{ width: `${(doneCount / setupSteps.length) * 100}%` }} />
+                </div>
+                <ol className="mt-4 space-y-1">
+                  {setupSteps.map((step) => {
+                    const isNext = step === nextStep;
+                    return (
+                      <li key={step.key}>
+                        <button
+                          type="button"
+                          onClick={step.action}
+                          aria-current={isNext ? 'step' : undefined}
+                          className={`flex min-h-12 w-full items-center gap-3 rounded-2xl px-2 py-2 text-left transition ${isNext ? 'bg-[#f0f8f4]' : 'hover:bg-slate-50'}`}
+                        >
+                          <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${step.done ? 'bg-[var(--mt-green-deep)] text-white' : isNext ? 'border-2 border-[var(--mt-green-primary)] bg-white' : 'border-2 border-slate-300 bg-white'}`}>
+                            {step.done && <Check className="h-4 w-4" aria-hidden="true" />}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className={`block text-sm ${step.done ? 'font-semibold text-slate-500 line-through decoration-slate-300' : 'font-bold text-slate-900'}`}>{step.label}</span>
+                            {isNext && <span className="block text-xs text-slate-600">{step.detail}</span>}
+                          </span>
+                          {isNext && <ChevronRight className="h-5 w-5 shrink-0 text-[var(--mt-green-hover)]" aria-hidden="true" />}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+                <button type="button" onClick={nextStep.action} className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--mt-green-primary)] px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-[var(--mt-green-hover)] active:scale-[0.98]">
+                  {nextStep.label} <ChevronRight className="h-4 w-4" aria-hidden="true" />
                 </button>
-                <button
-                  type="button"
-                  disabled={!isShopPublished}
-                  onClick={() => void copyOwnerLink('public')}
-                  className="inline-flex min-h-10 items-center justify-center rounded-full border border-[#dfe8dd] bg-white px-4 py-2 text-xs font-bold text-[var(--mt-green-hover)] transition hover:bg-[#edf7f0] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
-                >
-                  {isShopPublished ? 'Partager le lien' : 'Partager après publication'}
-                </button>
-              </div>
-            </div>
+                <Link to="/guide?role=merchant" state={{ guideAccountId: currentShop.id }} className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 text-sm font-semibold text-[var(--mt-green-hover)]">
+                  <BookOpen className="h-4 w-4" aria-hidden="true" /> Voir le guide pas à pas
+                </Link>
+              </section>
+            ) : null}
+            {/* Après le lancement : ce qui rend la vitrine attirante dans l’annuaire et sur l’accueil MaTable. */}
+            {!nextStep && !isAdminSuspended && (() => {
+              const productsWithoutPhoto = products.filter((product) => !product.image_url).length;
+              const missingBanner = !currentShop.theme_config?.custom_banner_url;
+              if (!missingBanner && productsWithoutPhoto === 0) return null;
+              return (
+                <section aria-label="Rendre la vitrine plus visible" className="rounded-3xl border border-[#e7dfd3] bg-white p-4 shadow-sm">
+                  <h2 className="text-base font-extrabold text-[var(--mt-gray-900)]">Rendez votre vitrine plus attirante</h2>
+                  <p className="mt-1 text-sm text-slate-600">Les boutiques avec des photos apparaissent en premier sur MaTable.</p>
+                  <div className="mt-3 space-y-2">
+                    {missingBanner && (
+                      <button type="button" onClick={() => { setSettingsSubTab('themes'); setActiveTab('settings'); }} className="flex min-h-12 w-full items-center gap-3 rounded-2xl bg-[#f0f8f4] px-3 text-left">
+                        <span className="min-w-0 flex-1 text-sm font-bold text-slate-900">Ajouter une photo de bannière</span>
+                        <ChevronRight className="h-5 w-5 shrink-0 text-[var(--mt-green-hover)]" aria-hidden="true" />
+                      </button>
+                    )}
+                    {productsWithoutPhoto > 0 && (
+                      <button type="button" onClick={() => { setCatalogSearch(''); setCatalogFilter('all'); setActiveTab('catalog'); }} className="flex min-h-12 w-full items-center gap-3 rounded-2xl bg-[#f0f8f4] px-3 text-left">
+                        <span className="min-w-0 flex-1 text-sm font-bold text-slate-900">{productsWithoutPhoto} article{productsWithoutPhoto > 1 ? 's' : ''} sans photo</span>
+                        <ChevronRight className="h-5 w-5 shrink-0 text-[var(--mt-green-hover)]" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+                </section>
+              );
+            })()}
+            {!nextStep && isShopPublished ? (
+              <section className="flex flex-wrap items-center gap-3 rounded-3xl border border-[#e7dfd3] bg-white p-4 shadow-sm">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-[var(--mt-green-deep)]"><Check className="h-5 w-5" aria-hidden="true" /></span>
+                <p className="min-w-0 flex-1 text-sm text-slate-700"><span className="font-bold text-slate-900">Votre vitrine est en ligne.</span> Partagez son lien pour recevoir des commandes.</p>
+                <button type="button" onClick={() => void copyOwnerLink('public')} className="inline-flex min-h-11 shrink-0 items-center rounded-xl border border-[#dfe8dd] bg-white px-4 text-sm font-bold text-[var(--mt-green-hover)] hover:bg-[#edf7f0]">Copier le lien</button>
+              </section>
+            ) : null}
           </div>
-        </section>
-        <div className="mt-4">
-          <React.Suspense fallback={<p role="status" className="text-sm text-slate-500">Chargement de votre guide…</p>}>
-            <GuideChecklist role="merchant" accountId={currentShop.id} collapsible />
-          </React.Suspense>
-        </div>
-      </div>
-      )}
+        );
+      })()}
 
       {/* Main Container */}
       <div className="mx-auto max-w-7xl px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6 lg:ml-64 lg:max-w-none lg:pb-6">
@@ -1148,7 +1136,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               </button>
             ))}
             <div className="my-2 border-t border-white/15" />
-            <p className="px-3 pb-1 pt-1 text-[10px] font-black uppercase tracking-[0.14em] text-white/70">À suivre</p>
+            <p className="px-3 pb-1 pt-1 text-xs font-bold text-white/70">À suivre</p>
             {[
               { id: 'visibility' as const, label: 'Campagnes et boosts', icon: TrendingUp, badge: '' },
               { id: 'subscription' as const, label: 'Abonnement', icon: CreditCard, badge: subscriptionNeedsAttention ? 'Échéance' : '' },
@@ -1159,10 +1147,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               </button>
             ))}
             <div className="my-2 border-t border-white/15" />
-            <p className="px-3 pb-1 pt-1 text-[10px] font-black uppercase tracking-[0.14em] text-white/70">Paramètres</p>
+            <p className="px-3 pb-1 pt-1 text-xs font-bold text-white/70">Paramètres</p>
             {settingsNavigationGroups.map((group) => (
               <section key={group.label} className="mb-2">
-                <h2 className="px-3 pb-1 text-[9px] font-black uppercase tracking-wide text-white/60">{group.label}</h2>
+                <h2 className="px-3 pb-1 text-xs font-bold text-white/60">{group.label}</h2>
                 {group.items.map(({ id, label, icon: Icon }) => (
                   <button key={id} type="button" aria-current={activeTab === 'settings' && settingsSubTab === id ? 'page' : undefined} onClick={() => { setSettingsSubTab(id); setActiveTab('settings'); }} className={`flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold transition sm:text-sm ${activeTab === 'settings' && settingsSubTab === id ? 'bg-[var(--mt-green-hover)] text-white' : 'text-white/90 hover:bg-[var(--mt-green-hover)] hover:text-white'}`}>
                     <Icon className="h-4 w-4 shrink-0" /><span>{label}</span>
@@ -1170,7 +1158,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 ))}
               </section>
             ))}
-            <p className="px-3 pb-1 pt-1 text-[10px] font-black uppercase tracking-[0.14em] text-white/70">Partage</p>
+            <p className="px-3 pb-1 pt-1 text-xs font-bold text-white/70">Partage</p>
             <button type="button" disabled={!isShopPublished} onClick={() => void copyOwnerLink('public')} className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-[var(--mt-green-hover)] disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"><Copy className="h-4 w-4 shrink-0" />Lien vitrine</button>
             <button type="button" disabled={!isShopPublished} onClick={() => setIsQrKitOpen(true)} className="flex min-h-10 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-[var(--mt-green-hover)] disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"><QrCode className="h-4 w-4 shrink-0" />QR code et affiche</button>
             {!isShopPublished && <p className="px-3 py-1 text-[10px] leading-4 text-white/65">Lien vitrine et QR code disponibles après publication.</p>}
@@ -1184,14 +1172,14 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           <div className="min-w-0" role="main">
           {activeTab === 'overview' && (
             <section className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {orders.length > 0 && <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
                 {[
                   { label: 'Commandes', value: orders.length, hint: `${actionableOrderCount} à traiter`, tone: 'text-[#C2410C]', icon: ShoppingBag },
                   { label: 'Montant des commandes', value: formatFCFA(orderValue), hint: 'Paiements non suivis par MaTable', tone: 'text-[#087F62]', icon: DollarSign },
                   { label: 'Clients', value: uniqueCustomerCount, hint: 'Clients ayant commandé', tone: 'text-[#087F62]', icon: UserPlus },
                   { label: 'Articles', value: `${products.length} / ${Number.isFinite(dashboardProductLimit) ? dashboardProductLimit : '∞'}`, hint: currentShop.admin_mode ? 'Limites ignorées en mode super-admin' : 'Dans votre catalogue', tone: 'text-[#087F62]', icon: Package },
-                ].map((metric) => <div key={metric.label} className="flex min-h-[104px] items-start gap-3 rounded-2xl border border-[#e7dfd3] bg-white p-4"><span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f7f4ee] ${metric.tone}`}><metric.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="text-xs font-semibold text-slate-500">{metric.label}</p><strong className="mt-1 block truncate text-xl font-black text-[var(--mt-gray-900)]">{metric.value}</strong><p className="mt-1 truncate text-[11px] text-slate-500">{metric.hint}</p></div></div>)}
-              </div>
+                ].map((metric) => <div key={metric.label} className="flex min-w-0 flex-col gap-2 rounded-2xl border border-[#e7dfd3] bg-white p-3 sm:min-h-[104px] sm:flex-row sm:items-start sm:gap-3 sm:p-4"><span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#f7f4ee] sm:mt-0.5 sm:h-9 sm:w-9 ${metric.tone}`}><metric.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="truncate text-xs font-semibold text-slate-500">{metric.label === 'Montant des commandes' ? <><span className="sm:hidden">Montant</span><span className="hidden sm:inline">{metric.label}</span></> : metric.label}</p><strong className="mt-0.5 block truncate text-lg font-black tabular-nums text-[var(--mt-gray-900)] sm:mt-1 sm:text-xl">{metric.value}</strong><p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-slate-500 sm:mt-1 sm:truncate">{metric.hint}</p></div></div>)}
+              </div>}
               <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,0.9fr)]">
                 <section aria-labelledby="merchant-recent-orders-title" className="min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
                   <div className="mb-3 flex items-center justify-between gap-3 border-b border-[#eee8dc] pb-3">
@@ -1218,14 +1206,16 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                           ? new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(orderDate)
                           : 'Heure indisponible';
                         return (
-                          <li key={order.id} className="flex min-w-0 flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
+                          <li key={order.id} className="flex min-w-0 items-center gap-3 py-3 first:pt-0 last:pb-0">
                             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#f8f1e7] text-[var(--mt-orange-deep)]"><ShoppingBag className="h-4 w-4" /></span>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-bold text-[var(--mt-gray-900)]">N° {order.id} · {orderItemName}</p>
-                              <p className="mt-0.5 text-xs text-slate-500">{isToday ? 'Aujourd’hui' : orderDateLabel}, {orderTime}</p>
+                              <p className="truncate text-sm font-bold text-[var(--mt-gray-900)]">{orderItemName}</p>
+                              <p className="mt-0.5 truncate text-xs text-slate-500">N° {order.id} · {isToday ? 'Aujourd’hui' : orderDateLabel}, {orderTime}</p>
                             </div>
-                            <span className="rounded-full bg-[#e2eee8] px-2.5 py-1 text-xs font-bold text-[var(--mt-green-hover)]">{orderStatusLabels[order.status || 'pending']}</span>
-                            <strong className="min-w-24 text-right text-sm font-black text-[var(--mt-gray-900)]">{formatFCFA(order.total_amount)}</strong>
+                            <div className="flex shrink-0 flex-col items-end gap-1">
+                              <strong className="text-sm font-black tabular-nums text-[var(--mt-gray-900)]">{formatFCFA(order.total_amount)}</strong>
+                              <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${ORDER_STATUS_TONE[order.status || 'pending']}`}>{orderStatusLabels[order.status || 'pending']}</span>
+                            </div>
                           </li>
                         );
                       })}
@@ -1331,7 +1321,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           <section role="dialog" aria-modal="true" aria-labelledby="identity-guide-title" className="relative max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-[#fffdf8] p-5 shadow-2xl sm:rounded-3xl sm:p-7">
             <button type="button" aria-label="Fermer le guide" onClick={dismissIdentityGuide} className="absolute right-4 top-4 rounded-full border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50"><X className="h-4 w-4" /></button>
             <span className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-100 text-amber-900"><ShieldCheck className="h-6 w-6" /></span>
-            <p className="mt-4 text-[10px] font-black uppercase tracking-[0.14em] text-amber-800">Première étape</p>
+            <p className="mt-4 text-xs font-bold text-amber-800">Première étape</p>
             <h2 id="identity-guide-title" className="mt-1 pr-8 text-2xl font-black text-[var(--mt-gray-900)]">Bienvenue dans votre espace boutique</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">Vérifiez l’identité de la personne responsable pour activer la publication. Aucun justificatif sur l’existence ou l’activité de la boutique n’est demandé.</p>
             <ol className="mt-5 space-y-3">
@@ -1356,7 +1346,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
           <section role="dialog" aria-modal="true" aria-labelledby="subscription-reminder-title" className="relative max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-[#fffdf8] p-5 shadow-2xl sm:rounded-3xl sm:p-7">
             <button type="button" aria-label="Fermer le rappel d’abonnement" onClick={dismissSubscriptionReminder} className="absolute right-4 top-4 rounded-full border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50"><X className="h-4 w-4" /></button>
             <span className={`grid h-12 w-12 place-items-center rounded-2xl ${subscriptionReminderDay <= 3 ? 'bg-rose-100 text-rose-900' : 'bg-orange-100 text-orange-900'}`}><Clock className="h-6 w-6" /></span>
-            <p className="mt-4 text-[10px] font-black uppercase tracking-[0.14em] text-orange-800">Rappel d’échéance · J−{subscriptionReminderDay}</p>
+            <p className="mt-4 text-xs font-bold text-orange-800">Rappel d’échéance · J−{subscriptionReminderDay}</p>
             <h2 id="subscription-reminder-title" className="mt-1 pr-8 text-2xl font-black text-[var(--mt-gray-900)]">{subscriptionReminderDay === 1 ? 'Votre forfait se termine demain' : `Votre forfait se termine dans ${subscriptionReminderDay} jours`}</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">{subscriptionStatus === 'trialing' ? 'Consultez les options de votre forfait pour préparer la suite après l’essai.' : 'Renouvelez votre forfait avant cette date pour conserver l’accès aux fonctionnalités incluses.'} Ce rappel restera dans votre tableau de bord jusqu’à son échéance.</p>
             <p className="mt-3 rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">Les rappels WhatsApp suivent un calendrier séparé (J−14, J−7, J−3 et J−1) lorsque vous y avez consenti et que le service est configuré.</p>
@@ -1379,7 +1369,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             </header>
             <nav className="mt-4 space-y-4" aria-label="Navigation et réglages commerçant">
               <section>
-                <h3 className="mb-1 px-3 text-[10px] font-black uppercase tracking-wide text-slate-500">Ma boutique</h3>
+                <h3 className="mb-1 px-3 text-xs font-bold text-slate-500">Ma boutique</h3>
                 <div className="overflow-hidden rounded-xl border border-[#e9e5dc] bg-white">
                   {[
                     { id: 'themes' as const, label: 'Apparence de la vitrine', icon: Palette },
@@ -1393,7 +1383,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 </div>
               </section>
               <section>
-                <h3 className="mb-1 px-3 text-[10px] font-black uppercase tracking-wide text-slate-500">Visibilité</h3>
+                <h3 className="mb-1 px-3 text-xs font-bold text-slate-500">Visibilité</h3>
                 <div className="overflow-hidden rounded-xl border border-[#e9e5dc] bg-white">
                   <button type="button" onClick={() => { setSettingsSubTab('visibility'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-12 w-full items-center gap-3 px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50">
                     <TrendingUp className="h-4 w-4 shrink-0 text-emerald-800" /><span className="flex-1">Campagnes et boosts</span><ChevronRight className="h-4 w-4 text-slate-400" />
@@ -1401,7 +1391,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 </div>
               </section>
               <section>
-                <h3 className="mb-1 px-3 text-[10px] font-black uppercase tracking-wide text-slate-500">Mon activité</h3>
+                <h3 className="mb-1 px-3 text-xs font-bold text-slate-500">Mon activité</h3>
                 <div className="overflow-hidden rounded-xl border border-[#e9e5dc] bg-white">
                   {[
                     { id: 'bilan' as const, label: 'Flash bilan', icon: Send },
@@ -1413,7 +1403,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 </div>
               </section>
               <section>
-                <h3 className="mb-1 px-3 text-[10px] font-black uppercase tracking-wide text-slate-500">Mon compte</h3>
+                <h3 className="mb-1 px-3 text-xs font-bold text-slate-500">Mon compte</h3>
                 <div className="overflow-hidden rounded-xl border border-[#e9e5dc] bg-white">
                   {[
                     { id: 'subscription' as const, label: 'Mon abonnement', icon: CreditCard, badge: subscriptionNeedsAttention ? 'Échéance' : currentShop.subscription?.plan || '' },
@@ -1441,16 +1431,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         </div>
       )}
       {confirmModal && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4">
-          <section role="alertdialog" aria-modal="true" aria-labelledby="merchant-confirm-title" className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
-            <h2 id="merchant-confirm-title" className="text-base font-black text-slate-900">Confirmer l’action</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">{confirmModal.message}</p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setConfirmModal(null)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">{confirmModal.cancelLabel || 'Annuler'}</button>
-              <button type="button" onClick={() => { const confirmAction = confirmModal.onConfirm; setConfirmModal(null); confirmAction(); }} className="min-h-10 rounded-lg bg-rose-700 px-4 py-2 text-sm font-bold text-white hover:bg-rose-800">{confirmModal.confirmLabel || 'Confirmer'}</button>
-            </div>
-          </section>
-        </div>
+        <ConfirmSheetView
+          withReason={false}
+          options={{ title: confirmModal.title, message: confirmModal.message, confirmLabel: confirmModal.confirmLabel, cancelLabel: confirmModal.cancelLabel, tone: 'danger' }}
+          onCancel={() => setConfirmModal(null)}
+          onConfirm={() => { const confirmAction = confirmModal.onConfirm; setConfirmModal(null); confirmAction(); }}
+        />
       )}
       {privateAccessLinkForCopy && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4">

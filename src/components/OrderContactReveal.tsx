@@ -68,7 +68,7 @@ export const OrderContactReveal: React.FC<OrderContactRevealProps> = ({ endpoint
   };
 
   if (contactLocked) {
-    return <p className="text-xs font-semibold text-slate-500">Contact verrouillé : commande terminée.</p>;
+    return <p className="text-xs font-semibold text-slate-500">Commande clôturée : le contact WhatsApp n’est plus proposé.</p>;
   }
 
   if (revealed) {

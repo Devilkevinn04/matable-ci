@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Store, Clock, Check, Send, Eye, EyeOff, TrendingUp, AlertTriangle, Copy, RotateCcw, Calendar } from 'lucide-react';
+import { Store, Clock, Check, Send,   TrendingUp, AlertTriangle, Copy, RotateCcw, Calendar } from 'lucide-react';
 import type { Shop } from '../../types';
 import { MerchantState } from './useMerchant';
-import { ContextualHelp } from '../ContextualHelp';
 import { ThemeCustomizer } from '../ThemeCustomizer';
 import type { ManualVerificationProgress } from './MerchantManualVerification';
 import { MerchantVerificationWizard } from './MerchantVerificationWizard';
@@ -20,6 +19,8 @@ import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
 import { PushNotificationSettings } from './PushNotificationSettings';
 import { ProductOffersManager } from './ProductOffersManager';
 import { isShopPubliclyVisible } from '../../utils/shopPublication';
+import { CodeField, PhoneField, TextAreaField, TextField } from '../ui/fields';
+import { StickyActionBar, SubmitButton, useSubmitting } from '../ui/FormActions';
 
 interface SettingsTabProps {
   state: MerchantState;
@@ -47,10 +48,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
   const [ownerProfileSaving, setOwnerProfileSaving] = useState(false);
   const [ownerProfileError, setOwnerProfileError] = useState('');
   const {
-    currentShop, products, showSettingsPin, setShowSettingsPin, setCurrentShop, settingsSubTab, settingsName, setSettingsName, settingsWelcome, setSettingsWelcome, settingsPhone, setSettingsPhone, settingsCity, setSettingsCity, settingsNewPin, setSettingsNewPin,
-    settingsSocialLinks, setSettingsSocialLinks, settingsSaved,
+    currentShop, products, setCurrentShop, settingsSubTab, settingsName, setSettingsName, settingsWelcome, setSettingsWelcome, settingsPhone, setSettingsPhone, settingsCity, setSettingsCity, settingsNewPin, setSettingsNewPin,
+    settingsSocialLinks, setSettingsSocialLinks,
     hoursEnabled, setHoursEnabled, openTime, setOpenTime, closeTime, setCloseTime, activeDays, setActiveDays,
-    manualOverride, hoursSaved, cronResult, copiedBilan, setCopiedBilan,
+    manualOverride, cronResult, copiedBilan, setCopiedBilan,
     flashBilan,
     handleSaveOpeningHours, handleResetManualOverride, handleSaveGeneralSettings, toast
   } = state;
@@ -245,18 +246,22 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
     }
   };
 
+  const generalSubmit = useSubmitting();
+  const hoursSubmit = useSubmitting();
+
   return (
     <>
 {/* TAB 4: SETTINGS & THEMES */}
 
           <div className="max-w-5xl space-y-5">
-            <header className="flex flex-col gap-4 rounded-3xl border border-[#e7dfd3] bg-white p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            {/* Sur mobile : titre seul. L’état des commandes figure déjà dans l’en-tête de l’espace commerçant. */}
+            <header className="flex flex-col gap-4 px-1 sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:border sm:border-[#e7dfd3] sm:bg-white sm:p-6">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--mt-green-primary)]">{activeSettingsCopy.eyebrow} · Paramètres</p>
-                <h2 className="mt-1 text-2xl font-black tracking-tight text-[var(--mt-gray-900)]">{activeSettingsCopy.title}</h2>
+                <p className="hidden text-xs font-bold text-[var(--mt-green-primary)] sm:block">{activeSettingsCopy.eyebrow} · Paramètres</p>
+                <h2 className="text-xl font-black tracking-tight text-[var(--mt-gray-900)] sm:mt-1 sm:text-2xl">{activeSettingsCopy.title}</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{activeSettingsCopy.description}</p>
               </div>
-              <div className="flex w-fit shrink-0 flex-wrap gap-2">
+              <div className="hidden w-fit shrink-0 flex-wrap gap-2 sm:flex">
                 <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${
                   currentShop.is_open
                     ? 'border-[#d8e9df] bg-[#eff7f1] text-[var(--mt-green-hover)]'
@@ -274,7 +279,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 </span>
               </div>
             </header>
-            <p className="-mt-3 px-1 text-xs leading-5 text-slate-500">
+            <p className={`-mt-3 px-1 text-xs leading-5 text-slate-500 ${settingsSubTab === 'hours' || settingsSubTab === 'visibility' ? '' : 'max-sm:hidden'}`}>
               L’état des commandes est indépendant de la publication : une vitrine en brouillon ou non visible n’est pas accessible au public, même si les commandes sont ouvertes.
             </p>
 
@@ -288,8 +293,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
               </button>
             </section>}
 
+            {currentShop && !currentShop.owner_email_verified && settingsSubTab !== 'profile' && !currentShop.admin_mode && (
+              <button type="button" onClick={() => state.setSettingsSubTab('profile')} className="flex min-h-12 w-full items-center gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 text-left text-sm font-semibold text-amber-950 sm:hidden">
+                <span className="min-w-0 flex-1">Vérifiez votre e-mail pour sécuriser l’accès</span>
+                <span aria-hidden="true">›</span>
+              </button>
+            )}
             {currentShop && !currentShop.owner_email_verified && (
-              <section role="status" className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950 sm:p-5">
+              <section role="status" className={`rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950 sm:p-5 ${settingsSubTab === 'profile' || currentShop.admin_mode ? '' : 'max-sm:hidden'}`}>
                 {currentShop.admin_mode ? (
                   <>
                     <h3 className="text-sm font-extrabold">Adresse e-mail du commerçant non vérifiée</h3>
@@ -298,7 +309,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 ) : (
                   <>
                     <h3 className="text-sm font-extrabold">Sécurisez l’accès à votre boutique</h3>
-                    <p className="mt-1 text-sm leading-6">Vérifiez une adresse e-mail que vous pouvez consulter. La MFA e-mail sera requise après la période de transition ; sans adresse vérifiée, vous ne pourrez pas terminer la connexion.</p>
+                    <p className="mt-1 text-sm leading-6">Vérifiez une adresse e-mail que vous pouvez consulter. Bientôt, un code envoyé par e-mail sera demandé à chaque connexion : sans adresse vérifiée, vous ne pourrez plus vous connecter.</p>
                     {settingsSubTab !== 'profile' && <button type="button" onClick={() => state.setSettingsSubTab('profile')} className="mt-2 text-sm font-bold underline underline-offset-2">Ajouter ou vérifier mon adresse</button>}
                   </>
                 )}
@@ -312,107 +323,38 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                   <p className="mt-1 text-xs leading-5 text-slate-600">Ces informations restent privées et sont distinctes du nom et du WhatsApp affichés sur la vitrine.</p>
                 </div>
                 {ownerProfileError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">{ownerProfileError}</p>}
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <label className="block text-sm font-semibold text-slate-800">
-                    Nom complet
-                    <input
-                      type="text"
-                      autoComplete="name"
-                      maxLength={100}
-                      value={ownerName}
-                      onChange={(event) => setOwnerName(event.target.value)}
-                      disabled={ownerEmailLoading || ownerProfileSaving}
-                      placeholder="Votre nom et prénom"
-                      className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/15 disabled:bg-slate-50"
-                    />
-                  </label>
-                  <label className="block text-sm font-semibold text-slate-800">
-                    Téléphone personnel
-                    <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Facultatif, format ivoirien. Ne change pas le WhatsApp public ni votre identifiant.</span>
-                    <input
-                      type="tel"
-                      autoComplete="tel"
-                      inputMode="tel"
-                      maxLength={20}
-                      value={ownerPhone}
-                      onChange={(event) => setOwnerPhone(event.target.value)}
-                      disabled={ownerEmailLoading || ownerProfileSaving}
-                      placeholder="+225 07 00 00 00 00"
-                      className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/15 disabled:bg-slate-50"
-                    />
-                  </label>
-                  <label className="block text-sm font-semibold text-slate-800">
-                    E-mail de facturation
-                    <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Requis pour la MFA et les reçus. Une adresse ne sera enregistrée qu’après vérification.</span>
-                    <input
-                      type="email"
-                      autoComplete="email"
-                      maxLength={254}
-                      value={ownerEmail}
-                      onChange={(event) => setOwnerEmail(event.target.value)}
-                      disabled={ownerEmailLoading || ownerProfileSaving}
-                      placeholder="vous@exemple.ci"
-                      className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/15 disabled:bg-slate-50"
-                    />
-                    {ownerEmailVerified && ownerEmail.trim().toLowerCase() === savedOwnerEmail.trim().toLowerCase()
-                      ? <span className="mt-1 block text-xs font-semibold text-emerald-800">Adresse vérifiée</span>
-                      : <span className="mt-1 block text-xs font-semibold text-amber-800">Adresse à vérifier</span>}
-                  </label>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <label className="block text-sm font-bold text-slate-800">Modifier le code PIN</label>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">PIN à 6 chiffres utilisé pour accéder à l’espace commerçant. Laissez vide pour le conserver.</p>
-                  <div className="relative mt-3">
-                    <label className="sr-only" htmlFor="merchant-new-pin">Nouveau code PIN à 6 chiffres</label>
-                    <input
-                      id="merchant-new-pin"
-                      type={showSettingsPin ? 'text' : 'password'}
-                      inputMode="numeric"
-                      pattern="[0-9]{6}"
-                      minLength={6}
-                      maxLength={6}
-                      autoComplete="new-password"
-                      value={settingsNewPin}
-                      onChange={(event) => setSettingsNewPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="Nouveau PIN à 6 chiffres"
-                      disabled={ownerEmailLoading || ownerProfileSaving}
-                      className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-12 text-sm font-mono tracking-widest outline-none focus:border-[var(--mt-green-hover)]"
-                    />
-                    <button type="button" disabled={ownerEmailLoading || ownerProfileSaving} onClick={() => setShowSettingsPin((visible) => !visible)} aria-label={showSettingsPin ? 'Masquer le PIN' : 'Afficher le PIN'} className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-hover)] disabled:opacity-50">
-                      {showSettingsPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-                </div>
-                <label className="block max-w-md text-sm font-semibold text-slate-800">
-                  Code PIN actuel
-                  <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">Requis pour vérifier l’e-mail ou modifier le code PIN.</span>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    autoComplete="current-password"
-                    maxLength={6}
-                    value={ownerCurrentPin}
-                    onChange={(event) => setOwnerCurrentPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-4">
+                  <TextField label="Nom complet" autoComplete="name" maxLength={100} value={ownerName} onChange={(event) => setOwnerName(event.target.value)} disabled={ownerEmailLoading || ownerProfileSaving} placeholder="Votre prénom et nom" />
+                  <PhoneField label="Téléphone personnel" optional value={ownerPhone} onValueChange={setOwnerPhone} disabled={ownerEmailLoading || ownerProfileSaving} hint="Ne change ni le WhatsApp de la vitrine ni votre identifiant de connexion." />
+                  <TextField
+                    label="Adresse e-mail"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    maxLength={254}
+                    value={ownerEmail}
+                    onChange={(event) => setOwnerEmail(event.target.value)}
                     disabled={ownerEmailLoading || ownerProfileSaving}
-                    placeholder="PIN actuel à 6 chiffres"
-                    className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-mono tracking-widest outline-none focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/15 disabled:bg-slate-50"
+                    placeholder="vous@exemple.ci"
+                    hint={ownerEmailVerified && ownerEmail.trim().toLowerCase() === savedOwnerEmail.trim().toLowerCase()
+                      ? '✓ Adresse vérifiée. Elle reçoit vos codes de connexion et vos reçus.'
+                      : 'À vérifier : elle recevra vos codes de connexion et vos reçus.'}
                   />
-                </label>
-                {(!ownerEmailVerified || ownerEmail.trim().toLowerCase() !== savedOwnerEmail.trim().toLowerCase()) && (
+                  <CodeField label="Nouveau code PIN" optional length={6} secret autoComplete="new-password" value={settingsNewPin} onValueChange={setSettingsNewPin} disabled={ownerEmailLoading || ownerProfileSaving} hint="Laissez vide pour garder votre code actuel." />
+                </div>
+                <CodeField className="max-w-md" label="Code PIN actuel" length={6} secret autoComplete="current-password" value={ownerCurrentPin} onValueChange={setOwnerCurrentPin} disabled={ownerEmailLoading || ownerProfileSaving} hint="Demandé pour vérifier l’e-mail ou changer de code PIN." />
+                                {(!ownerEmailVerified || ownerEmail.trim().toLowerCase() !== savedOwnerEmail.trim().toLowerCase()) && (
                   <div className="max-w-md space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                    {ownerEmailChallenge && <label className="block text-sm font-semibold text-slate-800">
-                      Code reçu par e-mail
-                      <input type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{8}" maxLength={8} value={ownerEmailCode} onChange={(event) => setOwnerEmailCode(event.target.value.replace(/\D/g, '').slice(0, 8))} className="mt-2 min-h-11 w-full rounded-xl border border-amber-200 bg-white px-3 text-center font-mono text-lg tracking-[0.3em]" />
-                    </label>}
+                    {ownerEmailChallenge && <CodeField label="Code reçu par e-mail" length={8} autoFocus value={ownerEmailCode} onValueChange={setOwnerEmailCode} />}
                     <button type="button" disabled={ownerEmailVerifying || ownerEmailLoading || !ownerEmail.trim() || !ownerCurrentPin.trim()} onClick={() => void verifyOwnerEmail(Boolean(ownerEmailChallenge))} className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-[var(--mt-green-deep)] px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-50">
                       {ownerEmailVerifying ? 'Vérification…' : ownerEmailChallenge ? 'Confirmer l’adresse' : 'Envoyer un code de vérification'}
                     </button>
                     {ownerEmailChallenge && <button type="button" disabled={ownerEmailVerifying} onClick={() => void verifyOwnerEmail(false)} className="w-full text-center text-xs font-semibold text-slate-700 underline underline-offset-2 disabled:opacity-50">Renvoyer le code</button>}
                   </div>
                 )}
-                <button type="submit" disabled={ownerEmailLoading || ownerProfileSaving} className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--mt-green-primary)] px-5 text-sm font-extrabold text-white shadow-sm transition-colors hover:bg-[var(--mt-green-hover)] disabled:cursor-wait disabled:opacity-60 sm:w-auto">
-                  {ownerProfileSaving ? 'Enregistrement…' : 'Enregistrer le profil'}
-                </button>
+                <StickyActionBar aboveNav>
+                  <SubmitButton label="Enregistrer le profil" doneLabel="Profil enregistré" pending={ownerProfileSaving} disabled={ownerEmailLoading} />
+                </StickyActionBar>
               </form>
             )}
 
@@ -488,16 +430,16 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                   <p className="text-xs font-bold uppercase text-emerald-800">Abonnement</p>
                   <h3 className="mt-1 text-lg font-extrabold text-slate-900">Votre formule</h3>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
                   <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">Formule</span><strong className="mt-1 block capitalize text-slate-900">{currentShop.subscription?.plan || 'Standard'}</strong></div>
                   <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">État</span><strong className="mt-1 block text-slate-900">{subscriptionStatusLabel}</strong></div>
-                  <div className="rounded-xl bg-slate-50 p-3"><span className="text-xs text-slate-500">{subscriptionStatus === 'active' ? 'Échéance' : subscriptionStatus === 'trialing' ? 'Fin de l’essai' : 'Prochaine échéance'}</span><strong className="mt-1 block text-slate-900">{(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd) ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd || '')) : 'Non démarré'}</strong></div>
+                  <div className="col-span-2 rounded-xl bg-slate-50 p-3 sm:col-span-1"><span className="text-xs text-slate-500">{subscriptionStatus === 'active' ? 'Échéance' : subscriptionStatus === 'trialing' ? 'Fin de l’essai' : 'Prochaine échéance'}</span><strong className="mt-1 block text-slate-900">{(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd) ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(currentShop.subscription?.expiresAt || currentShop.subscription?.trialEnd || '')) : 'Non démarré'}</strong></div>
                 </div>
-                <div className="grid gap-3 rounded-xl border border-[#e7dfd3] bg-[#fffdf8] p-4 sm:grid-cols-2">
+                <div className="grid grid-cols-2 gap-3 rounded-xl border border-[#e7dfd3] bg-[#fffdf8] p-3 sm:p-4">
                   <div><span className="text-xs text-slate-500">Capacité du catalogue</span><strong className="mt-1 block text-slate-900">{currentShop.admin_mode ? `${currentShopProductCount} produits · limites ignorées en mode super-admin` : Number.isFinite(currentProductLimit) ? `${currentShopProductCount} / ${currentProductLimit} produits` : `${currentShopProductCount} produits · illimité`}</strong></div>
                   <div><span className="text-xs text-slate-500">Photos par produit</span><strong className="mt-1 block text-slate-900">{currentShop.admin_mode ? `Jusqu’à ${currentPhotoLimit} · mode super-admin` : `Jusqu’à ${currentPhotoLimit}`}</strong></div>
                 </div>
-                <p className="text-xs leading-5 text-slate-600">Le paiement est ponctuel, sans prélèvement automatique. GeniusPay confirme le règlement au serveur avant toute activation. Le paiement des commandes clients reste directement convenu avec la boutique.</p>
+                <p className="text-xs leading-5 text-slate-600">Le paiement de l’abonnement est ponctuel, sans prélèvement automatique : votre formule s’active dès que le paiement est confirmé. Les commandes de vos clients se règlent toujours directement avec vous.</p>
                 <WhatsAppSubscriptionReminderConsent shop={currentShop} />
                 <EmailSubscriptionReminderConsent shop={currentShop} />
                 <div className="flex flex-col gap-3 rounded-xl border border-[#e3d9cc] bg-[var(--mt-gray-50)] p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -535,7 +477,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
 
             {/* Sub-Tab 2: GENERAL SETTINGS */}
             {settingsSubTab === 'general' && (
-              <form onSubmit={handleSaveGeneralSettings} className="space-y-5 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
+              <form onSubmit={generalSubmit.wrap(handleSaveGeneralSettings)} className="space-y-5 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
                 <div className="flex items-center gap-3 border-b border-[#eee8df] pb-4">
                   <span className="rounded-2xl bg-[#d1fae5] p-3 text-[var(--mt-green-primary)]"><Store className="h-5 w-5" /></span>
                   <div>
@@ -544,94 +486,25 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                   </div>
                 </div>
 
-                {settingsSaved && (
-                  <div className="p-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold flex items-center gap-2">
-                    <Check className="w-4 h-4 text-emerald-600" />
-                    <span>Modifications enregistrées avec succès !</span>
-                  </div>
-                )}
-
-                {/* Shop Name & City */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="merchant-store-name" className="block text-xs font-bold text-slate-700 mb-1">
-                      Nom commercial de la boutique *
-                    </label>
-                    <input
-                      id="merchant-store-name"
-                      type="text"
-                      required
-                      maxLength={100}
-                      value={settingsName}
-                      onChange={(e) => setSettingsName(e.target.value)}
-                      className="min-h-11 w-full rounded-xl border border-[#ded7cd] bg-[var(--mt-surface)] px-3 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-primary)]/25 focus:border-[var(--mt-green-primary)]"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="merchant-store-city" className="block text-xs font-bold text-slate-700 mb-1">
-                      Ville / Commune
-                    </label>
-                    <input
-                      id="merchant-store-city"
-                      type="text"
-                      maxLength={100}
-                      value={settingsCity}
-                      onChange={(e) => setSettingsCity(e.target.value)}
-                      placeholder="Ex. : Abidjan"
-                      className="min-h-11 w-full rounded-xl border border-[#ded7cd] bg-[var(--mt-surface)] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-primary)]/25 focus:border-[var(--mt-green-primary)]"
-                    />
-                  </div>
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-4">
+                  <TextField id="merchant-store-name" label="Nom de la boutique" required maxLength={100} value={settingsName} onChange={(e) => setSettingsName(e.target.value)} />
+                  <TextField id="merchant-store-city" label="Ville ou commune" maxLength={100} value={settingsCity} onChange={(e) => setSettingsCity(e.target.value)} placeholder="Ex. : Cocody" optional />
                 </div>
 
-                {/* Slogan */}
-                <div>
-                  <label htmlFor="merchant-store-welcome" className="block text-xs font-bold text-slate-700 mb-1">
-                    Slogan / Message de bienvenue sur la vitrine
-                  </label>
-                  <textarea
-                    id="merchant-store-welcome"
-                    rows={2}
-                    maxLength={500}
-                    value={settingsWelcome}
-                    onChange={(e) => setSettingsWelcome(e.target.value)}
-                    placeholder="Ex. : Nuisettes soyeuses et lingerie fine à Abidjan..."
-                    className="min-h-24 w-full rounded-xl border border-[#ded7cd] bg-[var(--mt-surface)] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-primary)]/25 focus:border-[var(--mt-green-primary)]"
-                  />
-                  <p className="mt-1 text-right text-[11px] text-slate-500">{settingsWelcome.length}/500</p>
-                </div>
+                <TextAreaField id="merchant-store-welcome" label="Message de bienvenue" optional rows={3} maxLength={500} value={settingsWelcome} onChange={(e) => setSettingsWelcome(e.target.value)} placeholder="Ex. : Nos plats du jour, préparés à la commande à Cocody." hint="Affiché sous le nom de votre boutique, en haut de la vitrine." />
 
-                {/* WhatsApp Contact Number */}
-                <div>
-                  <div className="mb-1 flex items-center gap-2">
-                    <label htmlFor="merchant-store-whatsapp" className="block text-xs font-bold text-slate-700">
-                      Numéro WhatsApp de réception des commandes *
-                    </label>
-                    <ContextualHelp label="Numéro WhatsApp de réception des commandes">
-                      Les clients pourront vous contacter sur ce numéro pour confirmer les détails de leur commande.
-                    </ContextualHelp>
-                  </div>
-                  <input
-                    id="merchant-store-whatsapp"
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    required
-                    value={settingsPhone}
-                    onChange={(e) => setSettingsPhone(e.target.value)}
-                    className="min-h-11 w-full rounded-xl border border-[#ded7cd] bg-[var(--mt-surface)] px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-primary)]/25 focus:border-[var(--mt-green-primary)]"
-                  />
-                </div>
+                {/* WhatsApp Contact Number */}                {/* WhatsApp Contact Number */}
+                <PhoneField id="merchant-store-whatsapp" label="Numéro WhatsApp des commandes" required value={settingsPhone} onValueChange={setSettingsPhone} hint="Vos clients vous écrivent sur ce numéro pour confirmer leur commande." />
 
                 {/* Social links */}
                 {canUseSocialLinks ? (
                   <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                    <label className="block text-xs font-bold text-slate-700">Réseaux sociaux publics · Premium/Pro</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <input type="url" aria-label="Lien Instagram" autoComplete="url" value={settingsSocialLinks.instagram || ''} onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, instagram: e.target.value }))} placeholder="Lien Instagram" className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15" />
-                      <input type="url" aria-label="Lien Facebook" autoComplete="url" value={settingsSocialLinks.facebook || ''} onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, facebook: e.target.value }))} placeholder="Lien Facebook" className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15" />
-                      <input type="url" aria-label="Lien du site web" autoComplete="url" value={settingsSocialLinks.website || ''} onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, website: e.target.value }))} placeholder="Lien du site web" className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15" />
-                      <input type="url" aria-label="Lien WhatsApp" autoComplete="url" value={settingsSocialLinks.whatsapp || ''} onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, whatsapp: e.target.value }))} placeholder="Lien WhatsApp" className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-[var(--mt-green-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--mt-green-hover)]/15" />
+                    <p className="text-sm font-bold text-slate-800">Réseaux sociaux</p>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <TextField label="Instagram" type="url" inputMode="url" autoComplete="url" value={settingsSocialLinks.instagram || ''} onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, instagram: e.target.value }))} placeholder="https://instagram.com/…" invalidMessage="Saisissez un lien complet, commençant par https://" />
+                      <TextField label="Facebook" type="url" inputMode="url" autoComplete="url" value={settingsSocialLinks.facebook || ''} onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, facebook: e.target.value }))} placeholder="https://facebook.com/…" invalidMessage="Saisissez un lien complet, commençant par https://" />
+                      <TextField label="Site web" type="url" inputMode="url" autoComplete="url" value={settingsSocialLinks.website || ''} onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, website: e.target.value }))} placeholder="https://…" invalidMessage="Saisissez un lien complet, commençant par https://" />
+                      <TextField label="Lien WhatsApp" type="url" inputMode="url" autoComplete="url" value={settingsSocialLinks.whatsapp || ''} onChange={(e) => setSettingsSocialLinks((prev) => ({ ...prev, whatsapp: e.target.value }))} placeholder="https://wa.me/…" invalidMessage="Saisissez un lien complet, commençant par https://" />
                     </div>
                   </div>
                 ) : (
@@ -641,31 +514,26 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                   </div>
                 )}
 
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    className="min-h-11 w-full rounded-xl bg-[var(--mt-green-primary)] px-5 text-sm font-extrabold text-white shadow-sm transition-colors hover:bg-[var(--mt-green-hover)] sm:w-auto"
-                  >
-                    Enregistrer les coordonnées
-                  </button>
-                </div>
+                <StickyActionBar aboveNav>
+                  <SubmitButton label="Enregistrer les coordonnées" doneLabel="Coordonnées enregistrées" pending={generalSubmit.pending} done={generalSubmit.done} />
+                </StickyActionBar>
               </form>
             )}
 
             {/* Sub-Tab 3: OPENING HOURS & AUTOMATION */}
             {settingsSubTab === 'hours' && (
-              <form onSubmit={handleSaveOpeningHours} className="space-y-6 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
+              <form onSubmit={hoursSubmit.wrap(handleSaveOpeningHours)} className="space-y-6 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                   <div className="flex items-center gap-2.5">
-                    <span className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 shrink-0">
+                    <span className="p-2.5 rounded-xl bg-emerald-50 text-[var(--mt-green-deep)] shrink-0">
                       <Clock className="w-5 h-5" />
                     </span>
                     <div>
                       <h3 className="font-extrabold text-slate-900 text-base">
-                        Automatisation des Horaires d'Ouverture
+                        Ouverture automatique des commandes
                       </h3>
                       <p className="text-xs text-slate-500">
-                        Gestion automatique de la prise de commandes selon vos plages horaires (fuseau GMT / UTC+0 Abidjan). Ce statut ne publie pas la vitrine.
+                        Les commandes s’ouvrent et se ferment seules selon vos horaires (heure d’Abidjan). Votre vitrine reste visible dans tous les cas.
                       </p>
                     </div>
                   </div>
@@ -681,13 +549,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                     </span>
                   </div>
                 </div>
-
-                {hoursSaved && (
-                  <div className="p-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold flex items-center gap-2">
-                    <Check className="w-4 h-4 text-emerald-600" />
-                    <span>Planning des horaires enregistré avec succès !</span>
-                  </div>
-                )}
 
                 {/* Manual Override Alert */}
                 {manualOverride && (
@@ -847,14 +708,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                   </div>
                 )}
 
-                <div className="pt-2 flex items-center justify-between gap-3">
-                  <button
-                    type="submit"
-                    className="min-h-11 w-full rounded-xl bg-slate-900 px-6 text-sm font-bold text-white shadow-sm transition-colors hover:bg-slate-800 sm:w-auto"
-                  >
-                    Enregistrer la programmation des horaires
-                  </button>
-                </div>
+                <StickyActionBar aboveNav>
+                  <SubmitButton label="Enregistrer les horaires" doneLabel="Horaires enregistrés" pending={hoursSubmit.pending} done={hoursSubmit.done} />
+                </StickyActionBar>
               </form>
             )}
 
@@ -863,7 +719,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
               <div className="space-y-6 rounded-3xl border border-[#e7dfd3] bg-white p-5 shadow-sm sm:p-7">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                   <div className="flex items-center gap-2.5">
-                    <span className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 shrink-0">
+                    <span className="p-2.5 rounded-xl bg-emerald-50 text-[var(--mt-green-deep)] shrink-0">
                       <Clock className="w-5 h-5" />
                     </span>
                     <div>
@@ -893,7 +749,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                         className="py-2 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors"
                       >
                         {copiedBilan ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedBilan ? 'Copié !' : 'Copier le texte'}</span>
+                        <span>{copiedBilan ? 'Texte copié' : 'Copier le texte'}</span>
                       </button>
                     )}
 
@@ -945,14 +801,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ state }) => {
                 {flashBilan?.top_selling_products && flashBilan.top_selling_products.length > 0 && (
                   <div className="space-y-2">
                     <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                      <TrendingUp className="w-4 h-4 text-indigo-600" />
+                      <TrendingUp className="w-4 h-4 text-[var(--mt-green-primary)]" />
                       <span>Top des articles les plus vendus aujourd'hui :</span>
                     </h4>
                     <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden divide-y divide-slate-200">
                       {flashBilan.top_selling_products.map((item, idx) => (
                         <div key={idx} className="p-3 flex items-center justify-between text-xs">
                           <div className="flex items-center gap-2.5">
-                            <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-black text-[10px] flex items-center justify-center">
+                            <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[10px] flex items-center justify-center">
                               #{idx + 1}
                             </span>
                             <span className="font-bold text-slate-900">{item.title}</span>

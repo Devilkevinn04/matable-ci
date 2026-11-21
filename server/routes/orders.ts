@@ -489,6 +489,50 @@ export function createOrderRouter({
     return res.json({ role: 'merchant', phone: result.phone, revealed_at: now });
   });
 
+  // Suivi public d’une commande, sans compte : le jeton secret remis à la création (comme pour
+  // le clic WhatsApp) sert de preuve. Aucune coordonnée personnelle n’est renvoyée.
+  router.post('/orders/:id/track', rateLimitPublicRequest(60), async (req, res) => {
+    const orderId = Number(req.params.id);
+    const token = typeof req.body?.token === 'string' ? req.body.token : '';
+    res.setHeader('Cache-Control', 'no-store');
+    if (!Number.isSafeInteger(orderId) || orderId <= 0 || token.length < 20 || token.length > 200) {
+      return res.status(404).json({ error: 'Commande introuvable. Vérifiez le lien de suivi.' });
+    }
+    const tracking = await dbGet<{ token_hash: string }>(
+      'SELECT token_hash FROM order_whatsapp_tracking WHERE order_id = ?',
+      [orderId],
+    );
+    if (!tracking || !timingSafeEqual(hashAccessToken(token), String(tracking.token_hash))) {
+      return res.status(404).json({ error: 'Commande introuvable. Vérifiez le lien de suivi.' });
+    }
+    const row = await dbGet<Record<string, unknown>>(`SELECT orders.id, orders.status, orders.created_at, orders.total_amount,
+      orders.items, shops.name AS shop_name, shops.slug AS shop_slug, shops.category AS shop_category
+      FROM orders JOIN shops ON shops.id = orders.shop_id WHERE orders.id = ?`, [orderId]);
+    if (!row) return res.status(404).json({ error: 'Commande introuvable. Vérifiez le lien de suivi.' });
+    let items: { product_title: string; quantity: number; selected_size?: string; selected_color?: string }[] = [];
+    try {
+      const parsed: unknown = typeof row.items === 'string' ? JSON.parse(row.items) : row.items;
+      if (Array.isArray(parsed)) {
+        items = parsed.map((item: Record<string, unknown>) => ({
+          product_title: String(item.product_title || 'Article'),
+          quantity: Number(item.quantity) || 1,
+          ...(item.selected_size ? { selected_size: String(item.selected_size) } : {}),
+          ...(item.selected_color ? { selected_color: String(item.selected_color) } : {}),
+        }));
+      }
+    } catch {
+      items = [];
+    }
+    res.json({
+      id: Number(row.id),
+      status: String(row.status || 'pending'),
+      created_at: String(row.created_at),
+      total_amount: Number(row.total_amount) || 0,
+      items,
+      shop: { name: String(row.shop_name || ''), slug: String(row.shop_slug || ''), category: String(row.shop_category || '') },
+    });
+  });
+
   router.post('/orders/:id/whatsapp-click', rateLimitPublicRequest(60), async (req, res) => {
     const orderId = Number(req.params.id);
     const token = typeof req.body?.token === 'string' ? req.body.token : '';
@@ -559,7 +603,7 @@ export function createOrderRouter({
   router.get('/auth/customer-orders', async (req, res) => {
     const customerSession = await getCustomerSessionState(req, res);
     if (!customerSession.authenticated || !customerSession.user) return res.status(401).json({ error: 'Authentification client requise.' });
-    const rows = await dbAll<Record<string, unknown>>(`SELECT orders.*, shops.name AS shop_name,
+    const rows = await dbAll<Record<string, unknown>>(`SELECT orders.*, shops.name AS shop_name, shops.category AS shop_category,
       order_whatsapp_tracking.order_id IS NOT NULL AS whatsapp_tracking_available,
       order_whatsapp_tracking.clicked_at AS whatsapp_clicked_at
       FROM orders

@@ -1,4 +1,4 @@
-import { motion } from 'motion/react';
+import { m } from 'motion/react';
 import { Clock, Download, Eye, Filter, MapPin, Megaphone, Package, Phone, Search, ShoppingCart, Star, Trash2, Wallet } from 'lucide-react';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
 import { CategoryIcon } from './CategoryIcon';
@@ -156,7 +156,7 @@ export function AdminShopList({
           {shops.map((shop) => {
             const isFeatured = Boolean(shop.featured_until && Date.parse(shop.featured_until) > Date.now());
             return (
-              <motion.div
+              <m.div
                 key={shop.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -237,7 +237,7 @@ export function AdminShopList({
                     <Trash2 className="h-4 w-4" />Supprimer
                   </button>}
                 </div>
-              </motion.div>
+              </m.div>
             );
           })}
         </div>

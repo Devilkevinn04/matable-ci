@@ -8,6 +8,7 @@ import { getCategoryDefaults } from '../../utils/categoryDefaults';
 import { getMerchantVocabulary } from '../../utils/merchantVocabulary';
 import { CategoryProductImage } from '../CategoryProductImage';
 import { getSubscriptionProductPhotoLimit } from '../../utils/subscriptionFeatures';
+import { AmountField, TextAreaField, TextField } from '../ui/fields';
 import { ContextualHelp } from '../ContextualHelp';
 
 interface ProductModalProps {
@@ -17,7 +18,7 @@ interface ProductModalProps {
 
 export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
   const {
-    currentShop, isProductModalOpen, isProductSaving, setIsProductModalOpen, editingProduct, prodTitle, setProdTitle, prodCategory, setProdCategory,
+    currentShop, isProductModalOpen, isProductSaving, setIsProductModalOpen, editingProduct, restoredDraft, discardRestoredDraft, prodTitle, setProdTitle, prodCategory, setProdCategory,
     prodDescription, setProdDescription, prodPrice, setProdPrice, prodSalePrice, setProdSalePrice, prodSaleStartsAt, setProdSaleStartsAt, prodSaleEndsAt, setProdSaleEndsAt, prodStock, setProdStock, prodImage, prodLookbookImage, setProdLookbookImage, prodSizes, setProdSizes, prodColors, setProdColors, prodPrepTime, setProdPrepTime,
     prodModifierGroups, setProdModifierGroups, prodAttributes, setProdAttributes, prodIsAvailable, setProdIsAvailable,
     imageCompressing, compressedSizeKB, originalImageSizeKB, handleImageUpload, handleLookbookImageUpload,
@@ -79,8 +80,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
 {/* PRODUCT ADD/EDIT MODAL */}
 
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-sm sm:items-center sm:p-4 lg:p-6" role="presentation">
-          <div role="dialog" aria-modal="true" aria-labelledby="product-dialog-title" className="max-h-[94dvh] w-full max-w-[980px] overflow-y-auto overscroll-contain rounded-t-2xl border border-slate-200 bg-[var(--mt-surface)] px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 shadow-2xl sm:rounded-2xl sm:p-5 lg:p-6">
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-[var(--mt-surface)] pb-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="product-dialog-title" className="max-h-[94dvh] w-full max-w-[980px] overflow-y-auto overscroll-contain rounded-t-2xl border border-slate-200 bg-[var(--mt-surface)] px-4 pb-0 pt-0 shadow-2xl sm:rounded-2xl sm:px-5 sm:pb-5 lg:px-6 lg:pb-6">
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-[var(--mt-surface)] pb-4 pt-4 sm:pt-5 lg:pt-6">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800">
                   <Boxes className="h-5 w-5" />
@@ -105,43 +106,78 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
 
             <form onSubmit={handleSaveProduct} className="mt-5 min-w-0">
               <fieldset disabled={isProductSaving || imageCompressing} className="min-w-0 space-y-4 lg:space-y-5">
-              <section className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 lg:p-5">
-                <div>
-                  <label htmlFor="merchant-product-title" className="mb-1.5 block text-xs font-bold text-slate-700">
-                    Nom de l'article *
-                  </label>
-                  <input
-                    id="merchant-product-title"
-                    type="text"
-                    required
-                    maxLength={120}
-                    placeholder={categoryDefaults.productTitlePlaceholder}
-                    value={prodTitle}
-                    onChange={(e) => setProdTitle(e.target.value)}
-                    className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/15"
-                  />
+              {restoredDraft && !editingProduct && (
+                <div role="status" className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+                  <span className="min-w-0 flex-1">Votre saisie précédente a été retrouvée.</span>
+                  <button type="button" onClick={discardRestoredDraft} className="min-h-10 shrink-0 rounded-lg px-2 font-bold text-emerald-900 underline underline-offset-4">Recommencer</button>
                 </div>
-              </section>
-
-              <div className="max-w-md">
-                <div className="mb-1.5 flex items-center gap-2">
-                  <label htmlFor="merchant-product-price" className="block text-xs font-bold text-slate-700">Prix habituel (en FCFA) *</label>
-                  <ContextualHelp label="Prix habituel" variant="info">
-                    Saisissez le prix normal de l’article. Un prix promotionnel éventuel doit lui être inférieur et ne s’applique que pendant les dates choisies.
-                  </ContextualHelp>
-                </div>
+              )}
+              {/* La photo d’abord : c’est elle qui fait vendre, et elle se prend en un geste au téléphone. */}
+              <div className="mt-field">
                 <input
-                  id="merchant-product-price"
-                  type="number"
-                  required
-                  min={0}
-                  step={1}
-                  placeholder="15000"
-                  value={prodPrice}
-                  onChange={(e) => setProdPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                  className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-mono font-bold text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/15"
+                  id="product-photo-upload"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleImageUpload}
+                  disabled={imageCompressing || isProductSaving}
+                  className="sr-only peer"
                 />
+                <label
+                  htmlFor="product-photo-upload"
+                  className={`group relative flex overflow-hidden rounded-2xl border-2 border-dashed transition peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--mt-green-primary)] ${prodImage ? 'border-transparent' : 'border-[#cfd8d2] bg-[#f4f8f5] hover:border-[var(--mt-green-primary)]'} ${imageCompressing || isProductSaving ? 'cursor-wait' : 'cursor-pointer'}`}
+                >
+                  {prodImage ? (
+                    <>
+                      <CategoryProductImage
+                        imageUrl={prodImage}
+                        category={currentShop.category}
+                        title={prodTitle || 'Aperçu du produit'}
+                        allowLegacyInlinePreview
+                        className="aspect-[16/9] w-full"
+                        loading="eager"
+                      />
+                      <span className="absolute bottom-3 right-3 inline-flex min-h-10 items-center gap-2 rounded-full bg-white/95 px-3.5 text-sm font-bold text-slate-800 shadow-md">
+                        <Upload className="h-4 w-4" aria-hidden="true" /> Changer la photo
+                      </span>
+                    </>
+                  ) : (
+                    <span className="flex aspect-[16/9] w-full flex-col items-center justify-center gap-2 px-4 text-center">
+                      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white text-[var(--mt-green-deep)] shadow-sm"><Upload className="h-6 w-6" aria-hidden="true" /></span>
+                      <span className="text-base font-extrabold text-[var(--mt-green-deep)]">Ajouter une photo</span>
+                      <span className="text-sm text-slate-600">Conseillé : les articles avec photo se vendent mieux.</span>
+                    </span>
+                  )}
+                </label>
+                {imageCompressing && <p className="mt-field-hint font-semibold text-amber-800" role="status">Préparation de la photo…</p>}
+                {compressedSizeKB !== null && !imageCompressing && (
+                  <p className="mt-field-hint flex items-center gap-1 font-semibold text-emerald-700" role="status">
+                    <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Photo prête ({formatPhotoSize(originalImageSizeKB)} → {formatPhotoSize(compressedSizeKB)})
+                  </p>
+                )}
               </div>
+
+              <TextField
+                id="merchant-product-title"
+                label="Nom"
+                required
+                maxLength={120}
+                autoCapitalize="sentences"
+                placeholder={categoryDefaults.productTitlePlaceholder}
+                value={prodTitle}
+                onChange={(e) => setProdTitle(e.target.value)}
+              />
+
+              <AmountField
+                id="merchant-product-price"
+                className="max-w-md"
+                label="Prix habituel"
+                required
+                min={1}
+                placeholder="Ex. : 2 500"
+                hint="Le prix normal. Une promotion éventuelle s’ajoute juste en dessous."
+                value={prodPrice}
+                onValueChange={setProdPrice}
+              />
 
               <details open={prodSalePrice !== ''} className="relative rounded-xl border border-orange-200 bg-orange-50/60 p-3 sm:p-4">
                 <summary className="cursor-pointer pr-8 text-sm font-extrabold text-orange-950">Ajouter une promotion (facultatif)</summary>
@@ -155,9 +191,15 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                     {prodSalePrice !== '' && <button type="button" onClick={() => { setProdSalePrice(''); setProdSaleStartsAt(''); setProdSaleEndsAt(''); }} className="min-h-8 rounded-lg px-2 text-xs font-bold text-orange-900 hover:bg-orange-100">Retirer la promotion</button>}
                   </div>
                   <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                    <label className="text-xs font-bold text-slate-700">Prix réduit (FCFA)
-                      <input type="number" min="1" step="1" max={prodPrice === '' ? undefined : Number(prodPrice) - 1} value={prodSalePrice} onChange={(event) => setProdSalePrice(event.target.value === '' ? '' : Number(event.target.value))} placeholder="Ex. 8 000" className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" />
-                    </label>
+                    <AmountField
+                      label="Prix réduit"
+                      min={1}
+                      max={prodPrice === '' ? undefined : Number(prodPrice) - 1}
+                      invalidMessage="Le prix réduit doit être inférieur au prix habituel."
+                      placeholder="Ex. : 8 000"
+                      value={prodSalePrice}
+                      onValueChange={setProdSalePrice}
+                    />
                     <label className="text-xs font-bold text-slate-700">Début de la promotion
                       <input type="datetime-local" required={prodSalePrice !== ''} max={prodSaleEndsAt || undefined} value={prodSaleStartsAt} onChange={(event) => setProdSaleStartsAt(event.target.value)} className="mt-1 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs" />
                     </label>
@@ -198,28 +240,17 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                 </div>
                 </details>
 
-                <div>
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <label htmlFor="product-description" className="block text-xs font-bold text-slate-700">
-                      Présentez l’article en quelques mots <span className="text-rose-600" aria-hidden="true">*</span>
-                    </label>
-                    <span className={`text-[11px] font-mono ${prodDescription.length === 0 ? 'text-rose-600' : 'text-slate-400'}`}>
-                      {prodDescription.length}/200
-                    </span>
-                  </div>
-                  <textarea
-                    id="product-description"
-                    rows={3}
-                    maxLength={200}
-                    required
-                    aria-required="true"
-                    placeholder={categoryDefaults.productDescriptionPlaceholder}
-                    value={prodDescription}
-                    onChange={(e) => setProdDescription(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/15"
-                  />
-                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">Par exemple : la matière, la taille ou ce qui rend cet article spécial. Cette présentation est obligatoire.</p>
-                </div>
+                <TextAreaField
+                  id="product-description"
+                  label="Présentation"
+                  rows={3}
+                  maxLength={200}
+                  required
+                  placeholder={categoryDefaults.productDescriptionPlaceholder}
+                  value={prodDescription}
+                  onChange={(e) => setProdDescription(e.target.value)}
+                  hint="Ce qui le rend spécial : ingrédients, matière, taille…"
+                />
                   </section>
 
                   {categoryDefaults.productAttributes.length > 0 && (
@@ -492,41 +523,6 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
                 </details>
 
               <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-3 sm:p-4 lg:p-5">
-                <div>
-                  <label className="mb-1.5 block text-xs font-bold text-slate-700">Photo principale (conseillée)</label>
-                  <div className="flex flex-col gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 sm:flex-row sm:items-center">
-                    <CategoryProductImage
-                      imageUrl={prodImage}
-                      category={currentShop.category}
-                      title={prodTitle || 'Aperçu du produit'}
-                      allowLegacyInlinePreview
-                      className="h-20 w-20 shrink-0 rounded-xl border border-slate-200 bg-white"
-                      loading="eager"
-                    />
-                    <div className="flex-1">
-                      <input
-                        id="product-photo-upload"
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        onChange={handleImageUpload}
-                        disabled={imageCompressing || isProductSaving}
-                        className="sr-only"
-                      />
-                      <label htmlFor="product-photo-upload" className={`inline-flex min-h-10 items-center gap-2 rounded-lg bg-emerald-800 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-900 ${imageCompressing || isProductSaving ? 'cursor-wait opacity-60' : 'cursor-pointer'}`}>
-                        <Upload className="h-3.5 w-3.5" /> {prodImage ? 'Changer la photo' : 'Ajouter une photo'}
-                      </label>
-                      <p className="mt-2 text-[11px] text-slate-500">Choisissez une photo dans votre téléphone ou votre ordinateur. Elle sera préparée automatiquement.</p>
-                      {!prodImage && <p className="mt-2 text-xs font-bold text-emerald-800">Ajoutez une photo, vous vendrez plus.</p>}
-                      {imageCompressing && <span className="mt-2 block text-[11px] font-bold text-amber-700">Optimisation de la photo en cours...</span>}
-                      {compressedSizeKB !== null && (
-                        <span className="mt-2 flex items-center gap-1 text-[11px] font-bold text-emerald-600">
-                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Photo prête : {formatPhotoSize(originalImageSizeKB)} → {formatPhotoSize(compressedSizeKB)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
                 <details open={Boolean(editingProduct && (prodLookbookImage || prodGalleryImages.length > 0))} className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4">
                 <summary className="cursor-pointer text-xs font-bold text-slate-700">Ajouter d’autres photos (facultatif · {productPhotoCount}/{productPhotoLimit})</summary>
                 <div className="mt-3 space-y-4">
@@ -603,19 +599,19 @@ export const ProductModal: React.FC<ProductModalProps> = ({ state }) => {
               </section>
               </section>
 
-              <div className="sticky bottom-0 z-10 -mx-4 mt-3 flex flex-col-reverse gap-2 border-t border-slate-200 bg-[var(--mt-surface)]/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur sm:static sm:mx-0 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent sm:p-0 sm:pt-1 lg:gap-3">
+              <div className="sticky bottom-0 z-10 -mx-4 mt-3 flex flex-row gap-2 border-t border-slate-200 bg-[var(--mt-surface)]/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur sm:static sm:mx-0 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent sm:p-0 sm:pt-1 lg:gap-3">
                 <button
                   type="button"
                   onClick={() => setIsProductModalOpen(false)}
                   disabled={isProductSaving}
-                  className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 sm:w-auto lg:px-5 lg:py-3 lg:text-sm"
+                  className="min-h-12 shrink-0 rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 sm:w-auto lg:px-5 lg:py-3 lg:text-sm"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
                   disabled={isProductSaving || imageCompressing}
-                  className="min-h-11 w-full rounded-lg bg-emerald-800 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-900 disabled:cursor-wait disabled:opacity-60 sm:w-auto lg:px-6 lg:py-3 lg:text-sm"
+                  className="min-h-12 min-w-0 flex-1 rounded-lg bg-emerald-800 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-900 disabled:cursor-wait disabled:opacity-60 sm:w-auto sm:flex-none lg:px-6 lg:py-3 lg:text-sm"
                 >
                   {isProductSaving ? 'Enregistrement…' : editingProduct ? 'Enregistrer les modifications' : 'Ajouter au catalogue'}
                 </button>

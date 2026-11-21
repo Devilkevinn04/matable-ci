@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Product, Shop } from '../../types';
 import { uploadPublicMediaFile, uploadPublicMediaVariants } from '../../utils/media';
-import { buildProductSavePayload, createProductDraft, productToDraft } from './productForm';
+import { buildProductSavePayload, clearNewProductDraft, createProductDraft, productToDraft, readNewProductDraft, writeNewProductDraft, type ProductDraft } from './productForm';
 import type { ProductModifierGroupDraft } from './productForm';
 import { useToast } from '../Toast';
 import { getSubscriptionProductPhotoLimit } from '../../utils/subscriptionFeatures';
@@ -39,10 +39,9 @@ export function useMerchantProductEditor(
   const [imageCompressing, setImageCompressing] = useState(false);
   const [compressedSizeKB, setCompressedSizeKB] = useState<number | null>(null);
   const [originalImageSizeKB, setOriginalImageSizeKB] = useState<number | null>(null);
+  const [restoredDraft, setRestoredDraft] = useState(false);
 
-  const handleOpenAddModal = () => {
-    const draft = createProductDraft(currentShop?.category);
-    setEditingProduct(null);
+  const applyDraft = (draft: ProductDraft) => {
     setProdTitle(draft.title);
     setProdCategory(draft.category);
     setProdDescription(draft.description);
@@ -51,9 +50,9 @@ export function useMerchantProductEditor(
     setProdSaleStartsAt(draft.sale_starts_at);
     setProdSaleEndsAt(draft.sale_ends_at);
     setProdStock(draft.stock);
-    setProdLookbookImage(draft.lookbook_image);
     setProdImage(draft.image_url);
     setProdThumbnail(draft.thumbnail_url);
+    setProdLookbookImage(draft.lookbook_image);
     setProdGalleryImages(draft.gallery_images);
     setProdSizes(draft.sizes);
     setProdColors(draft.colors);
@@ -63,34 +62,45 @@ export function useMerchantProductEditor(
     setProdIsAvailable(draft.is_available);
     setCompressedSizeKB(null);
     setOriginalImageSizeKB(null);
+  };
+
+  const handleOpenAddModal = () => {
+    setEditingProduct(null);
+    // Un ajout interrompu (réseau coupé, appel, application fermée) reprend là où il s’était arrêté.
+    const savedDraft = readNewProductDraft(currentShop?.id);
+    applyDraft(savedDraft ?? createProductDraft(currentShop?.category));
+    setRestoredDraft(Boolean(savedDraft));
     setIsProductModalOpen(true);
+  };
+
+  /** Efface le brouillon repris et repart d’un formulaire vide. */
+  const discardRestoredDraft = () => {
+    clearNewProductDraft(currentShop?.id);
+    applyDraft(createProductDraft(currentShop?.category));
+    setRestoredDraft(false);
   };
 
   const handleOpenEditModal = (product: Product) => {
-    const draft = productToDraft(product);
     setEditingProduct(product);
-    setProdTitle(draft.title);
-    setProdCategory(draft.category);
-    setProdDescription(draft.description);
-    setProdPrice(draft.price);
-    setProdSalePrice(draft.sale_price);
-    setProdSaleStartsAt(draft.sale_starts_at);
-    setProdSaleEndsAt(draft.sale_ends_at);
-    setProdStock(draft.stock);
-    setProdImage(draft.image_url);
-    setProdThumbnail(draft.thumbnail_url);
-    setProdLookbookImage(draft.lookbook_image);
-    setProdGalleryImages(draft.gallery_images);
-    setProdSizes(draft.sizes);
-    setProdColors(draft.colors);
-    setProdPrepTime(draft.prep_time);
-    setProdModifierGroups(draft.modifier_groups);
-    setProdAttributes(draft.attributes);
-    setProdIsAvailable(draft.is_available);
-    setCompressedSizeKB(null);
-    setOriginalImageSizeKB(null);
+    applyDraft(productToDraft(product));
+    setRestoredDraft(false);
     setIsProductModalOpen(true);
   };
+
+  // Sauvegarde locale du nouvel article pendant la saisie (pas en modification : la version en ligne fait foi).
+  useEffect(() => {
+    if (!isProductModalOpen || editingProduct || !currentShop?.id) return undefined;
+    const timer = window.setTimeout(() => {
+      writeNewProductDraft(currentShop.id, {
+        title: prodTitle, category: prodCategory, description: prodDescription, price: prodPrice,
+        sale_price: prodSalePrice, sale_starts_at: prodSaleStartsAt, sale_ends_at: prodSaleEndsAt, stock: prodStock,
+        image_url: prodImage, thumbnail_url: prodThumbnail, lookbook_image: prodLookbookImage, gallery_images: prodGalleryImages,
+        sizes: prodSizes, colors: prodColors, prep_time: prodPrepTime, modifier_groups: prodModifierGroups,
+        attributes: prodAttributes, is_available: prodIsAvailable,
+      });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [isProductModalOpen, editingProduct, currentShop?.id, prodTitle, prodCategory, prodDescription, prodPrice, prodSalePrice, prodSaleStartsAt, prodSaleEndsAt, prodStock, prodImage, prodThumbnail, prodLookbookImage, prodGalleryImages, prodSizes, prodColors, prodPrepTime, prodModifierGroups, prodAttributes, prodIsAvailable]);
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -255,7 +265,7 @@ export function useMerchantProductEditor(
           const data = await response.json();
           setProducts((previous) => previous.map((product) => product.id === editingProduct.id ? data.product : product));
           setIsProductModalOpen(false);
-          toast.success('Article modifié avec succès !');
+          toast.success('Modifications enregistrées.');
         } else {
           const data = await response.json().catch(() => ({}));
           toast.error(data.error || "Impossible de modifier l'article.");
@@ -270,7 +280,9 @@ export function useMerchantProductEditor(
           const data = await response.json();
           setProducts((previous) => [data.product, ...previous]);
           setIsProductModalOpen(false);
-          toast.success('Article ajouté au catalogue !');
+          clearNewProductDraft(currentShop.id);
+          setRestoredDraft(false);
+          toast.success('Article ajouté au catalogue.');
         } else {
           const data = await response.json().catch(() => ({}));
           toast.error(data.error || "Impossible d'ajouter l'article.");
@@ -285,7 +297,7 @@ export function useMerchantProductEditor(
 
   const handleDeleteProduct = (productId: number) => {
     if (!currentShop) return;
-    requestConfirmation('Supprimer définitivement cet article du catalogue ?', () => {
+    requestConfirmation('Il disparaîtra de votre vitrine. Cette action ne peut pas être annulée.', () => {
       void (async () => {
         try {
           const response = await fetch(`/api/shops/${currentShop.id}/products/${productId}`, { method: 'DELETE' });
@@ -304,6 +316,8 @@ export function useMerchantProductEditor(
   };
 
   return {
+    restoredDraft,
+    discardRestoredDraft,
     isProductModalOpen,
     isProductSaving,
     editingProduct,

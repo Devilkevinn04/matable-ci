@@ -4,16 +4,34 @@ import { Link } from 'react-router-dom';
 
 interface FooterProps {
   compact?: boolean;
+  /** Masque l’encart « Vous êtes commerçant ? » (déjà présent sur l’accueil). */
+  hideMerchantCta?: boolean;
+  /** Vitrine d’une boutique : pied de page réduit, pour ne pas détourner le client de la boutique. */
+  storefront?: boolean;
 }
 
 const linkClassName = 'footer-link inline-flex min-h-8 w-fit items-center text-[13px] text-white/70 transition-colors hover:text-white focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] sm:min-h-9 sm:text-sm';
 
-export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
+export const Footer: React.FC<FooterProps> = ({ compact = false, hideMerchantCta = false, storefront = false }) => storefront ? (
+  <footer className="border-t border-[#e7dfd3] bg-[#f4f1ea] text-[#47534b]">
+    <div className="mx-auto flex max-w-[1280px] flex-col gap-3 px-5 py-6 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-8">
+      <Link to="/" className="inline-flex min-h-11 items-center gap-2 font-bold text-[var(--mt-green-deep)]">
+        <img src="/brand-kit/monogram.svg" alt="" aria-hidden="true" className="h-7 w-7 rounded-lg" />
+        Boutique présentée sur MaTable
+      </Link>
+      <nav aria-label="Informations légales" className="flex flex-wrap gap-x-4 gap-y-1 text-[13px]">
+        <Link to="/mentions-legales" className="inline-flex min-h-11 items-center hover:text-[var(--mt-green-deep)]">Mentions légales</Link>
+        <Link to="/confidentialite" className="inline-flex min-h-11 items-center hover:text-[var(--mt-green-deep)]">Confidentialité</Link>
+        <Link to="/cgu" className="inline-flex min-h-11 items-center hover:text-[var(--mt-green-deep)]">Conditions</Link>
+      </nav>
+    </div>
+  </footer>
+) : (
   <footer className={`${compact ? 'mt-4' : ''} relative overflow-hidden border-t border-white/10 bg-[var(--mt-green-deep)] text-white`}>
     <div className={`mx-auto max-w-[1280px] px-5 sm:px-8 lg:px-10 ${compact ? 'py-6 sm:py-7' : 'py-8 sm:py-10'}`}>
-      <section className="mb-7 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[.045] p-4 sm:mb-9 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5">
+      {!hideMerchantCta && <section className="mb-7 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[.045] p-4 sm:mb-9 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5">
         <div className="max-w-xl">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--mt-orange-soft)]">Vous êtes commerçant ?</p>
+          <p className="text-xs font-bold text-[var(--mt-orange-soft)]">Vous êtes commerçant ?</p>
           <h2 className="mt-1 text-lg font-extrabold leading-snug text-white sm:text-xl">Faites découvrir votre boutique sur MaTable.</h2>
           <p className="mt-1 text-sm leading-5 text-white/70">Présentez vos produits et échangez directement avec vos clients.</p>
         </div>
@@ -21,7 +39,7 @@ export const Footer: React.FC<FooterProps> = ({ compact = false }) => (
           Présenter ma boutique
           <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
         </Link>
-      </section>
+      </section>}
 
       <div className="grid grid-cols-2 gap-x-5 gap-y-7 sm:gap-x-8 lg:grid-cols-4 md:gap-8">
         <section aria-labelledby="footer-brand-title" className="col-span-2 max-w-sm md:col-span-1">
