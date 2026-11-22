@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findPublicDiscoveryPage, getPublicDiscoveryPages, toDiscoveryCitySlug } from '../src/utils/discoverySeo';
+import { cityMatchesSlug, getCityFilterOptions, findPublicDiscoveryPage, getPublicDiscoveryPages, isAbidjanCity, toDiscoveryCitySlug } from '../src/utils/discoverySeo';
 
 test('creates category and city pages only when they have multiple public shops', () => {
   const pages = getPublicDiscoveryPages([
@@ -54,4 +54,32 @@ test('creates city and category pages only when enough matching shops exist', ()
     { slug: 'restaurant-one', category: 'food', city: 'Cocody' },
     { slug: 'restaurant-two', category: 'food', city: 'Cocody' },
   ])?.heading, 'Restaurants à Cocody');
+});
+
+test('Abidjan includes its communes, without absorbing other cities', () => {
+  for (const city of ['Abidjan', 'Cocody', 'Abobo', 'Port-Bouët', 'Abidjan · Cocody', 'cocody angré']) assert.equal(isAbidjanCity(city), true, city);
+  for (const city of ['Bouaké', 'Yamoussoukro', 'Grand-Bassam', 'Autre ville / commune', '']) assert.equal(isAbidjanCity(city), false, city);
+  assert.equal(cityMatchesSlug('Cocody', 'abidjan'), true);
+  assert.equal(cityMatchesSlug('Cocody', 'cocody'), true);
+  assert.equal(cityMatchesSlug('Abidjan', 'cocody'), false);
+  assert.equal(cityMatchesSlug('Bouaké', 'abidjan'), false);
+  const pages = getPublicDiscoveryPages([
+    { slug: 'a', category: 'food', city: 'Cocody' },
+    { slug: 'b', category: 'food', city: 'Abobo' },
+    { slug: 'c', category: 'beauty', city: 'Abidjan' },
+  ]);
+  const abidjan = pages.find((page) => page.path === '/boutiques/ville/abidjan');
+  assert.equal(abidjan?.shopCount, 3);
+  assert.equal(abidjan?.city, 'Abidjan');
+  assert.equal(pages.find((page) => page.path === '/boutiques/ville/abidjan/categorie/food')?.shopCount, 2);
+});
+
+test('city filters offer every commune plus all of Abidjan', () => {
+  assert.deepEqual(getCityFilterOptions(['Cocody', 'Abidjan', 'Abobo', 'Cocody', undefined, 'Bouaké']), [
+    { value: 'abidjan', label: 'Abidjan (toutes)' },
+    { value: 'abobo', label: 'Abobo' },
+    { value: 'bouake', label: 'Bouaké' },
+    { value: 'cocody', label: 'Cocody' },
+  ]);
+  assert.deepEqual(getCityFilterOptions(['Abidjan']), [{ value: 'abidjan', label: 'Abidjan' }]);
 });

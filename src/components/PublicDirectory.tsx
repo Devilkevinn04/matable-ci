@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowRight, BadgePercent, CheckCircle2, Clock3, LayoutGrid, MapPin, RotateCcw, Search, ShieldCheck, Store, X } from 'lucide-react';
-import { ABIDJAN_COMMUNES } from '../utils/abidjanCommunes';
+import { ArrowRight, BadgePercent, CheckCircle2, Clock3, MapPin, RotateCcw, Search, ShieldCheck, Store, X } from 'lucide-react';
 import { MotionReveal } from './MotionSystem';
 import { ShopCover, hasShopVisual } from './ShopCover';
 import { CategoryIcon } from './CategoryIcon';
 import { getBannerImageForDisplay, getCategoryDefaults, getProductImageForDisplay, isShopCategory, SHOP_CATEGORIES } from '../utils/categoryDefaults';
+import { isShopExcludedFromPublicIndex } from '../utils/shopIndexing';
 import { shopMatchesDirectorySearch } from '../utils/directorySearch';
-import { getDiscoveryCityLabel, getPublicDiscoveryPages, toDiscoveryCitySlug, type DiscoveryPage } from '../utils/discoverySeo';
+import { cityMatchesSlug, getCityFilterOptions, getDiscoveryCityLabel, getPublicDiscoveryPages, isAbidjanCity, toDiscoveryCitySlug, type DiscoveryPage } from '../utils/discoverySeo';
 import { ProductNewsFeed, type FeedProduct } from './ProductNewsFeed';
 import { PublicCampaignCarousel, type PublicCampaign } from './PublicCampaignCarousel';
 import { PublicPartnerCarousel, type PublicPermanentPartner } from './PublicPartnerCarousel';
@@ -18,6 +18,11 @@ import { AnimatedHome } from './AnimatedHome';
 import { CategoryProductImage } from './CategoryProductImage';
 import { ContextualHelp } from './ContextualHelp';
 import { lockBodyScroll } from '../utils/scrollLock';
+import { MobileDirectory } from './MobileDirectory';
+import { useMediaQuery } from '../hooks/useMediaQuery';
+import { FilterBar } from './FilterBar';
+import { useCatalogFilters } from '../hooks/useCatalogFilters';
+import { ProductSearchResults, useProductSearch } from './ProductSearchResults';
 
 interface DirectoryShop {
   id?: number;
@@ -63,7 +68,10 @@ interface PublicDirectoryProps {
   isPromotionsPage?: boolean;
 }
 
-type DirectorySort = 'recommended' | 'open' | 'name';
+const SHOP_SORTS = [
+  { value: 'recommended', label: 'Recommandées' },
+  { value: 'name', label: 'Nom, de A à Z' },
+];
 
 const categoryTileColors: Record<string, string> = {
   fashion: '#d1fae5',
@@ -78,7 +86,6 @@ const categoryTileColors: Record<string, string> = {
   automotive: '#e8e6e1',
   other: '#eee9df',
 };
-
 const MIN_CATEGORY_COUNT_SHOWN = 5;
 const MAX_HERO_NEIGHBOURHOODS = 6;
 
@@ -205,9 +212,11 @@ const HomeTrustBillboard: React.FC<{ shops: DirectoryShop[]; isLoading?: boolean
 export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoading, loadError, onRetry, onOpenShop, onOpenDirectory, discoveryPage, isShopDirectoryPage = false, isPromotionsPage = false }) => {
   const location = useLocation();
   const [query, setQuery] = useState(() => isShopDirectoryPage ? new URLSearchParams(location.search).get('q') || '' : '');
-  const [category, setCategory] = useState(discoveryPage?.category || 'all');
-  const [directorySort, setDirectorySort] = useState<DirectorySort>('recommended');
-  const [openOnly, setOpenOnly] = useState(false);
+  const [demoCategory, setDemoCategory] = useState('all');
+  const { filters, update, search, clear } = useCatalogFilters();
+  const category = discoveryPage?.category || (isShopDirectoryPage ? filters.category : demoCategory);
+  const city = discoveryPage?.citySlug || (isShopDirectoryPage ? filters.city : 'all');
+  const openOnly = isShopDirectoryPage && filters.openOnly;
   const [campaignEligible, setCampaignEligible] = useState(false);
   const [billboardHasCampaign, setBillboardHasCampaign] = useState(false);
   const [activeDemoShop, setActiveDemoShop] = useState<DirectoryShop | null>(null);
@@ -215,20 +224,12 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
   const isLocalAdvertisingDemo = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true
     && new URLSearchParams(location.search).get('demo') === '1'
     && !discoveryPage && !isShopDirectoryPage;
+  const isPhone = useMediaQuery('(max-width: 639px)');
   const directoryShops = isLocalAdvertisingDemo ? DEMO_SHOPS : shops;
   const directoryIsLoading = isLoading && !isLocalAdvertisingDemo;
   const abidjanShopCount = useMemo(() => {
     if (isLoading || loadError) return null;
-    return shops.filter((shop) => {
-      const citySlug = toDiscoveryCitySlug(shop.city || '');
-      return citySlug === 'abidjan'
-        || citySlug.startsWith('abidjan-')
-        || ABIDJAN_COMMUNES.some((commune) => {
-          if (commune === 'Autre ville / commune') return false;
-          const communeSlug = toDiscoveryCitySlug(commune);
-          return citySlug === communeSlug || citySlug.startsWith(`${communeSlug}-`);
-        });
-    }).length;
+    return shops.filter((shop) => !isShopExcludedFromPublicIndex(shop.name) && isAbidjanCity(shop.city)).length;
   }, [shops, isLoading, loadError]);
   useEffect(() => {
     if (isShopDirectoryPage) setQuery(new URLSearchParams(location.search).get('q') || '');
@@ -288,14 +289,13 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
     setDemoBasket({});
     setActiveDemoShop(directoryShops.find((shop) => shop.slug === slug) || null);
   };
-  const handleOpenDirectory = (search?: string) => {
+  const handleOpenDirectory = (searchTerm?: string) => {
     if (!isLocalAdvertisingDemo) {
-      onOpenDirectory(search);
+      onOpenDirectory(searchTerm);
       return;
     }
-    setCategory('all');
-    if (search === undefined) setQuery('');
-    else setQuery(search);
+    setDemoCategory('all');
+    setQuery(searchTerm ?? '');
   };
   const homeShops = [...directoryShops]
     .filter((shop) => (category === 'all' || shop.category === category)
@@ -382,12 +382,19 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
   for (const shop of directoryShops) {
     if (shop.category) categoryCounts.set(shop.category, (categoryCounts.get(shop.category) || 0) + 1);
   }
+  const { products: foundProducts } = useProductSearch(isShopDirectoryPage && !isLocalAdvertisingDemo && !isPhone ? query : '');
+  const shownProducts = foundProducts.filter((product) => !isShopExcludedFromPublicIndex(product.shop.name)
+    && (category === 'all' || product.shop.category === category)
+    && (city === 'all' || cityMatchesSlug(product.shop.city, city))
+    && (!openOnly || directoryShops.some((shop) => shop.slug === product.shop.slug && shop.is_open)));
+  const closedShops = new Set(directoryShops.filter((shop) => shop.is_open === false).map(({ slug }) => slug));
   const filteredShops = useMemo(() => {
+    const foundShopSlugs = new Set(foundProducts.map((product) => product.shop.slug));
     const filtered = directoryShops.filter((shop) =>
-    shopMatchesDirectorySearch(shop, query, categoryLabel(shop.category))
+    (foundShopSlugs.has(shop.slug) || shopMatchesDirectorySearch(shop, query, categoryLabel(shop.category)))
       && (category === 'all' || shop.category === category)
       && (!openOnly || shop.is_open)
-      && (!discoveryPage?.citySlug || toDiscoveryCitySlug(shop.city || '') === discoveryPage.citySlug)
+      && (city === 'all' || cityMatchesSlug(shop.city, city))
     );
     const targetPlacement = discoveryPage?.citySlug
       ? 'city'
@@ -403,11 +410,18 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         return Number(rightBoosted) - Number(leftBoosted) || left.index - right.index;
       }).map(({ shop }) => shop)
       : filtered;
-    if (directorySort === 'open') return [...ordered].sort((left, right) => Number(Boolean(right.is_open)) - Number(Boolean(left.is_open)));
-    if (directorySort === 'name') return [...ordered].sort((left, right) => left.name.localeCompare(right.name, 'fr', { sensitivity: 'base' }));
+    if (filters.sort === 'name') return [...ordered].sort((left, right) => left.name.localeCompare(right.name, 'fr', { sensitivity: 'base' }));
     return ordered;
-  }, [directoryShops, query, category, openOnly, directorySort, discoveryPage?.citySlug, discoveryPage?.category, isShopDirectoryPage]);
-  const hasActiveDirectoryFilters = Boolean(query.trim() || category !== 'all' || openOnly);
+  }, [directoryShops, foundProducts, query, category, city, openOnly, filters.sort, discoveryPage?.citySlug, discoveryPage?.category, isShopDirectoryPage]);
+  const shopFacets = categories.map((value) => ({
+    value,
+    count: directoryShops.filter((shop) => shop.category === value
+      && (foundProducts.some((product) => product.shop.slug === shop.slug) || shopMatchesDirectorySearch(shop, query, categoryLabel(shop.category)))
+      && (city === 'all' || cityMatchesSlug(shop.city, city))
+      && (!openOnly || shop.is_open)).length,
+  }));
+  const shopCities = getCityFilterOptions(directoryShops.map((shop) => shop.city));
+  const hasActiveDirectoryFilters = Boolean(query.trim() || category !== 'all' || city !== 'all' || openOnly);
   const getShopImage = (shop: DirectoryShop) => shop.theme_config?.custom_banner_url
     ? getBannerImageForDisplay(shop.theme_config.custom_banner_url, shop.category)
     : '';
@@ -421,17 +435,17 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         setQuery(query.trim());
         return;
       }
-      if (isShopDirectoryPage) onOpenDirectory(query.trim() || undefined);
+      if (isShopDirectoryPage) search(query);
       else onOpenDirectory(query);
     }}
     className={`mt-4 flex w-full max-w-[610px] items-center gap-1.5 rounded-[16px] border p-1.5 shadow-[0_10px_28px_rgba(0,0,0,.12)] focus-within:ring-2 focus-within:ring-[var(--mt-orange-soft)]/50 sm:mt-6 sm:gap-2 sm:rounded-[18px] sm:p-2 ${isShopDirectoryPage ? 'border-white/20 bg-white text-[var(--mt-gray-900)]' : 'border-[#d9cdbd] bg-white focus-within:border-[var(--mt-green-hover)] focus-within:ring-[var(--mt-green-hover)]/15'}`}
   >
     <Search className="ml-2 h-5 w-5 shrink-0 text-[#82796e]" aria-hidden="true" />
     <input
-      aria-label={isShopDirectoryPage ? 'Rechercher une boutique, une ville ou un quartier' : 'Rechercher une boutique, un produit ou un quartier'}
+      aria-label={isShopDirectoryPage ? 'Rechercher un produit, une boutique ou une commune' : 'Rechercher une boutique, un produit ou un quartier'}
       value={query}
       onChange={(event) => setQuery(event.target.value)}
-      placeholder={isShopDirectoryPage ? 'Nom ou quartier' : 'Boutique, produit, quartier'}
+      placeholder={isShopDirectoryPage ? 'Produit, boutique, commune' : 'Boutique, produit, quartier'}
       className="min-h-10 min-w-0 flex-1 border-0 bg-transparent px-1.5 text-sm outline-none placeholder:text-[#898178] sm:min-h-11 sm:px-2 sm:text-base"
     />
     <ContextualHelp label="Recherche de boutiques et de produits" variant="info">
@@ -452,6 +466,19 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
         neighbourhoods={heroNeighbourhoods}
         abidjanShopCount={abidjanShopCount}
         onOpenDirectory={onOpenDirectory}
+      />
+    );
+  }
+
+  if (isPhone && !isLocalAdvertisingDemo && (discoveryPage || isShopDirectoryPage)) {
+    return (
+      <MobileDirectory
+        shops={shops}
+        isLoading={directoryIsLoading}
+        loadError={loadError}
+        onRetry={onRetry}
+        discoveryPage={discoveryPage}
+        relatedPages={relatedDiscoveryPages}
       />
     );
   }
@@ -632,7 +659,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             const count = categoryCounts.get(item) || 0;
             const showCount = count >= MIN_CATEGORY_COUNT_SHOWN;
             return <MotionReveal key={item} delay={index * 0.05} className="w-[46%] shrink-0 snap-start sm:w-[calc(33.333%-8px)] lg:w-[calc(20%-10px)]">
-            <button type="button" aria-pressed={category === item} onClick={() => isLocalAdvertisingDemo ? setCategory(category === item ? 'all' : item) : onOpenDirectory(categoryLabel(item))} className={`motion-interactive group flex min-h-[112px] w-full flex-col items-start justify-between rounded-2xl border border-black/[.04] px-3 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(20,40,30,.08)] sm:px-4 ${category === item && isLocalAdvertisingDemo ? 'ring-2 ring-[var(--mt-green-deep)] ring-offset-2' : ''}`} style={{ backgroundColor: categoryTileColors[item] || '#f1f5f2' }}>
+            <button type="button" aria-pressed={category === item} onClick={() => isLocalAdvertisingDemo ? setDemoCategory(category === item ? 'all' : item) : onOpenDirectory(categoryLabel(item))} className={`motion-interactive group flex min-h-[112px] w-full flex-col items-start justify-between rounded-2xl border border-black/[.04] px-3 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-[0_8px_18px_rgba(20,40,30,.08)] sm:px-4 ${category === item && isLocalAdvertisingDemo ? 'ring-2 ring-[var(--mt-green-deep)] ring-offset-2' : ''}`} style={{ backgroundColor: categoryTileColors[item] || '#f1f5f2' }}>
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/80 text-[var(--mt-green-deep)]"><CategoryIcon category={item} className="h-4 w-4" /></span>
               <span className="mt-2 flex w-full items-end justify-between gap-1">
                 <span className="min-w-0">
@@ -683,7 +710,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
                 <MotionReveal key={shop.slug} delay={index * 0.04} className="h-[336px] min-w-[78%] snap-start sm:min-w-[44%] lg:min-w-[calc(25%-12px)]">
                   <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className="motion-interactive group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[#e7dfd3] bg-white shadow-[0_2px_12px_rgba(20,40,30,.05)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.1)]">
                     <span className="relative block aspect-[1.45] overflow-hidden" style={{ backgroundColor: getShopColor(shop) }}>
-                      <ShopCover shop={shop} className="absolute inset-0 h-full w-full transition-transform duration-500 group-hover:scale-[1.04]" />
+                      <ShopCover shop={shop} className="absolute inset-0 h-full w-full transition-transform duration-[var(--mt-motion-deliberate)] group-hover:scale-[1.04]" />
                       <span className="absolute left-2 top-2 rounded-full bg-white/95 px-2.5 py-1 text-xs font-black text-[#8f351d] sm:text-xs">{categoryLabel(shop.category)}</span>
                       {(shop.is_sponsored || shop.is_featured) && <span className="absolute right-2 top-2 rounded-full bg-[var(--mt-green-deep)]/95 px-2.5 py-1 text-xs font-black text-white">À la une</span>}
                     </span>
@@ -754,95 +781,34 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               {discoveryPage ? 'Les boutiques à découvrir' : hasActiveDirectoryFilters ? 'Adresses correspondantes' : 'Le répertoire des boutiques'}
             </h2>
           </div>
-          <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-white/80 bg-white/80 px-3 text-xs font-bold text-[#47534b] shadow-sm backdrop-blur sm:text-sm" aria-live="polite">
+          {!isShopDirectoryPage && <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-white/80 bg-white/80 px-3 text-xs font-bold text-[#47534b] shadow-sm backdrop-blur sm:text-sm" aria-live="polite">
             <span className="h-2 w-2 rounded-full bg-[#07805b]" aria-hidden="true" />
             {directoryIsLoading ? 'Chargement…' : `${filteredShops.length} adresse${filteredShops.length === 1 ? '' : 's'}`}
-          </span>
+          </span>}
         </div>
 
-        {isShopDirectoryPage && (
-          <div className="relative z-10 mb-3 flex items-start gap-2">
-          <details className="min-w-0 flex-1 rounded-[20px] border border-white/90 bg-white/75 p-3 shadow-[0_8px_28px_rgba(40,52,43,.07)] backdrop-blur-sm sm:rounded-[24px] sm:p-4">
-          <summary className="cursor-pointer text-sm font-bold text-[#183f32]">Catégories et filtres</summary>
-          <MotionReveal className="mt-3 overflow-hidden">
-            <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full bg-[#f3d9bb]/35 blur-2xl" />
-            <div className="relative">
-              <div className="mb-3 flex items-end justify-between gap-3">
-                <div>
-                  <p className="text-xs font-black text-[#a53a1d]">À chacun son univers</p>
-                  <p className="mt-1 font-display text-lg font-extrabold text-[#183f32] sm:text-xl">Qu’avez-vous envie de découvrir ?</p>
-                </div>
-                <span className="hidden pb-1 text-xs font-medium text-[var(--mt-gray-600)] sm:block">Choisissez une catégorie</span>
-              </div>
-              <div className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 pb-2 sm:flex-wrap sm:overflow-visible sm:pb-0" aria-label="Filtrer par catégorie">
-                <button
-                  type="button"
-                  aria-pressed={category === 'all'}
-                  onClick={() => setCategory('all')}
-                  className={`motion-interactive flex min-h-[70px] min-w-[104px] shrink-0 flex-col items-start justify-between rounded-2xl border px-3 py-2.5 text-left transition sm:min-w-[126px] sm:px-4 ${category === 'all' ? 'border-[var(--mt-green-deep)] bg-[var(--mt-green-deep)] text-white shadow-[0_8px_18px_rgba(6,95,70,.2)]' : 'border-[#e9e1d7] bg-[#fffdf8] text-[#183f32] hover:border-[#9cbdab] hover:bg-[#f4faf6]'}`}
-                >
-                  <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${category === 'all' ? 'bg-white/15' : 'bg-[#e2eee6]'}`}><LayoutGrid className="h-4 w-4" aria-hidden="true" /></span>
-                  <span className="flex w-full items-center justify-between gap-2 text-xs font-bold sm:text-sm">
-                    Tout voir
-                    <span className={`text-xs ${category === 'all' ? 'text-white/70' : 'text-[#81786d]'}`}>{directoryShops.length}</span>
-                  </span>
-                </button>
-                {categories.map((item) => {
-                  const selected = category === item;
-                  return (
-                    <button
-                      key={item}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => setCategory(selected ? 'all' : item)}
-                      className={`motion-interactive flex min-h-[70px] min-w-[104px] shrink-0 flex-col items-start justify-between rounded-2xl border px-3 py-2.5 text-left transition sm:min-w-[126px] sm:px-4 ${selected ? 'border-[var(--mt-green-deep)] bg-[var(--mt-green-deep)] text-white shadow-[0_8px_18px_rgba(6,95,70,.2)]' : 'border-[#e9e1d7] bg-[#fffdf8] text-[#183f32] hover:border-[#9cbdab] hover:bg-[#f4faf6]'}`}
-                    >
-                      <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${selected ? 'bg-white/15' : ''}`} style={!selected ? { backgroundColor: categoryTileColors[item] || '#e9e4da' } : undefined}><CategoryIcon category={item} className="h-4 w-4" /></span>
-                      <span className="flex w-full items-center justify-between gap-2 text-xs font-bold sm:text-sm">
-                        {categoryLabel(item)}
-                        <span className={`text-xs ${selected ? 'text-white/70' : 'text-[#81786d]'}`}>{categoryCounts.get(item) || 0}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="relative mt-3 flex flex-wrap items-center gap-2 border-t border-[#e9e1d7] pt-3 sm:mt-4 sm:pt-4">
-              <label htmlFor="directory-sort" className="mr-1 text-xs font-black text-[var(--mt-gray-600)] sm:text-xs">Affiner</label>
-              <select
-                id="directory-sort"
-                value={directorySort}
-                onChange={(event) => setDirectorySort(event.target.value as DirectorySort)}
-                className="min-h-10 min-w-[185px] flex-1 rounded-xl border border-[#e0d5c6] bg-[#fffdf8] px-3 text-sm font-semibold text-[var(--mt-gray-900)] outline-none transition focus:border-[var(--mt-green-hover)] focus:ring-2 focus:ring-[var(--mt-green-hover)]/15 sm:flex-none"
-              >
-                <option value="recommended">Ordre recommandé</option>
-                <option value="open">Commandes ouvertes en premier</option>
-                <option value="name">Nom : A à Z</option>
-              </select>
-              <button
-                type="button"
-                aria-pressed={openOnly}
-                onClick={() => setOpenOnly((current) => !current)}
-                className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 text-xs font-bold transition sm:text-sm ${openOnly ? 'border-[var(--mt-green-deep)] bg-[#e2eee6] text-[var(--mt-green-deep)]' : 'border-[#e0d5c6] bg-white text-[#47534b] hover:border-[var(--mt-green-hover)]'}`}
-              >
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                Commandes ouvertes uniquement
-              </button>
-              {hasActiveDirectoryFilters && <button type="button" onClick={() => { setQuery(''); setCategory('all'); setOpenOnly(false); handleOpenDirectory(); }} className="inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-xs font-bold text-[var(--mt-green-deep)] transition hover:bg-[#e9f5ee] sm:text-sm">Effacer les filtres <X className="h-4 w-4" aria-hidden="true" /></button>}
-            </div>
+        {isShopDirectoryPage && !directoryIsLoading && directoryShops.length > 0 && (
+          <div className="relative z-10 mb-5">
+            <FilterBar
+              label="les boutiques"
+              resultLabel={`${filteredShops.length} boutique${filteredShops.length > 1 ? 's' : ''}`}
+              filters={filters}
+              facets={shopFacets}
+              cities={shopCities}
+              sortOptions={SHOP_SORTS}
+              onChange={update}
+              onClear={() => clear()}
+            />
             {cityPages.length > 0 && (
-              <nav className="relative mt-3 flex flex-wrap items-center gap-2 border-t border-[#e9e1d7] pt-3 sm:mt-4 sm:pt-4" aria-label="Découvrir les boutiques par ville">
-                <span className="mr-1 text-xs font-black text-[var(--mt-gray-600)]">Explorer une ville</span>
-                {cityPages.map((page) => <Link key={page.path} to={page.path} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-white/80 bg-white/70 px-3 text-xs font-bold text-[#315548] shadow-sm transition hover:border-[#9cbdab] hover:bg-white"><MapPin className="h-3.5 w-3.5 text-[var(--mt-orange-deep)]" aria-hidden="true" />{page.city}</Link>)}
+              <nav aria-label="Découvrir les boutiques par ville" className="mt-2 flex flex-wrap items-center gap-x-4 px-2 text-sm text-[var(--mt-gray-600)]">
+                <span>Voir aussi :</span>
+                {cityPages.filter((page) => !page.category).map((page) => <Link key={page.path} to={page.path} className="inline-flex min-h-10 items-center font-semibold underline-offset-4 hover:text-[var(--mt-green-deep)] hover:underline">Boutiques à {page.city}</Link>)}
               </nav>
             )}
-          </MotionReveal>
-          </details>
-          <ContextualHelp label="Filtres de l’annuaire" variant="info">
-            Choisissez une catégorie, puis affinez l’ordre des boutiques ou affichez les commerces actuellement ouverts. Ces filtres ne modifient pas le catalogue des boutiques.
-          </ContextualHelp>
           </div>
         )}
+
+        {isShopDirectoryPage && <ProductSearchResults products={shownProducts} closedShops={closedShops} />}
 
         {directoryIsLoading ? (
           <div role="status" aria-label="Chargement des boutiques" className="relative z-10 grid grid-cols-2 gap-3 sm:gap-4 max-[360px]:grid-cols-1 lg:grid-cols-3">
@@ -866,7 +832,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
             <Store className="mx-auto h-10 w-10 text-[var(--mt-green-hover)]" aria-hidden="true" />
             <h3 className="mt-3 font-display text-lg font-bold">{openOnly && !query.trim() && category === 'all' ? 'Aucune boutique actuellement ouverte aux commandes' : hasActiveDirectoryFilters ? 'Aucune boutique trouvée' : 'Aucune boutique disponible pour le moment'}</h3>
             <p className="mt-2 text-sm text-[var(--mt-gray-600)]">{openOnly && !query.trim() && category === 'all' ? 'Consultez les horaires affichés sur les boutiques ou retirez ce filtre.' : hasActiveDirectoryFilters ? 'Essayez un autre mot-clé ou effacez vos filtres.' : 'La vitrine s’actualisera dès qu’une boutique sera publiée.'}</p>
-            {hasActiveDirectoryFilters && <button type="button" onClick={() => { setQuery(''); setCategory('all'); setOpenOnly(false); }} className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-4 py-2 text-sm font-bold text-white">Effacer les filtres <X className="h-4 w-4" /></button>}
+            {hasActiveDirectoryFilters && <button type="button" onClick={() => { setQuery(''); clear(true); }} className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-4 py-2 text-sm font-bold text-white">Effacer les filtres <X className="h-4 w-4" /></button>}
           </div>
         ) : (
           <div className={`relative z-10 grid items-stretch gap-3 sm:gap-4 lg:gap-5 ${filteredShops.length === 1 ? 'grid-cols-1' : 'grid-cols-2 max-[360px]:grid-cols-1 lg:grid-cols-3'}`}>
@@ -874,7 +840,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               <MotionReveal key={shop.slug} delay={Math.min(index, 7) * 0.045} className={`${filteredShops.length === 1 ? 'mx-auto w-full max-w-[760px]' : ''}`}>
               <Link to={`/${encodeURIComponent(shop.slug)}`} onClick={(event) => { if (isLocalAdvertisingDemo) { event.preventDefault(); handleOpenShop(shop.slug); } }} className={`directory-vitrine-card mt-press group flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#e3d9cc] bg-[#FFFFFF] transition hover:border-[#b7cfc3] hover:shadow-[0_16px_40px_rgba(36,28,22,.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] focus-visible:ring-offset-2 sm:rounded-[24px] ${index % 2 === 1 ? 'directory-vitrine-card-alt' : ''}`}>
                 <div className="relative aspect-[1.45] shrink-0 overflow-hidden sm:aspect-[1.8]" style={{ backgroundColor: `${getShopColor(shop)}30` }}>
-                    <ShopCover shop={shop} className="absolute inset-0 h-full w-full transition-transform duration-500 group-hover:scale-[1.04]" />
+                    <ShopCover shop={shop} className="absolute inset-0 h-full w-full transition-transform duration-[var(--mt-motion-deliberate)] group-hover:scale-[1.04]" />
                     {hasShopVisual(shop) && <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#17211f]/55 via-transparent to-transparent" />}
                   <span className="absolute bottom-2.5 left-2.5 rounded-full bg-[#FFFFFF]/95 px-2.5 py-1 text-[11px] font-bold text-[var(--mt-green-deep)] sm:bottom-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">{categoryLabel(shop.category)}</span>
                 </div>
@@ -935,7 +901,7 @@ export const PublicDirectory: React.FC<PublicDirectoryProps> = ({ shops, isLoadi
               href={`https://wa.me/?text=${encodeURIComponent(`Bonjour ! Je pense que ta boutique aurait sa place sur MaTable, l’annuaire des commerces de quartier en Côte d’Ivoire. Tu peux créer ta vitrine ici : ${typeof window !== 'undefined' ? window.location.origin : 'https://matable-ci.com'}/commercants`)}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#128C4B] px-5 text-sm font-extrabold text-white hover:bg-[#0f7a41]"
+              className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#0f7d43] px-5 text-sm font-extrabold text-white hover:bg-[#0c6b39]"
             >
               Partager sur WhatsApp
             </a>

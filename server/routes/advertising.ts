@@ -3,6 +3,7 @@ import { Router, type Request, type RequestHandler } from 'express';
 import { dbAll, dbGet, dbRun, dbTransaction } from '../../db.ts';
 import { isShopCategory } from '../../src/utils/categoryDefaults.ts';
 import { getBannerImageForDisplay, normalizeCustomBannerImage } from '../../src/utils/categoryDefaults.ts';
+import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
 import { isShopPubliclyVisible } from '../services/businessRules.ts';
 import { toPublicProductImageUrl } from '../services/publicProductImages.ts';
@@ -255,7 +256,7 @@ export function createAdvertisingRouters({
             WHERE id = ? AND shop_id = ? AND is_available = 1 AND stock > 0`,
           [campaign.product_id, shop.id],
         );
-        if (!product) continue;
+        if (!product || isAgeRestrictedProduct({ title: product.title, description: null }, shop.name)) continue;
       }
       const category = isShopCategory(shop.category) ? shop.category : 'other';
       const bannerUrl = getBannerImageForDisplay(shop.theme_config?.custom_banner_url, category);

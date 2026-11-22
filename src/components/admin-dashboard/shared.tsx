@@ -1,5 +1,8 @@
 // Types, libellés et composants partagés par les vues du dashboard admin.
 import React from 'react';
+import { AnimatedNumber } from '../AnimatedNumber';
+import { Sparkline } from '../charts/Sparkline';
+import { CHART_COLORS } from '../../utils/chartData';
 import { formatAudienceChange } from '../adminDashboardTypes';
 import type { AdminOrder } from '../adminDashboardTypes';
 
@@ -32,12 +35,12 @@ export interface DashboardMetricCardProps {
   periodLabel: string;
 }
 
-export const dashboardMetricTones: Record<DashboardMetricTone, { icon: string; bar: string; accent: string }> = {
-  emerald: { icon: 'bg-emerald-50 text-emerald-800 ring-emerald-100', bar: 'bg-emerald-600', accent: 'bg-emerald-500' },
-  sky: { icon: 'bg-sky-50 text-sky-800 ring-sky-100', bar: 'bg-sky-600', accent: 'bg-sky-500' },
-  orange: { icon: 'bg-orange-50 text-orange-800 ring-orange-100', bar: 'bg-orange-600', accent: 'bg-orange-500' },
-  amber: { icon: 'bg-amber-50 text-amber-800 ring-amber-100', bar: 'bg-amber-600', accent: 'bg-amber-500' },
-  rose: { icon: 'bg-rose-50 text-rose-800 ring-rose-100', bar: 'bg-rose-600', accent: 'bg-rose-500' },
+export const dashboardMetricTones: Record<DashboardMetricTone, { icon: string; spark: string; accent: string }> = {
+  emerald: { icon: 'bg-emerald-50 text-emerald-800 ring-emerald-100', spark: CHART_COLORS.green, accent: 'bg-emerald-500' },
+  sky: { icon: 'bg-sky-50 text-sky-800 ring-sky-100', spark: CHART_COLORS.blue, accent: 'bg-sky-500' },
+  orange: { icon: 'bg-orange-50 text-orange-800 ring-orange-100', spark: CHART_COLORS.rust, accent: 'bg-orange-500' },
+  amber: { icon: 'bg-amber-50 text-amber-800 ring-amber-100', spark: CHART_COLORS.amber, accent: 'bg-amber-500' },
+  rose: { icon: 'bg-rose-50 text-rose-800 ring-rose-100', spark: CHART_COLORS.rust, accent: 'bg-rose-500' },
 };
 
 export function DashboardMetricCard({
@@ -53,10 +56,6 @@ export function DashboardMetricCard({
   periodLabel,
 }: DashboardMetricCardProps) {
   const styles = dashboardMetricTones[tone];
-  const sampledSeries = series.length > 12
-    ? Array.from({ length: 12 }, (_, index) => series[Math.round(index * (series.length - 1) / 11)])
-    : series;
-  const seriesMax = Math.max(1, ...sampledSeries);
   const hasComparison = current !== undefined && previous !== undefined;
   const isStable = hasComparison && current === previous;
   const change = hasComparison ? formatAudienceChange(current, previous, percentagePoints) : null;
@@ -74,7 +73,7 @@ export function DashboardMetricCard({
       : change;
 
   return (
-    <article className="group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_4px_16px_rgba(15,23,42,.04)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(15,23,42,.08)] max-sm:p-3 sm:p-5">
+    <article className="group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_4px_16px_rgba(15,23,42,.04)] transition duration-[var(--mt-motion-fast)] hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(15,23,42,.08)] max-sm:p-3 sm:p-5">
       <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-1 ${styles.accent}`} />
       <div className="flex items-start justify-between gap-3">
         <p className="min-h-10 text-xs font-bold leading-5 text-slate-600">{label}</p>
@@ -82,7 +81,7 @@ export function DashboardMetricCard({
           <Icon className="h-4 w-4" aria-hidden="true" />
         </span>
       </div>
-      <p className="mt-1 break-words text-xl font-black tracking-tight tabular-nums text-[#183b31] sm:text-3xl">{value}</p>
+      <p className="mt-1 break-words text-xl font-black tracking-tight tabular-nums text-[#183b31] sm:text-3xl"><AnimatedNumber>{value}</AnimatedNumber></p>
       <p className="mt-1 min-h-8 text-[11px] leading-4 text-slate-500">{detail}</p>
       <div className="mt-3 flex min-w-0 items-center justify-between gap-2 border-t border-slate-100 pt-3">
         <span className={`min-w-0 truncate rounded-full px-2.5 py-1 text-[10px] font-black tabular-nums ${comparisonTone}`}>
@@ -90,17 +89,7 @@ export function DashboardMetricCard({
         </span>
         <span className="shrink-0 text-[10px] font-semibold text-slate-400">{periodLabel}</span>
       </div>
-      <div aria-hidden="true" className="mt-3 flex h-7 items-end gap-1">
-        {sampledSeries.length > 0
-          ? sampledSeries.map((point, index) => (
-            <span
-              key={index}
-              className={`min-w-0 flex-1 rounded-t-sm ${styles.bar} transition-[height] duration-300`}
-              style={{ height: `${point > 0 ? Math.max(12, point / seriesMax * 100) : 5}%`, opacity: point > 0 ? 0.78 : 0.12 }}
-            />
-          ))
-          : <span className="h-1 w-full rounded-full bg-slate-100" />}
-      </div>
+      <Sparkline series={series} color={styles.spark} className="mt-3 h-8" />
     </article>
   );
 }
@@ -188,7 +177,7 @@ export const adminOrderStatusLabels: Record<AdminOrder['status'], string> = {
   confirmed: 'Acceptée',
   preparing: 'En préparation',
   ready: 'Prête',
-  delivered: 'Livrée',
+  delivered: 'Remise',
   cancelled: 'Annulée',
   rejected: 'Refusée',
   expired: 'Expirée',

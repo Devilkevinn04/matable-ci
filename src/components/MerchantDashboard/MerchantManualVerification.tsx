@@ -240,7 +240,7 @@ export function MerchantManualVerification({ shopId, onProgress }: MerchantManua
       <div className="mt-3">
         <div className="flex items-center justify-between text-xs font-semibold text-slate-600"><span>Pièces reçues</span><span>{identityProgress}/{identityDocumentKind === 'identity_card' ? 2 : 1}</span></div>
         <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Pièces d’identité reçues" aria-valuemin={0} aria-valuemax={identityDocumentKind === 'identity_card' ? 2 : 1} aria-valuenow={identityProgress}>
-          <div className="h-full rounded-full bg-emerald-600 transition-[width] duration-300" style={{ width: `${identityProgress / (identityDocumentKind === 'identity_card' ? 2 : 1) * 100}%` }} />
+          <div className="h-full rounded-full bg-emerald-600 transition-[width] duration-[var(--mt-motion-standard)]" style={{ width: `${identityProgress / (identityDocumentKind === 'identity_card' ? 2 : 1) * 100}%` }} />
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">

@@ -66,8 +66,8 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
     }
     const { name, whatsapp_number, pin_code, pin, category, city, welcome_message, opening_hours } = req.body;
     const requestedTier = req.body.subscription_tier ?? 'standard';
-    if (requestedTier !== 'standard' && requestedTier !== 'premium') {
-      return res.status(400).json({ error: 'Choisissez Standard ou Premium pour votre boutique.' });
+    if (requestedTier !== 'standard' && requestedTier !== 'premium' && requestedTier !== 'pro') {
+      return res.status(400).json({ error: 'Choisissez Standard, Premium ou Pro pour votre boutique.' });
     }
     const ownerEmail = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     if (typeof name !== 'string' || typeof whatsapp_number !== 'string'
@@ -191,7 +191,8 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       if (await transaction.get('SELECT id FROM shops WHERE whatsapp_number = ?', [normalizedWhatsAppPhone])) return 'duplicate_phone';
       if (await transaction.get('SELECT id FROM shops WHERE LOWER(owner_email) = LOWER(?)', [ownerEmail])) return 'duplicate_email';
 
-      const trialGranted = await claimTrialPromotionSlot(transaction, databaseMode, requestedTier, newShop.id, now.toISOString());
+      // Pro est payante dès l’activation : aucune place d’essai n’est consommée.
+      const trialGranted = requestedTier !== 'pro' && await claimTrialPromotionSlot(transaction, databaseMode, requestedTier, newShop.id, now.toISOString());
       if (trialGranted) {
         const trialEnd = addCalendarMonths(now, trialDurationMonths);
         newShop.subscription_status = 'trialing';
@@ -287,6 +288,8 @@ export function createShopRegistrationRouter(options: RegistrationOptions) {
       trial_granted: trialGranted,
       message: trialGranted
         ? `Boutique créée. Votre essai ${requestedTier === 'premium' ? 'Premium' : 'Standard'} gratuit de ${trialDurationMonths} mois commence maintenant, avec jusqu’à ${TRIAL_CATALOG_LIMIT} produits.`
+        : requestedTier === 'pro'
+        ? 'Boutique créée avec la formule Pro, sans essai gratuit : réglez-la avec GeniusPay pour activer votre abonnement. Les commandes clients vous sont transmises via un reçu WhatsApp à ouvrir manuellement.'
         : 'Boutique créée sans essai gratuit : choisissez et réglez une formule avec GeniusPay pour activer votre abonnement. Les commandes clients vous sont transmises via un reçu WhatsApp à ouvrir manuellement.',
     });
   });

@@ -17,6 +17,9 @@ interface CustomerProductCardProps {
   isShopOpen: boolean;
   layoutStyle: 'grid_portrait' | 'card_landscape';
   compact?: boolean;
+  /** Ouvre la fiche à l’arrivée depuis un lien vers ce produit. */
+  openOnArrival?: boolean;
+  onOpenedOnArrival?: () => void;
   cardRadius: string;
   shadowClass: string;
   primaryColor: string;
@@ -49,6 +52,8 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   isShopOpen,
   layoutStyle,
   compact = false,
+  openOnArrival = false,
+  onOpenedOnArrival,
   cardRadius,
   shadowClass,
   primaryColor,
@@ -89,6 +94,11 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  useEffect(() => {
+    if (!openOnArrival) return;
+    if (compact) setIsSheetOpen(true);
+    onOpenedOnArrival?.();
+  }, [openOnArrival, compact, onOpenedOnArrival]);
   const imageViewerCloseRef = useRef<HTMLButtonElement>(null);
   const imageViewerTriggerRef = useRef<HTMLButtonElement>(null);
   const imageViewerDialogRef = useRef<HTMLElement>(null);
@@ -243,7 +253,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
               aria-label={`Agrandir la photo ${selectedImageIndex + 1} de ${productTitle}`}
               className="group absolute inset-0 z-0 rounded-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
             >
-              <CategoryProductImage imageUrl={selectedImage.thumbnailSrc} category={category} title={selectedImage.alt} showFallbackTitle={false} imageFit={selectedImage.fit} className={`h-full w-full transition-transform duration-200 group-hover:scale-105 ${selectedImage.fit === 'contain' ? 'p-1' : ''}`} />
+              <CategoryProductImage imageUrl={selectedImage.thumbnailSrc} category={category} title={selectedImage.alt} showFallbackTitle={false} imageFit={selectedImage.fit} className={`h-full w-full transition-transform duration-[var(--mt-motion-fast)] group-hover:scale-105 ${selectedImage.fit === 'contain' ? 'p-1' : ''}`} />
               <span className="pointer-events-none absolute bottom-2 right-2 z-20 hidden h-9 w-9 sm:flex items-center justify-center rounded-full border border-white/80 bg-slate-950/65 text-white shadow-sm backdrop-blur-sm">
                 <Expand className="h-4 w-4" aria-hidden="true" />
               </span>

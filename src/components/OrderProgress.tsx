@@ -1,4 +1,4 @@
-// Frise d’avancement d’une commande, vue par le client : Envoyée → Acceptée → (Prête) → Livrée.
+// Frise d’avancement d’une commande, vue par le client : Envoyée → Acceptée → (Prête) → Remise.
 // Les états d’arrêt (refusée, annulée, expirée) remplacent la frise par un message clair.
 import { Check, Clock3, XCircle } from 'lucide-react';
 
@@ -34,7 +34,7 @@ export function OrderProgress({ status, category, compact = false }: { status: s
     );
   }
 
-  // « Prête » n’a de sens que pour la restauration ; ailleurs, on passe d’Acceptée à Livrée.
+  // « Prête » n’a de sens que pour la restauration ; ailleurs, on passe d’Acceptée à Remise.
   const steps: Step[] = category === 'food'
     ? [{ key: 'pending', label: 'Envoyée' }, { key: 'confirmed', label: 'Acceptée' }, { key: 'ready', label: 'Prête' }, { key: 'delivered', label: 'Remise' }]
     : [{ key: 'pending', label: 'Envoyée' }, { key: 'confirmed', label: 'Acceptée' }, { key: 'delivered', label: 'Remise' }];

@@ -73,14 +73,14 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
           <p className="legal-kicker">MaTable · Côte d’Ivoire</p>
           <h1>{content.title}</h1>
           <p>{content.intro}</p>
-          <small>Dernière mise à jour : 8 novembre 2026</small>
+          <small>Dernière mise à jour : {page === 'mentions-legales' ? '22 novembre 2026' : '8 novembre 2026'}</small>
         </header>
 
         {page === 'mentions-legales' && (
           <div className="legal-content">
             <section>
               <h2>Éditeur et exploitant</h2>
-              <p>MaTable est la plateforme de mise en relation entre commerçants et clients, exploitée par Kouadio Kevin Marc Armel, au 01 BP 153 Abidjan 01, Cocody, Côte d’Ivoire. L’activité est gérée depuis la Côte d’Ivoire et l’infrastructure technique est hébergée par Render, conformément à la configuration de production.</p>
+              <p>MaTable est la plateforme de mise en relation entre commerçants et clients, exploitée par Kouadio Kevin Marc Armel, au 01 BP 153 Abidjan 01, Cocody, Côte d’Ivoire. L’activité est gérée depuis la Côte d’Ivoire et l’infrastructure technique est hébergée par Hostinger.</p>
               <p>La plateforme agit comme prestataire technique de mise en relation et ne collecte pas les paiements entre le client et le vendeur.</p>
             </section>
             <section>
@@ -89,7 +89,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
             </section>
             <section>
               <h2>Hébergement</h2>
-              <p>Le service applicatif est hébergé par Render. La base de données est déployée dans l’infrastructure active de la configuration de production et les données sont stockées selon la politique et la région définies par ce déploiement.</p>
+              <p>Le service applicatif et sa base de données sont hébergés sur un serveur privé virtuel Hostinger. Les images et les fichiers déposés sont stockés chez Cloudflare (R2).</p>
             </section>
             <section>
               <h2>Responsabilités</h2>

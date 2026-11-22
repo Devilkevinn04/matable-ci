@@ -465,7 +465,7 @@ export function ChoiceCards<T extends string>({ legend, name, value, onChange, o
               <input type="radio" name={name} value={option.value} checked={checked} onChange={() => onChange(option.value)} className="mt-choice-input" />
               {option.icon && <span className="mt-choice-icon" aria-hidden="true">{option.icon}</span>}
               <span className="min-w-0 flex-1">
-                <span className="flex items-baseline justify-between gap-2">
+                <span className="flex flex-wrap items-baseline justify-between gap-x-2">
                   <span className="mt-choice-label">{option.label}</span>
                   {option.aside && <span className="mt-choice-aside">{option.aside}</span>}
                 </span>

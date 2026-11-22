@@ -196,14 +196,14 @@ export const CustomerTrustPanel: React.FC<CustomerTrustPanelProps> = ({ targetTy
         <div className="mt-6 grid gap-5 border-t border-slate-200 pt-5 sm:grid-cols-2">
           <form onSubmit={submitReview} className="space-y-3">
             <h3 className="flex items-center gap-2 text-sm font-black text-slate-900"><Star className="h-4 w-4 text-amber-500" />Donner un avis vérifié</h3>
-            <p className="text-xs leading-5 text-slate-600">Seules les commandes livrées de votre compte peuvent donner lieu à un avis vérifié.</p>
-            <select aria-label="Commande livrée" value={orderId} onChange={(event) => setOrderId(event.target.value)} required disabled={ordersLoading || eligibleOrders.length === 0} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100">
-              <option value="">{ordersLoading ? 'Chargement de vos commandes…' : 'Choisir une commande livrée'}</option>
+            <p className="text-xs leading-5 text-slate-600">Seules les commandes remises de votre compte peuvent donner lieu à un avis vérifié.</p>
+            <select aria-label="Commande remise" value={orderId} onChange={(event) => setOrderId(event.target.value)} required disabled={ordersLoading || eligibleOrders.length === 0} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100">
+              <option value="">{ordersLoading ? 'Chargement de vos commandes…' : 'Choisir une commande remise'}</option>
               {eligibleOrders.map((order) => <option key={order.id} value={order.id}>Commande #{order.id}</option>)}
             </select>
             {ordersError && <p role="alert" className="text-xs text-rose-800">{ordersError}</p>}
             {!ordersLoading && !ordersError && !ordersAuthenticated && <p className="text-xs text-slate-600">Connectez-vous à votre compte client pour déposer un avis vérifié. <a href={customerLoginUrl} onClick={onClose} className="font-bold text-[var(--mt-green-deep)] underline underline-offset-2">Se connecter</a></p>}
-            {!ordersLoading && !ordersError && ordersAuthenticated && eligibleOrders.length === 0 && <p className="text-xs text-slate-600">{orders.length === 0 ? 'Aucune commande n’est associée à votre compte pour le moment.' : hasReviewedTargetOrder ? 'Vous avez déjà donné votre avis sur cet élément pour toutes vos commandes livrées.' : 'Une commande livrée de cette boutique ou contenant ce produit est nécessaire pour laisser un avis.'}</p>}
+            {!ordersLoading && !ordersError && ordersAuthenticated && eligibleOrders.length === 0 && <p className="text-xs text-slate-600">{orders.length === 0 ? 'Aucune commande n’est associée à votre compte pour le moment.' : hasReviewedTargetOrder ? 'Vous avez déjà donné votre avis sur cet élément pour toutes vos commandes remises.' : 'Une commande remise de cette boutique ou contenant ce produit est nécessaire pour laisser un avis.'}</p>}
             <div className="flex gap-1" aria-label="Note sur cinq">
               {[1, 2, 3, 4, 5].map((value) => <button key={value} type="button" onClick={() => setRating(value)} aria-label={`${value} étoile${value > 1 ? 's' : ''}`} aria-pressed={rating === value} className={`rounded p-1 ${rating >= value ? 'text-amber-500' : 'text-slate-300'}`}><Star className={`h-5 w-5 ${rating >= value ? 'fill-current' : ''}`} aria-hidden="true" /></button>)}
             </div>

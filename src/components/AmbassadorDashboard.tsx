@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+import { AnimatedNumber } from './AnimatedNumber';
+import { TrendChart } from './charts/TrendChart';
+import { CHART_COLORS, fillDailyRows, periodStart, toDailyPoints, toMonthlyPoints } from '../utils/chartData';
+import { useTabFade } from './useTabFade';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowDownRight, ArrowRight, BadgeCheck, Check, Copy, CreditCard, Download, Eye, EyeOff, Handshake, LayoutDashboard, LockKeyhole, LogOut, Mail, MessageCircle, Search, Share2, ShieldCheck, Store, Users, Wallet } from 'lucide-react';
 import { stringifyCsv } from '../utils/csv';
 import { getSupportWhatsAppUrl } from '../utils/supportWhatsApp';
-import { buildAmbassadorReferralUrl, getAmbassadorMonthlyStats, type AmbassadorMonthlyStats } from '../utils/ambassadors';
+import { buildAmbassadorReferralUrl, getAmbassadorMonthlyStats } from '../utils/ambassadors';
 import { useVisibilityPolling } from '../hooks/useVisibilityPolling';
 import { confirmAction } from './ui/ConfirmSheet';
 
@@ -84,51 +88,6 @@ const payoutMethodLabels: Record<PayoutMethod, string> = {
   wave: 'Wave', orange_money: 'Orange Money', mtn_momo: 'MTN MoMo', moov_money: 'Moov Money',
 };
 
-function AmbassadorMonthlyChart({
-  title,
-  rows,
-  valueFor,
-  formatValue,
-  concealed = false,
-}: {
-  title: string;
-  rows: AmbassadorMonthlyStats[];
-  valueFor: (row: AmbassadorMonthlyStats) => number;
-  formatValue: (value: number) => string;
-  concealed?: boolean;
-}) {
-  const maxValue = Math.max(1, ...rows.map(valueFor));
-  const accessibleSummary = concealed
-    ? `${title}. Montants masqués.`
-    : `${title} sur les six derniers mois : ${rows.map((row) => {
-      const date = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
-        .format(new Date(`${row.month}-01T12:00:00.000Z`));
-      return `${date}, ${formatValue(valueFor(row))}`;
-    }).join('; ')}.`;
-
-  return <section className="rounded-xl border border-slate-200 bg-white p-4" aria-label={title}>
-    <h3 className="text-sm font-bold text-slate-900">{title}</h3>
-    {concealed
-      ? <p className="mt-4 grid h-32 place-items-center rounded-lg bg-slate-50 text-sm text-slate-500">Montants masqués</p>
-      : <div className="mt-4 grid h-32 grid-cols-6 items-end gap-2" role="img" aria-label={accessibleSummary}>
-        {rows.map((row) => {
-          const value = valueFor(row);
-          const height = value ? Math.max(4, (value / maxValue) * 100) : 0;
-          return <div key={row.month} className="flex h-full min-w-0 flex-col items-center justify-end gap-2">
-            <div className="flex h-full w-full items-end justify-center">
-              <div
-                title={`${row.label} : ${formatValue(value)}`}
-                className="w-full max-w-8 rounded-t-md bg-emerald-800/85 transition-[height] duration-300"
-                style={{ height: `${height}%`, opacity: value ? 1 : 0.15 }}
-              />
-            </div>
-            <span className="text-[10px] font-medium text-slate-500">{row.label}</span>
-          </div>;
-        })}
-      </div>}
-  </section>;
-}
-
 export function AmbassadorDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -155,6 +114,7 @@ export function AmbassadorDashboard() {
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirmation, setNewPasswordConfirmation] = useState('');
   const [activeTab, setActiveTab] = useState<AmbassadorTab>('overview');
+  const tabPanel = useTabFade(activeTab);
   const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>('wave');
   const [payoutPhone, setPayoutPhone] = useState('');
   const [requestingWithdrawal, setRequestingWithdrawal] = useState(false);
@@ -374,6 +334,12 @@ export function AmbassadorDashboard() {
     last_referral_at: null,
   };
   const visibleActivity = selectedLinkStats?.activity || [];
+  const activityFrom = selectedRange === 'custom'
+    ? customStartDate
+    : selectedRange === 'all' ? visibleActivity[0]?.date || todayDate : periodStart(selectedRange === 'today' ? 1 : Number(selectedRange.replace('d', '')));
+  const activityDays = selectedLinkStats && !linkStatsError
+    ? fillDailyRows(visibleActivity, activityFrom, selectedRange === 'custom' ? customEndDate : todayDate, (date) => ({ date, clicks: 0, referrals: 0 }))
+    : [];
   const selectedPeriodDescription = selectedRange === 'today'
     ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'full' }).format(new Date(`${localDateInputValue(new Date())}T12:00:00`))
     : selectedRange === 'custom'
@@ -517,7 +483,7 @@ export function AmbassadorDashboard() {
 
     <div className="ambassador-auth-layout relative z-10 mx-auto grid max-w-[1320px] items-start gap-10 px-5 pb-10 pt-5 sm:px-8 sm:pb-14 lg:min-h-[calc(100svh-96px)] lg:grid-cols-[1.05fr_.95fr] lg:items-center lg:gap-16 lg:px-12 lg:pb-16 lg:pt-0">
       <section className="ambassador-auth-story max-w-[660px] py-3 lg:py-10">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[#e7b77d]/25 bg-[#e7b77d]/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.17em] text-[#f1c893] sm:text-xs">
+        <div className="inline-flex items-center gap-2 rounded-full border border-[#e7b77d]/25 bg-[#e7b77d]/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.17em] text-[#f1c893] sm:text-xs">
           <Handshake className="h-3.5 w-3.5" aria-hidden="true" />
           Le cercle des partenaires MaTable
         </div>
@@ -545,7 +511,7 @@ export function AmbassadorDashboard() {
         <section aria-labelledby="ambassador-commission-title" className="ambassador-commission-card mt-6 max-w-[540px] rounded-[24px] border border-[#e7b77d]/20 bg-[#e7b77d]/[0.07] p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.15em] text-[#f1c893]">Prime ambassadeur</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.15em] text-[#f1c893]">Prime ambassadeur</p>
               <h2 id="ambassador-commission-title" className="mt-2 font-display text-2xl font-black tracking-[-.04em] text-white">Une prime unique personnalisée</h2>
             </div>
             <span className="font-display text-2xl font-black tracking-[-.04em] text-[#e7b77d]">Selon votre compte</span>
@@ -553,7 +519,7 @@ export function AmbassadorDashboard() {
           <p className="mt-3 text-xs leading-5 text-white/60">
             Le taux convenu est indiqué dans votre espace. La prime est calculée sur le tarif mensuel après le premier paiement confirmé ; un paiement annuel est divisé par dix avant calcul.
           </p>
-          <p className="mt-3 text-[10px] leading-5 text-white/40">Montants indicatifs, soumis à vérification. La boutique doit être publiée et la commission validée avant versement. Pas de prime pour une inscription seule ou un renouvellement ; les remboursements annulent les primes non versées. Retraits manuels après validation.</p>
+          <p className="mt-3 text-xs leading-5 text-white/70">Montants indicatifs, soumis à vérification. La boutique doit être publiée et la commission validée avant versement. Pas de prime pour une inscription seule ou un renouvellement ; les remboursements annulent les primes non versées. Retraits manuels après validation.</p>
         </section>
       </section>
 
@@ -562,12 +528,12 @@ export function AmbassadorDashboard() {
         {!applicationSubmitted ? <>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a66e35]">Première étape</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#8a5a28]">Première étape</p>
               <h2 id="ambassador-application-title" className="mt-2 font-display text-2xl font-black leading-tight tracking-[-.04em] text-[#173c32] sm:text-[30px]">Parlons de votre projet.</h2>
             </div>
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#e8eee8] text-[#174c3d]"><Handshake className="h-5 w-5" aria-hidden="true" /></span>
           </div>
-          <p className="mt-3 text-sm leading-6 text-[#72766f]">Laissez-nous vos coordonnées. Notre équipe examinera votre candidature et vous répondra par e-mail.</p>
+          <p className="mt-3 text-sm leading-6 text-[#656a62]">Laissez-nous vos coordonnées. Notre équipe examinera votre candidature et vous répondra par e-mail.</p>
           <form key={applicationSubmitted ? 'application-submitted' : 'application-form'} onSubmit={(event) => void submitApplication(event)} className="auth-form ambassador-auth-form mt-7 space-y-4">
             <label className="block text-xs font-bold text-[#3d4b44]">
               Nom complet
@@ -578,7 +544,7 @@ export function AmbassadorDashboard() {
               <input required type="email" maxLength={254} autoComplete="email" value={applicantEmail} onChange={(event) => setApplicantEmail(event.target.value)} placeholder="vous@exemple.ci" className="mt-1.5 min-h-12 w-full rounded-2xl border border-[#deded5] bg-white px-4 text-sm font-normal text-[#292d2a] outline-none transition placeholder:text-[#a3a59f] focus:border-[#17644d] focus:ring-4 focus:ring-[#17644d]/10" />
             </label>
             <label className="block text-xs font-bold text-[#3d4b44]">
-              Téléphone <span className="font-normal text-[#8b8e87]">(facultatif)</span>
+              Téléphone <span className="font-normal text-[#686c64]">(facultatif)</span>
               <input type="tel" maxLength={30} autoComplete="tel" value={applicantPhone} onChange={(event) => setApplicantPhone(event.target.value)} placeholder="+225 07 00 00 00 00" className="mt-1.5 min-h-12 w-full rounded-2xl border border-[#deded5] bg-white px-4 text-sm font-normal text-[#292d2a] outline-none transition placeholder:text-[#a3a59f] focus:border-[#17644d] focus:ring-4 focus:ring-[#17644d]/10" />
             </label>
             <p className="flex items-start gap-2 rounded-2xl bg-[#f1f0e9] p-3 text-[11px] leading-5 text-[#646960]">
@@ -593,21 +559,21 @@ export function AmbassadorDashboard() {
           </form>
         </> : <div className="py-2">
           <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#e8eee8] text-[#17644d]"><Check className="h-7 w-7" aria-hidden="true" /></span>
-          <p className="mt-6 text-[10px] font-black uppercase tracking-[0.16em] text-[#a66e35]">Candidature envoyée</p>
+          <p className="mt-6 text-[11px] font-black uppercase tracking-[0.16em] text-[#8a5a28]">Candidature envoyée</p>
           <h2 id="ambassador-application-title" className="mt-2 font-display text-2xl font-black leading-tight tracking-[-.04em] text-[#173c32] sm:text-[30px]">Merci de vouloir faire équipe avec nous.</h2>
-          <p role="status" className="mt-4 text-sm leading-6 text-[#72766f]">Votre demande va être examinée. Si elle est approuvée, vous recevrez à l’adresse indiquée un lien personnel pour activer votre espace ambassadeur.</p>
+          <p role="status" className="mt-4 text-sm leading-6 text-[#656a62]">Votre demande va être examinée. Si elle est approuvée, vous recevrez à l’adresse indiquée un lien personnel pour activer votre espace ambassadeur.</p>
           <div className="mt-6 rounded-2xl border border-[#e8e4da] bg-white p-4">
             <p className="text-xs font-bold text-[#3d4b44]">Et ensuite ?</p>
-            <p className="mt-1 text-xs leading-5 text-[#72766f]">Gardez un œil sur votre boîte de réception. L’équipe MaTable vous contactera après l’examen de votre candidature.</p>
+            <p className="mt-1 text-xs leading-5 text-[#656a62]">Gardez un œil sur votre boîte de réception. L’équipe MaTable vous contactera après l’examen de votre candidature.</p>
           </div>
         </div>}
         <div className="mt-6 flex items-start gap-3 border-t border-[#eae7df] pt-5">
           <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#edf1eb] text-[#47705f]"><LockKeyhole className="h-4 w-4" aria-hidden="true" /></span>
-          <p className="text-[10px] leading-5 text-[#84877f]">
+          <p className="text-xs leading-5 text-[#686c64]">
             Vos coordonnées servent uniquement à examiner et gérer votre demande. Consultez notre <a href="/confidentialite" className="font-bold text-[#17644d] underline underline-offset-2">politique de confidentialité</a>.
           </p>
         </div>
-        <a href="/ambassadeur" className="mt-4 inline-flex min-h-9 items-center gap-2 text-xs font-bold text-[#17644d] transition hover:text-[#a66e35]">
+        <a href="/ambassadeur" className="mt-4 inline-flex min-h-11 items-center gap-2 text-xs font-bold text-[#17644d] transition hover:text-[#8a5a28]">
           <ArrowRight className="h-4 w-4 rotate-180" aria-hidden="true" /> Retour à la connexion
         </a>
       </section>
@@ -631,7 +597,7 @@ export function AmbassadorDashboard() {
 
     <div className="ambassador-auth-layout relative z-10 mx-auto grid max-w-[1320px] items-center gap-10 px-5 pb-10 pt-5 sm:px-8 sm:pb-14 lg:min-h-[calc(100svh-96px)] lg:grid-cols-[1.05fr_.95fr] lg:gap-16 lg:px-12 lg:pb-16 lg:pt-0">
       <section className="ambassador-auth-story max-w-[660px] py-3 lg:py-10">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[#e7b77d]/25 bg-[#e7b77d]/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.17em] text-[#f1c893] sm:text-xs">
+        <div className="inline-flex items-center gap-2 rounded-full border border-[#e7b77d]/25 bg-[#e7b77d]/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.17em] text-[#f1c893] sm:text-xs">
           <Handshake className="h-3.5 w-3.5" aria-hidden="true" />
           Le cercle des partenaires MaTable
         </div>
@@ -645,12 +611,12 @@ export function AmbassadorDashboard() {
         <div className="mt-8 grid max-w-[520px] grid-cols-2 gap-3 sm:mt-10 sm:gap-4">
           <article className="ambassador-commission-card relative overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.055] p-4 backdrop-blur-sm sm:p-5">
             <div aria-hidden="true" className="absolute -right-5 -top-7 h-24 w-24 rounded-full bg-[#e7b77d]/10 blur-2xl" />
-            <p className="relative text-[10px] font-bold uppercase tracking-[0.14em] text-white/50">Prime partenaire</p>
+            <p className="relative text-[11px] font-bold uppercase tracking-[0.14em] text-white/70">Prime partenaire</p>
             <p className="relative mt-2 font-display text-4xl font-black tracking-[-.05em] text-[#f1c893] sm:text-5xl">20<span className="text-2xl">%</span></p>
             <p className="relative mt-1 text-[11px] leading-5 text-white/55 sm:text-xs">du tarif mensuel, sur le premier abonnement payé.</p>
           </article>
           <article className="ambassador-commission-card rounded-[22px] border border-white/10 bg-white/[0.055] p-4 backdrop-blur-sm sm:p-5">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/50">Votre espace</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/70">Votre espace</p>
             <ul className="mt-3 space-y-2.5 text-xs font-semibold text-white/80">
               <li className="flex items-center gap-2"><span className="grid h-5 w-5 place-items-center rounded-full bg-[#e7b77d]/15 text-[#f1c893]"><Check className="h-3 w-3" /></span>Recommandations suivies</li>
               <li className="flex items-center gap-2"><span className="grid h-5 w-5 place-items-center rounded-full bg-[#e7b77d]/15 text-[#f1c893]"><Check className="h-3 w-3" /></span>Primes détaillées</li>
@@ -658,7 +624,7 @@ export function AmbassadorDashboard() {
             </ul>
           </article>
         </div>
-        <p className="mt-4 max-w-[520px] text-[10px] leading-5 text-white/40">
+        <p className="mt-4 max-w-[520px] text-xs leading-5 text-white/70">
           Prime indicative, soumise au paiement confirmé, à la publication de la boutique et à la validation de la commission.
         </p>
       </section>
@@ -667,7 +633,7 @@ export function AmbassadorDashboard() {
         <div aria-hidden="true" className="absolute right-7 top-0 h-1 w-16 rounded-b-full bg-[#d49a5b]" />
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#a66e35]">
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#8a5a28]">
               {isActivation ? 'Votre invitation est prête' : forgotAccess ? 'Récupération sécurisée' : 'Votre espace partenaire'}
             </p>
             <h2 id="ambassador-auth-title" className="mt-2 font-display text-2xl font-black leading-tight tracking-[-.04em] text-[#173c32] sm:text-[30px]">
@@ -678,7 +644,7 @@ export function AmbassadorDashboard() {
             {pendingMfaChallenge ? <Mail className="h-5 w-5" aria-hidden="true" /> : isActivation ? <BadgeCheck className="h-5 w-5" aria-hidden="true" /> : <LockKeyhole className="h-5 w-5" aria-hidden="true" />}
           </span>
         </div>
-        <p className="mt-3 text-sm leading-6 text-[#72766f]">
+        <p className="mt-3 text-sm leading-6 text-[#656a62]">
           {isActivation
             ? 'Choisissez votre mot de passe pour accéder au suivi de vos recommandations.'
             : forgotAccess
@@ -714,7 +680,7 @@ export function AmbassadorDashboard() {
             <input required type="password" autoComplete="new-password" minLength={8} maxLength={128} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-2xl border border-[#deded5] bg-white px-4 text-sm font-normal text-[#292d2a] outline-none transition focus:border-[#17644d] focus:ring-4 focus:ring-[#17644d]/10" />
           </label>}
           {isActivation && password && confirmation && password !== confirmation && <p className="text-xs font-semibold text-rose-800">Les deux mots de passe ne correspondent pas.</p>}
-          {!pendingMfaChallenge && !isActivation && <button type="button" onClick={() => { setForgotAccess((current) => !current); setPassword(''); setNotice(''); setError(''); }} className="min-h-9 text-xs font-bold text-[#17644d] transition hover:text-[#a66e35]">{forgotAccess ? '← Retour à la connexion' : 'Mot de passe oublié ?'}</button>}
+          {!pendingMfaChallenge && !isActivation && <button type="button" onClick={() => { setForgotAccess((current) => !current); setPassword(''); setNotice(''); setError(''); }} className="min-h-11 text-xs font-bold text-[#17644d] transition hover:text-[#8a5a28]">{forgotAccess ? '← Retour à la connexion' : 'Mot de passe oublié ?'}</button>}
           {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold leading-5 text-rose-800">{error}</p>}
           {activationLinkRejected && <button type="button" onClick={openAccessRecovery} className="min-h-11 w-full rounded-xl border border-[#17644d]/20 bg-white px-4 text-sm font-bold text-[#17644d] transition hover:bg-[#edf3ef] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#17644d]/15">Demander un nouveau lien par e-mail</button>}
           {notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold leading-5 text-emerald-900">{notice}</p>}
@@ -728,7 +694,7 @@ export function AmbassadorDashboard() {
           <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#edf1eb] text-[#47705f]"><ShieldCheck className="h-4 w-4" aria-hidden="true" /></span>
           <div className="min-w-0">
             <p className="text-xs font-bold text-[#455349]">{isActivation ? 'Invitation personnelle et sécurisée' : 'Vos accès restent confidentiels'}</p>
-            <p className="mt-1 text-[10px] leading-5 text-[#84877f]">
+            <p className="mt-1 text-xs leading-5 text-[#686c64]">
               {isActivation
                 ? 'Lien à usage unique valable 7 jours · 8 caractères minimum. Une phrase longue et unique est recommandée.'
                 : forgotAccess
@@ -737,7 +703,7 @@ export function AmbassadorDashboard() {
             </p>
           </div>
         </div>
-        {(!forgotAccess || isActivation) && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex min-h-9 items-center gap-2 text-xs font-bold text-[#17644d] transition hover:text-[#a66e35]">
+        {(!forgotAccess || isActivation) && <a href={supportUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex min-h-11 items-center gap-2 text-xs font-bold text-[#17644d] transition hover:text-[#8a5a28]">
           {supportWhatsAppUrl ? <MessageCircle className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
           {isActivation ? 'Un souci avec votre invitation ?' : 'Besoin d’aide pour vous connecter ?'}
         </a>}
@@ -776,7 +742,7 @@ export function AmbassadorDashboard() {
       }} onClick={() => setActiveTab(id)} className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border-0 px-0.5 text-[10px] font-semibold transition-colors sm:min-h-12 sm:flex-row sm:gap-2 sm:rounded-none sm:border-b-2 sm:px-1 sm:text-sm ${activeTab === id ? 'bg-emerald-50 text-emerald-950 sm:border-emerald-900 sm:bg-transparent' : 'bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-900 sm:border-transparent sm:hover:border-slate-300 sm:hover:bg-transparent'}`}><Icon aria-hidden="true" className="h-[18px] w-[18px] shrink-0 sm:h-4 sm:w-4" /><span className="truncate">{label}</span></button>)}</div>
       </div>
     </nav>
-    <div id={`ambassador-panel-${activeTab}`} role="tabpanel" aria-labelledby={`ambassador-tab-${activeTab}`} tabIndex={0} className="mx-auto max-w-5xl space-y-7 px-4 pb-24 pt-5 outline-none sm:px-6 sm:pb-8 sm:pt-8">
+    <div ref={tabPanel} id={`ambassador-panel-${activeTab}`} role="tabpanel" aria-labelledby={`ambassador-tab-${activeTab}`} tabIndex={0} className="mx-auto max-w-5xl space-y-7 px-4 pb-24 pt-5 outline-none sm:px-6 sm:pb-8 sm:pt-8">
       {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">{error}</p>}{notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">{notice}</p>}
       {activeTab === 'overview' && <>
         <section aria-label="Vos résultats" className="grid grid-cols-2 gap-3 lg:grid-cols-4">{metrics.map(({ label, value, icon: Icon }) => <article key={label} className="ambassador-stat-card flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-[0_12px_30px_rgba(15,23,42,0.04)] sm:flex-row sm:items-center sm:gap-3 sm:p-4"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#eaf7f3] text-emerald-900 sm:h-11 sm:w-11"><Icon className="h-5 w-5" /></span><div className="w-full min-w-0"><p className="break-words text-[10px] font-black uppercase tracking-[0.04em] text-slate-500 sm:text-[11px] sm:tracking-[0.12em]">{label}</p><p className="mt-1 text-lg font-black tabular-nums text-slate-950 sm:text-xl">{label === 'Primes versées' ? (showAmounts ? value : '••••') : Number(value) || 0}</p></div></article>)}</section>
@@ -794,19 +760,26 @@ export function AmbassadorDashboard() {
             <div className="mt-3 space-y-4">
               <p className="text-xs leading-5 text-slate-500">Les inscriptions correspondent aux boutiques créées avec attribution confirmée. Les visites du lien sont comptées séparément, sans identifier les visiteurs.</p>
               <div className="grid gap-3 lg:grid-cols-2">
-                <AmbassadorMonthlyChart
-                  title="Inscriptions attribuées — 6 derniers mois"
-                  rows={monthlyStats}
-                  valueFor={(row) => row.registrations}
+                <TrendChart
+                  title="Inscriptions attribuées"
+                  description="Par mois, sur 6 mois."
+                  points={toMonthlyPoints(monthlyStats, (row) => row.registrations)}
+                  color={CHART_COLORS.green}
                   formatValue={(value) => `${value} inscription${value > 1 ? 's' : ''}`}
+                  periodLabel="Mois"
+                  emptyMessage="Vos premières inscriptions apparaîtront ici."
                 />
-                <AmbassadorMonthlyChart
-                  title="Primes versées — 6 derniers mois"
-                  rows={monthlyStats}
-                  valueFor={(row) => row.paidAmount}
-                  formatValue={money}
-                  concealed={!showAmounts}
-                />
+                {showAmounts
+                  ? <TrendChart
+                    title="Primes versées"
+                    description="Par mois, sur 6 mois."
+                    points={toMonthlyPoints(monthlyStats, (row) => row.paidAmount)}
+                    color={CHART_COLORS.rust}
+                    formatValue={money}
+                    periodLabel="Mois"
+                    emptyMessage="Vos premières primes versées apparaîtront ici."
+                  />
+                  : <section aria-label="Primes versées" className="rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5"><h3 className="font-extrabold text-[#183b31]">Primes versées</h3><p className="mt-4 grid min-h-28 place-items-center rounded-xl bg-[#faf9f5] text-sm text-slate-600">Montants masqués</p></section>}
               </div>
               <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-labelledby="ambassador-cohorts-title">
                 <div className="border-b border-slate-100 p-4">
@@ -879,17 +852,17 @@ export function AmbassadorDashboard() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Visites du lien</p>
-            <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{linkStatsLoading ? '…' : new Intl.NumberFormat('fr-FR').format(rangeStats.total_clicks)}</p>
+            <p className="mt-2 text-2xl font-black tabular-nums text-slate-900"><AnimatedNumber>{linkStatsLoading ? '…' : new Intl.NumberFormat('fr-FR').format(rangeStats.total_clicks)}</AnimatedNumber></p>
             <p className="mt-1 text-[11px] text-slate-500">{rangeStats.last_click_at ? `Dernière visite : ${new Date(rangeStats.last_click_at).toLocaleDateString('fr-FR')}` : 'Aucune visite sur la période'}</p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Boutiques inscrites</p>
-            <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{linkStatsLoading ? '…' : new Intl.NumberFormat('fr-FR').format(rangeStats.total_referrals)}</p>
+            <p className="mt-2 text-2xl font-black tabular-nums text-slate-900"><AnimatedNumber>{linkStatsLoading ? '…' : new Intl.NumberFormat('fr-FR').format(rangeStats.total_referrals)}</AnimatedNumber></p>
             <p className="mt-1 text-[11px] text-slate-500">{rangeStats.last_referral_at ? `Dernière inscription : ${new Date(rangeStats.last_referral_at).toLocaleDateString('fr-FR')}` : 'Aucune inscription attribuée sur la période'}</p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <p className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Taux de conversion</p>
-            <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{linkStatsLoading ? '…' : `${rangeStats.conversion_rate}%`}</p>
+            <p className="mt-2 text-2xl font-black tabular-nums text-slate-900"><AnimatedNumber>{linkStatsLoading ? '…' : `${rangeStats.conversion_rate}%`}</AnimatedNumber></p>
             <p className="mt-1 text-[11px] text-slate-500">Inscriptions attribuées ÷ visites du lien</p>
           </article>
         </div>
@@ -906,6 +879,10 @@ export function AmbassadorDashboard() {
             </div>
           </div>
           {linkStatsError && <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-900">{linkStatsError}</p>}
+          {activityDays.length > 1 && visibleActivity.length > 0 && <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            <TrendChart title="Visites du lien" points={toDailyPoints(activityDays, (day) => day.clicks)} color={CHART_COLORS.blue} formatValue={String} emptyMessage="Aucune visite sur cette période." hasTable={false} />
+            <TrendChart title="Inscriptions attribuées" points={toDailyPoints(activityDays, (day) => day.referrals)} color={CHART_COLORS.green} formatValue={String} emptyMessage="Aucune inscription sur cette période." hasTable={false} />
+          </div>}
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[11px] font-semibold text-slate-600" aria-label="Légende des résultats">
             <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-sky-600" aria-hidden="true" />Visites du lien</span>
             <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-700" aria-hidden="true" />Boutiques inscrites avec votre code ou lien</span>

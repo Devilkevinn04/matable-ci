@@ -24,6 +24,7 @@ import { useSubscriptionPrices } from '../../utils/useSubscriptionPrices';
 import { getRenewedSubscriptionExpiry } from '../../utils/subscriptionExpiry';
 import { WhatsAppSubscriptionReminderConsent } from './WhatsAppSubscriptionReminderConsent';
 import { EmailSubscriptionReminderConsent } from './EmailSubscriptionReminderConsent';
+import { MOTION_SECONDS } from '../../utils/motionTokens';
 
 interface MerchantTrialOnboardingProps {
   shop: Shop;
@@ -269,8 +270,8 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     onClick={() => setSelectedTier(plan.tier)}
                     whileHover={mode === 'plans' && !prefersReducedMotion ? { y: -5 } : undefined}
                     whileTap={mode === 'plans' && !prefersReducedMotion ? { scale: 0.99 } : undefined}
-                    transition={{ duration: prefersReducedMotion ? 0 : 0.2 }}
-                    className={`relative flex min-h-[360px] flex-col items-start rounded-[26px] border p-5 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 sm:p-6 ${mode === 'plans' ? `${planColors.card} ${plan.tier === 'premium' ? 'shadow-[0_22px_55px_rgba(7,95,72,.2)] md:scale-[1.035]' : selected ? 'shadow-[0_18px_42px_-24px_rgba(15,77,61,0.35)]' : 'shadow-[0_12px_34px_rgba(38,35,28,.07)]'}` : `min-h-56 rounded-xl ${selected ? 'border-[var(--mt-green-hover)] bg-white ring-2 ring-[var(--mt-green-hover)]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[var(--mt-green-hover)]'}`} hover:-translate-y-0.5`}
+                    transition={{ duration: prefersReducedMotion ? 0 : MOTION_SECONDS.fast }}
+                    className={`relative flex min-h-[360px] flex-col items-start rounded-[26px] border p-5 text-left transition duration-[var(--mt-motion-fast)] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 sm:p-6 ${mode === 'plans' ? `${planColors.card} ${plan.tier === 'premium' ? 'shadow-[0_22px_55px_rgba(7,95,72,.2)] md:scale-[1.035]' : selected ? 'shadow-[0_18px_42px_-24px_rgba(15,77,61,0.35)]' : 'shadow-[0_12px_34px_rgba(38,35,28,.07)]'}` : `min-h-56 rounded-xl ${selected ? 'border-[var(--mt-green-hover)] bg-white ring-2 ring-[var(--mt-green-hover)]/20' : 'border-[#d5ddd5] bg-white/70 hover:border-[var(--mt-green-hover)]'}`} hover:-translate-y-0.5`}
                   >
                   {featured && <span className="mb-4 rounded-full bg-[var(--mt-orange-soft)] px-3 py-1 text-xs font-bold text-[var(--mt-gray-900)] shadow-sm">Recommandée</span>}
                     <span className="flex w-full items-center justify-between gap-2">
@@ -283,9 +284,9 @@ export function MerchantTrialOnboarding({ shop, productCount = 0, isStarting, on
                     <h3 className={`mt-4 text-xl font-black leading-tight ${mode === 'plans' && (plan.tier === 'premium' || plan.tier === 'pro' && selected) ? 'text-white' : 'text-[#202d28]'}`}>{plan.headline}</h3>
                     <p className={`mt-2 min-h-10 text-xs leading-5 ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{plan.description}</p>
                     <div className={`mt-5 border-b pb-5 ${mode === 'plans' ? selected && plan.tier === 'pro' ? 'border-white/15' : 'border-[#e8ebe5]' : 'border-[#e8ebe5]'}`}>
-                      <strong className="text-3xl font-black tracking-tight"><AnimatePresence mode="wait" initial={false}><m.span key={`${plan.tier}-${term}`} initial={prefersReducedMotion ? false : { opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} exit={prefersReducedMotion ? undefined : { opacity: 0, y: -7 }} transition={{ duration: prefersReducedMotion ? 0 : 0.16 }} className="inline-block">{subscriptionPrices ? new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier] * (term === 'annual' ? 10 : 1)) : '—'}</m.span></AnimatePresence><span className="ml-1 text-sm font-bold">FCFA</span></strong>
+                      <strong className="text-3xl font-black tracking-tight"><AnimatePresence mode="wait" initial={false}><m.span key={`${plan.tier}-${term}`} initial={prefersReducedMotion ? false : { opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} exit={prefersReducedMotion ? undefined : { opacity: 0, y: -7 }} transition={{ duration: prefersReducedMotion ? 0 : MOTION_SECONDS.fast }} className="inline-block">{subscriptionPrices ? new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier] * (term === 'annual' ? 10 : 1)) : '—'}</m.span></AnimatePresence><span className="ml-1 text-sm font-bold">FCFA</span></strong>
                       <span className={`ml-1 text-xs font-semibold ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>/{term === 'annual' ? 'an' : 'mois'}</span>
-                      <span className={`mt-1.5 block text-xs ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{subscriptionPrices ? term === 'annual' ? `Soit ${new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier])} FCFA/mois · 2 mois offerts` : `${new Intl.NumberFormat('fr-FR').format(Math.ceil(subscriptionPrices[plan.tier] / 30))} FCFA par jour` : 'Tarif indisponible'}</span>
+                      <span className={`mt-1.5 block text-xs ${mode === 'plans' ? planColors.subdued : 'text-slate-600'}`}>{subscriptionPrices ? term === 'annual' ? `2 mois offerts · vous économisez ${new Intl.NumberFormat('fr-FR').format(subscriptionPrices[plan.tier] * 2)} FCFA` : `${new Intl.NumberFormat('fr-FR').format(Math.ceil(subscriptionPrices[plan.tier] / 30))} FCFA par jour` : 'Tarif indisponible'}</span>
                     </div>
                     {mode === 'plans' && <span className={`group mt-5 flex min-h-11 w-full items-center justify-between gap-2 rounded-full px-4 text-xs font-extrabold transition ${plan.tier === 'premium' ? 'bg-[var(--mt-orange-soft)] text-[var(--mt-gray-900)]' : 'bg-[var(--mt-green-hover)] text-white'}`}>
                       {selected ? 'Formule sélectionnée' : plan.tier === 'standard' ? 'Commencer' : `Choisir ${plan.label}`} <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />

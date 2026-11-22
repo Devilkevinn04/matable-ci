@@ -3,8 +3,9 @@ import { dbAll, dbGet } from '../../db.ts';
 import { getSubscriptionState, isShopPubliclyVisible } from '../services/businessRules.ts';
 import { rankShopsByVisibility } from '../services/visibility.ts';
 import type { ProductRecord, ShopRecord } from '../types.ts';
-import { isShopCategory } from '../../src/utils/categoryDefaults.ts';
-import { toDiscoveryCitySlug } from '../../src/utils/discoverySeo.ts';
+import { getCategoryDefaults, isShopCategory } from '../../src/utils/categoryDefaults.ts';
+import { getSearchableCity, matchesSearchWords } from '../../src/utils/directorySearch.ts';
+import { cityMatchesSlug, toDiscoveryCitySlug } from '../../src/utils/discoverySeo.ts';
 import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
 import { issueAgeVerificationToken, isAgeVerificationTokenValid } from '../services/ageVerification.ts';
 import { mapProductRow } from '../repositories/products.ts';
@@ -79,6 +80,7 @@ export function createPublicShopsRouter({
       ? req.query.preferred_categories.split(',').map((value) => value.trim()).filter(isShopCategory).slice(0, 4)
       : [];
     const citySlug = typeof req.query.city === 'string' ? toDiscoveryCitySlug(req.query.city) : '';
+    const searchQuery = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 80) : '';
     const limitValue = Number(req.query.limit ?? 24);
     const offsetValue = Number(req.query.offset ?? 0);
     const limit = Number.isInteger(limitValue) ? Math.min(48, Math.max(1, limitValue)) : 24;
@@ -88,7 +90,7 @@ export function createPublicShopsRouter({
     const currentShops = shopRows.map((row) => mapShopRow({ ...row, pin_code_hash: '' }));
     const publicShopRecords = currentShops.filter((shop) => isShopPubliclyVisible(shop)
       && (!category || shop.category === category)
-      && (!citySlug || toDiscoveryCitySlug(shop.city || '') === citySlug));
+      && (!citySlug || cityMatchesSlug(shop.city, citySlug)));
     const publicShopsById = new Map(publicShopRecords.map((shop) => [shop.id, shop]));
     const shopIds = publicShopRecords.map((shop) => shop.id);
     const popularityByProductId = new Map<number, { views: number; clicks: number }>();
@@ -133,7 +135,7 @@ export function createPublicShopsRouter({
     let hasMoreRawProducts = shopIds.length > 0;
     while (feedProducts.length < requiredProductCount && hasMoreRawProducts) {
       const productRows = await dbAll<Record<string, unknown>>(
-        `SELECT p.id, p.shop_id, p.title, p.description, p.price, p.sale_price, p.sale_starts_at, p.sale_ends_at, p.stock, p.created_at,
+        `SELECT p.id, p.shop_id, p.title, p.description, p.category, p.price, p.sale_price, p.sale_starts_at, p.sale_ends_at, p.stock, p.created_at,
           ${popularityJoin ? 'COALESCE(popularity.views, 0)' : '0'} AS views,
           ${popularityJoin ? 'COALESCE(popularity.clicks, 0)' : '0'} AS clicks
          FROM products p
@@ -163,7 +165,18 @@ export function createPublicShopsRouter({
           is_available: true,
           created_at: row.created_at == null ? null : String(row.created_at),
         } as ProductRecord;
-        if (isAgeRestrictedProduct(product)) continue;
+        if (isAgeRestrictedProduct(product, publicShopsById.get(product.shop_id)?.name)) continue;
+        if (searchQuery) {
+          const shop = publicShopsById.get(product.shop_id);
+          if (!matchesSearchWords([
+            product.title,
+            product.description,
+            row.category == null ? '' : String(row.category),
+            shop?.name,
+            getSearchableCity(shop?.city),
+            shop && isShopCategory(shop.category) ? getCategoryDefaults(shop.category).label : '',
+          ], searchQuery)) continue;
+        }
         popularityByProductId.set(product.id, {
           views: Number(row.views) || 0,
           clicks: Number(row.clicks) || 0,
@@ -250,9 +263,31 @@ export function createPublicShopsRouter({
       in_stock: boolean;
       created_at: string | null;
     }[]>();
-    for (const row of previewRows) {
-      if (isAgeRestrictedProduct({ title: String(row.title || ''), description: String(row.description || '') })) continue;
+    // Les articles 18+ ne sont pas comptés dans le nombre annoncé ; la recherche SQL ne fait que préparer le contrôle exact.
+    const possiblyRestrictedRows = publicShopIds.length > 0
+      ? await dbAll<{ shop_id: number | string; title: string; description: string | null }>(
+        `SELECT shop_id, title, description FROM products
+         WHERE shop_id IN (${publicShopIds.map(() => '?').join(', ')}) AND is_available = 1 AND stock > 0
+           AND (${['puff', 'vap', 'cigarette', 'liquide', 'tabac', 'nicotine'].map(() => "LOWER(title || ' ' || COALESCE(description, '')) LIKE ?").join(' OR ')})`,
+        [...publicShopIds, ...['puff', 'vap', 'cigarette', 'liquide', 'tabac', 'nicotine'].map((term) => `%${term}%`)],
+      )
+      : [];
+    const restrictedCounts = new Map<number, number>();
+    for (const row of possiblyRestrictedRows) {
+      if (!isAgeRestrictedProduct({ title: row.title, description: row.description })) continue;
       const shopId = Number(row.shop_id);
+      restrictedCounts.set(shopId, (restrictedCounts.get(shopId) || 0) + 1);
+    }
+    const getAnnouncedProductCount = (shop: ShopRecord) => isAgeRestrictedProduct({ title: '', description: null }, shop.name)
+      ? 0
+      : Math.max(0, (productCounts.get(shop.id) || 0) - (restrictedCounts.get(shop.id) || 0));
+    const publicShopNames = new Map(publicShopRecords.map((shop) => [shop.id, shop.name]));
+    for (const row of previewRows) {
+      const shopId = Number(row.shop_id);
+      if (isAgeRestrictedProduct(
+        { title: String(row.title || ''), description: String(row.description || '') },
+        publicShopNames.get(shopId),
+      )) continue;
       const previews = productsPreviewByShop.get(shopId) || [];
       previews.push({
         id: Number(row.id),
@@ -289,7 +324,7 @@ export function createPublicShopsRouter({
         const availableProducts = productsPreviewByShop.get(shop.id) || [];
         return {
           products_preview: availableProducts,
-          products_count: productCounts.get(shop.id) || 0,
+          products_count: getAnnouncedProductCount(shop),
           id: shop.id,
           name: shop.name,
           slug: shop.slug,
@@ -358,11 +393,11 @@ export function createPublicShopsRouter({
       [shop.id],
     );
     const shopProducts = productRows.map(mapProductRow);
-    const hasAgeRestrictedProducts = shopProducts.some(isAgeRestrictedProduct);
+    const hasAgeRestrictedProducts = shopProducts.some((product) => isAgeRestrictedProduct(product, shop.name));
     const ageVerificationToken = req.get('X-MaTable-Age-Verification') || '';
     const ageVerified = isAgeVerificationTokenValid(ageVerificationToken, shop.id);
     const publicShopProducts = !isMerchantForShop && !isAdminForShop && !ageVerified
-      ? shopProducts.filter((product) => !isAgeRestrictedProduct(product))
+      ? shopProducts.filter((product) => !isAgeRestrictedProduct(product, shop.name))
       : shopProducts;
     const productLikeCounts = await getProductLikeCounts(shopProducts.map((product) => product.id));
     const activeBoost = await dbGet<{ starts_at: string; ends_at: string }>(
@@ -403,7 +438,7 @@ export function createPublicShopsRouter({
       // The image endpoint applies storefront visibility and age-verification checks.
       products: publicShopProducts.map((product) => ({
         ...withPublicProductImages(product, {
-          ageVerificationToken: !isMerchantForShop && isAgeRestrictedProduct(product)
+          ageVerificationToken: !isMerchantForShop && isAgeRestrictedProduct(product, shop.name)
             ? ageVerificationToken
             : undefined,
         }),

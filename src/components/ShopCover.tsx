@@ -31,7 +31,7 @@ export function hasShopVisual(shop: ShopCoverShop): boolean {
 
 const hideOnError = (event: React.SyntheticEvent<HTMLImageElement>) => { event.currentTarget.style.visibility = 'hidden'; };
 
-export function ShopCover({ shop, className = '', sizes = '(max-width: 640px) 50vw, 33vw' }: { shop: ShopCoverShop; className?: string; sizes?: string }) {
+export function ShopCover({ shop, className = '', sizes = '(max-width: 360px) 92vw, (max-width: 1023px) 50vw, 33vw' }: { shop: ShopCoverShop; className?: string; sizes?: string }) {
   const banner = getShopBanner(shop);
   const photos = banner ? [] : getShopProductPhotos(shop);
   const color = shop.theme_color || shop.theme_config?.primary_color || '#087F62';
@@ -51,7 +51,7 @@ export function ShopCover({ shop, className = '', sizes = '(max-width: 640px) 50
       <span className={`grid gap-0.5 overflow-hidden bg-white ${layout} ${className}`}>
         {photos.map((url, index) => (
           <span key={url} className={`relative min-h-0 overflow-hidden ${photos.length === 3 && index === 0 ? 'row-span-2' : ''}`} style={{ backgroundColor: `${color}20` }}>
-            <img {...getResponsiveImageProps(url, 320)} sizes="(max-width: 640px) 33vw, 20vw" alt="" loading="lazy" onError={hideOnError} className="absolute inset-0 h-full w-full object-cover" />
+            <img {...getResponsiveImageProps(url, 320)} sizes={photos.length === 1 || (photos.length === 3 && index === 0) ? sizes : '(max-width: 640px) 33vw, 20vw'} alt="" loading="lazy" onError={hideOnError} className="absolute inset-0 h-full w-full object-cover" />
           </span>
         ))}
       </span>

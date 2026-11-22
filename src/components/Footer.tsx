@@ -10,7 +10,7 @@ interface FooterProps {
   storefront?: boolean;
 }
 
-const linkClassName = 'footer-link inline-flex min-h-8 w-fit items-center text-[13px] text-white/70 transition-colors hover:text-white focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] sm:min-h-9 sm:text-sm';
+const linkClassName = 'footer-link inline-flex min-h-11 w-fit items-center text-[13px] text-white/70 transition-colors hover:text-white focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-orange-soft)] sm:min-h-9 sm:text-sm';
 
 export const Footer: React.FC<FooterProps> = ({ compact = false, hideMerchantCta = false, storefront = false }) => storefront ? (
   <footer className="border-t border-[#e7dfd3] bg-[#f4f1ea] text-[#47534b]">

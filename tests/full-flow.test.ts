@@ -2072,12 +2072,44 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
     body: JSON.stringify({ status: 'confirmed' }),
   });
   assert.equal(acceptReviewOrder.response.status, 200, JSON.stringify(acceptReviewOrder.payload));
+  const signedInCookies = cookieJar;
+  cookieJar = '';
+  for (const [method, route] of [
+    ['GET', '/api/loyalty/me'], ['GET', '/api/loyalty/me/transactions'], ['POST', '/api/loyalty/rewards/1/redeem'], ['POST', '/api/loyalty/redemptions/1/cancel'],
+    ['GET', `/api/shops/${shopId}/loyalty/program`], ['PUT', `/api/shops/${shopId}/loyalty/program`], ['GET', `/api/shops/${shopId}/loyalty/members`],
+    ['GET', `/api/shops/${shopId}/loyalty/analytics`], ['POST', `/api/shops/${shopId}/loyalty/redemptions/confirm`],
+    ['GET', '/api/admin/loyalty/overview'], ['GET', '/api/admin/loyalty/accounts/1'], ['POST', '/api/admin/loyalty/adjustments'],
+  ]) {
+    const anonymous = await apiFetch(route, { method, headers: { 'Content-Type': 'application/json' }, ...(method === 'GET' ? {} : { body: '{}' }) });
+    assert.equal(anonymous.response.status, 401, `${method} ${route}`);
+  }
+  cookieJar = signedInCookies;
+  const ownProgram = await apiFetch(`/api/shops/${shopId}/loyalty/program`);
+  assert.equal(ownProgram.response.status, 200, JSON.stringify(ownProgram.payload));
+  for (const route of ['/api/admin/loyalty/overview', '/api/admin/loyalty/programs']) assert.ok([401, 403].includes((await apiFetch(route)).response.status), route);
+  const loyaltySetup = new Database(TEST_DB_PATH);
+  loyaltySetup.prepare("INSERT INTO loyalty_programs (shop_id, status, created_at, updated_at) VALUES (?, 'active', ?, ?)").run(shopId, new Date().toISOString(), new Date().toISOString());
+  loyaltySetup.close();
   const deliveredReviewOrder = await apiFetch(`/api/shops/${shopId}/orders/${reviewOrderId}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: 'delivered' }),
   });
   assert.equal(deliveredReviewOrder.response.status, 200, JSON.stringify(deliveredReviewOrder.payload));
+  const loyaltyCheck = new Database(TEST_DB_PATH, { readonly: true });
+  assert.deepEqual(
+    loyaltyCheck.prepare('SELECT from_status, to_status, actor FROM order_status_events WHERE order_id = ? ORDER BY id').all(reviewOrderId),
+    [
+      { from_status: null, to_status: 'pending', actor: 'customer' },
+      { from_status: 'pending', to_status: 'confirmed', actor: 'merchant' },
+      { from_status: 'confirmed', to_status: 'delivered', actor: 'merchant' },
+    ],
+  );
+  assert.deepEqual(
+    loyaltyCheck.prepare('SELECT type, points_delta, actor FROM loyalty_transactions WHERE order_id = ?').all(reviewOrderId),
+    [{ type: 'earn', points_delta: 1, actor: 'merchant' }],
+  );
+  loyaltyCheck.close();
   const firstLoyaltyProgress = await apiFetch('/api/auth/customer-orders');
   const firstLoyaltyCard = firstLoyaltyProgress.payload.loyalty.find((card: any) => card.shop_id === shopId);
   assert.equal(firstLoyaltyCard.delivered_orders, 1);
@@ -2258,6 +2290,12 @@ test('guest and customer checkout track the WhatsApp handoff', async () => {
   assert.ok(ordersAfterAccountDeletion.payload.some((order: any) => order.id === guestOrder.payload.order.id));
   const deletedCustomerSession = await apiFetch('/api/auth/customer-session');
   assert.equal(deletedCustomerSession.payload.authenticated, false);
+
+  // En dernier : viser une autre boutique ferme la session du commerçant, par sécurité.
+  cookieJar = signedInCookies;
+  assert.equal((await apiFetch(`/api/shops/${shopId + 1}/loyalty/program`)).response.status, 401);
+  cookieJar = signedInCookies;
+  assert.equal((await apiFetch(`/api/shops/${shopId}/loyalty/program`)).response.status, 401);
 });
 
 test('Didit identity decisions stay independent from shop approval; signed webhooks are fresh and idempotent', async () => {

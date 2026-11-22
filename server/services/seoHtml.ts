@@ -2,7 +2,7 @@ import type { Request } from 'express';
 import type { ProductRecord, ShopRecord } from '../types.ts';
 import { escapeHtml, isShopPubliclyVisible } from './businessRules.ts';
 import { getCategoryDefaults } from '../../src/utils/categoryDefaults.ts';
-import { findPublicDiscoveryPage, toDiscoveryCitySlug } from '../../src/utils/discoverySeo.ts';
+import { cityMatchesSlug, findPublicDiscoveryPage } from '../../src/utils/discoverySeo.ts';
 import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts';
 import { isShopExcludedFromPublicIndex } from '../../src/utils/shopIndexing.ts';
 import { FAQ_SECTIONS } from '../../src/utils/faqContent.ts';
@@ -274,7 +274,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
       ? 'noindex, nofollow'
       : 'index, follow, max-image-preview:large';
     const shopProducts = products
-      .filter((product) => product.shop_id === targetShop.id && product.is_available && product.stock > 0 && !isAgeRestrictedProduct(product))
+      .filter((product) => product.shop_id === targetShop.id && product.is_available && product.stock > 0 && !isAgeRestrictedProduct(product, targetShop.name))
       .slice(0, 30);
     const absoluteHttpUrl = (value: unknown): string | null => {
       if (typeof value !== 'string' || !value.trim()) return null;
@@ -381,7 +381,7 @@ export function createSeoHtmlHelpers({ shops, products, sanitizeTextField, getSu
     const pageShops = shops.filter((shop) => {
       if (!isShopPubliclyVisible(shop)) return false;
       if (page.category && shop.category !== page.category) return false;
-      if (page.citySlug && toDiscoveryCitySlug(shop.city || '') !== page.citySlug) return false;
+      if (page.citySlug && !cityMatchesSlug(shop.city, page.citySlug)) return false;
       return true;
     });
     const structuredData = {

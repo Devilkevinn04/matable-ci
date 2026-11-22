@@ -1,4 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { AnimatedNumber } from './AnimatedNumber';
+import { SegmentedBar } from './charts/SegmentedBar';
+import { ProgressRing } from './ProgressRing';
+import { groupOrdersByStatus } from '../utils/chartData';
+import { useTabFade } from './useTabFade';
 import { ArrowRight, CalendarDays, Check, ChevronRight, Clock3,   Gift, Heart, KeyRound, LayoutDashboard, LogOut, Mail, MessageCircle, Package, PencilLine, ShieldCheck, ShoppingBag, Store, UserRound } from 'lucide-react';
 import { AuthAudienceSwitcher, AuthExperienceLayout } from './AuthExperienceLayout';
 import { CustomerOAuthButtons } from './CustomerOAuthButtons';
@@ -397,6 +402,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
   const [savedError, setSavedError] = useState<string | null>(null);
   const [savedRefresh, setSavedRefresh] = useState(0);
   const [activeSection, setActiveSection] = useState<CustomerAccountSection>('overview');
+  const sectionPanel = useTabFade<HTMLElement>(activeSection);
   const [firstName, setFirstName] = useState(user.first_name);
   const [lastName, setLastName] = useState(user.last_name);
   const [phone, setPhone] = useState(user.phone);
@@ -759,7 +765,7 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
           </div>
         </nav>
 
-        <section className="min-w-0 rounded-[24px] border border-[#e3d9cc] bg-[#FFFFFF] p-4 shadow-[0_10px_30px_rgba(37,35,31,.05)] sm:p-7" aria-live="polite">
+        <section ref={sectionPanel} className="min-w-0 rounded-[24px] border border-[#e3d9cc] bg-[#FFFFFF] p-4 shadow-[0_10px_30px_rgba(37,35,31,.05)] sm:p-7" aria-live="polite">
           {activeSection === 'overview' && <>
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
@@ -781,25 +787,27 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
             <div className="mt-4 grid grid-cols-2 gap-2 sm:mt-6 sm:grid-cols-4 sm:gap-3">
               <button type="button" onClick={() => setActiveSection('orders')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#c8dbd0] hover:bg-[#f8fcf9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] sm:p-4">
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#d1fae5] text-[var(--mt-green-deep)] sm:h-10 sm:w-10"><ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5" /></span>
-                <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{ordersLoading ? '…' : orders.length}</span>
+                <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl"><AnimatedNumber>{ordersLoading ? '…' : orders.length}</AnimatedNumber></span>
                 <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#647067] sm:text-sm">Commandes</span>
               </button>
               <button type="button" onClick={() => setActiveSection('orders')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#e8c69a] hover:bg-[#fffaf2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] sm:p-4">
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#fff2df] text-[#9b5a13] sm:h-10 sm:w-10"><Clock3 className="h-4 w-4 sm:h-5 sm:w-5" /></span>
-                <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{ordersLoading ? '…' : activeOrdersCount}</span>
+                <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl"><AnimatedNumber>{ordersLoading ? '…' : activeOrdersCount}</AnimatedNumber></span>
                 <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#647067] sm:text-sm">En cours</span>
               </button>
               <button type="button" onClick={() => setActiveSection('favorites')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#e8c69a] hover:bg-[#fffaf2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] sm:p-4">
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#fff2df] text-[#c2410c] sm:h-10 sm:w-10"><Heart className="h-4 w-4 sm:h-5 sm:w-5" /></span>
-                <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{savedLoading ? '…' : savedState.shops.length + savedState.products.length}</span>
+                <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl"><AnimatedNumber>{savedLoading ? '…' : savedState.shops.length + savedState.products.length}</AnimatedNumber></span>
                 <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#647067] sm:text-sm">Favoris</span>
               </button>
               <button type="button" onClick={() => setActiveSection('loyalty')} className="min-w-0 rounded-2xl border border-[#e8e0d6] bg-white p-3 text-left transition hover:border-[#c8dbd0] hover:bg-[#f8fcf9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] sm:p-4">
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#d1fae5] text-[var(--mt-green-deep)] sm:h-10 sm:w-10"><Gift className="h-4 w-4 sm:h-5 sm:w-5" /></span>
-                <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl">{ordersLoading ? '…' : availableRewardsCount}</span>
+                <span className="mt-2 block text-xl font-extrabold tabular-nums text-[#292d2a] sm:mt-3 sm:text-2xl"><AnimatedNumber>{ordersLoading ? '…' : availableRewardsCount}</AnimatedNumber></span>
                 <span className="mt-0.5 block truncate text-[10px] font-semibold text-[#647067] sm:text-sm">Récompenses</span>
               </button>
             </div>
+
+            {!ordersLoading && <SegmentedBar title="Vos commandes" description="Selon leur état actuel." segments={groupOrdersByStatus(orders)} className="mt-4" />}
 
             <div className="mt-7 grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(260px,.8fr)]">
               <div className="min-w-0">
@@ -973,21 +981,20 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                 <div className="flex items-center gap-2">
                   <h2 className="mt-1 font-display text-2xl font-extrabold sm:text-3xl">Ma fidélité</h2>
                   <ContextualHelp label="Carte de fidélité" variant="info">
-                    Les commandes sont comptabilisées quand la boutique les marque « Livrée ». Chaque boutique gère sa carte et remet les récompenses directement; MaTable ne modifie pas automatiquement le prix.
+                    Les commandes sont comptabilisées quand la boutique les marque « Remise ». Chaque boutique gère sa carte et remet les récompenses directement; MaTable ne modifie pas automatiquement le prix.
                   </ContextualHelp>
                 </div>
-                <p className="mt-2 text-sm leading-6 text-[#647067]">Chaque boutique suit séparément les commandes qu’elle a marquées « Livrée ». Une récompense est disponible tous les cinq achats comptabilisés.</p>
+                <p className="mt-2 text-sm leading-6 text-[#647067]">Chaque boutique suit séparément les commandes qu’elle a marquées « Remise ». Une récompense est disponible tous les cinq achats comptabilisés.</p>
               </div>
               <span className="rounded-full bg-[#d1fae5] px-3 py-1.5 text-xs font-bold text-[var(--mt-green-deep)]">{availableRewardsCount} récompense{availableRewardsCount === 1 ? '' : 's'} disponible{availableRewardsCount === 1 ? '' : 's'}</span>
             </div>
             {loyaltyCards.length === 0 && <div className="mt-6 rounded-2xl border border-dashed border-[#d9cfc2] bg-[#f9f6f0] p-7 text-center">
               <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#d1fae5] text-[var(--mt-green-deep)]"><Gift className="h-6 w-6" /></span>
               <h3 className="mt-3 font-display text-lg font-bold">Votre fidélité commence ici</h3>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#647067]">Connectez-vous avant de commander. Vos achats livrés auprès de chaque boutique alimenteront leur propre carte de fidélité.</p>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#647067]">Connectez-vous avant de commander. Vos achats remis auprès de chaque boutique alimenteront leur propre carte de fidélité.</p>
             </div>}
             {loyaltyCards.length > 0 && <div className="mt-6 grid gap-3 sm:grid-cols-2">
               {loyaltyCards.map((card) => {
-                const progress = card.available_rewards > 0 ? 100 : card.orders_toward_next_reward * 20;
                 return <article key={card.shop_id} className="rounded-2xl border border-[#e8e0d6] bg-white p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -996,14 +1003,14 @@ const CustomerAccountContent: React.FC<CustomerAccountProps> = ({ user, onLogout
                     </div>
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#d1fae5] text-[var(--mt-green-deep)]"><Gift className="h-5 w-5" /></span>
                   </div>
-                  <div className="mt-4 flex items-baseline justify-between gap-2">
-                    <span className="text-sm font-bold text-[#292d2a]">{card.delivered_orders} commande{card.delivered_orders === 1 ? '' : 's'} livrée{card.delivered_orders === 1 ? '' : 's'}</span>
-                    <span className="text-xs font-semibold text-[#647067]">{card.available_rewards > 0 ? `${card.available_rewards} récompense${card.available_rewards === 1 ? '' : 's'} à réclamer` : `${card.orders_to_next_reward} avant la prochaine`}</span>
+                  <div className="mt-4 flex items-center gap-4">
+                    <ProgressRing value={card.available_rewards > 0 ? 5 : card.orders_toward_next_reward} max={5} label={`Progression fidélité chez ${card.shop_name}`} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-[#292d2a]">{card.delivered_orders} commande{card.delivered_orders === 1 ? '' : 's'} remise{card.delivered_orders === 1 ? '' : 's'}</p>
+                      <p className="mt-0.5 text-xs font-semibold text-[#647067]">{card.available_rewards > 0 ? `${card.available_rewards} récompense${card.available_rewards === 1 ? '' : 's'} à réclamer` : `${card.orders_to_next_reward} avant la prochaine`}</p>
+                    </div>
                   </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#f1eee7]" role="progressbar" aria-label={`Progression fidélité chez ${card.shop_name}`} aria-valuemin={0} aria-valuemax={5} aria-valuenow={card.available_rewards > 0 ? 5 : card.orders_toward_next_reward}>
-                    <div className="h-full rounded-full bg-[var(--mt-green-primary)] transition-all" style={{ width: `${progress}%` }} />
-                  </div>
-                  <p className="mt-3 text-xs leading-5 text-[#647067]">{card.available_rewards > 0 ? 'Présentez-vous à la boutique pour recevoir votre récompense. Elle est remise par le commerçant et ne modifie pas automatiquement le prix des commandes.' : 'Une récompense est acquise après cinq commandes livrées auprès de cette boutique.'}</p>
+                  <p className="mt-3 text-xs leading-5 text-[#647067]">{card.available_rewards > 0 ? 'Présentez-vous à la boutique pour recevoir votre récompense. Elle est remise par le commerçant et ne modifie pas automatiquement le prix des commandes.' : 'Une récompense est acquise après cinq commandes remises auprès de cette boutique.'}</p>
                   <a href={`/${encodeURIComponent(card.shop_slug)}`} className="mt-3 inline-flex min-h-10 items-center gap-1 text-sm font-bold text-[var(--mt-green-deep)]">Voir la boutique <ChevronRight className="h-4 w-4" /></a>
                 </article>;
               })}
@@ -1116,7 +1123,7 @@ function customerOrderStatusLabel(status: string) {
     confirmed: 'Confirmée',
     preparing: 'En préparation',
     ready: 'Prête',
-    delivered: 'Livrée',
+    delivered: 'Remise',
     cancelled: 'Annulée',
     rejected: 'Refusée par la boutique',
     expired: 'Expirée',

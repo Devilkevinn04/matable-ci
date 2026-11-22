@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_SUBSCRIPTION_PRO_FEATURES,
+  getRegistrationTierFromSearch,
   getSubscriptionPlanBenefits,
   getSubscriptionProductLimit,
   getSubscriptionProductPhotoLimit,
@@ -124,4 +125,11 @@ test('temporary manual subscription suspension blocks entitlements until its end
   assert.equal(afterOverride.status, 'active');
   assert.equal(afterOverride.plan, 'premium');
   assert.equal(afterOverride.isActive, true);
+});
+
+test('the plan chosen on the pricing page reaches registration', () => {
+  assert.equal(getRegistrationTierFromSearch('?formule=pro'), 'pro');
+  assert.equal(getRegistrationTierFromSearch('?formule=premium&ref=X'), 'premium');
+  assert.equal(getRegistrationTierFromSearch('?formule=inconnue'), 'standard');
+  assert.equal(getRegistrationTierFromSearch(''), 'standard');
 });

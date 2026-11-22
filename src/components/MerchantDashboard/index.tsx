@@ -1,4 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { AnimatedNumber } from '../AnimatedNumber';
+import { SegmentedBar } from '../charts/SegmentedBar';
+import { groupOrdersByStatus } from '../../utils/chartData';
+import { useTabFade } from '../useTabFade';
 import { createPortal } from 'react-dom';
 import {
   Store,
@@ -31,6 +35,7 @@ import {
   Bell,
   BookOpen,
   Star,
+  Gift,
 } from 'lucide-react';
 import { OrderStatus } from '../../types';
 import { formatFCFA } from '../../utils/format';
@@ -98,6 +103,7 @@ import { SettingsTab } from './SettingsTab';
 import { ProductModal } from './ProductModal';
 import { MerchantTrialOnboarding } from './MerchantTrialOnboarding';
 import { ProAnalyticsPanel } from './ProAnalyticsPanel';
+import { LoyaltyTab } from './LoyaltyTab';
 import { MerchantQrShareKit } from './MerchantQrShareKit';
 import { MerchantPushPrompt } from './MerchantPushPrompt';
 import { PendingOrdersQueue } from './PendingOrdersQueue';
@@ -120,6 +126,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
 
   const merchantState = useMerchantDashboard(onOpenStorefront, openRegistration);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
+  const [isLoyaltyOpen, setIsLoyaltyOpen] = useState(false);
   const settingsDrawerCloseButtonRef = useRef<HTMLButtonElement>(null);
   const [isHeaderCompact, setIsHeaderCompact] = useState(false);
   const [isIdentityGuideOpen, setIsIdentityGuideOpen] = useState(false);
@@ -295,6 +302,20 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [activeTab, settingsSubTab]);
+  const tabPanel = useTabFade(activeTab);
+
+  // L’onglet Fidélité n’apparaît que pour les boutiques auxquelles les points sont ouverts.
+  const loyaltyShopId = merchantState.currentShop?.id;
+  useEffect(() => {
+    setIsLoyaltyOpen(false);
+    if (!loyaltyShopId) return undefined;
+    let active = true;
+    fetch(`/api/shops/${loyaltyShopId}/loyalty/program`, { credentials: 'include' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { is_open?: boolean } | null) => { if (active) setIsLoyaltyOpen(data?.is_open === true); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [loyaltyShopId]);
 
   const requestPrivateAccessLink = () => {
     setConfirmModal({
@@ -800,7 +821,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
     confirmed: 'Confirmée',
     preparing: 'En préparation',
     ready: 'Prête',
-    delivered: 'Livrée',
+    delivered: 'Remise',
     cancelled: 'Annulée',
     rejected: 'Refusée',
     expired: 'Expirée',
@@ -885,7 +906,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                   : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
               }`}
             >
-              <span className={`h-2 w-2 shrink-0 rounded-full ${currentShop.is_open ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+              <span className={`h-2 w-2 shrink-0 rounded-full ${currentShop.is_open ? 'bg-emerald-500' : 'bg-amber-500'}`} />
               <span className="truncate">{currentShop.is_open ? 'Commandes ouvertes' : 'Commandes fermées'}</span>
             </button>
 
@@ -1043,7 +1064,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                   <span className="text-sm font-bold tabular-nums text-slate-500">{doneCount} sur {setupSteps.length}</span>
                 </div>
                 <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#ebe6dc]" role="progressbar" aria-label="Avancement des premiers pas" aria-valuemin={0} aria-valuemax={setupSteps.length} aria-valuenow={doneCount}>
-                  <div className="h-full rounded-full bg-[var(--mt-green-primary)] transition-[width] duration-500" style={{ width: `${(doneCount / setupSteps.length) * 100}%` }} />
+                  <div className="h-full rounded-full bg-[var(--mt-green-primary)] transition-[width] duration-[var(--mt-motion-deliberate)]" style={{ width: `${(doneCount / setupSteps.length) * 100}%` }} />
                 </div>
                 <ol className="mt-4 space-y-1">
                   {setupSteps.map((step) => {
@@ -1127,6 +1148,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
               { id: 'catalog' as const, label: 'Catalogue', count: products.length, icon: Package },
               { id: 'orders' as const, label: 'Commandes', count: actionableOrderCount, icon: ShoppingBag },
               { id: 'stats' as const, label: 'Statistiques', icon: BarChart3 },
+              ...(isLoyaltyOpen ? [{ id: 'loyalty' as const, label: 'Fidélité', icon: Gift }] : []),
             ].map(({ id, label, icon: Icon, count }) => (
               <button key={id} type="button" aria-current={activeTab === id ? 'page' : undefined} onClick={() => setActiveTab(id)} className={`flex min-h-11 min-w-0 items-center justify-start gap-3 rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition-all sm:text-sm lg:w-full ${activeTab === id ? 'border-transparent bg-[var(--mt-green-hover)] text-white' : 'border-transparent bg-transparent text-white/90 hover:bg-[var(--mt-green-hover)] hover:text-white'}`}>
                 <Icon className="h-4 w-4 shrink-0" /><span className="flex-1">{label}</span>
@@ -1169,7 +1191,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
             </button>
           </nav>
 
-          <div className="min-w-0" role="main">
+          <div ref={tabPanel} className="min-w-0" role="main">
           {activeTab === 'overview' && (
             <section className="space-y-4">
               {orders.length > 0 && <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
@@ -1178,8 +1200,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                   { label: 'Montant des commandes', value: formatFCFA(orderValue), hint: 'Paiements non suivis par MaTable', tone: 'text-[#087F62]', icon: DollarSign },
                   { label: 'Clients', value: uniqueCustomerCount, hint: 'Clients ayant commandé', tone: 'text-[#087F62]', icon: UserPlus },
                   { label: 'Articles', value: `${products.length} / ${Number.isFinite(dashboardProductLimit) ? dashboardProductLimit : '∞'}`, hint: currentShop.admin_mode ? 'Limites ignorées en mode super-admin' : 'Dans votre catalogue', tone: 'text-[#087F62]', icon: Package },
-                ].map((metric) => <div key={metric.label} className="flex min-w-0 flex-col gap-2 rounded-2xl border border-[#e7dfd3] bg-white p-3 sm:min-h-[104px] sm:flex-row sm:items-start sm:gap-3 sm:p-4"><span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#f7f4ee] sm:mt-0.5 sm:h-9 sm:w-9 ${metric.tone}`}><metric.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="truncate text-xs font-semibold text-slate-500">{metric.label === 'Montant des commandes' ? <><span className="sm:hidden">Montant</span><span className="hidden sm:inline">{metric.label}</span></> : metric.label}</p><strong className="mt-0.5 block truncate text-lg font-black tabular-nums text-[var(--mt-gray-900)] sm:mt-1 sm:text-xl">{metric.value}</strong><p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-slate-500 sm:mt-1 sm:truncate">{metric.hint}</p></div></div>)}
+                ].map((metric) => <div key={metric.label} className="flex min-w-0 flex-col gap-2 rounded-2xl border border-[#e7dfd3] bg-white p-3 sm:min-h-[104px] sm:flex-row sm:items-start sm:gap-3 sm:p-4"><span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#f7f4ee] sm:mt-0.5 sm:h-9 sm:w-9 ${metric.tone}`}><metric.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="truncate text-xs font-semibold text-slate-500">{metric.label === 'Montant des commandes' ? <><span className="sm:hidden">Montant</span><span className="hidden sm:inline">{metric.label}</span></> : metric.label}</p><strong className="mt-0.5 block truncate text-lg font-black tabular-nums text-[var(--mt-gray-900)] sm:mt-1 sm:text-xl"><AnimatedNumber>{metric.value}</AnimatedNumber></strong><p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-slate-500 sm:mt-1 sm:truncate">{metric.hint}</p></div></div>)}
               </div>}
+              <SegmentedBar title="Répartition des commandes" description="Selon leur état actuel." segments={groupOrdersByStatus(orders)} />
               <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,0.9fr)]">
                 <section aria-labelledby="merchant-recent-orders-title" className="min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
                   <div className="mb-3 flex items-center justify-between gap-3 border-b border-[#eee8dc] pb-3">
@@ -1291,6 +1314,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
         {activeTab === 'catalog' && <CatalogTab state={merchantState} filteredProducts={filteredProducts} />}
         {activeTab === 'orders' && <OrdersTab state={merchantState} filteredOrders={filteredOrders} orderValue={orderValue} averageOrderValue={avgBasket} isShopPublished={isShopPublished} />}
           {activeTab === 'stats' && <ProAnalyticsPanel shop={currentShop} />}
+          {activeTab === 'loyalty' && isLoyaltyOpen && <LoyaltyTab key={currentShop.id} shopId={currentShop.id} shopName={currentShop.name} isReadOnly={Boolean(currentShop.admin_mode)} />}
           {activeTab === 'settings' && <SettingsTab state={merchantState} />}
           </div>
         </div>
@@ -1383,11 +1407,16 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({ onOpenStor
                 </div>
               </section>
               <section>
-                <h3 className="mb-1 px-3 text-xs font-bold text-slate-500">Visibilité</h3>
+                <h3 className="mb-1 px-3 text-xs font-bold text-slate-500">{isLoyaltyOpen ? 'Visibilité et fidélité' : 'Visibilité'}</h3>
                 <div className="overflow-hidden rounded-xl border border-[#e9e5dc] bg-white">
                   <button type="button" onClick={() => { setSettingsSubTab('visibility'); setActiveTab('settings'); setIsSettingsDrawerOpen(false); }} className="flex min-h-12 w-full items-center gap-3 px-3 text-left text-sm font-semibold text-slate-800 hover:bg-emerald-50">
                     <TrendingUp className="h-4 w-4 shrink-0 text-emerald-800" /><span className="flex-1">Campagnes et boosts</span><ChevronRight className="h-4 w-4 text-slate-400" />
                   </button>
+                  {isLoyaltyOpen && (
+                    <button type="button" onClick={() => { setActiveTab('loyalty'); setIsSettingsDrawerOpen(false); }} className="flex min-h-12 w-full items-center gap-3 border-t border-[#eee9e1] px-3 text-left text-sm font-semibold text-slate-800 hover:bg-[#f7f4ee]">
+                      <Gift className="h-4 w-4 shrink-0 text-emerald-800" /><span className="flex-1">Fidélité</span><ChevronRight className="h-4 w-4 text-slate-400" />
+                    </button>
+                  )}
                 </div>
               </section>
               <section>

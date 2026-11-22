@@ -8,8 +8,8 @@ export const MerchantRegistrationProgress: React.FC<{ step: 1 | 2 }> = ({ step }
       const isComplete = step > number;
       const isCurrent = step === number;
       return (
-        <li key={label} aria-current={isCurrent ? 'step' : undefined} className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 text-xs font-bold transition-colors ${isCurrent ? 'border-[var(--mt-green-primary)] bg-[#edf6ef] text-[var(--mt-green-deep)]' : isComplete ? 'border-[#d4e8d9] bg-[#f5faf5] text-[#426458]' : 'border-[#e8e2d8] bg-[#faf9f6] text-[#8a9089]'}`}>
-          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${isCurrent ? 'bg-[var(--mt-green-primary)] text-white' : isComplete ? 'bg-[#dcefe2] text-[var(--mt-green-primary)]' : 'bg-[#eeece6] text-[#7b8279]'}`}>
+        <li key={label} aria-current={isCurrent ? 'step' : undefined} className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 text-xs font-bold transition-colors ${isCurrent ? 'border-[var(--mt-green-primary)] bg-[#edf6ef] text-[var(--mt-green-deep)]' : isComplete ? 'border-[#d4e8d9] bg-[#f5faf5] text-[#426458]' : 'border-[#e8e2d8] bg-[#faf9f6] text-[#68716b]'}`}>
+          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${isCurrent ? 'bg-[var(--mt-green-primary)] text-white' : isComplete ? 'bg-[#dcefe2] text-[var(--mt-green-primary)]' : 'bg-[#eeece6] text-[#5f675f]'}`}>
             {isComplete ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : number}
           </span>
           {label}
@@ -29,18 +29,18 @@ export const AuthAudienceSwitcher: React.FC<{
       type="button"
       onClick={onSelectCustomer}
       aria-current={activeAudience === 'customer' ? 'page' : undefined}
-      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'customer' ? 'bg-white text-[var(--mt-green-deep)] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
+      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-2 text-sm font-bold transition ${activeAudience === 'customer' ? 'bg-white text-[var(--mt-green-deep)] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
     >
-      <UserRound className="h-4 w-4" aria-hidden="true" />
+      <UserRound className="h-4 w-4 shrink-0" aria-hidden="true" />
       <span><span className="sr-only">Connexion </span>Client</span>
     </button>
     <button
       type="button"
       onClick={onSelectMerchant}
       aria-current={activeAudience === 'merchant' ? 'page' : undefined}
-      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition ${activeAudience === 'merchant' ? 'bg-white text-[var(--mt-green-deep)] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
+      className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-2 text-sm font-bold transition ${activeAudience === 'merchant' ? 'bg-white text-[var(--mt-green-deep)] shadow-sm' : 'text-[#667168] hover:bg-white/70'}`}
     >
-      <Store className="h-4 w-4" aria-hidden="true" />
+      <Store className="h-4 w-4 shrink-0" aria-hidden="true" />
       <span><span className="sr-only">Connexion </span>Commerçant</span>
     </button>
   </nav>
@@ -68,14 +68,14 @@ export const MerchantShopPreview: React.FC<{ name: string; category: string; cit
   <div className="min-w-0 flex-1">
     <div className="flex items-center justify-between gap-2">
       <p className="text-xs font-bold text-[#f0ba80]">Votre aperçu MaTable</p>
-      <span className="inline-flex items-center gap-1 rounded-full bg-[#c1f1d4]/15 px-2 py-1 text-[8px] font-bold text-[#c1f1d4]"><span className="h-1.5 w-1.5 rounded-full bg-[#86efac]" /> En direct</span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-[#c1f1d4]/15 px-2 py-1 text-[11px] font-bold text-[#c1f1d4]"><span className="h-1.5 w-1.5 rounded-full bg-[#86efac]" /> En direct</span>
     </div>
     <p className="mt-2 truncate font-display text-lg font-extrabold leading-tight text-white sm:text-xl">{name.trim() || 'Nom de votre boutique'}</p>
     <div className="mt-2 flex flex-wrap gap-1.5">
-      <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[9px] font-semibold text-white/85"><Store className="h-3 w-3 text-[#f0ba80]" aria-hidden="true" />{category || 'Votre activité'}</span>
-      <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[9px] font-semibold text-white/85"><MapPin className="h-3 w-3 text-[#f0ba80]" aria-hidden="true" />{city || 'Votre ville'}</span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/85"><Store className="h-3 w-3 text-[#f0ba80]" aria-hidden="true" />{category || 'Votre activité'}</span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/85"><MapPin className="h-3 w-3 text-[#f0ba80]" aria-hidden="true" />{city || 'Votre ville'}</span>
     </div>
-    <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-2.5 text-[9px] font-medium text-white/65">
+    <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-2.5 text-[11px] font-medium text-white/65">
       <MessageCircle className="h-3.5 w-3.5 text-[#f0ba80]" aria-hidden="true" />
       Une vitrine locale, un contact direct
     </div>
@@ -115,7 +115,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
           <BrandMark className="bg-white/95" />
           <div>
             <p className="text-[19px] font-extrabold leading-none tracking-tight">MaTable</p>
-            <p className="mt-1 text-[10px] font-medium text-white/75">Le commerce local, en lien direct</p>
+            <p className="mt-1 text-[11px] font-medium text-white/75">Le commerce local, en lien direct</p>
           </div>
         </div>
 
@@ -137,11 +137,11 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
                 <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#16483a] bg-white text-[var(--mt-green-primary)] sm:h-7 sm:w-7"><BadgeCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden="true" /></span>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-[#f0ba80] sm:text-[10px]">Une vitrine à votre image</p>
+                <p className="text-xs font-bold text-[#f0ba80] sm:text-[11px]">Une vitrine à votre image</p>
                 <p className="mt-1 font-display text-base font-extrabold leading-tight sm:text-lg">Votre quartier, vos clients.</p>
                 <div className="mt-2 flex flex-wrap gap-1.5 sm:mt-3 sm:gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-1 text-[9px] font-semibold text-white/85 sm:px-2.5 sm:text-[10px]"><MapPin className="h-3 w-3 text-[#f0ba80]" aria-hidden="true" /> Près de vous</span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-1 text-[9px] font-semibold text-white/85 sm:px-2.5 sm:text-[10px]"><MessageCircle className="h-3 w-3 text-[#f0ba80]" aria-hidden="true" /> En direct</span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-1 text-[11px] font-semibold text-white/85 sm:px-2.5 sm:text-[11px]"><MapPin className="h-3 w-3 text-[#f0ba80]" aria-hidden="true" /> Près de vous</span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-1 text-[11px] font-semibold text-white/85 sm:px-2.5 sm:text-[11px]"><MessageCircle className="h-3 w-3 text-[#f0ba80]" aria-hidden="true" /> En direct</span>
                 </div>
               </div>
               <ShoppingBag className="absolute right-3 top-3 h-4 w-4 text-white/35 sm:right-4 sm:top-4" aria-hidden="true" />
@@ -172,7 +172,7 @@ export const AuthExperienceLayout: React.FC<AuthExperienceLayoutProps> = ({
             {children}
           </div>
         </div>
-        <p className="pt-3 text-center text-[11px] text-[#7b8279]">Vos informations restent protégées.</p>
+        <p className="pt-3 text-center text-[11px] text-[#5f675f]">Vos informations restent protégées.</p>
       </section>
     </div>
   </main>

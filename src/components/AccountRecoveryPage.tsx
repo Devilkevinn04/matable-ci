@@ -81,7 +81,7 @@ export const AccountRecoveryPage: React.FC<AccountRecoveryPageProps> = ({ initia
           </form>
         )}
         {accountType === 'merchant' && whatsappUrl && <a href={whatsappUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-full border border-[#deded5] px-5 py-3 text-sm font-bold text-[var(--mt-green-deep)] hover:bg-[#f7f1e6]"><MessageCircle className="h-4 w-4" />Contacter l’assistance</a>}
-        <a href={accountType === 'merchant' ? '/app' : '/connexion'} className="mt-4 block py-2 text-center text-sm font-bold text-[var(--mt-green-deep)] hover:text-[#c2410c]">Retour à la connexion</a>
+        <a href={accountType === 'merchant' ? '/app' : '/connexion'} className="mt-3 block py-3 text-center text-sm font-bold text-[var(--mt-green-deep)] hover:text-[#c2410c]">Retour à la connexion</a>
       </div>
     </AuthExperienceLayout>
   );

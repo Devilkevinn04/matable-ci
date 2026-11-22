@@ -434,6 +434,80 @@ const sqliteSchema = `
     redeemed_by TEXT NOT NULL,
     UNIQUE (shop_id, user_id, qualifying_order_count)
   );
+  CREATE TABLE IF NOT EXISTS loyalty_programs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id INTEGER NOT NULL UNIQUE REFERENCES shops(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'inactive' CHECK (status IN ('inactive', 'active', 'blocked')),
+    points_per_order INTEGER NOT NULL DEFAULT 1 CHECK (points_per_order BETWEEN 1 AND 10),
+    rule_version INTEGER NOT NULL DEFAULT 1,
+    blocked_reason TEXT,
+    activated_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS loyalty_rewards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    program_id INTEGER NOT NULL REFERENCES loyalty_programs(id) ON DELETE CASCADE,
+    label TEXT NOT NULL CHECK (length(label) BETWEEN 3 AND 80),
+    conditions TEXT NOT NULL DEFAULT '',
+    cost_points INTEGER NOT NULL CHECK (cost_points BETWEEN 1 AND 50),
+    remaining INTEGER CHECK (remaining IS NULL OR remaining >= 0),
+    ends_at TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS loyalty_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    program_id INTEGER NOT NULL REFERENCES loyalty_programs(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    balance INTEGER NOT NULL DEFAULT 0,
+    reserved INTEGER NOT NULL DEFAULT 0 CHECK (reserved >= 0),
+    updated_at TEXT NOT NULL,
+    UNIQUE (program_id, user_id)
+  );
+  CREATE TABLE IF NOT EXISTS loyalty_redemptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL REFERENCES loyalty_accounts(id) ON DELETE CASCADE,
+    reward_id INTEGER NOT NULL REFERENCES loyalty_rewards(id) DEFERRABLE INITIALLY DEFERRED,
+    reward_label TEXT NOT NULL,
+    cost_points INTEGER NOT NULL CHECK (cost_points > 0),
+    code TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL CHECK (status IN ('reserved', 'used', 'released', 'expired')),
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    closed_at TEXT
+  );
+  CREATE TABLE IF NOT EXISTS loyalty_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL REFERENCES loyalty_accounts(id) ON DELETE CASCADE,
+    order_id INTEGER,
+    redemption_id INTEGER REFERENCES loyalty_redemptions(id) DEFERRABLE INITIALLY DEFERRED,
+    type TEXT NOT NULL CHECK (type IN ('earn', 'reverse', 'redeem', 'adjust', 'legacy')),
+    points_delta INTEGER NOT NULL CHECK (points_delta <> 0),
+    balance_after INTEGER NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    rule_version INTEGER NOT NULL,
+    actor TEXT NOT NULL,
+    reason TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS order_status_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL,
+    shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    from_status TEXT,
+    to_status TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_loyalty_rewards_program ON loyalty_rewards(program_id);
+  CREATE INDEX IF NOT EXISTS idx_loyalty_accounts_user ON loyalty_accounts(user_id);
+  CREATE INDEX IF NOT EXISTS idx_loyalty_redemptions_account ON loyalty_redemptions(account_id, status);
+  CREATE INDEX IF NOT EXISTS idx_loyalty_redemptions_expiry ON loyalty_redemptions(status, expires_at);
+  CREATE INDEX IF NOT EXISTS idx_loyalty_transactions_account ON loyalty_transactions(account_id, id);
+  CREATE INDEX IF NOT EXISTS idx_loyalty_transactions_order ON loyalty_transactions(order_id);
+  CREATE INDEX IF NOT EXISTS idx_order_status_events_order ON order_status_events(order_id, id);
+  CREATE INDEX IF NOT EXISTS idx_order_status_events_shop ON order_status_events(shop_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_customer_favorites_user_created ON customer_favorites(user_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_customer_product_likes_product ON customer_product_likes(product_id);
   CREATE INDEX IF NOT EXISTS idx_customer_oauth_user_id ON customer_oauth_identities(user_id);
@@ -1271,6 +1345,80 @@ export const postgresMigrations = [
   'CREATE INDEX IF NOT EXISTS idx_customer_reviews_public ON customer_reviews(target_type, target_id, status, created_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_customer_reports_moderation ON customer_reports(status, created_at DESC)',
   'CREATE INDEX IF NOT EXISTS idx_customer_loyalty_redemptions_user_shop ON customer_loyalty_redemptions(user_id, shop_id, qualifying_order_count)',
+  `CREATE TABLE IF NOT EXISTS loyalty_programs (
+    id BIGSERIAL PRIMARY KEY,
+    shop_id BIGINT NOT NULL UNIQUE REFERENCES shops(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'inactive' CHECK (status IN ('inactive', 'active', 'blocked')),
+    points_per_order INTEGER NOT NULL DEFAULT 1 CHECK (points_per_order BETWEEN 1 AND 10),
+    rule_version INTEGER NOT NULL DEFAULT 1,
+    blocked_reason TEXT,
+    activated_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS loyalty_rewards (
+    id BIGSERIAL PRIMARY KEY,
+    program_id BIGINT NOT NULL REFERENCES loyalty_programs(id) ON DELETE CASCADE,
+    label TEXT NOT NULL CHECK (length(label) BETWEEN 3 AND 80),
+    conditions TEXT NOT NULL DEFAULT '',
+    cost_points INTEGER NOT NULL CHECK (cost_points BETWEEN 1 AND 50),
+    remaining INTEGER CHECK (remaining IS NULL OR remaining >= 0),
+    ends_at TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS loyalty_accounts (
+    id BIGSERIAL PRIMARY KEY,
+    program_id BIGINT NOT NULL REFERENCES loyalty_programs(id) ON DELETE CASCADE,
+    user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    balance INTEGER NOT NULL DEFAULT 0,
+    reserved INTEGER NOT NULL DEFAULT 0 CHECK (reserved >= 0),
+    updated_at TEXT NOT NULL,
+    UNIQUE (program_id, user_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS loyalty_redemptions (
+    id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES loyalty_accounts(id) ON DELETE CASCADE,
+    reward_id BIGINT NOT NULL REFERENCES loyalty_rewards(id) DEFERRABLE INITIALLY DEFERRED,
+    reward_label TEXT NOT NULL,
+    cost_points INTEGER NOT NULL CHECK (cost_points > 0),
+    code TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL CHECK (status IN ('reserved', 'used', 'released', 'expired')),
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    closed_at TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS loyalty_transactions (
+    id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES loyalty_accounts(id) ON DELETE CASCADE,
+    order_id BIGINT,
+    redemption_id BIGINT REFERENCES loyalty_redemptions(id) DEFERRABLE INITIALLY DEFERRED,
+    type TEXT NOT NULL CHECK (type IN ('earn', 'reverse', 'redeem', 'adjust', 'legacy')),
+    points_delta INTEGER NOT NULL CHECK (points_delta <> 0),
+    balance_after INTEGER NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    rule_version INTEGER NOT NULL,
+    actor TEXT NOT NULL,
+    reason TEXT,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS order_status_events (
+    id BIGSERIAL PRIMARY KEY,
+    order_id BIGINT NOT NULL,
+    shop_id BIGINT NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    from_status TEXT,
+    to_status TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_loyalty_rewards_program ON loyalty_rewards(program_id)',
+  'CREATE INDEX IF NOT EXISTS idx_loyalty_accounts_user ON loyalty_accounts(user_id)',
+  'CREATE INDEX IF NOT EXISTS idx_loyalty_redemptions_account ON loyalty_redemptions(account_id, status)',
+  'CREATE INDEX IF NOT EXISTS idx_loyalty_redemptions_expiry ON loyalty_redemptions(status, expires_at)',
+  'CREATE INDEX IF NOT EXISTS idx_loyalty_transactions_account ON loyalty_transactions(account_id, id)',
+  'CREATE INDEX IF NOT EXISTS idx_loyalty_transactions_order ON loyalty_transactions(order_id)',
+  'CREATE INDEX IF NOT EXISTS idx_order_status_events_order ON order_status_events(order_id, id)',
+  'CREATE INDEX IF NOT EXISTS idx_order_status_events_shop ON order_status_events(shop_id, created_at)',
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_reports_one_open_per_target ON customer_reports(user_id, target_type, target_id) WHERE status IN ('pending', 'in_review')",
   'CREATE INDEX IF NOT EXISTS idx_customer_oauth_user_id ON customer_oauth_identities(user_id)',
   'ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_user_id BIGINT',

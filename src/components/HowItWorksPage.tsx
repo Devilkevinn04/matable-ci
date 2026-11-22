@@ -2,6 +2,8 @@ import React from 'react';
 import { m, useReducedMotion } from 'motion/react';
 import { ArrowRight, BadgePercent, Clock3, MessageCircle, Search, ShoppingBag, Store } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { TRIAL_DURATION_MONTHS, TRIAL_PROMOTION_SLOTS_PER_TIER } from '../utils/subscriptionFeatures';
+import { motionDeliberate } from '../utils/motionTokens';
 
 const tourSteps = [
   {
@@ -32,7 +34,7 @@ const shopSteps = [
   'Complétez la vitrine : coordonnées, horaires, présentation et identité visuelle.',
   'Ajoutez vos produits, leurs prix, leur disponibilité et des photos à jour.',
   'Faites vérifier l’identité du responsable (pièce d’identité) : c’est requis avant la publication.',
-  'Choisissez une formule et réglez-la avec GeniusPay. Aucun prélèvement automatique n’est effectué.',
+  `Activez votre formule : essai de ${TRIAL_DURATION_MONTHS} mois pour les ${TRIAL_PROMOTION_SLOTS_PER_TIER} premières boutiques Standard et les ${TRIAL_PROMOTION_SLOTS_PER_TIER} premières Premium, sinon paiement avec GeniusPay. Aucun prélèvement automatique n’est effectué.`,
   'Publiez la boutique après les étapes requises, puis gérez les demandes des clients depuis votre espace et échangez avec eux sur WhatsApp.',
 ];
 
@@ -53,7 +55,7 @@ const HowItWorksPage: React.FC = () => {
             initial={reduceMotion ? false : 'hidden'}
             animate="visible"
             variants={reveal}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
+            transition={motionDeliberate}
             className="max-w-3xl"
           >
             <p className="text-xs font-bold text-[var(--mt-orange-soft)] sm:text-sm">La vision MaTable</p>
@@ -120,7 +122,7 @@ const HowItWorksPage: React.FC = () => {
       <section className="bg-[#eee8df]">
         <div id="parcours-commercant" className="mx-auto grid max-w-[1100px] scroll-mt-24 gap-8 px-5 py-14 sm:px-8 sm:py-18 lg:grid-cols-[.8fr_1.2fr] lg:items-center">
           <div>
-            <p className="text-xs font-bold text-[var(--mt-orange-deep)]">Et côté commerçant ?</p>
+            <p className="text-xs font-bold text-[#a83608]">Et côté commerçant ?</p>
             <h2 className="mt-2 font-display text-3xl font-extrabold leading-tight sm:text-4xl">Votre vitrine, vos échanges.</h2>
             <p className="mt-3 text-sm leading-6 text-[var(--mt-gray-600)]">Présentez votre activité et restez en contact direct avec vos clients.</p>
             <Link to="/commercants" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 text-sm font-bold text-white transition hover:bg-[var(--mt-green-hover)]">

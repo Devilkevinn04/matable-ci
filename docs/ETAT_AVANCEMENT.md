@@ -5,6 +5,34 @@ de production indiqués ci-dessous. Ce document décrit l’étendue fonctionnel
 actuelle ; il ne remplace pas les guides détaillés ni les vérifications des
 fournisseurs.
 
+## Construit en local, non publié (22 novembre 2026)
+
+Ces changements ne sont ni commités ni déployés. Vérifiés par `npm run lint`,
+`npm run test:ci` (371 tests : 369 réussis, aucun échec, 2 ignorés) et le build.
+Ils n’ont pas été essayés sur un vrai téléphone, ni sur Safari ou Firefox.
+
+- **Cohérence du site public** : hébergement décrit dans les pages légales,
+  inscription Pro sans essai, prix annuel présenté comme « 2 mois offerts »,
+  produits 18+ exclus des espaces publics.
+- **Accueil et annuaire** : refonte mobile, recherche sur tous les produits,
+  accueil ordinateur avec les produits d’abord, filtre unique à la place des
+  quatre séries de bulles de catégories.
+- **Panier** : un panier vidé affiche « Votre panier est vide » au lieu du
+  formulaire de commande.
+- **Points de fidélité, phases 1 à 3** : migration `059_loyalty_points_core.sql`,
+  moteur, API et espace commerçant, fermés par défaut. Restent l’espace client
+  (phase 4), le Super-admin (phase 5) et le choix d’une boutique pilote.
+- **Animations** : système commun, Motion, une séquence GSAP sur ordinateur.
+- **Tableaux de bord** : Recharts chez le marchand, l’ambassadeur et le
+  Super-admin ; indicateurs SVG chez le client. Corrections : jours sans activité
+  affichés à zéro, détails ambassadeur qui étaient masqués.
+
+Avant publication : compléter la page Confidentialité (points et historique des
+statuts), essayer sur téléphone, répéter la reprise de fidélité sur une copie
+des données réelles. Rive attend une illustration dessinée dans Rive Editor.
+
+Spécifications : [`docs/superpowers/specs/`](./superpowers/specs/).
+
 ## Évolutions incluses dans cette publication (21 novembre 2026)
 
 Ces changements sont vérifiés localement par `npm run lint`, les tests ciblés
@@ -127,8 +155,8 @@ de maintenance doit être planifié séparément.
 
 ### Vitrines et parcours client
 
-- Annuaire, recherche et pages publiques de boutiques ; catalogue filtrable,
-  disponibilité des produits et personnalisation visuelle.
+- Annuaire, recherche et pages publiques de boutiques ; filtres par catégorie,
+  commune, prix et ouverture ; disponibilité des produits et personnalisation visuelle.
 - Inscription et connexion client, gestion du compte et sessions ; des parcours
   OAuth Google et Apple sont prévus dans le code et nécessitent les identifiants
   des fournisseurs.

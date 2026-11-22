@@ -5,7 +5,7 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-const result = spawnSync(process.execPath, ['--import', 'tsx', '--test', 'tests/postgres-db.test.ts'], {
+const result = spawnSync(process.execPath, ['--import', 'tsx', '--test', '--test-concurrency=1', 'tests/postgres-db.test.ts', 'tests/loyalty-postgres.test.ts'], {
   cwd: process.cwd(),
   env: { ...process.env, NODE_ENV: 'production', REQUIRE_POSTGRES_TESTS: '1' },
   stdio: 'inherit',

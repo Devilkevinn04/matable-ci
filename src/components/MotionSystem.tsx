@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { m, useReducedMotion } from 'motion/react';
+import { motionDeliberate, motionStandard } from '../utils/motionTokens';
 
 interface MotionRevealProps {
   children: React.ReactNode;
@@ -30,9 +31,34 @@ export const MotionReveal: React.FC<MotionRevealProps> = ({ children, className,
     ref={ref}
     initial={{ opacity: 0, y: 16 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.48, delay, ease: [0.22, 1, 0.36, 1] }}
+    transition={{ ...motionDeliberate, delay }}
     className={`mt-reveal-motion ${className || ''}`}
   >
     {children}
   </m.div>;
 };
+
+/** Au-delà, recalculer la position de chaque carte devient coûteux sur un téléphone modeste. */
+const ANIMATED_GRID_LIMIT = 24;
+
+interface MotionGridItemProps extends Omit<React.ComponentProps<typeof m.div>, 'layout' | 'exit' | 'transition'> {
+  /** Nombre de cartes de la grille. */
+  count: number;
+}
+
+/** Carte qui glisse vers sa nouvelle place quand un filtre réorganise la grille. À placer dans un AnimatePresence popLayout. */
+export const MotionGridItem = React.forwardRef<HTMLDivElement, MotionGridItemProps>(({ count, children, ...props }, ref) => {
+  const still = useReducedMotion() === true || count > ANIMATED_GRID_LIMIT;
+  return (
+    <m.div
+      ref={ref}
+      layout={still ? false : 'position'}
+      exit={still ? undefined : { opacity: 0 }}
+      transition={still ? { duration: 0 } : motionStandard}
+      {...props}
+    >
+      {children}
+    </m.div>
+  );
+});
+MotionGridItem.displayName = 'MotionGridItem';

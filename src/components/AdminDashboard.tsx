@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTabFade } from './useTabFade';
 import { m } from 'motion/react';
 import {
   ShieldCheck,
@@ -39,7 +40,10 @@ import { AdminPushAnnouncements } from './AdminPushAnnouncements';
 import { AdminHomepageMarketing } from './AdminHomepageMarketing';
 import { AdminProductPromotions } from './AdminProductPromotions';
 import { AdminAmbassadors } from './AdminAmbassadors';
-import { AnalyticsDailyBars } from './AnalyticsDailyBars';
+import { AnimatedNumber } from './AnimatedNumber';
+import { MeterBar } from './charts/MeterBar';
+import { TrendChart } from './charts/TrendChart';
+import { CHART_COLORS, toDailyPoints } from '../utils/chartData';
 import { Link } from 'react-router-dom';
 import { ContextualHelp } from './ContextualHelp';
 import { getCategoryDefaults } from '../utils/categoryDefaults';
@@ -81,6 +85,7 @@ import { askReason, confirmAction } from './ui/ConfirmSheet';
 
 export const AdminDashboard: React.FC = () => {
   const [adminView, setAdminView] = useState<AdminView>('overview');
+  const viewPanel = useTabFade<HTMLElement>(adminView);
   const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(false);
   const [shops, setShops] = useState<AdminShopItem[]>([]);
   const [verificationShops, setVerificationShops] = useState<VerificationShopSummary[]>([]);
@@ -516,15 +521,6 @@ export const AdminDashboard: React.FC = () => {
     setContentModerationLoaded(false);
   };
 
-  const maxDailyViews = Math.max(1, ...(analytics?.daily.map(day => day.page_views) || [0]));
-  const chartPoints = analytics?.daily.length
-    ? analytics.daily.map((day, index) => {
-        const x = 18 + (index * (384 / Math.max(analytics.daily.length - 1, 1)));
-        const y = 140 - (day.page_views / maxDailyViews) * 96;
-        return `${x},${y}`;
-      }).join(' ')
-    : '';
-
   if (!isAuthenticated) {
     return <AdminLoginForm onAuthenticated={fetchAdminShops} />;
   }
@@ -941,7 +937,7 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl space-y-4 px-3 pt-4 sm:space-y-6 sm:px-4 sm:pt-6 lg:ml-64 lg:w-auto lg:max-w-none">
+      <main ref={viewPanel} className="mx-auto w-full max-w-6xl space-y-4 px-3 pt-4 sm:space-y-6 sm:px-4 sm:pt-6 lg:ml-64 lg:w-auto lg:max-w-none">
         {actionNotice && (
           <m.div
             initial={{ opacity: 0, y: -8 }}
@@ -1141,7 +1137,7 @@ export const AdminDashboard: React.FC = () => {
                 ].map((metric) => (
                   <div key={metric.label} className="rounded-xl bg-emerald-50/70 p-3">
                     <p className="text-[10px] font-bold leading-4 text-slate-600">{metric.label}</p>
-                    <p className="mt-1 text-lg font-black tabular-nums text-[#183b31]">{metric.value}</p>
+                    <p className="mt-1 text-lg font-black text-[#183b31]"><AnimatedNumber>{metric.value}</AnimatedNumber></p>
                   </div>
                 ))}
               </div>
@@ -1241,21 +1237,19 @@ export const AdminDashboard: React.FC = () => {
             {analytics && adminRole === 'super_admin' && (
               <div className="space-y-4">
                 <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-                  <AnalyticsDailyBars
+                  <TrendChart
                     title="Visites des vitrines"
                     description="Consultations de boutiques par jour, uniquement après consentement à la mesure."
-                    rows={overviewDaily}
-                    valueFor={(day) => day.page_views}
-                    color="#087c5b"
+                    points={toDailyPoints(overviewDaily, (day) => day.page_views)}
+                    color={CHART_COLORS.green}
                     formatValue={(value) => new Intl.NumberFormat('fr-FR').format(value)}
                     emptyMessage="Les visites mesurées apparaîtront ici dès qu’une vitrine recevra de l’activité."
                   />
-                  <AnalyticsDailyBars
+                  <TrendChart
                     title="Commandes reçues"
                     description="Commandes enregistrées par jour, hors annulation et expiration."
-                    rows={overviewDaily}
-                    valueFor={(day) => day.orders}
-                    color="#e77a3d"
+                    points={toDailyPoints(overviewDaily, (day) => day.orders)}
+                    color={CHART_COLORS.rust}
                     formatValue={(value) => new Intl.NumberFormat('fr-FR').format(value)}
                     emptyMessage="Les commandes apparaîtront ici dès qu’une boutique en recevra."
                   />
@@ -1270,7 +1264,7 @@ export const AdminDashboard: React.FC = () => {
                 </section>
                 <section aria-labelledby="admin-top-shops-title" className="min-w-0 rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3"><div><h3 id="admin-top-shops-title" className="text-sm font-black text-slate-900">Boutiques par montant commandé</h3><p className="mt-1 text-xs text-slate-500">Classement sur la même période</p></div><button type="button" onClick={() => setAdminView('shops')} className="shrink-0 text-xs font-bold text-sky-800 underline underline-offset-2">Toutes</button></div>
-                  {overviewTopShops.length === 0 || overviewTopShops.every((shop) => shop.sales === 0) ? <p className="py-6 text-sm text-slate-500">Aucun montant de commande sur cette période.</p> : <div className="mt-2 divide-y divide-slate-100">{overviewTopShops.filter((shop) => shop.sales > 0).map((shop, index) => <div key={shop.shop_id} className="py-3"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-2"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-50 text-[10px] font-black text-emerald-800">{index + 1}</span><div className="min-w-0"><p className="truncate text-xs font-bold text-slate-800">{shop.shop_name}</p><p className="mt-1 text-[10px] text-slate-500">{shop.orders} commande{shop.orders === 1 ? '' : 's'} · {shop.unique_visitors} session{shop.unique_visitors === 1 ? '' : 's'} unique{shop.unique_visitors === 1 ? '' : 's'}</p></div></div><strong className="shrink-0 text-xs tabular-nums text-slate-900">{new Intl.NumberFormat('fr-FR').format(shop.sales)} F</strong></div><div className="ml-8 mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-700" style={{ width: `${Math.min(100, shop.sales / Math.max(1, overviewTopShops[0]?.sales || 1) * 100)}%` }} /></div></div>)}</div>}
+                  {overviewTopShops.length === 0 || overviewTopShops.every((shop) => shop.sales === 0) ? <p className="py-6 text-sm text-slate-500">Aucun montant de commande sur cette période.</p> : <div className="mt-2 divide-y divide-slate-100">{overviewTopShops.filter((shop) => shop.sales > 0).map((shop, index) => <div key={shop.shop_id} className="py-3"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-2"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-50 text-[10px] font-black text-emerald-800">{index + 1}</span><div className="min-w-0"><p className="truncate text-xs font-bold text-slate-800">{shop.shop_name}</p><p className="mt-1 text-[10px] text-slate-500">{shop.orders} commande{shop.orders === 1 ? '' : 's'} · {shop.unique_visitors} session{shop.unique_visitors === 1 ? '' : 's'} unique{shop.unique_visitors === 1 ? '' : 's'}</p></div></div><strong className="shrink-0 text-xs tabular-nums text-slate-900">{new Intl.NumberFormat('fr-FR').format(shop.sales)} F</strong></div><MeterBar value={shop.sales} max={overviewTopShops[0]?.sales || 0} color={CHART_COLORS.green} className="ml-8 mt-2 h-2" /></div>)}</div>}
                 </section>
               </div>
             )}
@@ -1428,33 +1422,14 @@ export const AdminDashboard: React.FC = () => {
               </aside>
 
               <div className="mt-5 grid lg:grid-cols-[1.2fr_1fr] gap-4">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-black text-slate-800">Pages vues consenties par jour</h3>
-                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-800">{analytics.days} jours</span>
-                  </div>
-                  <div className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-2">
-                    <div className="flex h-44 flex-col justify-between pb-6 text-right text-[10px] tabular-nums text-slate-500">
-                      {[maxDailyViews, Math.round(maxDailyViews / 2), 0].map((value, index) => <span key={`${value}-${index}`}>{new Intl.NumberFormat('fr-FR').format(value)}</span>)}
-                    </div>
-                    <div className="chart-grid relative h-44 min-w-0 rounded-2xl border border-slate-200 bg-white p-3">
-                      <svg role="img" aria-label={`Pages vues consenties par jour, échelle de 0 à ${maxDailyViews}`} viewBox="0 0 420 160" className="h-full w-full">
-                        <path d="M18 35H402 M18 82H402 M18 140H402" stroke="#e2e8e5" strokeWidth="1" />
-                        <polyline fill="none" stroke="var(--mt-green-primary)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={chartPoints} />
-                        {analytics.daily.map((day, index) => {
-                          const x = 18 + (index * (384 / Math.max(analytics.daily.length - 1, 1)));
-                          const y = 140 - (day.page_views / maxDailyViews) * 96;
-                          return <circle key={day.date} cx={x} cy={y} r="2.5" fill="#d58b42"><title>{new Date(`${day.date}T12:00:00`).toLocaleDateString('fr-FR')} · {day.page_views} page(s) vue(s)</title></circle>;
-                        })}
-                      </svg>
-                      <div className="absolute inset-x-3 bottom-2 flex justify-between text-[9px] tabular-nums text-slate-500">
-                        {analytics.daily.filter((_, index) => index % Math.max(1, Math.ceil(analytics.daily.length / 6)) === 0 || index === analytics.daily.length - 1).map((day) => (
-                          <span key={day.date}>{new Date(`${day.date}T12:00:00`).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <TrendChart
+                  title="Pages vues par jour"
+                  description={`Après consentement, sur ${analytics.days} jours.`}
+                  points={toDailyPoints(analytics.daily, (day) => day.page_views)}
+                  color={CHART_COLORS.green}
+                  formatValue={(value) => new Intl.NumberFormat('fr-FR').format(value)}
+                  emptyMessage="Aucune visite consentie sur cette période."
+                />
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
                   <h3 className="text-xs font-black text-slate-800">Origine des visites</h3>
@@ -1463,7 +1438,7 @@ export const AdminDashboard: React.FC = () => {
                     {analytics.sources.length === 0 ? <p className="py-3 text-xs text-slate-500">Aucune visite consentie sur cette période.</p> : analytics.sources.map((source) => (
                       <div key={source.source}>
                         <div className="flex items-center justify-between gap-2 text-xs font-bold text-slate-700"><span>{audienceSourceLabels[source.source]}</span><span className="tabular-nums">{new Intl.NumberFormat('fr-FR').format(source.visits)} pages · {analytics.totals.page_views ? Math.round(source.visits / analytics.totals.page_views * 100) : 0}%</span></div>
-                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-700" style={{ width: `${Math.min(100, (source.visits / Math.max(1, analytics.totals.page_views)) * 100)}%` }} /></div>
+                        <MeterBar value={source.visits} max={analytics.totals.page_views} color={CHART_COLORS.green} className="mt-1 h-2" />
                         <div className="mt-1 text-[11px] text-slate-500">{new Intl.NumberFormat('fr-FR').format(source.visitors)} sessions distinctes · catégories de provenance, pas de personnes identifiées</div>
                       </div>
                     ))}
@@ -1556,8 +1531,8 @@ export const AdminDashboard: React.FC = () => {
               <section className="border-y border-slate-200 py-4" aria-label="MRR par formule">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div><h3 className="text-sm font-black text-slate-900">MRR estimé par formule</h3><p className="mt-1 text-xs text-slate-500">Paiements annuels divisés par 12 ; à défaut, prix mensuel catalogue.</p></div>
-                  <div className="flex flex-wrap gap-x-6 gap-y-2">
-                    {finance.summary.mrr_by_tier.map((tier) => <div key={tier.tier} className="min-w-24"><p className="text-xs font-semibold capitalize text-slate-500">{tier.tier} · {tier.count}</p><p className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(tier.amount)} F</p></div>)}
+                  <div className="grid w-full gap-x-6 gap-y-3 sm:grid-cols-3">
+                    {finance.summary.mrr_by_tier.map((tier) => <div key={tier.tier} className="min-w-0"><p className="flex items-baseline justify-between gap-3 text-xs font-semibold text-slate-600"><span className="capitalize">{tier.tier} · {tier.count}</span><strong className="text-sm font-black text-slate-900">{new Intl.NumberFormat('fr-FR').format(tier.amount)} F</strong></p><MeterBar value={tier.amount} max={Math.max(...finance.summary.mrr_by_tier.map(({ amount }) => amount))} color={CHART_COLORS.green} className="mt-1.5 h-2" /></div>)}
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 text-sm sm:grid-cols-4">

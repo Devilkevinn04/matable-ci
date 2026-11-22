@@ -21,7 +21,9 @@ import { createShopRegistrationRouter } from './server/routes/shopRegistration.t
 import { createMerchantVerificationRouter } from './server/routes/merchantVerification.ts';
 import { createTelemetryRouter } from './server/routes/telemetry.ts';
 import { createGeniusPayRouter } from './server/routes/geniusPay.ts';
+import { expireReservations } from './server/services/loyaltyEngine.ts';
 import { expireStalePendingOrders, remindPendingOrdersWithoutResponse } from './server/services/orderLifecycle.ts';
+import { createLoyaltyRouters } from './server/routes/loyalty.ts';
 import { createAdvertisingRouters } from './server/routes/advertising.ts';
 import { createPublicRateLimitMiddleware, purgeExpiredRateLimitEntries } from './server/services/rateLimits.ts';
 import { buildSessionFingerprint, createAuthSessionHelpers, isRequestFingerprintMatch } from './server/services/authSessions.ts';
@@ -1046,6 +1048,10 @@ async function startServer() {
   });
   app.use('/api/admin/advertising', advertisingRouters.adminRouter);
   app.use('/api/shops', advertisingRouters.merchantRouter);
+  const loyaltyRouters = createLoyaltyRouters({ getCustomerSessionState, requireMerchantOwnShop, requireSuperAdminAccess, rateLimitPublicRequest });
+  app.use('/api/loyalty', loyaltyRouters.customerRouter);
+  app.use('/api/shops', loyaltyRouters.merchantRouter);
+  app.use('/api/admin/loyalty', loyaltyRouters.adminRouter);
   app.use('/api', advertisingRouters.publicRouter);
   app.use('/api/admin/identity-verifications', requireVerificationAdminAccess, verificationRouters.adminRouter);
   const maintenanceHtmlPath = path.join(process.cwd(), process.env.NODE_ENV === 'production' ? 'dist' : 'public', 'maintenance.html');
@@ -1158,7 +1164,7 @@ async function startServer() {
     const isShopOwner = session.authenticated && session.userType === 'merchant' && session.shopId === shop.id;
     const isSuperAdmin = session.authenticated && session.userType === 'admin' && session.role === 'super_admin';
     const hasPrivateAccess = isShopOwner || isSuperAdmin;
-    const isAgeRestricted = isAgeRestrictedProduct(product);
+    const isAgeRestricted = isAgeRestrictedProduct(product, shop.name);
     const ageVerificationToken = typeof req.query.age_token === 'string' ? req.query.age_token : '';
     const ageVerified = isAgeVerificationTokenValid(ageVerificationToken, shop.id);
     const isPubliclyReadable = isShopPubliclyVisible(shop)
@@ -1313,6 +1319,8 @@ async function startServer() {
   }));
 
   const runPendingOrderExpiry = () => {
+    void expireReservations()
+      .catch((error) => console.error('Loyalty reservation expiry failed:', error));
     void expireStalePendingOrders()
       .then(async (expiredOrders) => {
         for (const expired of expiredOrders) {

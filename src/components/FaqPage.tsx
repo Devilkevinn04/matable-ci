@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowLeft, ChevronDown, CircleHelp, Store } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { FAQ_SECTIONS } from '../utils/faqContent';
+import { toFrenchSpacing } from '../utils/format';
 
 export const FaqPage: React.FC = () => (
   <main className="min-h-[70vh] bg-[var(--mt-gray-50)] px-4 py-8 text-[var(--mt-gray-900)] sm:px-6 sm:py-12">
@@ -35,10 +36,10 @@ export const FaqPage: React.FC = () => (
               {section.questions.map((item) => (
                 <details key={item.question} className="group py-1">
                   <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 py-3 text-left text-sm font-semibold text-[var(--mt-gray-900)] marker:hidden sm:text-base">
-                    <span>{item.question}</span>
+                    <span>{toFrenchSpacing(item.question)}</span>
                     <ChevronDown className="h-4 w-4 shrink-0 text-[var(--mt-green-hover)] transition-transform group-open:rotate-180" />
                   </summary>
-                  <p className="mt-faq-answer max-w-3xl pb-4 pr-8 text-sm leading-6 text-[var(--mt-gray-600)]">{item.answer}</p>
+                  <p className="mt-faq-answer max-w-3xl pb-4 pr-8 text-sm leading-6 text-[var(--mt-gray-600)]">{toFrenchSpacing(item.answer)}</p>
                 </details>
               ))}
             </div>
@@ -47,7 +48,7 @@ export const FaqPage: React.FC = () => (
       </div>
 
       <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-[#e7e1d7] bg-[#f1ede5] p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <p className="text-sm text-[var(--mt-gray-600)]">Vous avez encore une question sur une commande ?</p>
+        <p className="text-sm text-[var(--mt-gray-600)]">Vous avez encore une question sur une commande ?</p>
         <Link to="/" className="inline-flex min-h-10 items-center justify-center rounded-full bg-[var(--mt-green-deep)] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[var(--mt-green-hover)]">Trouver une boutique</Link>
       </div>
     </div>

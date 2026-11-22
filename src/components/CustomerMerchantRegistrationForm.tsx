@@ -3,7 +3,7 @@ import { ArrowRight, CheckCircle2,   Store } from 'lucide-react';
 import { ShopCategory } from '../types';
 import { getCategoryDefaults, SHOP_CATEGORIES } from '../utils/categoryDefaults';
 import { ABIDJAN_COMMUNES } from '../utils/abidjanCommunes';
-import { SUBSCRIPTION_PLANS, TRIAL_DURATION_MONTHS, TRIAL_PROMOTION_SLOTS_PER_TIER } from '../utils/subscriptionFeatures';
+import { REGISTRATION_TIER_HIGHLIGHTS, SUBSCRIPTION_PLANS, TRIAL_DURATION_MONTHS, TRIAL_PROMOTION_SLOTS_PER_TIER, type SubscriptionTier } from '../utils/subscriptionFeatures';
 import { useSubscriptionPrices } from '../utils/useSubscriptionPrices';
 import { formatFCFA } from '../utils/format';
 import { TermsPrivacyConsent } from './TermsPrivacyConsent';
@@ -35,7 +35,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
   const formRef = useRef<HTMLFormElement>(null);
   const [name, setName] = useState('');
   const [category, setCategory] = useState<ShopCategory>('fashion');
-  const [subscriptionTier, setSubscriptionTier] = useState<'standard' | 'premium'>('standard');
+  const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier>('standard');
   const [city, setCity] = useState('');
   const [otherCity, setOtherCity] = useState('');
   const [phone, setPhone] = useState('+225');
@@ -54,11 +54,6 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
   const [pendingMfaChallenge, setPendingMfaChallenge] = useState('');
   const [mfaCode, setMfaCode] = useState('');
   const { prices } = useSubscriptionPrices();
-  // Ce qui distingue vraiment les deux formules, pour choisir sans lire la grille complète.
-  const tierHighlights: Record<'standard' | 'premium', string> = {
-    standard: 'Jusqu’à 20 articles, commandes WhatsApp, QR code',
-    premium: 'Catalogue illimité, vitrine à vos couleurs, logo et bannière',
-  };
 
   useEffect(() => {
     const syncLinkedCode = () => setLinkedAmbassadorCode(getStoredAmbassadorCode());
@@ -160,7 +155,7 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
         <p className="mt-3 text-xs font-semibold text-[#68756c]">Étape {step} sur 2</p>
         <h3 className="mt-0.5 font-display text-xl font-extrabold tracking-tight text-[#292d2a]">{step === 1 ? 'Votre boutique' : 'Votre accès'}</h3>
         <p className="mt-1 text-sm leading-6 text-[#47534b]">{step === 1
-          ? `${TRIAL_DURATION_MONTHS} mois gratuits, sans paiement, pour les ${TRIAL_PROMOTION_SLOTS_PER_TIER} premières boutiques de chaque formule.`
+          ? `${TRIAL_DURATION_MONTHS} mois gratuits, sans paiement, pour les ${TRIAL_PROMOTION_SLOTS_PER_TIER} premières boutiques Standard et les ${TRIAL_PROMOTION_SLOTS_PER_TIER} premières Premium. Pro est payante dès l’activation.`
           : 'Vos clients vous contacteront sur ce numéro WhatsApp. Le PIN protège votre espace commerçant.'}</p>
       </div>
       <form ref={formRef} onSubmit={submit} className="auth-form space-y-3">
@@ -168,16 +163,16 @@ export const CustomerMerchantRegistrationForm: React.FC<CustomerMerchantRegistra
         <div className="space-y-5">
             <TextField label="Nom de la boutique" value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={100} autoComplete="organization" placeholder="Ex. : Atelier Awa" invalidMessage="Le nom doit contenir au moins 2 caractères." />
 
-            <ChoiceCards<'standard' | 'premium'>
+            <ChoiceCards<SubscriptionTier>
               legend="Formule"
               name="customer-merchant-subscription-tier"
               value={subscriptionTier}
               onChange={setSubscriptionTier}
-              options={(['standard', 'premium'] as const).map((tier) => ({
+              options={(['standard', 'premium', 'pro'] as const).map((tier) => ({
                 value: tier,
                 label: SUBSCRIPTION_PLANS[tier].label,
-                aside: `puis ${formatFCFA(prices?.[tier] ?? SUBSCRIPTION_PLANS[tier].price)}/mois`,
-                description: tierHighlights[tier],
+                aside: `${tier === 'pro' ? '' : 'puis '}${formatFCFA(prices?.[tier] ?? SUBSCRIPTION_PLANS[tier].price)}/mois`,
+                description: REGISTRATION_TIER_HIGHLIGHTS[tier],
               }))}
             />
 

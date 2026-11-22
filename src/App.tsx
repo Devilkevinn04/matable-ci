@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ConfirmHost } from './components/ui/ConfirmSheet';
-import { LazyMotion } from 'motion/react';
+import { LazyMotion, MotionConfig } from 'motion/react';
 
 // Le moteur d’animation est téléchargé après le premier affichage : la page s’ouvre sans l’attendre.
 const loadMotionFeatures = () => import('./utils/motionFeatures').then((module) => module.default);
 import { Link, Route, Routes, useLocation, useNavigate, useNavigationType, useParams } from 'react-router-dom';
+import { motionStandard } from './utils/motionTokens';
 import { Navigation } from './components/Navigation';
 import { ToastProvider } from './components/Toast';
 import { Footer } from './components/Footer';
@@ -362,10 +363,11 @@ export default function App() {
     const routeKey = `${location.pathname}${location.search}`;
     if (previousRouteRef.current === routeKey) return;
     previousRouteRef.current = routeKey;
+    if ((location.state as { keepScroll?: boolean } | null)?.keepScroll) return;
     setRouteProgressVisible(true);
     const timer = window.setTimeout(() => setRouteProgressVisible(false), 650);
     return () => window.clearTimeout(timer);
-  }, [location.pathname, location.search]);
+  }, [location.pathname, location.search, location.state]);
 
   useEffect(() => {
     const routeKey = `${location.pathname}${location.search}`;
@@ -405,6 +407,12 @@ export default function App() {
       };
     }
 
+    // Un filtre change l’adresse, pas la page : la lecture reste où elle est.
+    if ((location.state as { keepScroll?: boolean } | null)?.keepScroll) {
+      scrollPositionsRef.current.set(`${location.pathname}${location.search}`, window.scrollY);
+      return;
+    }
+
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     // Un second passage après le rendu évite qu’un décalage de mise en page (polices, bannière)
     // ne laisse la nouvelle page légèrement défilée.
@@ -412,7 +420,7 @@ export default function App() {
       window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }));
     });
     return () => window.cancelAnimationFrame(topFrame);
-  }, [location.pathname, location.search, location.hash, navigationType]);
+  }, [location.pathname, location.search, location.hash, location.state, navigationType]);
 
   useEffect(() => {
     if (navigationType === 'POP') return;
@@ -617,11 +625,13 @@ export default function App() {
 
   return (
     <ToastProvider>
+      {/* Réglage système : les déplacements Motion sont coupés partout, même sans test dans le composant. */}
+      <MotionConfig reducedMotion="user" transition={motionStandard}>
       <LazyMotion features={loadMotionFeatures}>
       <a href="#main-content" className="skip-link">Aller au contenu</a>
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-1 origin-left bg-[var(--mt-orange-deep)] shadow-[0_1px_8px_rgba(190,83,43,.35)] transition-[transform,opacity] duration-300"
+        className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-1 origin-left bg-[var(--mt-orange-deep)] shadow-[0_1px_8px_rgba(190,83,43,.35)] transition-[transform,opacity] duration-[var(--mt-motion-standard)]"
         style={{ transform: routeProgressVisible ? 'scaleX(1)' : 'scaleX(0)', opacity: routeProgressVisible ? 1 : 0 }}
       />
       <div className="min-h-screen flex flex-col bg-transparent font-sans">
@@ -694,6 +704,7 @@ export default function App() {
             </div>
       </div>
           </LazyMotion>
+      </MotionConfig>
     </ToastProvider>
   );
 }

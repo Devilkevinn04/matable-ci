@@ -182,3 +182,8 @@ export async function compressImageClientSide(
     reader.onerror = () => reject(new Error('Échec de lecture du fichier'));
   });
 }
+
+/** Espaces insécables avant ? ! ; : » et après « : la ponctuation ne passe jamais seule à la ligne. */
+export function toFrenchSpacing(text: string): string {
+  return text.replace(/ ([?!;:»])/g, '\u00a0$1').replace(/« /g, '«\u00a0');
+}

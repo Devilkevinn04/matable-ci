@@ -26,7 +26,7 @@ export const CategoryProductImage: React.FC<CategoryProductImageProps> = ({
   loading = 'lazy',
   showFallbackTitle = false,
   allowLegacyInlinePreview = false,
-  sizes = '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw',
+  sizes = '(max-width: 1024px) 50vw, 27vw',
   children,
 }) => {
   const defaults = getCategoryDefaults(category);

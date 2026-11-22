@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useToast } from '../Toast';
 import { Shop, Product, Order, FlashBilan, ShopCategory, OrderStatus, ShopSocialLinks, SubscriptionTier } from '../../types';
 import { CATEGORY_DEFAULTS } from '../../utils/categoryDefaults';
-import { isSubscriptionFeatureIncluded, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
+import { getRegistrationTierFromSearch, isSubscriptionFeatureIncluded, TRIAL_CATALOG_LIMIT, TRIAL_DURATION_MONTHS } from '../../utils/subscriptionFeatures';
 import { useMerchantProductEditor } from './useMerchantProductEditor';
 import { trackLogin, trackLogout, trackSignup } from '../../utils/analyticsTracker';
 import { normalizeAcquisitionSource } from '../../utils/acquisitionSources';
@@ -57,7 +57,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   const [regAcceptedTermsPrivacy, setRegAcceptedTermsPrivacy] = useState(false);
   const [regAmbassadorCode, setRegAmbassadorCode] = useState('');
   const [regCategory, setRegCategory] = useState<ShopCategory>('fashion');
-  const [regSubscriptionTier, setRegSubscriptionTier] = useState<Extract<SubscriptionTier, 'standard' | 'premium'>>('standard');
+  const [regSubscriptionTier, setRegSubscriptionTier] = useState<SubscriptionTier>(() => (typeof window !== 'undefined' ? getRegistrationTierFromSearch(window.location.search) : 'standard'));
   // Campaign from ?src= / utm_source, kept only when the visitor accepted audience analytics.
   const [regTrackedCampaign] = useState(() => (typeof window !== 'undefined' && hasAnalyticsConsent()
     ? getAnalyticsCampaignFromSearch(window.location.search) || getStoredAnalyticsCampaign()
@@ -77,7 +77,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
   }, [openRegistration, currentShop]);
 
   // Active view tab
-  const [activeTab, setActiveTab] = useState<'overview' | 'catalog' | 'orders' | 'stats' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'catalog' | 'orders' | 'stats' | 'loyalty' | 'settings'>('overview');
   const [settingsSubTab, setSettingsSubTab] = useState<'profile' | 'themes' | 'general' | 'hours' | 'bilan' | 'verification' | 'subscription' | 'visibility' | 'notifications'>('themes');
 
   // Products & Orders data
@@ -542,6 +542,8 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       const privateUrl = `${window.location.origin}/app?access=${encodeURIComponent(data.owner_access_token)}`;
       const trialMessage = data.trial_granted === true
         ? `Votre essai ${regSubscriptionTier === 'premium' ? 'Premium' : 'Standard'} gratuit de ${TRIAL_DURATION_MONTHS} mois a commencé, avec jusqu’à ${TRIAL_CATALOG_LIMIT} produits.`
+        : regSubscriptionTier === 'pro'
+        ? 'La formule Pro est payante dès l’activation : réglez-la dans votre espace marchand pour débloquer votre boutique.'
         : 'Les 75 places d’essai de cette formule sont attribuées. Votre boutique reste bloquée jusqu’au paiement d’un abonnement dans votre espace marchand.';
       const accessMessage = `Votre boutique ${data.shop.name} est créée sur MaTable. ${trialMessage} Vérifiez l’identité de la personne responsable depuis votre espace pour pouvoir publier la boutique. Vitrine : ${publicUrl} | Espace privé : ${privateUrl} | Identifiant : ${data.shop.whatsapp_number} | Mot de passe : le code PIN choisi.`;
       setRegistrationLinks({
@@ -909,7 +911,7 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       if (newStatus === 'delivered') {
         const ordersRes = await fetch(`/api/shops/${currentShop.id}/orders`);
         if (!ordersRes.ok) {
-          throw new Error('Commande livrée, mais impossible d’actualiser les cartes de fidélité.');
+          throw new Error('Commande remise, mais impossible d’actualiser les cartes de fidélité.');
         }
         const ordersData = await ordersRes.json();
         const shopOrders = Array.isArray(ordersData) ? ordersData : (ordersData.orders || []);

@@ -1119,7 +1119,7 @@ test('trial promotion caps each formula at 75 and requires payment after its slo
   }
 
   let registrationNumber = 0;
-  const register = async (suffix: string, tier: 'standard' | 'premium' = 'standard') => {
+  const register = async (suffix: string, tier: 'standard' | 'premium' | 'pro' = 'standard') => {
     registrationNumber += 1;
     const response = await fetch(`${BASE_URL}/api/shops`, {
       method: 'POST',
@@ -1147,6 +1147,14 @@ test('trial promotion caps each formula at 75 and requires payment after its slo
   assert.equal(premiumTrial.response.status, 200, JSON.stringify(premiumTrial.payload));
   assert.equal(premiumTrial.payload.trial_granted, true);
   assert.equal(premiumTrial.payload.shop.subscription.plan, 'premium');
+
+  const proRegistration = await register('pro', 'pro');
+  assert.equal(proRegistration.response.status, 200, JSON.stringify(proRegistration.payload));
+  assert.equal(proRegistration.payload.trial_granted, false);
+  assert.equal(proRegistration.payload.shop.subscription.plan, 'pro');
+  assert.equal(proRegistration.payload.shop.subscription.status, 'not_started');
+  assert.equal(proRegistration.payload.shop.subscription.isActive, false);
+  assert.match(String(proRegistration.payload.message), /formule Pro, sans essai gratuit/);
 
   const finalTrialLogin = await fetch(`${BASE_URL}/api/auth/merchant-access-login`, {
     method: 'POST',

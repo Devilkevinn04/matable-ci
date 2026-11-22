@@ -197,7 +197,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
       className="mt-press mt-reveal group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl  border border-[#e7e9e5] bg-white text-left shadow-[0_2px_12px_rgba(20,40,30,.06)] transition hover:-translate-y-1 hover:border-[#b9d5ca] hover:shadow-[0_12px_28px_rgba(20,40,30,.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mt-green-primary)] focus-visible:ring-offset-2"
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-[#d1fae5]">
-        <CategoryProductImage imageUrl={product.thumbnail_url || product.image_url} category={product.shop.category} title={productTitle} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" className="h-full w-full transition-transform duration-500 group-hover:scale-[1.04]" />
+        <CategoryProductImage imageUrl={product.thumbnail_url || product.image_url} category={product.shop.category} title={productTitle} sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 25vw" className="h-full w-full transition-transform duration-[var(--mt-motion-deliberate)] group-hover:scale-[1.04]" />
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           {isPromotion
             ? <span aria-label={discountPercent > 0 ? `Réduction de ${discountPercent} %` : 'Prix réduit'} className="inline-flex items-center gap-1 rounded-full bg-[#c2410c] px-2.5 py-1 text-[11px] font-bold text-white"><BadgePercent className="h-3 w-3" aria-hidden="true" />{discountPercent > 0 ? `−${discountPercent}%` : 'Prix réduit'}</span>
@@ -217,7 +217,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
         <div className="mt-2 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <p className={`text-base font-extrabold ${isPromotion ? 'text-[#c2410c]' : 'text-[var(--mt-green-deep)]'}`}>{formatFCFA(activePrice)}</p>
-            {isPromotion && <p className="text-xs font-semibold text-[#81786d]"><del>{formatFCFA(product.price)}</del></p>}
+            {isPromotion && <p className="text-xs font-semibold text-[#6b6258]"><del>{formatFCFA(product.price)}</del></p>}
             {isPromotion && product.sale_ends_at && <p className="basis-full text-[11px] font-semibold text-[#a53a1d]">Jusqu’au {new Date(product.sale_ends_at).toLocaleDateString('fr-FR')}</p>}
           </div>
           {product.shop.city && <p className="flex items-center gap-1 text-[11px] text-[#647067]"><MapPin className="h-3 w-3 text-[var(--mt-green-primary)]" aria-hidden="true" />{getDiscoveryCityLabel(product.shop.city)}</p>}
@@ -257,7 +257,7 @@ export const ProductNewsFeed: React.FC<ProductNewsFeedProps> = ({ onOpenShop, ca
         <div className="mt-4 max-w-sm">
           <label htmlFor="product-feed-category" className="flex min-h-10 items-center gap-3 rounded-xl border border-[#e0d5c6] bg-white px-3 text-sm font-semibold text-[#47534b]">
             <span className="shrink-0 text-[#647067]">{promotionsOnly ? 'Filtrer' : 'Catégorie'}</span>
-            <select id="product-feed-category" value={category} onChange={(event) => changeFilter(() => setCategory(event.target.value))} className="min-w-0 flex-1 bg-transparent py-2 outline-none">
+            <select id="product-feed-category" value={category} onChange={(event) => changeFilter(() => setCategory(event.target.value))} className="min-h-11 min-w-0 flex-1 bg-transparent py-2 outline-none">
               <option value="all">Toutes les catégories</option>
               {categories.map((key) => <option key={key} value={key}>{getCategoryDefaults(key).label}</option>)}
             </select>

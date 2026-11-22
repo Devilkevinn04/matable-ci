@@ -10,7 +10,7 @@ const MAX_VISIBLE = 3;
 
 interface PendingOrdersQueueProps {
   orders: Order[];
-  /** Autres commandes acceptées mais pas encore livrées. */
+  /** Autres commandes acceptées mais pas encore remises. */
   inProgressCount: number;
   onUpdateStatus: (orderId: number, status: OrderStatus) => void;
   onOpenOrders: (filter: 'pending' | 'actionable') => void;

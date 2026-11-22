@@ -2,8 +2,13 @@ import type { Product } from '../types';
 
 const ageRestrictedProductTerms = /\b(?:puffs?|vapes?|vapoteuses?|cigarettes?\s*electroniques?|e-?cigarettes?|e-?liquides?|tabacs?|nicotine)\b/;
 
-export function isAgeRestrictedProduct(product: Pick<Product, 'title' | 'description'>): boolean {
-  const searchableText = `${product.title} ${product.description || ''}`
+// Une boutique de tabac ou de vapotage réserve tout son catalogue aux majeurs :
+// ses articles portent souvent un nom de marque que le titre seul ne trahit pas.
+export function isAgeRestrictedProduct(
+  product: Pick<Product, 'title' | 'description'>,
+  shopName = '',
+): boolean {
+  const searchableText = `${product.title} ${product.description || ''} ${shopName}`
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();

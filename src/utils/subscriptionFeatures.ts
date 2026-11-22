@@ -2,6 +2,12 @@ export type SubscriptionTier = 'standard' | 'premium' | 'pro';
 export type SubscriptionFeature = 'custom_branding' | 'event_mode' | 'social_links' | 'advanced_analytics' | 'boost_discount';
 export type SubscriptionTerm = 'monthly' | 'annual';
 
+/** Formule choisie sur la page tarifs et transmise à l’inscription (`?formule=`). */
+export function getRegistrationTierFromSearch(search: string): SubscriptionTier {
+  const tier = new URLSearchParams(search).get('formule');
+  return tier === 'premium' || tier === 'pro' ? tier : 'standard';
+}
+
 export interface SubscriptionProFeatures {
   productLimit: number | null;
   productPhotoLimit: number;
@@ -84,6 +90,13 @@ export function addCalendarMonths(date: Date, months: number): string {
   result.setUTCDate(Math.min(dayOfMonth, lastDayOfTargetMonth));
   return result.toISOString().slice(0, 10);
 }
+
+// Ce qui distingue vraiment les formules, pour choisir à l’inscription sans lire la grille complète.
+export const REGISTRATION_TIER_HIGHLIGHTS: Record<SubscriptionTier, string> = {
+  standard: 'Jusqu’à 20 articles, commandes WhatsApp, QR code',
+  premium: 'Catalogue illimité, vitrine à vos couleurs, logo et bannière',
+  pro: 'Tout Premium, statistiques détaillées et réduction sur les boosts · sans essai gratuit',
+};
 
 export const SUBSCRIPTION_PLANS = {
   standard: {

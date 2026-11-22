@@ -174,7 +174,7 @@ export function MerchantIdentityVerification({ shopId, shopName, onStatusChange 
         </div>
         <p className="mt-1 text-xs">{details.description}</p>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/80" role="progressbar" aria-label="Progression de la vérification d’identité" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
-          <div className="h-full rounded-full bg-current transition-[width] duration-500" style={{ width: `${progress}%` }} />
+          <div className="h-full rounded-full bg-current transition-[width] duration-[var(--mt-motion-deliberate)]" style={{ width: `${progress}%` }} />
         </div>
         <div className="mt-2 grid grid-cols-3 text-[10px] font-semibold">
           <span className="text-left">À démarrer</span><span className="text-center">Envoyée</span><span className="text-right">Terminée</span>

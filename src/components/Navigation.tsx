@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Store, ShieldCheck, ShoppingBag, Compass, CircleHelp, BookOpen, Menu, X, Sparkles, Search, Home, ArrowUpRight, BadgePercent } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import type { CustomerUser } from './CustomerAuth';
-import { getCategoryDefaults, SHOP_CATEGORIES } from '../utils/categoryDefaults';
 
 interface NavigationProps {
   currentRole: 'storefront' | 'merchant' | 'admin';
@@ -259,20 +258,6 @@ export const Navigation: React.FC<NavigationProps> = ({
           </nav>
           )}
       </div>
-      {location.pathname === '/' && currentRole === 'storefront' && (
-        <nav aria-label="Catégories de produits" className="hidden border-t border-[#f0ebe2] bg-white/80 xl:block">
-          <div className="mx-auto flex max-w-[1440px] items-center gap-1 overflow-x-auto px-8 py-1.5">
-            <button type="button" onClick={() => onOpenDirectory()} className="mr-2 inline-flex min-h-9 shrink-0 items-center gap-2 rounded-lg bg-[var(--mt-green-primary)] px-4 text-xs font-bold text-white transition hover:bg-[var(--mt-green-hover)]">
-              <Store className="h-3.5 w-3.5" aria-hidden="true" /> Toutes les catégories
-            </button>
-            {SHOP_CATEGORIES.filter((category) => category !== 'other').map((category) => (
-              <button key={category} type="button" onClick={() => onOpenDirectory(getCategoryDefaults(category).label)} className="min-h-9 shrink-0 rounded-lg px-3 text-xs font-semibold text-[#47534b] transition hover:bg-[#f0f7f2] hover:text-[var(--mt-green-deep)]">
-                {getCategoryDefaults(category).label}
-              </button>
-            ))}
-          </div>
-        </nav>
-      )}
     </header>
   );
 };

@@ -1,5 +1,6 @@
 import { databaseMode, dbAll, dbTransaction, type DatabaseTransaction } from '../../db.ts';
 import type { OrderRecord } from '../types.ts';
+import { recordOrderStatus } from './loyaltyEngine.ts';
 import { getVapidConfiguration, sendMerchantPush } from './pushNotifications.ts';
 
 export const PENDING_ORDER_TTL_MS = 2 * 60 * 60 * 1000;
@@ -81,6 +82,7 @@ async function expirePendingOrder(
     [orderId],
   );
   if (updated.changes !== 1) return null;
+  await recordOrderStatus(transaction, { orderId, shopId, from: 'pending', to: 'expired', actor: 'system', now });
   await transaction.run(`UPDATE merchant_push_deliveries SET sent_at = ?, last_error = 'order_expired'
     WHERE shop_id = ? AND event_key = ? AND sent_at IS NULL`,
   [now, shopId, pendingOrderReminderEventKey(orderId, row.pending_since || row.created_at)]);

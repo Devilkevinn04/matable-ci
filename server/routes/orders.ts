@@ -21,6 +21,7 @@ import {
   maskContactPhone,
 } from '../services/contactGuard.ts';
 import { sendCustomerOrderReceiptEmail } from '../services/email.ts';
+import { recordOrderStatus } from '../services/loyaltyEngine.ts';
 import { CUSTOMER_LOYALTY_REWARD_THRESHOLD } from '../../src/utils/customerLoyalty.ts';
 import {
   expirePendingOrderInTransaction,
@@ -195,7 +196,7 @@ export function createOrderRouter({
           if (normalizedColor && !colorOptions.includes(normalizedColor)) {
             throw Object.assign(new Error(`Couleur indisponible pour "${product.title}".`), { statusCode: 400, product_id: product.id });
           }
-          if (isAgeRestrictedProduct(product)
+          if (isAgeRestrictedProduct(product, shop.name)
             && !isAgeVerificationTokenValid(req.body?.age_verification_token, shop.id)) {
             throw Object.assign(new Error('Une confirmation de majorité est requise pour commander ces produits.'), { statusCode: 403 });
           }
@@ -284,6 +285,9 @@ export function createOrderRouter({
           'INSERT INTO order_whatsapp_tracking (order_id, token_hash, clicked_at) VALUES (?, ?, NULL)',
           [orderId, hashAccessToken(whatsappTrackingToken)],
         );
+        await recordOrderStatus(transaction, {
+          orderId: newOrder.id, shopId: newOrder.shop_id, from: null, to: 'pending', actor: 'customer', now: newOrder.created_at,
+        });
 
         return { order: newOrder };
       });
@@ -380,6 +384,7 @@ export function createOrderRouter({
         [orderId],
       );
       if (update.changes !== 1) throw new Error(`Pending order ${orderId} changed while cancelling.`);
+      await recordOrderStatus(transaction, { orderId, shopId, from: 'pending', to: 'cancelled', actor: 'customer', now });
 
       return { type: 'cancelled' as const, shopId, stockUpdates };
     });
@@ -624,6 +629,7 @@ export function createOrderRouter({
       COUNT(*) AS delivered_orders
       FROM orders JOIN shops ON shops.id = orders.shop_id
       WHERE orders.customer_user_id = ? AND orders.status = 'delivered'
+        AND NOT EXISTS (SELECT 1 FROM loyalty_programs AS programs WHERE programs.shop_id = orders.shop_id AND programs.activated_at IS NOT NULL)
       GROUP BY orders.shop_id, shops.name, shops.slug
       ORDER BY MAX(orders.created_at) DESC`, [customerSession.user.id]);
     const loyaltyRedemptions = await dbAll<{ shop_id: number | string; count: number | string }>(

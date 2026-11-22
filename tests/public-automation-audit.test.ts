@@ -775,10 +775,61 @@ test('shop and product API defaults are category-aware and product placeholders 
   const directoryShops = await publicDirectory.json();
   const directoryShop = directoryShops.find((shop: { slug: string }) => shop.slug === createdPayload.shop.slug);
   assert.equal(directoryShop.products_preview.some((product: { id: number }) => product.id === restrictedProduct.id), false);
+  assert.equal(directoryShop.products_count, 1, 'le produit 18+ n’est pas compté');
 
   const publicFeed = await fetch(`${BASE_URL}/api/v1/catalog/storefronts/feed?sort=new&limit=48`);
   const publicFeedPayload = await publicFeed.json();
   assert.equal(publicFeedPayload.products.some((product: { id: number }) => product.id === restrictedProduct.id), false);
+
+  const searchFeed = async (query: string) => (await (await fetch(
+    `${BASE_URL}/api/v1/catalog/storefronts/feed?sort=popular&limit=48&q=${encodeURIComponent(query)}`,
+  )).json()).products as { id: number }[];
+  const findsPlainProduct = async (query: string) => (await searchFeed(query)).some(({ id }) => id === productPayload.product.id);
+  assert.equal(await findsPlainProduct('karite'), true, 'description, sans accent');
+  assert.equal(await findsPlainProduct('hydratant soin'), true, 'mots dans un autre ordre');
+  assert.equal(await findsPlainProduct('soins atelier'), true, 'produit et boutique');
+  assert.equal(await findsPlainProduct('soin introuvable'), false);
+  assert.equal((await searchFeed('puff')).some(({ id }) => id === restrictedProduct.id), false, 'jamais de produit 18+');
+
+  // Un article au nom de marque neutre reste protégé dès que la boutique est une boutique de vapotage.
+  const plainProductId = productPayload.product.id;
+  const renameShop = (name: string) => {
+    const database = new Database(TEST_DB_PATH);
+    database.prepare('UPDATE shops SET name = ? WHERE id = ?').run(name, createdPayload.shop.id);
+    database.close();
+  };
+  const isListed = (list: { id: number }[]) => list.some((product) => product.id === plainProductId);
+  const readExposure = async () => {
+    const catalog = await (await fetch(`${BASE_URL}/api/v1/catalog/storefronts/${createdPayload.shop.slug}`)).json();
+    const shops = await (await fetch(`${BASE_URL}/api/v1/catalog/storefronts`)).json();
+    const feed = await (await fetch(`${BASE_URL}/api/v1/catalog/storefronts/feed?sort=new&limit=48`)).json();
+    const order = await fetch(`${BASE_URL}/api/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shop_id: createdPayload.shop.id,
+        customer_name: 'Client test',
+        customer_phone: uniquePhone(),
+        delivery_location: 'Cocody',
+        items: [{ product_id: plainProductId, quantity: 1 }],
+      }),
+    });
+    return {
+      catalog: isListed(catalog.products),
+      directory: isListed(shops.find((shop: { slug: string }) => shop.slug === createdPayload.shop.slug).products_preview),
+      feed: isListed(feed.products),
+      orderStatus: order.status,
+    };
+  };
+  renameShop('PUFF 2.0');
+  assert.deepEqual(await readExposure(), { catalog: false, directory: false, feed: false, orderStatus: 403 });
+  renameShop('Atelier beauté API');
+  const ordinaryExposure = await readExposure();
+  assert.deepEqual(
+    { catalog: ordinaryExposure.catalog, directory: ordinaryExposure.directory, feed: ordinaryExposure.feed },
+    { catalog: true, directory: true, feed: true },
+  );
+  assert.notEqual(ordinaryExposure.orderStatus, 403);
 
   const restrictedOrder = await fetch(`${BASE_URL}/api/orders`, {
     method: 'POST',

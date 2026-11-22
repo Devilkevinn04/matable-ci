@@ -13,6 +13,8 @@ import { normalizeWhatsAppPhone } from '../services/businessRules.ts';
 import { isEmailMfaRequired, sendEmailMfaRolloutNoticeOnce, startEmailMfaChallenge, verifyEmailMfaChallenge } from '../services/emailMfa.ts';
 import { requireSameOriginJsonRequest } from '../middleware/authRequestSecurity.ts';
 import { sanitizeThemeConfigForResponse } from '../services/shopThemeConfig.ts';
+import { closeCustomerAccounts } from '../services/loyaltyEngine.ts';
+import { getCustomerLoyaltyExport } from '../repositories/loyalty.ts';
 
 interface MerchantSession {
   shopId: number;
@@ -1461,7 +1463,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     const session = await getCustomerSessionState(req, res);
     if (!session.authenticated || !session.user) return res.status(401).json({ error: 'Authentification client requise.' });
     const userId = session.user.id;
-    const [profile, orders, favorites, likes, reviews, reports, consents, loyaltyRedemptions] = await Promise.all([
+    const [profile, orders, favorites, likes, reviews, reports, consents, loyaltyRedemptions, loyaltyPoints] = await Promise.all([
       dbGet<CustomerProfileRow>(
         'SELECT id, name, first_name, last_name, phone, email, created_at FROM users WHERE id = ?',
         [userId],
@@ -1496,6 +1498,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
         'SELECT shop_id, qualifying_order_count, redeemed_at FROM customer_loyalty_redemptions WHERE user_id = ? ORDER BY redeemed_at DESC',
         [userId],
       ),
+      getCustomerLoyaltyExport(session.user.id),
     ]);
     if (!profile) return res.status(404).json({ error: 'Compte client introuvable.' });
     res.setHeader('Cache-Control', 'no-store');
@@ -1513,6 +1516,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
       reports,
       account_consents: consents,
       loyalty_redemptions: loyaltyRedemptions,
+      loyalty_points: loyaltyPoints,
     });
   });
 
@@ -1597,6 +1601,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     }
 
     await dbTransaction(async (transaction) => {
+      await closeCustomerAccounts(transaction, session.user!.id, new Date().toISOString());
       await transaction.run(
         `UPDATE orders SET customer_user_id = NULL, customer_name = 'Compte supprimé',
           customer_phone = '', delivery_location = '', delivery_note = NULL

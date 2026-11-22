@@ -1,8 +1,9 @@
 import React from 'react';
-import { ShoppingBag, Check, ExternalLink, Search, TrendingUp, DollarSign, CheckCircle2, Clock3, CookingPot, Package, Sparkles, X } from 'lucide-react';
+import { Gift, ShoppingBag, Check, ExternalLink, Search, TrendingUp, DollarSign, CheckCircle2, Clock3, CookingPot, Package, Sparkles, X } from 'lucide-react';
 import type { MerchantOrderFilter, MerchantState } from './useMerchant';
 import { formatFCFA } from '../../utils/format';
 import { OrderContactReveal } from '../OrderContactReveal';
+import { LoyaltyCodeForm } from './LoyaltyCodeForm';
 
 interface OrdersTabProps {
   state: MerchantState;
@@ -72,7 +73,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
     { id: 'confirmed', label: 'Acceptées', count: orders.filter(o => o.status === 'confirmed').length },
     { id: 'preparing', label: 'En préparation', count: orders.filter(o => o.status === 'preparing').length },
     { id: 'ready', label: 'Prêtes', count: orders.filter(o => o.status === 'ready').length },
-    { id: 'delivered', label: 'Livrées', count: orders.filter(o => o.status === 'delivered').length },
+    { id: 'delivered', label: 'Remises', count: orders.filter(o => o.status === 'delivered').length },
     { id: 'cancelled', label: 'Annulées', count: orders.filter(o => o.status === 'cancelled').length },
     { id: 'rejected', label: 'Refusées', count: orders.filter(o => o.status === 'rejected').length },
     { id: 'expired', label: 'Expirées', count: orders.filter(o => o.status === 'expired').length },
@@ -90,6 +91,13 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                 <p className="mt-1 text-xs leading-5 text-slate-500">Traitez les demandes clients et suivez leur progression.</p>
               </div>
             </header>
+
+            {state.currentShop && !state.currentShop.admin_mode && orders.some((order) => order.loyalty_points) && (
+              <details className="rounded-2xl border border-[#d6e5dc] bg-white">
+                <summary className="flex min-h-12 cursor-pointer items-center gap-2 px-4 text-sm font-bold text-[var(--mt-green-deep)]"><Gift className="h-4 w-4" aria-hidden="true" /> Valider un code de fidélité</summary>
+                <div className="px-3 pb-3"><LoyaltyCodeForm shopId={state.currentShop.id} onUsed={() => void state.loadShopData(state.currentShop!.id)} /></div>
+              </details>
+            )}
 
             {/* Orders Statistics Cards */}
             {/* Indicateurs compacts : la liste des commandes reste visible sans défiler. */}
@@ -219,7 +227,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                           )}
                           {order.status === 'delivered' && (
                             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
-                              <Sparkles className="h-3 w-3" aria-hidden="true" /> Livrée
+                              <Sparkles className="h-3 w-3" aria-hidden="true" /> Remise
                             </span>
                           )}
                           {order.status === 'preparing' && (
@@ -277,6 +285,16 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                             </div>
                           ))}
                         </div>
+                        {order.loyalty_points && (
+                          <p className="flex flex-wrap items-center gap-x-2 text-xs text-[var(--mt-green-deep)]">
+                            <span className="inline-flex items-center gap-1.5 font-bold"><Gift className="h-3.5 w-3.5" aria-hidden="true" />{order.loyalty_points.available} point{order.loyalty_points.available === 1 ? '' : 's'}</span>
+                            {order.loyalty_points.reserved > 0
+                              ? <span className="font-semibold">{order.loyalty_points.reserved} réservé{order.loyalty_points.reserved === 1 ? '' : 's'} : demandez son code au client</span>
+                              : order.loyalty_points.next_cost !== null && (order.loyalty_points.available >= order.loyalty_points.next_cost
+                              ? <span className="font-semibold">Récompense disponible : le client peut réserver son code</span>
+                              : <span className="text-[var(--mt-gray-600)]">Encore {order.loyalty_points.next_cost - order.loyalty_points.available} avant une récompense</span>)}
+                          </p>
+                        )}
                         {state.currentShop && !state.currentShop.admin_mode && order.status === 'delivered'
                           && order.customer_user_id && order.loyalty?.available_rewards > 0 && (
                             <MerchantLoyaltyReward
@@ -336,7 +354,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                                 onClick={() => handleUpdateOrderStatus(order.id, 'delivered')}
                                 className="min-h-11 flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700 sm:flex-none"
                               >
-                                Marquer livrée
+                                Marquer comme remise
                               </button>
                               <button
                                 type="button"
@@ -374,7 +392,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({ state, filteredOrders, ord
                                 onClick={() => handleUpdateOrderStatus(order.id, 'delivered')}
                                 className="min-h-11 flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700 sm:flex-none"
                               >
-                                Marquer livrée
+                                Marquer comme remise
                               </button>
                               <button
                                 type="button"

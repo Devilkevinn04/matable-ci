@@ -1,3 +1,4 @@
+import { ABIDJAN_COMMUNES } from './abidjanCommunes';
 import { isShopCategory, SHOP_CATEGORIES, type ShopCategory } from './categoryDefaults';
 
 export interface DiscoveryShop {
@@ -101,6 +102,36 @@ function makeCityCategoryPage(category: ShopCategory, city: string, citySlug: st
   };
 }
 
+const ABIDJAN_SLUGS = ['abidjan', ...ABIDJAN_COMMUNES
+  .filter((commune) => commune !== 'Autre ville / commune')
+  .map(toDiscoveryCitySlug)];
+
+export function isAbidjanCity(city: string | null | undefined): boolean {
+  const slug = toDiscoveryCitySlug(city || '');
+  return ABIDJAN_SLUGS.some((candidate) => slug === candidate || slug.startsWith(`${candidate}-`));
+}
+
+/** « Abidjan » regroupe toutes ses communes ; une commune ne regroupe qu’elle-même. */
+export function cityMatchesSlug(city: string | null | undefined, slug: string): boolean {
+  return toDiscoveryCitySlug(city || '') === slug || (slug === 'abidjan' && isAbidjanCity(city));
+}
+
+/** Choix de communes pour un filtre, avec « Abidjan (toutes) » dès qu’une de ses communes est présente. */
+export function getCityFilterOptions(cities: readonly (string | undefined)[]): { value: string; label: string }[] {
+  const bySlug = new Map<string, string>();
+  for (const city of cities) {
+    const label = city ? getDiscoveryCityLabel(city) : '';
+    const slug = toDiscoveryCitySlug(label);
+    if (!slug) continue;
+    bySlug.set(slug, label);
+    if (slug !== 'abidjan' && isAbidjanCity(label)) bySlug.set('abidjan', 'Abidjan (toutes)');
+  }
+  if (bySlug.has('abidjan') && [...bySlug.keys()].some((slug) => slug !== 'abidjan' && isAbidjanCity(slug))) bySlug.set('abidjan', 'Abidjan (toutes)');
+  return [...bySlug.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((left, right) => left.label.localeCompare(right.label, 'fr'));
+}
+
 export function getPublicDiscoveryPages(shops: readonly DiscoveryShop[]): DiscoveryPage[] {
   const pages: DiscoveryPage[] = [];
   const shopsByCategory = new Map<ShopCategory, number>();
@@ -115,14 +146,17 @@ export function getPublicDiscoveryPages(shops: readonly DiscoveryShop[]): Discov
     if (city) {
       const citySlug = toDiscoveryCitySlug(city);
       if (citySlug && !['cote-d-ivoire', 'cote-divoire'].includes(citySlug)) {
-        const existing = shopsByCity.get(citySlug);
-        shopsByCity.set(citySlug, { city: existing?.city || city, count: (existing?.count || 0) + 1 });
-        if (isShopCategory(shop.category)) {
-          const key = `${citySlug}:${shop.category}`;
+        const places = [{ slug: citySlug, label: city }];
+        if (citySlug !== 'abidjan' && isAbidjanCity(city)) places.push({ slug: 'abidjan', label: 'Abidjan' });
+        for (const place of places) {
+          const existing = shopsByCity.get(place.slug);
+          shopsByCity.set(place.slug, { city: existing?.city || place.label, count: (existing?.count || 0) + 1 });
+          if (!isShopCategory(shop.category)) continue;
+          const key = `${place.slug}:${shop.category}`;
           const localExisting = shopsByCityCategory.get(key);
           shopsByCityCategory.set(key, {
-            city: localExisting?.city || city,
-            citySlug,
+            city: localExisting?.city || place.label,
+            citySlug: place.slug,
             category: shop.category,
             count: (localExisting?.count || 0) + 1,
           });

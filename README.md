@@ -56,17 +56,58 @@ Les couleurs fixes de l’interface réutilisent les variables `--mt-*` pour gar
 une palette, des contrastes et des ombres cohérents. Les couleurs configurées
 par les commerçants pour leur propre vitrine restent indépendantes de cette
 identité.
+
+### Accueil et filtres
+
 L’accueil met en avant les vraies boutiques, sans substituer des vitrines
-fictives aux commerces publiés : le mur de photos du haut de page n’utilise que
-des produits ayant une photo (et disparaît s’il y en a moins de quatre), puis
-viennent « Boutiques à découvrir », « Par catégorie » (une tuile par catégorie
-réellement présente, plus une invitation à ouvrir une boutique) et la grille de
-produits (8 au départ, ceux avec photo en premier, filtres par catégorie,
-quartier et tri). Une boutique sans bannière est illustrée par une mosaïque de
+fictives aux commerces publiés. Il a deux mises en page, choisies à 640 px :
+
+- **Téléphone** (`src/components/MobileHome.tsx`) : recherche, catégories,
+  produits à commander, promotions et nouveautés si elles existent, boutiques.
+  Une barre « Reprendre » rouvre le panier en cours.
+- **Ordinateur et tablette** (`AnimatedHome.tsx`) : recherche et photos
+  cliquables (au-delà de 1 024 px), produits filtrables, boutiques, « Commander,
+  en trois gestes » (`OrderStory.tsx`), appel aux vendeurs.
+
+Les deux lisent le même fil produits (`src/hooks/useHomeFeed.ts`) : boutiques
+ouvertes d’abord, puis articles avec photo, sans plus de deux articles de suite
+de la même boutique quand un autre choix existe. Les produits 18+ n’y figurent
+jamais.
+
+Sur ordinateur, l’accueil et l’annuaire partagent un seul filtre
+(`src/components/FilterBar.tsx`, règles dans `src/utils/catalogFilters.ts`) :
+catégorie avec le nombre de résultats, commune, prix (accueil), ouverture et
+ordre. Seules les catégories ayant un contenu sont proposées. Les choix vivent
+dans l’adresse (`categorie`, `commune`, `prix`, `ouvertes`, `tri`), donc un
+retour arrière ou un lien partagé les retrouve. L’annuaire des téléphones
+utilise les mêmes paramètres `categorie`, `commune` et `ouvertes`.
+
+Une boutique sans bannière est illustrée par une mosaïque de
 ses propres photos produits (`src/components/ShopCover.tsx`), sinon par son
 visuel de catégorie. Les vitrines ont un pied de page réduit pour ne pas
-détourner le client de la boutique. L’animation d’apparition ne s’applique
-qu’au premier écran : plus bas, le contenu s’affiche directement.
+détourner le client de la boutique.
+
+### Animations et graphiques
+
+- Trois durées seulement, 160, 260 et 420 ms : variables `--mt-motion-*` de
+  `src/index.css`, reprises par `src/utils/motionTokens.ts`. Seuls les
+  indicateurs de chargement tournent en boucle. Le réglage « réduire les
+  mouvements » coupe tout. `tests/motion-charter.test.ts` refuse un écart.
+- Motion anime les interactions : grilles filtrées, panier, chiffres
+  (`AnimatedNumber`), onglets (`useTabFade`).
+- GSAP n’anime que « Commander, en trois gestes », au-delà de 1 024 px. Il est
+  téléchargé à l’approche de la séquence (46 Ko compressés) et n’est importé que
+  par `src/utils/orderStoryTimeline.ts`. Sa licence gratuite est propre à GSAP
+  (<https://gsap.com/standard-license>).
+- Recharts dessine les courbes et barres des tableaux de bord. Il est téléchargé
+  à leur affichage (131 Ko compressés) et n’est importé que par
+  `src/components/charts/TrendPlot.tsx`. Chaque graphique a un tableau
+  équivalent. Les petits indicateurs restent en SVG et CSS.
+- Les couleurs des graphiques (`CHART_COLORS`, `src/utils/chartData.ts`) ont été
+  contrôlées pour les daltonismes courants : ne pas les changer sans refaire ce
+  contrôle.
+
+### Formulaires
 
 Les formulaires partagent un même kit de champs (`src/components/ui/fields.tsx` :
 texte en 16 px, téléphone ivoirien avec +225 fixe, montant en FCFA, PIN et codes
@@ -79,7 +120,8 @@ les blocages de défilement par `src/utils/scrollLock.ts`.
 
 - Les demandes de commande utilisent le click-to-chat WhatsApp (`wa.me`) : le mode sélectionné au checkout est une préférence transmise à la boutique, pas un paiement en ligne. Les paiements d’abonnement et de boosts utilisent l’API et le checkout hébergé GeniusPay, qui achemine les paiements vers ses passerelles; les rappels d’échéance WhatsApp Business nécessitent une configuration fournisseur et le consentement du commerçant.
 - Une commande client commence en attente de réponse du commerçant. Un même numéro normalisé ne peut avoir qu’une commande en attente par boutique pendant la fenêtre de réservation de deux heures. Si la boutique a activé les notifications Push, un rappel unique est envoyé après 30 minutes sans réponse ; le stock reste réservé pendant deux heures, puis le système expire automatiquement les demandes encore sans réponse et libère le stock. Le commerçant peut accepter ou refuser dans son dashboard. Un client connecté peut annuler une demande encore en attente depuis son compte, où chaque commande affiche une frise d’avancement (Envoyée → Acceptée → Prête pour la restauration → Remise). Sans compte, le client suit sa commande sur `/suivi/<n°>#<jeton>` : le lien est proposé à la confirmation et rappelé 24 h sur la vitrine depuis le même appareil ; il s’appuie sur le jeton secret de la commande (`POST /api/orders/:id/track`, aucune coordonnée renvoyée). L’adresse e-mail facultative d’un invité sert uniquement à l’envoi du récapitulatif.
-- Le compte client suit une carte de fidélité par boutique : cinq commandes livrées liées à ce compte ouvrent une récompense. Le commerçant la remet et l’enregistre depuis une commande livrée ; aucun rabais n’est appliqué automatiquement. Les commandes invitées ne sont pas comptabilisées.
+- Le compte client suit une carte de fidélité par boutique : cinq commandes marquées « Remise » et liées à ce compte ouvrent une récompense. Le commerçant la remet et l’enregistre depuis une commande remise ; aucun rabais n’est appliqué automatiquement. Les commandes invitées ne sont pas comptabilisées.
+- Un programme de **points de fidélité** est en préparation : moteur, historique des statuts, API et espace commerçant (« Plus > Fidélité ») sont construits, mais il reste fermé tant que `LOYALTY_PILOT_SHOP_IDS` est vide (une liste d’identifiants ouvre des boutiques pilotes, `*` les ouvre toutes). Ne pas l’ouvrir avant l’écran client. `npm run migrate:loyalty` simule la reprise des anciennes cartes et n’écrit rien sans option explicite. Voir `docs/superpowers/specs/2026-11-22-points-fidelite-design.md`.
 - Sur mobile, le catalogue est une liste compacte (photo, titre, une ligne de description, prix, bouton « + »). Toucher un produit ouvre une feuille d'options : choix obligatoires ou facultatifs avec suppléments, taille et couleur pour la mode, détails, total en direct et ajout au panier. Sur grand écran, les cartes restent inchangées.
 - Sur mobile, la vitrine respecte les zones sûres des iPhone, affiche un squelette de chargement aux dimensions réelles de la page (avec un bouton « Réessayer » après 8 s de connexion lente), permet de tirer pour actualiser le catalogue sans perdre le panier, et propose d'installer l'application à partir de la 2e visite, après le choix sur les cookies et 12 s de navigation (bouton natif sur Android, instructions Safari sur iPhone, rappel repoussé de 14 jours après un refus).
 - La vitrine publique indique la date de dernière actualisation du catalogue. Cette date suit les changements de produits et de stock ainsi que les mises à jour des horaires.
@@ -88,7 +130,7 @@ les blocages de défilement par `src/utils/scrollLock.ts`.
 - Le stockage local et les tests utilisent SQLite (`better-sqlite3`). En production (`NODE_ENV=production`), le serveur utilise PostgreSQL via `DATABASE_URL` (Neon recommandé). Les écritures de commandes et de stock sont transactionnelles.
 - Les sessions marchand et administrateur sont sécurisées via cookies `HttpOnly` et contrôles de sécurité sur les tentatives.
 - La gestion de stock est protégée contre les oversells concurrentiels.
-- Les 75 premières inscriptions Standard et les 75 premières Premium bénéficient d’un essai de deux mois limité à 5 produits. Les places sont attribuées transactionnellement par formule; au-delà, la boutique est créée sans accès actif et doit régler son abonnement pour être activée. Les essais accordés avant l’ouverture de cette offre sont conservés. Les tarifs initiaux sont Standard (3 000), Premium (5 000) et Pro (8 000 FCFA/mois); le Super-admin peut modifier les tarifs et la page Formules affiche les montants actuels.
+- Les 75 premières inscriptions Standard et les 75 premières Premium bénéficient d’un essai de deux mois limité à 5 produits. Les places sont attribuées transactionnellement par formule; au-delà, la boutique est créée sans accès actif et doit régler son abonnement pour être activée. Une inscription Pro est acceptée sans essai : elle ne consomme aucune place et reste inactive jusqu’au paiement. Les essais accordés avant l’ouverture de cette offre sont conservés. Les tarifs initiaux sont Standard (3 000), Premium (5 000) et Pro (8 000 FCFA/mois); le Super-admin peut modifier les tarifs et la page Formules affiche les montants actuels.
 - Pendant l’essai, l’identité est vérifiée avant l’accès au dashboard. Une boutique vérifiée doit ensuite être publiée explicitement ; son ouverture commerciale reste contrôlée séparément.
 - Les notifications Push navigateur restent soumises à l’accord du commerçant, mais une fenêtre « Activez les alertes de commande » s’affiche à chaque connexion au dashboard tant que l’appareil n’est pas abonné (le navigateur exige un clic pour l’autorisation). « Plus tard » la masque pour la session en cours ; elle attend que le guide d’accueil soit refermé ; un appareil déjà autorisé est abonné automatiquement, et si le navigateur bloque les notifications, la fenêtre explique comment les réautoriser. L’activation et la désactivation restent disponibles dans « Plus > Paramètres > Compte > Notifications ».
 - Le centre opérationnel Super-admin contrôle la base de données, les commandes en attente au-delà de deux heures, les rappels de commande dus et les échecs Push des dernières 24 heures. Les alertes et compteurs se rafraîchissent toutes les 30 secondes lorsque l’onglet est visible ; ils signalent les situations à examiner sans modifier automatiquement une commande.
@@ -99,7 +141,7 @@ Le dashboard propose les vues Accueil, Produits, Commandes et Statistiques, avec
 
 Sur mobile, le catalogue commerçant est une liste compacte pensée pour des mises à jour sans saisie complexe : toucher le prix le modifie sur place, les boutons « − / + » ajustent le stock, et un bouton « Visible / Masqué » règle la vitrine. « Choisir plusieurs » permet de masquer, afficher, épuiser, lancer une promotion de −10 % ou −20 % pendant 7 jours, ou arrêter les promotions de plusieurs articles à la fois, avec confirmation ; seuls les articles concernés sont modifiés. Dans le formulaire d’un plat, chaque choix d’option a un nom et des boutons « Gratuit / +500 / +1 000 / Autre » pour le supplément (aucune syntaxe à écrire), et « Ajouter en un geste » reprend les groupes déjà créés sur les autres plats ou des modèles prêts (Sauce, Accompagnement, Boisson, Portion). Un nouvel article n’est jamais pré-rempli (ni temps de préparation, ni options) ; le formulaire commence par la photo, et la saisie d’un nouvel article est conservée sur l’appareil (7 jours au plus) jusqu’à l’ajout au catalogue. Dans les réglages, le bouton d’enregistrement reste visible en bas d’écran. Les mots du dashboard suivent la catégorie de la boutique (`src/utils/merchantVocabulary.ts`) : « Mon menu », « Ajouter un plat » et « Plus disponible » pour la restauration, « Mes prestations » et « Complet » pour les services, « Mes articles » et « Épuisé » pour la mode, etc.
 
-Les limites sont vérifiées côté serveur : Standard permet 20 produits et 2 photos par produit, Premium un nombre illimité de produits et 5 photos, Pro un nombre illimité de produits et jusqu’à 6 photos. Pro incluant « Tout Premium », une configuration Pro ne peut pas descendre sous 5 photos par article. Les statistiques couvrent respectivement 7, 30 et 90 jours. Les sections avancées (parcours jusqu’à la commande, campagnes, audiences, pages et appareils) sont réservées à la formule Pro et vérifiées côté serveur. Les boutiques en essai sont limitées à 5 produits.
+Les limites sont vérifiées côté serveur : Standard permet 20 produits et 2 photos par produit, Premium un nombre illimité de produits et 5 photos, Pro un nombre illimité de produits et jusqu’à 6 photos. Pro incluant « Tout Premium », une configuration Pro ne peut pas descendre sous 5 photos par article. Les statistiques couvrent respectivement 7, 30 et 90 jours. Elles présentent visites, commandes et valeur des commandes par jour, les jours sans activité étant affichés à zéro. Les sections avancées (parcours jusqu’à la commande, campagnes, audiences, pages et appareils) sont réservées à la formule Pro et vérifiées côté serveur. Les boutiques en essai sont limitées à 5 produits.
 
 Le menu « Partage » génère un QR code PNG et une affiche PNG personnalisée avec le nom, la catégorie et la couleur de la boutique. Le QR code ne contient que le lien public et reste désactivé tant que la vitrine n’est pas publiée. Le dashboard propose l’export CSV du catalogue, l’import avec aperçu (ID MaTable renseigné pour modifier, ID vide pour créer; les cellules vides conservent les valeurs existantes) et l’export des commandes de la boutique. Les comptes d’équipe, codes promotionnels et programmes de parrainage ne sont pas encore disponibles.
 
@@ -107,7 +149,7 @@ Le menu « Partage » génère un QR code PNG et une affiche PNG personnalisée 
 
 Le tableau de bord `/admin` propose deux rôles distincts, sélectionnés au moment de la connexion :
 
-- **Vue générale Super-admin** : les statistiques reprennent les cartes et graphiques simples du dashboard commerçant, avec le périmètre global de la plateforme : visiteurs distincts, commandes reçues, ratio brut commandes/visiteurs et montant demandé. Le ratio peut dépasser 100 % lorsque des visiteurs passent plusieurs commandes ; il ne représente pas une part de personnes converties. Chaque carte compare la période sélectionnée à la période précédente ; l’état des comptes boutiques est présenté séparément, et des graphiques en barres montrent les visites et commandes quotidiennes. Les libellés précisent que le montant demandé n’est pas un paiement encaissé et que les visiteurs sont comptés après consentement. Une file d’intervention regroupe aussi les signalements, vérifications d’identité, commandes en attente de réponse et avis à modérer, avec un accès direct à chaque file. Les files de commandes et de modération se rafraîchissent toutes les 30 secondes lorsque l’onglet est visible ; les erreurs de chargement sont signalées au lieu d’être présentées comme une file vide. Ce suivi ne confirme ni n’annule automatiquement les commandes à la place du commerçant.
+- **Vue générale Super-admin** : les statistiques reprennent les cartes et graphiques simples du dashboard commerçant, avec le périmètre global de la plateforme : visiteurs distincts, commandes reçues, ratio brut commandes/visiteurs et montant demandé. Le ratio peut dépasser 100 % lorsque des visiteurs passent plusieurs commandes ; il ne représente pas une part de personnes converties. Chaque carte compare la période sélectionnée à la période précédente ; l’état des comptes boutiques est présenté séparément, et des graphiques montrent les visites et commandes quotidiennes, avec total, pic et tableau des chiffres. Les libellés précisent que le montant demandé n’est pas un paiement encaissé et que les visiteurs sont comptés après consentement. Une file d’intervention regroupe aussi les signalements, vérifications d’identité, commandes en attente de réponse et avis à modérer, avec un accès direct à chaque file. Les files de commandes et de modération se rafraîchissent toutes les 30 secondes lorsque l’onglet est visible ; les erreurs de chargement sont signalées au lieu d’être présentées comme une file vide. Ce suivi ne confirme ni n’annule automatiquement les commandes à la place du commerçant.
 - **Super-admin** : accès complet aux outils d’administration, notamment aux paiements et abonnements, aux liens d’accès des boutiques, au mode maintenance, au suivi des annonces automatiques, à la suspension/réactivation des boutiques et comptes clients, à la suppression de boutiques et au journal d’audit global consultable et filtrable. Toute suspension ou réactivation exige un motif; suspendre un compte client révoque ses sessions actives. Toute prolongation d’essai gratuit exige également un motif explicite inscrit au journal d’audit.
 - **Admin de vérification** : espace centré sur la file Didit et la modération de contenu, avec la possibilité de préparer un rappel WhatsApp de vérification. Il dispose d’une liste de boutiques strictement en lecture seule, limitée au nom, à la ville, à la catégorie et aux statuts de publication et d’identité ; elle n’expose pas les coordonnées privées ni les données financières. Il ne peut pas modifier les statuts des commandes, gérer les paiements ou abonnements, supprimer des boutiques, créer des liens d’accès privés, modifier le mode maintenance ou consulter le suivi des annonces automatiques. Un accès en lecture seule aux commandes d’une boutique reste disponible sur l’API marchand pour les besoins limités.
 
@@ -155,6 +197,7 @@ VERIFICATION_ADMIN_ACCESS_KEY="CHANGE_ME_VERIFICATION_ADMIN_KEY"
 AGE_VERIFICATION_SECRET=""
 AD_EVENT_SIGNING_SECRET=""
 ADVERTISING_BETA_ENABLED="false"
+LOYALTY_PILOT_SHOP_IDS=""
 DIDIT_API_KEY=""
 DIDIT_WORKFLOW_ID=""
 DIDIT_WEBHOOK_SECRET=""
@@ -234,7 +277,6 @@ Les commandes de sauvegarde et de validation chargent `.env` automatiquement. Po
 
 Une URL de connexion PostgreSQL est un secret d’accès complet. Protéger les archives et leurs checksums comme des données sensibles, ne pas les commiter, et planifier des sauvegardes chiffrées vers un stockage indépendant avec des restaurations périodiques sur une base jetable.
 
-
 Exemple de configuration :
 
 ```env
@@ -259,7 +301,6 @@ Les statistiques d’audience sont collectées uniquement après consentement an
 
 Les actions super-admin de suspension/réactivation exigent un motif, une confirmation et sont consignées. La correction manuelle d’une échéance d’abonnement actif demande une date et un motif de vérification ; elle ne confirme pas un paiement et ne doit être utilisée qu’après contrôle d’un justificatif. Les corrections d’essai synchronisent uniquement l’expiration technique avec la fin d’essai enregistrée. Une dérogation manuelle active bloque les autres commandes de cycle de vie et de facturation jusqu’à son retrait ou son expiration.
 
-
 ### Base PostgreSQL
 
 La production utilise PostgreSQL sur le VPS Hostinger. Toute migration de fournisseur doit suivre la procédure de sauvegarde, restauration et validation décrite ci-dessus.
@@ -277,7 +318,6 @@ Les intents d’abonnement expirent localement après 24 heures, mais l’URL de
 Un paiement confirmé active les droits d’abonnement, mais ne réactive pas une boutique désactivée ou non publiée et ne contourne pas la vérification d’identité. Une suspension manuelle active empêche la création d’un nouveau checkout GeniusPay. Si un checkout avait déjà été ouvert avant cette suspension et est réglé ensuite, le paiement est enregistré, mais les droits restent suspendus jusqu’à la levée ou à l’expiration de la dérogation; l’espace commerçant l’indique au retour du paiement.
 
 Le checkout exige une adresse e-mail de facturation. MaTable ne collecte ni ne stocke de données de carte et ne déclenche aucun prélèvement automatique : le commerçant initie et confirme chaque paiement. Voir la [documentation API GeniusPay](https://geniuspay.ci/docs/api) pour les détails officiels du contrat marchand et des webhooks.
-
 
 Les échéances restent actives jusqu’à la fin de leur date civile en Côte d’Ivoire; l’écran de renouvellement apparaît le lendemain. Le statut effectif passe à `past_due` pendant le délai de grâce, puis `suspended` et la boutique est masquée publiquement. Les données et l’accès marchand sont conservés afin de permettre le renouvellement. Si les secrets WhatsApp Business sont configurés, le serveur envoie les rappels à J−14, J−7, J−3 et J−1 uniquement aux commerçants ayant activé l’opt-in dans « Mon forfait ». Chaque échéance et chaque palier sont enregistrés pour éviter les doublons; un échec fournisseur est journalisé et peut être retenté. Changer le numéro WhatsApp révoque l’accord. Configurer dans `/srv/apps/matable/shared/app.env` `WHATSAPP_CLOUD_API_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_SUBSCRIPTION_REMINDER_TEMPLATE` et `WHATSAPP_GRAPH_API_VERSION`. Le modèle Meta doit être approuvé comme modèle utilitaire et contenir deux paramètres de corps : le nom de la boutique et sa date d’échéance. L’envoi automatique dépend de ces identifiants secrets Meta et de l’approbation du modèle; aucune valeur secrète ne doit être placée dans le dépôt. Le code ne déclenche aucun prélèvement automatique : le commerçant doit toujours ouvrir le checkout GeniusPay et confirmer le paiement.
 
@@ -303,7 +343,7 @@ Resend sert également aux messages de bienvenue client et commerçant, aux réc
 
 ## Règles métier
 
-L’essai marchand dure deux mois calendaires et permet dix produits; il est réservé aux 75 premières inscriptions Standard et aux 75 premières Premium. Les boutiques suivantes doivent régler une formule avant d’accéder aux fonctions de leur espace marchand. Les commerçants en essai peuvent payer une formule à tout moment. Les tarifs mensuels par formule sont configurables par le Super-admin et affichés sur la page Formules; l’annuel coûte 10 mensualités pour 12 mois de service. Le délai de grâce avant masquage est de deux jours. Un boost de 24 h, 3 jours ou 7 jours coûte respectivement 1 000, 1 500 ou 2 000 FCFA; Pro donne 15 % de remise. Chaque achat choisit un seul emplacement au même tarif : accueil, haut de catégorie ou boutiques de la ville. Cinq créneaux simultanés sont disponibles sur l’accueil, par catégorie ou par ville selon l’emplacement; les réservations payées débutent au premier créneau libre. Une boutique doit être vérifiée, ouverte et présenter au moins deux produits. Le bilan d’un boost présente les visites consenties de la vitrine et les clics WhatsApp suivis sur sa période; il ne s’agit pas d’une mesure de ventes ni d’une garantie de portée. Les boosts courent pendant leur durée prévue même si la vitrine est masquée. Après activation, les paiements ne sont pas remboursables, sauf impossibilité de MaTable d’activer le service payé, auquel cas le commerçant peut demander un remboursement à l’assistance.
+L’essai marchand dure deux mois calendaires et permet cinq produits; il est réservé aux 75 premières inscriptions Standard et aux 75 premières Premium. Les boutiques suivantes doivent régler une formule avant d’accéder aux fonctions de leur espace marchand. Les commerçants en essai peuvent payer une formule à tout moment. Les tarifs mensuels par formule sont configurables par le Super-admin et affichés sur la page Formules; l’annuel coûte 10 mensualités pour 12 mois de service. Le délai de grâce avant masquage est de deux jours. Un boost de 24 h, 3 jours ou 7 jours coûte respectivement 1 000, 1 500 ou 2 000 FCFA; Pro donne 15 % de remise. Chaque achat choisit un seul emplacement au même tarif : accueil, haut de catégorie ou boutiques de la ville. Cinq créneaux simultanés sont disponibles sur l’accueil, par catégorie ou par ville selon l’emplacement; les réservations payées débutent au premier créneau libre. Une boutique doit être vérifiée, ouverte et présenter au moins deux produits. Le bilan d’un boost présente les visites consenties de la vitrine et les clics WhatsApp suivis sur sa période; il ne s’agit pas d’une mesure de ventes ni d’une garantie de portée. Les boosts courent pendant leur durée prévue même si la vitrine est masquée. Après activation, les paiements ne sont pas remboursables, sauf impossibilité de MaTable d’activer le service payé, auquel cas le commerçant peut demander un remboursement à l’assistance.
 
 Les valeurs initiales de catégorie (message, présentation, exemples de produits, palette et illustrations) sont centralisées dans `src/utils/categoryDefaults.ts`. Les illustrations produit sont des placeholders d’affichage : `image_url` reste vide tant qu’aucune photo réelle n’est fournie. Les anciennes valeurs génériques connues sont remplacées à l’affichage, sans migration automatique des boutiques ou produits existants.
 

@@ -168,6 +168,8 @@ export interface Order {
     delivered_orders: number;
     available_rewards: number;
   };
+  /** Présent quand la boutique utilise les points : solde disponible du client et prix de la première récompense. */
+  loyalty_points?: { available: number; reserved: number; next_cost: number | null };
   items?: OrderItem[];
 }
 

@@ -4,7 +4,10 @@ import type { LucideIcon } from 'lucide-react';
 import type { Shop } from '../../types';
 import { formatFCFA } from '../../utils/format';
 import { getSubscriptionAnalyticsDayLimit, isSubscriptionFeatureIncluded } from '../../utils/subscriptionFeatures';
-import { AnalyticsDailyBars } from '../AnalyticsDailyBars';
+import { AnimatedNumber } from '../AnimatedNumber';
+import { MeterBar } from '../charts/MeterBar';
+import { TrendChart } from '../charts/TrendChart';
+import { CHART_COLORS, fillDailyRows, periodStart, toDailyPoints } from '../../utils/chartData';
 import { ContextualHelp } from '../ContextualHelp';
 
 type DailyAnalytics = {
@@ -129,7 +132,7 @@ function MetricCard({
           <Icon className="h-4 w-4" aria-hidden="true" />
         </span>
       </div>
-      <p className="mt-3 break-words text-2xl font-black tracking-tight text-[#183b31] sm:text-3xl">{value}</p>
+      <p className="mt-3 break-words text-2xl font-black tracking-tight text-[#183b31] sm:text-3xl"><AnimatedNumber>{value}</AnimatedNumber></p>
       <p className="mt-1 text-[11px] leading-4 text-slate-500">{detail}</p>
     </div>
   );
@@ -182,7 +185,9 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
   }, [canUseAnalytics, days, refreshKey, shop.id]);
 
   const periods = Array.from(new Set([7, 30, 90, maxDays])).filter((period) => period <= maxDays);
-  const dailyRows = useMemo(() => analytics?.daily || [], [analytics?.daily]);
+  const dailyRows = useMemo(() => analytics
+    ? fillDailyRows(analytics.daily, periodStart(analytics.days), periodStart(1), (date) => ({ date, page_views: 0, unique_visitors: 0, orders: 0, order_value: 0 }))
+    : [], [analytics]);
   const metrics = [
     { icon: Eye, label: 'Visites de la vitrine', value: numberFormat.format(analytics?.summary.page_views ?? 0), detail: `${numberFormat.format(analytics?.summary.unique_visitors ?? 0)} visiteurs distincts · après consentement`, tone: 'green' as const },
     { icon: ShoppingBag, label: 'Commandes reçues', value: numberFormat.format(analytics?.summary.orders ?? 0), detail: 'Commandes non annulées', tone: 'orange' as const },
@@ -203,6 +208,7 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
   if (compact) {
     const daily = dailyRows.slice(-7);
     const maxOrders = Math.max(1, ...daily.map((day) => day.orders));
+    const hasActivity = daily.some((day) => day.orders > 0 || day.page_views > 0);
     return (
       <section aria-labelledby="merchant-overview-analytics-title" className="rounded-2xl border border-[#e7dfd3] bg-white p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
@@ -220,14 +226,14 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
           <div className="rounded-xl bg-[#fff5eb] p-3"><p className="text-[10px] font-bold text-slate-500">Commandes</p><p className="mt-1 text-xl font-black text-[#a64a1f]">{analytics ? numberFormat.format(analytics.summary.orders) : '—'}</p></div>
         </div>
         {loading && !analytics && <p role="status" className="mt-3 text-xs text-slate-500">Chargement…</p>}
-        {!loading && !error && !daily.length && <p className="mt-4 rounded-xl bg-[#faf9f5] p-4 text-xs leading-5 text-slate-500">Les visites apparaîtront ici dès que votre vitrine recevra de l’activité.</p>}
-        {daily.length > 0 && (
+        {!loading && !error && !hasActivity && <p className="mt-4 rounded-xl bg-[#faf9f5] p-4 text-xs leading-5 text-slate-500">Les visites apparaîtront ici dès que votre vitrine recevra de l’activité.</p>}
+        {hasActivity && (
           <div className="mt-4">
             <div className="flex h-16 items-end gap-1.5" role="img" aria-label="Commandes reçues chaque jour cette semaine">
               {daily.map((day) => (
                 <div key={day.date} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1" title={`${shortDateFormat.format(new Date(`${day.date}T12:00:00`))} : ${day.orders} commande(s)`}>
                   <span className="text-[9px] font-bold tabular-nums text-slate-500">{day.orders || ''}</span>
-                  <span className="w-full max-w-7 rounded-t bg-[#e77a3d]" style={{ height: `${day.orders ? Math.max(12, (day.orders / maxOrders) * 38) : 3}px`, opacity: day.orders ? 1 : 0.2 }} />
+                  <span className="w-full max-w-7 rounded-t bg-[#c2410c]" style={{ height: `${day.orders ? Math.max(12, (day.orders / maxOrders) * 38) : 3}px`, opacity: day.orders ? 1 : 0.2 }} />
                   <span className="text-[9px] text-slate-400">{new Intl.DateTimeFormat('fr-FR', { weekday: 'narrow' }).format(new Date(`${day.date}T12:00:00`))}</span>
                 </div>
               ))}
@@ -291,23 +297,30 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <AnalyticsDailyBars
+        <TrendChart
           title="Visites de la vitrine"
           description="Nombre de consultations mesurées chaque jour."
-          rows={dailyRows}
-          valueFor={(day) => day.page_views}
-          color="#087c5b"
+          points={toDailyPoints(dailyRows, (day) => day.page_views)}
+          color={CHART_COLORS.green}
           formatValue={(value) => numberFormat.format(value)}
           emptyMessage="Les données apparaîtront ici dès que votre boutique aura reçu de l’activité."
         />
-        <AnalyticsDailyBars
+        <TrendChart
           title="Commandes reçues"
           description="Commandes enregistrées et non annulées, par jour."
-          rows={dailyRows}
-          valueFor={(day) => day.orders}
-          color="#e77a3d"
+          points={toDailyPoints(dailyRows, (day) => day.orders)}
+          color={CHART_COLORS.rust}
           formatValue={(value) => numberFormat.format(value)}
           emptyMessage="Les données apparaîtront ici dès que votre boutique aura reçu de l’activité."
+        />
+        <TrendChart
+          title="Valeur des commandes"
+          description="Montant demandé par jour, pas un paiement encaissé."
+          points={toDailyPoints(dailyRows, (day) => day.order_value)}
+          color={CHART_COLORS.green}
+          formatValue={formatCurrency}
+          emptyMessage="Le montant de vos commandes apparaîtra ici."
+          className="lg:col-span-2"
         />
       </div>
 
@@ -338,7 +351,7 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#f4f7f3] text-xs font-black text-[#315548]">{index + 1}</span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold text-slate-800">{product.title}</p>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#087c5b]" style={{ width: `${Math.min(100, (product.views / maxViews) * 100)}%` }} /></div>
+                    <MeterBar value={product.views} max={maxViews} color={CHART_COLORS.green} className="mt-2 h-2" />
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-black tabular-nums text-[#183b31]">{numberFormat.format(product.views)} <span className="text-[10px] font-semibold text-slate-500">vues</span></p>
@@ -378,9 +391,9 @@ export function ProAnalyticsPanel({ shop, compact = false }: { shop: Shop; compa
           <div className="space-y-2.5">
             {(analytics?.funnel || []).map((step) => (
               <div key={step.step} className="flex items-center justify-between gap-3 rounded-xl bg-[#f7f6f1] px-3 py-2.5">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-bold text-slate-700">{funnelLabels[step.step] || step.step}</p>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-[#087c5b]" style={{ width: `${Math.min(100, step.conversion_from_visit)}%` }} /></div>
+                  <MeterBar value={step.conversion_from_visit} max={100} color={CHART_COLORS.green} className="mt-1.5 h-2" />
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="text-sm font-black tabular-nums text-[#183b31]">{numberFormat.format(step.count)}</p>

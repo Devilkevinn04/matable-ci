@@ -126,7 +126,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
             </form>
           {pendingMfaChallenge
             ? <button type="button" onClick={() => { setPendingMfaChallenge(''); setMfaCode(''); }} className="mt-3 block w-full text-center text-xs font-semibold text-[#47534b] underline underline-offset-2">Recommencer la connexion</button>
-            : <Link to="/recuperation-acces?type=merchant" className="mt-3 block text-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[var(--mt-green-deep)]">PIN ou accès oublié ?</Link>}
+            : <Link to="/recuperation-acces?type=merchant" className="mt-1 flex min-h-11 items-center justify-center text-xs font-semibold text-[#47534b] underline underline-offset-2 hover:text-[var(--mt-green-deep)]">PIN ou accès oublié ?</Link>}
           {!pendingMfaChallenge && <div className="relative mt-5 pt-4 border-t border-[var(--mt-gray-200)] text-center">
             <p className="text-xs text-[#47534b] max-w-sm mx-auto mb-3">
               Vous n’avez pas encore de boutique ? Créez-la ici. Pour vous reconnecter ensuite, utilisez le numéro WhatsApp et le code PIN choisis à la création.
@@ -134,7 +134,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ state, onBackToDirecto
             <button
               type="button"
               onClick={() => setIsRegisterModalOpen(true)}
-              className="text-xs font-extrabold text-[var(--mt-gray-900)] hover:text-[var(--mt-green-primary)] flex items-center justify-center gap-1.5 mx-auto py-1"
+              className="text-xs font-extrabold text-[var(--mt-gray-900)] hover:text-[var(--mt-green-primary)] flex min-h-11 items-center justify-center gap-1.5 mx-auto"
             >
               <UserPlus className="w-4 h-4" />
               <span>Créer ma boutique</span>

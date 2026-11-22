@@ -1,6 +1,7 @@
 import { Router, type RequestHandler } from 'express';
 import { databaseMode, dbAll, dbGet, dbTransaction } from '../../db.ts';
 import { stringifyCsv } from '../../src/utils/csv.ts';
+import { applyOrderStatusChange, ensureProgram } from '../services/loyaltyEngine.ts';
 import { CUSTOMER_LOYALTY_REWARD_THRESHOLD } from '../../src/utils/customerLoyalty.ts';
 import { mapProductRow } from '../repositories/products.ts';
 import { getShopFromDatabase } from '../repositories/shops.ts';
@@ -132,6 +133,26 @@ export function createMerchantOrdersRouter({
         [shopId],
       )
       : [];
+    // L’ancienne carte s’efface dès que la boutique a activé les points.
+    const pointsProgram = await dbGet<{ id: number | string; status: string }>('SELECT id, status FROM loyalty_programs WHERE shop_id = ? AND activated_at IS NOT NULL', [shopId]);
+    const usesPoints = Boolean(pointsProgram);
+    const pointAccounts = pointsProgram?.status === 'active' && customerIds.length > 0
+      ? await dbAll<{ user_id: number | string; available: number | string; reserved: number | string }>(
+        'SELECT user_id, balance - reserved AS available, reserved FROM loyalty_accounts WHERE program_id = ? AND user_id IS NOT NULL',
+        [pointsProgram.id],
+      )
+      : [];
+    const cheapestReward = pointAccounts.length > 0
+      ? await dbGet<{ cost: number | string | null }>(
+        `SELECT MIN(cost_points) AS cost FROM loyalty_rewards
+         WHERE program_id = ? AND is_active = 1 AND (remaining IS NULL OR remaining > 0) AND (ends_at IS NULL OR ends_at > ?)`,
+        [pointsProgram!.id, new Date().toISOString()],
+      )
+      : undefined;
+    const pointsByCustomer = new Map(pointAccounts.map((row) => [Number(row.user_id), {
+      available: Math.max(0, Number(row.available) || 0),
+      reserved: Number(row.reserved) || 0,
+    }]));
     const deliveredByCustomer = new Map(
       loyaltyCounts.map((row) => [Number(row.customer_user_id), Number(row.delivered_orders) || 0]),
     );
@@ -149,8 +170,14 @@ export function createMerchantOrdersRouter({
       return {
         ...order,
         customer_phone: maskContactPhone(order.customer_phone),
-        ...(customerIdSet.has(customerUserId) ? {
+        ...(customerIdSet.has(customerUserId) && !usesPoints ? {
           loyalty: { delivered_orders: deliveredOrders, available_rewards: availableRewards },
+        } : {}),
+        ...(pointsByCustomer.has(customerUserId) ? {
+          loyalty_points: {
+            ...pointsByCustomer.get(customerUserId)!,
+            next_cost: cheapestReward?.cost == null ? null : Number(cheapestReward.cost),
+          },
         } : {}),
       };
     });
@@ -187,6 +214,7 @@ export function createMerchantOrdersRouter({
       if (!order) return { type: 'missing' as const };
       if (order.status !== 'delivered') return { type: 'not_delivered' as const };
       if (order.customer_user_id == null) return { type: 'guest' as const };
+      if ((await ensureProgram(transaction, shopId, now)).activatedAt) return { type: 'points_program' as const };
       const userId = Number(order.customer_user_id);
       const delivered = await transaction.get<{ count: number | string }>(
         `SELECT COUNT(*) AS count FROM orders
@@ -222,8 +250,9 @@ export function createMerchantOrdersRouter({
       };
     });
     if (result.type === 'missing') return res.status(404).json({ error: 'Commande introuvable.' });
-    if (result.type === 'not_delivered') return res.status(409).json({ error: 'Seules les commandes livrées comptent pour la fidélité.' });
+    if (result.type === 'not_delivered') return res.status(409).json({ error: 'Seules les commandes remises comptent pour la fidélité.' });
     if (result.type === 'guest') return res.status(409).json({ error: 'Cette commande n’est pas liée à un compte client.' });
+    if (result.type === 'points_program') return res.status(409).json({ error: 'Votre boutique utilise les points de fidélité : saisissez le code du client.' });
     if (result.type === 'no_reward') return res.status(409).json({ error: 'Aucune récompense de fidélité n’est disponible pour ce client.' });
     return res.json({
       success: true,
@@ -393,6 +422,15 @@ export function createMerchantOrdersRouter({
         if (['cancelled', 'rejected', 'expired'].includes(status)) {
           await transaction.run('UPDATE orders SET delivery_fee = 0 WHERE id = ?', [order.id]);
         }
+        await applyOrderStatusChange(transaction, {
+          orderId: order.id,
+          shopId,
+          from: previousStatus,
+          to: status,
+          actor: req.adminShopAccess ? req.adminRole || 'super_admin' : 'merchant',
+          reason: adminReason || undefined,
+          now: new Date().toISOString(),
+        });
         if (req.adminShopAccess) {
           await transaction.run(
             'INSERT INTO admin_audit_logs (actor, action, shop_id, details, created_at) VALUES (?, ?, ?, ?, ?)',
@@ -443,7 +481,7 @@ export function createMerchantOrdersRouter({
             ? 'Demande refusée et stock libéré.'
             : status === 'cancelled'
               ? 'Demande annulée.'
-            : `Statut mis à jour : ${({ preparing: 'en préparation', ready: 'prête', delivered: 'livrée', confirmed: 'acceptée' } as Record<string, string>)[status] || 'enregistré'}.`,
+            : `Statut mis à jour : ${({ preparing: 'en préparation', ready: 'prête', delivered: 'remise', confirmed: 'acceptée' } as Record<string, string>)[status] || 'enregistré'}.`,
       });
     } catch (error: unknown) {
       if (!error || typeof error !== 'object' || !('statusCode' in error)) throw error;
@@ -505,7 +543,7 @@ export function createMerchantOrdersRouter({
       `💰 *Valeur des commandes enregistrées :* ${new Intl.NumberFormat('fr-FR').format(metrics.ca_ordered)} FCFA`,
       `✅ *Valeur des commandes confirmées :* ${new Intl.NumberFormat('fr-FR').format(metrics.ca_confirmed)} FCFA`,
       `🚚 *Valeur des commandes terminées :* ${new Intl.NumberFormat('fr-FR').format(metrics.ca_delivered)} FCFA`,
-      `🧺 *Panier moyen livré :* ${new Intl.NumberFormat('fr-FR').format(metrics.panier_moyen_livre)} FCFA`,
+      `🧺 *Panier moyen des commandes remises :* ${new Intl.NumberFormat('fr-FR').format(metrics.panier_moyen_livre)} FCFA`,
       '----------------------------------------',
       'ℹ️ *MaTable ne collecte aucun paiement.* Les paiements sont convenus directement entre le client et le vendeur.',
     ];

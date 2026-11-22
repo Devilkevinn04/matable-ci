@@ -9,7 +9,7 @@ import { MerchantState } from './useMerchant';
 import { TermsPrivacyConsent } from '../TermsPrivacyConsent';
 import { ACQUISITION_SOURCES } from '../../utils/acquisitionSources';
 import { ChoiceCards, CodeField, PhoneField, SelectField, TextField } from '../ui/fields';
-import { SUBSCRIPTION_PLANS } from '../../utils/subscriptionFeatures';
+import { REGISTRATION_TIER_HIGHLIGHTS, SUBSCRIPTION_PLANS, type SubscriptionTier } from '../../utils/subscriptionFeatures';
 import { useSubscriptionPrices } from '../../utils/useSubscriptionPrices';
 import { formatFCFA } from '../../utils/format';
 import { getAmbassadorToken, getStoredAmbassadorCode } from '../../utils/ambassadors';
@@ -94,12 +94,12 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
         </div>
         <MerchantRegistrationProgress step={step} />
         <p className="text-sm leading-6 text-[#68756c]">{step === 1
-          ? `Choisissez Standard ou Premium. Les ${TRIAL_PROMOTION_SLOTS_PER_TIER} premiers commerçants de chaque formule bénéficient de ${TRIAL_DURATION_MONTHS} mois d’essai gratuit et jusqu’à ${TRIAL_CATALOG_LIMIT} produits. Après attribution des places, le paiement est nécessaire pour activer la boutique.`
+          ? `Choisissez votre formule. Les ${TRIAL_PROMOTION_SLOTS_PER_TIER} premières boutiques Standard et les ${TRIAL_PROMOTION_SLOTS_PER_TIER} premières Premium bénéficient de ${TRIAL_DURATION_MONTHS} mois d’essai gratuit, avec jusqu’à ${TRIAL_CATALOG_LIMIT} produits. Ensuite, et dès le départ avec Pro, le paiement est nécessaire pour activer la boutique.`
           : 'Ces informations permettent à vos clients de vous contacter et vous serviront à retrouver votre espace marchand.'}</p>
         {/* One compact row on phones so the form fields stay near the top of the screen. */}
         {step === 1 && <div className="grid grid-cols-3 gap-2">
           {benefits.map(({ label, icon: Icon }) => (
-            <div key={label} className="flex flex-col items-center gap-1.5 rounded-2xl border border-[#e7e0d6] bg-[var(--mt-gray-50)] px-1.5 py-2 text-center text-[10px] font-semibold leading-tight text-[#47534b] sm:flex-row sm:gap-2 sm:px-2.5 sm:py-2.5 sm:text-left sm:text-[11px]">
+            <div key={label} className="flex flex-col items-center gap-1.5 rounded-2xl border border-[#e7e0d6] bg-[var(--mt-gray-50)] px-1.5 py-2 text-center text-[11px] font-semibold leading-tight text-[#47534b] sm:flex-row sm:gap-2 sm:px-2.5 sm:py-2.5 sm:text-left sm:text-[11px]">
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#e9f3ec] text-[var(--mt-green-deep)]">
                 <Icon className="h-3.5 w-3.5" />
               </span>
@@ -107,16 +107,16 @@ export const MerchantRegistrationScreen: React.FC<MerchantRegistrationScreenProp
             </div>
           ))}
         </div>}
-        {step === 1 && <ChoiceCards<'standard' | 'premium'>
+        {step === 1 && <ChoiceCards<SubscriptionTier>
           legend="Formule"
           name="merchant-subscription-tier"
           value={regSubscriptionTier}
           onChange={setRegSubscriptionTier}
-          options={(['standard', 'premium'] as const).map((tier) => ({
+          options={(['standard', 'premium', 'pro'] as const).map((tier) => ({
             value: tier,
             label: SUBSCRIPTION_PLANS[tier].label,
-            aside: `puis ${formatFCFA(prices?.[tier] ?? SUBSCRIPTION_PLANS[tier].price)}/mois`,
-            description: tier === 'standard' ? 'Jusqu’à 20 articles, commandes WhatsApp, QR code' : 'Catalogue illimité, vitrine à vos couleurs, logo et bannière',
+            aside: `${tier === 'pro' ? '' : 'puis '}${formatFCFA(prices?.[tier] ?? SUBSCRIPTION_PLANS[tier].price)}/mois`,
+            description: REGISTRATION_TIER_HIGHLIGHTS[tier],
           }))}
         />}
       </div>

@@ -16,6 +16,22 @@ function validCartItems(value: unknown): CartItem[] {
   );
 }
 
+/** Panier en cours sur cet appareil, quelle que soit la boutique. */
+/** Une ligne de panier : le même produit avec les mêmes options. */
+export const getCartItemKey = (item: Omit<CartItem, 'quantity'>) => JSON.stringify([item.product.id, item.selected_size ?? null, item.selected_color ?? null, item.selected_modifiers ?? []]);
+
+export function readActiveCart(): CartState | null {
+  try {
+    const parsed: unknown = JSON.parse(sessionStorage.getItem(ACTIVE_CART_STORAGE_KEY) || 'null');
+    if (!parsed || typeof parsed !== 'object' || !('shopSlug' in parsed) || !('items' in parsed)) return null;
+    const { shopSlug, items } = parsed as { shopSlug: unknown; items: unknown };
+    const validItems = validCartItems(items);
+    return typeof shopSlug === 'string' && validItems.length > 0 ? { shopSlug, items: validItems } : null;
+  } catch {
+    return null;
+  }
+}
+
 function readStoredCart(shopSlug: string): CartState {
   try {
     const activeCart = sessionStorage.getItem(ACTIVE_CART_STORAGE_KEY);
@@ -109,12 +125,8 @@ export function useCustomerCart(
     const currentColor = selectedColors[product.id];
     const currentMods = selectedModifiers[product.id] || [];
     const addProduct = (items: CartItem[]) => {
-      const existingIndex = items.findIndex((item) =>
-        item.product.id === product.id
-        && item.selected_size === currentSize
-        && item.selected_color === currentColor
-        && JSON.stringify(item.selected_modifiers || []) === JSON.stringify(currentMods)
-      );
+      const key = getCartItemKey({ product, selected_size: currentSize, selected_color: currentColor, selected_modifiers: currentMods });
+      const existingIndex = items.findIndex((item) => getCartItemKey(item) === key);
       if (existingIndex > -1) {
         const existing = items[existingIndex];
         if (existing.quantity >= product.stock) return items;

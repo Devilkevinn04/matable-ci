@@ -9,6 +9,14 @@ test('identifies tobacco and nicotine products without matching ordinary goods',
   assert.equal(isAgeRestrictedProduct({ title: 'Jus de gingembre', description: 'Fait maison' }), false);
 });
 
+test('restricts every product of a tobacco or vape shop, whatever its title', () => {
+  const coolBar = { title: 'COOL BAR', description: null };
+  assert.equal(isAgeRestrictedProduct(coolBar), false);
+  assert.equal(isAgeRestrictedProduct(coolBar, 'PUFF 2.0'), true);
+  assert.equal(isAgeRestrictedProduct(coolBar, 'Vape Store Abidjan'), true);
+  assert.equal(isAgeRestrictedProduct(coolBar, 'Les saveurs de chez nous'), false);
+});
+
 test('checks the eighteenth birthday using calendar dates and rejects invalid dates', () => {
   const today = new Date(2026, 9, 10);
   assert.equal(isAtLeastAge('2008-10-10', 18, today), true);

@@ -59,9 +59,13 @@ import { CustomerTrustPanel } from './CustomerTrustPanel';
 import { getCanonicalOrigin } from '../utils/seoCanonical';
 import { getActiveProductPrice } from '../utils/productPricing';
 import { normalizeShopEventType, SHOP_EVENT_VISUALS } from '../utils/shopEventVisuals';
-import { useCustomerCart } from './useCustomerCart';
+import { getCartItemKey, useCustomerCart } from './useCustomerCart';
 import { isAgeRestrictedProduct } from '../utils/ageRestrictedProducts';
 import { lockBodyScroll } from '../utils/scrollLock';
+import { MOTION_EASE, MOTION_SECONDS, motionFast, motionStandard } from '../utils/motionTokens';
+import { AnimatedNumber } from './AnimatedNumber';
+import { MotionGridItem } from './MotionSystem';
+import { SuccessCheck } from './SuccessCheck';
 
 interface CustomerStorefrontProps {
   shopSlug: string;
@@ -108,6 +112,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   const ageExitButtonRef = useRef<HTMLAnchorElement>(null);
   const ageConfirmationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
+  const handledAnchorRef = useRef('');
+  const [requestedProductId, setRequestedProductId] = useState<number | null>(null);
   const headerRef = useRef<HTMLElement>(null);
   const [favoriteProductIds, setFavoriteProductIds] = useState<Set<number>>(new Set());
   const [likedProductIds, setLikedProductIds] = useState<Set<number>>(new Set());
@@ -186,28 +192,48 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     return Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[];
   }, [products]);
 
+  // Le panier peut encore contenir les articles d’une autre boutique : le nom de
+  // la boutique affichée ne s’applique qu’à ses propres produits.
+  const isRestrictedHere = useCallback((product: Product) => isAgeRestrictedProduct(
+    product,
+    shop && product.shop_id === shop.id ? shop.name : '',
+  ), [shop]);
+
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
-      if (!ageVerified && isAgeRestrictedProduct(p)) return false;
+      if (!ageVerified && isRestrictedHere(p)) return false;
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch = !q ||
         `${p.title} ${p.description || ''} ${p.category || ''}`.toLowerCase().includes(q);
       const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
-  }, [products, searchQuery, selectedCategory, ageVerified]);
+  }, [products, searchQuery, selectedCategory, ageVerified, isRestrictedHere]);
 
   useEffect(() => {
     const productAnchor = /^#product-(\d+)$/.exec(location.hash);
-    if (!productAnchor || loading || products.length === 0) return undefined;
+    const anchorKey = `${location.key}${location.hash}`;
+    // Le contrôle d’âge passe toujours avant, et un rafraîchissement du catalogue ne rejoue pas l’ancre.
+    if (!productAnchor || loading || products.length === 0 || handledAnchorRef.current === anchorKey
+      || hasAgeRestrictedProducts && !ageVerified) return undefined;
 
     const timer = window.setTimeout(() => {
+      handledAnchorRef.current = anchorKey;
+      setRequestedProductId(Number(productAnchor[1]));
       const target = document.getElementById(`product-${productAnchor[1]}`)
         || document.getElementById('store-catalogue');
       target?.scrollIntoView({ behavior: prefersReducedMotion ? 'instant' : 'smooth', block: 'start' });
     }, 100);
     return () => window.clearTimeout(timer);
-  }, [location.hash, loading, products, prefersReducedMotion]);
+  }, [location.key, location.hash, loading, products, hasAgeRestrictedProducts, ageVerified, prefersReducedMotion]);
+
+  useEffect(() => {
+    const anchorKey = `${location.key}${location.hash}`;
+    if (location.hash !== '#panier' || loading || cart.length === 0 || handledAnchorRef.current === anchorKey
+      || hasAgeRestrictedProducts && !ageVerified) return;
+    handledAnchorRef.current = anchorKey;
+    setIsCartOpen(true);
+  }, [location.key, location.hash, loading, cart.length, hasAgeRestrictedProducts, ageVerified, setIsCartOpen]);
 
   const fetchShopData = async (signal: AbortSignal, ageToken = '', silent = false): Promise<boolean> => {
     try {
@@ -332,9 +358,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
   }, [ageDenied, hasAgeRestrictedProducts, ageVerified]);
 
   useEffect(() => {
-    if (ageVerified || !cart.some((item) => isAgeRestrictedProduct(item.product))) return;
-    setCart((items) => items.filter((item) => !isAgeRestrictedProduct(item.product)));
-  }, [ageVerified, cart, setCart]);
+    if (ageVerified || !cart.some((item) => isRestrictedHere(item.product))) return;
+    setCart((items) => items.filter((item) => !isRestrictedHere(item.product)));
+  }, [ageVerified, cart, isRestrictedHere, setCart]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -601,7 +627,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
     e.preventDefault();
     if (!shop || cart.length === 0) return;
     trackCheckoutStart(shop.id, totalCartCount, totalCartAmount);
-    if (!ageVerified && cart.some((item) => isAgeRestrictedProduct(item.product))) {
+    if (!ageVerified && cart.some((item) => isRestrictedHere(item.product))) {
       toast.error('Confirmez votre majorité avant de commander ces produits.');
       return;
     }
@@ -834,7 +860,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 <span className="flex min-w-0 max-w-full items-center gap-2">
                   <span className={`inline-flex min-w-0 items-center gap-1.5 whitespace-normal leading-tight text-xs font-bold ${shop.is_open ? 'text-[var(--mt-green-hover)]' : 'text-[#8a5a12]'}`}>
                     <span aria-hidden="true" className={`h-2 w-2 rounded-full ${shop.is_open ? 'bg-[var(--mt-green-hover)]' : 'bg-[#8a5a12]'}`} />
-                    {shop.is_open ? 'Ouverte aux commandes' : 'Fermée aux commandes'}{shop.city ? <span className="truncate sm:hidden">· {shop.city}</span> : null}
+                    <span>{shop.is_open ? 'Ouverte' : 'Fermée'}<span className="hidden lg:inline"> aux commandes</span></span>{shop.city ? <span className="truncate sm:hidden">· {shop.city}</span> : null}
                   </span>
                   {['approved', 'verified'].includes(shop.identity_verification_status || shop.merchant_verification_status || '') && (
                     <span className="hidden items-center gap-0.5 rounded-full bg-[#e3f4ea] px-1.5 py-0.5 text-xs font-extrabold text-[var(--mt-green-deep)] sm:inline-flex" title="Le commerçant a fait vérifier son identité">
@@ -878,7 +904,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                   key={totalCartCount}
                   initial={prefersReducedMotion ? false : { scale: 0.6 }}
                   animate={{ scale: 1 }}
-                  transition={{ duration: prefersReducedMotion ? 0 : 0.18 }}
+                  transition={{ duration: prefersReducedMotion ? 0 : MOTION_SECONDS.fast }}
                   className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white px-1 text-xs font-black"
                   style={{ backgroundColor: primaryColor, color: primaryTextColor }}
                 >
@@ -908,7 +934,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
       <div className="max-w-6xl mx-auto px-4 pt-3 sm:pt-4">
         <div className="group relative min-h-44 overflow-hidden rounded-[1.35rem] border border-white/70 shadow-[0_18px_45px_rgba(33,23,18,0.12)]" style={{ backgroundColor: bannerUrl ? primaryColor : secondaryColor }}>
-          {bannerUrl && <img src={bannerUrl} alt="" className="mt-hero-image absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />}
+          {bannerUrl && <img src={bannerUrl} alt="" className="absolute inset-0 h-full w-full object-cover" onError={(event) => { event.currentTarget.hidden = true; }} />}
           {bannerUrl && <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/25 to-transparent" />}
           {!bannerUrl && <div aria-hidden="true" className="mt-photo-fallback absolute inset-0" style={{ color: primaryColor }}><CategoryIcon category={shop.category} className="absolute -right-5 -top-4 h-32 w-32 rotate-[-12deg] opacity-[0.13]" /></div>}
           <div className={`relative z-10 flex min-h-44 flex-col items-start justify-end gap-2 p-4 sm:flex-row sm:items-end sm:justify-between sm:gap-3 sm:p-6 ${bannerUrl ? 'text-white' : ''}`} style={!bannerUrl ? { color: primaryColor } : undefined}>
@@ -967,14 +993,14 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
         <div className="min-w-0">
-        <details className="mb-3 rounded-2xl border border-[#ded8ce] bg-white px-4 py-3.5 shadow-sm sm:mb-5 sm:p-5">
-          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <details className="mb-3 rounded-2xl border border-[#ded8ce] bg-white shadow-sm sm:mb-5">
+          <summary className="cursor-pointer list-none px-4 py-3.5 sm:p-5 [&::-webkit-details-marker]:hidden">
             <span className="flex items-center justify-between gap-2">
-              <span className="whitespace-nowrap text-[15px] font-black text-[var(--mt-gray-900)] sm:text-lg">Comment commander ?</span>
+              <span className="min-w-0 text-[15px] font-black text-[var(--mt-gray-900)] sm:text-lg">Comment commander ?</span>
               <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#d1fae5] px-2.5 py-1 text-xs font-bold text-[var(--mt-green-deep)]">3 étapes<ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /></span>
             </span>
           </summary>
-          <div className="mt-3 border-t border-[#eee8dc] pt-3">
+          <div className="mx-4 mb-3.5 border-t border-[#eee8dc] pt-3 sm:mx-5 sm:mb-5">
           <div className="grid auto-rows-fr gap-2 sm:grid-cols-3 sm:gap-3">
             {[
               { number: '01', title: 'Choisissez vos articles', description: 'Ajoutez vos envies au panier.' },
@@ -1069,13 +1095,13 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
               key="age-gate"
               initial={prefersReducedMotion ? false : { opacity: 0 }}
               animate={{ opacity: isAgeGateClosing ? 0 : 1 }}
-              transition={{ duration: prefersReducedMotion ? 0 : 0.42, ease: 'easeOut' }}
+              transition={{ duration: prefersReducedMotion ? 0 : MOTION_SECONDS.deliberate, ease: MOTION_EASE }}
               className="fixed inset-0 z-[120] grid place-items-center overflow-y-auto bg-[rgba(10,28,22,0.42)] p-4 backdrop-blur-[8px]"
             >
               <m.section
                 initial={prefersReducedMotion ? false : { opacity: 0, y: 28, scale: 0.94 }}
                 animate={isAgeGateClosing ? { opacity: 0, y: -18, scale: 0.96 } : { opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: prefersReducedMotion ? 0 : 0.55, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: prefersReducedMotion ? 0 : MOTION_SECONDS.deliberate, ease: MOTION_EASE }}
                 role="alertdialog"
                 aria-modal="true"
                 aria-labelledby="age-gate-title"
@@ -1105,12 +1131,6 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 className="age-verification-dialog relative w-full max-w-[420px] rounded-[28px] bg-white px-6 pb-6 pt-8 text-center text-[#12362d] shadow-[0_40px_80px_-24px_rgba(0,0,0,0.55)] focus:outline-none sm:px-7"
               >
                 <div className="relative mx-auto mb-[18px] grid h-[68px] w-[68px] place-items-center rounded-full bg-[#0f2e26] text-[22px] font-extrabold text-white">
-                  <m.span
-                    animate={prefersReducedMotion ? undefined : { opacity: [0.7, 0], scale: [0.92, 1.35] }}
-                    transition={{ duration: 2.6, repeat: Infinity, ease: 'easeOut', delay: 0.8 }}
-                    aria-hidden="true"
-                    className="absolute -inset-[7px] rounded-full border-2 border-[var(--mt-green-hover)]"
-                  />
                   <AnimatePresence mode="wait" initial={false}>
                     {ageConfirmationComplete ? (
                       <m.span
@@ -1138,7 +1158,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -8 }}
-                      transition={{ duration: prefersReducedMotion ? 0 : 0.35, ease: 'easeOut' }}
+                      transition={{ duration: prefersReducedMotion ? 0 : MOTION_SECONDS.deliberate, ease: MOTION_EASE }}
                     >
                       <h2 id="age-gate-title" className="mb-2 text-[22px] font-bold leading-tight tracking-[-0.015em]">
                         Merci pour votre réponse
@@ -1165,7 +1185,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={prefersReducedMotion ? undefined : { opacity: 0, y: -8 }}
-                      transition={{ duration: prefersReducedMotion ? 0 : 0.35, ease: 'easeOut' }}
+                      transition={{ duration: prefersReducedMotion ? 0 : MOTION_SECONDS.deliberate, ease: MOTION_EASE }}
                     >
                       <h2 id="age-gate-title" className="mb-1.5 text-[22px] font-bold leading-tight tracking-[-0.015em]">
                         Cette sélection est réservée aux adultes
@@ -1257,11 +1277,12 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
             ? 'mx-auto grid w-full max-w-md grid-cols-1 gap-2.5 sm:gap-4'
             : 'grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-4'
           }>
+            <AnimatePresence initial={false} mode="popLayout">
             {filteredProducts.map((product) => {
               const activeModifiers = selectedModifiers[product.id] || [];
               const cartIndex = cart.findIndex((item) => item.product.id === product.id);
               return (
-                <div id={`product-${product.id}`} key={product.id} data-analytics-product-id={product.id} className="min-w-0 scroll-mt-24">
+                <MotionGridItem id={`product-${product.id}`} key={product.id} count={filteredProducts.length} data-analytics-product-id={product.id} className="min-w-0 scroll-mt-24">
                   <CustomerProductCard
                     product={product}
                     category={shop.category}
@@ -1269,6 +1290,8 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     isShopOpen={shop.is_open}
                     layoutStyle={layoutStyle}
                     compact={isCompactViewport}
+                    openOnArrival={requestedProductId === product.id}
+                    onOpenedOnArrival={() => setRequestedProductId(null)}
                     cardRadius={cardRadius}
                     shadowClass={shadowClass}
                     primaryColor={primaryColor}
@@ -1303,9 +1326,10 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     onAddToCart={() => { reportProductClick(product.id); trackCartEvent('add_to_cart', shop.id, product.id, 1, totalCartCount + 1); addToCart(product); }}
                     onDecreaseQuantity={() => { if (cartIndex > -1) { updateQuantity(cartIndex, -1); trackCartEvent('remove_from_cart', shop.id, product.id, 1, Math.max(0, totalCartCount - 1)); } }}
                   />
-                </div>
+                </MotionGridItem>
               );
             })}
+            </AnimatePresence>
           </div>
         )}
 
@@ -1412,13 +1436,16 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
       )}
 
       {/* 5. CHECKOUT DRAWER / MODAL */}
-      {isCartOpen && (
-        createPortal(<div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 backdrop-blur-xs sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsCartOpen(false); }}>
-          <div 
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+        {isCartOpen && <m.div key="checkout" exit={prefersReducedMotion ? undefined : { opacity: 0, pointerEvents: 'none' }} transition={motionStandard} className="mt-fade-enter fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 backdrop-blur-xs sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsCartOpen(false); }}>
+          <m.div
+            exit={prefersReducedMotion ? undefined : { y: 32 }}
+            transition={motionStandard}
             role="dialog"
             aria-modal="true"
             aria-labelledby="checkout-dialog-title"
-            className="bg-[#FFFDF9] w-full sm:max-w-lg rounded-t-[1.75rem] sm:rounded-3xl max-h-[92dvh] flex flex-col shadow-[0_-12px_40px_rgba(34,32,27,0.22)] overflow-hidden animate-in slide-in-from-bottom-6 duration-200"
+            className="bg-[#FFFDF9] w-full sm:max-w-lg rounded-t-[1.75rem] sm:rounded-3xl max-h-[92dvh] flex flex-col shadow-[0_-12px_40px_rgba(34,32,27,0.22)] overflow-hidden mt-drawer-enter"
           >
             {/* Modal Header */}
             <div className="relative px-4 pb-3 pt-4 sm:p-5 border-b border-[#EDE4D6] bg-[#FFFDF9] flex items-center justify-between">
@@ -1437,7 +1464,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       Votre demande ne vaut pas paiement. La boutique doit confirmer la commande ; contactez-la pour convenir de la remise et du règlement.
                     </ContextualHelp>
                   </div>
-                  <p className="text-xs text-slate-500">{totalCartCount > 1 ? `${totalCartCount} articles` : '1 article'} · {formatFCFA(totalCartAmount)}</p>
+                  <p className="text-xs text-slate-500">{totalCartCount === 0 ? 'Panier vide' : `${totalCartCount} article${totalCartCount > 1 ? 's' : ''} · ${formatFCFA(totalCartAmount)}`}</p>
                 </div>
               </div>
               <button
@@ -1456,7 +1483,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 /* ORDER SUCCESS SCREEN WITH DIRECT WHATSAPP LAUNCH */
                 <div className="text-center py-6">
                   <div className="success-mark w-16 h-16 bg-[#E3F1EA] text-[var(--mt-green-primary)] rounded-full flex items-center justify-center mx-auto mb-4 ring-8 ring-[#F4F8F5]">
-                    <CheckCircle2 className="w-9 h-9" strokeWidth={2.4} />
+                    <SuccessCheck />
                   </div>
                   <h4 className="text-xl font-extrabold text-[var(--mt-green-deep)]">
                     Demande n° {orderSuccess.orderId} enregistrée
@@ -1537,14 +1564,28 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                     Retour au catalogue
                   </button>
                 </div>
+              ) : cart.length === 0 ? (
+                <div className="py-10 text-center">
+                  <ShoppingBag className="mx-auto h-10 w-10 text-[var(--mt-green-primary)]" aria-hidden="true" />
+                  <h4 className="mt-3 text-lg font-extrabold text-slate-900">Votre panier est vide</h4>
+                  <p className="mx-auto mt-1 max-w-xs text-sm leading-6 text-slate-600">Ajoutez un article pour préparer votre demande.</p>
+                  <button type="button" onClick={() => setIsCartOpen(false)} className="mt-5 min-h-12 rounded-2xl bg-[var(--mt-green-deep)] px-6 text-sm font-extrabold text-white">
+                    Retour au catalogue
+                  </button>
+                </div>
               ) : (
                 <>
                   {/* Selected items list */}
                   <div className="space-y-2.5">
                     <h4 className="text-sm font-extrabold text-slate-900">Votre panier</h4>
+                    <AnimatePresence initial={false} mode="popLayout">
                     {cart.map((item, idx) => (
-                      <div 
-                        key={idx}
+                      <m.div
+                        key={getCartItemKey(item)}
+                        layout={prefersReducedMotion ? false : 'position'}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={prefersReducedMotion ? undefined : { opacity: 0, x: -24 }}
+                        transition={motionStandard}
                         className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-[#F8F3EC] border border-[#E4D9C8]"
                       >
                         <CategoryProductImage
@@ -1585,7 +1626,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
-                          <span className="min-w-6 text-center font-extrabold text-sm tabular-nums text-slate-900" aria-live="polite">{item.quantity}</span>
+                          <span className="min-w-6 text-center font-extrabold text-sm tabular-nums text-slate-900" aria-live="polite"><m.span key={item.quantity} initial={prefersReducedMotion ? false : { scale: 0.7 }} animate={{ scale: 1 }} transition={motionFast} className="inline-block">{item.quantity}</m.span></span>
                           <button
                             type="button"
                             onClick={() => updateQuantity(idx, 1)}
@@ -1596,8 +1637,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                             <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      </div>
+                      </m.div>
                     ))}
+                    </AnimatePresence>
                   </div>
 
                   {authenticatedCustomer && (
@@ -1736,7 +1778,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                       <div className="mb-3 flex items-baseline justify-between">
                         <span className="text-sm font-bold text-slate-700">Total</span>
                         <span className="text-xl font-black tabular-nums text-slate-900">
-                          {formatFCFA(totalCartAmount)}
+                          <AnimatedNumber>{formatFCFA(totalCartAmount)}</AnimatedNumber>
                         </span>
                       </div>
 
@@ -1745,7 +1787,7 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                         type="submit"
                         disabled={isSubmitting || !shop.is_open}
                         whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
-                        transition={{ duration: 0.15 }}
+                        transition={{ duration: MOTION_SECONDS.fast }}
                         className="w-full min-h-14 py-3.5 px-6 rounded-2xl bg-[#128C4B] hover:bg-[#0f7a41] text-white font-black text-base shadow-[0_10px_24px_-10px_rgba(18,140,75,0.8)] flex items-center justify-center gap-2.5 transition-[background-color,box-shadow,transform,opacity] disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Phone className="w-5 h-5 fill-white" />
@@ -1759,9 +1801,9 @@ export const CustomerStorefront: React.FC<CustomerStorefrontProps> = ({ shopSlug
                 </>
               )}
             </div>
-          </div>
-        </div>, document.body)
-      )}
+          </m.div>
+        </m.div>}
+        </AnimatePresence>, document.body)}
       {trustTarget && (
         <CustomerTrustPanel
           targetType={trustTarget.type}
