@@ -10,6 +10,7 @@ import { getAnalyticsCampaignFromSearch, getStoredAnalyticsCampaign } from '../.
 import { hasAnalyticsConsent } from '../../utils/cookieConsent';
 import { clearAmbassadorReferral, getAmbassadorToken, getStoredAmbassadorCode } from '../../utils/ambassadors';
 import { buildBulkProductPatch, type BulkProductAction } from './bulkActions';
+import { readMerchantLoginOutcome } from '../../utils/merchantLoginResponse';
 
 export type MerchantOrderFilter = 'all' | 'actionable' | OrderStatus;
 
@@ -353,16 +354,26 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        if (data.email_setup_required === true) setEmailSetupRequired(true);
-        throw new Error(data.error || 'Code d’accès invalide.');
+      const outcome = readMerchantLoginOutcome<Shop>(res.ok, data, 'Code d’accès invalide.');
+      if (outcome.type === 'mfa') {
+        setPendingMfaChallenge(outcome.challengeId);
+        setMfaCode('');
+        setMfaIsRegistration(false);
+        setAuthError('Un code à 8 chiffres a été envoyé à votre adresse e-mail. Vérifiez aussi vos courriers indésirables.');
+        return;
       }
+      if (outcome.type === 'email_setup') {
+        setEmailSetupRequired(true);
+        setAuthError(outcome.message);
+        return;
+      }
+      if (outcome.type === 'error') throw new Error(outcome.message);
 
       window.history.replaceState({}, '', '/app');
-      setCurrentShop(data.shop);
-      syncShopSettings(data.shop);
+      setCurrentShop(outcome.shop);
+      syncShopSettings(outcome.shop);
       trackLogin('merchant', 'access_code');
-      loadShopData(data.shop.id);
+      loadShopData(outcome.shop.id);
     } catch (err: unknown) {
       const error = err as Error;
       setAuthError(error.message || 'Erreur lors de la connexion');
@@ -416,19 +427,25 @@ export const useMerchantDashboard = (onOpenStorefront: (slug: string) => void, o
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        if (data.email_setup_required === true) {
-          setEmailSetupRequired(true);
-          setAuthError(data.error || 'Vérifiez votre adresse e-mail pour continuer.');
-          return;
-        }
-        throw new Error(data.error || 'Identifiants invalides');
+      const outcome = readMerchantLoginOutcome<Shop>(res.ok, data);
+      if (outcome.type === 'mfa') {
+        setPendingMfaChallenge(outcome.challengeId);
+        setMfaCode('');
+        setMfaIsRegistration(false);
+        setAuthError('Un code à 8 chiffres a été envoyé à votre adresse e-mail. Vérifiez aussi vos courriers indésirables.');
+        return;
       }
+      if (outcome.type === 'email_setup') {
+        setEmailSetupRequired(true);
+        setAuthError(outcome.message);
+        return;
+      }
+      if (outcome.type === 'error') throw new Error(outcome.message);
 
-      setCurrentShop(data.shop);
-      syncShopSettings(data.shop);
+      setCurrentShop(outcome.shop);
+      syncShopSettings(outcome.shop);
       trackLogin('merchant', 'pin');
-      loadShopData(data.shop.id);
+      loadShopData(outcome.shop.id);
     } catch (err: unknown) {
       const error = err as Error;
       setAuthError(error.message || 'Erreur lors de la connexion');

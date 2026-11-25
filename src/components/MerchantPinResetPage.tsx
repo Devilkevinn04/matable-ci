@@ -57,7 +57,7 @@ export const MerchantPinResetPage: React.FC<MerchantPinResetPageProps> = ({ toke
           <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">Le lien est invalide ou incomplet. Demandez un nouveau lien depuis la page de récupération.</p>
         ) : completed ? (
           <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
-            <p role="status">Votre PIN a été modifié. Toutes les sessions commerçant existantes ont été déconnectées.</p>
+            <p role="status">Votre PIN a été modifié. Toutes les sessions commerçant existantes ont été déconnectées. Reconnectez-vous avec le numéro WhatsApp de la boutique et ce nouveau PIN ; un code envoyé par e-mail pourra vous être demandé pour finaliser la connexion.</p>
             <button type="button" onClick={onBack} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--mt-green-deep)] px-5 py-3 text-sm font-bold text-white hover:bg-[var(--mt-green-primary)]">Se connecter<ArrowRight className="h-4 w-4" /></button>
           </div>
         ) : (
