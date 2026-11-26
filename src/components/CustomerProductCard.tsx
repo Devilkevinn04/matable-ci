@@ -1,14 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { BadgePercent, CheckCircle2, ChevronDown, ChevronUp, Clock, Expand, Heart, Minus, Plus, ShoppingBag, Star, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { BadgePercent, CheckCircle2, ChevronDown, ChevronUp, Clock, Expand, Heart, Minus, Plus, ShoppingBag, Star } from 'lucide-react';
 import type { Product, ShopCategory } from '../types';
 import type { CategoryDefaults } from '../utils/categoryDefaults';
 import { formatFCFA } from '../utils/format';
 import { CategoryProductImage } from './CategoryProductImage';
 import { ProductOptionsSheet } from './ProductOptionsSheet';
 import { getActiveProductPrice } from '../utils/productPricing';
+import { getProductCoverImage, getProductDisplayImages } from '../utils/productDisplayImages';
 import { useProductSaleClock } from '../utils/useProductSaleClock';
-import { lockBodyScroll } from '../utils/scrollLock';
+import { ProductImageViewer } from './ProductImageViewer';
 
 interface CustomerProductCardProps {
   product: Product;
@@ -86,11 +86,8 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
   const activeBasePrice = getActiveProductPrice(product, saleNow);
   const selectedModifierTotal = selectedUnitPrice - activeBasePrice;
   const isPromotion = activeBasePrice < product.price;
-  const productImages = [
-    ...(product.image_url ? [{ src: product.image_url, thumbnailSrc: product.thumbnail_url || product.image_url, alt: productTitle, fit: category === 'fashion' ? 'contain' as const : 'cover' as const }] : []),
-    ...(product.lookbook_image ? [{ src: product.lookbook_image, thumbnailSrc: product.lookbook_image, alt: `Lookbook de ${productTitle}`, fit: 'cover' as const }] : []),
-    ...(product.gallery_images || []).map((src, index) => ({ src, thumbnailSrc: src, alt: `Photo ${index + 1} de ${productTitle}`, fit: category === 'fashion' ? 'contain' as const : 'cover' as const })),
-  ];
+  const productImages = getProductDisplayImages(product, category, productTitle);
+  const coverImage = getProductCoverImage(product, category, productTitle);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -99,62 +96,12 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
     if (compact) setIsSheetOpen(true);
     onOpenedOnArrival?.();
   }, [openOnArrival, compact, onOpenedOnArrival]);
-  const imageViewerCloseRef = useRef<HTMLButtonElement>(null);
-  const imageViewerTriggerRef = useRef<HTMLButtonElement>(null);
-  const imageViewerDialogRef = useRef<HTMLElement>(null);
   const selectedImage = productImages[selectedImageIndex];
   const hasProductOptions = Boolean(
     (category === 'fashion' && (product.sizes?.length || product.colors?.length)) ||
     (category === 'food' && product.modifier_groups?.length) ||
     Object.values(product.attributes || {}).some((value) => value.trim()),
   );
-
-  useEffect(() => {
-    if (!isImageViewerOpen) return;
-
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const unlockScroll = lockBodyScroll();
-    imageViewerCloseRef.current?.focus();
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsImageViewerOpen(false);
-      if (productImages.length > 1 && event.key === 'ArrowRight') {
-        setSelectedImageIndex((index) => (index + 1) % productImages.length);
-      }
-      if (productImages.length > 1 && event.key === 'ArrowLeft') {
-        setSelectedImageIndex((index) => (index - 1 + productImages.length) % productImages.length);
-      }
-      if (event.key === 'Tab') {
-        const focusableElements = imageViewerDialogRef.current?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        );
-        if (!focusableElements?.length) return;
-        const firstElement = focusableElements[0];
-        const lastElement = focusableElements[focusableElements.length - 1];
-        if (event.shiftKey && document.activeElement === firstElement) {
-          event.preventDefault();
-          lastElement.focus();
-        } else if (!event.shiftKey && document.activeElement === lastElement) {
-          event.preventDefault();
-          firstElement.focus();
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      unlockScroll();
-      document.removeEventListener('keydown', handleKeyDown);
-      (imageViewerTriggerRef.current || previousFocus)?.focus();
-    };
-  }, [isImageViewerOpen, productImages.length]);
-
-  const showPreviousImage = () => {
-    setSelectedImageIndex((index) => (index - 1 + productImages.length) % productImages.length);
-  };
-  const showNextImage = () => {
-    setSelectedImageIndex((index) => (index + 1) % productImages.length);
-  };
 
   if (compact) {
     const hasChoices = hasProductOptions;
@@ -166,8 +113,15 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
           id={`product-card-${product.id}`}
           className="mt-reveal flex min-h-[7.5rem] gap-3 rounded-2xl border border-[#ded8ce] bg-white p-2.5 shadow-sm"
         >
-          <button type="button" onClick={() => setIsSheetOpen(true)} aria-label={`Voir les détails de ${productTitle}`} className="relative h-[6.25rem] w-[6.25rem] shrink-0 overflow-hidden rounded-xl bg-[#f4f1ea]">
-            <CategoryProductImage imageUrl={product.thumbnail_url || product.image_url} category={category} title={productTitle} showFallbackTitle={false} sizes="100px" className="h-full w-full" />
+          <button
+            type="button"
+            onClick={() => { if (coverImage) { setSelectedImageIndex(0); setIsImageViewerOpen(true); } else setIsSheetOpen(true); }}
+            aria-label={coverImage ? `Agrandir la photo de ${productTitle}` : `Voir les détails de ${productTitle}`}
+            className="relative h-[6.25rem] w-[6.25rem] shrink-0 overflow-hidden rounded-xl bg-[#f4f1ea]"
+          >
+            <CategoryProductImage imageUrl={coverImage?.thumbnailSrc || ''} category={category} title={productTitle} showFallbackTitle={false} sizes="100px" className="h-full w-full" />
+            {coverImage && <span className="pointer-events-none absolute bottom-1 right-1 flex h-7 w-7 items-center justify-center rounded-full bg-slate-950/65 text-white"><Expand className="h-3.5 w-3.5" aria-hidden="true" /></span>}
+            {productImages.length > 1 && <span className="pointer-events-none absolute bottom-1 left-1 rounded-full bg-slate-950/65 px-1.5 text-[10px] font-bold text-white">1/{productImages.length}</span>}
             {product.prep_time && <span className="absolute left-1 top-1 flex items-center gap-0.5 rounded-md bg-slate-900/80 px-1.5 py-0.5 text-[11px] font-black text-white"><Clock className="h-2.5 w-2.5 text-amber-400" aria-hidden="true" />{product.prep_time} min</span>}
             {outOfStock && <span className="absolute inset-0 flex items-center justify-center bg-slate-950/65 text-[11px] font-black text-white">Épuisé</span>}
           </button>
@@ -217,7 +171,7 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
             product={product}
             category={category}
             categoryDefaults={categoryDefaults}
-            imageSrc={product.image_url}
+            imageSrc={coverImage?.src || ''}
             isShopOpen={isShopOpen}
             outOfStock={outOfStock}
             primaryColor={primaryColor}
@@ -234,6 +188,16 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
             onClose={() => setIsSheetOpen(false)}
           />
         )}
+        {isImageViewerOpen && (
+          <ProductImageViewer
+            images={productImages}
+            index={selectedImageIndex}
+            category={category}
+            title={productTitle}
+            onClose={() => setIsImageViewerOpen(false)}
+            onSelect={setSelectedImageIndex}
+          />
+        )}
       </>
     );
   }
@@ -247,7 +211,6 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
         <div className={`relative w-full overflow-hidden bg-[#f4f1ea] ${layoutStyle === 'grid_portrait' ? 'aspect-square sm:aspect-[4/5]' : 'aspect-[5/4] sm:aspect-[4/3]'}`}>
           {selectedImage && (
             <button
-              ref={imageViewerTriggerRef}
               type="button"
               onClick={() => setIsImageViewerOpen(true)}
               aria-label={`Agrandir la photo ${selectedImageIndex + 1} de ${productTitle}`}
@@ -324,76 +287,15 @@ export const CustomerProductCard: React.FC<CustomerProductCardProps> = ({
         {outOfStock ? <button disabled className="min-h-11 w-full rounded-xl bg-slate-100 px-2 py-2 text-sm font-bold text-slate-400 sm:px-4 sm:py-2.5">Indisponible</button> : quantityInCart > 0 ? <div className="flex min-h-11 items-center justify-between rounded-xl border border-slate-200 bg-slate-100 p-1"><button id={`qty-minus-${product.id}`} onClick={onDecreaseQuantity} className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-slate-700 shadow-2xs transition-colors hover:bg-slate-50" aria-label="Diminuer"><Minus className="h-4 w-4" /></button><span role="status" aria-label={`${quantityInCart} au panier`} className="min-w-0 truncate px-1 text-sm font-extrabold text-slate-900 sm:px-2"><span className="sm:hidden">{quantityInCart}</span><span className="hidden sm:inline">{quantityInCart} au panier</span></span><button id={`qty-plus-${product.id}`} onClick={onAddToCart} disabled={quantityInCart >= product.stock} className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 disabled:opacity-40" aria-label="Augmenter"><Plus className="h-4 w-4" /></button></div> : <button id={`add-btn-${product.id}`} onClick={onAddToCart} disabled={!isShopOpen} className="flex min-h-11 w-full items-center justify-center gap-1 rounded-xl border border-white/30 px-1.5 py-2 text-sm font-bold text-white shadow-sm transition-[filter,transform,opacity] hover:brightness-105 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 sm:gap-2 sm:px-4 sm:py-2.5" style={{ backgroundColor: primaryColor, boxShadow: `0 6px 16px ${primaryColor}35`, ...glowStyle }}><Plus className="h-4 w-4 sm:hidden" aria-hidden="true" /><ShoppingBag className="hidden h-4 w-4 sm:block" aria-hidden="true" /><span className="sm:hidden">Ajouter</span><span className="hidden sm:inline">Ajouter au panier</span></button>}
       </div>
 
-      {isImageViewerOpen && selectedImage && typeof document !== 'undefined' && createPortal(
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/95 p-3 text-white sm:p-6"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setIsImageViewerOpen(false);
-          }}
-        >
-          <section
-            ref={imageViewerDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Photos de ${productTitle}`}
-            className="relative flex h-full max-h-[900px] w-full max-w-6xl flex-col"
-          >
-            <header className="flex min-h-12 items-center justify-between gap-3 pb-2">
-              <div className="min-w-0">
-                <h2 className="truncate text-sm font-bold sm:text-base">{productTitle}</h2>
-                {productImages.length > 1 && <p className="text-xs text-white/70">Photo {selectedImageIndex + 1} sur {productImages.length}</p>}
-              </div>
-              <button
-                ref={imageViewerCloseRef}
-                type="button"
-                onClick={() => setIsImageViewerOpen(false)}
-                aria-label="Fermer les photos"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-              >
-                <X className="h-5 w-5" aria-hidden="true" />
-              </button>
-            </header>
-            <div className="relative flex min-h-0 flex-1 items-center justify-center">
-              <CategoryProductImage
-                imageUrl={selectedImage.src}
-                category={category}
-                title={selectedImage.alt}
-                showFallbackTitle={false}
-                imageFit="contain"
-                sizes="100vw"
-                className="h-full max-h-full w-full max-w-full"
-              />
-              {productImages.length > 1 && (
-                <>
-                  <button type="button" onClick={showPreviousImage} aria-label="Photo précédente" className="absolute left-1 flex h-11 w-11 items-center justify-center rounded-full bg-slate-950/60 text-white ring-1 ring-white/30 hover:bg-slate-950/85 sm:left-4">
-                    <ChevronDown className="h-5 w-5 rotate-90" aria-hidden="true" />
-                  </button>
-                  <button type="button" onClick={showNextImage} aria-label="Photo suivante" className="absolute right-1 flex h-11 w-11 items-center justify-center rounded-full bg-slate-950/60 text-white ring-1 ring-white/30 hover:bg-slate-950/85 sm:right-4">
-                    <ChevronDown className="h-5 w-5 -rotate-90" aria-hidden="true" />
-                  </button>
-                </>
-              )}
-            </div>
-            {productImages.length > 1 && (
-              <div className="flex justify-center gap-2 overflow-x-auto py-3" aria-label="Choisir une photo">
-                {productImages.map((image, index) => (
-                  <button
-                    key={`${product.id}-viewer-photo-${index}`}
-                    type="button"
-                    onClick={() => setSelectedImageIndex(index)}
-                    aria-label={`Afficher ${image.alt}`}
-                    aria-pressed={selectedImageIndex === index}
-                    className={`h-12 w-12 shrink-0 overflow-hidden rounded-lg border bg-white/10 p-0.5 ${selectedImageIndex === index ? 'border-white ring-2 ring-white/60' : 'border-white/30'}`}
-                  >
-                    <img src={image.src} alt="" className={`h-full w-full ${image.fit === 'contain' ? 'object-contain' : 'object-cover'}`} />
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>,
-        document.body,
+      {isImageViewerOpen && (
+        <ProductImageViewer
+          images={productImages}
+          index={selectedImageIndex}
+          category={category}
+          title={productTitle}
+          onClose={() => setIsImageViewerOpen(false)}
+          onSelect={setSelectedImageIndex}
+        />
       )}
     </article>
   );

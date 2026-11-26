@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   PUBLIC_PRODUCT_IMAGE_PATH,
+  getPublicProductCoverImage,
   productImageFingerprint,
   resolveProductImageRequest,
   toPublicProductImageUrl,
@@ -53,6 +54,25 @@ test('gallery photos get their own slot', () => {
   assert.deepEqual((product.gallery_images as unknown as string[])[0], '');
   assert.match((product.gallery_images as unknown as string[])[1], /\/7\/2-[a-f0-9]{20}\.png$/);
   assert.equal(toPublicProductImageUrl(7, 'data:image/svg+xml;base64,PHN2Zz4='), '');
+});
+
+test('shop previews fall back to the lookbook or gallery when no main photo exists', () => {
+  const lookbookUrl = toPublicProductImageUrl(42, pixel, 999);
+  const galleryUrl = toPublicProductImageUrl(42, pixel, 1);
+  const withLookbook = getPublicProductCoverImage({ lookbook_image: lookbookUrl, gallery_images: [galleryUrl] });
+  assert.equal(withLookbook.imageUrl, lookbookUrl);
+  assert.equal(withLookbook.thumbnailUrl, lookbookUrl);
+
+  const withGallery = getPublicProductCoverImage({ gallery_images: [galleryUrl] });
+  assert.deepEqual(withGallery, { imageUrl: galleryUrl, thumbnailUrl: galleryUrl });
+  assert.deepEqual(getPublicProductCoverImage({}), { imageUrl: '', thumbnailUrl: '' });
+
+  const withMain = getPublicProductCoverImage({
+    image_url: toPublicProductImageUrl(42, pixel),
+    thumbnail_url: toPublicProductImageUrl(42, pixel, 998),
+    lookbook_image: lookbookUrl,
+  });
+  assert.equal(withMain.thumbnailUrl, toPublicProductImageUrl(42, pixel, 998));
 });
 
 test('age-verified product image URLs carry the short-lived scoped token', () => {

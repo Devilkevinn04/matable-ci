@@ -64,6 +64,19 @@ function parseGallery(value: unknown): unknown[] {
   }
 }
 
+/** First photo available for compact surfaces (shop previews, home feed). */
+export function getPublicProductCoverImage(product: {
+  image_url?: unknown;
+  thumbnail_url?: unknown;
+  lookbook_image?: unknown;
+  gallery_images?: unknown;
+}): { imageUrl: string; thumbnailUrl: string } {
+  const gallery = parseGallery(product.gallery_images).map((image) => String(image || ''));
+  const imageUrl = String(product.image_url || '') || String(product.lookbook_image || '') || gallery.find(Boolean) || '';
+  const thumbnailUrl = product.image_url ? (String(product.thumbnail_url || '') || imageUrl) : imageUrl;
+  return { imageUrl, thumbnailUrl };
+}
+
 /** Rewrites the main photo and gallery of a product for a public (non-merchant) response. */
 export function withPublicProductImages<T extends { id: number; image_url?: unknown; thumbnail_url?: unknown; gallery_images?: unknown; lookbook_image?: unknown }>(
   product: T,

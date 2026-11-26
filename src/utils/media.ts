@@ -187,16 +187,21 @@ async function fileToDataUrl(file: Blob): Promise<string> {
  */
 async function prepareImageForUpload(file: File, options: { maxDimension?: number; maxSizeKB?: number }): Promise<File> {
   if (typeof document === 'undefined' || typeof File === 'undefined' || file.type === 'image/gif') return file;
-  try {
-    const { compressImageClientSide } = await import('./format');
-    // WebP keeps transparency for PNG/WebP logos; JPEG is smaller for photos.
-    const outputType = file.type === 'image/png' || file.type === 'image/webp' ? 'image/webp' : 'image/jpeg';
-    const { dataUrl } = await compressImageClientSide(file, options.maxDimension ?? 1400, options.maxSizeKB ?? 250, outputType);
-    const compressed = await dataUrlToFile(dataUrl, file.name);
-    return compressed.size > 0 && compressed.size < file.size ? compressed : file;
-  } catch {
-    return file;
+  const { compressImageClientSide } = await import('./format');
+  // WebP keeps transparency for PNG/WebP logos; JPEG is the universal fallback.
+  const outputTypes = file.type === 'image/png' || file.type === 'image/webp'
+    ? ['image/webp', 'image/jpeg'] as const
+    : ['image/jpeg'] as const;
+  for (const outputType of outputTypes) {
+    try {
+      const { dataUrl } = await compressImageClientSide(file, options.maxDimension ?? 1400, options.maxSizeKB ?? 250, outputType);
+      const compressed = await dataUrlToFile(dataUrl, file.name);
+      return compressed.size > 0 && compressed.size < file.size ? compressed : file;
+    } catch {
+      // Try the next format before giving up on compression.
+    }
   }
+  return file;
 }
 
 async function prepareImageThumbnail(file: File, maxDimension: number, maxSizeKB: number): Promise<File> {
@@ -205,12 +210,17 @@ async function prepareImageThumbnail(file: File, maxDimension: number, maxSizeKB
   }
 
   const { compressImageClientSide } = await import('./format');
-  const { dataUrl } = await compressImageClientSide(file, maxDimension, maxSizeKB, 'image/webp');
-  const thumbnail = await dataUrlToFile(dataUrl, file.name);
-  if (thumbnail.type !== 'image/webp') {
-    throw new Error('Ce navigateur ne permet pas de générer une miniature WebP.');
+  // Some mobile browsers cannot encode WebP. A JPEG thumbnail is displayed the
+  // same way by /media/products, so it must never block the main photo upload.
+  for (const outputType of ['image/webp', 'image/jpeg'] as const) {
+    try {
+      const { dataUrl } = await compressImageClientSide(file, maxDimension, maxSizeKB, outputType);
+      const thumbnail = await dataUrlToFile(dataUrl, file.name);
+      if (thumbnail.type === outputType && thumbnail.size <= maxSizeKB * 1024) return thumbnail;
+    } catch {
+      // Try the next format.
+    }
   }
-  if (thumbnail.size <= maxSizeKB * 1024) return thumbnail;
   throw new Error(`La miniature dépasse ${maxSizeKB} Ko. Choisissez une image plus légère.`);
 }
 

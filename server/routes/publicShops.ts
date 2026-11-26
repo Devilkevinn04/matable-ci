@@ -10,7 +10,7 @@ import { isAgeRestrictedProduct } from '../../src/utils/ageRestrictedProducts.ts
 import { issueAgeVerificationToken, isAgeVerificationTokenValid } from '../services/ageVerification.ts';
 import { mapProductRow } from '../repositories/products.ts';
 import { mapShopRow } from '../repositories/shops.ts';
-import { toPublicProductImageUrl, withPublicProductImages } from '../services/publicProductImages.ts';
+import { getPublicProductCoverImage, toPublicProductImageUrl, withPublicProductImages } from '../services/publicProductImages.ts';
 import { sanitizeThemeConfigForResponse } from '../services/shopThemeConfig.ts';
 
 const publicShopColumns = `id, name, slug, theme_color, welcome_message, is_open, is_active,
@@ -240,8 +240,8 @@ export function createPublicShopsRouter({
           publicShopIds,
         ),
         dbAll<Record<string, unknown>>(
-          `SELECT id, shop_id, title, description, image_url, thumbnail_url, price, sale_price, sale_starts_at, sale_ends_at, stock, created_at FROM (
-             SELECT id, shop_id, title, description, image_url, thumbnail_url, price, sale_price, sale_starts_at, sale_ends_at, stock, created_at,
+          `SELECT id, shop_id, title, description, image_url, thumbnail_url, lookbook_image, gallery_images, price, sale_price, sale_starts_at, sale_ends_at, stock, created_at FROM (
+             SELECT id, shop_id, title, description, image_url, thumbnail_url, lookbook_image, gallery_images, price, sale_price, sale_starts_at, sale_ends_at, stock, created_at,
                ROW_NUMBER() OVER (PARTITION BY shop_id ORDER BY created_at DESC, id DESC) AS preview_rank
              FROM products
              WHERE shop_id IN (${publicShopIds.map(() => '?').join(', ')}) AND is_available = 1 AND stock > 0
@@ -288,12 +288,22 @@ export function createPublicShopsRouter({
         { title: String(row.title || ''), description: String(row.description || '') },
         publicShopNames.get(shopId),
       )) continue;
+      const publicImages = withPublicProductImages({
+        id: Number(row.id),
+        image_url: row.image_url,
+        thumbnail_url: row.thumbnail_url,
+        lookbook_image: row.lookbook_image,
+        gallery_images: row.gallery_images,
+      });
+      // A shop preview must not look empty when the merchant only filled the
+      // lookbook or the gallery: use the first available photo as the cover.
+      const cover = getPublicProductCoverImage(publicImages);
       const previews = productsPreviewByShop.get(shopId) || [];
       previews.push({
         id: Number(row.id),
         title: String(row.title),
-        image_url: toPublicProductImageUrl(Number(row.id), String(row.image_url || '')),
-        thumbnail_url: toPublicProductImageUrl(Number(row.id), String(row.thumbnail_url || row.image_url || ''), 998),
+        image_url: cover.imageUrl,
+        thumbnail_url: cover.thumbnailUrl,
         price: Number(row.price),
         sale_price: row.sale_price == null ? null : Number(row.sale_price),
         sale_starts_at: row.sale_starts_at == null ? null : String(row.sale_starts_at),
