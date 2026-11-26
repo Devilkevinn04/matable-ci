@@ -11,6 +11,7 @@ import {
   isLegacyInlineMediaUrl,
   isStorableMediaUrl,
   isSupportedMediaMimeType,
+  isNetworkFetchFailure,
   normalizePublicMediaUrl,
   normalizeStoredMediaCollection,
   normalizeStoredMediaUrl,
@@ -64,6 +65,14 @@ test('media storage unavailable error carries a stable client code', () => {
   const error = new MediaStorageUnavailableError();
   assert.equal(error.code, 'media_storage_unavailable');
   assert.ok(error instanceof Error);
+});
+
+test('opaque browser fetch failures are recognized across engines', () => {
+  for (const message of ['Load failed', 'Failed to fetch', 'NetworkError when attempting to fetch resource.']) {
+    assert.equal(isNetworkFetchFailure(new TypeError(message)), true, message);
+  }
+  assert.equal(isNetworkFetchFailure(new TypeError('Impossible de lire le fichier')), false);
+  assert.equal(isNetworkFetchFailure(new Error('Load failed')), false);
 });
 
 test('media storage adapter exposes both public and stored normalizers', () => {

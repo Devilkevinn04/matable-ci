@@ -23,6 +23,15 @@ export class MediaStorageUnavailableError extends Error {
   }
 }
 
+/**
+ * Browsers hide network, CORS and CSP failures behind an opaque TypeError:
+ * Safari says "Load failed", Chrome "Failed to fetch", Firefox "NetworkError".
+ */
+export function isNetworkFetchFailure(error: unknown): boolean {
+  return error instanceof TypeError
+    && /load failed|failed to fetch|networkerror|network error/i.test(error.message || '');
+}
+
 export function isSupportedMediaMimeType(value: unknown): value is (typeof SUPPORTED_MEDIA_MIME_TYPES)[number] {
   return typeof value === 'string' && (SUPPORTED_MEDIA_MIME_TYPES as readonly string[]).includes(value.trim().toLowerCase());
 }
@@ -117,17 +126,25 @@ export async function requestMediaUploadUrl(params: {
   folder?: string;
   size?: number;
 }): Promise<{ key: string; signedUrl: string; publicUrl: string; }> {
-  const response = await fetch(`/api/shops/${params.shopId}/media/upload-url`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      filename: params.filename || 'upload',
-      contentType: params.contentType || 'application/octet-stream',
-      purpose: params.purpose || 'media',
-      folder: params.folder || 'shops',
-      ...(typeof params.size === 'number' && Number.isFinite(params.size) ? { size: params.size } : {}),
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`/api/shops/${params.shopId}/media/upload-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: params.filename || 'upload',
+        contentType: params.contentType || 'application/octet-stream',
+        purpose: params.purpose || 'media',
+        folder: params.folder || 'shops',
+        ...(typeof params.size === 'number' && Number.isFinite(params.size) ? { size: params.size } : {}),
+      }),
+    });
+  } catch (error) {
+    if (isNetworkFetchFailure(error)) {
+      throw new MediaStorageUnavailableError('Le service de téléversement est momentanément inaccessible.');
+    }
+    throw error;
+  }
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -218,6 +235,19 @@ export async function uploadPublicMediaFile(file: File, shopId: number | string,
   return uploadPreparedPublicMediaFile(prepared, shopId, options);
 }
 
+/**
+ * Storage is an optimisation, not a prerequisite: a compressed inline image can
+ * still be saved when the storage API or the direct PUT is unreachable (CORS,
+ * CSP, network). It must stay within the bound accepted by product writes.
+ */
+async function inlineFallback(file: File): Promise<string> {
+  const dataUrl = await fileToDataUrl(file);
+  if (!isLegacyInlineMediaUrl(dataUrl)) {
+    throw new Error('Le téléversement a échoué et l’image est trop volumineuse pour être conservée. Choisissez une photo plus légère.');
+  }
+  return dataUrl;
+}
+
 async function uploadPreparedPublicMediaFile(file: File, shopId: number | string, options: {
   purpose?: string;
   folder?: string;
@@ -233,25 +263,30 @@ async function uploadPreparedPublicMediaFile(file: File, shopId: number | string
       size: file.size,
     });
   } catch (error) {
-    // R2 not configured yet: the compressed base64 fallback keeps the shop usable
-    // and stays compatible with the public /media/products resolver.
     if (error instanceof MediaStorageUnavailableError) {
-      return fileToDataUrl(file);
+      return inlineFallback(file);
     }
     throw error;
   }
 
-  const uploadResponse = await fetch(uploadDetails.signedUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': file.type || 'image/jpeg',
-      'Cache-Control': 'public, max-age=31536000, immutable',
-    },
-    body: file,
-  });
+  let uploadResponse: Response;
+  try {
+    uploadResponse = await fetch(uploadDetails.signedUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': file.type || 'image/jpeg',
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+      body: file,
+    });
+  } catch (error) {
+    // Safari's "Load failed" is typically a CORS/CSP rejection of the direct PUT.
+    if (isNetworkFetchFailure(error)) return inlineFallback(file);
+    throw new Error('Le fichier n’a pas pu être téléversé sur le dépôt public.');
+  }
 
   if (!uploadResponse.ok) {
-    throw new Error('Le fichier n’a pas pu être téléversé sur le dépôt public.');
+    throw new Error(`Le dépôt public a refusé l’image (${uploadResponse.status}).`);
   }
 
   return uploadDetails.publicUrl;
